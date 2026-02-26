@@ -8,6 +8,7 @@ build/
 DerivedData/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
 *.xcodeproj/xcshareddata/WorkspaceSettings.xcsettings
 
@@ -27,3 +28,5 @@ Package.resolved
 
 # Local tools / references
 /tmp/
+build.log
+build2.log
