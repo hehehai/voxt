@@ -20,11 +20,18 @@ private let hotkeyConflictRules: [HotkeyConflictRule] = [
 ]
 
 struct HotkeySettingsView: View {
+    private enum RecordingField {
+        case transcription
+        case translation
+    }
+
     @AppStorage(AppPreferenceKey.hotkeyKeyCode) private var hotkeyKeyCode = Int(HotkeyPreference.defaultKeyCode)
     @AppStorage(AppPreferenceKey.hotkeyModifiers) private var hotkeyModifiers = Int(HotkeyPreference.defaultModifiers.rawValue)
+    @AppStorage(AppPreferenceKey.translationHotkeyKeyCode) private var translationHotkeyKeyCode = Int(HotkeyPreference.defaultTranslationKeyCode)
+    @AppStorage(AppPreferenceKey.translationHotkeyModifiers) private var translationHotkeyModifiers = Int(HotkeyPreference.defaultTranslationModifiers.rawValue)
     @AppStorage(AppPreferenceKey.hotkeyTriggerMode) private var hotkeyTriggerMode = HotkeyPreference.defaultTriggerMode.rawValue
 
-    @State private var isRecordingHotkey = false
+    @State private var recordingField: RecordingField?
 
     private var hotkeyBinding: Binding<UInt16> {
         Binding(
@@ -47,6 +54,80 @@ struct HotkeySettingsView: View {
         )
     }
 
+    private var translationHotkeyBinding: Binding<UInt16> {
+        Binding(
+            get: { UInt16(translationHotkeyKeyCode) },
+            set: { translationHotkeyKeyCode = Int($0) }
+        )
+    }
+
+    private var translationModifierBinding: Binding<NSEvent.ModifierFlags> {
+        Binding(
+            get: { NSEvent.ModifierFlags(rawValue: UInt(translationHotkeyModifiers)).intersection(.hotkeyRelevant) },
+            set: { translationHotkeyModifiers = Int($0.rawValue) }
+        )
+    }
+
+    private var currentTranslationHotkey: HotkeyPreference.Hotkey {
+        HotkeyPreference.Hotkey(
+            keyCode: translationHotkeyBinding.wrappedValue,
+            modifiers: translationModifierBinding.wrappedValue
+        )
+    }
+
+    private var activeKeyCodeBinding: Binding<UInt16> {
+        Binding(
+            get: {
+                switch recordingField {
+                case .translation:
+                    return UInt16(translationHotkeyKeyCode)
+                default:
+                    return UInt16(hotkeyKeyCode)
+                }
+            },
+            set: { newValue in
+                switch recordingField {
+                case .translation:
+                    translationHotkeyKeyCode = Int(newValue)
+                default:
+                    hotkeyKeyCode = Int(newValue)
+                }
+            }
+        )
+    }
+
+    private var activeModifierBinding: Binding<NSEvent.ModifierFlags> {
+        Binding(
+            get: {
+                switch recordingField {
+                case .translation:
+                    return NSEvent.ModifierFlags(rawValue: UInt(translationHotkeyModifiers)).intersection(.hotkeyRelevant)
+                default:
+                    return NSEvent.ModifierFlags(rawValue: UInt(hotkeyModifiers)).intersection(.hotkeyRelevant)
+                }
+            },
+            set: { newValue in
+                switch recordingField {
+                case .translation:
+                    translationHotkeyModifiers = Int(newValue.rawValue)
+                default:
+                    hotkeyModifiers = Int(newValue.rawValue)
+                }
+            }
+        )
+    }
+
+    private var isRecordingBinding: Binding<Bool> {
+        Binding(
+            get: { recordingField != nil },
+            set: { isRecording in
+                if !isRecording {
+                    recordingField = nil
+                }
+            }
+        )
+    }
+
     private var triggerModeBinding: Binding<HotkeyPreference.TriggerMode> {
         Binding(
             get: { HotkeyPreference.TriggerMode(rawValue: hotkeyTriggerMode) ?? .longPress },
@@ -61,36 +142,58 @@ struct HotkeySettingsView: View {
                     Text("Shortcut")
                         .font(.headline)
 
-                    HStack {
-                        Text("Current")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(HotkeyPreference.displayString(for: currentHotkey))
-                            .font(.system(.body, design: .rounded))
-                    }
+                    shortcutInput(
+                        title: "Transcription",
+                        hotkey: currentHotkey,
+                        isRecording: recordingField == .transcription,
+                        onFocus: { recordingField = .transcription },
+                        onReset: {
+                            hotkeyBinding.wrappedValue = HotkeyPreference.defaultKeyCode
+                            modifierBinding.wrappedValue = HotkeyPreference.defaultModifiers
+                        }
+                    )
 
-                    Button(isRecordingHotkey ? "Press keys…" : "Record Shortcut") {
-                        isRecordingHotkey = true
-                    }
-                    .disabled(isRecordingHotkey)
+                    shortcutInput(
+                        title: "Translation",
+                        hotkey: currentTranslationHotkey,
+                        isRecording: recordingField == .translation,
+                        onFocus: { recordingField = .translation },
+                        onReset: {
+                            translationHotkeyBinding.wrappedValue = HotkeyPreference.defaultTranslationKeyCode
+                            translationModifierBinding.wrappedValue = HotkeyPreference.defaultTranslationModifiers
+                        }
+                    )
 
-                    if isRecordingHotkey {
-                        Text("Press a key or key combination. Esc cancels.")
+                    if recordingField != nil {
+                        Text("Type your shortcut now. Press Esc to cancel recording.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        HotkeyRecorderView(
-                            keyCode: hotkeyBinding,
-                            modifiers: modifierBinding,
-                            isRecording: $isRecordingHotkey
-                        )
-                        .frame(width: 0, height: 0)
                     }
 
                     if let conflict = hotkeyConflictMessage(for: currentHotkey) {
-                        Text(conflict)
+                        Text("Transcription shortcut: \(conflict)")
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
+
+                    if let conflict = hotkeyConflictMessage(for: currentTranslationHotkey) {
+                        Text("Translation shortcut: \(conflict)")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if currentHotkey == currentTranslationHotkey {
+                        Text("Transcription and translation shortcuts should be different.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    HotkeyRecorderView(
+                        keyCode: activeKeyCodeBinding,
+                        modifiers: activeModifierBinding,
+                        isRecording: isRecordingBinding
+                    )
+                    .frame(width: 0, height: 0)
 
                     HStack(alignment: .center, spacing: 12) {
                         Text("Trigger")
@@ -114,7 +217,7 @@ struct HotkeySettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Tips")
                         .font(.headline)
-                    Text("You can use a single key (such as fn) or a key combination.")
+                    Text("Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -128,5 +231,47 @@ struct HotkeySettingsView: View {
         return hotkeyConflictRules.first {
             hotkey.keyCode == $0.keyCode && hotkey.modifiers == $0.modifiers
         }?.message
+    }
+
+    @ViewBuilder
+    private func shortcutInput(
+        title: String,
+        hotkey: HotkeyPreference.Hotkey,
+        isRecording: Bool,
+        onFocus: @escaping () -> Void,
+        onReset: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .font(.body)
+                .foregroundStyle(.secondary)
+            Spacer()
+
+            HStack(spacing: 8) {
+                Text(isRecording ? "Listening..." : HotkeyPreference.displayString(for: hotkey))
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(isRecording ? .primary : .primary)
+                Spacer()
+                Button(action: onReset) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Reset shortcut")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isRecording ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isRecording ? 2 : 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onFocus)
+            .frame(width: 220, alignment: .trailing)
+        }
     }
 }

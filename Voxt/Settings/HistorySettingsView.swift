@@ -118,9 +118,12 @@ private struct HistoryRow: View {
                         .multilineTextAlignment(.leading)
                         .lineLimit(3)
 
-                    Text(metadataText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        historyBadge
+                        Text(metadataText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -193,6 +196,18 @@ private struct HistoryRow: View {
             return dateText
         }
         return "\(dateText) · Audio: \(audioDuration)"
+    }
+
+    private var historyBadge: some View {
+        Text(entry.isTranslation ? "Translation" : "Normal")
+            .font(.system(size: 10, weight: .semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(entry.isTranslation ? Color.blue.opacity(0.16) : Color.gray.opacity(0.16))
+            )
+            .foregroundStyle(entry.isTranslation ? Color.blue : Color.secondary)
     }
 
     private func formattedDuration(_ seconds: TimeInterval?) -> String? {

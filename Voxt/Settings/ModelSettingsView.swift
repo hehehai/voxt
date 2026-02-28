@@ -12,8 +12,10 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.transcriptionEngine) private var engineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.enhancementMode) private var enhancementModeRaw = EnhancementMode.off.rawValue
     @AppStorage(AppPreferenceKey.enhancementSystemPrompt) private var systemPrompt = AppPreferenceKey.defaultEnhancementPrompt
+    @AppStorage(AppPreferenceKey.translationSystemPrompt) private var translationPrompt = AppPreferenceKey.defaultTranslationPrompt
     @AppStorage(AppPreferenceKey.mlxModelRepo) private var modelRepo = MLXModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.customLLMModelRepo) private var customLLMRepo = CustomLLMModelManager.defaultModelRepo
+    @AppStorage(AppPreferenceKey.translationCustomLLMModelRepo) private var translationCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.useHfMirror) private var useHfMirror = false
 
     @ObservedObject var mlxModelManager: MLXModelManager
@@ -88,6 +90,45 @@ struct ModelSettingsView: View {
                 .padding(8)
             }
 
+            GroupBox {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Translation")
+                        .font(.headline)
+
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("Custom LLM Model")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Picker("Translation Custom LLM Model", selection: $translationCustomLLMRepo) {
+                            ForEach(CustomLLMModelManager.availableModels) { model in
+                                Text(model.title).tag(model.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(maxWidth: 280, alignment: .trailing)
+                    }
+
+                    Text("Translation Prompt")
+                        .font(.subheadline.weight(.medium))
+                    PromptEditorView(text: $translationPrompt)
+
+                    HStack {
+                        Text("Use {target_language} placeholder in the prompt for selected target language.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Reset to Default") {
+                            translationPrompt = AppPreferenceKey.defaultTranslationPrompt
+                        }
+                        .controlSize(.small)
+                        .disabled(translationPrompt == AppPreferenceKey.defaultTranslationPrompt)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+
             TranscriptionTestSectionView()
         }
         .onAppear {
@@ -100,6 +141,12 @@ struct ModelSettingsView: View {
 
             if customLLMRepo.isEmpty {
                 customLLMRepo = CustomLLMModelManager.defaultModelRepo
+            }
+            if translationCustomLLMRepo.isEmpty {
+                translationCustomLLMRepo = customLLMRepo
+            }
+            if translationPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                translationPrompt = AppPreferenceKey.defaultTranslationPrompt
             }
             customLLMManager.updateModel(repo: customLLMRepo)
             customLLMManager.prefetchAllModelSizes()
@@ -115,6 +162,9 @@ struct ModelSettingsView: View {
         }
         .onChange(of: customLLMRepo) { _, newValue in
             customLLMManager.updateModel(repo: newValue)
+            if translationCustomLLMRepo.isEmpty {
+                translationCustomLLMRepo = newValue
+            }
         }
         .onChange(of: useHfMirror) { _, _ in
             updateMirrorSetting()

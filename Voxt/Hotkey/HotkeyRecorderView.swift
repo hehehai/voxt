@@ -46,4 +46,22 @@ final class KeyCaptureView: NSView {
         let mods = event.modifierFlags.intersection(.hotkeyRelevant)
         onKeyCaptured?(event.keyCode, mods)
     }
+
+    override func flagsChanged(with event: NSEvent) {
+        guard isRecording else { return }
+
+        let mods = event.modifierFlags.intersection(.hotkeyRelevant)
+        guard !mods.isEmpty else { return }
+
+        let modifierOnlyKeyCodes: Set<UInt16> = [
+            UInt16(kVK_Shift), UInt16(kVK_RightShift),
+            UInt16(kVK_Control), UInt16(kVK_RightControl),
+            UInt16(kVK_Option), UInt16(kVK_RightOption),
+            UInt16(kVK_Command), UInt16(kVK_RightCommand),
+            UInt16(kVK_Function), UInt16(kVK_CapsLock)
+        ]
+
+        guard modifierOnlyKeyCodes.contains(event.keyCode) else { return }
+        onKeyCaptured?(HotkeyPreference.modifierOnlyKeyCode, mods)
+    }
 }

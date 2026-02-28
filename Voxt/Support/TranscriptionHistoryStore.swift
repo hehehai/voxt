@@ -9,9 +9,65 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let transcriptionModel: String
     let enhancementMode: String
     let enhancementModel: String
+    let isTranslation: Bool
     let audioDurationSeconds: TimeInterval?
     let transcriptionProcessingDurationSeconds: TimeInterval?
     let llmDurationSeconds: TimeInterval?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case text
+        case createdAt
+        case transcriptionEngine
+        case transcriptionModel
+        case enhancementMode
+        case enhancementModel
+        case isTranslation
+        case audioDurationSeconds
+        case transcriptionProcessingDurationSeconds
+        case llmDurationSeconds
+    }
+
+    init(
+        id: UUID,
+        text: String,
+        createdAt: Date,
+        transcriptionEngine: String,
+        transcriptionModel: String,
+        enhancementMode: String,
+        enhancementModel: String,
+        isTranslation: Bool,
+        audioDurationSeconds: TimeInterval?,
+        transcriptionProcessingDurationSeconds: TimeInterval?,
+        llmDurationSeconds: TimeInterval?
+    ) {
+        self.id = id
+        self.text = text
+        self.createdAt = createdAt
+        self.transcriptionEngine = transcriptionEngine
+        self.transcriptionModel = transcriptionModel
+        self.enhancementMode = enhancementMode
+        self.enhancementModel = enhancementModel
+        self.isTranslation = isTranslation
+        self.audioDurationSeconds = audioDurationSeconds
+        self.transcriptionProcessingDurationSeconds = transcriptionProcessingDurationSeconds
+        self.llmDurationSeconds = llmDurationSeconds
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        text = try container.decode(String.self, forKey: .text)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        transcriptionEngine = try container.decode(String.self, forKey: .transcriptionEngine)
+        transcriptionModel = try container.decode(String.self, forKey: .transcriptionModel)
+        enhancementMode = try container.decode(String.self, forKey: .enhancementMode)
+        enhancementModel = try container.decode(String.self, forKey: .enhancementModel)
+        isTranslation = try container.decodeIfPresent(Bool.self, forKey: .isTranslation) ?? false
+        audioDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .audioDurationSeconds)
+        transcriptionProcessingDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .transcriptionProcessingDurationSeconds)
+        llmDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .llmDurationSeconds)
+    }
 }
 
 @MainActor
@@ -66,6 +122,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         transcriptionModel: String,
         enhancementMode: String,
         enhancementModel: String,
+        isTranslation: Bool,
         audioDurationSeconds: TimeInterval?,
         transcriptionProcessingDurationSeconds: TimeInterval?,
         llmDurationSeconds: TimeInterval?
@@ -81,6 +138,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             transcriptionModel: transcriptionModel,
             enhancementMode: enhancementMode,
             enhancementModel: enhancementModel,
+            isTranslation: isTranslation,
             audioDurationSeconds: audioDurationSeconds,
             transcriptionProcessingDurationSeconds: transcriptionProcessingDurationSeconds,
             llmDurationSeconds: llmDurationSeconds

@@ -24,12 +24,16 @@ struct HotkeyPreference {
     static let modifierOnlyKeyCode: UInt16 = 0xFFFF
     static let defaultKeyCode: UInt16 = modifierOnlyKeyCode
     static let defaultModifiers: NSEvent.ModifierFlags = [.function]
+    static let defaultTranslationKeyCode: UInt16 = modifierOnlyKeyCode
+    static let defaultTranslationModifiers: NSEvent.ModifierFlags = [.function, .shift]
     static let defaultTriggerMode: TriggerMode = .longPress
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
             AppPreferenceKey.hotkeyKeyCode: Int(defaultKeyCode),
             AppPreferenceKey.hotkeyModifiers: Int(defaultModifiers.rawValue),
+            AppPreferenceKey.translationHotkeyKeyCode: Int(defaultTranslationKeyCode),
+            AppPreferenceKey.translationHotkeyModifiers: Int(defaultTranslationModifiers.rawValue),
             AppPreferenceKey.hotkeyTriggerMode: defaultTriggerMode.rawValue
         ])
     }
@@ -65,6 +69,23 @@ struct HotkeyPreference {
     static func save(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
         UserDefaults.standard.set(Int(keyCode), forKey: AppPreferenceKey.hotkeyKeyCode)
         UserDefaults.standard.set(Int(modifiers.rawValue), forKey: AppPreferenceKey.hotkeyModifiers)
+    }
+
+    static func loadTranslation() -> Hotkey {
+        let defaults = UserDefaults.standard
+        let keyCodeValue = defaults.object(forKey: AppPreferenceKey.translationHotkeyKeyCode) as? Int
+        let modifiersValue = defaults.object(forKey: AppPreferenceKey.translationHotkeyModifiers) as? Int
+
+        let keyCode = UInt16(keyCodeValue ?? Int(defaultTranslationKeyCode))
+        let modifiersRaw = modifiersValue ?? Int(defaultTranslationModifiers.rawValue)
+        let modifiers = NSEvent.ModifierFlags(rawValue: UInt(modifiersRaw)).intersection(.hotkeyRelevant)
+
+        return Hotkey(keyCode: keyCode, modifiers: modifiers)
+    }
+
+    static func saveTranslation(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
+        UserDefaults.standard.set(Int(keyCode), forKey: AppPreferenceKey.translationHotkeyKeyCode)
+        UserDefaults.standard.set(Int(modifiers.rawValue), forKey: AppPreferenceKey.translationHotkeyModifiers)
     }
 
     static func loadTriggerMode() -> TriggerMode {

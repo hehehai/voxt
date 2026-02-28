@@ -60,15 +60,21 @@ enum AppPreferenceKey {
     static let transcriptionEngine = "transcriptionEngine"
     static let enhancementMode = "enhancementMode"
     static let enhancementSystemPrompt = "enhancementSystemPrompt"
+    static let translationSystemPrompt = "translationSystemPrompt"
     static let mlxModelRepo = "mlxModelRepo"
     static let customLLMModelRepo = "customLLMModelRepo"
+    static let translationCustomLLMModelRepo = "translationCustomLLMModelRepo"
     static let useHfMirror = "useHfMirror"
     static let hotkeyKeyCode = "hotkeyKeyCode"
     static let hotkeyModifiers = "hotkeyModifiers"
+    static let translationHotkeyKeyCode = "translationHotkeyKeyCode"
+    static let translationHotkeyModifiers = "translationHotkeyModifiers"
     static let hotkeyTriggerMode = "hotkeyTriggerMode"
     static let selectedInputDeviceID = "selectedInputDeviceID"
     static let interactionSoundsEnabled = "interactionSoundsEnabled"
     static let overlayPosition = "overlayPosition"
+    static let translationTargetLanguage = "translationTargetLanguage"
+    static let autoCopyWhenNoFocusedInput = "autoCopyWhenNoFocusedInput"
     static let launchAtLogin = "launchAtLogin"
     static let showInDock = "showInDock"
     static let historyEnabled = "historyEnabled"
@@ -79,6 +85,12 @@ enum AppPreferenceKey {
         capitalization, and improve formatting. Do not alter the meaning, tone, or \
         substance of the text. Do not add, remove, or rephrase any content. Do not \
         add commentary or explanations. Return only the cleaned-up text.
+        """
+
+    static let defaultTranslationPrompt = """
+        You are Voxt's translation assistant. Translate the input text to {target_language}.
+        Preserve meaning, tone, names, numbers, and formatting.
+        Return only the translated text.
         """
 }
 
@@ -102,6 +114,11 @@ struct VoxtApp: App {
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private enum SessionOutputMode {
+        case transcription
+        case translation
+    }
+
     private let speechTranscriber = SpeechTranscriber()
     private var mlxTranscriber: MLXTranscriber?
     let mlxModelManager: MLXModelManager
@@ -130,6 +147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingStartedAt: Date?
     private var recordingStoppedAt: Date?
     private var transcriptionProcessingStartedAt: Date?
+    private var sessionOutputMode: SessionOutputMode = .transcription
 
     override init() {
         let repo = UserDefaults.standard.string(forKey: AppPreferenceKey.mlxModelRepo)
@@ -143,6 +161,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: [
             AppPreferenceKey.interactionSoundsEnabled: true,
             AppPreferenceKey.overlayPosition: OverlayPosition.bottom.rawValue,
+            AppPreferenceKey.translationTargetLanguage: TranslationTargetLanguage.english.rawValue,
+            AppPreferenceKey.autoCopyWhenNoFocusedInput: false,
+            AppPreferenceKey.translationSystemPrompt: AppPreferenceKey.defaultTranslationPrompt,
             AppPreferenceKey.launchAtLogin: false,
             AppPreferenceKey.showInDock: false,
             AppPreferenceKey.historyEnabled: false,
@@ -313,24 +334,50 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             switch HotkeyPreference.loadTriggerMode() {
             case .longPress:
-                self.beginRecording()
+                guard !self.isSessionActive else { return }
+                self.beginRecording(outputMode: .transcription)
             case .tap:
                 if self.isSessionActive {
                     self.endRecording()
                 } else {
-                    self.beginRecording()
+                    self.beginRecording(outputMode: .transcription)
                 }
             }
         }
         hotkeyManager.onKeyUp = { [weak self] in
             guard let self else { return }
             guard HotkeyPreference.loadTriggerMode() == .longPress else { return }
+            guard self.isSessionActive, self.sessionOutputMode == .transcription else { return }
+            self.endRecording()
+        }
+        hotkeyManager.onTranslationKeyDown = { [weak self] in
+            guard let self else { return }
+            switch HotkeyPreference.loadTriggerMode() {
+            case .longPress:
+                guard !self.isSessionActive else { return }
+                self.beginRecording(outputMode: .translation)
+            case .tap:
+                if self.isSessionActive {
+                    if self.sessionOutputMode == .translation {
+                        self.endRecording()
+                    } else {
+                        self.sessionOutputMode = .translation
+                    }
+                } else {
+                    self.beginRecording(outputMode: .translation)
+                }
+            }
+        }
+        hotkeyManager.onTranslationKeyUp = { [weak self] in
+            guard let self else { return }
+            guard HotkeyPreference.loadTriggerMode() == .longPress else { return }
+            guard self.isSessionActive, self.sessionOutputMode == .translation else { return }
             self.endRecording()
         }
         hotkeyManager.start()
     }
 
-    private func beginRecording() {
+    private func beginRecording(outputMode: SessionOutputMode) {
         guard !isSessionActive else { return }
         pendingSessionFinishTask?.cancel()
         pendingSessionFinishTask = nil
@@ -341,6 +388,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         recordingStartedAt = Date()
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
+        sessionOutputMode = outputMode
         applyPreferredInputDevice()
 
         if transcriptionEngine == .mlxAudio {
@@ -420,6 +468,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if sessionOutputMode == .translation {
+            processTranslatedTranscription(text)
+            return
+        }
+
         switch enhancementMode {
         case .off:
             setEnhancingState(false)
@@ -472,14 +525,99 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self.setEnhancingState(false)
                     self.finishSession()
                 }
-
                 let llmStartedAt = Date()
-                // TODO: wire local on-device Custom LLM inference through MLX Swift LM.
-                try? await Task.sleep(for: .milliseconds(250))
-                let llmDuration = Date().timeIntervalSince(llmStartedAt)
-                self.commitTranscription(text, llmDurationSeconds: llmDuration)
+                let prompt = UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementSystemPrompt)
+                    ?? AppPreferenceKey.defaultEnhancementPrompt
+                do {
+                    let enhanced = try await self.customLLMManager.enhance(text, systemPrompt: prompt)
+                    let llmDuration = Date().timeIntervalSince(llmStartedAt)
+                    self.commitTranscription(enhanced, llmDurationSeconds: llmDuration)
+                } catch {
+                    VoxtLog.error("Custom LLM enhancement failed, using raw text: \(error)")
+                    self.commitTranscription(text, llmDurationSeconds: nil)
+                }
             }
         }
+    }
+
+    private func processTranslatedTranscription(_ text: String) {
+        setEnhancingState(true)
+        Task {
+            defer {
+                self.setEnhancingState(false)
+                self.finishSession()
+            }
+
+            let llmStartedAt = Date()
+            do {
+                let enhanced = try await self.enhanceTextIfNeeded(text)
+                let translated = try await self.translateText(enhanced, targetLanguage: self.translationTargetLanguage)
+                let llmDuration = Date().timeIntervalSince(llmStartedAt)
+                self.commitTranscription(translated, llmDurationSeconds: llmDuration)
+            } catch {
+                VoxtLog.warning("Translation flow failed, using raw text: \(error)")
+                self.commitTranscription(text, llmDurationSeconds: nil)
+            }
+        }
+    }
+
+    private func enhanceTextIfNeeded(_ text: String) async throws -> String {
+        switch enhancementMode {
+        case .off:
+            return text
+        case .appleIntelligence:
+            guard let enhancer else { return text }
+            if #available(macOS 26.0, *) {
+                let prompt = UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementSystemPrompt)
+                    ?? AppPreferenceKey.defaultEnhancementPrompt
+                return try await enhancer.enhance(text, systemPrompt: prompt)
+            }
+            return text
+        case .customLLM:
+            guard customLLMManager.isModelDownloaded(repo: customLLMManager.currentModelRepo) else { return text }
+            let prompt = UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementSystemPrompt)
+                ?? AppPreferenceKey.defaultEnhancementPrompt
+            return try await customLLMManager.enhance(text, systemPrompt: prompt)
+        }
+    }
+
+    private func translateText(_ text: String, targetLanguage: TranslationTargetLanguage) async throws -> String {
+        let resolvedPrompt = translationSystemPrompt.replacingOccurrences(
+            of: "{target_language}",
+            with: targetLanguage.instructionName
+        )
+        let translationRepo = translationCustomLLMRepo
+
+        switch enhancementMode {
+        case .customLLM where customLLMManager.isModelDownloaded(repo: translationRepo):
+            return try await customLLMManager.translate(
+                text,
+                targetLanguage: targetLanguage,
+                systemPrompt: resolvedPrompt,
+                modelRepo: translationRepo
+            )
+        default:
+            break
+        }
+
+        if #available(macOS 26.0, *), let enhancer {
+            return try await enhancer.translate(
+                text,
+                targetLanguage: targetLanguage,
+                systemPrompt: resolvedPrompt
+            )
+        }
+
+        if customLLMManager.isModelDownloaded(repo: translationRepo) {
+            return try await customLLMManager.translate(
+                text,
+                targetLanguage: targetLanguage,
+                systemPrompt: resolvedPrompt,
+                modelRepo: translationRepo
+            )
+        }
+
+        return text
     }
 
     private func commitTranscription(_ text: String, llmDurationSeconds: TimeInterval?) {
@@ -492,9 +630,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let pasteboard = NSPasteboard.general
         let previous = pasteboard.string(forType: .string) ?? ""
         let accessibilityTrusted = AXIsProcessTrusted()
+        let shouldCopyOnly = autoCopyWhenNoFocusedInput && !hasWritableFocusedInput()
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+
+        if shouldCopyOnly {
+            return
+        }
 
         guard accessibilityTrusted else {
             promptForAccessibilityPermission()
@@ -527,6 +670,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 pasteboard.setString(previous, forType: .string)
             }
         }
+    }
+
+    private func hasWritableFocusedInput() -> Bool {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedObject: CFTypeRef?
+        let focusedResult = AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedObject
+        )
+        guard focusedResult == .success,
+              let focusedObject,
+              CFGetTypeID(focusedObject) == AXUIElementGetTypeID()
+        else {
+            return false
+        }
+
+        let focusedElement = unsafeBitCast(focusedObject, to: AXUIElement.self)
+        var roleObject: CFTypeRef?
+        let roleResult = AXUIElementCopyAttributeValue(
+            focusedElement,
+            kAXRoleAttribute as CFString,
+            &roleObject
+        )
+        guard roleResult == .success,
+              let role = roleObject as? String
+        else {
+            return false
+        }
+
+        if role == kAXTextFieldRole as String ||
+            role == kAXTextAreaRole as String ||
+            role == kAXComboBoxRole as String ||
+            role == "AXSearchField" {
+            return true
+        }
+
+        var editableObject: CFTypeRef?
+        let editableResult = AXUIElementCopyAttributeValue(
+            focusedElement,
+            "AXEditable" as CFString,
+            &editableObject
+        )
+        if editableResult == .success, let editable = editableObject as? Bool {
+            return editable
+        }
+
+        return false
     }
 
     private func promptForAccessibilityPermission() {
@@ -598,6 +789,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.interactionSoundPlayer.playEnd()
             }
             self.isSessionActive = false
+            self.sessionOutputMode = .transcription
             self.overlayState.isCompleting = false
             self.pendingSessionFinishTask = nil
         }
@@ -615,6 +807,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayPosition: OverlayPosition {
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.overlayPosition)
         return OverlayPosition(rawValue: raw ?? "") ?? .bottom
+    }
+
+    private var autoCopyWhenNoFocusedInput: Bool {
+        UserDefaults.standard.bool(forKey: AppPreferenceKey.autoCopyWhenNoFocusedInput)
+    }
+
+    private var translationTargetLanguage: TranslationTargetLanguage {
+        let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.translationTargetLanguage)
+        return TranslationTargetLanguage(rawValue: raw ?? "") ?? .english
+    }
+
+    private var translationSystemPrompt: String {
+        let value = UserDefaults.standard.string(forKey: AppPreferenceKey.translationSystemPrompt)
+        if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return value
+        }
+        return AppPreferenceKey.defaultTranslationPrompt
+    }
+
+    private var translationCustomLLMRepo: String {
+        let value = UserDefaults.standard.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo)
+        if let value, !value.isEmpty {
+            return value
+        }
+        return UserDefaults.standard.string(forKey: AppPreferenceKey.customLLMModelRepo)
+            ?? CustomLLMModelManager.defaultModelRepo
     }
 
     private var showInDock: Bool {
@@ -660,6 +878,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             transcriptionModel: transcriptionModel,
             enhancementMode: enhancementMode.title,
             enhancementModel: enhancementModel,
+            isTranslation: sessionOutputMode == .translation,
             audioDurationSeconds: audioDuration,
             transcriptionProcessingDurationSeconds: processingDuration,
             llmDurationSeconds: llmDurationSeconds

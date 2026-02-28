@@ -123,6 +123,65 @@ class CustomLLMModelManager: ObservableObject {
         return cleaned.isEmpty ? rawText : cleaned
     }
 
+    func translate(
+        _ text: String,
+        targetLanguage: TranslationTargetLanguage,
+        systemPrompt: String,
+        modelRepo: String
+    ) async throws -> String {
+        let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return text }
+        _ = targetLanguage
+        let translated = try await runTranslationPrompt(
+            input,
+            instructions: systemPrompt,
+            modelRepo: modelRepo
+        )
+        return translated.isEmpty ? text : translated
+    }
+
+    private func runTranslationPrompt(
+        _ text: String,
+        instructions: String,
+        modelRepo: String
+    ) async throws -> String {
+        guard isModelDownloaded(repo: modelRepo) else {
+            throw NSError(
+                domain: "Voxt.CustomLLM",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: "Custom LLM model is not installed locally."]
+            )
+        }
+
+        let container = try await container(for: modelRepo)
+        var session = ChatSession(container, instructions: instructions)
+        session.generateParameters = GenerateParameters(
+            maxTokens: 256,
+            temperature: 0.1,
+            topP: 0.95
+        )
+        let response = try await session.respond(to: text)
+        return response.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func container(for repo: String) async throws -> ModelContainer {
+        if let cached = inferenceContainer, inferenceModelRepo == repo {
+            return cached
+        }
+
+        guard let directory = Self.cacheDirectory(for: repo) else {
+            throw NSError(
+                domain: "Voxt.CustomLLM",
+                code: -10,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid local model path."]
+            )
+        }
+        let container = try await loadModelContainer(directory: directory)
+        inferenceContainer = container
+        inferenceModelRepo = repo
+        return container
+    }
+
     func displayTitle(for repo: String) -> String {
         if let option = Self.availableModels.first(where: { $0.id == repo }) {
             return option.title

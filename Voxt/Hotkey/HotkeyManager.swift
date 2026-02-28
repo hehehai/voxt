@@ -9,11 +9,16 @@ import AppKit
 class HotkeyManager {
     var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
+    var onTranslationKeyDown: (() -> Void)?
+    var onTranslationKeyUp: (() -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isKeyDown = false
     private var activeKeyCode: UInt16?
+    private var isTranslationKeyDown = false
+    private var activeTranslationKeyCode: UInt16?
+    private var suppressTranscriptionTapUntil = Date.distantPast
 
     func start() {
         let eventMask: CGEventMask =
@@ -55,27 +60,120 @@ class HotkeyManager {
         runLoopSource = nil
         isKeyDown = false
         activeKeyCode = nil
+        isTranslationKeyDown = false
+        activeTranslationKeyCode = nil
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) {
-        let hotkey = HotkeyPreference.load()
+        let transcriptionHotkey = HotkeyPreference.load()
+        let translationHotkey = HotkeyPreference.loadTranslation()
         let triggerMode = HotkeyPreference.loadTriggerMode()
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
-        let requiredFlags = cgFlags(from: hotkey.modifiers)
         let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        let transcriptionFlags = cgFlags(from: transcriptionHotkey.modifiers)
+        let translationFlags = cgFlags(from: translationHotkey.modifiers)
+        let wasTranslationKeyDown = isTranslationKeyDown
 
-        if hotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode {
+        // Translation hotkey path (higher priority).
+        if translationHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode {
+            if type == .flagsChanged {
+                let comboIsDown = flags.contains(translationFlags)
+                let isFnOnlyHotkey = translationFlags == .maskSecondaryFn
+                let isFunctionKeyEvent = keyCode == UInt16(kVK_Function)
+
+                if triggerMode == .tap {
+                    if (comboIsDown || (isFnOnlyHotkey && isFunctionKeyEvent)) && !isTranslationKeyDown {
+                        isTranslationKeyDown = true
+                        suppressTranscriptionTapUntil = Date().addingTimeInterval(0.35)
+                        emitTranslationKeyDown()
+                    }
+                    if !comboIsDown && isTranslationKeyDown {
+                        isTranslationKeyDown = false
+                        suppressTranscriptionTapUntil = Date().addingTimeInterval(0.20)
+                    }
+                    // Consume translation combo transitions to avoid falling through
+                    // into transcription fn-only handling during release sequence.
+                    if wasTranslationKeyDown != isTranslationKeyDown || comboIsDown {
+                        return
+                    }
+                } else {
+                    if comboIsDown && !isTranslationKeyDown {
+                        isTranslationKeyDown = true
+                        emitTranslationKeyDown()
+                    } else if !comboIsDown && isTranslationKeyDown {
+                        isTranslationKeyDown = false
+                        emitTranslationKeyUp()
+                    } else if isFnOnlyHotkey && isFunctionKeyEvent {
+                        if isTranslationKeyDown {
+                            isTranslationKeyDown = false
+                            emitTranslationKeyUp()
+                        } else {
+                            isTranslationKeyDown = true
+                            emitTranslationKeyDown()
+                        }
+                    }
+                }
+            }
+        } else {
+            let translationFlagsMatch = flags.contains(translationFlags)
+            switch type {
+            case .keyDown:
+                if keyCode == translationHotkey.keyCode, translationFlagsMatch, !isAutoRepeat {
+                    if triggerMode == .tap {
+                        emitTranslationKeyDown()
+                    } else if !isTranslationKeyDown {
+                        isTranslationKeyDown = true
+                        activeTranslationKeyCode = keyCode
+                        emitTranslationKeyDown()
+                    }
+                    return
+                }
+            case .keyUp:
+                if triggerMode == .tap {
+                    if activeTranslationKeyCode == keyCode {
+                        activeTranslationKeyCode = nil
+                    }
+                    if keyCode == translationHotkey.keyCode {
+                        emitTranslationKeyUp()
+                        return
+                    }
+                } else if isTranslationKeyDown, activeTranslationKeyCode == keyCode {
+                    isTranslationKeyDown = false
+                    activeTranslationKeyCode = nil
+                    emitTranslationKeyUp()
+                    return
+                }
+            default:
+                break
+            }
+        }
+
+        // Transcription hotkey path.
+        if transcriptionHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode {
             guard type == .flagsChanged else { return }
-            let comboIsDown = flags.contains(requiredFlags)
-            let isFnOnlyHotkey = requiredFlags == .maskSecondaryFn
+            // If translation modifier combo is active, suppress transcription trigger.
+            if translationHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode,
+               flags.contains(translationFlags) || isTranslationKeyDown {
+                return
+            }
+            let comboIsDown = flags.contains(transcriptionFlags)
+            let isFnOnlyHotkey = transcriptionFlags == .maskSecondaryFn
             let isFunctionKeyEvent = keyCode == UInt16(kVK_Function)
 
             if triggerMode == .tap {
-                // In tap mode, emit on every detected modifier press.
-                // Some keyboards report fn via keyCode without stable flags.
-                if comboIsDown || (isFnOnlyHotkey && isFunctionKeyEvent) {
+                if Date() < suppressTranscriptionTapUntil {
+                    if !comboIsDown && isKeyDown {
+                        isKeyDown = false
+                    }
+                    return
+                }
+                if (comboIsDown || (isFnOnlyHotkey && isFunctionKeyEvent)) && !isKeyDown {
+                    isKeyDown = true
                     emitKeyDown()
+                }
+                if !comboIsDown && isKeyDown {
+                    isKeyDown = false
                 }
                 return
             }
@@ -87,8 +185,6 @@ class HotkeyManager {
                 isKeyDown = false
                 emitKeyUp()
             } else if isFnOnlyHotkey && isFunctionKeyEvent {
-                // Fallback for keyboards that don't reliably set maskSecondaryFn.
-                // Use a simple toggle-like behavior on flagsChanged for fn-only hotkeys.
                 if isKeyDown {
                     isKeyDown = false
                     emitKeyUp()
@@ -100,20 +196,13 @@ class HotkeyManager {
             return
         }
 
-        let flagsMatch = flags.contains(requiredFlags)
-
+        let transcriptionFlagsMatch = flags.contains(transcriptionFlags)
         switch type {
         case .keyDown:
-            guard keyCode == hotkey.keyCode, flagsMatch, !isAutoRepeat else { return }
-
+            guard keyCode == transcriptionHotkey.keyCode, transcriptionFlagsMatch, !isAutoRepeat else { return }
             if triggerMode == .tap {
-                // Tap mode should react to every physical key press and must not rely on
-                // seeing the previous key-up event to recover.
                 emitKeyDown()
-                return
-            }
-
-            if !isKeyDown {
+            } else if !isKeyDown {
                 isKeyDown = true
                 activeKeyCode = keyCode
                 emitKeyDown()
@@ -123,10 +212,11 @@ class HotkeyManager {
                 if activeKeyCode == keyCode {
                     activeKeyCode = nil
                 }
-                emitKeyUp()
+                if keyCode == transcriptionHotkey.keyCode {
+                    emitKeyUp()
+                }
                 return
             }
-
             if isKeyDown, activeKeyCode == keyCode {
                 isKeyDown = false
                 activeKeyCode = nil
@@ -156,6 +246,18 @@ class HotkeyManager {
     private func emitKeyUp() {
         Task { @MainActor in
             onKeyUp?()
+        }
+    }
+
+    private func emitTranslationKeyDown() {
+        Task { @MainActor in
+            onTranslationKeyDown?()
+        }
+    }
+
+    private func emitTranslationKeyUp() {
+        Task { @MainActor in
+            onTranslationKeyUp?()
         }
     }
 }

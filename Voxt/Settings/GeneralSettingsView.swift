@@ -5,6 +5,8 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.selectedInputDeviceID) private var selectedInputDeviceIDRaw = 0
     @AppStorage(AppPreferenceKey.interactionSoundsEnabled) private var interactionSoundsEnabled = true
     @AppStorage(AppPreferenceKey.overlayPosition) private var overlayPositionRaw = OverlayPosition.bottom.rawValue
+    @AppStorage(AppPreferenceKey.translationTargetLanguage) private var translationTargetLanguageRaw = TranslationTargetLanguage.english.rawValue
+    @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
     @AppStorage(AppPreferenceKey.showInDock) private var showInDock = false
 
@@ -64,6 +66,47 @@ struct GeneralSettingsView: View {
                     }
 
                     Text("Controls where the floating transcription overlay appears on screen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Translation")
+                        .font(.headline)
+
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Target language")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Picker("Target language", selection: $translationTargetLanguageRaw) {
+                            ForEach(TranslationTargetLanguage.allCases) { language in
+                                Text(language.title).tag(language.rawValue)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 220, alignment: .trailing)
+                    }
+
+                    Text("Used by the dedicated translation shortcut (fn + Space).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Output")
+                        .font(.headline)
+
+                    Toggle("Copy to clipboard when no focused input", isOn: $autoCopyWhenNoFocusedInput)
+                    Text("When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
