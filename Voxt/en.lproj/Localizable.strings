@@ -31,6 +31,8 @@
 "Target language" = "Target language";
 "Output" = "Output";
 "Copy to clipboard when no focused input" = "Copy to clipboard when no focused input";
+"Always copy result to clipboard" = "Always copy result to clipboard";
+"Also copy result to clipboard" = "Also copy result to clipboard";
 "App Behavior" = "App Behavior";
 "Launch at Login" = "Launch at Login";
 "Show in Dock" = "Show in Dock";
@@ -65,6 +67,8 @@
 "Controls where the floating transcription overlay appears on screen." = "Controls where the floating transcription overlay appears on screen.";
 "Used by the dedicated translation shortcut (fn + Left Shift)." = "Used by the dedicated translation shortcut (fn + Left Shift).";
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste.";
+"When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste.";
+"When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "When enabled, Voxt auto-pastes result text and also keeps it in clipboard.";
 "Automatically start Voxt when your Mac starts." = "Automatically start Voxt when your Mac starts.";
 "Show Voxt in your Mac Dock for quick access." = "Show Voxt in your Mac Dock for quick access.";
 "Unable to change login item: %@" = "Unable to change login item: %@";
@@ -131,3 +135,17 @@
 "Test" = "Test";
 "Switch sample text with dots, then paste your transcription below to compare differences." = "Switch sample text with dots, then paste your transcription below to compare differences.";
 "Clean" = "Clean";
+"Permissions" = "Permissions";
+"Voxt needs the following permissions to support hotkeys, recording, and text insertion." = "Voxt needs the following permissions to support hotkeys, recording, and text insertion.";
+"Microphone Permission" = "Microphone Permission";
+"Speech Recognition Permission" = "Speech Recognition Permission";
+"Accessibility Permission" = "Accessibility Permission";
+"Input Monitoring Permission" = "Input Monitoring Permission";
+"Required to capture audio for transcription." = "Required to capture audio for transcription.";
+"Required for Apple Direct Dictation engine." = "Required for Apple Direct Dictation engine.";
+"Required to paste transcription text into other apps." = "Required to paste transcription text into other apps.";
+"Required for reliable global modifier hotkeys (such as fn)." = "Required for reliable global modifier hotkeys (such as fn).";
+"Enabled" = "Enabled";
+"Disabled" = "Disabled";
+"Request" = "Request";
+"Open Settings" = "Open Settings";

@@ -2,6 +2,7 @@ import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general
+    case permissions
     case history
     case model
     case hotkey
@@ -12,6 +13,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return String(localized: "General")
+        case .permissions: return String(localized: "Permissions")
         case .history: return String(localized: "History")
         case .model: return String(localized: "Model")
         case .hotkey: return String(localized: "Hotkey")
@@ -22,6 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .general: return "slider.horizontal.3"
+        case .permissions: return "lock.shield"
         case .history: return "clock.arrow.circlepath"
         case .model: return "waveform"
         case .hotkey: return "keyboard"

@@ -31,6 +31,8 @@
 "Target language" = "翻訳先言語";
 "Output" = "出力";
 "Copy to clipboard when no focused input" = "入力フォーカスがない場合はクリップボードへコピー";
+"Always copy result to clipboard" = "結果を常にクリップボードへコピー";
+"Also copy result to clipboard" = "結果を同時にクリップボードへコピー";
 "App Behavior" = "アプリ動作";
 "Launch at Login" = "ログイン時に起動";
 "Show in Dock" = "Dock に表示";
@@ -65,6 +67,8 @@
 "Controls where the floating transcription overlay appears on screen." = "フローティング文字起こしオーバーレイの表示位置を設定します。";
 "Used by the dedicated translation shortcut (fn + Left Shift)." = "専用翻訳ショートカット（fn + 左 Shift）で使用されます。";
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "有効時、入力可能なフォーカスがない場合は貼り付けの代わりに結果をクリップボードへ保存します。";
+"When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "有効時、Voxt は常に文字起こし結果をクリップボードに保存し、自動貼り付けは行いません。";
+"When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "有効時、Voxt は結果を自動貼り付けし、同時にクリップボードにも保持します。";
 "Automatically start Voxt when your Mac starts." = "Mac 起動時に Voxt を自動起動します。";
 "Show Voxt in your Mac Dock for quick access." = "すばやくアクセスできるよう Mac の Dock に Voxt を表示します。";
 "Unable to change login item: %@" = "ログイン項目を変更できません: %@";
@@ -131,3 +135,17 @@
 "Test" = "テスト";
 "Switch sample text with dots, then paste your transcription below to compare differences." = "ドットでサンプル文を切り替え、下の欄に文字起こし結果を貼り付けて差分を比較します。";
 "Clean" = "クリア";
+"Permissions" = "権限";
+"Voxt needs the following permissions to support hotkeys, recording, and text insertion." = "ホットキー、録音、テキスト入力のために以下の権限が必要です。";
+"Microphone Permission" = "マイク権限";
+"Speech Recognition Permission" = "音声認識権限";
+"Accessibility Permission" = "アクセシビリティ権限";
+"Input Monitoring Permission" = "入力監視権限";
+"Required to capture audio for transcription." = "文字起こしの音声取得に必要です。";
+"Required for Apple Direct Dictation engine." = "Apple Direct Dictation エンジンに必要です。";
+"Required to paste transcription text into other apps." = "他アプリへ文字起こし結果を貼り付けるために必要です。";
+"Required for reliable global modifier hotkeys (such as fn)." = "fn などのグローバル修飾キーの検出に必要です。";
+"Enabled" = "有効";
+"Disabled" = "無効";
+"Request" = "許可を要求";
+"Open Settings" = "設定を開く";

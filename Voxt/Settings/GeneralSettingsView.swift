@@ -133,8 +133,8 @@ struct GeneralSettingsView: View {
                     Text("Output")
                         .font(.headline)
 
-                    Toggle("Copy to clipboard when no focused input", isOn: $autoCopyWhenNoFocusedInput)
-                    Text("When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste.")
+                    Toggle("Also copy result to clipboard", isOn: $autoCopyWhenNoFocusedInput)
+                    Text("When enabled, Voxt auto-pastes result text and also keeps it in clipboard.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

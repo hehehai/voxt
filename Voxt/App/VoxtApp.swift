@@ -638,14 +638,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let pasteboard = NSPasteboard.general
         let previous = pasteboard.string(forType: .string) ?? ""
         let accessibilityTrusted = AXIsProcessTrusted()
-        let shouldCopyOnly = autoCopyWhenNoFocusedInput && !hasWritableFocusedInput()
+        let keepResultInClipboard = autoCopyWhenNoFocusedInput
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-
-        if shouldCopyOnly {
-            return
-        }
 
         guard accessibilityTrusted else {
             promptForAccessibilityPermission()
@@ -672,60 +668,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         cmdDown?.post(tap: .cgAnnotatedSessionEventTap)
         cmdUp?.post(tap: .cgAnnotatedSessionEventTap)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            pasteboard.clearContents()
-            if !previous.isEmpty {
-                pasteboard.setString(previous, forType: .string)
+        if !keepResultInClipboard {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                pasteboard.clearContents()
+                if !previous.isEmpty {
+                    pasteboard.setString(previous, forType: .string)
+                }
             }
         }
-    }
-
-    private func hasWritableFocusedInput() -> Bool {
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedObject: CFTypeRef?
-        let focusedResult = AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedObject
-        )
-        guard focusedResult == .success,
-              let focusedObject,
-              CFGetTypeID(focusedObject) == AXUIElementGetTypeID()
-        else {
-            return false
-        }
-
-        let focusedElement = unsafeBitCast(focusedObject, to: AXUIElement.self)
-        var roleObject: CFTypeRef?
-        let roleResult = AXUIElementCopyAttributeValue(
-            focusedElement,
-            kAXRoleAttribute as CFString,
-            &roleObject
-        )
-        guard roleResult == .success,
-              let role = roleObject as? String
-        else {
-            return false
-        }
-
-        if role == kAXTextFieldRole as String ||
-            role == kAXTextAreaRole as String ||
-            role == kAXComboBoxRole as String ||
-            role == "AXSearchField" {
-            return true
-        }
-
-        var editableObject: CFTypeRef?
-        let editableResult = AXUIElementCopyAttributeValue(
-            focusedElement,
-            "AXEditable" as CFString,
-            &editableObject
-        )
-        if editableResult == .success, let editable = editableObject as? Bool {
-            return editable
-        }
-
-        return false
     }
 
     private func promptForAccessibilityPermission() {

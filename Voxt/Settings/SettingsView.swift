@@ -33,6 +33,8 @@ struct SettingsView: View {
                                 switch selectedTab {
                                 case .general:
                                     GeneralSettingsView()
+                                case .permissions:
+                                    PermissionsSettingsView()
                                 case .model:
                                     ModelSettingsView(
                                         mlxModelManager: mlxModelManager,
