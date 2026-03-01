@@ -229,31 +229,37 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        Task { @MainActor in
-            do {
-                let fileManager = FileManager.default
-                let downloadsDir = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
-                    ?? fileManager.temporaryDirectory
-                let version = self.latestManifest?.version ?? "latest"
-                let destination = downloadsDir.appendingPathComponent("Voxt-\(version).pkg")
-                if fileManager.fileExists(atPath: destination.path) {
-                    try fileManager.removeItem(at: destination)
-                }
-                try fileManager.moveItem(at: location, to: destination)
+        let fileManager = FileManager.default
+        let stagingDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("VoxtUpdate", isDirectory: true)
+        let stagedPackageURL = stagingDirectory
+            .appendingPathComponent("Voxt-update-\(UUID().uuidString).pkg")
 
-                self.downloadedPackageURL = destination
-                self.isDownloading = false
-                self.downloadTask = nil
-                self.downloadProgress = 1
-                self.statusMessage = AppLocalization.localizedString("Download complete. Ready to install.")
-                VoxtLog.info("Update download completed: \(destination.path)")
-            } catch {
+        do {
+            try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: stagedPackageURL.path) {
+                try fileManager.removeItem(at: stagedPackageURL)
+            }
+            // Persist the temporary URLSession file before this delegate callback returns.
+            try fileManager.moveItem(at: location, to: stagedPackageURL)
+        } catch {
+            Task { @MainActor in
                 self.isDownloading = false
                 self.downloadTask = nil
                 self.downloadProgress = 0
                 self.statusMessage = AppLocalization.format("Failed to save installer: %@", error.localizedDescription)
-                VoxtLog.error("Failed to persist downloaded installer: \(error.localizedDescription)")
+                VoxtLog.error("Failed to stage downloaded installer: \(error.localizedDescription)")
             }
+            return
+        }
+
+        Task { @MainActor in
+            self.downloadedPackageURL = stagedPackageURL
+            self.isDownloading = false
+            self.downloadTask = nil
+            self.downloadProgress = 1
+            self.statusMessage = AppLocalization.localizedString("Download complete. Ready to install.")
+            VoxtLog.info("Update download completed: \(stagedPackageURL.path)")
         }
     }
 
