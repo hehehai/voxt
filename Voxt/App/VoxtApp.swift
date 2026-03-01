@@ -235,6 +235,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        VoxtLog.info("Voxt launching.")
         AppBehaviorController.applyDockVisibility(showInDock: showInDock)
         migrateLegacyPreferences()
 
@@ -280,6 +281,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 await self?.appUpdateManager.checkForUpdates(source: .automatic)
             }
         }
+        VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
     }
 
     deinit {
@@ -322,6 +324,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func checkForUpdates() {
+        VoxtLog.info("Manual update check triggered from menu.")
         Task { [weak self] in
             await self?.appUpdateManager.checkForUpdates(source: .manual)
         }
@@ -474,6 +477,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self.endRecording()
         }
         hotkeyManager.start()
+        VoxtLog.info("Hotkey callbacks configured.")
     }
 
     private func beginRecording(outputMode: SessionOutputMode) {
@@ -489,6 +493,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
         sessionOutputMode = outputMode
+        VoxtLog.info(
+            "Recording started. output=\(outputMode == .translation ? "translation" : "transcription"), engine=\(transcriptionEngine.rawValue)"
+        )
         applyPreferredInputDevice()
         overlayState.statusMessage = ""
 
@@ -536,6 +543,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func endRecording() {
         guard isSessionActive else { return }
+        VoxtLog.info("Recording stop requested.")
         silenceMonitorTask?.cancel()
         silenceMonitorTask = nil
         pauseLLMTask?.cancel()
@@ -572,10 +580,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func processTranscription(_ rawText: String) {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
+            VoxtLog.info("Transcription result is empty; finishing session.")
             setEnhancingState(false)
             finishSession(after: 0)
             return
         }
+        VoxtLog.info("Transcription result received. characters=\(text.count), output=\(sessionOutputMode == .translation ? "translation" : "transcription")")
 
         if sessionOutputMode == .translation {
             processTranslatedTranscription(text)
@@ -860,6 +870,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func preflightPermissionsForRecording() -> Bool {
         if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
+            VoxtLog.warning("Recording blocked: microphone permission not granted.")
             showOverlayReminder(
                 String(localized: "Microphone permission is required. Enable it in Settings > Permissions.")
             )
@@ -867,6 +878,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if transcriptionEngine == .dictation && SFSpeechRecognizer.authorizationStatus() != .authorized {
+            VoxtLog.warning("Recording blocked: speech recognition permission not granted for Direct Dictation.")
             showOverlayReminder(
                 String(localized: "Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions.")
             )
@@ -1175,6 +1187,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quit() {
+        VoxtLog.info("Quit requested from menu.")
         hotkeyManager.stop()
         NSApp.terminate(nil)
     }

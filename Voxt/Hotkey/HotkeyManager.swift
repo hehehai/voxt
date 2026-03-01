@@ -21,6 +21,7 @@ class HotkeyManager {
     private var suppressTranscriptionTapUntil = Date.distantPast
 
     func start() {
+        VoxtLog.info("Starting hotkey manager.")
         let eventMask: CGEventMask =
             (1 << CGEventType.keyDown.rawValue) |
             (1 << CGEventType.keyUp.rawValue) |
@@ -47,9 +48,11 @@ class HotkeyManager {
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        VoxtLog.info("Hotkey event tap started successfully.")
     }
 
     func stop() {
+        VoxtLog.info("Stopping hotkey manager.")
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
@@ -62,6 +65,7 @@ class HotkeyManager {
         activeKeyCode = nil
         isTranslationKeyDown = false
         activeTranslationKeyCode = nil
+        VoxtLog.info("Hotkey manager stopped.")
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) {

@@ -72,6 +72,12 @@
 "Project" = "プロジェクト";
 "Author" = "作者";
 "Thanks" = "謝辞";
+"Logs" = "ログ";
+"Export Latest Logs (2000)" = "最新ログをエクスポート（2000件）";
+"No logs yet" = "ログはまだありません";
+"Last updated: %@" = "最終更新: %@";
+"Exported to %@" = "%@ にエクスポートしました";
+"Export failed: %@" = "エクスポートに失敗しました: %@";
 "Play a short start chime when recording begins and an end chime when transcription completes." = "録音開始時に短い開始音、文字起こし完了時に終了音を再生します。";
 "Controls where the floating transcription overlay appears on screen." = "フローティング文字起こしオーバーレイの表示位置を設定します。";
 "Used by the dedicated translation shortcut (fn + Left Shift)." = "専用翻訳ショートカット（fn + 左 Shift）で使用されます。";

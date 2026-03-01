@@ -72,6 +72,12 @@
 "Project" = "Project";
 "Author" = "Author";
 "Thanks" = "Thanks";
+"Logs" = "Logs";
+"Export Latest Logs (2000)" = "Export Latest Logs (2000)";
+"No logs yet" = "No logs yet";
+"Last updated: %@" = "Last updated: %@";
+"Exported to %@" = "Exported to %@";
+"Export failed: %@" = "Export failed: %@";
 "Play a short start chime when recording begins and an end chime when transcription completes." = "Play a short start chime when recording begins and an end chime when transcription completes.";
 "Controls where the floating transcription overlay appears on screen." = "Controls where the floating transcription overlay appears on screen.";
 "Used by the dedicated translation shortcut (fn + Left Shift)." = "Used by the dedicated translation shortcut (fn + Left Shift).";

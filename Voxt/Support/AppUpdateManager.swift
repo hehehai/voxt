@@ -35,12 +35,14 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
     func checkForUpdates(source: CheckSource) async {
         guard !isChecking else { return }
         guard let manifestURL = updateManifestURL else {
+            VoxtLog.warning("Update check skipped: manifest URL not configured.")
             if source == .manual {
                 statusMessage = AppLocalization.localizedString("Update manifest URL is not configured.")
                 showUpdateSheet = true
             }
             return
         }
+        VoxtLog.info("Checking for updates. source=\(source == .manual ? "manual" : "automatic"), manifest=\(manifestURL.absoluteString)")
 
         isChecking = true
         defer { isChecking = false }
@@ -57,6 +59,7 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
 
             if let minimum = manifest.minimumSupportedVersion,
                compareVersions(currentVersion, minimum) == .orderedAscending {
+                VoxtLog.warning("Current version \(currentVersion) is below minimum supported \(minimum).")
                 hasUpdate = true
                 latestManifest = manifest
                 statusMessage = AppLocalization.localizedString("This version is no longer supported. Please install the latest version.")
@@ -66,6 +69,7 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
 
             if compareVersions(currentVersion, manifest.version) == .orderedAscending {
                 if skippedVersion == manifest.version {
+                    VoxtLog.info("Update \(manifest.version) available but skipped by user.")
                     hasUpdate = false
                     latestManifest = nil
                     downloadedPackageURL = nil
@@ -75,6 +79,7 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
                     }
                     return
                 }
+                VoxtLog.info("Update available: current=\(currentVersion), latest=\(manifest.version)")
                 latestManifest = manifest
                 hasUpdate = true
                 statusMessage = nil
@@ -82,6 +87,7 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
                     showUpdateSheet = true
                 }
             } else {
+                VoxtLog.info("No update available. current=\(currentVersion)")
                 hasUpdate = false
                 latestManifest = nil
                 downloadedPackageURL = nil
@@ -91,6 +97,7 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
                 }
             }
         } catch {
+            VoxtLog.error("Update check failed: \(error.localizedDescription)")
             if source == .manual {
                 statusMessage = AppLocalization.format("Failed to check updates: %@", error.localizedDescription)
                 showUpdateSheet = true
@@ -102,10 +109,12 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
         guard !isDownloading else { return }
         guard let manifest = latestManifest,
               let url = URL(string: manifest.downloadURL) else {
+            VoxtLog.warning("Update download failed to start: invalid download URL.")
             statusMessage = AppLocalization.localizedString("Invalid update download URL.")
             showUpdateSheet = true
             return
         }
+        VoxtLog.info("Starting update download: version=\(manifest.version), url=\(url.absoluteString)")
 
         statusMessage = nil
         isDownloading = true
@@ -119,16 +128,19 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
 
     func installAndRestart() {
         guard let packageURL = downloadedPackageURL else {
+            VoxtLog.warning("Install requested before package download completed.")
             statusMessage = AppLocalization.localizedString("Installer package not downloaded yet.")
             return
         }
 
+        VoxtLog.info("Opening installer package and terminating app: \(packageURL.path)")
         NSWorkspace.shared.open(packageURL)
         NSApp.terminate(nil)
     }
 
     func cancelDownload() {
         guard isDownloading else { return }
+        VoxtLog.info("Update download cancelled by user.")
         downloadTask?.cancel()
         downloadTask = nil
         isDownloading = false
@@ -148,6 +160,7 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
 
     func skipCurrentVersion() {
         guard let version = latestManifest?.version else { return }
+        VoxtLog.info("User skipped update version \(version).")
         UserDefaults.standard.set(version, forKey: AppPreferenceKey.skippedUpdateVersion)
         hasUpdate = false
         latestManifest = nil
@@ -233,11 +246,13 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
                 self.downloadTask = nil
                 self.downloadProgress = 1
                 self.statusMessage = AppLocalization.localizedString("Download complete. Ready to install.")
+                VoxtLog.info("Update download completed: \(destination.path)")
             } catch {
                 self.isDownloading = false
                 self.downloadTask = nil
                 self.downloadProgress = 0
                 self.statusMessage = AppLocalization.format("Failed to save installer: %@", error.localizedDescription)
+                VoxtLog.error("Failed to persist downloaded installer: \(error.localizedDescription)")
             }
         }
     }
@@ -253,6 +268,7 @@ final class AppUpdateManager: NSObject, ObservableObject, URLSessionDownloadDele
             self.downloadTask = nil
             self.downloadProgress = 0
             self.statusMessage = AppLocalization.format("Download failed: %@", error.localizedDescription)
+            VoxtLog.error("Update download failed: \(error.localizedDescription)")
         }
     }
 }

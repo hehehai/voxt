@@ -72,6 +72,12 @@
 "Project" = "项目";
 "Author" = "作者";
 "Thanks" = "感谢";
+"Logs" = "日志";
+"Export Latest Logs (2000)" = "导出最新日志（2000条）";
+"No logs yet" = "暂无日志";
+"Last updated: %@" = "最后更新：%@";
+"Exported to %@" = "已导出到 %@";
+"Export failed: %@" = "导出失败：%@";
 "Play a short start chime when recording begins and an end chime when transcription completes." = "录制开始时播放短提示音，转录完成时播放结束提示音。";
 "Controls where the floating transcription overlay appears on screen." = "控制悬浮转录面板在屏幕中的显示位置。";
 "Used by the dedicated translation shortcut (fn + Left Shift)." = "用于专用翻译快捷键（fn + 左 Shift）。";

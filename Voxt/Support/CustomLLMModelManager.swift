@@ -71,6 +71,7 @@ class CustomLLMModelManager: ObservableObject {
     init(modelRepo: String, hubBaseURL: URL = URL(string: "https://huggingface.co")!) {
         self.modelRepo = modelRepo
         self.hubBaseURL = hubBaseURL
+        VoxtLog.info("Custom LLM manager initialized. repo=\(modelRepo), hub=\(hubBaseURL.absoluteString)")
         checkExistingModel()
         fetchRemoteSize()
     }
@@ -191,6 +192,7 @@ class CustomLLMModelManager: ObservableObject {
 
     func updateModel(repo: String) {
         guard repo != modelRepo else { return }
+        VoxtLog.info("Custom LLM model changed: \(modelRepo) -> \(repo)")
         modelRepo = repo
         inferenceContainer = nil
         inferenceModelRepo = nil
@@ -200,6 +202,7 @@ class CustomLLMModelManager: ObservableObject {
 
     func updateHubBaseURL(_ url: URL) {
         guard url != hubBaseURL else { return }
+        VoxtLog.info("Custom LLM hub base URL changed: \(hubBaseURL.absoluteString) -> \(url.absoluteString)")
         hubBaseURL = url
         fetchRemoteSize()
         prefetchAllModelSizes()
@@ -240,9 +243,11 @@ class CustomLLMModelManager: ObservableObject {
     func checkExistingModel() {
         guard let modelDir = Self.cacheDirectory(for: modelRepo) else {
             state = .error("Invalid model identifier")
+            VoxtLog.error("Invalid custom LLM repo identifier: \(modelRepo)")
             return
         }
         state = Self.isModelDirectoryValid(modelDir) ? .downloaded : .notDownloaded
+        VoxtLog.info("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(state == .downloaded)")
     }
 
     func downloadModel() async {
@@ -256,6 +261,7 @@ class CustomLLMModelManager: ObservableObject {
             do {
                 guard let repoID = Repo.ID(rawValue: modelRepo) else {
                     state = .error("Invalid model identifier")
+                    VoxtLog.error("Custom LLM download failed: invalid repo id \(modelRepo)")
                     return
                 }
 
@@ -279,8 +285,10 @@ class CustomLLMModelManager: ObservableObject {
                 )
                 guard !entries.isEmpty else {
                     state = .error("No downloadable files were found for this model.")
+                    VoxtLog.error("Custom LLM download failed: no downloadable files for \(repoID.description)")
                     return
                 }
+                VoxtLog.info("Custom LLM download started: repo=\(repoID.description), files=\(entries.count)")
 
                 let totalBytes = max(entries.reduce(Int64(0)) { $0 + max($1.size ?? 0, 0) }, 1)
                 let totalFiles = entries.count
@@ -325,14 +333,18 @@ class CustomLLMModelManager: ObservableObject {
 
                 guard Self.isModelDirectoryValid(modelDir) else {
                     state = .error("Downloaded files are incomplete.")
+                    VoxtLog.error("Custom LLM download produced incomplete files: \(modelRepo)")
                     return
                 }
 
                 state = .downloaded
+                VoxtLog.info("Custom LLM download completed: \(modelRepo)")
             } catch is CancellationError {
                 state = .notDownloaded
+                VoxtLog.warning("Custom LLM download cancelled: \(modelRepo)")
             } catch {
                 state = .error("Download failed: \(error.localizedDescription)")
+                VoxtLog.error("Custom LLM download failed: \(modelRepo), error=\(error.localizedDescription)")
             }
         }
     }
@@ -344,6 +356,7 @@ class CustomLLMModelManager: ObservableObject {
 
     func cancelDownload() {
         guard downloadTask != nil else { return }
+        VoxtLog.info("Custom LLM download cancellation requested: \(modelRepo)")
         downloadTask?.cancel()
         downloadTask = nil
         state = .notDownloaded
@@ -355,6 +368,7 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func deleteModel(repo: String) {
+        VoxtLog.info("Deleting custom LLM model cache: \(repo)")
         if let repoID = Repo.ID(rawValue: repo) {
             clearHubCache(for: repoID)
         }
@@ -392,6 +406,7 @@ class CustomLLMModelManager: ObservableObject {
             } catch {
                 sizeState = .error("Size unavailable")
                 remoteSizeTextByRepo[repo] = "Unknown"
+                VoxtLog.warning("Failed to fetch custom LLM remote size: repo=\(repo), error=\(error.localizedDescription)")
             }
         }
     }
@@ -415,6 +430,7 @@ class CustomLLMModelManager: ObservableObject {
                     await MainActor.run {
                         self.remoteSizeTextByRepo[model.id] = "Unknown"
                     }
+                    VoxtLog.warning("Failed to prefetch custom LLM model size: repo=\(model.id), error=\(error.localizedDescription)")
                 }
             }
         }

@@ -22,7 +22,10 @@ enum AudioInputDeviceManager {
             nil,
             &dataSize
         )
-        guard sizeStatus == noErr, dataSize > 0 else { return [] }
+        guard sizeStatus == noErr, dataSize > 0 else {
+            VoxtLog.warning("Failed to query audio input devices. status=\(sizeStatus), dataSize=\(dataSize)")
+            return []
+        }
 
         let deviceCount = Int(dataSize) / MemoryLayout<AudioDeviceID>.size
         var deviceIDs = Array(repeating: AudioDeviceID(0), count: deviceCount)
@@ -34,14 +37,21 @@ enum AudioInputDeviceManager {
             &dataSize,
             &deviceIDs
         )
-        guard listStatus == noErr else { return [] }
+        guard listStatus == noErr else {
+            VoxtLog.warning("Failed to load audio input device list. status=\(listStatus)")
+            return []
+        }
 
-        return deviceIDs.compactMap { id in
+        let devices: [AudioInputDevice] = deviceIDs.compactMap { (id: AudioDeviceID) -> AudioInputDevice? in
             guard hasInputStream(deviceID: id) else { return nil }
             guard let name = deviceName(deviceID: id), !name.isEmpty else { return nil }
             return AudioInputDevice(id: id, name: name)
         }
-        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        .sorted { (lhs: AudioInputDevice, rhs: AudioInputDevice) in
+            lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        VoxtLog.info("Audio input devices discovered: \(devices.count)", verbose: true)
+        return devices
     }
 
     static func defaultInputDeviceID() -> AudioDeviceID? {
@@ -61,7 +71,10 @@ enum AudioInputDeviceManager {
             &dataSize,
             &deviceID
         )
-        guard status == noErr, deviceID != 0 else { return nil }
+        guard status == noErr, deviceID != 0 else {
+            VoxtLog.warning("Failed to read default input device. status=\(status), deviceID=\(deviceID)")
+            return nil
+        }
         return deviceID
     }
 
