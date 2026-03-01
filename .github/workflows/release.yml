@@ -24,6 +24,15 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Validate Swift tools version
+        run: |
+          SWIFT_VERSION="$(swift --version | awk '{print $4}')"
+          if [[ "$SWIFT_VERSION" != 6.2* && "$SWIFT_VERSION" != 6.3* && "$SWIFT_VERSION" != 6.4* && "$SWIFT_VERSION" != 7.* ]]; then
+            echo "Swift tools version is ${SWIFT_VERSION}, but at least 6.2 is required for mlx-audio-swift."
+            echo "Installed Xcode path: $(xcode-select -p)"
+            exit 1
+          fi
+
       - name: Resolve version
         id: version
         run: |
