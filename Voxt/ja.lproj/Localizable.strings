@@ -194,5 +194,12 @@
 "Install and Restart" = "インストールして再起動";
 "Download Update" = "更新をダウンロード";
 "Download progress: %.0f%%" = "ダウンロード進捗: %.0f%%";
+"Permissions Disabled" = "権限が未許可";
+"Please enable required permissions in Settings > Permissions." = "設定 > 権限で必要な権限を有効にしてください。";
+"Microphone permission is required. Enable it in Settings > Permissions." = "マイク権限が必要です。設定 > 権限で有効にしてください。";
+"Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions." = "Direct Dictation には音声認識権限が必要です。設定 > 権限で有効にしてください。";
+"MLX model is not downloaded. Open Settings > Model to install it." = "MLX モデルが未ダウンロードです。設定 > モデルでインストールしてください。";
+"MLX model is unavailable. Open Settings > Model to fix it." = "MLX モデルが利用できません。設定 > モデルで修正してください。";
+"Custom LLM model is not installed. Open Settings > Model to install it." = "カスタム LLM モデルが未インストールです。設定 > モデルでインストールしてください。";
 "Version %@ is skipped." = "バージョン %@ はスキップ済みです。";
 "Skipped version %@." = "バージョン %@ をスキップしました。";

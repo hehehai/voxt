@@ -4,6 +4,7 @@ struct WaveformView: View {
     var audioLevel: Float
     var isRecording: Bool
     var transcribedText: String
+    var statusMessage: String = ""
     var isEnhancing: Bool = false
     var isCompleting: Bool = false
 
@@ -16,13 +17,19 @@ struct WaveformView: View {
     @State private var spinAngle: Double = 0
 
     /// Whether we have text to show (drives expansion)
-    private var hasText: Bool { !transcribedText.isEmpty }
+    private var displayText: String {
+        let message = statusMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isEmpty { return message }
+        return transcribedText
+    }
+
+    private var hasText: Bool { !displayText.isEmpty }
 
     /// Keep expanded layout while text exists to avoid UI jumps during LLM processing.
     private var isCompact: Bool { !hasText }
 
     private var cornerRadius: CGFloat { isCompact ? 24 : 20 }
-    private var textOverflows: Bool { transcribedText.count > 38 }
+    private var textOverflows: Bool { displayText.count > 38 }
 
     var body: some View {
         VStack(spacing: isCompact ? 0 : 8) {
@@ -62,7 +69,7 @@ struct WaveformView: View {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 0) {
-                            Text(transcribedText)
+                            Text(displayText)
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.85))
                                 .lineLimit(1)
@@ -87,7 +94,7 @@ struct WaveformView: View {
                             Color.white
                         }
                     )
-                    .onChange(of: transcribedText) {
+                    .onChange(of: displayText) {
                         withAnimation(.easeOut(duration: 0.2)) {
                             proxy.scrollTo(textScrollID, anchor: .trailing)
                         }

@@ -194,5 +194,12 @@
 "Install and Restart" = "安装并重启";
 "Download Update" = "下载更新";
 "Download progress: %.0f%%" = "下载进度：%.0f%%";
+"Permissions Disabled" = "权限未开启";
+"Please enable required permissions in Settings > Permissions." = "请在设置 > 权限中开启应用所需权限。";
+"Microphone permission is required. Enable it in Settings > Permissions." = "需要麦克风权限，请在设置 > 权限中开启。";
+"Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions." = "Direct Dictation 需要语音识别权限，请在设置 > 权限中开启。";
+"MLX model is not downloaded. Open Settings > Model to install it." = "MLX 模型尚未下载，请在设置 > 模型中安装。";
+"MLX model is unavailable. Open Settings > Model to fix it." = "MLX 模型不可用，请在设置 > 模型中修复。";
+"Custom LLM model is not installed. Open Settings > Model to install it." = "自定义 LLM 模型尚未安装，请在设置 > 模型中安装。";
 "Version %@ is skipped." = "版本 %@ 已被跳过。";
 "Skipped version %@." = "已跳过版本 %@。";

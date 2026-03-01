@@ -194,5 +194,12 @@
 "Install and Restart" = "Install and Restart";
 "Download Update" = "Download Update";
 "Download progress: %.0f%%" = "Download progress: %.0f%%";
+"Permissions Disabled" = "Permissions Disabled";
+"Please enable required permissions in Settings > Permissions." = "Please enable required permissions in Settings > Permissions.";
+"Microphone permission is required. Enable it in Settings > Permissions." = "Microphone permission is required. Enable it in Settings > Permissions.";
+"Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions." = "Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions.";
+"MLX model is not downloaded. Open Settings > Model to install it." = "MLX model is not downloaded. Open Settings > Model to install it.";
+"MLX model is unavailable. Open Settings > Model to fix it." = "MLX model is unavailable. Open Settings > Model to fix it.";
+"Custom LLM model is not installed. Open Settings > Model to install it." = "Custom LLM model is not installed. Open Settings > Model to install it.";
 "Version %@ is skipped." = "Version %@ is skipped.";
 "Skipped version %@." = "Skipped version %@.";

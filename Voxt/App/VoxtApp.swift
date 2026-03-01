@@ -3,6 +3,7 @@ import AppKit
 import ApplicationServices
 import CoreAudio
 import AVFoundation
+import Speech
 
 enum TranscriptionEngine: String, CaseIterable, Identifiable {
     case dictation
@@ -149,6 +150,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var stopRecordingFallbackTask: Task<Void, Never>?
     private var silenceMonitorTask: Task<Void, Never>?
     private var pauseLLMTask: Task<Void, Never>?
+    private var overlayReminderTask: Task<Void, Never>?
+    private var overlayStatusClearTask: Task<Void, Never>?
     private var lastSignificantAudioAt = Date()
     private var didTriggerPauseTranscription = false
     private var didTriggerPauseLLM = false
@@ -228,14 +231,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         buildMenu()
 
-        Task {
-            let granted = await requestMicrophonePermission()
-            if !granted {
-                showPermissionAlert()
-                return
-            }
-            setupHotkey()
-        }
+        setupHotkey()
 
         if autoCheckForUpdates {
             Task { [weak self] in
@@ -412,6 +408,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func beginRecording(outputMode: SessionOutputMode) {
         guard !isSessionActive else { return }
+        guard preflightPermissionsForRecording() else { return }
         pendingSessionFinishTask?.cancel()
         pendingSessionFinishTask = nil
         stopRecordingFallbackTask?.cancel()
@@ -423,13 +420,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         transcriptionProcessingStartedAt = nil
         sessionOutputMode = outputMode
         applyPreferredInputDevice()
+        overlayState.statusMessage = ""
 
         if transcriptionEngine == .mlxAudio {
             switch mlxModelManager.state {
             case .notDownloaded:
                 VoxtLog.warning("MLX Audio model not downloaded, falling back to Direct Dictation")
+                showOverlayStatus(
+                    String(localized: "MLX model is not downloaded. Open Settings > Model to install it."),
+                    clearAfter: 2.5
+                )
             case .error:
                 VoxtLog.warning("MLX Audio model error, falling back to Direct Dictation")
+                showOverlayStatus(
+                    String(localized: "MLX model is unavailable. Open Settings > Model to fix it."),
+                    clearAfter: 2.5
+                )
             default:
                 break
             }
@@ -546,6 +552,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .customLLM:
             guard customLLMManager.isModelDownloaded(repo: customLLMManager.currentModelRepo) else {
                 VoxtLog.warning("Custom LLM selected but local model is not installed. Using raw transcription.")
+                showOverlayStatus(
+                    String(localized: "Custom LLM model is not installed. Open Settings > Model to install it."),
+                    clearAfter: 2.5
+                )
                 setEnhancingState(false)
                 commitTranscription(text, llmDurationSeconds: nil)
                 finishSession()
@@ -628,6 +638,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 targetLanguage: targetLanguage,
                 systemPrompt: resolvedPrompt,
                 modelRepo: translationRepo
+            )
+        case .customLLM:
+            showOverlayStatus(
+                String(localized: "Custom LLM model is not installed. Open Settings > Model to install it."),
+                clearAfter: 2.5
             )
         default:
             break
@@ -732,6 +747,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMLXRecordingSession() {
         let mlx = mlxTranscriber ?? MLXTranscriber(modelManager: mlxModelManager)
         mlxTranscriber = mlx
+        overlayState.statusMessage = ""
         mlx.setPreferredInputDevice(selectedInputDeviceID)
         mlx.onTranscriptionFinished = { [weak self] text in
             self?.processTranscription(text)
@@ -749,11 +765,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let granted = await self.speechTranscriber.requestPermissions()
             guard granted else {
-                self.finishSession(after: 0)
-                self.showPermissionAlert()
+                self.showOverlayReminder(
+                    String(localized: "Please enable required permissions in Settings > Permissions.")
+                )
                 return
             }
 
+            self.overlayState.statusMessage = ""
             self.speechTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.processTranscription(text)
             }
@@ -768,6 +786,62 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func requestMicrophonePermission() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
+    private func preflightPermissionsForRecording() -> Bool {
+        if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
+            showOverlayReminder(
+                String(localized: "Microphone permission is required. Enable it in Settings > Permissions.")
+            )
+            return false
+        }
+
+        if transcriptionEngine == .dictation && SFSpeechRecognizer.authorizationStatus() != .authorized {
+            showOverlayReminder(
+                String(localized: "Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions.")
+            )
+            return false
+        }
+
+        if !AXIsProcessTrusted() {
+            showOverlayStatus(
+                String(localized: "Please enable required permissions in Settings > Permissions."),
+                clearAfter: 2.2
+            )
+        }
+
+        return true
+    }
+
+    private func showOverlayReminder(_ message: String, autoHideAfter seconds: TimeInterval = 2.4) {
+        overlayReminderTask?.cancel()
+        overlayStatusClearTask?.cancel()
+        overlayState.reset()
+        overlayState.statusMessage = message
+        overlayWindow.show(state: overlayState, position: overlayPosition)
+
+        overlayReminderTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self.overlayWindow.hide()
+            self.overlayState.reset()
+            self.overlayReminderTask = nil
+        }
+    }
+
+    private func showOverlayStatus(_ message: String, clearAfter seconds: TimeInterval = 2.4) {
+        overlayStatusClearTask?.cancel()
+        overlayState.statusMessage = message
+        overlayStatusClearTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            if self.overlayState.statusMessage == message {
+                self.overlayState.statusMessage = ""
+            }
+            self.overlayStatusClearTask = nil
+        }
     }
 
     private func setEnhancingState(_ isEnhancing: Bool) {

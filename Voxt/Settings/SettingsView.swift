@@ -1,4 +1,8 @@
 import SwiftUI
+import AppKit
+import AVFoundation
+import Speech
+import ApplicationServices
 
 struct SettingsView: View {
     @ObservedObject var mlxModelManager: MLXModelManager
@@ -6,6 +10,7 @@ struct SettingsView: View {
     @ObservedObject var historyStore: TranscriptionHistoryStore
     @ObservedObject var appUpdateManager: AppUpdateManager
     @State private var selectedTab: SettingsTab = .general
+    @State private var hasMissingPermissions = false
 
     var body: some View {
         ZStack {
@@ -15,8 +20,12 @@ struct SettingsView: View {
             HStack(alignment: .top, spacing: 8) {
                 SettingsSidebar(
                     selectedTab: $selectedTab,
+                    hasMissingPermissions: hasMissingPermissions,
                     hasUpdate: appUpdateManager.hasUpdate,
-                    latestVersion: appUpdateManager.latestVersion
+                    latestVersion: appUpdateManager.latestVersion,
+                    onTapPermissionBadge: {
+                        selectedTab = .permissions
+                    }
                 ) {
                     appUpdateManager.showUpdateSheet = true
                 }
@@ -76,13 +85,34 @@ struct SettingsView: View {
             UpdateSheetView(appUpdateManager: appUpdateManager)
                 .frame(width: 460, height: 300)
         }
+        .onAppear {
+            refreshPermissionBadge()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPermissionBadge()
+        }
+    }
+
+    private func refreshPermissionBadge() {
+        let microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let speechGranted = SFSpeechRecognizer.authorizationStatus() == .authorized
+        let accessibilityGranted = AXIsProcessTrusted()
+        let inputMonitoringGranted: Bool
+        if #available(macOS 10.15, *) {
+            inputMonitoringGranted = CGPreflightListenEventAccess()
+        } else {
+            inputMonitoringGranted = true
+        }
+        hasMissingPermissions = !(microphoneGranted && speechGranted && accessibilityGranted && inputMonitoringGranted)
     }
 }
 
 private struct SettingsSidebar: View {
     @Binding var selectedTab: SettingsTab
+    let hasMissingPermissions: Bool
     let hasUpdate: Bool
     let latestVersion: String?
+    let onTapPermissionBadge: () -> Void
     let onTapUpdateBadge: () -> Void
 
     var body: some View {
@@ -112,6 +142,31 @@ private struct SettingsSidebar: View {
             }
 
             Spacer(minLength: 8)
+
+            if hasMissingPermissions {
+                Button(action: onTapPermissionBadge) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.red)
+                        Text(String(localized: "Permissions Disabled"))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.red)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.red.opacity(0.10))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
 
             if hasUpdate {
                 Button(action: onTapUpdateBadge) {

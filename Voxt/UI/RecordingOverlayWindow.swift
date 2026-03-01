@@ -8,6 +8,7 @@ class OverlayState: ObservableObject {
     @Published var isRecording = false
     @Published var audioLevel: Float = 0.0
     @Published var transcribedText = ""
+    @Published var statusMessage = ""
     @Published var isEnhancing = false
     @Published var isCompleting = false
 
@@ -35,6 +36,7 @@ class OverlayState: ObservableObject {
         isRecording = false
         audioLevel = 0
         transcribedText = ""
+        statusMessage = ""
         isEnhancing = false
         isCompleting = false
         cancellables.removeAll()
@@ -111,6 +113,7 @@ private struct OverlayContent: View {
             audioLevel: state.audioLevel,
             isRecording: state.isRecording,
             transcribedText: state.transcribedText,
+            statusMessage: state.statusMessage,
             isEnhancing: state.isEnhancing,
             isCompleting: state.isCompleting
         )
