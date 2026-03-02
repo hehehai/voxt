@@ -2,18 +2,21 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
     <title>Voxt Updates</title>
-    <link>https://github.com/hehehai/voxt/releases/tag/v1.1.8</link>
+    <link>https://github.com/hehehai/voxt/releases/tag/v1.2.0</link>
     <description>Latest Voxt releases</description>
     <language>en</language>
     <item>
-      <title>Voxt 1.1.8</title>
-      <pubDate>Mon, 02 Mar 2026 03:26:14 +0000</pubDate>
-      <description>## [1.1.8] - 2026-03-02
+      <title>Voxt 1.2.0</title>
+      <pubDate>Mon, 02 Mar 2026 13:23:52 +0000</pubDate>
+      <description>## What's Changed
+* feat(icon): migrate app icon to Xcode 26 .icon format by @missuo in https://github.com/hehehai/voxt/pull/3
 
-### Added
-- Release v1.1.8.</description>
-      <sparkle:releaseNotesLink>https://github.com/hehehai/voxt/releases/tag/v1.1.8</sparkle:releaseNotesLink>
-      <enclosure url="https://github.com/hehehai/voxt/releases/download/v1.1.8/Voxt-1.1.8.pkg" type="application/octet-stream" length="21619723" sparkle:shortVersionString="1.1.8" sparkle:version="1001008" />
+## New Contributors
+* @missuo made their first contribution in https://github.com/hehehai/voxt/pull/3
+
+**Full Changelog**: https://github.com/hehehai/voxt/compare/v1.1.6...v1.2.0</description>
+      <sparkle:releaseNotesLink>https://github.com/hehehai/voxt/releases/tag/v1.2.0</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/hehehai/voxt/releases/download/v1.2.0/Voxt-1.2.0.pkg" type="application/octet-stream" length="33900001" sparkle:shortVersionString="1.2.0" sparkle:version="1002000" sparkle:edSignature="ip+TNhTAH4W9rMpi046jcRdh61VW4mZFpCjzjaPA73XuTDbT9mbabcg5roTu4lFo3Xdt5Gm4KUYBmve/pK/jDA==" />
     </item>
   </channel>
 </rss>
