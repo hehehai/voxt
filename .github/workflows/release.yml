@@ -113,7 +113,7 @@ jobs:
 
   build_sign_notarize:
     name: Build, Sign, Notarize
-    runs-on: macos-15
+    runs-on: macos-26
     needs: [preflight]
     if: needs.preflight.outputs.should_skip != 'true'
     permissions:
