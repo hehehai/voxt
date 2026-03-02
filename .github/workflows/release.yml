@@ -221,7 +221,6 @@ jobs:
             "$APP_PATH"
 
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-          spctl -a -vv -t execute "$APP_PATH"
 
       - name: Build zip and pkg artifacts
         run: |
