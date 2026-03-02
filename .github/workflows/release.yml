@@ -361,12 +361,12 @@ jobs:
             echo "Notarization submit attempt $attempt..."
             if run_notarytool_submit; then
               SUBMISSION_ID="$(python3 - <<'PY'
-import json
-with open("build/notary-submit.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
-print(data.get("id", ""))
-PY
-)"
+                import json
+                with open("build/notary-submit.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                print(data.get("id", ""))
+                PY
+              )"
               if [ -z "$SUBMISSION_ID" ]; then
                 echo "::error::notarytool submit succeeded but no submission id was returned"
                 exit 1
@@ -429,12 +429,12 @@ PY
             fi
 
             STATUS="$(python3 - <<'PY'
-import json
-with open("build/notary-info.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
-print((data.get("status") or "").strip())
-PY
-)"
+              import json
+              with open("build/notary-info.json", "r", encoding="utf-8") as f:
+                  data = json.load(f)
+              print((data.get("status") or "").strip())
+              PY
+            )"
             echo "Notary status: ${STATUS:-<empty>}"
 
             if [ "$STATUS" = "Accepted" ]; then
