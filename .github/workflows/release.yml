@@ -308,7 +308,7 @@ jobs:
 
           classify_retryable() {
             local err_file="$1"
-            if rg -q "HTTP status code: 5[0-9][0-9]|statusCode: 500|UNEXPECTED_ERROR|Internal Server Error" "$err_file"; then
+            if grep -Eq "HTTP status code: 5[0-9][0-9]|statusCode: 500|UNEXPECTED_ERROR|Internal Server Error" "$err_file"; then
               return 0
             fi
             return 1
@@ -383,7 +383,7 @@ jobs:
                 exit 1
               fi
               BACKOFF=$((attempt * 30))
-              REQUEST_ID="$(rg -o "Request ID: [A-Z0-9.]+" "$SUBMIT_ERR" | head -n 1 || true)"
+              REQUEST_ID="$(grep -Eo "Request ID: [A-Z0-9.]+" "$SUBMIT_ERR" | head -n 1 || true)"
               if [ -n "$REQUEST_ID" ]; then
                 echo "Retryable Apple notary error ($REQUEST_ID). Retrying in ${BACKOFF}s..."
               else
@@ -506,8 +506,8 @@ jobs:
             SIGN_OUTPUT="$("$SIGN_UPDATE_BIN" "$PKG_PATH" "$KEY_FILE" 2>>/tmp/sign_update.err || true)"
           fi
 
-          SPARKLE_ED_SIGNATURE="$(printf '%s\n' "$SIGN_OUTPUT" | rg -o 'sparkle:edSignature="[^"]+"' | head -n 1 | sed -E 's/^[^"]*"([^"]+)".*$/\1/')"
-          SPARKLE_ED_LENGTH="$(printf '%s\n' "$SIGN_OUTPUT" | rg -o 'length="[0-9]+"' | head -n 1 | sed -E 's/^[^"]*"([0-9]+)".*$/\1/')"
+          SPARKLE_ED_SIGNATURE="$(printf '%s\n' "$SIGN_OUTPUT" | grep -Eo 'sparkle:edSignature="[^"]+"' | head -n 1 | sed -E 's/^[^"]*"([^"]+)".*$/\1/')"
+          SPARKLE_ED_LENGTH="$(printf '%s\n' "$SIGN_OUTPUT" | grep -Eo 'length="[0-9]+"' | head -n 1 | sed -E 's/^[^"]*"([0-9]+)".*$/\1/')"
           if [ -z "$SPARKLE_ED_LENGTH" ]; then
             SPARKLE_ED_LENGTH="$(stat -f%z "$PKG_PATH")"
           fi
