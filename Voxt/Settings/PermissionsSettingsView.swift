@@ -13,6 +13,15 @@ struct PermissionsSettingsView: View {
 
         var id: String { rawValue }
 
+        var logKey: String {
+            switch self {
+            case .microphone: return "mic"
+            case .speechRecognition: return "speech"
+            case .accessibility: return "accessibility"
+            case .inputMonitoring: return "inputMonitoring"
+            }
+        }
+
         var titleKey: LocalizedStringKey {
             switch self {
             case .microphone: return "Microphone Permission"
@@ -138,6 +147,7 @@ struct PermissionsSettingsView: View {
             snapshot[kind] = currentState(for: kind)
         }
         states = snapshot
+        VoxtLog.info("Permission status: \(permissionSnapshotText(snapshot))")
     }
 
     private func currentState(for kind: PermissionKind) -> PermissionState {
@@ -159,6 +169,7 @@ struct PermissionsSettingsView: View {
     private func requestPermission(_ kind: PermissionKind) {
         let initial = currentState(for: kind)
         states[kind] = initial
+        VoxtLog.info("Permission request triggered: \(kind.logKey)=\(initial == .enabled ? "on" : "off")")
         startMonitoring(kind: kind, initialState: initial)
 
         switch kind {
@@ -195,6 +206,7 @@ struct PermissionsSettingsView: View {
                 let latest = currentState(for: kind)
                 states[kind] = latest
                 if latest != initialState {
+                    VoxtLog.info("Permission status changed: \(kind.logKey)=\(latest == .enabled ? "on" : "off")")
                     return
                 }
             }
@@ -227,5 +239,14 @@ struct PermissionsSettingsView: View {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    private func permissionSnapshotText(_ snapshot: [PermissionKind: PermissionState]) -> String {
+        PermissionKind.allCases
+            .map { kind in
+                let state = snapshot[kind] ?? .disabled
+                return "\(kind.logKey)=\(state == .enabled ? "on" : "off")"
+            }
+            .joined(separator: ", ")
     }
 }

@@ -1,8 +1,8 @@
 {
-  "version": "1.1.6",
-  "minimumSupportedVersion": "1.1.6",
-  "downloadURL": "https://github.com/hehehai/voxt/releases/download/v1.1.6/Voxt-1.1.6.pkg",
-  "releaseNotes": "Added: Added the ability to skip a specific update version in update checks. | Fixed: Added microphone permission checks before starting dictation recording. | Fixed: Fixed hotkey event callback ownership handling in the event tap callback. | Fixed: Fixed update installer download handling by staging the package before completion callback returns.",
-  "publishedAt": "2026-03-01T13:58:21Z",
-  "sha256": "1d75918b0e3e11491747ad3b52a896047c3c6303473a48e34ced9c8f645329e8"
+  "version": "1.1.7",
+  "minimumSupportedVersion": "1.1.7",
+  "downloadURL": "https://github.com/hehehai/voxt/releases/download/v1.1.7/Voxt-1.1.7.pkg",
+  "releaseNotes": "Added: Release v1.1.7.",
+  "publishedAt": "2026-03-02T01:04:00Z",
+  "sha256": "2d9a58cb01e33a6508415ed405bbd0c544a62f0c09dfae1a5954e4b10cff562b"
 }
