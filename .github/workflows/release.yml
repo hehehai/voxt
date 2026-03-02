@@ -4,6 +4,27 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (push mode requires vX.Y.Z; manual mode supports vX.Y.Z-suffix)"
+        required: true
+        default: "v1.1.8-draft1"
+      draft_release:
+        description: "Create or keep release as draft"
+        required: true
+        default: true
+        type: boolean
+      update_appcast:
+        description: "Commit updates/appcast.json to main"
+        required: true
+        default: false
+        type: boolean
+      skip_if_assets_exist:
+        description: "Skip run when release already has assets"
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -19,17 +40,43 @@ jobs:
       should_skip: ${{ steps.release_state.outputs.should_skip }}
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
+      draft_release: ${{ steps.flags.outputs.draft_release }}
+      update_appcast: ${{ steps.flags.outputs.update_appcast }}
+      skip_if_assets_exist: ${{ steps.flags.outputs.skip_if_assets_exist }}
     steps:
+      - name: Resolve runtime flags
+        id: flags
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "draft_release=${{ inputs.draft_release }}" >> "$GITHUB_OUTPUT"
+            echo "update_appcast=${{ inputs.update_appcast }}" >> "$GITHUB_OUTPUT"
+            echo "skip_if_assets_exist=${{ inputs.skip_if_assets_exist }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "draft_release=false" >> "$GITHUB_OUTPUT"
+            echo "update_appcast=true" >> "$GITHUB_OUTPUT"
+            echo "skip_if_assets_exist=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Validate tag and extract version
         id: version
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          if ! [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "::error::Tag must be vX.Y.Z, got: $TAG"
-            exit 1
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            if ! [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)([-+][0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Manual tag must be vX.Y.Z or vX.Y.Z-suffix, got: $TAG"
+              exit 1
+            fi
+            VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            if ! [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "::error::Tag must be vX.Y.Z, got: $TAG"
+              exit 1
+            fi
+            VERSION="${TAG#v}"
           fi
-          VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -38,8 +85,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
+          SKIP_IF_ASSETS_EXIST: ${{ steps.flags.outputs.skip_if_assets_exist }}
         run: |
           set -euo pipefail
+          if [ "$SKIP_IF_ASSETS_EXIST" != "true" ]; then
+            echo "skip_if_assets_exist=false, forcing run."
+            echo "should_skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           ASSETS="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets | length' 2>/dev/null || echo "0")"
           if [[ "$ASSETS" =~ ^[0-9]+$ ]] && [ "$ASSETS" -gt 0 ]; then
             echo "Release $TAG already has $ASSETS assets, skipping."
@@ -231,6 +284,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.preflight.outputs.version }}
       TAG: ${{ needs.preflight.outputs.tag }}
+      DRAFT_RELEASE: ${{ needs.preflight.outputs.draft_release }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -268,21 +322,32 @@ jobs:
               --title "Voxt $TAG" \
               --notes-file "$NOTES_FILE" \
               -R "$GITHUB_REPOSITORY"
+            if [ "$DRAFT_RELEASE" = "true" ]; then
+              gh release edit "$TAG" --draft -R "$GITHUB_REPOSITORY"
+            fi
             gh release upload "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
               --clobber \
               -R "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
-              --title "Voxt $TAG" \
-              --notes-file "$NOTES_FILE" \
-              -R "$GITHUB_REPOSITORY"
+            if [ "$DRAFT_RELEASE" = "true" ]; then
+              gh release create "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
+                --draft \
+                --title "Voxt $TAG" \
+                --notes-file "$NOTES_FILE" \
+                -R "$GITHUB_REPOSITORY"
+            else
+              gh release create "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
+                --title "Voxt $TAG" \
+                --notes-file "$NOTES_FILE" \
+                -R "$GITHUB_REPOSITORY"
+            fi
           fi
 
   update_appcast_main:
     name: Update updates/appcast.json on main
     runs-on: ubuntu-latest
     needs: [preflight, build_sign_notarize, publish_release]
-    if: needs.preflight.outputs.should_skip != 'true'
+    if: needs.preflight.outputs.should_skip != 'true' && needs.preflight.outputs.update_appcast == 'true'
     permissions:
       contents: write
     env:
