@@ -599,11 +599,13 @@ jobs:
             if [ "$DRAFT_RELEASE" = "true" ]; then
               gh release create "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
                 --draft \
+                --target "$GITHUB_SHA" \
                 --title "Voxt $TAG" \
                 --notes-file "$NOTES_FILE" \
                 -R "$GITHUB_REPOSITORY"
             else
               gh release create "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
+                --target "$GITHUB_SHA" \
                 --title "Voxt $TAG" \
                 --notes-file "$NOTES_FILE" \
                 -R "$GITHUB_REPOSITORY"
