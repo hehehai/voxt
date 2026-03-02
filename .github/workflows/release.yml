@@ -188,48 +188,47 @@ jobs:
             exit 1
           fi
 
-      - name: Archive app
+      - name: Build app (unsigned)
         run: |
           set -euo pipefail
           xcodebuild \
             -project Voxt.xcodeproj \
             -scheme Voxt \
             -configuration Release \
-            -archivePath build/Voxt.xcarchive \
             -destination "generic/platform=macOS" \
-            archive
+            -derivedDataPath build/DerivedData \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
 
-      - name: Export archive
+      - name: Sign app bundle with Developer ID
         run: |
           set -euo pipefail
-          cat > build/ExportOptions.plist <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>developer-id</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>signingCertificate</key>
-            <string>$DEVELOPER_ID_APP_IDENTITY</string>
-            <key>teamID</key>
-            <string>$APPLE_TEAM_ID</string>
-          </dict>
-          </plist>
-          EOF
-          xcodebuild \
-            -exportArchive \
-            -archivePath build/Voxt.xcarchive \
-            -exportPath build/export \
-            -exportOptionsPlist build/ExportOptions.plist
+          APP_PATH="build/DerivedData/Build/Products/Release/Voxt.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Voxt.app not found at $APP_PATH"
+            exit 1
+          fi
+
+          codesign \
+            --force \
+            --deep \
+            --options runtime \
+            --timestamp \
+            --entitlements Voxt/Voxt.entitlements \
+            --sign "$DEVELOPER_ID_APP_IDENTITY" \
+            "$APP_PATH"
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          spctl -a -vv -t execute "$APP_PATH"
 
       - name: Build zip and pkg artifacts
         run: |
           set -euo pipefail
-          APP_PATH="$(find build/export -maxdepth 4 -name 'Voxt.app' -print -quit)"
-          if [ -z "$APP_PATH" ]; then
-            echo "::error::Voxt.app not found under build/export"
+          APP_PATH="build/DerivedData/Build/Products/Release/Voxt.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Voxt.app not found at $APP_PATH"
             exit 1
           fi
 
