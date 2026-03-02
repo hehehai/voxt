@@ -245,7 +245,8 @@ jobs:
           set -euo pipefail
           PKG_PATH="build/Voxt-${VERSION}.pkg"
 
-          for attempt in 1 2 3; do
+          MAX_ATTEMPTS=8
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
             echo "Notarization attempt $attempt..."
             if xcrun notarytool submit "$PKG_PATH" \
               --apple-id "$APPLE_ID" \
@@ -254,11 +255,13 @@ jobs:
               --wait; then
               break
             fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::Notarization failed after 3 attempts"
+            if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+              echo "::error::Notarization failed after ${MAX_ATTEMPTS} attempts"
               exit 1
             fi
-            sleep 30
+            BACKOFF=$((attempt * 30))
+            echo "Notarization attempt $attempt failed. Retrying in ${BACKOFF}s..."
+            sleep "$BACKOFF"
           done
 
           xcrun stapler staple "$PKG_PATH"
