@@ -2,6 +2,7 @@ import SwiftUI
 import CoreAudio
 
 struct GeneralSettingsView: View {
+    let appUpdateManager: AppUpdateManager
     @AppStorage(AppPreferenceKey.selectedInputDeviceID) private var selectedInputDeviceIDRaw = 0
     @AppStorage(AppPreferenceKey.interactionSoundsEnabled) private var interactionSoundsEnabled = true
     @AppStorage(AppPreferenceKey.interactionSoundPreset) private var interactionSoundPresetRaw = InteractionSoundPreset.soft.rawValue
@@ -181,7 +182,7 @@ struct GeneralSettingsView: View {
                         .foregroundStyle(.secondary)
 
                     Toggle("Automatically check for updates", isOn: $autoCheckForUpdates)
-                    Text("Check update manifest at launch and notify when a newer version is available.")
+                    Text("Let Sparkle periodically check for updates in the background.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -212,6 +213,7 @@ struct GeneralSettingsView: View {
                     isSyncingLaunchAtLoginState = false
                 }
             }
+            autoCheckForUpdates = appUpdateManager.automaticallyChecksForUpdates
             AppBehaviorController.applyDockVisibility(showInDock: showInDock)
         }
         .onChange(of: launchAtLogin) { _, newValue in
@@ -231,6 +233,9 @@ struct GeneralSettingsView: View {
         }
         .onChange(of: showInDock) { _, newValue in
             AppBehaviorController.applyDockVisibility(showInDock: newValue)
+        }
+        .onChange(of: autoCheckForUpdates) { _, newValue in
+            appUpdateManager.automaticallyChecksForUpdates = newValue
         }
         .onChange(of: interfaceLanguageRaw) { _, _ in
             NotificationCenter.default.post(name: .voxtInterfaceLanguageDidChange, object: nil)

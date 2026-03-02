@@ -1,0 +1,774 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (push mode requires vX.Y.Z; manual mode supports vX.Y.Z-suffix)"
+        required: true
+        default: "v1.1.8-draft1"
+      draft_release:
+        description: "Create or keep release as draft"
+        required: true
+        default: true
+        type: boolean
+      update_appcast:
+        description: "Commit updates/appcast.xml to main"
+        required: true
+        default: false
+        type: boolean
+      skip_if_assets_exist:
+        description: "Skip run when release already has assets"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_skip: ${{ steps.release_state.outputs.should_skip }}
+      tag: ${{ steps.version_dispatch.outputs.tag || steps.version_push.outputs.tag }}
+      version: ${{ steps.version_dispatch.outputs.version || steps.version_push.outputs.version }}
+      draft_release: ${{ steps.flags_dispatch.outputs.draft_release || steps.flags_push.outputs.draft_release }}
+      update_appcast: ${{ steps.flags_dispatch.outputs.update_appcast || steps.flags_push.outputs.update_appcast }}
+      skip_if_assets_exist: ${{ steps.flags_dispatch.outputs.skip_if_assets_exist || steps.flags_push.outputs.skip_if_assets_exist }}
+    steps:
+      - name: Resolve runtime flags (dispatch)
+        id: flags_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          echo "draft_release=${{ github.event.inputs.draft_release }}" >> "$GITHUB_OUTPUT"
+          echo "update_appcast=${{ github.event.inputs.update_appcast }}" >> "$GITHUB_OUTPUT"
+          echo "skip_if_assets_exist=${{ github.event.inputs.skip_if_assets_exist }}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve runtime flags (push)
+        id: flags_push
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          echo "draft_release=false" >> "$GITHUB_OUTPUT"
+          echo "update_appcast=true" >> "$GITHUB_OUTPUT"
+          echo "skip_if_assets_exist=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag and extract version (dispatch)
+        id: version_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          if ! [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Manual tag must be vX.Y.Z or vX.Y.Z-suffix, got: $TAG"
+            exit 1
+          fi
+          VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag and extract version (push)
+        id: version_push
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if ! [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Tag must be vX.Y.Z, got: $TAG"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check existing release assets
+        id: release_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version_dispatch.outputs.tag || steps.version_push.outputs.tag }}
+          SKIP_IF_ASSETS_EXIST: ${{ steps.flags_dispatch.outputs.skip_if_assets_exist || steps.flags_push.outputs.skip_if_assets_exist }}
+        run: |
+          set -euo pipefail
+          if [ "$SKIP_IF_ASSETS_EXIST" != "true" ]; then
+            echo "skip_if_assets_exist=false, forcing run."
+            echo "should_skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ASSETS="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets | length' 2>/dev/null || echo "0")"
+          if [[ "$ASSETS" =~ ^[0-9]+$ ]] && [ "$ASSETS" -gt 0 ]; then
+            echo "Release $TAG already has $ASSETS assets, skipping."
+            echo "should_skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build_sign_notarize:
+    name: Build, Sign, Notarize
+    runs-on: macos-26
+    needs: [preflight]
+    if: needs.preflight.outputs.should_skip != 'true'
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      TAG: ${{ needs.preflight.outputs.tag }}
+      UPDATE_APPCAST: ${{ needs.preflight.outputs.update_appcast }}
+      DEVELOPER_ID_APP_CERT_P12: ${{ secrets.DEVELOPER_ID_APP_CERT_P12 }}
+      DEVELOPER_ID_APP_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_APP_CERT_PASSWORD }}
+      DEVELOPER_ID_INSTALLER_CERT_P12: ${{ secrets.DEVELOPER_ID_INSTALLER_CERT_P12 }}
+      DEVELOPER_ID_INSTALLER_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_INSTALLER_CERT_PASSWORD }}
+      DEVELOPER_ID_APP_IDENTITY: ${{ secrets.DEVELOPER_ID_APP_IDENTITY }}
+      DEVELOPER_ID_INSTALLER_IDENTITY: ${{ secrets.DEVELOPER_ID_INSTALLER_IDENTITY }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_NOTARIZATION_ISSUER: ${{ secrets.APPLE_NOTARIZATION_ISSUER }}
+      APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+      APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+      NOTARY_PROFILE_NAME: ${{ secrets.NOTARY_PROFILE_NAME }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          for key in \
+            DEVELOPER_ID_APP_CERT_P12 \
+            DEVELOPER_ID_APP_CERT_PASSWORD \
+            DEVELOPER_ID_INSTALLER_CERT_P12 \
+            DEVELOPER_ID_INSTALLER_CERT_PASSWORD \
+            DEVELOPER_ID_APP_IDENTITY \
+            DEVELOPER_ID_INSTALLER_IDENTITY \
+            KEYCHAIN_PASSWORD; do
+            if [ -z "${!key:-}" ]; then
+              echo "::error::Missing required secret: $key"
+              exit 1
+            fi
+          done
+
+          HAS_API_KEY_AUTH=0
+          if [ -n "${APPLE_NOTARIZATION_ISSUER:-}" ] && [ -n "${APPLE_NOTARIZATION_KEY_ID:-}" ] && [ -n "${APPLE_NOTARIZATION_KEY:-}" ]; then
+            HAS_API_KEY_AUTH=1
+          fi
+
+          HAS_APPLE_ID_AUTH=0
+          if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]; then
+            HAS_APPLE_ID_AUTH=1
+          fi
+
+          if [ "$HAS_API_KEY_AUTH" -eq 0 ] && [ "$HAS_APPLE_ID_AUTH" -eq 0 ]; then
+            echo "::error::Missing notarization credentials: provide API key (APPLE_NOTARIZATION_ISSUER/KEY_ID/KEY) or Apple ID credentials (APPLE_ID/APPLE_TEAM_ID/APPLE_APP_SPECIFIC_PASSWORD)."
+            exit 1
+          fi
+
+          if [ "${UPDATE_APPCAST:-false}" = "true" ] && [ -z "${SPARKLE_PRIVATE_KEY:-}" ]; then
+            echo "::error::Missing required secret for Sparkle appcast signing: SPARKLE_PRIVATE_KEY"
+            exit 1
+          fi
+
+      - name: Validate MARKETING_VERSION matches tag
+        run: |
+          set -euo pipefail
+          MARKETING_VERSION="$(xcodebuild -project Voxt.xcodeproj -scheme Voxt -configuration Release -showBuildSettings | awk -F' = ' '/ MARKETING_VERSION = / {print $2; exit}')"
+          if [ -z "$MARKETING_VERSION" ]; then
+            echo "::error::Unable to read MARKETING_VERSION from build settings"
+            exit 1
+          fi
+          if [ "$MARKETING_VERSION" != "$VERSION" ]; then
+            echo "::error::MARKETING_VERSION($MARKETING_VERSION) does not match tag version($VERSION)"
+            exit 1
+          fi
+
+      - name: Setup keychain and import certificates
+        run: |
+          set -euo pipefail
+          echo "$DEVELOPER_ID_APP_CERT_P12" | base64 --decode > app-cert.p12
+          echo "$DEVELOPER_ID_INSTALLER_CERT_P12" | base64 --decode > installer-cert.p12
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+
+          security import app-cert.p12 -k build.keychain -P "$DEVELOPER_ID_APP_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild > /dev/null
+          security import installer-cert.p12 -k build.keychain -P "$DEVELOPER_ID_INSTALLER_CERT_PASSWORD" \
+            -T /usr/bin/productbuild -T /usr/bin/security > /dev/null
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productbuild: -s -k "$KEYCHAIN_PASSWORD" build.keychain > /dev/null
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s build.keychain
+
+      - name: Verify signing identities in keychain
+        run: |
+          set -euo pipefail
+          if ! security find-identity -v -p codesigning build.keychain | grep -F "$DEVELOPER_ID_APP_IDENTITY" >/dev/null; then
+            echo "::error::Developer ID Application identity not found in keychain: $DEVELOPER_ID_APP_IDENTITY"
+            exit 1
+          fi
+          if ! security find-identity -v -p basic build.keychain | grep -F "$DEVELOPER_ID_INSTALLER_IDENTITY" >/dev/null; then
+            echo "::error::Developer ID Installer identity not found in keychain: $DEVELOPER_ID_INSTALLER_IDENTITY"
+            exit 1
+          fi
+
+      - name: Setup notarytool authentication mode
+        run: |
+          set -euo pipefail
+
+          PROFILE="${NOTARY_PROFILE_NAME:-notarytool-profile}"
+          echo "NOTARY_PROFILE_NAME=$PROFILE" >> "$GITHUB_ENV"
+
+          if [ -n "${APPLE_NOTARIZATION_ISSUER:-}" ] && [ -n "${APPLE_NOTARIZATION_KEY_ID:-}" ] && [ -n "${APPLE_NOTARIZATION_KEY:-}" ]; then
+            KEY_FILE="build/notary-api-key.p8"
+            mkdir -p build
+            printf '%s' "$APPLE_NOTARIZATION_KEY" > "$KEY_FILE"
+            xcrun notarytool store-credentials "$PROFILE" \
+              --key "$KEY_FILE" \
+              --key-id "$APPLE_NOTARIZATION_KEY_ID" \
+              --issuer "$APPLE_NOTARIZATION_ISSUER"
+            rm -f "$KEY_FILE"
+            echo "NOTARY_AUTH_MODE=profile" >> "$GITHUB_ENV"
+            echo "Using notary auth mode: profile"
+          else
+            echo "NOTARY_AUTH_MODE=apple-id" >> "$GITHUB_ENV"
+            echo "Using notary auth mode: apple-id"
+          fi
+
+      - name: Build app (unsigned)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Voxt.xcodeproj \
+            -scheme Voxt \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -derivedDataPath build/DerivedData \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Sign app bundle with Developer ID
+        run: |
+          set -euo pipefail
+          APP_PATH="build/DerivedData/Build/Products/Release/Voxt.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Voxt.app not found at $APP_PATH"
+            exit 1
+          fi
+
+          codesign \
+            --force \
+            --deep \
+            --options runtime \
+            --timestamp \
+            --entitlements Voxt/Voxt.entitlements \
+            --sign "$DEVELOPER_ID_APP_IDENTITY" \
+            "$APP_PATH"
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Build zip and pkg artifacts
+        run: |
+          set -euo pipefail
+          APP_PATH="build/DerivedData/Build/Products/Release/Voxt.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Voxt.app not found at $APP_PATH"
+            exit 1
+          fi
+
+          ZIP_PATH="build/Voxt-${VERSION}-macOS.zip"
+          PKG_PATH="build/Voxt-${VERSION}.pkg"
+
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+          productbuild \
+            --component "$APP_PATH" /Applications \
+            --sign "$DEVELOPER_ID_INSTALLER_IDENTITY" \
+            "$PKG_PATH"
+
+      - name: Notarize and staple pkg
+        run: |
+          set -euo pipefail
+          PKG_PATH="build/Voxt-${VERSION}.pkg"
+          NOTARY_LOG_FILE="build/notary-log-${VERSION}.json"
+          SUBMIT_JSON="build/notary-submit.json"
+          SUBMIT_ERR="build/notary-submit.err.log"
+          INFO_JSON="build/notary-info.json"
+          INFO_ERR="build/notary-info.err.log"
+
+          classify_retryable() {
+            local err_file="$1"
+            if rg -q "HTTP status code: 5[0-9][0-9]|statusCode: 500|UNEXPECTED_ERROR|Internal Server Error" "$err_file"; then
+              return 0
+            fi
+            return 1
+          }
+
+          run_notarytool_submit() {
+            if [ "${NOTARY_AUTH_MODE:-apple-id}" = "profile" ]; then
+              xcrun notarytool submit "$PKG_PATH" \
+                --keychain-profile "$NOTARY_PROFILE_NAME" \
+                --output-format json \
+                >"$SUBMIT_JSON" 2>"$SUBMIT_ERR"
+            else
+              xcrun notarytool submit "$PKG_PATH" \
+                --apple-id "$APPLE_ID" \
+                --team-id "$APPLE_TEAM_ID" \
+                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+                --output-format json \
+                >"$SUBMIT_JSON" 2>"$SUBMIT_ERR"
+            fi
+          }
+
+          run_notarytool_info() {
+            local submission_id="$1"
+            if [ "${NOTARY_AUTH_MODE:-apple-id}" = "profile" ]; then
+              xcrun notarytool info "$submission_id" \
+                --keychain-profile "$NOTARY_PROFILE_NAME" \
+                --output-format json \
+                >"$INFO_JSON" 2>"$INFO_ERR"
+            else
+              xcrun notarytool info "$submission_id" \
+                --apple-id "$APPLE_ID" \
+                --team-id "$APPLE_TEAM_ID" \
+                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+                --output-format json \
+                >"$INFO_JSON" 2>"$INFO_ERR"
+            fi
+          }
+
+          fetch_notary_log() {
+            local submission_id="$1"
+            if [ "${NOTARY_AUTH_MODE:-apple-id}" = "profile" ]; then
+              xcrun notarytool log "$submission_id" \
+                --keychain-profile "$NOTARY_PROFILE_NAME" \
+                >"$NOTARY_LOG_FILE" 2>&1 || true
+            else
+              xcrun notarytool log "$submission_id" \
+                --apple-id "$APPLE_ID" \
+                --team-id "$APPLE_TEAM_ID" \
+                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+                >"$NOTARY_LOG_FILE" 2>&1 || true
+            fi
+          }
+
+          SUBMISSION_ID=""
+          MAX_SUBMIT_ATTEMPTS=8
+          for attempt in $(seq 1 "$MAX_SUBMIT_ATTEMPTS"); do
+            echo "Notarization submit attempt $attempt..."
+            if run_notarytool_submit; then
+              SUBMISSION_ID="$(python3 -c 'import json; print(json.load(open("build/notary-submit.json", "r", encoding="utf-8")).get("id", ""))')"
+              if [ -z "$SUBMISSION_ID" ]; then
+                echo "::error::notarytool submit succeeded but no submission id was returned"
+                exit 1
+              fi
+              echo "Notary submission id: $SUBMISSION_ID"
+              break
+            fi
+
+            if classify_retryable "$SUBMIT_ERR"; then
+              if [ "$attempt" -eq "$MAX_SUBMIT_ATTEMPTS" ]; then
+                echo "::error::Notarization submit failed after ${MAX_SUBMIT_ATTEMPTS} attempts (retryable server errors)"
+                cat "$SUBMIT_ERR"
+                exit 1
+              fi
+              BACKOFF=$((attempt * 30))
+              REQUEST_ID="$(rg -o "Request ID: [A-Z0-9.]+" "$SUBMIT_ERR" | head -n 1 || true)"
+              if [ -n "$REQUEST_ID" ]; then
+                echo "Retryable Apple notary error ($REQUEST_ID). Retrying in ${BACKOFF}s..."
+              else
+                echo "Retryable Apple notary error. Retrying in ${BACKOFF}s..."
+              fi
+              sleep "$BACKOFF"
+              continue
+            fi
+
+            echo "::error::Notarization submit failed with non-retryable error"
+            cat "$SUBMIT_ERR"
+            exit 1
+          done
+
+          if [ -z "$SUBMISSION_ID" ]; then
+            echo "::error::No notary submission id available"
+            exit 1
+          fi
+
+          POLL_INTERVAL=25
+          MAX_POLL_SECONDS=$((30 * 60))
+          START_TS="$(date +%s)"
+          ACCEPTED=0
+
+          while true; do
+            NOW_TS="$(date +%s)"
+            ELAPSED=$((NOW_TS - START_TS))
+            if [ "$ELAPSED" -ge "$MAX_POLL_SECONDS" ]; then
+              echo "::error::Notary polling timed out after ${MAX_POLL_SECONDS}s for submission $SUBMISSION_ID"
+              fetch_notary_log "$SUBMISSION_ID"
+              exit 1
+            fi
+
+            if ! run_notarytool_info "$SUBMISSION_ID"; then
+              if classify_retryable "$INFO_ERR"; then
+                echo "Retryable error while checking notary status, continuing..."
+                sleep "$POLL_INTERVAL"
+                continue
+              fi
+              echo "::error::Failed to fetch notary status (non-retryable)"
+              cat "$INFO_ERR"
+              fetch_notary_log "$SUBMISSION_ID"
+              exit 1
+            fi
+
+            STATUS="$(python3 -c 'import json; print((json.load(open("build/notary-info.json", "r", encoding="utf-8")).get("status") or "").strip())')"
+            echo "Notary status: ${STATUS:-<empty>}"
+
+            if [ "$STATUS" = "Accepted" ]; then
+              ACCEPTED=1
+              break
+            fi
+
+            if [ "$STATUS" = "Invalid" ] || [ "$STATUS" = "Rejected" ]; then
+              echo "::error::Notary status is $STATUS for submission $SUBMISSION_ID"
+              fetch_notary_log "$SUBMISSION_ID"
+              [ -f "$NOTARY_LOG_FILE" ] && tail -n 120 "$NOTARY_LOG_FILE" || true
+              exit 1
+            fi
+
+            sleep "$POLL_INTERVAL"
+          done
+
+          if [ "$ACCEPTED" -ne 1 ]; then
+            echo "::error::Notary status did not reach Accepted"
+            fetch_notary_log "$SUBMISSION_ID"
+            exit 1
+          fi
+
+          xcrun stapler staple "$PKG_PATH"
+          xcrun stapler validate "$PKG_PATH"
+          spctl -a -vv -t install "$PKG_PATH"
+
+      - name: Upload notarization diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarization-diagnostics-${{ needs.preflight.outputs.version }}
+          path: |
+            build/notary-*.log
+            build/notary-*.json
+          if-no-files-found: ignore
+
+      - name: Generate checksum
+        run: |
+          set -euo pipefail
+          PKG_PATH="build/Voxt-${VERSION}.pkg"
+          SHA_PATH="build/Voxt-${VERSION}.pkg.sha256"
+          shasum -a 256 "$PKG_PATH" | awk '{print $1}' > "$SHA_PATH"
+
+      - name: Generate Sparkle edSignature metadata
+        if: needs.preflight.outputs.update_appcast == 'true'
+        run: |
+          set -euo pipefail
+          PKG_PATH="build/Voxt-${VERSION}.pkg"
+          KEY_FILE="build/sparkle-private-key.pem"
+          SIG_ENV_FILE="build/sparkle-signature.env"
+
+          if [ ! -f "$PKG_PATH" ]; then
+            echo "::error::Package file missing: $PKG_PATH"
+            exit 1
+          fi
+
+          if [ -z "${SPARKLE_PRIVATE_KEY:-}" ]; then
+            echo "::error::SPARKLE_PRIVATE_KEY is empty"
+            exit 1
+          fi
+
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          SIGN_UPDATE_BIN="$(find build/DerivedData/SourcePackages/checkouts -path '*/Sparkle/bin/sign_update' -type f | head -n 1 || true)"
+          if [ -z "$SIGN_UPDATE_BIN" ]; then
+            echo "::error::Unable to locate Sparkle sign_update binary from SwiftPM checkout"
+            exit 1
+          fi
+
+          SIGN_OUTPUT="$("$SIGN_UPDATE_BIN" "$PKG_PATH" --ed-key-file "$KEY_FILE" 2>/tmp/sign_update.err || true)"
+          if [ -z "$SIGN_OUTPUT" ]; then
+            SIGN_OUTPUT="$("$SIGN_UPDATE_BIN" "$PKG_PATH" "$KEY_FILE" 2>>/tmp/sign_update.err || true)"
+          fi
+
+          SPARKLE_ED_SIGNATURE="$(printf '%s\n' "$SIGN_OUTPUT" | rg -o 'sparkle:edSignature="[^"]+"' | head -n 1 | sed -E 's/^[^"]*"([^"]+)".*$/\1/')"
+          SPARKLE_ED_LENGTH="$(printf '%s\n' "$SIGN_OUTPUT" | rg -o 'length="[0-9]+"' | head -n 1 | sed -E 's/^[^"]*"([0-9]+)".*$/\1/')"
+          if [ -z "$SPARKLE_ED_LENGTH" ]; then
+            SPARKLE_ED_LENGTH="$(stat -f%z "$PKG_PATH")"
+          fi
+
+          if [ -z "$SPARKLE_ED_SIGNATURE" ]; then
+            echo "::error::Failed to parse sparkle:edSignature from sign_update output"
+            cat /tmp/sign_update.err || true
+            printf '%s\n' "$SIGN_OUTPUT"
+            exit 1
+          fi
+
+          if ! [[ "$SPARKLE_ED_LENGTH" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid Sparkle package length: $SPARKLE_ED_LENGTH"
+            exit 1
+          fi
+
+          {
+            printf 'SPARKLE_ED_SIGNATURE=%s\n' "$SPARKLE_ED_SIGNATURE"
+            printf 'SPARKLE_ED_LENGTH=%s\n' "$SPARKLE_ED_LENGTH"
+          } > "$SIG_ENV_FILE"
+
+          rm -f "$KEY_FILE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ needs.preflight.outputs.version }}
+          path: |
+            build/Voxt-${{ needs.preflight.outputs.version }}-macOS.zip
+            build/Voxt-${{ needs.preflight.outputs.version }}.pkg
+            build/Voxt-${{ needs.preflight.outputs.version }}.pkg.sha256
+            build/sparkle-signature.env
+
+  publish_release:
+    name: Publish GitHub Release Assets
+    runs-on: ubuntu-latest
+    needs: [preflight, build_sign_notarize]
+    if: needs.preflight.outputs.should_skip != 'true'
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.preflight.outputs.version }}
+      TAG: ${{ needs.preflight.outputs.tag }}
+      DRAFT_RELEASE: ${{ needs.preflight.outputs.draft_release }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts-${{ needs.preflight.outputs.version }}
+          path: build
+
+      - name: Prepare release notes
+        run: |
+          set -euo pipefail
+          NOTES_FILE="build/release-notes.md"
+
+          BODY="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
+          BODY_TRIMMED="$(printf '%s' "$BODY" | tr -d '[:space:]')"
+
+          if [ -n "$BODY_TRIMMED" ]; then
+            printf '%s\n' "$BODY" > "$NOTES_FILE"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq '.body' > "$NOTES_FILE"
+          fi
+
+          if [ ! -s "$NOTES_FILE" ]; then
+            printf '## Voxt %s\n' "$TAG" > "$NOTES_FILE"
+          fi
+
+      - name: Create or update release and upload assets
+        run: |
+          set -euo pipefail
+          ZIP_PATH="build/Voxt-${VERSION}-macOS.zip"
+          PKG_PATH="build/Voxt-${VERSION}.pkg"
+          SHA_PATH="build/Voxt-${VERSION}.pkg.sha256"
+          NOTES_FILE="build/release-notes.md"
+
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Voxt $TAG" \
+              --notes-file "$NOTES_FILE" \
+              -R "$GITHUB_REPOSITORY"
+            if [ "$DRAFT_RELEASE" = "true" ]; then
+              gh release edit "$TAG" --draft -R "$GITHUB_REPOSITORY"
+            fi
+            gh release upload "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
+              --clobber \
+              -R "$GITHUB_REPOSITORY"
+          else
+            if [ "$DRAFT_RELEASE" = "true" ]; then
+              gh release create "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
+                --draft \
+                --target "$GITHUB_SHA" \
+                --title "Voxt $TAG" \
+                --notes-file "$NOTES_FILE" \
+                -R "$GITHUB_REPOSITORY"
+            else
+              gh release create "$TAG" "$ZIP_PATH" "$PKG_PATH" "$SHA_PATH" \
+                --target "$GITHUB_SHA" \
+                --title "Voxt $TAG" \
+                --notes-file "$NOTES_FILE" \
+                -R "$GITHUB_REPOSITORY"
+            fi
+          fi
+
+  update_appcast_main:
+    name: Update updates/appcast.xml on main
+    runs-on: ubuntu-latest
+    needs: [preflight, build_sign_notarize, publish_release]
+    if: needs.preflight.outputs.should_skip != 'true' && needs.preflight.outputs.update_appcast == 'true'
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      TAG: ${{ needs.preflight.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts-${{ needs.preflight.outputs.version }}
+          path: build
+
+      - name: Generate appcast.xml
+        run: |
+          set -euo pipefail
+          PKG_NAME="Voxt-${VERSION}.pkg"
+          PKG_PATH="build/${PKG_NAME}"
+          SIG_ENV_FILE="build/sparkle-signature.env"
+
+          if [ ! -f "$PKG_PATH" ]; then
+            echo "::error::Package file missing: $PKG_PATH"
+            exit 1
+          fi
+
+          if [ ! -f "$SIG_ENV_FILE" ]; then
+            echo "::error::Sparkle signature metadata file missing: $SIG_ENV_FILE"
+            exit 1
+          fi
+
+          set -a
+          . "$SIG_ENV_FILE"
+          set +a
+
+          if [ -z "${SPARKLE_ED_SIGNATURE:-}" ]; then
+            echo "::error::SPARKLE_ED_SIGNATURE is missing in $SIG_ENV_FILE"
+            exit 1
+          fi
+
+          if ! [[ "${SPARKLE_ED_LENGTH:-}" =~ ^[0-9]+$ ]]; then
+            echo "::error::SPARKLE_ED_LENGTH is invalid in $SIG_ENV_FILE: ${SPARKLE_ED_LENGTH:-}"
+            exit 1
+          fi
+
+          RELEASE_BODY="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body // ""')"
+          RELEASE_NOTES="$(printf '%s' "$RELEASE_BODY")"
+          if [ -z "$RELEASE_NOTES" ]; then
+            RELEASE_NOTES="Release ${VERSION}."
+          fi
+
+          PUBLISHED_AT="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt // ""')"
+          if [ -z "$PUBLISHED_AT" ]; then
+            PUBLISHED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          fi
+
+          RELEASE_URL="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json url --jq '.url // ""')"
+          if [ -z "$RELEASE_URL" ]; then
+            RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          SPARKLE_VERSION="$((10#$MAJOR * 1000000 + 10#$MINOR * 1000 + 10#$PATCH))"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${PKG_NAME}"
+
+          APPCAST_VERSION="$VERSION" \
+          APPCAST_SPARKLE_VERSION="$SPARKLE_VERSION" \
+          APPCAST_DOWNLOAD_URL="$DOWNLOAD_URL" \
+          APPCAST_RELEASE_URL="$RELEASE_URL" \
+          APPCAST_RELEASE_NOTES="$RELEASE_NOTES" \
+          APPCAST_PKG_SIZE="$SPARKLE_ED_LENGTH" \
+          APPCAST_ED_SIGNATURE="$SPARKLE_ED_SIGNATURE" \
+          APPCAST_PUBLISHED_AT="$PUBLISHED_AT" \
+          python3 - <<'PY' > updates/appcast.xml
+          import os
+          from datetime import datetime, timezone
+          from email.utils import format_datetime
+          from xml.sax.saxutils import escape, quoteattr
+
+          published_at = os.environ["APPCAST_PUBLISHED_AT"].strip()
+          try:
+              if published_at.endswith("Z"):
+                  dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+              else:
+                  dt = datetime.fromisoformat(published_at)
+              if dt.tzinfo is None:
+                  dt = dt.replace(tzinfo=timezone.utc)
+              dt = dt.astimezone(timezone.utc)
+          except Exception:
+              dt = datetime.now(timezone.utc)
+          pub_date = format_datetime(dt)
+
+          version = os.environ["APPCAST_VERSION"]
+          sparkle_version = os.environ["APPCAST_SPARKLE_VERSION"]
+          download_url = os.environ["APPCAST_DOWNLOAD_URL"]
+          release_url = os.environ["APPCAST_RELEASE_URL"]
+          notes = os.environ.get("APPCAST_RELEASE_NOTES", "").strip() or f"Release {version}."
+          pkg_size = os.environ["APPCAST_PKG_SIZE"]
+          ed_signature = os.environ["APPCAST_ED_SIGNATURE"]
+
+          enclosure_attrs = [
+              f"url={quoteattr(download_url)}",
+              'type="application/octet-stream"',
+              f"length={quoteattr(pkg_size)}",
+              f"sparkle:shortVersionString={quoteattr(version)}",
+              f"sparkle:version={quoteattr(sparkle_version)}",
+              f"sparkle:edSignature={quoteattr(ed_signature)}",
+          ]
+
+          lines = [
+              '<?xml version="1.0" encoding="utf-8"?>',
+              '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">',
+              "  <channel>",
+              "    <title>Voxt Updates</title>",
+              f"    <link>{escape(release_url)}</link>",
+              "    <description>Latest Voxt releases</description>",
+              "    <language>en</language>",
+              "    <item>",
+              f"      <title>Voxt {escape(version)}</title>",
+              f"      <pubDate>{escape(pub_date)}</pubDate>",
+              f"      <description>{escape(notes)}</description>",
+              f"      <sparkle:releaseNotesLink>{escape(release_url)}</sparkle:releaseNotesLink>",
+              f"      <enclosure {' '.join(enclosure_attrs)} />",
+          ]
+
+          lines.extend([
+              "    </item>",
+              "  </channel>",
+              "</rss>",
+          ])
+
+          print("\n".join(lines))
+          PY
+
+      - name: Commit and push appcast.xml to main
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- updates/appcast.xml; then
+            echo "No updates/appcast.xml changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/appcast.xml
+          git commit -m "ci: update sparkle appcast for ${TAG}"
+
+          PUSH_TOKEN="${GH_RELEASE_TOKEN:-$GITHUB_TOKEN}"
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:main

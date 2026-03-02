@@ -8,7 +8,7 @@ struct SettingsView: View {
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
-    @ObservedObject var appUpdateManager: AppUpdateManager
+    let appUpdateManager: AppUpdateManager
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @State private var selectedTab: SettingsTab
     @State private var hasMissingPermissions = false
@@ -37,14 +37,10 @@ struct SettingsView: View {
                 SettingsSidebar(
                     selectedTab: $selectedTab,
                     hasMissingPermissions: hasMissingPermissions,
-                    hasUpdate: appUpdateManager.hasUpdate,
-                    latestVersion: appUpdateManager.latestVersion,
                     onTapPermissionBadge: {
                         selectedTab = .permissions
                     }
-                ) {
-                    appUpdateManager.showUpdateSheet = true
-                }
+                )
                     .frame(width: 170)
                     .frame(maxHeight: .infinity, alignment: .top)
 
@@ -69,7 +65,7 @@ struct SettingsView: View {
                             Group {
                                 switch selectedTab {
                                 case .general:
-                                    GeneralSettingsView()
+                                    GeneralSettingsView(appUpdateManager: appUpdateManager)
                                 case .permissions:
                                     PermissionsSettingsView()
                                 case .report:
@@ -105,10 +101,6 @@ struct SettingsView: View {
         .environment(\.locale, interfaceLanguage.locale)
         .id(languageRefreshToken)
         .ignoresSafeArea(.container, edges: .top)
-        .sheet(isPresented: $appUpdateManager.showUpdateSheet) {
-            UpdateSheetView(appUpdateManager: appUpdateManager)
-                .frame(width: 460, height: 300)
-        }
         .onAppear {
             refreshPermissionBadge()
         }
@@ -149,10 +141,7 @@ struct SettingsView: View {
 private struct SettingsSidebar: View {
     @Binding var selectedTab: SettingsTab
     let hasMissingPermissions: Bool
-    let hasUpdate: Bool
-    let latestVersion: String?
     let onTapPermissionBadge: () -> Void
-    let onTapUpdateBadge: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -207,30 +196,6 @@ private struct SettingsSidebar: View {
                 .buttonStyle(.plain)
             }
 
-            if hasUpdate {
-                Button(action: onTapUpdateBadge) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.red)
-                        Text(latestVersion.map { String(format: NSLocalizedString("New Version %@", comment: ""), $0) } ?? String(localized: "New Update"))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.red)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.red.opacity(0.10))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
@@ -245,97 +210,5 @@ private struct SettingsSidebar: View {
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 3)
-    }
-}
-
-private struct UpdateSheetView: View {
-    @ObservedObject var appUpdateManager: AppUpdateManager
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("App Update")
-                .font(.title3.weight(.semibold))
-
-            if let message = appUpdateManager.statusMessage, !message.isEmpty {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let manifest = appUpdateManager.latestManifest {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(String(format: NSLocalizedString("Latest version: %@", comment: ""), manifest.version))
-                        .font(.subheadline.weight(.medium))
-
-                    if let notes = manifest.releaseNotes, !notes.isEmpty {
-                        Text(notes)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else if appUpdateManager.isChecking {
-                Text("Checking for updates…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("No update information yet.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if appUpdateManager.isDownloading {
-                ProgressView(value: appUpdateManager.downloadProgress)
-                    .progressViewStyle(.linear)
-                Text(String(format: NSLocalizedString("Download progress: %.0f%%", comment: ""), appUpdateManager.downloadProgress * 100))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            HStack {
-                Button("Check Now") {
-                    Task {
-                        await appUpdateManager.checkForUpdates(source: .manual)
-                    }
-                }
-
-                if appUpdateManager.canSkipLatestVersion {
-                    Button("Skip This Version") {
-                        appUpdateManager.skipCurrentVersion()
-                    }
-                }
-
-                Spacer()
-
-                Button("Close") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                if appUpdateManager.isDownloading {
-                    Button("Cancel Download", role: .destructive) {
-                        appUpdateManager.cancelDownload()
-                    }
-                } else if appUpdateManager.downloadedPackageURL != nil {
-                    Button("Install and Restart") {
-                        appUpdateManager.installAndRestart()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                } else {
-                    Button("Download Update") {
-                        appUpdateManager.startDownload()
-                    }
-                    .disabled(!appUpdateManager.hasUpdate)
-                }
-            }
-        }
-        .padding(16)
-        .task {
-            if !appUpdateManager.hasUpdate && !appUpdateManager.isChecking {
-                await appUpdateManager.checkForUpdates(source: .manual)
-            }
-        }
     }
 }

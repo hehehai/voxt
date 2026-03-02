@@ -105,8 +105,6 @@ enum AppPreferenceKey {
     static let showInDock = "showInDock"
     static let historyEnabled = "historyEnabled"
     static let autoCheckForUpdates = "autoCheckForUpdates"
-    static let updateManifestURL = "updateManifestURL"
-    static let skippedUpdateVersion = "skippedUpdateVersion"
 
     static let defaultEnhancementPrompt = """
         You are Voxt, a speech-to-text transcription assistant. Your only job is to enhance raw transcription output. Fix punctuation, add missing commas, correct capitalization, and improve formatting. Do not alter the meaning, tone, or substance of the text. Clean up non-sematic tone words，Do not add, remove, or rephrase any content. Do not add commentary or explanations. Return only the cleaned-up text. If there is a mixed language, please pay attention to keep the mixed language semantics.
@@ -207,7 +205,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.showInDock: false,
             AppPreferenceKey.historyEnabled: false,
             AppPreferenceKey.autoCheckForUpdates: true,
-            AppPreferenceKey.updateManifestURL: "https://raw.githubusercontent.com/hehehai/voxt/main/updates/appcast.json",
         ])
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
@@ -262,6 +259,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.buildMenu()
+                guard let self else { return }
+                self.appUpdateManager.automaticallyChecksForUpdates = self.autoCheckForUpdates
             }
         }
         interfaceLanguageObserver = NotificationCenter.default.addObserver(
@@ -276,11 +275,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupHotkey()
 
-        if autoCheckForUpdates {
-            Task { [weak self] in
-                await self?.appUpdateManager.checkForUpdates(source: .automatic)
-            }
-        }
+        appUpdateManager.automaticallyChecksForUpdates = autoCheckForUpdates
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
     }
 
@@ -325,9 +320,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func checkForUpdates() {
         VoxtLog.info("Manual update check triggered from menu.")
-        Task { [weak self] in
-            await self?.appUpdateManager.checkForUpdates(source: .manual)
-        }
+        appUpdateManager.checkForUpdates(source: .manual)
     }
 
     @objc private func openSettings() {
