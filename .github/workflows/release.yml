@@ -176,6 +176,18 @@ jobs:
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           security default-keychain -s build.keychain
 
+      - name: Verify signing identities in keychain
+        run: |
+          set -euo pipefail
+          if ! security find-identity -v -p codesigning build.keychain | grep -F "$DEVELOPER_ID_APP_IDENTITY" >/dev/null; then
+            echo "::error::Developer ID Application identity not found in keychain: $DEVELOPER_ID_APP_IDENTITY"
+            exit 1
+          fi
+          if ! security find-identity -v -p basic build.keychain | grep -F "$DEVELOPER_ID_INSTALLER_IDENTITY" >/dev/null; then
+            echo "::error::Developer ID Installer identity not found in keychain: $DEVELOPER_ID_INSTALLER_IDENTITY"
+            exit 1
+          fi
+
       - name: Archive app
         run: |
           set -euo pipefail
@@ -184,11 +196,8 @@ jobs:
             -scheme Voxt \
             -configuration Release \
             -archivePath build/Voxt.xcarchive \
-            archive \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$DEVELOPER_ID_APP_IDENTITY" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            OTHER_CODE_SIGN_FLAGS="--timestamp"
+            -destination "generic/platform=macOS" \
+            archive
 
       - name: Export archive
         run: |
