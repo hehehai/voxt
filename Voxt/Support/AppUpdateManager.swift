@@ -2,22 +2,23 @@ import Foundation
 import Sparkle
 
 @MainActor
-final class AppUpdateManager: NSObject {
+final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate {
     enum CheckSource {
         case automatic
         case manual
     }
 
-    private let updaterController: SPUStandardUpdaterController
-
-    override init() {
-        updaterController = SPUStandardUpdaterController(
+    private lazy var updaterController: SPUStandardUpdaterController = {
+        SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,
-            userDriverDelegate: nil
+            userDriverDelegate: self
         )
-        super.init()
-    }
+    }()
+
+    // Background/dockless apps should opt into Sparkle's gentle reminder support
+    // to avoid missing scheduled update alerts.
+    var supportsGentleScheduledUpdateReminders: Bool { true }
 
     var hasUpdate: Bool {
         false
