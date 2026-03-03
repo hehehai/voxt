@@ -13,6 +13,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let audioDurationSeconds: TimeInterval?
     let transcriptionProcessingDurationSeconds: TimeInterval?
     let llmDurationSeconds: TimeInterval?
+    let focusedAppName: String?
+    let matchedAppGroupName: String?
+    let matchedURLGroupName: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -26,6 +29,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case audioDurationSeconds
         case transcriptionProcessingDurationSeconds
         case llmDurationSeconds
+        case focusedAppName
+        case matchedAppGroupName
+        case matchedURLGroupName
     }
 
     init(
@@ -39,7 +45,10 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         isTranslation: Bool,
         audioDurationSeconds: TimeInterval?,
         transcriptionProcessingDurationSeconds: TimeInterval?,
-        llmDurationSeconds: TimeInterval?
+        llmDurationSeconds: TimeInterval?,
+        focusedAppName: String?,
+        matchedAppGroupName: String?,
+        matchedURLGroupName: String?
     ) {
         self.id = id
         self.text = text
@@ -52,6 +61,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.audioDurationSeconds = audioDurationSeconds
         self.transcriptionProcessingDurationSeconds = transcriptionProcessingDurationSeconds
         self.llmDurationSeconds = llmDurationSeconds
+        self.focusedAppName = focusedAppName
+        self.matchedAppGroupName = matchedAppGroupName
+        self.matchedURLGroupName = matchedURLGroupName
     }
 
     init(from decoder: Decoder) throws {
@@ -67,6 +79,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         audioDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .audioDurationSeconds)
         transcriptionProcessingDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .transcriptionProcessingDurationSeconds)
         llmDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .llmDurationSeconds)
+        focusedAppName = try container.decodeIfPresent(String.self, forKey: .focusedAppName)
+        matchedAppGroupName = try container.decodeIfPresent(String.self, forKey: .matchedAppGroupName)
+        matchedURLGroupName = try container.decodeIfPresent(String.self, forKey: .matchedURLGroupName)
     }
 }
 
@@ -129,7 +144,10 @@ final class TranscriptionHistoryStore: ObservableObject {
         isTranslation: Bool,
         audioDurationSeconds: TimeInterval?,
         transcriptionProcessingDurationSeconds: TimeInterval?,
-        llmDurationSeconds: TimeInterval?
+        llmDurationSeconds: TimeInterval?,
+        focusedAppName: String?,
+        matchedAppGroupName: String?,
+        matchedURLGroupName: String?
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -145,7 +163,10 @@ final class TranscriptionHistoryStore: ObservableObject {
             isTranslation: isTranslation,
             audioDurationSeconds: audioDurationSeconds,
             transcriptionProcessingDurationSeconds: transcriptionProcessingDurationSeconds,
-            llmDurationSeconds: llmDurationSeconds
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: focusedAppName,
+            matchedAppGroupName: matchedAppGroupName,
+            matchedURLGroupName: matchedURLGroupName
         )
 
         allEntries.insert(entry, at: 0)

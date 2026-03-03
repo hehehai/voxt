@@ -3,6 +3,7 @@ import AppKit
 import AVFoundation
 import Speech
 import ApplicationServices
+import Carbon
 
 struct PermissionsSettingsView: View {
     private enum PermissionKind: String, CaseIterable, Identifiable {
@@ -64,9 +65,39 @@ struct PermissionsSettingsView: View {
         }
     }
 
+    private enum BrowserAutomationTarget: String, CaseIterable, Identifiable {
+        case chrome = "com.google.Chrome"
+        case safari = "com.apple.Safari"
+        case arc = "company.thebrowser.Browser"
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .chrome: return "Google Chrome"
+            case .safari: return "Safari"
+            case .arc: return "Arc"
+            }
+        }
+
+        var probeScript: String {
+            switch self {
+            case .chrome:
+                return "tell application id \"com.google.Chrome\" to get the URL of active tab of front window"
+            case .safari:
+                return "tell application id \"com.apple.Safari\" to get URL of front document"
+            case .arc:
+                return "tell application id \"company.thebrowser.Browser\" to get the URL of active tab of front window"
+            }
+        }
+    }
+
     @State private var states: [PermissionKind: PermissionState] = [:]
     @State private var monitoringKinds: Set<PermissionKind> = []
     @State private var monitorTasks: [PermissionKind: Task<Void, Never>] = [:]
+    @State private var browserAutomationStates: [BrowserAutomationTarget: PermissionState] = [:]
+    @State private var browserAutomationRequestsInFlight: Set<BrowserAutomationTarget> = []
+    @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -86,9 +117,29 @@ struct PermissionsSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+
+            if appEnhancementEnabled {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("App Branch URL Authorization")
+                            .font(.headline)
+
+                        Text("Grant browser automation permission so Voxt can read active-tab URLs for App Branch matching.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        ForEach(BrowserAutomationTarget.allCases) { target in
+                            browserAuthorizationRow(target)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                }
+            }
         }
         .onAppear {
             refreshStates()
+            refreshBrowserAutomationStates()
         }
         .onDisappear {
             stopAllMonitoring()
@@ -123,6 +174,40 @@ struct PermissionsSettingsView: View {
 
             Button("Open Settings") {
                 openSettings(for: kind)
+            }
+            .controlSize(.small)
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func browserAuthorizationRow(_ target: BrowserAutomationTarget) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(target.title)
+                    .font(.subheadline)
+                Text("Allow Voxt to read the active URL in \(target.title).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if browserAutomationRequestsInFlight.contains(target) {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 14, height: 14)
+            }
+
+            statusBadge(for: browserAutomationStates[target] ?? .disabled)
+
+            Button("Request") {
+                requestBrowserAutomationPermission(target)
+            }
+            .controlSize(.small)
+
+            Button("Open Settings") {
+                openBrowserAutomationSettings()
             }
             .controlSize(.small)
         }
@@ -223,6 +308,74 @@ struct PermissionsSettingsView: View {
         monitoringKinds.removeAll()
     }
 
+    private func refreshBrowserAutomationStates() {
+        for target in BrowserAutomationTarget.allCases {
+            browserAutomationStates[target] = probeBrowserAutomationState(target)
+        }
+    }
+
+    private func requestBrowserAutomationPermission(_ target: BrowserAutomationTarget) {
+        browserAutomationRequestsInFlight.insert(target)
+        VoxtLog.info("Browser automation permission request triggered: target=\(target.rawValue)")
+
+        Task { @MainActor in
+            defer { browserAutomationRequestsInFlight.remove(target) }
+            let status = automationPermissionStatus(for: target, askUserIfNeeded: true)
+            let result: PermissionState = (status == noErr) ? .enabled : .disabled
+            browserAutomationStates[target] = result == .enabled ? .enabled : .disabled
+            VoxtLog.info(
+                "Browser automation permission status: target=\(target.rawValue), state=\(result == .enabled ? "enabled" : "disabled"), status=\(status)"
+            )
+        }
+    }
+
+    private func probeBrowserAutomationState(_ target: BrowserAutomationTarget) -> PermissionState {
+        let status = automationPermissionStatus(for: target, askUserIfNeeded: false)
+        return status == noErr ? .enabled : .disabled
+    }
+
+    private func automationPermissionStatus(for target: BrowserAutomationTarget, askUserIfNeeded: Bool) -> OSStatus {
+        let descriptor = NSAppleEventDescriptor(bundleIdentifier: target.rawValue)
+        guard let aeDesc = descriptor.aeDesc else {
+            return OSStatus(errAEEventNotPermitted)
+        }
+
+        return AEDeterminePermissionToAutomateTarget(
+            aeDesc,
+            AEEventClass(kCoreEventClass),
+            AEEventID(kAEGetData),
+            askUserIfNeeded
+        )
+    }
+
+    private func runAppleScript(_ source: String, promptIfNeeded: Bool = true) -> PermissionState {
+        let scriptSource: String
+        if promptIfNeeded {
+            scriptSource = source
+        } else {
+            scriptSource = """
+            with timeout of 1 seconds
+            \(source)
+            end timeout
+            """
+        }
+
+        var error: NSDictionary?
+        let script = NSAppleScript(source: scriptSource)
+        _ = script?.executeAndReturnError(&error).stringValue
+        guard let error else { return .enabled }
+
+        let errorNumber = (error[NSAppleScript.errorNumber] as? Int) ?? 0
+        if errorNumber == -1743 || errorNumber == -10004 {
+            return .disabled
+        }
+        if errorNumber == -600 {
+            // App not running does not imply permission denied; keep current as disabled until requested.
+            return .disabled
+        }
+        return .disabled
+    }
+
     private func openSettings(for kind: PermissionKind) {
         let urlString: String
         switch kind {
@@ -237,6 +390,12 @@ struct PermissionsSettingsView: View {
         }
 
         if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func openBrowserAutomationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
             NSWorkspace.shared.open(url)
         }
     }

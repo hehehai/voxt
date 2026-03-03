@@ -18,7 +18,7 @@ struct AppEnhancementSettingsView: View {
     @State private var modalErrorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             sourceListCard
             groupListCard
         }
@@ -45,13 +45,7 @@ struct AppEnhancementSettingsView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Picker("Source", selection: $sourceTab) {
-                        ForEach(SourceTab.allCases) { tab in
-                            Text(tab.title).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
+                    sourceTabs
 
                     Spacer()
 
@@ -73,6 +67,41 @@ struct AppEnhancementSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
+        }
+    }
+
+    private var sourceTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(SourceTab.allCases) { tab in
+                Button {
+                    sourceTab = tab
+                } label: {
+                    Text(tab.title)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 22)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(sourceTab == tab ? Color.accentColor : Color.secondary)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(sourceTab == tab ? Color.accentColor.opacity(0.14) : .clear)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(sourceTab == tab ? Color.accentColor.opacity(0.45) : .clear, lineWidth: 1)
+                }
+            }
+        }
+        .padding(2)
+        .frame(width: 154)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         }
     }
 
@@ -214,6 +243,7 @@ struct AppEnhancementSettingsView: View {
         showsGroupBadge: Bool,
         supportsHoverBadge: Bool,
         hoverCardID: String,
+        isOffline: Bool = false,
         removeAction: (() -> Void)? = nil
     ) -> some View {
         let group = groupForApp(bundleID: app.id)
@@ -241,7 +271,11 @@ struct AppEnhancementSettingsView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(
-                    isDragging ? Color.accentColor : (isAssigned ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.10)),
+                    isDragging
+                        ? Color.accentColor
+                        : (isOffline
+                            ? Color.primary.opacity(0.18)
+                            : (isAssigned ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.10))),
                     lineWidth: isDragging ? 1.5 : 1
                 )
         }
@@ -349,6 +383,7 @@ struct AppEnhancementSettingsView: View {
 
     private func groupCard(for group: AppBranchGroup) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            let members = groupMembers(group: group)
             HStack(spacing: 8) {
                 Button {
                     setGroupExpanded(groupID: group.id, expanded: !group.isExpanded)
@@ -362,7 +397,7 @@ struct AppEnhancementSettingsView: View {
                 Text(group.name)
                     .font(.system(size: 13, weight: .semibold))
 
-                Text("\(group.appBundleIDs.count + group.urlPatternIDs.count) items")
+                Text("\(members.count) items")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
@@ -387,16 +422,17 @@ struct AppEnhancementSettingsView: View {
                     let columns = appGridColumns(for: proxy.size.width)
                     ScrollView(.vertical) {
                         LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
-                            ForEach(groupMembers(group: group)) { member in
+                            ForEach(members) { member in
                                 switch member.content {
-                                case .app(let app):
+                                case .app(let appMember):
                                     appCard(
-                                        for: app,
+                                        for: appMember.app,
                                         showsGroupBadge: false,
                                         supportsHoverBadge: true,
-                                        hoverCardID: "group:\(group.id.uuidString):app:\(app.id)",
+                                        hoverCardID: "group:\(group.id.uuidString):app:\(appMember.app.id)",
+                                        isOffline: !appMember.isRunning,
                                         removeAction: {
-                                            removeAppFromGroup(bundleID: app.id)
+                                            removeAppFromGroup(bundleID: appMember.app.id)
                                         }
                                     )
                                 case .url(let item):
@@ -453,6 +489,35 @@ struct AppEnhancementSettingsView: View {
         }
     }
 
+    private func appRefForBundleID(_ bundleID: String) -> AppBranchAppRef {
+        if let running = apps.first(where: { $0.id == bundleID }) {
+            return AppBranchAppRef(bundleID: bundleID, displayName: running.name)
+        }
+        if let app = appFromSystem(bundleID: bundleID, fallbackName: bundleID) {
+            return AppBranchAppRef(bundleID: bundleID, displayName: app.name)
+        }
+        return AppBranchAppRef(bundleID: bundleID, displayName: bundleID)
+    }
+
+    private func appFromSystem(bundleID: String, fallbackName: String) -> BranchApp? {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let displayName = Bundle(url: appURL)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        let bundleName = Bundle(url: appURL)?.object(forInfoDictionaryKey: kCFBundleNameKey as String) as? String
+        let resolvedName = displayName ?? bundleName ?? appURL.deletingPathExtension().lastPathComponent
+        let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+        return BranchApp(
+            id: bundleID,
+            name: resolvedName.isEmpty ? fallbackName : resolvedName,
+            icon: icon
+        )
+    }
+
+    private func defaultAppIcon() -> NSImage {
+        NSWorkspace.shared.icon(for: .application)
+    }
+
     private func groupForApp(bundleID: String) -> AppBranchGroup? {
         groups.first { $0.appBundleIDs.contains(bundleID) }
     }
@@ -462,12 +527,19 @@ struct AppEnhancementSettingsView: View {
     }
 
     private func groupMembers(group: AppBranchGroup) -> [GroupMember] {
-        let appSet = Set(group.appBundleIDs)
+        let runningByBundleID = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, $0) })
         let urlSet = Set(group.urlPatternIDs)
 
-        let appMembers = apps
-            .filter { appSet.contains($0.id) }
-            .map { GroupMember(content: .app($0)) }
+        let appMembers = group.appRefs.map { ref in
+            let runningApp = runningByBundleID[ref.bundleID]
+            let resolvedApp = runningApp ?? appFromSystem(bundleID: ref.bundleID, fallbackName: ref.displayName)
+                ?? BranchApp(
+                    id: ref.bundleID,
+                    name: ref.displayName.isEmpty ? ref.bundleID : ref.displayName,
+                    icon: defaultAppIcon()
+                )
+            return GroupMember(content: .app(GroupAppMember(app: resolvedApp, isRunning: runningApp != nil)))
+        }
         let urlMembers = urlItems
             .filter { urlSet.contains($0.id) }
             .map { GroupMember(content: .url($0)) }
@@ -482,10 +554,14 @@ struct AppEnhancementSettingsView: View {
     private func assignApp(bundleID: String, to groupID: UUID) {
         for index in groups.indices {
             groups[index].appBundleIDs.removeAll { $0 == bundleID }
+            groups[index].appRefs.removeAll { $0.bundleID == bundleID }
         }
         guard let targetIndex = groups.firstIndex(where: { $0.id == groupID }) else { return }
         if !groups[targetIndex].appBundleIDs.contains(bundleID) {
             groups[targetIndex].appBundleIDs.append(bundleID)
+        }
+        if !groups[targetIndex].appRefs.contains(where: { $0.bundleID == bundleID }) {
+            groups[targetIndex].appRefs.append(appRefForBundleID(bundleID))
         }
     }
 
@@ -502,6 +578,7 @@ struct AppEnhancementSettingsView: View {
     private func removeAppFromGroup(bundleID: String) {
         for index in groups.indices {
             groups[index].appBundleIDs.removeAll { $0 == bundleID }
+            groups[index].appRefs.removeAll { $0.bundleID == bundleID }
         }
     }
 
@@ -535,6 +612,7 @@ struct AppEnhancementSettingsView: View {
                     name: trimmedName,
                     prompt: groupPromptDraft,
                     appBundleIDs: [],
+                    appRefs: [],
                     urlPatternIDs: [],
                     isExpanded: true
                 )
@@ -561,13 +639,14 @@ struct AppEnhancementSettingsView: View {
             return
         }
 
-        let normalizedInput = entries.map(normalizedPattern)
+        let canonicalEntries = entries.map(canonicalizedPattern)
+        let normalizedInput = canonicalEntries.map(normalizedPattern)
         if Set(normalizedInput).count != normalizedInput.count {
             modalErrorMessage = "Duplicate URL patterns detected in input."
             return
         }
 
-        if let invalid = entries.first(where: { !isValidWildcardURLPattern($0) }) {
+        if let invalid = canonicalEntries.first(where: { !isValidWildcardURLPattern($0) }) {
             modalErrorMessage = "Invalid URL pattern: \(invalid). Use wildcard format like google.com/*."
             return
         }
@@ -578,24 +657,24 @@ struct AppEnhancementSettingsView: View {
             return
         }
 
-        let newItems = entries.map { BranchURLItem(id: UUID(), pattern: $0) }
+        let newItems = canonicalEntries.map { BranchURLItem(id: UUID(), pattern: $0) }
         urlItems.append(contentsOf: newItems)
         modal = nil
     }
 
     private func saveEditedURL(urlID: UUID) {
-        let trimmed = urlDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        let canonical = canonicalizedPattern(urlDraft)
+        guard !canonical.isEmpty else {
             modalErrorMessage = "URL pattern is required."
             return
         }
 
-        guard isValidWildcardURLPattern(trimmed) else {
+        guard isValidWildcardURLPattern(canonical) else {
             modalErrorMessage = "Invalid URL pattern. Use wildcard format like google.com/*."
             return
         }
 
-        let normalized = normalizedPattern(trimmed)
+        let normalized = normalizedPattern(canonical)
         let others = Set(urlItems.filter { $0.id != urlID }.map { normalizedPattern($0.pattern) })
         if others.contains(normalized) {
             modalErrorMessage = "URL pattern already exists."
@@ -606,12 +685,27 @@ struct AppEnhancementSettingsView: View {
             modal = nil
             return
         }
-        urlItems[index].pattern = trimmed
+        urlItems[index].pattern = canonical
         modal = nil
     }
 
+    private func canonicalizedPattern(_ value: String) -> String {
+        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.hasPrefix("https://") {
+            normalized.removeFirst("https://".count)
+        } else if normalized.hasPrefix("http://") {
+            normalized.removeFirst("http://".count)
+        }
+        if !normalized.contains("/") {
+            normalized += "/*"
+        } else if normalized.hasSuffix("/") {
+            normalized += "*"
+        }
+        return normalized
+    }
+
     private func normalizedPattern(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        canonicalizedPattern(value)
     }
 
     private func isValidWildcardURLPattern(_ pattern: String) -> Bool {
@@ -651,7 +745,9 @@ struct AppEnhancementSettingsView: View {
             return
         }
         do {
-            urlItems = try JSONDecoder().decode([BranchURLItem].self, from: data)
+            urlItems = try JSONDecoder().decode([BranchURLItem].self, from: data).map {
+                BranchURLItem(id: $0.id, pattern: canonicalizedPattern($0.pattern))
+            }
         } catch {
             urlItems = []
         }
@@ -774,11 +870,17 @@ private struct BranchURLItem: Identifiable, Codable, Equatable {
     var pattern: String
 }
 
+private struct AppBranchAppRef: Codable, Equatable {
+    let bundleID: String
+    var displayName: String
+}
+
 private struct AppBranchGroup: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
     var prompt: String
     var appBundleIDs: [String]
+    var appRefs: [AppBranchAppRef]
     var urlPatternIDs: [UUID]
     var isExpanded: Bool
 
@@ -787,15 +889,25 @@ private struct AppBranchGroup: Identifiable, Codable, Equatable {
         case name
         case prompt
         case appBundleIDs
+        case appRefs
         case urlPatternIDs
         case isExpanded
     }
 
-    init(id: UUID, name: String, prompt: String, appBundleIDs: [String], urlPatternIDs: [UUID], isExpanded: Bool) {
+    init(
+        id: UUID,
+        name: String,
+        prompt: String,
+        appBundleIDs: [String],
+        appRefs: [AppBranchAppRef],
+        urlPatternIDs: [UUID],
+        isExpanded: Bool
+    ) {
         self.id = id
         self.name = name
         self.prompt = prompt
         self.appBundleIDs = appBundleIDs
+        self.appRefs = appRefs
         self.urlPatternIDs = urlPatternIDs
         self.isExpanded = isExpanded
     }
@@ -806,6 +918,12 @@ private struct AppBranchGroup: Identifiable, Codable, Equatable {
         name = try container.decode(String.self, forKey: .name)
         prompt = try container.decode(String.self, forKey: .prompt)
         appBundleIDs = try container.decodeIfPresent([String].self, forKey: .appBundleIDs) ?? []
+        let decodedRefs = try container.decodeIfPresent([AppBranchAppRef].self, forKey: .appRefs) ?? []
+        if decodedRefs.isEmpty {
+            appRefs = appBundleIDs.map { AppBranchAppRef(bundleID: $0, displayName: $0) }
+        } else {
+            appRefs = decodedRefs
+        }
         urlPatternIDs = try container.decodeIfPresent([UUID].self, forKey: .urlPatternIDs) ?? []
         isExpanded = try container.decodeIfPresent(Bool.self, forKey: .isExpanded) ?? true
     }
@@ -816,14 +934,19 @@ private struct GroupMember: Identifiable {
 
     var id: String {
         switch content {
-        case .app(let app): return "app:\(app.id)"
+        case .app(let appMember): return "app:\(appMember.app.id)"
         case .url(let item): return "url:\(item.id.uuidString)"
         }
     }
 }
 
+private struct GroupAppMember {
+    let app: BranchApp
+    let isRunning: Bool
+}
+
 private enum GroupMemberContent {
-    case app(BranchApp)
+    case app(GroupAppMember)
     case url(BranchURLItem)
 }
 

@@ -153,6 +153,18 @@ private struct HistoryRow: View {
                     detailLine(labelKey: "Enhancement", value: entry.enhancementMode)
                     detailLine(labelKey: "Enhancer Model", value: entry.enhancementModel)
                     detailLine(
+                        labelKey: "Focused App",
+                        value: entry.focusedAppName ?? String(localized: "N/A")
+                    )
+                    detailLine(
+                        labelKey: "App Group",
+                        value: entry.matchedAppGroupName ?? String(localized: "N/A")
+                    )
+                    detailLine(
+                        labelKey: "URL Group",
+                        value: entry.matchedURLGroupName ?? String(localized: "N/A")
+                    )
+                    detailLine(
                         labelKey: "Transcription Processing",
                         value: formattedDuration(entry.transcriptionProcessingDurationSeconds) ?? String(localized: "N/A")
                     )

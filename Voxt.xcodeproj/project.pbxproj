@@ -423,6 +423,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Voxt;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Voxt needs automation access to read the active browser tab URL for app branch enhancement.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
 				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/hehehai/voxt/main/updates/appcast.xml";
@@ -464,6 +465,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Voxt;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Voxt needs automation access to read the active browser tab URL for app branch enhancement.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
 				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/hehehai/voxt/main/updates/appcast.xml";

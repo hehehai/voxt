@@ -180,6 +180,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private struct BrowserScriptProvider {
+        let name: String
+        let scripts: [String]
+    }
+
+    private struct EnhancementContextSnapshot {
+        let bundleID: String?
+        let capturedAt: Date
+    }
+
+    private struct EnhancementPromptContext {
+        let focusedAppName: String?
+        let matchedAppGroupName: String?
+        let matchedURLGroupName: String?
+    }
+
     private enum SessionOutputMode {
         case transcription
         case translation
@@ -219,6 +235,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingStoppedAt: Date?
     private var transcriptionProcessingStartedAt: Date?
     private var sessionOutputMode: SessionOutputMode = .transcription
+    private var enhancementContextSnapshot: EnhancementContextSnapshot?
+    private var lastEnhancementPromptContext: EnhancementPromptContext?
 
     override init() {
         let repo = UserDefaults.standard.string(forKey: AppPreferenceKey.mlxModelRepo)
@@ -534,6 +552,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
         sessionOutputMode = outputMode
+        enhancementContextSnapshot = nil
         VoxtLog.info(
             "Recording started. output=\(outputMode == .translation ? "translation" : "transcription"), engine=\(transcriptionEngine.rawValue)"
         )
@@ -595,6 +614,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if transcriptionProcessingStartedAt == nil {
             transcriptionProcessingStartedAt = recordingStoppedAt
         }
+        enhancementContextSnapshot = captureEnhancementContextSnapshot()
 
         if transcriptionEngine == .mlxAudio, isMLXReady {
             mlxTranscriber?.stopRecording()
@@ -1005,6 +1025,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.isSessionActive = false
             self.sessionOutputMode = .transcription
+            self.enhancementContextSnapshot = nil
             self.overlayState.isCompleting = false
             self.pendingSessionFinishTask = nil
         }
@@ -1090,6 +1111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let now = Date()
         let audioDuration = resolvedDuration(from: recordingStartedAt, to: recordingStoppedAt ?? now)
         let processingDuration = resolvedDuration(from: transcriptionProcessingStartedAt, to: now)
+        let focusedAppName = lastEnhancementPromptContext?.focusedAppName ?? NSWorkspace.shared.frontmostApplication?.localizedName
 
         historyStore.append(
             text: trimmed,
@@ -1100,8 +1122,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isTranslation: sessionOutputMode == .translation,
             audioDurationSeconds: audioDuration,
             transcriptionProcessingDurationSeconds: processingDuration,
-            llmDurationSeconds: llmDurationSeconds
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: focusedAppName,
+            matchedAppGroupName: lastEnhancementPromptContext?.matchedAppGroupName,
+            matchedURLGroupName: lastEnhancementPromptContext?.matchedURLGroupName
         )
+        lastEnhancementPromptContext = nil
     }
 
     private func resolvedDuration(from start: Date?, to end: Date?) -> TimeInterval? {
@@ -1260,64 +1286,84 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let urlsByID = loadAppBranchURLsByID()
-        let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let context = currentEnhancementContext()
+        let frontmostBundleID = context.bundleID
+        let focusedAppName = NSWorkspace.shared.frontmostApplication?.localizedName
 
         if isBrowserBundleID(frontmostBundleID) {
             let activeURL = activeBrowserTabURL(frontmostBundleID: frontmostBundleID)
             let normalizedActiveURL = normalizedURLForMatching(activeURL)
 
             guard let normalizedActiveURL else {
+                lastEnhancementPromptContext = EnhancementPromptContext(
+                    focusedAppName: focusedAppName,
+                    matchedAppGroupName: nil,
+                    matchedURLGroupName: nil
+                )
                 VoxtLog.info("Enhancement prompt source: global/default (browser url unavailable), bundleID=\(frontmostBundleID ?? "nil")")
                 return fallbackPrompt
             }
 
-            for group in groups {
-                for urlID in group.urlPatternIDs {
-                    guard let pattern = urlsByID[urlID], wildcardMatches(pattern: pattern, candidate: normalizedActiveURL) else {
-                        continue
-                    }
-                    let prompt = group.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !prompt.isEmpty {
-                        VoxtLog.info("Enhancement prompt source: group(url) group=\(group.name), pattern=\(pattern), url=\(normalizedActiveURL)")
-                        return prompt
-                    }
-                }
+            if let match = firstURLPromptMatch(groups: groups, urlsByID: urlsByID, normalizedURL: normalizedActiveURL) {
+                lastEnhancementPromptContext = EnhancementPromptContext(
+                    focusedAppName: focusedAppName,
+                    matchedAppGroupName: nil,
+                    matchedURLGroupName: match.groupName
+                )
+                VoxtLog.info("Enhancement prompt source: group(url) group=\(match.groupName), pattern=\(match.pattern), url=\(normalizedActiveURL)")
+                return match.prompt
             }
 
+            lastEnhancementPromptContext = EnhancementPromptContext(
+                focusedAppName: focusedAppName,
+                matchedAppGroupName: nil,
+                matchedURLGroupName: nil
+            )
             VoxtLog.info("Enhancement prompt source: global/default (browser url no group match), bundleID=\(frontmostBundleID ?? "nil"), url=\(normalizedActiveURL)")
             return fallbackPrompt
-        }
-
-        let activeURL = activeBrowserTabURL(frontmostBundleID: frontmostBundleID)
-        let normalizedActiveURL = normalizedURLForMatching(activeURL)
-
-        if let normalizedActiveURL {
-            for group in groups {
-                for urlID in group.urlPatternIDs {
-                    guard let pattern = urlsByID[urlID], wildcardMatches(pattern: pattern, candidate: normalizedActiveURL) else {
-                        continue
-                    }
-                    let prompt = group.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !prompt.isEmpty {
-                        VoxtLog.info("Enhancement prompt source: group(url) group=\(group.name), pattern=\(pattern), url=\(normalizedActiveURL)")
-                        return prompt
-                    }
-                }
-            }
         }
 
         if let frontmostBundleID {
             for group in groups where group.appBundleIDs.contains(frontmostBundleID) {
                 let prompt = group.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !prompt.isEmpty {
+                    lastEnhancementPromptContext = EnhancementPromptContext(
+                        focusedAppName: focusedAppName,
+                        matchedAppGroupName: group.name,
+                        matchedURLGroupName: nil
+                    )
                     VoxtLog.info("Enhancement prompt source: group(app) group=\(group.name), bundleID=\(frontmostBundleID)")
                     return prompt
                 }
             }
         }
 
-        VoxtLog.info("Enhancement prompt source: global/default (no group match), bundleID=\(frontmostBundleID ?? "nil"), url=\(normalizedActiveURL ?? "nil")")
+        lastEnhancementPromptContext = EnhancementPromptContext(
+            focusedAppName: focusedAppName,
+            matchedAppGroupName: nil,
+            matchedURLGroupName: nil
+        )
+        VoxtLog.info("Enhancement prompt source: global/default (no group match), bundleID=\(frontmostBundleID ?? "nil")")
         return fallbackPrompt
+    }
+
+    private func firstURLPromptMatch(
+        groups: [StoredAppBranchGroup],
+        urlsByID: [UUID: String],
+        normalizedURL: String
+    ) -> (prompt: String, groupName: String, pattern: String)? {
+        for group in groups {
+            for urlID in group.urlPatternIDs {
+                guard let pattern = urlsByID[urlID], wildcardMatches(pattern: pattern, candidate: normalizedURL) else {
+                    continue
+                }
+                let prompt = group.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !prompt.isEmpty {
+                    return (prompt, group.name, pattern)
+                }
+            }
+        }
+        return nil
     }
 
     private func loadAppBranchGroups() -> [StoredAppBranchGroup] {
@@ -1343,6 +1389,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let bundleID else { return false }
         switch bundleID {
         case "com.apple.Safari",
+             "com.apple.SafariTechnologyPreview",
              "com.google.Chrome",
              "com.microsoft.edgemac",
              "com.brave.Browser",
@@ -1360,39 +1407,115 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             VoxtLog.info("Browser process not running while resolving active tab URL. bundleID=\(frontmostBundleID)")
             return nil
         }
-        switch frontmostBundleID {
-        case "com.apple.Safari":
-            return runAppleScript("tell application \"Safari\" to return URL of current tab of front window")
+        guard let provider = browserScriptProvider(for: frontmostBundleID) else { return nil }
+        if let scriptedURL = runAppleScriptCandidates(provider.scripts, providerName: provider.name) {
+            return scriptedURL
+        }
+        if let axURL = activeBrowserTabURLFromAccessibility(frontmostBundleID: frontmostBundleID) {
+            VoxtLog.info("Browser active-tab URL read succeeded via AX fallback. provider=\(provider.name)")
+            return axURL
+        }
+        return nil
+    }
+
+    private func captureEnhancementContextSnapshot() -> EnhancementContextSnapshot {
+        let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        return EnhancementContextSnapshot(
+            bundleID: frontmostBundleID,
+            capturedAt: Date()
+        )
+    }
+
+    private func currentEnhancementContext() -> EnhancementContextSnapshot {
+        if let snapshot = enhancementContextSnapshot {
+            let age = Date().timeIntervalSince(snapshot.capturedAt)
+            if age <= 20 {
+                return snapshot
+            }
+        }
+        return captureEnhancementContextSnapshot()
+    }
+
+    private func browserScriptProvider(for bundleID: String) -> BrowserScriptProvider? {
+        switch bundleID {
+        case "com.apple.Safari", "com.apple.SafariTechnologyPreview":
+            return BrowserScriptProvider(
+                name: "Safari",
+                scripts: [
+                    "tell application id \"\(bundleID)\" to get URL of front document",
+                    "tell application id \"\(bundleID)\" to get URL of current tab of front window",
+                    "tell application \"Safari\" to get URL of front document"
+                ]
+            )
         case "com.google.Chrome":
-            return runAppleScript("tell application \"Google Chrome\" to return URL of active tab of front window")
+            return BrowserScriptProvider(
+                name: "Google Chrome",
+                scripts: [
+                    "tell application id \"com.google.Chrome\" to get the URL of active tab of front window",
+                    "tell application \"Google Chrome\" to get the URL of active tab of front window"
+                ]
+            )
         case "com.microsoft.edgemac":
-            return runAppleScript("tell application \"Microsoft Edge\" to return URL of active tab of front window")
+            return BrowserScriptProvider(
+                name: "Microsoft Edge",
+                scripts: [
+                    "tell application id \"com.microsoft.edgemac\" to get the URL of active tab of front window",
+                    "tell application \"Microsoft Edge\" to get the URL of active tab of front window"
+                ]
+            )
         case "com.brave.Browser":
-            return runAppleScript("tell application \"Brave Browser\" to return URL of active tab of front window")
+            return BrowserScriptProvider(
+                name: "Brave Browser",
+                scripts: [
+                    "tell application id \"com.brave.Browser\" to get the URL of active tab of front window",
+                    "tell application \"Brave Browser\" to get the URL of active tab of front window"
+                ]
+            )
         case "company.thebrowser.Browser":
-            return runAppleScriptCandidates([
-                "tell application id \"company.thebrowser.Browser\" to return (URL of active tab of front window) as text",
-                "tell application id \"company.thebrowser.Browser\" to return (URL of active tab of window 1) as text"
-            ])
+            return BrowserScriptProvider(
+                name: "Arc",
+                scripts: [
+                    "tell application id \"company.thebrowser.Browser\" to get the URL of active tab of front window",
+                    "tell application id \"company.thebrowser.Browser\" to get the URL of active tab of window 1",
+                    "tell application \"Arc\" to get the URL of active tab of front window"
+                ]
+            )
         default:
             return nil
         }
     }
 
-    private func runAppleScriptCandidates(_ sources: [String]) -> String? {
+    private func runAppleScriptCandidates(_ sources: [String], providerName: String) -> String? {
         var lastError: NSDictionary?
-        for source in sources {
+        for (index, source) in sources.enumerated() {
             var executionError: NSDictionary?
-            if let output = runAppleScript(source, error: &executionError, logFailure: false),
+            let startedAt = Date()
+            if let output = runAppleScript(source, error: &executionError, logFailure: false, timeout: 0.8),
                !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                if index > 0 {
+                    VoxtLog.info("Browser active-tab URL read succeeded via fallback. provider=\(providerName), candidate=\(index + 1), elapsedMs=\(elapsedMs)")
+                }
                 return output
             }
             if let executionError {
+                let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                VoxtLog.info(
+                    "Browser active-tab URL candidate failed. provider=\(providerName), candidate=\(index + 1), elapsedMs=\(elapsedMs), error=\(executionError)"
+                )
                 lastError = executionError
+                if let errorNumber = executionError["NSAppleScriptErrorNumber"] as? Int, errorNumber == -600 {
+                    break
+                }
+            } else {
+                let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                VoxtLog.info(
+                    "Browser active-tab URL candidate returned empty/timed out. provider=\(providerName), candidate=\(index + 1), elapsedMs=\(elapsedMs)"
+                )
             }
         }
         if let lastError {
-            VoxtLog.info("Browser active-tab URL read failed: \(lastError)")
+            VoxtLog.info("Browser active-tab URL read failed. provider=\(providerName), error=\(lastError)")
         }
         return nil
     }
@@ -1400,9 +1523,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func runAppleScript(
         _ source: String,
         error: inout NSDictionary?,
-        logFailure: Bool = true
+        logFailure: Bool = true,
+        timeout: TimeInterval? = nil
     ) -> String? {
-        guard let script = NSAppleScript(source: source) else { return nil }
+        let wrappedSource: String
+        if let timeout, timeout > 0 {
+            let seconds = max(1, Int(ceil(timeout)))
+            wrappedSource = """
+            with timeout of \(seconds) seconds
+            \(source)
+            end timeout
+            """
+        } else {
+            wrappedSource = source
+        }
+
+        guard let script = NSAppleScript(source: wrappedSource) else { return nil }
         guard let output = script.executeAndReturnError(&error).stringValue else {
             if logFailure, let error {
                 VoxtLog.info("Browser active-tab URL read failed: \(error)")
@@ -1415,6 +1551,64 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func runAppleScript(_ source: String) -> String? {
         var error: NSDictionary?
         return runAppleScript(source, error: &error)
+    }
+
+    private func activeBrowserTabURLFromAccessibility(frontmostBundleID: String) -> String? {
+        guard AXIsProcessTrusted() else {
+            VoxtLog.info("Browser active-tab AX fallback unavailable: accessibility not trusted")
+            return nil
+        }
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.bundleIdentifier == frontmostBundleID
+        else {
+            VoxtLog.info("Browser active-tab AX fallback skipped: frontmost app changed")
+            return nil
+        }
+
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        var focusedWindowValue: CFTypeRef?
+        let focusedStatus = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindowValue
+        )
+        if focusedStatus == .success,
+           let focusedWindow = focusedWindowValue {
+            if let url = axDocumentURL(from: focusedWindow) {
+                return url
+            }
+        } else {
+            VoxtLog.info("Browser active-tab AX fallback focused window unavailable: status=\(focusedStatus.rawValue)")
+        }
+
+        var mainWindowValue: CFTypeRef?
+        let mainStatus = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXMainWindowAttribute as CFString,
+            &mainWindowValue
+        )
+        if mainStatus == .success,
+           let mainWindow = mainWindowValue {
+            return axDocumentURL(from: mainWindow)
+        }
+        VoxtLog.info("Browser active-tab AX fallback main window unavailable: status=\(mainStatus.rawValue)")
+        return nil
+    }
+
+    private func axDocumentURL(from windowRef: CFTypeRef) -> String? {
+        guard CFGetTypeID(windowRef) == AXUIElementGetTypeID() else { return nil }
+        let windowElement = unsafeBitCast(windowRef, to: AXUIElement.self)
+        var documentValue: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(
+            windowElement,
+            kAXDocumentAttribute as CFString,
+            &documentValue
+        )
+        guard status == .success, let documentValue else {
+            VoxtLog.info("Browser active-tab AX fallback document attribute unavailable: status=\(status.rawValue)")
+            return nil
+        }
+        return documentValue as? String
     }
 
     private func normalizedURLForMatching(_ rawURL: String?) -> String? {

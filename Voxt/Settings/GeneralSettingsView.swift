@@ -163,7 +163,24 @@ struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Toggle("App Enhancement", isOn: $appEnhancementEnabled)
+                    Toggle(isOn: $appEnhancementEnabled) {
+                        HStack(spacing: 8) {
+                            Text("App Enhancement")
+                            Text("Beta")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.orange.opacity(0.15))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+                                )
+                        }
+                    }
                     Text("Show the App Enhancement menu and enable app-based enhancement configuration.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
