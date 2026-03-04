@@ -4,6 +4,7 @@ import AVFoundation
 import Speech
 import ApplicationServices
 import Carbon
+import UniformTypeIdentifiers
 
 struct PermissionsSettingsView: View {
     private enum PermissionKind: String, CaseIterable, Identifiable {
@@ -65,39 +66,40 @@ struct PermissionsSettingsView: View {
         }
     }
 
-    private enum BrowserAutomationTarget: String, CaseIterable, Identifiable {
-        case chrome = "com.google.Chrome"
-        case safari = "com.apple.Safari"
-        case arc = "company.thebrowser.Browser"
+    private struct BrowserAutomationTarget: Identifiable, Hashable {
+        let bundleID: String
+        let displayName: String
+        let scripts: [String]
+        let isCustom: Bool
 
-        var id: String { rawValue }
+        var id: String { bundleID }
+    }
 
-        var title: String {
-            switch self {
-            case .chrome: return "Google Chrome"
-            case .safari: return "Safari"
-            case .arc: return "Arc"
-            }
-        }
+    private struct StoredCustomBrowser: Codable, Hashable {
+        let bundleID: String
+        let displayName: String
+    }
 
-        var probeScript: String {
-            switch self {
-            case .chrome:
-                return "tell application id \"com.google.Chrome\" to get the URL of active tab of front window"
-            case .safari:
-                return "tell application id \"com.apple.Safari\" to get URL of front document"
-            case .arc:
-                return "tell application id \"company.thebrowser.Browser\" to get the URL of active tab of front window"
-            }
-        }
+    private struct ScriptProbeResult {
+        let success: Bool
+        let permissionDenied: Bool
+        let appNotRunning: Bool
+        let lastErrorCode: Int?
     }
 
     @State private var states: [PermissionKind: PermissionState] = [:]
     @State private var monitoringKinds: Set<PermissionKind> = []
     @State private var monitorTasks: [PermissionKind: Task<Void, Never>] = [:]
-    @State private var browserAutomationStates: [BrowserAutomationTarget: PermissionState] = [:]
-    @State private var browserAutomationRequestsInFlight: Set<BrowserAutomationTarget> = []
+
+    @State private var browserTargets: [BrowserAutomationTarget] = []
+    @State private var browserAutomationStates: [String: PermissionState] = [:]
+    @State private var browserAutomationRequestsInFlight: Set<String> = []
+    @State private var browserAutomationTestsInFlight: Set<String> = []
+    @State private var browserAutomationMessages: [String: String] = [:]
+    @State private var browserPickerErrorMessage: String?
+
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
+    @AppStorage(AppPreferenceKey.appBranchCustomBrowsers) private var appBranchCustomBrowsersJSON = "[]"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -121,15 +123,32 @@ struct PermissionsSettingsView: View {
             if appEnhancementEnabled {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("App Branch URL Authorization")
-                            .font(.headline)
+                        HStack {
+                            Text("App Branch URL Authorization")
+                                .font(.headline)
+                            Spacer()
+                            Button("Add Browser") {
+                                chooseBrowserApplication()
+                            }
+                            .controlSize(.small)
+                            Button("Open Settings") {
+                                openBrowserAutomationSettings()
+                            }
+                            .controlSize(.small)
+                        }
 
                         Text("Grant browser automation permission so Voxt can read active-tab URLs for App Branch matching.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        ForEach(BrowserAutomationTarget.allCases) { target in
+                        ForEach(browserTargets) { target in
                             browserAuthorizationRow(target)
+                        }
+
+                        if let browserPickerErrorMessage {
+                            Text(browserPickerErrorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -139,6 +158,7 @@ struct PermissionsSettingsView: View {
         }
         .onAppear {
             refreshStates()
+            loadBrowserTargets()
             refreshBrowserAutomationStates()
         }
         .onDisappear {
@@ -184,32 +204,44 @@ struct PermissionsSettingsView: View {
     private func browserAuthorizationRow(_ target: BrowserAutomationTarget) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(target.title)
+                Text(target.displayName)
                     .font(.subheadline)
-                Text(AppLocalization.format("Allow Voxt to read the active URL in %@.", target.title))
+                Text(AppLocalization.format("Allow Voxt to read the active URL in %@.", target.displayName))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let message = browserAutomationMessages[target.bundleID] {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
 
-            if browserAutomationRequestsInFlight.contains(target) {
+            if browserAutomationRequestsInFlight.contains(target.bundleID) || browserAutomationTestsInFlight.contains(target.bundleID) {
                 ProgressView()
                     .controlSize(.small)
                     .frame(width: 14, height: 14)
             }
 
-            statusBadge(for: browserAutomationStates[target] ?? .disabled)
+            statusBadge(for: browserAutomationStates[target.bundleID] ?? .disabled)
 
             Button("Request") {
                 requestBrowserAutomationPermission(target)
             }
             .controlSize(.small)
 
-            Button("Open Settings") {
-                openBrowserAutomationSettings()
+            Button("Test") {
+                testBrowserURLRead(target)
             }
             .controlSize(.small)
+
+            if target.isCustom {
+                Button("Delete", role: .destructive) {
+                    removeCustomBrowser(target)
+                }
+                .controlSize(.small)
+            }
         }
         .padding(.vertical, 2)
     }
@@ -308,34 +340,166 @@ struct PermissionsSettingsView: View {
         monitoringKinds.removeAll()
     }
 
+    private func builtInBrowserTargets() -> [BrowserAutomationTarget] {
+        [
+            BrowserAutomationTarget(
+                bundleID: "com.apple.Safari",
+                displayName: "Safari",
+                scripts: [
+                    "tell application id \"com.apple.Safari\" to get URL of front document",
+                    "tell application \"Safari\" to get URL of front document"
+                ],
+                isCustom: false
+            ),
+            BrowserAutomationTarget(
+                bundleID: "com.google.Chrome",
+                displayName: "Google Chrome",
+                scripts: [
+                    "tell application id \"com.google.Chrome\" to get the URL of active tab of front window",
+                    "tell application \"Google Chrome\" to get the URL of active tab of front window"
+                ],
+                isCustom: false
+            ),
+            BrowserAutomationTarget(
+                bundleID: "company.thebrowser.Browser",
+                displayName: "Arc",
+                scripts: [
+                    "tell application id \"company.thebrowser.Browser\" to get the URL of active tab of front window",
+                    "tell application \"Arc\" to get the URL of active tab of front window"
+                ],
+                isCustom: false
+            )
+        ]
+    }
+
+    private func scriptsForCustomBrowser(bundleID: String, displayName: String) -> [String] {
+        [
+            "tell application id \"\(bundleID)\" to get URL of front document",
+            "tell application id \"\(bundleID)\" to get URL of current tab of front window",
+            "tell application id \"\(bundleID)\" to get the URL of active tab of front window",
+            "tell application \"\(displayName)\" to get URL of front document"
+        ]
+    }
+
+    private func loadBrowserTargets() {
+        let builtIns = builtInBrowserTargets()
+        let customBrowsers = loadStoredCustomBrowsers().map {
+            BrowserAutomationTarget(
+                bundleID: $0.bundleID,
+                displayName: $0.displayName,
+                scripts: scriptsForCustomBrowser(bundleID: $0.bundleID, displayName: $0.displayName),
+                isCustom: true
+            )
+        }
+
+        var seen: Set<String> = []
+        var merged: [BrowserAutomationTarget] = []
+        for target in builtIns + customBrowsers {
+            guard !seen.contains(target.bundleID) else { continue }
+            seen.insert(target.bundleID)
+            merged.append(target)
+        }
+
+        browserTargets = merged
+    }
+
+    private func loadStoredCustomBrowsers() -> [StoredCustomBrowser] {
+        guard let data = appBranchCustomBrowsersJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([StoredCustomBrowser].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    private func saveStoredCustomBrowsers(_ browsers: [StoredCustomBrowser]) {
+        guard let data = try? JSONEncoder().encode(browsers),
+              let json = String(data: data, encoding: .utf8) else {
+            return
+        }
+        appBranchCustomBrowsersJSON = json
+    }
+
+    private func chooseBrowserApplication() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        if #available(macOS 12.0, *) {
+            panel.allowedContentTypes = [.applicationBundle]
+        } else {
+            panel.allowedFileTypes = ["app"]
+        }
+        panel.prompt = String(localized: "Choose")
+
+        guard panel.runModal() == .OK, let appURL = panel.url else { return }
+        guard let bundle = Bundle(url: appURL),
+              let bundleID = bundle.bundleIdentifier,
+              !bundleID.isEmpty else {
+            browserPickerErrorMessage = AppLocalization.localizedString("Selected app is not a valid browser (missing bundle id).")
+            return
+        }
+
+        if browserTargets.contains(where: { $0.bundleID == bundleID }) {
+            browserPickerErrorMessage = AppLocalization.localizedString("Browser already added.")
+            return
+        }
+
+        let displayName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: kCFBundleNameKey as String) as? String)
+            ?? appURL.deletingPathExtension().lastPathComponent
+
+        var custom = loadStoredCustomBrowsers()
+        custom.append(StoredCustomBrowser(bundleID: bundleID, displayName: displayName))
+        saveStoredCustomBrowsers(custom)
+        browserPickerErrorMessage = nil
+        loadBrowserTargets()
+        refreshBrowserAutomationStates()
+    }
+
+    private func removeCustomBrowser(_ target: BrowserAutomationTarget) {
+        guard target.isCustom else { return }
+        var custom = loadStoredCustomBrowsers()
+        custom.removeAll { $0.bundleID == target.bundleID }
+        saveStoredCustomBrowsers(custom)
+        browserAutomationStates.removeValue(forKey: target.bundleID)
+        browserAutomationMessages.removeValue(forKey: target.bundleID)
+        loadBrowserTargets()
+        refreshBrowserAutomationStates()
+    }
+
     private func refreshBrowserAutomationStates() {
-        for target in BrowserAutomationTarget.allCases {
-            browserAutomationStates[target] = probeBrowserAutomationState(target)
+        for target in browserTargets {
+            browserAutomationStates[target.bundleID] = probeBrowserAutomationState(target)
         }
     }
 
     private func requestBrowserAutomationPermission(_ target: BrowserAutomationTarget) {
-        browserAutomationRequestsInFlight.insert(target)
-        VoxtLog.info("Browser automation permission request triggered: target=\(target.rawValue)")
+        browserAutomationRequestsInFlight.insert(target.bundleID)
+        VoxtLog.info("Browser automation permission request triggered: target=\(target.bundleID)")
 
         Task { @MainActor in
-            defer { browserAutomationRequestsInFlight.remove(target) }
-            let status = automationPermissionStatus(for: target, askUserIfNeeded: true)
-            let result: PermissionState = (status == noErr) ? .enabled : .disabled
-            browserAutomationStates[target] = result == .enabled ? .enabled : .disabled
+            defer { browserAutomationRequestsInFlight.remove(target.bundleID) }
+            let status = automationPermissionStatus(for: target.bundleID, askUserIfNeeded: true)
+            let enabled = (status == noErr)
+            browserAutomationStates[target.bundleID] = enabled ? .enabled : .disabled
+            if enabled {
+                browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Authorization granted.")
+            } else {
+                browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Authorization not granted.")
+            }
             VoxtLog.info(
-                "Browser automation permission status: target=\(target.rawValue), state=\(result == .enabled ? "enabled" : "disabled"), status=\(status)"
+                "Browser automation permission status: target=\(target.bundleID), state=\(enabled ? "enabled" : "disabled"), status=\(status)"
             )
         }
     }
 
     private func probeBrowserAutomationState(_ target: BrowserAutomationTarget) -> PermissionState {
-        let status = automationPermissionStatus(for: target, askUserIfNeeded: false)
+        let status = automationPermissionStatus(for: target.bundleID, askUserIfNeeded: false)
         return status == noErr ? .enabled : .disabled
     }
 
-    private func automationPermissionStatus(for target: BrowserAutomationTarget, askUserIfNeeded: Bool) -> OSStatus {
-        let descriptor = NSAppleEventDescriptor(bundleIdentifier: target.rawValue)
+    private func automationPermissionStatus(for bundleID: String, askUserIfNeeded: Bool) -> OSStatus {
+        let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleID)
         guard let aeDesc = descriptor.aeDesc else {
             return OSStatus(errAEEventNotPermitted)
         }
@@ -348,32 +512,66 @@ struct PermissionsSettingsView: View {
         )
     }
 
-    private func runAppleScript(_ source: String, promptIfNeeded: Bool = true) -> PermissionState {
-        let scriptSource: String
-        if promptIfNeeded {
-            scriptSource = source
-        } else {
-            scriptSource = """
+    private func testBrowserURLRead(_ target: BrowserAutomationTarget) {
+        browserAutomationTestsInFlight.insert(target.bundleID)
+        browserAutomationMessages[target.bundleID] = nil
+
+        Task { @MainActor in
+            defer { browserAutomationTestsInFlight.remove(target.bundleID) }
+            let result = runAppleScriptCandidates(target.scripts)
+            if result.success {
+                browserAutomationStates[target.bundleID] = .enabled
+                browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Browser URL read test succeeded.")
+                return
+            }
+
+            if result.permissionDenied {
+                browserAutomationStates[target.bundleID] = .disabled
+                browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Browser URL read test failed: permission denied.")
+            } else if result.appNotRunning {
+                browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Browser URL read test failed: browser is not running.")
+            } else if let lastErrorCode = result.lastErrorCode {
+                browserAutomationMessages[target.bundleID] = AppLocalization.format("Browser URL read test failed (error: %@).", String(lastErrorCode))
+            } else {
+                browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Browser URL read test failed.")
+            }
+        }
+    }
+
+    private func runAppleScriptCandidates(_ scripts: [String]) -> ScriptProbeResult {
+        var sawPermissionDenied = false
+        var sawAppNotRunning = false
+        var lastErrorCode: Int?
+
+        for source in scripts {
+            var error: NSDictionary?
+            let wrapped = """
             with timeout of 1 seconds
             \(source)
             end timeout
             """
+            let script = NSAppleScript(source: wrapped)
+            let result = script?.executeAndReturnError(&error)
+            if let output = result?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !output.isEmpty {
+                return ScriptProbeResult(success: true, permissionDenied: false, appNotRunning: false, lastErrorCode: nil)
+            }
+
+            let code = error?[NSAppleScript.errorNumber] as? Int
+            lastErrorCode = code
+            if code == -1743 || code == -10004 {
+                sawPermissionDenied = true
+            }
+            if code == -600 {
+                sawAppNotRunning = true
+            }
         }
 
-        var error: NSDictionary?
-        let script = NSAppleScript(source: scriptSource)
-        _ = script?.executeAndReturnError(&error).stringValue
-        guard let error else { return .enabled }
-
-        let errorNumber = (error[NSAppleScript.errorNumber] as? Int) ?? 0
-        if errorNumber == -1743 || errorNumber == -10004 {
-            return .disabled
-        }
-        if errorNumber == -600 {
-            // App not running does not imply permission denied; keep current as disabled until requested.
-            return .disabled
-        }
-        return .disabled
+        return ScriptProbeResult(
+            success: false,
+            permissionDenied: sawPermissionDenied,
+            appNotRunning: sawAppNotRunning,
+            lastErrorCode: lastErrorCode
+        )
     }
 
     private func openSettings(for kind: PermissionKind) {

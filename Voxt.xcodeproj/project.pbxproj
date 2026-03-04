@@ -11,6 +11,7 @@
 		A1B2C3D4E5F6078901234567 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F6078901234568 /* MLXAudioCore */; };
 		A1B2C3D4E5F6078901234569 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F607890123456A /* MLXAudioSTT */; };
 		B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B1C2D3E4F5060708090A0B0D /* Sparkle */; };
+		C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B02 /* MLXLMCommon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +54,7 @@
 				A1B2C3D4E5F6078901234567 /* MLXAudioCore in Frameworks */,
 				A1B2C3D4E5F6078901234569 /* MLXAudioSTT in Frameworks */,
 				B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */,
+				C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -144,6 +146,7 @@
 				A1B2C3D4E5F6078901234568 /* MLXAudioCore */,
 				A1B2C3D4E5F607890123456A /* MLXAudioSTT */,
 				B1C2D3E4F5060708090A0B0D /* Sparkle */,
+				C1D2E3F4A5060708090A0B02 /* MLXLMCommon */,
 			);
 			productName = Voxt;
 			productReference = 31F19CCD2F4D76D200E96913 /* Voxt Dev.app */;
@@ -202,6 +205,7 @@
 			packageReferences = (
 				A1B2C3D4E5F607890123456B /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
 				B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */,
+				C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 31F19CCE2F4D76D200E96913 /* Products */;
@@ -674,6 +678,14 @@
 				minimumVersion = 2.6.4;
 			};
 		};
+		C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
+			requirement = {
+				kind = revision;
+				revision = e33eba8513595bde535719c48fedcb10ade5af57;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -691,6 +703,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		C1D2E3F4A5060708090A0B02 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

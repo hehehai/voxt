@@ -4,6 +4,7 @@ import ApplicationServices
 import CoreAudio
 import AVFoundation
 import Speech
+import HuggingFace
 
 enum TranscriptionEngine: String, CaseIterable, Identifiable {
     case dictation
@@ -88,6 +89,8 @@ enum AppPreferenceKey {
     static let mlxModelRepo = "mlxModelRepo"
     static let customLLMModelRepo = "customLLMModelRepo"
     static let translationCustomLLMModelRepo = "translationCustomLLMModelRepo"
+    static let modelStorageRootPath = "modelStorageRootPath"
+    static let modelStorageRootBookmark = "modelStorageRootBookmark"
     static let useHfMirror = "useHfMirror"
     static let hotkeyKeyCode = "hotkeyKeyCode"
     static let hotkeyModifiers = "hotkeyModifiers"
@@ -104,6 +107,8 @@ enum AppPreferenceKey {
     static let appEnhancementEnabled = "appEnhancementEnabled"
     static let appBranchGroups = "appBranchGroups"
     static let appBranchURLs = "appBranchURLs"
+    static let appBranchCustomBrowsers = "appBranchCustomBrowsers"
+    static let customLLMRemoteSizeCache = "customLLMRemoteSizeCache"
     static let launchAtLogin = "launchAtLogin"
     static let showInDock = "showInDock"
     static let historyEnabled = "historyEnabled"
@@ -118,6 +123,77 @@ enum AppPreferenceKey {
         Preserve meaning, tone, names, numbers, and formatting.
         Return only the translated text.
         """
+}
+
+enum ModelStorageDirectoryManager {
+    private static var securityScopedURL: URL?
+
+    static var defaultRootURL: URL {
+        HubCache.default.cacheDirectory
+    }
+
+    static func resolvedRootURL() -> URL {
+        let defaults = UserDefaults.standard
+        if let bookmarkData = defaults.data(forKey: AppPreferenceKey.modelStorageRootBookmark),
+           let bookmarkedURL = resolveSecurityScopedURL(from: bookmarkData) {
+            return bookmarkedURL
+        }
+
+        if let path = defaults.string(forKey: AppPreferenceKey.modelStorageRootPath), !path.isEmpty {
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+
+        return defaultRootURL
+    }
+
+    static func saveUserSelectedRootURL(_ url: URL) throws {
+        let normalized = url.standardizedFileURL
+        let bookmark = try normalized.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+
+        let defaults = UserDefaults.standard
+        defaults.set(normalized.path, forKey: AppPreferenceKey.modelStorageRootPath)
+        defaults.set(bookmark, forKey: AppPreferenceKey.modelStorageRootBookmark)
+
+        _ = resolveSecurityScopedURL(from: bookmark)
+    }
+
+    static func openRootInFinder() {
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: resolvedRootURL().path)
+    }
+
+    private static func resolveSecurityScopedURL(from bookmarkData: Data) -> URL? {
+        var isStale = false
+        guard let resolved = try? URL(
+            resolvingBookmarkData: bookmarkData,
+            options: [.withSecurityScope, .withoutUI],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ) else {
+            return nil
+        }
+
+        if securityScopedURL?.path != resolved.path {
+            securityScopedURL?.stopAccessingSecurityScopedResource()
+            if resolved.startAccessingSecurityScopedResource() {
+                securityScopedURL = resolved
+            }
+        }
+
+        if isStale,
+           let refreshed = try? resolved.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+           ) {
+            UserDefaults.standard.set(refreshed, forKey: AppPreferenceKey.modelStorageRootBookmark)
+        }
+
+        return resolved
+    }
 }
 
 @main
@@ -178,6 +254,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             urlPatternIDs = try container.decodeIfPresent([UUID].self, forKey: .urlPatternIDs) ?? []
             isExpanded = try container.decodeIfPresent(Bool.self, forKey: .isExpanded) ?? true
         }
+    }
+
+    private struct StoredCustomBrowser: Codable {
+        let bundleID: String
+        let displayName: String
     }
 
     private struct BrowserScriptProvider {
@@ -473,7 +554,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let leftInset: CGFloat = 22
-        let topInset: CGFloat = 19
+        let topInset: CGFloat = 21
         let spacing: CGFloat = 6
 
         let buttonSize = closeButton.frame.size
@@ -1387,17 +1468,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func isBrowserBundleID(_ bundleID: String?) -> Bool {
         guard let bundleID else { return false }
-        switch bundleID {
-        case "com.apple.Safari",
-             "com.apple.SafariTechnologyPreview",
-             "com.google.Chrome",
-             "com.microsoft.edgemac",
-             "com.brave.Browser",
-             "company.thebrowser.Browser":
-            return true
-        default:
-            return false
-        }
+        return supportedBrowserBundleIDs().contains(bundleID)
     }
 
     private func activeBrowserTabURL(frontmostBundleID: String?) -> String? {
@@ -1481,8 +1552,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
         default:
-            return nil
+            guard let customDisplayName = customBrowserDisplayName(for: bundleID) else {
+                return nil
+            }
+            return BrowserScriptProvider(
+                name: customDisplayName,
+                scripts: scriptsForCustomBrowser(bundleID: bundleID, displayName: customDisplayName)
+            )
         }
+    }
+
+    private func supportedBrowserBundleIDs() -> Set<String> {
+        var bundleIDs: Set<String> = [
+            "com.apple.Safari",
+            "com.apple.SafariTechnologyPreview",
+            "com.google.Chrome",
+            "com.microsoft.edgemac",
+            "com.brave.Browser",
+            "company.thebrowser.Browser"
+        ]
+        for browser in loadStoredCustomBrowsers() where !browser.bundleID.isEmpty {
+            bundleIDs.insert(browser.bundleID)
+        }
+        return bundleIDs
+    }
+
+    private func customBrowserDisplayName(for bundleID: String) -> String? {
+        loadStoredCustomBrowsers().first { $0.bundleID == bundleID }?.displayName
+    }
+
+    private func loadStoredCustomBrowsers() -> [StoredCustomBrowser] {
+        guard let json = UserDefaults.standard.string(forKey: AppPreferenceKey.appBranchCustomBrowsers),
+              let data = json.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([StoredCustomBrowser].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    private func scriptsForCustomBrowser(bundleID: String, displayName: String) -> [String] {
+        [
+            "tell application id \"\(bundleID)\" to get URL of front document",
+            "tell application id \"\(bundleID)\" to get URL of current tab of front window",
+            "tell application id \"\(bundleID)\" to get the URL of active tab of front window",
+            "tell application id \"\(bundleID)\" to get the URL of active tab of window 1",
+            "tell application \"\(displayName)\" to get URL of front document",
+            "tell application \"\(displayName)\" to get the URL of active tab of front window"
+        ]
     }
 
     private func runAppleScriptCandidates(_ sources: [String], providerName: String) -> String? {

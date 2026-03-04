@@ -455,7 +455,7 @@ struct AppEnhancementSettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .frame(height: 150)
+                .frame(height: 148)
             }
         }
         .padding(10)

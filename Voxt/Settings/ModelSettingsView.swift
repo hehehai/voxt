@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 struct ModelSettingsView: View {
     private static let byteFormatter: ByteCountFormatter = {
@@ -22,6 +23,7 @@ struct ModelSettingsView: View {
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @State private var showMirrorInfo = false
+    private let modelStateRefreshTimer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
 
     private var selectedEngine: TranscriptionEngine {
         TranscriptionEngine(rawValue: engineRaw) ?? .mlxAudio
@@ -144,7 +146,13 @@ struct ModelSettingsView: View {
             if customLLMRepo.isEmpty {
                 customLLMRepo = CustomLLMModelManager.defaultModelRepo
             }
+            if !CustomLLMModelManager.isSupportedModelRepo(customLLMRepo) {
+                customLLMRepo = CustomLLMModelManager.defaultModelRepo
+            }
             if translationCustomLLMRepo.isEmpty {
+                translationCustomLLMRepo = customLLMRepo
+            }
+            if !CustomLLMModelManager.isSupportedModelRepo(translationCustomLLMRepo) {
                 translationCustomLLMRepo = customLLMRepo
             }
             if translationPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -153,6 +161,7 @@ struct ModelSettingsView: View {
             customLLMManager.updateModel(repo: customLLMRepo)
             customLLMManager.prefetchAllModelSizes()
             updateMirrorSetting()
+            refreshModelInstallStateIfNeeded()
         }
         .onChange(of: modelRepo) { _, newValue in
             let canonicalRepo = MLXModelManager.canonicalModelRepo(newValue)
@@ -170,6 +179,9 @@ struct ModelSettingsView: View {
         }
         .onChange(of: useHfMirror) { _, _ in
             updateMirrorSetting()
+        }
+        .onReceive(modelStateRefreshTimer) { _ in
+            refreshModelInstallStateIfNeeded()
         }
         .id(interfaceLanguageRaw)
     }
@@ -303,11 +315,12 @@ struct ModelSettingsView: View {
     }
 
     private var customLLMModelTable: some View {
-        ModelTableView(title: "Custom LLM Models", rows: customLLMRows)
+        ModelTableView(title: "Custom LLM Models", rows: customLLMRows, maxHeight: 260)
     }
 
     private var mlxRows: [ModelTableRow] {
         MLXModelManager.availableModels.map { model in
+            let isDownloaded = mlxModelManager.isModelDownloaded(repo: model.id)
             let actions: [ModelTableAction]
             if isDownloadingModel(model.id) {
                 actions = [
@@ -340,6 +353,8 @@ struct ModelSettingsView: View {
                 title: model.title,
                 isActive: isCurrentModel(model.id),
                 status: modelStatusText(for: model.id),
+                isTitleUnderlined: isDownloaded,
+                onTapTitle: isDownloaded ? { openMLXModelDirectory(model.id) } : nil,
                 actions: actions
             )
         }
@@ -347,6 +362,7 @@ struct ModelSettingsView: View {
 
     private var customLLMRows: [ModelTableRow] {
         CustomLLMModelManager.availableModels.map { model in
+            let isDownloaded = customLLMManager.isModelDownloaded(repo: model.id)
             let actions: [ModelTableAction]
             if isDownloadingCustomLLM(model.id) {
                 actions = [
@@ -379,6 +395,8 @@ struct ModelSettingsView: View {
                 title: model.title,
                 isActive: isCurrentCustomLLM(model.id),
                 status: customLLMStatusText(for: model.id),
+                isTitleUnderlined: isDownloaded,
+                onTapTitle: isDownloaded ? { openCustomLLMModelDirectory(model.id) } : nil,
                 actions: actions
             )
         }
@@ -525,6 +543,32 @@ struct ModelSettingsView: View {
         customLLMManager.updateHubBaseURL(url)
     }
 
+    private func refreshModelInstallStateIfNeeded() {
+        if case .downloading = mlxModelManager.state {
+            // Keep current transient state during active downloads.
+        } else if case .loading = mlxModelManager.state {
+            // Avoid resetting while model is being loaded.
+        } else {
+            mlxModelManager.checkExistingModel()
+        }
+
+        if case .downloading = customLLMManager.state {
+            // Keep current transient state during active downloads.
+        } else {
+            customLLMManager.checkExistingModel()
+        }
+    }
+
+    private func openMLXModelDirectory(_ repo: String) {
+        guard let folderURL = mlxModelManager.modelDirectoryURL(repo: repo) else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
+    }
+
+    private func openCustomLLMModelDirectory(_ repo: String) {
+        guard let folderURL = customLLMManager.modelDirectoryURL(repo: repo) else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
+    }
+
     private func modelLocalizedDescription(for repo: String) -> LocalizedStringKey {
         switch MLXModelManager.canonicalModelRepo(repo) {
         case "mlx-community/Qwen3-ASR-0.6B-4bit":
@@ -578,12 +622,15 @@ private struct ModelTableRow: Identifiable {
     let title: String
     let isActive: Bool
     let status: String
+    var isTitleUnderlined: Bool = false
+    var onTapTitle: (() -> Void)? = nil
     let actions: [ModelTableAction]
 }
 
 private struct ModelTableView: View {
     let title: LocalizedStringKey
     let rows: [ModelTableRow]
+    var maxHeight: CGFloat? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -601,39 +648,60 @@ private struct ModelTableView: View {
                 Divider()
             }
 
-            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+            ScrollView(.vertical) {
                 VStack(spacing: 0) {
-                    HStack(alignment: .center, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
+                    tableRows
+                }
+            }
+            .frame(maxHeight: maxHeight)
+        }
+        .tableContainerStyle
+    }
+
+    @ViewBuilder
+    private var tableRows: some View {
+        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+            VStack(spacing: 0) {
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let onTapTitle = row.onTapTitle {
+                            Button(action: onTapTitle) {
+                                Text(row.title)
+                                    .font(.subheadline.weight(row.isActive ? .semibold : .regular))
+                                    .underline(row.isTitleUnderlined)
+                                    .foregroundStyle(row.isTitleUnderlined ? Color.accentColor : Color.primary)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
                             Text(row.title)
                                 .font(.subheadline.weight(row.isActive ? .semibold : .regular))
-                            Text(row.status)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .underline(row.isTitleUnderlined)
                         }
+                        Text(row.status)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-                        Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                        HStack(spacing: 6) {
-                            ForEach(Array(row.actions.enumerated()), id: \.offset) { _, action in
-                                Button(action.title, role: action.role) {
-                                    action.handler()
-                                }
-                                .controlSize(.small)
-                                .disabled(!action.isEnabled)
+                    HStack(spacing: 6) {
+                        ForEach(Array(row.actions.enumerated()), id: \.offset) { _, action in
+                            Button(action.title, role: action.role) {
+                                action.handler()
                             }
+                            .controlSize(.small)
+                            .disabled(!action.isEnabled)
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
 
-                    if index < rows.count - 1 {
-                        Divider()
-                    }
+                if index < rows.count - 1 {
+                    Divider()
                 }
             }
         }
-        .tableContainerStyle
     }
 }
 
