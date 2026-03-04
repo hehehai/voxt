@@ -6,6 +6,21 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+### Added
+- App Branch source card now shows an Apps-tab drag hint in the header.
+- Added custom LLM model options:
+  - `mlx-community/Qwen3.5-0.8B-MLX-4bit`
+  - `mlx-community/Qwen3.5-2B-MLX-4bit`
+
+### Changed
+- Upgraded `mlx-swift-lm` to a newer revision with `qwen3_5` model-type support.
+- Improved App Branch localization coverage for tab content and related sheets.
+
+### Fixed
+- Fixed custom LLM download cancellation UI state not resetting reliably.
+- Fixed custom LLM large-file progress display by aligning in-flight progress logic with MLX model download behavior.
+- Fixed App Branch language switching inconsistency when switching to English.
+
 ## [1.1.8] - 2026-03-02
 
 ### Added
