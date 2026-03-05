@@ -6,6 +6,12 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-03-05
+
+### Fixed
+- Fixed update version comparison by aligning app `CURRENT_PROJECT_VERSION` with Sparkle `sparkle:version`, preventing `1.3.1` from repeatedly showing `1.3.1 (1003001)` as an available update.
+- Added detailed Sparkle update lifecycle logs (check source, found/not found, download success/failure, cycle completion, and abort details) to support in-app log export troubleshooting.
+
 ## [1.3.1] - 2026-03-05
 
 ### Changed
