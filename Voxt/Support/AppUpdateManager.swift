@@ -2,26 +2,22 @@ import Foundation
 import Sparkle
 
 @MainActor
-final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate, SPUUpdaterDelegate {
+final class AppUpdateManager: NSObject {
     enum CheckSource {
         case automatic
         case manual
     }
 
-    private lazy var updaterController: SPUStandardUpdaterController = {
-        SPUStandardUpdaterController(
+    private let updaterController: SPUStandardUpdaterController
+
+    override init() {
+        updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: self,
-            userDriverDelegate: self
+            updaterDelegate: nil,
+            userDriverDelegate: nil
         )
-    }()
-
-    private let stableFeedURLString = "https://voxt.actnow.dev/updates/stable/appcast.xml"
-    private let betaFeedURLString = "https://voxt.actnow.dev/updates/beta/appcast.xml"
-
-    // Background/dockless apps should opt into Sparkle's gentle reminder support
-    // to avoid missing scheduled update alerts.
-    var supportsGentleScheduledUpdateReminders: Bool { true }
+        super.init()
+    }
 
     var hasUpdate: Bool {
         false
@@ -45,15 +41,5 @@ final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate, SPUUpdate
             VoxtLog.info("Background update check triggered via Sparkle.")
             updaterController.updater.checkForUpdatesInBackground()
         }
-    }
-
-    func feedURLString(for updater: SPUUpdater) -> String? {
-        selectedFeedURLString
-    }
-
-    private var selectedFeedURLString: String {
-        let bundleID = Bundle.main.bundleIdentifier?.lowercased() ?? ""
-        let isBetaBuild = bundleID.contains(".dev") || bundleID.contains(".beta")
-        return isBetaBuild ? betaFeedURLString : stableFeedURLString
     }
 }

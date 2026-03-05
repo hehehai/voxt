@@ -112,27 +112,19 @@ class MLXModelManager: ObservableObject {
 
     func isModelDownloaded(repo: String) -> Bool {
         let canonicalRepo = Self.canonicalModelRepo(repo)
-        guard let modelDir = cacheDirectory(for: canonicalRepo) else { return false }
+        guard let modelDir = Self.cacheDirectory(for: canonicalRepo) else { return false }
         return MLXModelDownloadSupport.isModelDirectoryValid(modelDir, fileManager: .default)
     }
 
     func modelSizeOnDisk(repo: String) -> String {
         let canonicalRepo = Self.canonicalModelRepo(repo)
-        guard let modelDir = cacheDirectory(for: canonicalRepo),
+        guard let modelDir = Self.cacheDirectory(for: canonicalRepo),
               let size = try? FileManager.default.allocatedSizeOfDirectory(at: modelDir),
               size > 0
         else {
             return ""
         }
         return Self.byteFormatter.string(fromByteCount: Int64(size))
-    }
-
-    func modelDirectoryURL(repo: String) -> URL? {
-        let canonicalRepo = Self.canonicalModelRepo(repo)
-        guard let modelDir = cacheDirectory(for: canonicalRepo),
-              FileManager.default.fileExists(atPath: modelDir.path)
-        else { return nil }
-        return modelDir
     }
 
     func deleteModel(repo: String) {
@@ -145,7 +137,7 @@ class MLXModelManager: ObservableObject {
         if let repoID = Repo.ID(rawValue: canonicalRepo) {
             clearHubCache(for: repoID)
         }
-        if let modelDir = cacheDirectory(for: canonicalRepo) {
+        if let modelDir = Self.cacheDirectory(for: canonicalRepo) {
             try? FileManager.default.removeItem(at: modelDir)
         }
     }
@@ -177,7 +169,7 @@ class MLXModelManager: ObservableObject {
     }
 
     func checkExistingModel() {
-        guard let modelDir = cacheDirectory(for: modelRepo) else {
+        guard let modelDir = Self.cacheDirectory(for: modelRepo) else {
             state = .error("Invalid model identifier")
             return
         }
@@ -290,7 +282,7 @@ class MLXModelManager: ObservableObject {
 
         clearCurrentRepoHubCache()
 
-        guard let modelDir = cacheDirectory(for: modelRepo) else {
+        guard let modelDir = Self.cacheDirectory(for: modelRepo) else {
             state = .notDownloaded
             return
         }
@@ -299,7 +291,7 @@ class MLXModelManager: ObservableObject {
     }
 
     var modelSizeOnDisk: String {
-        guard let modelDir = cacheDirectory(for: modelRepo),
+        guard let modelDir = Self.cacheDirectory(for: modelRepo),
               let size = try? FileManager.default.allocatedSizeOfDirectory(at: modelDir), size > 0
         else {
             return ""
@@ -332,14 +324,10 @@ class MLXModelManager: ObservableObject {
         return try await Qwen3ASRModel.fromPretrained(repo)
     }
 
-    private func cacheDirectory(for repo: String) -> URL? {
-        Self.cacheDirectory(for: repo, rootDirectory: ModelStorageDirectoryManager.resolvedRootURL())
-    }
-
-    private static func cacheDirectory(for repo: String, rootDirectory: URL) -> URL? {
+    private static func cacheDirectory(for repo: String) -> URL? {
         guard let repoID = Repo.ID(rawValue: repo) else { return nil }
         let modelSubdir = repoID.description.replacingOccurrences(of: "/", with: "_")
-        return rootDirectory
+        return HubCache.default.cacheDirectory
             .appendingPathComponent("mlx-audio")
             .appendingPathComponent(modelSubdir)
     }
@@ -349,7 +337,7 @@ class MLXModelManager: ObservableObject {
             try? FileManager.default.removeItem(at: tempDir)
             downloadTempDir = nil
         }
-        guard let modelDir = cacheDirectory(for: modelRepo) else { return }
+        guard let modelDir = Self.cacheDirectory(for: modelRepo) else { return }
         try? FileManager.default.removeItem(at: modelDir)
     }
 
@@ -431,7 +419,7 @@ class MLXModelManager: ObservableObject {
         session: URLSession
     ) async throws -> URL {
         let modelSubdir = repoID.description.replacingOccurrences(of: "/", with: "_")
-        let baseDir = ModelStorageDirectoryManager.resolvedRootURL().appendingPathComponent("mlx-audio")
+        let baseDir = cache.cacheDirectory.appendingPathComponent("mlx-audio")
         let modelDir = baseDir.appendingPathComponent(modelSubdir)
         let tempDir = baseDir.appendingPathComponent("\(modelSubdir)-download")
 

@@ -54,61 +54,6 @@ class CustomLLMModelManager: ObservableObject {
             id: "Qwen/Qwen2.5-3B-Instruct",
             title: "Qwen2.5 3B Instruct",
             description: "Larger instruction model with stronger reasoning and formatting quality."
-        ),
-        ModelOption(
-            id: "mlx-community/Qwen3-4B-4bit",
-            title: "Qwen3 4B (4bit)",
-            description: "Balanced Qwen3 model for quality and performance."
-        ),
-        ModelOption(
-            id: "mlx-community/Qwen3-8B-4bit",
-            title: "Qwen3 8B (4bit)",
-            description: "Higher-quality Qwen3 model for stronger enhancement results."
-        ),
-        ModelOption(
-            id: "mlx-community/GLM-4-9B-0414-4bit",
-            title: "GLM-4 9B (4bit)",
-            description: "GLM-4 model variant with strong multilingual instruction following."
-        ),
-        ModelOption(
-            id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
-            title: "Llama 3.2 3B Instruct (4bit)",
-            description: "Lightweight Llama 3.2 model for fast local enhancement."
-        ),
-        ModelOption(
-            id: "mlx-community/Llama-3.2-1B-Instruct-4bit",
-            title: "Llama 3.2 1B Instruct (4bit)",
-            description: "Smallest Llama 3.2 option with minimal memory footprint."
-        ),
-        ModelOption(
-            id: "mlx-community/Meta-Llama-3-8B-Instruct-4bit",
-            title: "Meta Llama 3 8B Instruct (4bit)",
-            description: "General-purpose 8B instruction model with strong quality."
-        ),
-        ModelOption(
-            id: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
-            title: "Meta Llama 3.1 8B Instruct (4bit)",
-            description: "Refined 8B Llama 3.1 instruction model."
-        ),
-        ModelOption(
-            id: "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
-            title: "Mistral 7B Instruct v0.3 (4bit)",
-            description: "Reliable 7B instruction model for concise formatting tasks."
-        ),
-        ModelOption(
-            id: "mlx-community/Mistral-Nemo-Instruct-2407-4bit",
-            title: "Mistral Nemo Instruct 2407 (4bit)",
-            description: "Nemo-based Mistral model with improved instruction quality."
-        ),
-        ModelOption(
-            id: "mlx-community/gemma-2-2b-it-4bit",
-            title: "Gemma 2 2B IT (4bit)",
-            description: "Compact Gemma 2 instruction-tuned model."
-        ),
-        ModelOption(
-            id: "mlx-community/gemma-2-9b-it-4bit",
-            title: "Gemma 2 9B IT (4bit)",
-            description: "Higher-capacity Gemma 2 model for better quality output."
         )
     ]
 
@@ -119,22 +64,14 @@ class CustomLLMModelManager: ObservableObject {
     private var modelRepo: String
     private var hubBaseURL: URL
     private var downloadTask: Task<Void, Never>?
-    private var downloadProgressTask: Task<Void, Never>?
     private var sizeTask: Task<Void, Never>?
     private var inferenceContainer: ModelContainer?
     private var inferenceModelRepo: String?
-    private var lastLoggedModelPresence: (repo: String, downloaded: Bool)?
-    private var lastInvalidRepoLogged: String?
 
     init(modelRepo: String, hubBaseURL: URL = URL(string: "https://huggingface.co")!) {
-        let sanitizedRepo = Self.isSupportedModelRepo(modelRepo) ? modelRepo : Self.defaultModelRepo
-        self.modelRepo = sanitizedRepo
+        self.modelRepo = modelRepo
         self.hubBaseURL = hubBaseURL
-        self.remoteSizeTextByRepo = Self.loadPersistedRemoteSizeCache()
-        if sanitizedRepo != modelRepo {
-            VoxtLog.warning("Unsupported custom LLM repo '\(modelRepo)' found in settings. Falling back to \(sanitizedRepo).")
-        }
-        VoxtLog.info("Custom LLM manager initialized. repo=\(sanitizedRepo), hub=\(hubBaseURL.absoluteString)")
+        VoxtLog.info("Custom LLM manager initialized. repo=\(modelRepo), hub=\(hubBaseURL.absoluteString)")
         checkExistingModel()
         fetchRemoteSize()
     }
@@ -157,7 +94,7 @@ class CustomLLMModelManager: ObservableObject {
         if let cached = inferenceContainer, inferenceModelRepo == modelRepo {
             container = cached
         } else {
-            guard let directory = cacheDirectory(for: modelRepo) else {
+            guard let directory = Self.cacheDirectory(for: modelRepo) else {
                 throw NSError(
                     domain: "Voxt.CustomLLM",
                     code: -10,
@@ -182,8 +119,8 @@ class CustomLLMModelManager: ObservableObject {
         \(input)
         """
 
-        let response = try await session.respond(to: modelPrompt(prompt, repo: modelRepo))
-        let cleaned = sanitizeModelOutput(response)
+        let response = try await session.respond(to: prompt)
+        let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? rawText : cleaned
     }
 
@@ -224,8 +161,8 @@ class CustomLLMModelManager: ObservableObject {
             temperature: 0.1,
             topP: 0.95
         )
-        let response = try await session.respond(to: modelPrompt(text, repo: modelRepo))
-        return sanitizeModelOutput(response)
+        let response = try await session.respond(to: text)
+        return response.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func container(for repo: String) async throws -> ModelContainer {
@@ -233,7 +170,7 @@ class CustomLLMModelManager: ObservableObject {
             return cached
         }
 
-        guard let directory = cacheDirectory(for: repo) else {
+        guard let directory = Self.cacheDirectory(for: repo) else {
             throw NSError(
                 domain: "Voxt.CustomLLM",
                 code: -10,
@@ -254,23 +191,13 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func updateModel(repo: String) {
-        let sanitizedRepo = Self.isSupportedModelRepo(repo) ? repo : Self.defaultModelRepo
-        guard sanitizedRepo != modelRepo else { return }
-        if sanitizedRepo != repo {
-            VoxtLog.warning("Unsupported custom LLM repo '\(repo)' requested. Falling back to \(sanitizedRepo).")
-        }
-        VoxtLog.info("Custom LLM model changed: \(modelRepo) -> \(sanitizedRepo)")
-        modelRepo = sanitizedRepo
+        guard repo != modelRepo else { return }
+        VoxtLog.info("Custom LLM model changed: \(modelRepo) -> \(repo)")
+        modelRepo = repo
         inferenceContainer = nil
         inferenceModelRepo = nil
-        lastLoggedModelPresence = nil
-        lastInvalidRepoLogged = nil
         checkExistingModel()
         fetchRemoteSize()
-    }
-
-    static func isSupportedModelRepo(_ repo: String) -> Bool {
-        availableModels.contains { $0.id == repo }
     }
 
     func updateHubBaseURL(_ url: URL) {
@@ -282,25 +209,18 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func isModelDownloaded(repo: String) -> Bool {
-        guard let modelDir = cacheDirectory(for: repo) else { return false }
+        guard let modelDir = Self.cacheDirectory(for: repo) else { return false }
         return Self.isModelDirectoryValid(modelDir)
     }
 
     func modelSizeOnDisk(repo: String) -> String {
-        guard let modelDir = cacheDirectory(for: repo),
+        guard let modelDir = Self.cacheDirectory(for: repo),
               let size = try? FileManager.default.allocatedSizeOfDirectory(at: modelDir),
               size > 0
         else {
             return ""
         }
         return Self.byteFormatter.string(fromByteCount: Int64(size))
-    }
-
-    func modelDirectoryURL(repo: String) -> URL? {
-        guard let modelDir = cacheDirectory(for: repo),
-              FileManager.default.fileExists(atPath: modelDir.path)
-        else { return nil }
-        return modelDir
     }
 
     func remoteSizeText(repo: String) -> String {
@@ -321,21 +241,13 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func checkExistingModel() {
-        guard let modelDir = cacheDirectory(for: modelRepo) else {
+        guard let modelDir = Self.cacheDirectory(for: modelRepo) else {
             state = .error("Invalid model identifier")
-            if lastInvalidRepoLogged != modelRepo {
-                VoxtLog.error("Invalid custom LLM repo identifier: \(modelRepo)")
-                lastInvalidRepoLogged = modelRepo
-            }
+            VoxtLog.error("Invalid custom LLM repo identifier: \(modelRepo)")
             return
         }
-        lastInvalidRepoLogged = nil
         state = Self.isModelDirectoryValid(modelDir) ? .downloaded : .notDownloaded
-        let downloaded = (state == .downloaded)
-        if lastLoggedModelPresence?.repo != modelRepo || lastLoggedModelPresence?.downloaded != downloaded {
-            VoxtLog.info("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(downloaded)")
-            lastLoggedModelPresence = (modelRepo, downloaded)
-        }
+        VoxtLog.info("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(state == .downloaded)")
     }
 
     func downloadModel() async {
@@ -343,10 +255,7 @@ class CustomLLMModelManager: ObservableObject {
 
         downloadTask = Task { [weak self] in
             guard let self else { return }
-            defer {
-                cancelDownloadProgressTask()
-                downloadTask = nil
-            }
+            defer { downloadTask = nil }
             setDownloadingState(progress: 0, completed: 0, total: 0, currentFile: nil, completedFiles: 0, totalFiles: 0)
 
             do {
@@ -385,14 +294,12 @@ class CustomLLMModelManager: ObservableObject {
                 let totalFiles = entries.count
                 var completedBytes: Int64 = 0
 
-                let modelDir = cacheDirectory(for: modelRepo)!
+                let modelDir = Self.cacheDirectory(for: modelRepo)!
                 try? FileManager.default.removeItem(at: modelDir)
                 try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
 
                 for (index, entry) in entries.enumerated() {
-                    let expectedFileBytes = max(entry.size ?? 0, 0)
-                    let progress = Progress(totalUnitCount: max(expectedFileBytes, 1))
-                    let fileBaseCompleted = completedBytes
+                    let progress = Progress(totalUnitCount: max(entry.size ?? 1, 1))
                     setDownloadingState(
                         progress: min(1, Double(completedBytes) / Double(totalBytes)),
                         completed: min(completedBytes, totalBytes),
@@ -401,34 +308,6 @@ class CustomLLMModelManager: ObservableObject {
                         completedFiles: index,
                         totalFiles: totalFiles
                     )
-
-                    cancelDownloadProgressTask()
-                    downloadProgressTask = Task { [weak self] in
-                        let startTime = Date()
-                        while !Task.isCancelled {
-                            await MainActor.run {
-                                guard let self else { return }
-                                let effectiveCurrentFileCompleted = Self.inFlightBytes(
-                                    progress: progress,
-                                    expectedFileBytes: expectedFileBytes,
-                                    startTime: startTime
-                                )
-                                let aggregateCompleted = min(
-                                    fileBaseCompleted + effectiveCurrentFileCompleted,
-                                    totalBytes
-                                )
-                                self.setDownloadingState(
-                                    progress: min(1, Double(aggregateCompleted) / Double(totalBytes)),
-                                    completed: aggregateCompleted,
-                                    total: totalBytes,
-                                    currentFile: entry.path,
-                                    completedFiles: index,
-                                    totalFiles: totalFiles
-                                )
-                            }
-                            try? await Task.sleep(for: .milliseconds(200))
-                        }
-                    }
 
                     _ = try await client.downloadFile(
                         at: entry.path,
@@ -440,10 +319,8 @@ class CustomLLMModelManager: ObservableObject {
                         transport: .lfs,
                         localFilesOnly: false
                     )
-                    cancelDownloadProgressTask()
 
-                    let delta = max(expectedFileBytes, max(progress.completedUnitCount, 0))
-                    completedBytes += max(delta, 0)
+                    completedBytes += max(entry.size ?? progress.completedUnitCount, 0)
                     setDownloadingState(
                         progress: min(1, Double(completedBytes) / Double(totalBytes)),
                         completed: min(completedBytes, totalBytes),
@@ -463,11 +340,9 @@ class CustomLLMModelManager: ObservableObject {
                 state = .downloaded
                 VoxtLog.info("Custom LLM download completed: \(modelRepo)")
             } catch is CancellationError {
-                cancelDownloadProgressTask()
                 state = .notDownloaded
                 VoxtLog.warning("Custom LLM download cancelled: \(modelRepo)")
             } catch {
-                cancelDownloadProgressTask()
                 state = .error("Download failed: \(error.localizedDescription)")
                 VoxtLog.error("Custom LLM download failed: \(modelRepo), error=\(error.localizedDescription)")
             }
@@ -480,16 +355,11 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func cancelDownload() {
+        guard downloadTask != nil else { return }
         VoxtLog.info("Custom LLM download cancellation requested: \(modelRepo)")
         downloadTask?.cancel()
-        cancelDownloadProgressTask()
         downloadTask = nil
         state = .notDownloaded
-    }
-
-    private func cancelDownloadProgressTask() {
-        downloadProgressTask?.cancel()
-        downloadProgressTask = nil
     }
 
     func deleteModel() {
@@ -502,7 +372,7 @@ class CustomLLMModelManager: ObservableObject {
         if let repoID = Repo.ID(rawValue: repo) {
             clearHubCache(for: repoID)
         }
-        if let modelDir = cacheDirectory(for: repo) {
+        if let modelDir = Self.cacheDirectory(for: repo) {
             try? FileManager.default.removeItem(at: modelDir)
         }
         if repo == inferenceModelRepo {
@@ -516,12 +386,8 @@ class CustomLLMModelManager: ObservableObject {
 
     private func fetchRemoteSize() {
         sizeTask?.cancel()
-        let repo = modelRepo
-        if let cachedText = remoteSizeTextByRepo[repo], cachedText != "Unknown" {
-            sizeState = .ready(bytes: 0, text: cachedText)
-            return
-        }
         sizeState = .loading
+        let repo = modelRepo
 
         sizeTask = Task { [weak self] in
             guard let self else { return }
@@ -535,7 +401,6 @@ class CustomLLMModelManager: ObservableObject {
                 if Task.isCancelled { return }
                 sizeState = .ready(bytes: info.bytes, text: info.text)
                 remoteSizeTextByRepo[repo] = info.text
-                Self.savePersistedRemoteSizeCache(remoteSizeTextByRepo)
             } catch is CancellationError {
                 return
             } catch {
@@ -560,7 +425,6 @@ class CustomLLMModelManager: ObservableObject {
                     )
                     await MainActor.run {
                         self.remoteSizeTextByRepo[model.id] = info.text
-                        Self.savePersistedRemoteSizeCache(self.remoteSizeTextByRepo)
                     }
                 } catch {
                     await MainActor.run {
@@ -590,68 +454,10 @@ class CustomLLMModelManager: ObservableObject {
         )
     }
 
-    private static func inFlightBytes(
-        progress: Progress,
-        expectedFileBytes: Int64,
-        startTime: Date
-    ) -> Int64 {
-        let reported = max(progress.completedUnitCount, 0)
-        guard reported == 0 else { return reported }
-
-        let elapsed = Date().timeIntervalSince(startTime)
-        let expectedForTenMinutes = Double(expectedFileBytes) / (10 * 60)
-        let fallbackRate = max(expectedForTenMinutes, 256 * 1024)
-        let estimated = Int64(elapsed * fallbackRate)
-        let cap = Int64(Double(expectedFileBytes) * 0.95)
-        return min(max(estimated, 0), max(cap, 0))
-    }
-
-    private static func loadPersistedRemoteSizeCache() -> [String: String] {
-        guard let data = UserDefaults.standard.data(forKey: AppPreferenceKey.customLLMRemoteSizeCache),
-              let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
-            return [:]
-        }
-        return decoded
-    }
-
-    private static func savePersistedRemoteSizeCache(_ cache: [String: String]) {
-        guard let data = try? JSONEncoder().encode(cache) else { return }
-        UserDefaults.standard.set(data, forKey: AppPreferenceKey.customLLMRemoteSizeCache)
-    }
-
-    private func modelPrompt(_ prompt: String, repo: String) -> String {
-        guard shouldForceNoThink(repo: repo) else { return prompt }
-        return "/no_think\n\(prompt)"
-    }
-
-    private func shouldForceNoThink(repo: String) -> Bool {
-        switch repo {
-        case "mlx-community/Qwen3.5-2B-MLX-4bit",
-             "mlx-community/Qwen3.5-4B-MLX-4bit",
-             "mlx-community/Qwen3.5-9B-MLX-4bit":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private func sanitizeModelOutput(_ output: String) -> String {
-        var cleaned = output
-        if let regex = try? NSRegularExpression(pattern: "<think>[\\s\\S]*?</think>", options: [.caseInsensitive]) {
-            let range = NSRange(location: 0, length: (cleaned as NSString).length)
-            cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: range, withTemplate: "")
-        }
-        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func cacheDirectory(for repo: String) -> URL? {
-        Self.cacheDirectory(for: repo, rootDirectory: ModelStorageDirectoryManager.resolvedRootURL())
-    }
-
-    private static func cacheDirectory(for repo: String, rootDirectory: URL) -> URL? {
+    private static func cacheDirectory(for repo: String) -> URL? {
         guard let repoID = Repo.ID(rawValue: repo) else { return nil }
         let modelSubdir = repoID.description.replacingOccurrences(of: "/", with: "_")
-        return rootDirectory
+        return HubCache.default.cacheDirectory
             .appendingPathComponent("mlx-llm")
             .appendingPathComponent(modelSubdir)
     }

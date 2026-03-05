@@ -32,9 +32,6 @@ enum AppLocalization {
             return nil
         }
         let value = bundle.localizedString(forKey: key, value: key, table: nil)
-        if localeIdentifier == "en" {
-            return value
-        }
         return value == key ? nil : value
     }
 }

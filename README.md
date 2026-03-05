@@ -46,8 +46,6 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
 - Smart output option: copy-only when no writable text input is focused.
 - Clipboard-safe paste flow: restores previous clipboard content.
 - Local transcription history with pagination, copy, delete, clear-all, and `Normal / Translation` tags.
-- App Branch enhancement rules with drag-and-drop grouping for apps and URL patterns.
-- Browser active-tab URL matching (Chrome / Safari / Arc) with per-browser Automation permission flow.
 - Model download manager with progress, cancel, delete, size display, validation, and `hf-mirror.com` support.
 - System controls: microphone selection, interaction sounds, launch at login, show in Dock.
 
@@ -93,8 +91,6 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
 
 - `Qwen/Qwen2-1.5B-Instruct` (default): general enhancement/translation with lower resource pressure.
 - `Qwen/Qwen2.5-3B-Instruct`: stronger formatting/reasoning with higher resource usage.
-- `mlx-community/Qwen3.5-0.8B-MLX-4bit`: lightweight Qwen3.5 option with fast local inference.
-- `mlx-community/Qwen3.5-2B-MLX-4bit`: higher-quality Qwen3.5 option with moderate resource usage.
 
 ## Model Comparison (Relative)
 

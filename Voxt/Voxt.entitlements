@@ -2,12 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-
-	<key>com.apple.security.automation.apple-events</key>
-	<true/>
-
 	<!-- Microphone access -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
@@ -15,17 +9,6 @@
 	<!-- Outgoing network connections (for downloading MLX Audio models from HuggingFace) -->
 	<key>com.apple.security.network.client</key>
 	<true/>
-
-	<!-- Apple Events to supported browsers for active-tab URL -->
-	<key>com.apple.security.temporary-exception.apple-events</key>
-	<array>
-		<string>com.apple.Safari</string>
-		<string>com.apple.SafariTechnologyPreview</string>
-		<string>com.google.Chrome</string>
-		<string>com.microsoft.edgemac</string>
-		<string>com.brave.Browser</string>
-		<string>company.thebrowser.Browser</string>
-	</array>
 
 	<!-- Accessibility (for CGEvent tap to detect Option key globally) -->
 	<!-- Note: this is requested at runtime; the user must grant it in System Settings -->

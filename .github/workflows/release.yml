@@ -40,7 +40,6 @@ jobs:
       should_skip: ${{ steps.release_state.outputs.should_skip }}
       tag: ${{ steps.version_dispatch.outputs.tag || steps.version_push.outputs.tag }}
       version: ${{ steps.version_dispatch.outputs.version || steps.version_push.outputs.version }}
-      channel: ${{ steps.channel_dispatch.outputs.channel || steps.channel_push.outputs.channel }}
       draft_release: ${{ steps.flags_dispatch.outputs.draft_release || steps.flags_push.outputs.draft_release }}
       update_appcast: ${{ steps.flags_dispatch.outputs.update_appcast || steps.flags_push.outputs.update_appcast }}
       skip_if_assets_exist: ${{ steps.flags_dispatch.outputs.skip_if_assets_exist || steps.flags_push.outputs.skip_if_assets_exist }}
@@ -73,21 +72,9 @@ jobs:
             echo "::error::Manual tag must be vX.Y.Z or vX.Y.Z-suffix, got: $TAG"
             exit 1
           fi
-          VERSION="${TAG#v}"
+          VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve channel (dispatch)
-        id: channel_dispatch
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          set -euo pipefail
-          TAG="${{ github.event.inputs.tag }}"
-          if [[ "$TAG" == *-* ]]; then
-            echo "channel=beta" >> "$GITHUB_OUTPUT"
-          else
-            echo "channel=stable" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Validate tag and extract version (push)
         id: version_push
@@ -95,25 +82,13 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          if ! [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)([-+][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Tag must be vX.Y.Z or vX.Y.Z-suffix, got: $TAG"
+          if ! [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Tag must be vX.Y.Z, got: $TAG"
             exit 1
           fi
           VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve channel (push)
-        id: channel_push
-        if: github.event_name != 'workflow_dispatch'
-        run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          if [[ "$TAG" == *-* ]]; then
-            echo "channel=beta" >> "$GITHUB_OUTPUT"
-          else
-            echo "channel=stable" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Check existing release assets
         id: release_state
@@ -146,7 +121,6 @@ jobs:
     env:
       VERSION: ${{ needs.preflight.outputs.version }}
       TAG: ${{ needs.preflight.outputs.tag }}
-      CHANNEL: ${{ needs.preflight.outputs.channel }}
       UPDATE_APPCAST: ${{ needs.preflight.outputs.update_appcast }}
       DEVELOPER_ID_APP_CERT_P12: ${{ secrets.DEVELOPER_ID_APP_CERT_P12 }}
       DEVELOPER_ID_APP_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_APP_CERT_PASSWORD }}
@@ -211,9 +185,8 @@ jobs:
             echo "::error::Unable to read MARKETING_VERSION from build settings"
             exit 1
           fi
-          TAG_BASE_VERSION="$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
-          if [ "$MARKETING_VERSION" != "$TAG_BASE_VERSION" ]; then
-            echo "::error::MARKETING_VERSION($MARKETING_VERSION) does not match tag base version($TAG_BASE_VERSION)"
+          if [ "$MARKETING_VERSION" != "$VERSION" ]; then
+            echo "::error::MARKETING_VERSION($MARKETING_VERSION) does not match tag version($VERSION)"
             exit 1
           fi
 
@@ -575,7 +548,7 @@ jobs:
     permissions:
       contents: write
     env:
-      GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.preflight.outputs.version }}
       TAG: ${{ needs.preflight.outputs.tag }}
       DRAFT_RELEASE: ${{ needs.preflight.outputs.draft_release }}
@@ -588,10 +561,6 @@ jobs:
       - name: Prepare release notes
         run: |
           set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            GH_TOKEN="${{ github.token }}"
-            export GH_TOKEN
-          fi
           NOTES_FILE="build/release-notes.md"
 
           BODY="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
@@ -610,10 +579,6 @@ jobs:
       - name: Create or update release and upload assets
         run: |
           set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            GH_TOKEN="${{ github.token }}"
-            export GH_TOKEN
-          fi
           ZIP_PATH="build/Voxt-${VERSION}-macOS.zip"
           PKG_PATH="build/Voxt-${VERSION}.pkg"
           SHA_PATH="build/Voxt-${VERSION}.pkg.sha256"
@@ -649,53 +614,42 @@ jobs:
             fi
           fi
 
-  publish_to_voxt_api:
-    name: Publish Package And Appcast To Voxt Service
+  update_appcast_main:
+    name: Update updates/appcast.xml on main
     runs-on: ubuntu-latest
-    needs: [preflight, build_sign_notarize]
+    needs: [preflight, build_sign_notarize, publish_release]
     if: needs.preflight.outputs.should_skip != 'true' && needs.preflight.outputs.update_appcast == 'true'
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.preflight.outputs.version }}
       TAG: ${{ needs.preflight.outputs.tag }}
-      CHANNEL: ${{ needs.preflight.outputs.channel }}
       GH_TOKEN: ${{ github.token }}
-      VOXT_UPDATE_API_BASE: ${{ secrets.VOXT_UPDATE_API_BASE }}
-      VOXT_RELEASE_API_KEY: ${{ secrets.VOXT_RELEASE_API_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           name: release-artifacts-${{ needs.preflight.outputs.version }}
           path: build
 
-      - name: Validate publish API secrets
+      - name: Generate appcast.xml
         run: |
           set -euo pipefail
-          if [ -z "${VOXT_UPDATE_API_BASE:-}" ]; then
-            echo "::error::Missing required secret: VOXT_UPDATE_API_BASE"
-            exit 1
-          fi
-          if [ -z "${VOXT_RELEASE_API_KEY:-}" ]; then
-            echo "::error::Missing required secret: VOXT_RELEASE_API_KEY"
-            exit 1
-          fi
-
-      - name: Upload package metadata and trigger appcast
-        run: |
-          set -euo pipefail
-          API_BASE="${VOXT_UPDATE_API_BASE%/}"
           PKG_NAME="Voxt-${VERSION}.pkg"
           PKG_PATH="build/${PKG_NAME}"
-          SHA_PATH="build/${PKG_NAME}.sha256"
           SIG_ENV_FILE="build/sparkle-signature.env"
 
           if [ ! -f "$PKG_PATH" ]; then
             echo "::error::Package file missing: $PKG_PATH"
             exit 1
           fi
-          if [ ! -f "$SHA_PATH" ]; then
-            echo "::error::Checksum file missing: $SHA_PATH"
-            exit 1
-          fi
+
           if [ ! -f "$SIG_ENV_FILE" ]; then
             echo "::error::Sparkle signature metadata file missing: $SIG_ENV_FILE"
             exit 1
@@ -715,48 +669,108 @@ jobs:
             exit 1
           fi
 
-          SHA256="$(cat "$SHA_PATH")"
-          if ! [[ "$SHA256" =~ ^[0-9a-fA-F]{64}$ ]]; then
-            echo "::error::Invalid sha256 in $SHA_PATH"
-            exit 1
-          fi
-
-          RELEASE_BODY="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
+          RELEASE_BODY="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body // ""')"
           RELEASE_NOTES="$(printf '%s' "$RELEASE_BODY")"
           if [ -z "$RELEASE_NOTES" ]; then
             RELEASE_NOTES="Release ${VERSION}."
           fi
 
-          PUBLISHED_AT="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt // ""' 2>/dev/null || true)"
+          PUBLISHED_AT="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt // ""')"
           if [ -z "$PUBLISHED_AT" ]; then
             PUBLISHED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           fi
 
-          RELEASE_URL="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json url --jq '.url // ""' 2>/dev/null || true)"
+          RELEASE_URL="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json url --jq '.url // ""')"
           if [ -z "$RELEASE_URL" ]; then
             RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
           fi
 
-          BASE_VERSION="$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           SPARKLE_VERSION="$((10#$MAJOR * 1000000 + 10#$MINOR * 1000 + 10#$PATCH))"
-          curl --fail --silent --show-error \
-            -X POST "${API_BASE}/api/pkg/update" \
-            -H "Authorization: Bearer ${VOXT_RELEASE_API_KEY}" \
-            -H "X-Voxt-Source: github-actions" \
-            -F "channel=${CHANNEL}" \
-            -F "version=${VERSION}" \
-            -F "sparkleVersion=${SPARKLE_VERSION}" \
-            -F "sha256=${SHA256}" \
-            -F "size=${SPARKLE_ED_LENGTH}" \
-            -F "edSignature=${SPARKLE_ED_SIGNATURE}" \
-            -F "releaseNotes=${RELEASE_NOTES}" \
-            -F "releaseURL=${RELEASE_URL}" \
-            -F "publishedAt=${PUBLISHED_AT}" \
-            -F "file=@${PKG_PATH};type=application/octet-stream"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${PKG_NAME}"
 
-          curl --fail --silent --show-error \
-            -X POST "${API_BASE}/api/pkg/appcast" \
-            -H "Authorization: Bearer ${VOXT_RELEASE_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"channel\":\"${CHANNEL}\",\"version\":\"${VERSION}\",\"mode\":\"replace-latest\"}"
+          APPCAST_VERSION="$VERSION" \
+          APPCAST_SPARKLE_VERSION="$SPARKLE_VERSION" \
+          APPCAST_DOWNLOAD_URL="$DOWNLOAD_URL" \
+          APPCAST_RELEASE_URL="$RELEASE_URL" \
+          APPCAST_RELEASE_NOTES="$RELEASE_NOTES" \
+          APPCAST_PKG_SIZE="$SPARKLE_ED_LENGTH" \
+          APPCAST_ED_SIGNATURE="$SPARKLE_ED_SIGNATURE" \
+          APPCAST_PUBLISHED_AT="$PUBLISHED_AT" \
+          python3 - <<'PY' > updates/appcast.xml
+          import os
+          from datetime import datetime, timezone
+          from email.utils import format_datetime
+          from xml.sax.saxutils import escape, quoteattr
+
+          published_at = os.environ["APPCAST_PUBLISHED_AT"].strip()
+          try:
+              if published_at.endswith("Z"):
+                  dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+              else:
+                  dt = datetime.fromisoformat(published_at)
+              if dt.tzinfo is None:
+                  dt = dt.replace(tzinfo=timezone.utc)
+              dt = dt.astimezone(timezone.utc)
+          except Exception:
+              dt = datetime.now(timezone.utc)
+          pub_date = format_datetime(dt)
+
+          version = os.environ["APPCAST_VERSION"]
+          sparkle_version = os.environ["APPCAST_SPARKLE_VERSION"]
+          download_url = os.environ["APPCAST_DOWNLOAD_URL"]
+          release_url = os.environ["APPCAST_RELEASE_URL"]
+          notes = os.environ.get("APPCAST_RELEASE_NOTES", "").strip() or f"Release {version}."
+          pkg_size = os.environ["APPCAST_PKG_SIZE"]
+          ed_signature = os.environ["APPCAST_ED_SIGNATURE"]
+
+          enclosure_attrs = [
+              f"url={quoteattr(download_url)}",
+              'type="application/octet-stream"',
+              f"length={quoteattr(pkg_size)}",
+              f"sparkle:shortVersionString={quoteattr(version)}",
+              f"sparkle:version={quoteattr(sparkle_version)}",
+              f"sparkle:edSignature={quoteattr(ed_signature)}",
+          ]
+
+          lines = [
+              '<?xml version="1.0" encoding="utf-8"?>',
+              '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">',
+              "  <channel>",
+              "    <title>Voxt Updates</title>",
+              f"    <link>{escape(release_url)}</link>",
+              "    <description>Latest Voxt releases</description>",
+              "    <language>en</language>",
+              "    <item>",
+              f"      <title>Voxt {escape(version)}</title>",
+              f"      <pubDate>{escape(pub_date)}</pubDate>",
+              f"      <description>{escape(notes)}</description>",
+              f"      <sparkle:releaseNotesLink>{escape(release_url)}</sparkle:releaseNotesLink>",
+              f"      <enclosure {' '.join(enclosure_attrs)} />",
+          ]
+
+          lines.extend([
+              "    </item>",
+              "  </channel>",
+              "</rss>",
+          ])
+
+          print("\n".join(lines))
+          PY
+
+      - name: Commit and push appcast.xml to main
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- updates/appcast.xml; then
+            echo "No updates/appcast.xml changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/appcast.xml
+          git commit -m "ci: update sparkle appcast for ${TAG}"
+
+          PUSH_TOKEN="${GH_RELEASE_TOKEN:-$GITHUB_TOKEN}"
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:main
