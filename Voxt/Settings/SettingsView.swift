@@ -10,6 +10,7 @@ struct SettingsView: View {
     @ObservedObject var historyStore: TranscriptionHistoryStore
     let appUpdateManager: AppUpdateManager
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
+    @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @State private var selectedTab: SettingsTab
     @State private var hasMissingPermissions = false
     @State private var languageRefreshToken = UUID()
@@ -36,6 +37,7 @@ struct SettingsView: View {
             HStack(alignment: .top, spacing: 8) {
                 SettingsSidebar(
                     selectedTab: $selectedTab,
+                    appEnhancementEnabled: appEnhancementEnabled,
                     hasMissingPermissions: hasMissingPermissions,
                     onTapPermissionBadge: {
                         selectedTab = .permissions
@@ -49,10 +51,12 @@ struct SettingsView: View {
                         .font(.title3.weight(.semibold))
                         .padding(.horizontal, 8)
 
-                    if selectedTab == .history || selectedTab == .report {
+                    if selectedTab == .history || selectedTab == .report || selectedTab == .appEnhancement {
                         Group {
                             if selectedTab == .history {
                                 HistorySettingsView(historyStore: historyStore)
+                            } else if selectedTab == .appEnhancement {
+                                AppEnhancementSettingsView()
                             } else {
                                 ReportSettingsView(historyStore: historyStore)
                             }
@@ -75,6 +79,8 @@ struct SettingsView: View {
                                         mlxModelManager: mlxModelManager,
                                         customLLMManager: customLLMManager
                                     )
+                                case .appEnhancement:
+                                    EmptyView()
                                 case .hotkey:
                                     HotkeySettingsView()
                                 case .about:
@@ -118,6 +124,11 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .voxtInterfaceLanguageDidChange)) { _ in
             languageRefreshToken = UUID()
         }
+        .onChange(of: appEnhancementEnabled) { _, isEnabled in
+            if !isEnabled, selectedTab == .appEnhancement {
+                selectedTab = .model
+            }
+        }
     }
 
     private var interfaceLanguage: AppInterfaceLanguage {
@@ -140,12 +151,13 @@ struct SettingsView: View {
 
 private struct SettingsSidebar: View {
     @Binding var selectedTab: SettingsTab
+    let appEnhancementEnabled: Bool
     let hasMissingPermissions: Bool
     let onTapPermissionBadge: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(SettingsTab.allCases) { tab in
+            ForEach(visibleTabs) { tab in
                 Button {
                     selectedTab = tab
                 } label: {
@@ -210,5 +222,11 @@ private struct SettingsSidebar: View {
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 3)
+    }
+
+    private var visibleTabs: [SettingsTab] {
+        SettingsTab.allCases.filter { tab in
+            appEnhancementEnabled || tab != .appEnhancement
+        }
     }
 }

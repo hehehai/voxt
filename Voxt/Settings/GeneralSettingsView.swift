@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreAudio
+import AppKit
 
 struct GeneralSettingsView: View {
     let appUpdateManager: AppUpdateManager
@@ -10,14 +11,18 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.translationTargetLanguage) private var translationTargetLanguageRaw = TranslationTargetLanguage.english.rawValue
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
+    @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
     @AppStorage(AppPreferenceKey.showInDock) private var showInDock = false
     @AppStorage(AppPreferenceKey.autoCheckForUpdates) private var autoCheckForUpdates = true
+    @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
 
     @State private var inputDevices: [AudioInputDevice] = []
     @State private var launchAtLoginError: String?
     @State private var isSyncingLaunchAtLoginState = false
     @State private var interactionSoundPlayer = InteractionSoundPlayer()
+    @State private var modelStorageDisplayPath = ""
+    @State private var modelStorageSelectionError: String?
 
     private var selectedInputDeviceID: AudioDeviceID {
         AudioDeviceID(selectedInputDeviceIDRaw)
@@ -154,11 +159,76 @@ struct GeneralSettingsView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
+                    Text("Model Storage")
+                        .font(.headline)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("Storage Path")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            ModelStorageDirectoryManager.openRootInFinder()
+                        } label: {
+                            Text(modelStorageDisplayPath.isEmpty ? ModelStorageDirectoryManager.defaultRootURL.path : modelStorageDisplayPath)
+                                .underline()
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button("Choose") {
+                            chooseModelStorageDirectory()
+                        }
+                        .controlSize(.small)
+                    }
+
+                    Text("New model downloads in Model settings are stored in this folder.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("After switching to a new path, previously downloaded models won't be detected and must be downloaded again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let modelStorageSelectionError {
+                        Text(modelStorageSelectionError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Output")
                         .font(.headline)
 
                     Toggle("Also copy result to clipboard", isOn: $autoCopyWhenNoFocusedInput)
                     Text("When enabled, Voxt auto-pastes result text and also keeps it in clipboard.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle(isOn: $appEnhancementEnabled) {
+                        HStack(spacing: 8) {
+                            Text("App Enhancement")
+                            Text("Beta")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.orange.opacity(0.15))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+                                )
+                        }
+                    }
+                    Text("Show the App Enhancement menu and enable app-based enhancement configuration.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -215,6 +285,7 @@ struct GeneralSettingsView: View {
             }
             autoCheckForUpdates = appUpdateManager.automaticallyChecksForUpdates
             AppBehaviorController.applyDockVisibility(showInDock: showInDock)
+            refreshModelStorageDisplayPath()
         }
         .onChange(of: launchAtLogin) { _, newValue in
             if isSyncingLaunchAtLoginState { return }
@@ -240,6 +311,9 @@ struct GeneralSettingsView: View {
         .onChange(of: interfaceLanguageRaw) { _, _ in
             NotificationCenter.default.post(name: .voxtInterfaceLanguageDidChange, object: nil)
         }
+        .onChange(of: modelStorageRootPath) { _, _ in
+            refreshModelStorageDisplayPath()
+        }
         .id(interfaceLanguageRaw)
     }
 
@@ -262,5 +336,33 @@ struct GeneralSettingsView: View {
 
     private var interactionSoundPreset: InteractionSoundPreset {
         InteractionSoundPreset(rawValue: interactionSoundPresetRaw) ?? .soft
+    }
+
+    private func chooseModelStorageDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = ModelStorageDirectoryManager.resolvedRootURL()
+        panel.prompt = String(localized: "Choose")
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
+        do {
+            try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
+            modelStorageSelectionError = nil
+            refreshModelStorageDisplayPath()
+        } catch {
+            let format = NSLocalizedString("Failed to update model storage path: %@", comment: "")
+            modelStorageSelectionError = String(format: format, error.localizedDescription)
+        }
+    }
+
+    private func refreshModelStorageDisplayPath() {
+        let resolved = ModelStorageDirectoryManager.resolvedRootURL().path
+        modelStorageDisplayPath = resolved
+        if modelStorageRootPath != resolved {
+            modelStorageRootPath = resolved
+        }
     }
 }

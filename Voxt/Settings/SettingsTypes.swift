@@ -9,6 +9,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case report
     case model
+    case appEnhancement
     case history
     case permissions
     case hotkey
@@ -23,6 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .history: return "History"
         case .report: return "Report"
         case .model: return "Model"
+        case .appEnhancement: return "App Branch"
         case .hotkey: return "Hotkey"
         case .about: return "About"
         }
@@ -37,6 +39,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .history: return "History"
         case .report: return "Report"
         case .model: return "Model"
+        case .appEnhancement: return "App Branch"
         case .hotkey: return "Hotkey"
         case .about: return "About"
         }
@@ -49,6 +52,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .history: return "clock.arrow.circlepath"
         case .report: return "chart.bar"
         case .model: return "waveform"
+        case .appEnhancement: return "sparkles.rectangle.stack"
         case .hotkey: return "keyboard"
         case .about: return "info.circle"
         }
@@ -175,6 +179,56 @@ enum TranslationTargetLanguage: String, CaseIterable, Identifiable {
         case .spanish: return "Spanish"
         case .french: return "French"
         case .german: return "German"
+        }
+    }
+}
+
+enum HistoryRetentionPeriod: String, CaseIterable, Identifiable {
+    case oneDay
+    case sevenDays
+    case fifteenDays
+    case thirtyDays
+    case ninetyDays
+    case oneHundredEightyDays
+    case forever
+
+    var id: String { rawValue }
+
+    var days: Int? {
+        switch self {
+        case .oneDay:
+            return 1
+        case .sevenDays:
+            return 7
+        case .fifteenDays:
+            return 15
+        case .thirtyDays:
+            return 30
+        case .ninetyDays:
+            return 90
+        case .oneHundredEightyDays:
+            return 180
+        case .forever:
+            return nil
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .oneDay:
+            return AppLocalization.localizedString("1 Day")
+        case .sevenDays:
+            return AppLocalization.localizedString("7 Days")
+        case .fifteenDays:
+            return AppLocalization.localizedString("15 Days")
+        case .thirtyDays:
+            return AppLocalization.localizedString("30 Days")
+        case .ninetyDays:
+            return AppLocalization.localizedString("90 Days")
+        case .oneHundredEightyDays:
+            return AppLocalization.localizedString("180 Days")
+        case .forever:
+            return AppLocalization.localizedString("Forever")
         }
     }
 }

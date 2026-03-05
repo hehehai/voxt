@@ -3,18 +3,57 @@ import AppKit
 
 struct HistorySettingsView: View {
     @AppStorage(AppPreferenceKey.historyEnabled) private var historyEnabled = false
+    @AppStorage(AppPreferenceKey.historyRetentionPeriod) private var historyRetentionPeriodRaw = HistoryRetentionPeriod.thirtyDays.rawValue
 
     @ObservedObject var historyStore: TranscriptionHistoryStore
     @State private var copiedEntryID: UUID?
+    @State private var showRetentionInfo = false
+
+    private var historyRetentionPeriod: HistoryRetentionPeriod {
+        HistoryRetentionPeriod(rawValue: historyRetentionPeriodRaw) ?? .thirtyDays
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
-                    Toggle("Enable Transcription History", isOn: $historyEnabled)
+                    HStack(alignment: .center, spacing: 12) {
+                        Toggle("Enable Transcription History", isOn: $historyEnabled)
+                        Spacer(minLength: 12)
+                        HStack(spacing: 4) {
+                            Text("Retention")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Button {
+                                showRetentionInfo.toggle()
+                            } label: {
+                                Image(systemName: "info.circle")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .popover(isPresented: $showRetentionInfo, arrowEdge: .top) {
+                                Text(AppLocalization.localizedString("History older than the selected retention time is automatically deleted."))
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .frame(width: 280, alignment: .leading)
+                            }
+                        }
+                        Picker("Retention", selection: $historyRetentionPeriodRaw) {
+                            ForEach(HistoryRetentionPeriod.allCases) { option in
+                                Text(option.title).tag(option.rawValue)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize(horizontal: true, vertical: false)
+                        .disabled(!historyEnabled)
+                    }
+
                     Text("When enabled, each completed transcription result will be saved in local history.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
@@ -89,6 +128,21 @@ struct HistorySettingsView: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
+            if HistoryRetentionPeriod(rawValue: historyRetentionPeriodRaw) == nil {
+                historyRetentionPeriodRaw = HistoryRetentionPeriod.thirtyDays.rawValue
+            }
+            historyStore.reload()
+            historyStore.updateRetentionPolicy()
+        }
+        .onChange(of: historyEnabled) { _, _ in
+            historyStore.updateRetentionPolicy()
+            historyStore.reload()
+        }
+        .onChange(of: historyRetentionPeriodRaw) { _, newValue in
+            if HistoryRetentionPeriod(rawValue: newValue) == nil {
+                historyRetentionPeriodRaw = HistoryRetentionPeriod.thirtyDays.rawValue
+            }
+            historyStore.updateRetentionPolicy()
             historyStore.reload()
         }
     }
@@ -152,6 +206,18 @@ private struct HistoryRow: View {
                     detailLine(labelKey: "Model", value: entry.transcriptionModel)
                     detailLine(labelKey: "Enhancement", value: entry.enhancementMode)
                     detailLine(labelKey: "Enhancer Model", value: entry.enhancementModel)
+                    detailLine(
+                        labelKey: "Focused App",
+                        value: entry.focusedAppName ?? String(localized: "N/A")
+                    )
+                    detailLine(
+                        labelKey: "App Group",
+                        value: entry.matchedAppGroupName ?? String(localized: "N/A")
+                    )
+                    detailLine(
+                        labelKey: "URL Group",
+                        value: entry.matchedURLGroupName ?? String(localized: "N/A")
+                    )
                     detailLine(
                         labelKey: "Transcription Processing",
                         value: formattedDuration(entry.transcriptionProcessingDurationSeconds) ?? String(localized: "N/A")

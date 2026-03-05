@@ -13,6 +13,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let audioDurationSeconds: TimeInterval?
     let transcriptionProcessingDurationSeconds: TimeInterval?
     let llmDurationSeconds: TimeInterval?
+    let focusedAppName: String?
+    let matchedAppGroupName: String?
+    let matchedURLGroupName: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -26,6 +29,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case audioDurationSeconds
         case transcriptionProcessingDurationSeconds
         case llmDurationSeconds
+        case focusedAppName
+        case matchedAppGroupName
+        case matchedURLGroupName
     }
 
     init(
@@ -39,7 +45,10 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         isTranslation: Bool,
         audioDurationSeconds: TimeInterval?,
         transcriptionProcessingDurationSeconds: TimeInterval?,
-        llmDurationSeconds: TimeInterval?
+        llmDurationSeconds: TimeInterval?,
+        focusedAppName: String?,
+        matchedAppGroupName: String?,
+        matchedURLGroupName: String?
     ) {
         self.id = id
         self.text = text
@@ -52,6 +61,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.audioDurationSeconds = audioDurationSeconds
         self.transcriptionProcessingDurationSeconds = transcriptionProcessingDurationSeconds
         self.llmDurationSeconds = llmDurationSeconds
+        self.focusedAppName = focusedAppName
+        self.matchedAppGroupName = matchedAppGroupName
+        self.matchedURLGroupName = matchedURLGroupName
     }
 
     init(from decoder: Decoder) throws {
@@ -67,6 +79,9 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         audioDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .audioDurationSeconds)
         transcriptionProcessingDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .transcriptionProcessingDurationSeconds)
         llmDurationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .llmDurationSeconds)
+        focusedAppName = try container.decodeIfPresent(String.self, forKey: .focusedAppName)
+        matchedAppGroupName = try container.decodeIfPresent(String.self, forKey: .matchedAppGroupName)
+        matchedURLGroupName = try container.decodeIfPresent(String.self, forKey: .matchedURLGroupName)
     }
 }
 
@@ -80,6 +95,7 @@ final class TranscriptionHistoryStore: ObservableObject {
     private let maxStoredEntries = 1000
 
     private let fileManager = FileManager.default
+    private let defaults = UserDefaults.standard
 
     init() {
         reload()
@@ -91,6 +107,14 @@ final class TranscriptionHistoryStore: ObservableObject {
 
     var allHistoryEntries: [TranscriptionHistoryEntry] {
         allEntries
+    }
+
+    func updateRetentionPolicy() {
+        if applyRetentionPolicyIfNeeded() {
+            loadedCount = min(loadedCount, allEntries.count)
+            entries = Array(allEntries.prefix(loadedCount))
+            persist()
+        }
     }
 
     func reload() {
@@ -105,8 +129,12 @@ final class TranscriptionHistoryStore: ObservableObject {
             let data = try Data(contentsOf: url)
             let decoded = try JSONDecoder().decode([TranscriptionHistoryEntry].self, from: data)
             allEntries = decoded.sorted { $0.createdAt > $1.createdAt }
+            let didPrune = applyRetentionPolicyIfNeeded()
             loadedCount = min(pageSize, allEntries.count)
             entries = Array(allEntries.prefix(loadedCount))
+            if didPrune {
+                persist()
+            }
         } catch {
             allEntries = []
             entries = []
@@ -129,7 +157,10 @@ final class TranscriptionHistoryStore: ObservableObject {
         isTranslation: Bool,
         audioDurationSeconds: TimeInterval?,
         transcriptionProcessingDurationSeconds: TimeInterval?,
-        llmDurationSeconds: TimeInterval?
+        llmDurationSeconds: TimeInterval?,
+        focusedAppName: String?,
+        matchedAppGroupName: String?,
+        matchedURLGroupName: String?
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -145,13 +176,17 @@ final class TranscriptionHistoryStore: ObservableObject {
             isTranslation: isTranslation,
             audioDurationSeconds: audioDurationSeconds,
             transcriptionProcessingDurationSeconds: transcriptionProcessingDurationSeconds,
-            llmDurationSeconds: llmDurationSeconds
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: focusedAppName,
+            matchedAppGroupName: matchedAppGroupName,
+            matchedURLGroupName: matchedURLGroupName
         )
 
         allEntries.insert(entry, at: 0)
         if allEntries.count > maxStoredEntries {
             allEntries = Array(allEntries.prefix(maxStoredEntries))
         }
+        _ = applyRetentionPolicyIfNeeded()
 
         loadedCount = min(max(loadedCount + 1, pageSize), allEntries.count)
         entries = Array(allEntries.prefix(loadedCount))
@@ -181,6 +216,25 @@ final class TranscriptionHistoryStore: ObservableObject {
         } catch {
             // Keep UI responsive even if persistence fails.
         }
+    }
+
+    private var historyEnabled: Bool {
+        defaults.bool(forKey: AppPreferenceKey.historyEnabled)
+    }
+
+    private var historyRetentionPeriod: HistoryRetentionPeriod {
+        let raw = defaults.string(forKey: AppPreferenceKey.historyRetentionPeriod)
+        return HistoryRetentionPeriod(rawValue: raw ?? "") ?? .thirtyDays
+    }
+
+    private func applyRetentionPolicyIfNeeded(referenceDate: Date = Date()) -> Bool {
+        guard historyEnabled else { return false }
+        guard let days = historyRetentionPeriod.days else { return false }
+
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate
+        let originalCount = allEntries.count
+        allEntries.removeAll { $0.createdAt < cutoff }
+        return allEntries.count != originalCount
     }
 
     private func historyFileURL() throws -> URL {

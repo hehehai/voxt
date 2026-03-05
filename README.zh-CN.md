@@ -46,6 +46,8 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
 - 智能输出策略：可选“无可编辑输入框时仅复制到剪贴板”。
 - 剪贴板保护：自动粘贴后恢复原剪贴板内容。
 - 本地历史记录：分页、复制、删除、清空，区分 `Normal / Translation`。
+- App Branch 应用增强分组：支持 App 与 URL 规则拖拽分组配置。
+- 浏览器活动标签页 URL 匹配（Chrome / Safari / Arc），按浏览器单独进行自动化授权。
 - 模型下载管理：进度、取消、删除、体积展示、校验、`hf-mirror.com` 镜像切换。
 - 系统级能力：麦克风选择、交互提示音、开机启动、Dock 显示开关。
 
@@ -91,6 +93,8 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
 
 - `Qwen/Qwen2-1.5B-Instruct`（默认）：通用增强/翻译，资源压力更低。
 - `Qwen/Qwen2.5-3B-Instruct`：更强格式与推理能力，速度和占用更高。
+- `mlx-community/Qwen3.5-0.8B-MLX-4bit`：轻量 Qwen3.5，本地推理速度更快。
+- `mlx-community/Qwen3.5-2B-MLX-4bit`：更高质量 Qwen3.5，资源占用中等。
 
 ## 模型效果对比（相对）
 
