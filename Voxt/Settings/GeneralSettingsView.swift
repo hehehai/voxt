@@ -10,6 +10,7 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.overlayPosition) private var overlayPositionRaw = OverlayPosition.bottom.rawValue
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.translationTargetLanguage) private var translationTargetLanguageRaw = TranslationTargetLanguage.english.rawValue
+    @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) private var translateSelectedTextOnTranslationHotkey = true
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
@@ -207,6 +208,11 @@ struct GeneralSettingsView: View {
 
                     Toggle("Also copy result to clipboard", isOn: $autoCopyWhenNoFocusedInput)
                     Text("When enabled, Voxt auto-pastes result text and also keeps it in clipboard.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Translate selected text with translation shortcut", isOn: $translateSelectedTextOnTranslationHotkey)
+                    Text("When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

@@ -86,6 +86,8 @@
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste.";
 "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste.";
 "When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "When enabled, Voxt auto-pastes result text and also keeps it in clipboard.";
+"Translate selected text with translation shortcut" = "Translate selected text with translation shortcut";
+"When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it." = "When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it.";
 "Automatically start Voxt when your Mac starts." = "Automatically start Voxt when your Mac starts.";
 "Show Voxt in your Mac Dock for quick access." = "Show Voxt in your Mac Dock for quick access.";
 "Unable to change login item: %@" = "Unable to change login item: %@";
@@ -119,6 +121,7 @@
 "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination." = "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination.";
 "Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop." = "Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop.";
 "Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation hotkey starts translation sessions." = "Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation hotkey starts translation sessions.";
+"Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same." = "Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same.";
 "Listening..." = "Listening...";
 "Reset shortcut" = "Reset shortcut";
 "Text Enhancement" = "Text Enhancement";

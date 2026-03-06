@@ -86,6 +86,8 @@
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "开启后，当没有可输入的焦点时，Voxt 会将结果写入剪贴板，而不是尝试粘贴。";
 "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "开启后，Voxt 会始终将转录结果写入剪贴板，不再自动粘贴。";
 "When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "开启后，Voxt 会自动粘贴结果文本，同时保留到剪贴板。";
+"Translate selected text with translation shortcut" = "使用翻译快捷键翻译选中文本";
+"When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it." = "开启后，当存在选中文本时按下翻译快捷键，会直接翻译并替换选中内容。";
 "Automatically start Voxt when your Mac starts." = "Mac 启动时自动启动 Voxt。";
 "Show Voxt in your Mac Dock for quick access." = "在 Mac Dock 中显示 Voxt 以便快速访问。";
 "Unable to change login item: %@" = "无法修改登录启动项：%@";
@@ -119,6 +121,7 @@
 "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination." = "两种动作都支持自定义快捷键。可使用单键（如 fn）或组合键。";
 "Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop." = "长按：按住转录快捷键开始转录，松开结束；按住翻译快捷键开始翻译，松开结束。";
 "Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation hotkey starts translation sessions." = "点按：点按一次转录快捷键开始，再点按一次结束。翻译快捷键用于开始翻译会话。";
+"Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same." = "选中文本快捷行为：当聚焦输入框中有选中文本时，按下翻译快捷键会直接翻译并替换选中内容。点按和长按行为一致。";
 "Listening..." = "正在监听...";
 "Reset shortcut" = "重置快捷键";
 "Text Enhancement" = "文本增强";

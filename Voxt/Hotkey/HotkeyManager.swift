@@ -167,12 +167,14 @@ class HotkeyManager {
                     // - Translation combo emits only "down" and acts as a start trigger.
                     // - Stop action is centralized to transcription hotkey tap (fn) in AppDelegate.
                     if (comboIsDown || (isFnOnlyHotkey && isFunctionKeyEvent)) && !isTranslationKeyDown {
+                        VoxtLog.info("Hotkey detect translation modifier combo down (tap).")
                         cancelPendingTranscriptionTap(resetKeyState: true)
                         isTranslationKeyDown = true
                         suppressTranscriptionTapUntil = Date().addingTimeInterval(0.35)
                         emitTranslationKeyDown()
                     }
                     if !comboIsDown && isTranslationKeyDown {
+                        VoxtLog.info("Hotkey detect translation modifier combo up (tap).")
                         isTranslationKeyDown = false
                         suppressTranscriptionTapUntil = Date().addingTimeInterval(0.20)
                     }
@@ -186,9 +188,11 @@ class HotkeyManager {
                         cancelPendingTranslationLongPressRelease()
                     }
                     if comboIsDown && !isTranslationKeyDown {
+                        VoxtLog.info("Hotkey detect translation modifier combo down (longPress).")
                         isTranslationKeyDown = true
                         emitTranslationKeyDown()
                     } else if !comboIsDown && isTranslationKeyDown {
+                        VoxtLog.info("Hotkey detect translation modifier combo up (longPress-pending).")
                         scheduleTranslationLongPressRelease()
                     } else if isFnOnlyHotkey && isFunctionKeyEvent {
                         if isTranslationKeyDown {
@@ -241,6 +245,7 @@ class HotkeyManager {
             // If translation modifier combo is active, suppress transcription trigger.
             if translationHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode,
                flags.contains(translationFlags) || isTranslationKeyDown {
+                VoxtLog.info("Hotkey suppress transcription modifier path because translation combo is active.")
                 cancelPendingTranscriptionTap(resetKeyState: true)
                 return
             }
@@ -443,24 +448,28 @@ class HotkeyManager {
     }
 
     private func emitKeyDown() {
+        VoxtLog.info("Hotkey emit transcriptionDown")
         Task { @MainActor in
             onKeyDown?()
         }
     }
 
     private func emitKeyUp() {
+        VoxtLog.info("Hotkey emit transcriptionUp")
         Task { @MainActor in
             onKeyUp?()
         }
     }
 
     private func emitTranslationKeyDown() {
+        VoxtLog.info("Hotkey emit translationDown")
         Task { @MainActor in
             onTranslationKeyDown?()
         }
     }
 
     private func emitTranslationKeyUp() {
+        VoxtLog.info("Hotkey emit translationUp")
         Task { @MainActor in
             onTranslationKeyUp?()
         }

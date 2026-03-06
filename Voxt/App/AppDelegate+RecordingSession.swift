@@ -272,6 +272,7 @@ extension AppDelegate {
             }
             self.isSessionActive = false
             self.sessionOutputMode = .transcription
+            self.isSelectedTextTranslationFlow = false
             self.enhancementContextSnapshot = nil
             self.overlayState.isCompleting = false
             self.pendingSessionFinishTask = nil
@@ -357,6 +358,47 @@ extension AppDelegate {
         }
     }
 
+    func beginSelectedTextTranslationIfPossible() -> Bool {
+        guard translateSelectedTextOnTranslationHotkey else { return false }
+        guard !isSessionActive else { return false }
+        guard let selectedText = selectedTextFromSystemSelection(),
+              !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return false
+        }
+
+        pendingSessionFinishTask?.cancel()
+        pendingSessionFinishTask = nil
+        stopRecordingFallbackTask?.cancel()
+        stopRecordingFallbackTask = nil
+        silenceMonitorTask?.cancel()
+        silenceMonitorTask = nil
+        pauseLLMTask?.cancel()
+        pauseLLMTask = nil
+        overlayState.reset()
+        overlayState.transcribedText = selectedText
+        overlayState.statusMessage = ""
+        overlayWindow.show(state: overlayState, position: overlayPosition)
+
+        let startedAt = Date()
+        isSessionActive = true
+        isSelectedTextTranslationFlow = true
+        sessionOutputMode = .translation
+        recordingStartedAt = startedAt
+        recordingStoppedAt = startedAt
+        transcriptionProcessingStartedAt = startedAt
+        enhancementContextSnapshot = nil
+        lastEnhancementPromptContext = nil
+
+        if interactionSoundsEnabled {
+            interactionSoundPlayer.playStart()
+        }
+
+        VoxtLog.info("Selected text translation started. inputChars=\(selectedText.count)")
+        processSelectedTextTranslation(selectedText)
+        return true
+    }
+
     private func enhanceTextIfNeeded(_ text: String, useAppBranchPrompt: Bool = true) async throws -> String {
         let prompt = useAppBranchPrompt ? resolvedEnhancementPrompt() : resolvedGlobalEnhancementPrompt()
         if !useAppBranchPrompt {
@@ -378,11 +420,10 @@ extension AppDelegate {
     }
 
     private func translateText(_ text: String, targetLanguage: TranslationTargetLanguage) async throws -> String {
-        let translationPrompt = translationSystemPrompt.replacingOccurrences(
-            of: "{target_language}",
-            with: targetLanguage.instructionName
+        let resolvedPrompt = resolvedTranslationPrompt(
+            targetLanguage: targetLanguage,
+            strict: false
         )
-        let resolvedPrompt = translationPrompt
         let translationRepo = translationCustomLLMRepo
         VoxtLog.info(
             "Translation request. promptChars=\(resolvedPrompt.count), inputChars=\(text.count), translationRepo=\(translationRepo)"
@@ -430,11 +471,184 @@ extension AppDelegate {
         return text
     }
 
+    private func translateTextStrict(_ text: String, targetLanguage: TranslationTargetLanguage) async throws -> String {
+        let strictPrompt = resolvedTranslationPrompt(
+            targetLanguage: targetLanguage,
+            strict: true
+        )
+        let translationRepo = translationCustomLLMRepo
+        VoxtLog.info(
+            "Strict translation retry. promptChars=\(strictPrompt.count), inputChars=\(text.count), translationRepo=\(translationRepo)"
+        )
+
+        switch enhancementMode {
+        case .customLLM where customLLMManager.isModelDownloaded(repo: translationRepo):
+            return try await customLLMManager.translate(
+                text,
+                targetLanguage: targetLanguage,
+                systemPrompt: strictPrompt,
+                modelRepo: translationRepo
+            )
+        default:
+            break
+        }
+
+        if #available(macOS 26.0, *), let enhancer {
+            return try await enhancer.translate(
+                text,
+                targetLanguage: targetLanguage,
+                systemPrompt: strictPrompt
+            )
+        }
+
+        if customLLMManager.isModelDownloaded(repo: translationRepo) {
+            return try await customLLMManager.translate(
+                text,
+                targetLanguage: targetLanguage,
+                systemPrompt: strictPrompt,
+                modelRepo: translationRepo
+            )
+        }
+        return text
+    }
+
+    private func resolvedTranslationPrompt(
+        targetLanguage: TranslationTargetLanguage,
+        strict: Bool
+    ) -> String {
+        let basePrompt = translationSystemPrompt.replacingOccurrences(
+            of: "{target_language}",
+            with: targetLanguage.instructionName
+        )
+        let enforcement = strict
+            ? """
+            Mandatory translation rules:
+            - Translate every linguistic token into \(targetLanguage.instructionName), including very short text (1-3 characters).
+            - Output must not copy source-language wording.
+            - Keep proper nouns, product names, URLs, emails, and pure numbers/symbols unchanged when needed.
+            - Do not add explanations, quotes, or markdown.
+            - Return only the translated text.
+            """
+            : """
+            Mandatory translation rules:
+            - Translate to \(targetLanguage.instructionName).
+            - Keep meaning, tone, names, numbers, and formatting.
+            - For short text, still translate when it is linguistic content.
+            - Do not output explanations.
+            - Return only the translated text.
+            """
+        return "\(basePrompt)\n\(enforcement)"
+    }
+
+    private func processSelectedTextTranslation(_ text: String) {
+        setEnhancingState(true)
+        Task {
+            defer {
+                self.setEnhancingState(false)
+                self.isSelectedTextTranslationFlow = false
+                self.finishSession()
+            }
+
+            let llmStartedAt = Date()
+            do {
+                var translated = try await self.translateText(text, targetLanguage: self.translationTargetLanguage)
+                if self.looksUntranslated(source: text, result: translated) {
+                    VoxtLog.warning("Selected text translation first-pass looks untranslated. Retrying with strict translation prompt.")
+                    translated = try await self.translateTextStrict(text, targetLanguage: self.translationTargetLanguage)
+                }
+                let llmDuration = Date().timeIntervalSince(llmStartedAt)
+                if self.looksUntranslated(source: text, result: translated) {
+                    VoxtLog.warning("Selected text translation output may be untranslated. inputChars=\(text.count), outputChars=\(translated.count)")
+                }
+                VoxtLog.info("Selected text translation succeeded. outputChars=\(translated.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
+                self.overlayState.transcribedText = translated
+                self.commitTranscription(translated, llmDurationSeconds: llmDuration)
+            } catch {
+                VoxtLog.warning("Selected text translation failed, using original selected text: \(error)")
+                self.overlayState.transcribedText = text
+                self.commitTranscription(text, llmDurationSeconds: nil)
+            }
+        }
+    }
+
     private func looksUntranslated(source: String, result: String) -> Bool {
         let sourceTrimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
         let resultTrimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sourceTrimmed.isEmpty, !resultTrimmed.isEmpty else { return false }
         return sourceTrimmed.caseInsensitiveCompare(resultTrimmed) == .orderedSame
+    }
+
+    private func selectedTextFromSystemSelection() -> String? {
+        if let axSelected = selectedTextFromAXFocusedElement(),
+           !axSelected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return axSelected
+        }
+        return selectedTextBySimulatedCopy()
+    }
+
+    private func selectedTextFromAXFocusedElement() -> String? {
+        guard AXIsProcessTrusted() else { return nil }
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedElementRef: CFTypeRef?
+        let focusedStatus = AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedElementRef
+        )
+        guard focusedStatus == .success,
+              let focusedElementRef,
+              CFGetTypeID(focusedElementRef) == AXUIElementGetTypeID()
+        else {
+            return nil
+        }
+
+        let focusedElement = unsafeBitCast(focusedElementRef, to: AXUIElement.self)
+        var selectedTextRef: CFTypeRef?
+        let selectedStatus = AXUIElementCopyAttributeValue(
+            focusedElement,
+            kAXSelectedTextAttribute as CFString,
+            &selectedTextRef
+        )
+        guard selectedStatus == .success, let selectedTextRef else {
+            return nil
+        }
+
+        if let selectedText = selectedTextRef as? String, !selectedText.isEmpty {
+            return selectedText
+        }
+        if let selectedText = selectedTextRef as? NSAttributedString, !selectedText.string.isEmpty {
+            return selectedText.string
+        }
+        return nil
+    }
+
+    private func selectedTextBySimulatedCopy() -> String? {
+        guard AXIsProcessTrusted() else { return nil }
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return nil }
+        let pasteboard = NSPasteboard.general
+        let previous = pasteboard.string(forType: .string)
+
+        let cKeyCode: CGKeyCode = 0x08
+        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: true)
+        cmdDown?.flags = .maskCommand
+        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: false)
+        cmdUp?.flags = .maskCommand
+        guard cmdDown != nil, cmdUp != nil else { return nil }
+
+        cmdDown?.post(tap: .cgAnnotatedSessionEventTap)
+        cmdUp?.post(tap: .cgAnnotatedSessionEventTap)
+        Thread.sleep(forTimeInterval: 0.06)
+
+        let copied = pasteboard.string(forType: .string)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        pasteboard.clearContents()
+        if let previous, !previous.isEmpty {
+            pasteboard.setString(previous, forType: .string)
+        }
+
+        guard let copied, !copied.isEmpty else { return nil }
+        return copied
     }
 
     private func commitTranscription(_ text: String, llmDurationSeconds: TimeInterval?) {

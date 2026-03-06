@@ -42,6 +42,11 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
   - Tap:
     - Tap transcription hotkey (`fn`) to start, tap `fn` again to stop.
     - Tap translation hotkey (`fn+shift`) to start translation mode.
+- Selected-text direct translation (new):
+  - When enabled, pressing translation hotkey (`fn+shift`) with selected text translates the selection directly and replaces it.
+  - Works for both tap and long-press shortcut styles.
+  - If the model returns untranslated output, Voxt retries once with stricter translation constraints.
+- Single-session guard: only one active recording/translation session is allowed at a time (no mid-session mode switch).
 - Two STT engines:
   - `MLX Audio (On-device)` with local downloadable models
   - `Direct Dictation` powered by Apple Speech
@@ -73,7 +78,14 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
      - ASR -> enhancement -> translation (two LLM calls)
      - Enhancement stage still uses App Branch prompt routing.
      - Translation stage uses dedicated translation prompt with output-only constraints.
+   - Translation hotkey with selected text enabled:
+     - Selected text capture (AX first, clipboard copy fallback) -> direct translation -> replace selected text.
+     - Overlay still appears and shows selected/translated text for consistency.
 5. Output is injected with clipboard + simulated `Cmd+V`, and metadata can be saved to history.
+
+## Settings Notes
+
+- `General -> Output -> Translate selected text with translation shortcut` controls the selected-text direct translation behavior.
 
 ## Engines
 
