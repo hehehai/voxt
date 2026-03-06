@@ -42,6 +42,11 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
   - 点按：
     - 点按转写快捷键（`fn`）开始，再次点按 `fn` 结束。
     - 点按翻译快捷键（`fn+shift`）开始翻译模式。
+- 选中文本直译（新增）：
+  - 开启后，在有选中文本时按翻译快捷键（`fn+shift`），会直接翻译并替换选中内容。
+  - 点按与长按两种快捷键风格都支持该行为。
+  - 若模型首轮返回“未翻译”结果，Voxt 会自动使用更严格约束重试一次。
+- 单会话保护：同一时刻只允许一个会话运行，不支持会话中途切换模式。
 - 双语音引擎：
   - `MLX Audio (On-device)`：本地模型转写
   - `Direct Dictation`：Apple Speech 实时听写
@@ -73,7 +78,14 @@ https://github.com/user-attachments/assets/23d42c24-7128-4bdb-bc1d-98509e69d97e
      - ASR -> 增强 -> 翻译（两次 LLM 调用）
      - 增强阶段仍使用 App Branch 增强路由。
      - 翻译阶段使用独立翻译提示词，并约束只输出结果文本。
+   - 启用“翻译快捷键直译选中”时：
+     - 先获取系统选中文本（优先 AX，失败回退到复制读取）-> 直接翻译 -> 替换选中内容。
+     - 悬浮转录 UI 仍会显示，并同步选中/翻译结果文本。
 5. 通过粘贴板 + `Cmd+V` 注入文本，并记录历史与耗时。
+
+## 设置说明
+
+- `General -> Output -> Translate selected text with translation shortcut` 用于控制“翻译快捷键直译选中”的开关。
 
 ## 引擎介绍
 

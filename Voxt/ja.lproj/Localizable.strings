@@ -79,12 +79,15 @@
 "Last updated: %@" = "最終更新: %@";
 "Exported to %@" = "%@ にエクスポートしました";
 "Export failed: %@" = "エクスポートに失敗しました: %@";
+"Exports the most recent 2000 log entries as a .log file." = "最新 2000 件のログを .log ファイルとして書き出します。";
 "Play a short start chime when recording begins and an end chime when transcription completes." = "録音開始時に短い開始音、文字起こし完了時に終了音を再生します。";
 "Controls where the floating transcription overlay appears on screen." = "フローティング文字起こしオーバーレイの表示位置を設定します。";
 "Used by the dedicated translation shortcut (fn + Left Shift)." = "専用翻訳ショートカット（fn + 左 Shift）で使用されます。";
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "有効時、入力可能なフォーカスがない場合は貼り付けの代わりに結果をクリップボードへ保存します。";
 "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "有効時、Voxt は常に文字起こし結果をクリップボードに保存し、自動貼り付けは行いません。";
 "When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "有効時、Voxt は結果を自動貼り付けし、同時にクリップボードにも保持します。";
+"Translate selected text with translation shortcut" = "翻訳ショートカットで選択テキストを翻訳";
+"When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it." = "有効時、テキスト選択中に翻訳ショートカットを押すと、選択範囲を直接翻訳して置き換えます。";
 "Automatically start Voxt when your Mac starts." = "Mac 起動時に Voxt を自動起動します。";
 "Show Voxt in your Mac Dock for quick access." = "すばやくアクセスできるよう Mac の Dock に Voxt を表示します。";
 "Unable to change login item: %@" = "ログイン項目を変更できません: %@";
@@ -116,6 +119,9 @@
 "Translation shortcut: %@" = "翻訳ショートカット: %@";
 "Transcription and translation shortcuts should be different." = "文字起こしと翻訳のショートカットは別にしてください。";
 "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination." = "両方の操作でカスタムショートカットが使えます。単一キー（fn など）またはキー組み合わせを設定できます。";
+"Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop." = "長押し: 文字起こしショートカットを押し続けると開始し、離すと終了します。翻訳ショートカットも同様です。";
+"Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation hotkey starts translation sessions." = "タップ: 文字起こしショートカットを 1 回押すと開始、もう 1 回押すと終了します。翻訳ショートカットは翻訳セッションを開始します。";
+"Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same." = "選択テキスト時のショートカット動作: フォーカス中の入力欄でテキストを選択している場合、翻訳ショートカットで直接翻訳し、選択範囲を置き換えます。タップと長押しは同じ動作です。";
 "Listening..." = "入力待機中...";
 "Reset shortcut" = "ショートカットをリセット";
 "Text Enhancement" = "テキスト強化";

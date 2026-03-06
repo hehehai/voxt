@@ -141,6 +141,10 @@ struct AboutSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    Text("Exports the most recent 2000 log entries as a .log file.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)

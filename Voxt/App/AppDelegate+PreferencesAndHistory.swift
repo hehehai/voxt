@@ -26,6 +26,10 @@ extension AppDelegate {
         return TranslationTargetLanguage(rawValue: raw ?? "") ?? .english
     }
 
+    var translateSelectedTextOnTranslationHotkey: Bool {
+        UserDefaults.standard.bool(forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
+    }
+
     var translationSystemPrompt: String {
         let value = UserDefaults.standard.string(forKey: AppPreferenceKey.translationSystemPrompt)
         if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

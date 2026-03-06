@@ -20,6 +20,7 @@ enum AppPreferenceKey {
     static let overlayPosition = "overlayPosition"
     static let interfaceLanguage = "interfaceLanguage"
     static let translationTargetLanguage = "translationTargetLanguage"
+    static let translateSelectedTextOnTranslationHotkey = "translateSelectedTextOnTranslationHotkey"
     static let autoCopyWhenNoFocusedInput = "autoCopyWhenNoFocusedInput"
     static let appEnhancementEnabled = "appEnhancementEnabled"
     static let appBranchGroups = "appBranchGroups"
@@ -37,8 +38,12 @@ enum AppPreferenceKey {
         """
 
     static let defaultTranslationPrompt = """
-        You are Voxt's translation assistant. Translate the input text to {target_language}.
+        You are Voxt's translation assistant.
+        Translate the input text to {target_language}.
         Preserve meaning, tone, names, numbers, and formatting.
+        Translate short text as well when it contains linguistic content.
+        Keep proper nouns, URLs, emails, and pure numbers unchanged when appropriate.
+        Do not output explanations, notes, or markdown.
         Return only the translated text.
         """
 }

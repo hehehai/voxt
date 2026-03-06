@@ -227,6 +227,9 @@ struct HotkeySettingsView: View {
                     Text("Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation hotkey starts translation sessions.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text("Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
