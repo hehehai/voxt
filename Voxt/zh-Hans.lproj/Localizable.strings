@@ -75,6 +75,7 @@
 "Logs" = "日志";
 "Export Latest Logs (2000)" = "导出最新日志（2000条）";
 "No logs yet" = "暂无日志";
+"Export canceled" = "导出已取消";
 "Last updated: %@" = "最后更新：%@";
 "Exported to %@" = "已导出到 %@";
 "Export failed: %@" = "导出失败：%@";

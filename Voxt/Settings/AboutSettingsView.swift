@@ -8,6 +8,7 @@ struct AboutSettingsView: View {
 
     @State private var latestLogUpdateDate: Date?
     @State private var logExportStatus: String?
+    @State private var hostWindow: NSWindow?
 
     private var appVersionText: String? {
         let bundle = Bundle.main
@@ -145,6 +146,11 @@ struct AboutSettingsView: View {
                 .padding(8)
             }
         }
+        .background(
+            WindowAccessor { window in
+                hostWindow = window
+            }
+        )
         .onAppear {
             refreshLogUpdateDate()
         }
@@ -155,43 +161,57 @@ struct AboutSettingsView: View {
     }
 
     private func exportLatestLogs() {
-        do {
-            let generatedURL = try VoxtLog.exportLatestLogs(limit: 2000)
-            let panel = NSSavePanel()
-            panel.canCreateDirectories = true
-            panel.allowedContentTypes = [.plainText]
-            panel.nameFieldStringValue = generatedURL.lastPathComponent
-            panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        logExportStatus = nil
+        let payload = VoxtLog.latestLogExportPayload(limit: 2000)
+        let panel = configuredSavePanel(filename: payload.filename)
 
-            let response = panel.runModal()
-            guard response == .OK, let destinationURL = panel.url else {
-                logExportStatus = String(localized: "Export cancelled")
-                refreshLogUpdateDate()
-                return
+        if let hostWindow {
+            panel.beginSheetModal(for: hostWindow) { response in
+                handleLogExportResponse(response, panel: panel, payload: payload)
             }
-
-            let scopedDirectoryURL = destinationURL.deletingLastPathComponent()
-            let accessStarted = scopedDirectoryURL.startAccessingSecurityScopedResource()
-            defer {
-                if accessStarted {
-                    scopedDirectoryURL.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            if FileManager.default.fileExists(atPath: destinationURL.path) {
-                try FileManager.default.removeItem(at: destinationURL)
-            }
-            try FileManager.default.copyItem(at: generatedURL, to: destinationURL)
-            NSWorkspace.shared.activateFileViewerSelecting([destinationURL])
-            logExportStatus = localizedFormat("Exported to %@", destinationURL.lastPathComponent)
-        } catch {
-            logExportStatus = localizedFormat("Export failed: %@", error.localizedDescription)
+            return
         }
-        refreshLogUpdateDate()
+
+        let response = panel.runModal()
+        handleLogExportResponse(response, panel: panel, payload: payload)
     }
 
     private func localizedFormat(_ key: String, _ argument: String) -> String {
         let format = NSLocalizedString(key, comment: "")
         return String(format: format, locale: locale, argument)
+    }
+
+    private func configuredSavePanel(filename: String) -> NSSavePanel {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.nameFieldStringValue = filename
+        panel.allowedContentTypes = [UTType(filenameExtension: "log", conformingTo: .plainText) ?? .plainText]
+        return panel
+    }
+
+    private func handleLogExportResponse(
+        _ response: NSApplication.ModalResponse,
+        panel: NSSavePanel,
+        payload: VoxtLog.ExportPayload
+    ) {
+        defer { refreshLogUpdateDate() }
+
+        guard response == .OK else {
+            logExportStatus = String(localized: "Export canceled")
+            return
+        }
+
+        guard let destinationURL = panel.url else {
+            logExportStatus = String(localized: "Export canceled")
+            return
+        }
+
+        do {
+            try payload.content.write(to: destinationURL, atomically: true, encoding: .utf8)
+            logExportStatus = localizedFormat("Exported to %@", destinationURL.lastPathComponent)
+        } catch {
+            logExportStatus = localizedFormat("Export failed: %@", error.localizedDescription)
+        }
     }
 }

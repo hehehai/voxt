@@ -1,6 +1,11 @@
 import Foundation
 
 enum VoxtLog {
+    struct ExportPayload {
+        let filename: String
+        let content: String
+    }
+
     private enum Level: String {
         case info = "INFO"
         case warning = "WARN"
@@ -32,7 +37,7 @@ enum VoxtLog {
         }
     }
 
-    static func exportLatestLogs(limit: Int = 2000) throws -> URL {
+    static func latestLogExportPayload(limit: Int = 2000) -> ExportPayload {
         lock.lock()
         defer { lock.unlock() }
         loadCacheIfNeeded()
@@ -44,8 +49,13 @@ enum VoxtLog {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let filename = "voxt-log-\(formatter.string(from: Date())).log"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        try content.write(to: url, atomically: true, encoding: .utf8)
+        return ExportPayload(filename: filename, content: content)
+    }
+
+    static func exportLatestLogs(limit: Int = 2000) throws -> URL {
+        let payload = latestLogExportPayload(limit: limit)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(payload.filename)
+        try payload.content.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
 

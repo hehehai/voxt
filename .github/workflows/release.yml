@@ -271,7 +271,7 @@ jobs:
             echo "Using notary auth mode: apple-id"
           fi
 
-      - name: Build app (unsigned)
+      - name: Archive app (signed)
         run: |
           set -euo pipefail
           xcodebuild \
@@ -279,16 +279,16 @@ jobs:
             -scheme Voxt \
             -configuration Release \
             -destination "generic/platform=macOS" \
+            -archivePath build/Voxt.xcarchive \
             -derivedDataPath build/DerivedData \
-            build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            archive \
+            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
+            CODE_SIGN_IDENTITY="$DEVELOPER_ID_APP_IDENTITY"
 
-      - name: Sign Sparkle and app bundle with Developer ID
+      - name: Verify archived app signature
         run: |
           set -euo pipefail
-          APP_PATH="build/DerivedData/Build/Products/Release/Voxt.app"
+          APP_PATH="build/Voxt.xcarchive/Products/Applications/Voxt.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "::error::Voxt.app not found at $APP_PATH"
             exit 1
@@ -300,37 +300,17 @@ jobs:
             exit 1
           fi
 
-          # Sparkle sandboxed updater requires nested helpers/xpcs to be signed explicitly.
-          # Avoid --deep because it can sign nested code with wrong entitlements.
-          sign_if_exists() {
-            local target="$1"
-            if [ -e "$target" ]; then
-              echo "Signing: $target"
-              codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_APP_IDENTITY" "$target"
-            fi
-          }
-
-          sign_if_exists "$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Installer.xpc"
-          sign_if_exists "$SPARKLE_FRAMEWORK/Versions/B/XPCServices/InstallerLauncher.xpc"
-          sign_if_exists "$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Downloader.xpc"
-          sign_if_exists "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate"
-          sign_if_exists "$SPARKLE_FRAMEWORK/Versions/B/Updater.app"
-          sign_if_exists "$SPARKLE_FRAMEWORK"
-
-          codesign \
-            --force \
-            --options runtime \
-            --timestamp \
-            --entitlements Voxt/Voxt.entitlements \
-            --sign "$DEVELOPER_ID_APP_IDENTITY" \
-            "$APP_PATH"
-
           codesign --verify --strict --verbose=2 "$APP_PATH"
+          codesign --verify --strict --verbose=2 "$SPARKLE_FRAMEWORK"
+          codesign --verify --strict --verbose=2 "$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Installer.xpc"
+          codesign --verify --strict --verbose=2 "$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Downloader.xpc"
+          codesign --verify --strict --verbose=2 "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate"
+          codesign --verify --strict --verbose=2 "$SPARKLE_FRAMEWORK/Versions/B/Updater.app"
 
       - name: Build zip and pkg artifacts
         run: |
           set -euo pipefail
-          APP_PATH="build/DerivedData/Build/Products/Release/Voxt.app"
+          APP_PATH="build/Voxt.xcarchive/Products/Applications/Voxt.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "::error::Voxt.app not found at $APP_PATH"
             exit 1
@@ -505,6 +485,81 @@ jobs:
           xcrun stapler staple "$PKG_PATH"
           xcrun stapler validate "$PKG_PATH"
           spctl -a -vv -t install "$PKG_PATH"
+
+      - name: Validate packaged app and Sparkle helpers
+        run: |
+          set -euo pipefail
+          PKG_PATH="build/Voxt-${VERSION}.pkg"
+          EXPANDED_PATH="build/expanded-pkg"
+          COMPONENT_PATH="$EXPANDED_PATH/com.voxt.Voxt.pkg"
+          PACKAGED_APP_PATH="$COMPONENT_PATH/Payload/Voxt.app"
+          ENTITLEMENTS_PATH="build/packaged-app-entitlements.plist"
+
+          rm -rf "$EXPANDED_PATH"
+          pkgutil --check-signature "$PKG_PATH"
+          pkgutil --expand-full "$PKG_PATH" "$EXPANDED_PATH"
+
+          if [ ! -d "$PACKAGED_APP_PATH" ]; then
+            echo "::error::Packaged Voxt.app not found at $PACKAGED_APP_PATH"
+            find "$EXPANDED_PATH" -maxdepth 4 -type d | sed -n '1,120p'
+            exit 1
+          fi
+
+          APP_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PACKAGED_APP_PATH/Contents/Info.plist")"
+          APP_MARKETING_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PACKAGED_APP_PATH/Contents/Info.plist")"
+          APP_BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PACKAGED_APP_PATH/Contents/Info.plist")"
+          EXPECTED_BUILD_VERSION="$(xcodebuild -project Voxt.xcodeproj -scheme Voxt -configuration Release -showBuildSettings | awk -F' = ' '/ CURRENT_PROJECT_VERSION = / {print $2; exit}')"
+
+          if [ "$APP_BUNDLE_ID" != "com.voxt.Voxt" ]; then
+            echo "::error::Unexpected packaged bundle identifier: $APP_BUNDLE_ID"
+            exit 1
+          fi
+          if [ "$APP_MARKETING_VERSION" != "$VERSION" ]; then
+            echo "::error::Unexpected packaged marketing version: $APP_MARKETING_VERSION (expected $VERSION)"
+            exit 1
+          fi
+          if [ "$APP_BUILD_VERSION" != "$EXPECTED_BUILD_VERSION" ]; then
+            echo "::error::Unexpected packaged build version: $APP_BUILD_VERSION (expected $EXPECTED_BUILD_VERSION)"
+            exit 1
+          fi
+
+          SPARKLE_FRAMEWORK="$PACKAGED_APP_PATH/Contents/Frameworks/Sparkle.framework"
+          INSTALLER_XPC="$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Installer.xpc"
+          DOWNLOADER_XPC="$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Downloader.xpc"
+          AUTOUPDATE="$SPARKLE_FRAMEWORK/Versions/B/Autoupdate"
+          UPDATER_APP="$SPARKLE_FRAMEWORK/Versions/B/Updater.app"
+
+          for target in "$PACKAGED_APP_PATH" "$SPARKLE_FRAMEWORK" "$INSTALLER_XPC" "$DOWNLOADER_XPC" "$AUTOUPDATE" "$UPDATER_APP"; do
+            if [ ! -e "$target" ]; then
+              echo "::error::Missing packaged target: $target"
+              exit 1
+            fi
+            codesign --verify --strict --verbose=2 "$target"
+            codesign -dvv "$target" 2>&1 | sed -n '1,40p'
+          done
+
+          plutil -p "$INSTALLER_XPC/Contents/Info.plist"
+          plutil -p "$DOWNLOADER_XPC/Contents/Info.plist"
+
+          codesign -d --entitlements :- "$PACKAGED_APP_PATH" > "$ENTITLEMENTS_PATH" 2>/dev/null
+          plutil -p "$ENTITLEMENTS_PATH"
+
+          grep -F '<key>com.apple.security.app-sandbox</key>' "$ENTITLEMENTS_PATH" >/dev/null || {
+            echo "::error::Packaged app is missing app sandbox entitlement"
+            exit 1
+          }
+          grep -F '<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>' "$ENTITLEMENTS_PATH" >/dev/null || {
+            echo "::error::Packaged app is missing Sparkle mach lookup entitlement"
+            exit 1
+          }
+          grep -F "${APP_BUNDLE_ID}-spks" "$ENTITLEMENTS_PATH" >/dev/null || {
+            echo "::error::Packaged app is missing ${APP_BUNDLE_ID}-spks entitlement"
+            exit 1
+          }
+          grep -F "${APP_BUNDLE_ID}-spki" "$ENTITLEMENTS_PATH" >/dev/null || {
+            echo "::error::Packaged app is missing ${APP_BUNDLE_ID}-spki entitlement"
+            exit 1
+          }
 
       - name: Upload notarization diagnostics
         if: failure()

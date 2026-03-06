@@ -75,6 +75,7 @@
 "Logs" = "Logs";
 "Export Latest Logs (2000)" = "Export Latest Logs (2000)";
 "No logs yet" = "No logs yet";
+"Export canceled" = "Export canceled";
 "Last updated: %@" = "Last updated: %@";
 "Exported to %@" = "Exported to %@";
 "Export failed: %@" = "Export failed: %@";

@@ -75,6 +75,7 @@
 "Logs" = "ログ";
 "Export Latest Logs (2000)" = "最新ログをエクスポート（2000件）";
 "No logs yet" = "ログはまだありません";
+"Export canceled" = "エクスポートをキャンセルしました";
 "Last updated: %@" = "最終更新: %@";
 "Exported to %@" = "%@ にエクスポートしました";
 "Export failed: %@" = "エクスポートに失敗しました: %@";

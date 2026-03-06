@@ -22,6 +22,7 @@ final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate, SPUUpdate
     private var lastCheckSource: CheckSource = .automatic
     private(set) var hasUpdate = false
     private(set) var latestVersion: String?
+    private var latestDownloadedUpdateURL: URL?
 
     // Background/dockless apps should opt into Sparkle's gentle reminder support
     // to avoid missing scheduled update alerts.
@@ -53,18 +54,28 @@ final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate, SPUUpdate
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
         let nsError = error as NSError
+        let failureReason = nsError.localizedFailureReason ?? "nil"
+        let underlyingErrorSummary: String
+        if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            underlyingErrorSummary = "\(underlyingError.domain):\(underlyingError.code):\(underlyingError.localizedDescription)"
+        } else {
+            underlyingErrorSummary = "nil"
+        }
         VoxtLog.error(
             """
             Sparkle update aborted. domain=\(nsError.domain), code=\(nsError.code), \
-            description=\(nsError.localizedDescription), userInfo=\(nsError.userInfo)
+            description=\(nsError.localizedDescription), failureReason=\(failureReason), \
+            underlyingError=\(underlyingErrorSummary), updateURL=\(latestDownloadedUpdateURL?.absoluteString ?? "nil"), \
+            userInfo=\(nsError.userInfo)
             """
         )
-        handleInstallerAuthorizationFailureIfNeeded(nsError)
+        handleInstallerFailureIfNeeded(nsError)
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         hasUpdate = true
         latestVersion = "\(item.displayVersionString) (\(item.versionString))"
+        latestDownloadedUpdateURL = item.fileURL
         NotificationCenter.default.post(name: .voxtUpdateAvailabilityDidChange, object: nil)
         VoxtLog.info(
             """
@@ -78,6 +89,7 @@ final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate, SPUUpdate
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
         hasUpdate = false
         latestVersion = nil
+        latestDownloadedUpdateURL = nil
         NotificationCenter.default.post(name: .voxtUpdateAvailabilityDidChange, object: nil)
         let nsError = error as NSError
         VoxtLog.info(
@@ -89,6 +101,7 @@ final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate, SPUUpdate
     }
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
+        latestDownloadedUpdateURL = item.fileURL
         VoxtLog.info(
             """
             Sparkle finished downloading update. version=\(item.displayVersionString), \
@@ -149,19 +162,25 @@ final class AppUpdateManager: NSObject, SPUStandardUserDriverDelegate, SPUUpdate
         return stableFeedURLString
     }
 
-    private func handleInstallerAuthorizationFailureIfNeeded(_ error: NSError) {
+    private func handleInstallerFailureIfNeeded(_ error: NSError) {
         let message = error.localizedDescription.lowercased()
-        let indicatesInstallerAuthFailure =
+        let indicatesInstallerFailure =
+            (error.domain == SUSparkleErrorDomain && [4003, 4005, 4008, 4012].contains(error.code)) ||
             message.contains("authorization") ||
             message.contains("installer") ||
             message.contains("gain authorization required to update target")
-        guard indicatesInstallerAuthFailure else { return }
+        guard indicatesInstallerFailure else { return }
 
-        let manualDownloadURL = selectedFeedURLString
-            .replacingOccurrences(of: "/appcast.xml", with: "/")
+        let fallbackURLString = latestDownloadedUpdateURL?.absoluteString
+            ?? selectedFeedURLString.replacingOccurrences(of: "/appcast.xml", with: "/")
 
-        guard let url = URL(string: manualDownloadURL) else { return }
-        VoxtLog.warning("Sparkle installer authorization failed. Opening manual download page: \(manualDownloadURL)")
+        guard let url = URL(string: fallbackURLString) else { return }
+        VoxtLog.warning(
+            """
+            Sparkle installer failed to launch or authorize. \
+            Opening fallback update URL: \(fallbackURLString)
+            """
+        )
         NSWorkspace.shared.open(url)
     }
 
