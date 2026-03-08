@@ -103,6 +103,7 @@
 "Enhancement" = "Enhancement";
 "Enhancer Model" = "Enhancer Model";
 "Transcription Processing" = "Transcription Processing";
+"ASR Processing" = "ASR Processing";
 "LLM Duration" = "LLM Duration";
 "N/A" = "N/A";
 "%@ · Audio: %@" = "%@ · Audio: %@";
@@ -272,6 +273,8 @@
 "URL Group" = "URL Group";
 "Show the App Enhancement menu and enable app-based enhancement configuration." = "Show the App Enhancement menu and enable app-based enhancement configuration.";
 "Let Sparkle periodically check for updates in the background." = "Let Sparkle periodically check for updates in the background.";
+"Use System Proxy" = "Use System Proxy";
+"When disabled, Voxt uses direct network connections and bypasses system HTTP/HTTPS/SOCKS proxy settings." = "When disabled, Voxt uses direct network connections and bypasses system HTTP/HTTPS/SOCKS proxy settings.";
 "Tip: Drag resources into groups below." = "Tip: Drag resources into groups below.";
 "Model Storage" = "Model Storage";
 "Storage Path" = "Storage Path";
@@ -335,6 +338,9 @@
 "Remote LLM Provider" = "Remote LLM Provider";
 "Remote LLM Model" = "Remote LLM Model";
 "Remote LLM Endpoint" = "Remote LLM Endpoint";
+"Custom Model ID (Optional)" = "Custom Model ID (Optional)";
+"Custom..." = "Custom...";
+"e.g. doubao-seed-2-0-pro-260215" = "e.g. doubao-seed-2-0-pro-260215";
 "Configure a remote provider and model, then click Use." = "Configure a remote provider and model, then click Use.";
 "Configured model: %@" = "Configured model: %@";
 "Not configured" = "Not configured";

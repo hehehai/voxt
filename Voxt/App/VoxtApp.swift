@@ -126,6 +126,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var recordingStartedAt: Date?
     var recordingStoppedAt: Date?
     var transcriptionProcessingStartedAt: Date?
+    var transcriptionResultReceivedAt: Date?
     var sessionOutputMode: SessionOutputMode = .transcription
     var isSelectedTextTranslationFlow = false
     var didCommitSessionOutput = false
@@ -165,6 +166,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.historyEnabled: false,
             AppPreferenceKey.historyRetentionPeriod: HistoryRetentionPeriod.thirtyDays.rawValue,
             AppPreferenceKey.autoCheckForUpdates: true,
+            AppPreferenceKey.useSystemProxy: false,
         ])
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()

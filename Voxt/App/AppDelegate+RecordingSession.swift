@@ -18,6 +18,7 @@ extension AppDelegate {
         recordingStartedAt = Date()
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
+        transcriptionResultReceivedAt = nil
         didCommitSessionOutput = false
         sessionOutputMode = outputMode
         enhancementContextSnapshot = nil
@@ -113,6 +114,7 @@ extension AppDelegate {
         stopRecordingFallbackTask?.cancel()
         stopRecordingFallbackTask = nil
 
+        transcriptionResultReceivedAt = Date()
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
             VoxtLog.info("Transcription result is empty; finishing session.")

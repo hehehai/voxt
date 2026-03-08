@@ -119,7 +119,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
         case .zai:
             return "glm-5"
         case .volcengine:
-            return "doubao-seed-2.0-pro"
+            return "doubao-seed-2-0-pro-260215"
         case .kimi:
             return "kimi-k2.5"
         case .lmStudio:
@@ -197,10 +197,17 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             ]
         case .volcengine:
             return [
-                RemoteModelOption(id: "doubao-seed-2.0-pro", title: "Doubao Seed 2.0 Pro"),
-                RemoteModelOption(id: "doubao-seed-2.0-lite", title: "Doubao Seed 2.0 Lite"),
-                RemoteModelOption(id: "doubao-seed-2.0-code", title: "Doubao Seed 2.0 Code"),
-                RemoteModelOption(id: "doubao-seed-1.8", title: "Doubao Seed 1.8")
+                RemoteModelOption(id: "doubao-seed-2-0-pro-260215", title: "Doubao Seed 2.0 Pro (260215)"),
+                RemoteModelOption(id: "doubao-seed-2-0-lite-260215", title: "Doubao Seed 2.0 Lite (260215)"),
+                RemoteModelOption(id: "doubao-seed-2-0-mini-260215", title: "Doubao Seed 2.0 Mini (260215)"),
+                RemoteModelOption(id: "doubao-seed-2-0-code-preview-260215", title: "Doubao Seed 2.0 Code Preview (260215)"),
+                RemoteModelOption(id: "doubao-seed-1-8-251228", title: "Doubao Seed 1.8 (251228)"),
+                RemoteModelOption(id: "glm-4-7-251222", title: "GLM-4.7 (251222)"),
+                RemoteModelOption(id: "doubao-seed-code-preview-251028", title: "Doubao Seed Code Preview (251028)"),
+                RemoteModelOption(id: "doubao-seed-1-6-lite-251015", title: "Doubao Seed 1.6 Lite (251015)"),
+                RemoteModelOption(id: "doubao-seed-1-6-flash-250828", title: "Doubao Seed 1.6 Flash (250828)"),
+                RemoteModelOption(id: "doubao-seed-translation-250915", title: "Doubao Seed Translation (250915)"),
+                RemoteModelOption(id: "doubao-seed-1-6-vision-250815", title: "Doubao Seed 1.6 Vision (250815)")
             ]
         case .kimi:
             return [
@@ -274,11 +281,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "glm-4.5-airx", title: "GLM-4.5-AirX")
             ]
         case .volcengine:
-            return [
-                RemoteModelOption(id: "doubao-seed-2.0-lite", title: "Doubao Seed 2.0 Lite"),
-                RemoteModelOption(id: "doubao-1.5-lite-32k", title: "Doubao 1.5 Lite 32k"),
-                RemoteModelOption(id: "doubao-1.6-lite", title: "Doubao Seed 1.6 Lite")
-            ]
+            return []
         case .kimi:
             return [
                 RemoteModelOption(id: "moonshot-v1-8k", title: "Moonshot V1 8K"),
@@ -357,11 +360,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "glm-4.6v", title: "GLM-4.6V")
             ]
         case .volcengine:
-            return [
-                RemoteModelOption(id: "doubao-seed-2.0-code", title: "Doubao Seed 2.0 Code"),
-                RemoteModelOption(id: "doubao-1.5-pro-256k", title: "Doubao 1.5 Pro 256k"),
-                RemoteModelOption(id: "doubao-1.5-thinking-pro", title: "Doubao 1.5 Thinking Pro")
-            ]
+            return []
         case .kimi:
             return [
                 RemoteModelOption(id: "kimi-k2-thinking", title: "Kimi K2 Thinking"),

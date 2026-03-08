@@ -216,7 +216,7 @@ private struct HistoryRow: View {
                     optionalDetailLine(labelKey: "App Group", value: entry.matchedAppGroupName)
                     optionalDetailLine(labelKey: "URL Group", value: entry.matchedURLGroupName)
                     optionalDetailLine(
-                        labelKey: "Transcription Processing",
+                        labelKey: "ASR Processing",
                         value: formattedDuration(entry.transcriptionProcessingDurationSeconds)
                     )
                     optionalDetailLine(

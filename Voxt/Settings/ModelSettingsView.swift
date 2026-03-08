@@ -922,6 +922,7 @@ private struct RemoteProviderConfigurationSheet: View {
     let onSave: (RemoteProviderConfiguration) -> Void
 
     @State private var selectedProviderModel = ""
+    @State private var customModelID = ""
     @State private var endpoint = ""
     @State private var apiKey = ""
     @State private var appID = ""
@@ -950,6 +951,7 @@ private struct RemoteProviderConfigurationSheet: View {
                         ForEach(llmProvider.advancedModelOptions, id: \.self) { option in
                             Text(option.title).tag(option.id)
                         }
+                        Text("Custom...").tag(customModelOptionID)
                     } else {
                         ForEach(providerModelOptions, id: \.self) { option in
                             Text(option.title).tag(option.id)
@@ -959,6 +961,14 @@ private struct RemoteProviderConfigurationSheet: View {
                 .pickerStyle(.menu)
                 .labelsHidden()
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                if llmProviderForPicker != nil && resolvedSelectionForPicker == customModelOptionID {
+                    Text("Custom Model ID (Optional)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    TextField("e.g. doubao-seed-2-0-pro-260215", text: $customModelID)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
 
             if !isDoubaoASRTest {
@@ -1043,6 +1053,7 @@ private struct RemoteProviderConfigurationSheet: View {
         .frame(width: 440)
         .onAppear {
             configureModelSelection()
+            customModelID = configuration.model
             endpoint = configuration.endpoint
             apiKey = configuration.apiKey
             appID = configuration.appID
@@ -2040,6 +2051,8 @@ private struct RemoteProviderConfigurationSheet: View {
         return false
     }
 
+    private let customModelOptionID = "__voxt_custom_model__"
+
     private var providerModelOptions: [RemoteModelOption] {
         if case .asr(let provider) = testTarget {
             return provider.modelOptions
@@ -2052,7 +2065,7 @@ private struct RemoteProviderConfigurationSheet: View {
 
     private var pickerModelOptionIDs: [String] {
         if let llmProvider = llmProviderForPicker {
-            return (llmProvider.latestModelOptions + llmProvider.basicModelOptions + llmProvider.advancedModelOptions).map(\.id)
+            return (llmProvider.latestModelOptions + llmProvider.basicModelOptions + llmProvider.advancedModelOptions).map(\.id) + [customModelOptionID]
         }
         return providerModelOptions.map(\.id)
     }
@@ -2066,13 +2079,23 @@ private struct RemoteProviderConfigurationSheet: View {
         if pickerModelOptionIDs.contains(configured) {
             return configured
         }
+        if llmProviderForPicker != nil {
+            return customModelOptionID
+        }
         return pickerModelOptionIDs.first ?? trimmed
     }
 
     private var providerModelSelectionBinding: Binding<String> {
         Binding(
             get: { resolvedSelectionForPicker },
-            set: { selectedProviderModel = $0 }
+            set: {
+                selectedProviderModel = $0
+                if llmProviderForPicker != nil,
+                   $0 != customModelOptionID,
+                   customModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    customModelID = $0
+                }
+            }
         )
     }
 
@@ -2084,6 +2107,16 @@ private struct RemoteProviderConfigurationSheet: View {
     }
 
     private func configureModelSelection() {
+        if llmProviderForPicker != nil {
+            let configured = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            if pickerModelOptionIDs.contains(configured) {
+                selectedProviderModel = configured
+            } else {
+                selectedProviderModel = customModelOptionID
+            }
+            return
+        }
+
         if pickerModelOptionIDs.contains(configuration.model) {
             selectedProviderModel = configuration.model
         } else {
@@ -2092,7 +2125,13 @@ private struct RemoteProviderConfigurationSheet: View {
     }
 
     private func resolvedModelValue() -> String {
-        resolvedSelectionForPicker
+        if let llmProvider = llmProviderForPicker {
+            if resolvedSelectionForPicker == customModelOptionID {
+                let trimmedCustom = customModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmedCustom.isEmpty ? llmProvider.suggestedModel : trimmedCustom
+            }
+        }
+        return resolvedSelectionForPicker
     }
 }
 

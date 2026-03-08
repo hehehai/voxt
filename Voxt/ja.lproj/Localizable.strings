@@ -103,6 +103,7 @@
 "Enhancement" = "強化";
 "Enhancer Model" = "強化モデル";
 "Transcription Processing" = "文字起こし処理時間";
+"ASR Processing" = "ASR 処理時間";
 "LLM Duration" = "LLM 処理時間";
 "N/A" = "該当なし";
 "%@ · Audio: %@" = "%@ ・ 音声: %@";
@@ -272,6 +273,8 @@
 "URL Group" = "URL グループ";
 "Show the App Enhancement menu and enable app-based enhancement configuration." = "App Enhancement メニューを表示し、アプリ別の強化設定を有効にします。";
 "Let Sparkle periodically check for updates in the background." = "Sparkle がバックグラウンドで定期的に更新を確認します。";
+"Use System Proxy" = "システムプロキシを使用";
+"When disabled, Voxt uses direct network connections and bypasses system HTTP/HTTPS/SOCKS proxy settings." = "無効にすると、Voxt は直接接続を使用し、システムの HTTP/HTTPS/SOCKS プロキシ設定をバイパスします。";
 "Tip: Drag resources into groups below." = "ヒント: 下のグループへリソースをドラッグできます。";
 "Model Storage" = "モデル保存先";
 "Storage Path" = "保存パス";
@@ -335,6 +338,9 @@
 "Remote LLM Provider" = "リモート LLM プロバイダー";
 "Remote LLM Model" = "リモート LLM モデル";
 "Remote LLM Endpoint" = "リモート LLM エンドポイント";
+"Custom Model ID (Optional)" = "カスタムモデル ID（任意）";
+"Custom..." = "カスタム...";
+"e.g. doubao-seed-2-0-pro-260215" = "例: doubao-seed-2-0-pro-260215";
 "Configure a remote provider and model, then click Use." = "リモートプロバイダーとモデルを設定してから「使用」をクリックしてください。";
 "Configured model: %@" = "設定済みモデル: %@";
 "Not configured" = "未設定";

@@ -5,6 +5,11 @@ import MLXLMCommon
 
 @MainActor
 class CustomLLMModelManager: ObservableObject {
+    private enum LocalTaskKind {
+        case enhancement
+        case translation
+    }
+
     private struct TextResultPayload: Decodable {
         let resultText: String
     }
@@ -174,19 +179,24 @@ class CustomLLMModelManager: ObservableObject {
         }
 
         let session = ChatSession(container, instructions: systemPrompt)
-        session.generateParameters = GenerateParameters(
-            maxTokens: 256,
-            temperature: 0.1,
-            topP: 0.95
-        )
+        let params = generationParameters(for: .enhancement, inputLength: input.count)
+        session.generateParameters = params
 
         let prompt = structuredOutputPrompt(
             taskInstruction: "Clean up this transcription while preserving meaning and style.",
             input: input
         )
 
+        let startedAt = Date()
+        VoxtLog.info(
+            "Custom LLM enhance started. repo=\(modelRepo), inputChars=\(input.count), maxTokens=\(params.maxTokens ?? 0), temperature=\(params.temperature), topP=\(params.topP)"
+        )
         let response = try await session.respond(to: modelPrompt(prompt, repo: modelRepo))
+        let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
         let cleaned = extractResultText(response)
+        VoxtLog.info(
+            "Custom LLM enhance completed. repo=\(modelRepo), outputChars=\(cleaned.count), elapsedMs=\(elapsedMs)"
+        )
         return cleaned.isEmpty ? rawText : cleaned
     }
 
@@ -222,17 +232,35 @@ class CustomLLMModelManager: ObservableObject {
 
         let container = try await container(for: modelRepo)
         let session = ChatSession(container, instructions: instructions)
-        session.generateParameters = GenerateParameters(
-            maxTokens: 256,
-            temperature: 0.1,
-            topP: 0.95
-        )
+        let params = generationParameters(for: .translation, inputLength: text.count)
+        session.generateParameters = params
         let prompt = structuredOutputPrompt(
             taskInstruction: "Process the input according to the instructions.",
             input: text
         )
+        let startedAt = Date()
+        VoxtLog.info(
+            "Custom LLM translate started. repo=\(modelRepo), inputChars=\(text.count), maxTokens=\(params.maxTokens ?? 0), temperature=\(params.temperature), topP=\(params.topP)"
+        )
         let response = try await session.respond(to: modelPrompt(prompt, repo: modelRepo))
-        return extractResultText(response)
+        let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+        let result = extractResultText(response)
+        VoxtLog.info(
+            "Custom LLM translate completed. repo=\(modelRepo), outputChars=\(result.count), elapsedMs=\(elapsedMs)"
+        )
+        return result
+    }
+
+    private func generationParameters(for kind: LocalTaskKind, inputLength: Int) -> GenerateParameters {
+        let safeInput = max(1, inputLength)
+        let baseMultiplier: Double = (kind == .translation) ? 1.35 : 1.10
+        let estimated = Int(Double(safeInput) * baseMultiplier)
+        let budget = max(96, min(estimated + 48, 320))
+        return GenerateParameters(
+            maxTokens: budget,
+            temperature: 0.1,
+            topP: 0.85
+        )
     }
 
     private func container(for repo: String) async throws -> ModelContainer {

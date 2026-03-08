@@ -38,6 +38,7 @@ enum AppPreferenceKey {
     static let historyEnabled = "historyEnabled"
     static let historyRetentionPeriod = "historyRetentionPeriod"
     static let autoCheckForUpdates = "autoCheckForUpdates"
+    static let useSystemProxy = "useSystemProxy"
 
     static let defaultEnhancementPrompt = """
         You are Voxt, a speech-to-text transcription assistant. Your only job is to enhance raw transcription output. Fix punctuation, add missing commas, correct capitalization, and improve formatting. Do not alter the meaning, tone, or substance of the text. Clean up non-sematic tone words，Do not add, remove, or rephrase any content. Do not add commentary or explanations. Return only the cleaned-up text. If there is a mixed language, please pay attention to keep the mixed language semantics.

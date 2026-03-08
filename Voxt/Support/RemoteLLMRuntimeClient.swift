@@ -1,6 +1,18 @@
 import Foundation
+import CFNetwork
 
 struct RemoteLLMRuntimeClient {
+    private enum CompletionIntent {
+        case enhancement
+        case translation
+    }
+
+    private struct GenerationTuning {
+        let maxTokens: Int
+        let temperature: Double
+        let topP: Double
+    }
+
     func enhance(
         text: String,
         systemPrompt: String,
@@ -15,6 +27,8 @@ struct RemoteLLMRuntimeClient {
         let output = try await complete(
             systemPrompt: systemPrompt,
             userPrompt: prompt,
+            inputTextLength: text.count,
+            intent: .enhancement,
             provider: provider,
             configuration: configuration
         )
@@ -36,6 +50,8 @@ struct RemoteLLMRuntimeClient {
         let output = try await complete(
             systemPrompt: systemPrompt,
             userPrompt: prompt,
+            inputTextLength: text.count,
+            intent: .translation,
             provider: provider,
             configuration: configuration
         )
@@ -46,6 +62,8 @@ struct RemoteLLMRuntimeClient {
     private func complete(
         systemPrompt: String,
         userPrompt: String,
+        inputTextLength: Int,
+        intent: CompletionIntent,
         provider: RemoteLLMProvider,
         configuration: RemoteProviderConfiguration
     ) async throws -> String {
@@ -71,6 +89,13 @@ struct RemoteLLMRuntimeClient {
             request.timeoutInterval = requestTimeoutInterval(for: provider)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
+            let tuning = generationTuning(
+                for: provider,
+                inputTextLength: inputTextLength,
+                systemPromptLength: systemPrompt.count,
+                userPromptLength: userPrompt.count,
+                intent: intent
+            )
 
             switch provider {
             case .anthropic:
@@ -131,12 +156,23 @@ struct RemoteLLMRuntimeClient {
                         ["role": "system", "content": systemPrompt],
                         ["role": "user", "content": userPrompt]
                     ],
-                    "stream": false
+                    "stream": false,
+                    "max_tokens": tuning.maxTokens,
+                    "temperature": tuning.temperature,
+                    "top_p": tuning.topP
                 ])
             }
 
+            let requestStartedAt = Date()
+            let useSystemProxy = VoxtNetworkSession.isUsingSystemProxy
+            let proxyRoute = resolvedProxyRoute(for: url, useSystemProxy: useSystemProxy)
+            let networkMode = useSystemProxy ? "system" : "direct"
+            VoxtLog.info(
+                "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(tuning.maxTokens), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
+            )
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await VoxtNetworkSession.active.data(for: request)
+                let responseElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
                 guard let http = response as? HTTPURLResponse else {
                     throw NSError(domain: "Voxt.RemoteLLM", code: -305, userInfo: [NSLocalizedDescriptionKey: "Invalid remote LLM response."])
                 }
@@ -149,16 +185,38 @@ struct RemoteLLMRuntimeClient {
                     )
                 }
 
+                let decodeStartedAt = Date()
                 let object = try JSONSerialization.jsonObject(with: data)
+                let decodeElapsedMs = Int(Date().timeIntervalSince(decodeStartedAt) * 1000)
+                let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
+                let attempt = index + 1
                 if let content = extractPrimaryText(from: object), !content.isEmpty {
+                    VoxtLog.info(
+                        "Remote LLM response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs)"
+                    )
                     return content
                 }
+
+                VoxtLog.warning(
+                    "Remote LLM response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs)"
+                )
                 throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
             } catch {
                 lastError = error
+                let elapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
+                let nsError = error as NSError
+                let isTimeout = nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
+                let detail = networkErrorDetail(error: nsError)
+                let attempt = index + 1
+                if isTimeout {
+                    VoxtLog.warning("Remote LLM request timeout. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpoints.count), elapsedMs=\(elapsedMs), timeoutSec=\(Int(request.timeoutInterval)), proxy=\(proxyRoute), detail=\(detail)")
+                } else {
+                    VoxtLog.warning("Remote LLM request failed. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpoints.count), elapsedMs=\(elapsedMs), proxy=\(proxyRoute), detail=\(detail)")
+                }
+
                 let hasNext = index < endpoints.count - 1
                 if hasNext && shouldRetry(error: error, provider: provider) {
-                    VoxtLog.warning("Remote LLM request failed on endpoint \(endpointValue); retrying next endpoint.")
+                    VoxtLog.warning("Remote LLM request failed on endpoint \(endpointValue); retrying next endpoint. attempt=\(attempt)/\(endpoints.count), reason=\(error.localizedDescription)")
                     continue
                 }
                 throw error
@@ -169,7 +227,53 @@ struct RemoteLLMRuntimeClient {
     }
 
     private func requestTimeoutInterval(for provider: RemoteLLMProvider) -> TimeInterval {
-        provider == .zai ? 90 : 40
+        switch provider {
+        case .zai, .volcengine:
+            return 30
+        default:
+            return 40
+        }
+    }
+
+    private func generationTuning(
+        for provider: RemoteLLMProvider,
+        inputTextLength: Int,
+        systemPromptLength: Int,
+        userPromptLength: Int,
+        intent: CompletionIntent
+    ) -> GenerationTuning {
+        let outputBudget = estimatedOutputTokenBudget(
+            inputTextLength: inputTextLength,
+            systemPromptLength: systemPromptLength,
+            userPromptLength: userPromptLength,
+            intent: intent
+        )
+        switch provider {
+        case .volcengine:
+            // Favor low latency and deterministic rewrite/translation behavior.
+            return GenerationTuning(maxTokens: outputBudget, temperature: 0.1, topP: 0.3)
+        case .zai:
+            return GenerationTuning(maxTokens: outputBudget, temperature: 0.2, topP: 0.7)
+        default:
+            return GenerationTuning(maxTokens: outputBudget, temperature: 0.2, topP: 0.9)
+        }
+    }
+
+    private func estimatedOutputTokenBudget(
+        inputTextLength: Int,
+        systemPromptLength: Int,
+        userPromptLength: Int,
+        intent: CompletionIntent
+    ) -> Int {
+        let safeInput = max(1, inputTextLength)
+        // Keep output budget mainly tied to ASR text length, and reserve a small
+        // extra window for instruction overhead (system/user prompt framing).
+        let instructionChars = max(0, systemPromptLength + userPromptLength - safeInput)
+        let baseMultiplier: Double = (intent == .translation) ? 1.35 : 1.15
+        let contentEstimate = Int(Double(safeInput) * baseMultiplier)
+        let instructionReserve = min(192, max(32, instructionChars / 12))
+        let estimate = contentEstimate + instructionReserve
+        return max(128, min(estimate, 1024))
     }
 
     private func shouldRetry(error: Error, provider: RemoteLLMProvider) -> Bool {
@@ -372,6 +476,57 @@ struct RemoteLLMRuntimeClient {
             if path.isEmpty || path == "/" { return appendingPath(base, suffix: "/v1/chat/completions") }
             return base
         }
+    }
+
+    private func resolvedProxyRoute(for url: URL, useSystemProxy: Bool) -> String {
+        let detected = resolvedSystemProxyRoute(for: url)
+        guard useSystemProxy else {
+            return "disabled(direct),systemDetected=\(detected)"
+        }
+        return "enabled(system),resolved=\(detected)"
+    }
+
+    private func resolvedSystemProxyRoute(for url: URL) -> String {
+        guard
+            let settingsRef = CFNetworkCopySystemProxySettings(),
+            let settings = settingsRef.takeRetainedValue() as? [String: Any]
+        else {
+            return "unavailable"
+        }
+
+        let proxiesCF = CFNetworkCopyProxiesForURL(url as CFURL, settings as CFDictionary).takeRetainedValue()
+        guard
+            let proxies = proxiesCF as? [[String: Any]],
+            let selected = proxies.first
+        else {
+            return "unavailable"
+        }
+
+        let type = (selected[kCFProxyTypeKey as String] as? String) ?? "unknown"
+        if type == (kCFProxyTypeNone as String) {
+            return "none"
+        }
+
+        let host = (selected[kCFProxyHostNameKey as String] as? String) ?? ""
+        let portValue = selected[kCFProxyPortNumberKey as String]
+        let port: String
+        if let number = portValue as? NSNumber {
+            port = number.stringValue
+        } else if let value = portValue as? String {
+            port = value
+        } else {
+            port = ""
+        }
+
+        let auth = ((selected[kCFProxyUsernameKey as String] as? String)?.isEmpty == false) ? "auth" : "noauth"
+        let address = host.isEmpty ? "unknown" : (port.isEmpty ? host : "\(host):\(port)")
+        return "\(type)@\(address),\(auth)"
+    }
+
+    private func networkErrorDetail(error: NSError) -> String {
+        let streamDomain = error.userInfo["_kCFStreamErrorDomainKey"] ?? "nil"
+        let streamCode = error.userInfo["_kCFStreamErrorCodeKey"] ?? "nil"
+        return "domain=\(error.domain), code=\(error.code), streamDomain=\(streamDomain), streamCode=\(streamCode), desc=\(error.localizedDescription)"
     }
 
     private func replacingPathSuffix(in value: String, oldSuffix: String, newSuffix: String) -> String {

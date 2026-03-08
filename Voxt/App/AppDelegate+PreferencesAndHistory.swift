@@ -131,7 +131,10 @@ extension AppDelegate {
 
         let now = Date()
         let audioDuration = resolvedDuration(from: recordingStartedAt, to: recordingStoppedAt ?? now)
-        let processingDuration = resolvedDuration(from: transcriptionProcessingStartedAt, to: now)
+        // ASR processing duration should exclude LLM enhancement time.
+        // Measure from recording stop to first ASR text callback when available.
+        let processingEnd = transcriptionResultReceivedAt ?? now
+        let processingDuration = resolvedDuration(from: transcriptionProcessingStartedAt, to: processingEnd)
         let focusedAppName = lastEnhancementPromptContext?.focusedAppName ?? NSWorkspace.shared.frontmostApplication?.localizedName
 
         let remoteASRProviderInfo: String?
@@ -186,6 +189,7 @@ extension AppDelegate {
         )
 
         lastEnhancementPromptContext = nil
+        transcriptionResultReceivedAt = nil
     }
 
     private func resolvedDuration(from start: Date?, to end: Date?) -> TimeInterval? {

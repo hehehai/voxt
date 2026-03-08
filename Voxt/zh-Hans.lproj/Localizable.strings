@@ -103,6 +103,7 @@
 "Enhancement" = "增强";
 "Enhancer Model" = "增强模型";
 "Transcription Processing" = "转录处理时长";
+"ASR Processing" = "ASR 处理时长";
 "LLM Duration" = "LLM 耗时";
 "N/A" = "无";
 "%@ · Audio: %@" = "%@ · 音频：%@";
@@ -272,6 +273,8 @@
 "URL Group" = "URL 分组";
 "Show the App Enhancement menu and enable app-based enhancement configuration." = "显示应用增强菜单，并启用按应用配置的增强规则。";
 "Let Sparkle periodically check for updates in the background." = "让 Sparkle 在后台定期检查更新。";
+"Use System Proxy" = "使用系统代理";
+"When disabled, Voxt uses direct network connections and bypasses system HTTP/HTTPS/SOCKS proxy settings." = "关闭后，Voxt 将使用直连网络，并绕过系统的 HTTP/HTTPS/SOCKS 代理设置。";
 "Tip: Drag resources into groups below." = "提示：可将资源拖拽到下方分组中。";
 "Model Storage" = "模型存储";
 "Storage Path" = "存储路径";
@@ -335,6 +338,9 @@
 "Remote LLM Provider" = "远程 LLM 服务商";
 "Remote LLM Model" = "远程 LLM 模型";
 "Remote LLM Endpoint" = "远程 LLM 端点";
+"Custom Model ID (Optional)" = "自定义模型 ID（可选）";
+"Custom..." = "自定义...";
+"e.g. doubao-seed-2-0-pro-260215" = "例如：doubao-seed-2-0-pro-260215";
 "Configure a remote provider and model, then click Use." = "先配置远程服务商和模型，然后点击“使用”。";
 "Configured model: %@" = "已配置模型：%@";
 "Not configured" = "未配置";

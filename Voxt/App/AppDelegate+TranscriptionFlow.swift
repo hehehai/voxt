@@ -50,9 +50,16 @@ extension AppDelegate {
             }
 
             let llmStartedAt = Date()
+            if let asrAt = self.transcriptionResultReceivedAt {
+                let handoffMs = Int(llmStartedAt.timeIntervalSince(asrAt) * 1000)
+                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=\(max(handoffMs, 0)), inputChars=\(text.count)")
+            } else {
+                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=unknown, inputChars=\(text.count)")
+            }
             do {
                 let enhanced = try await self.runStandardTranscriptionPipeline(text: text)
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
+                VoxtLog.info("Enhancement completed. mode=\(self.enhancementMode.rawValue), inputChars=\(text.count), outputChars=\(enhanced.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.commitTranscription(enhanced, llmDurationSeconds: llmDuration)
             } catch {
                 VoxtLog.warning("Standard transcription pipeline enhancement failed, using raw text: \(error)")

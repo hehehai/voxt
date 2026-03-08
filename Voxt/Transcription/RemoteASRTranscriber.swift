@@ -88,18 +88,26 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 "Doubao streaming final packet. lastSequence=\(context.lastAudioSequence), nextSequence=\(context.nextAudioSequence), finalSequence=\(finalSequence)",
                 verbose: true
             )
-            let finalPacket = buildDoubaoPacket(
-                messageType: DoubaoProtocol.messageTypeAudioOnlyClientRequest,
-                messageFlags: DoubaoProtocol.flagNegativeAudioPacket,
-                serialization: DoubaoProtocol.serializationNone,
-                compression: DoubaoProtocol.compressionNone,
-                sequence: finalSequence,
-                payload: Data()
-            )
-            sendDoubaoPacket(finalPacket, through: context.ws) { error in
-                Task { [responseState = context.responseState] in
-                    await responseState.markCompletedWithError(error)
+            if !context.isClosed {
+                let finalPacket = buildDoubaoPacket(
+                    messageType: DoubaoProtocol.messageTypeAudioOnlyClientRequest,
+                    messageFlags: DoubaoProtocol.flagNegativeAudioPacket,
+                    serialization: DoubaoProtocol.serializationNone,
+                    compression: DoubaoProtocol.compressionNone,
+                    sequence: finalSequence,
+                    payload: Data()
+                )
+                sendDoubaoPacket(finalPacket, through: context.ws) { error, isBenign in
+                    Task { [responseState = context.responseState] in
+                        if isBenign {
+                            await responseState.markSocketClosed()
+                        } else {
+                            await responseState.markCompletedWithError(error)
+                        }
+                    }
                 }
+            } else {
+                VoxtLog.info("Doubao streaming socket already closed before final packet, skip final send.", verbose: true)
             }
 
             transcribeTask = Task { [weak self] in
@@ -266,7 +274,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
         VoxtLog.info("Doubao websocket connect. endpoint=\(endpoint), resource=\(resourceID), requestID=\(requestID), appID=\(appID)")
 
-        let ws = URLSession.shared.webSocketTask(with: request)
+        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
         ws.resume()
         defer {
             ws.cancel(with: .goingAway, reason: nil)
@@ -367,7 +375,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
         VoxtLog.info("Doubao stream connect. endpoint=\(endpoint), resource=\(resourceID), requestID=\(requestID), appID=\(appID)")
 
-        let ws = URLSession.shared.webSocketTask(with: request)
+        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
         ws.resume()
         let context = DoubaoStreamingContext(ws: ws, responseState: DoubaoResponseState())
         doubaoStreamingContext = context
@@ -406,9 +414,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             sequence: 1,
             payload: payload
         )
-        sendDoubaoPacket(initPacket, through: ws) { error in
+        sendDoubaoPacket(initPacket, through: ws) { error, isBenign in
             Task { [responseState = context.responseState] in
-                await responseState.markCompletedWithError(error)
+                if isBenign {
+                    context.isClosed = true
+                    await responseState.markSocketClosed()
+                } else {
+                    await responseState.markCompletedWithError(error)
+                }
             }
         }
         isRecording = true
@@ -417,15 +430,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private func sendDoubaoPacket(
         _ packet: Data,
         through ws: URLSessionWebSocketTask,
-        onError: @escaping (Error) -> Void
+        onError: @escaping (Error, Bool) -> Void
     ) {
         ws.send(.data(packet)) { error in
             if let error {
                 let nsError = error as NSError
-                if self.isBenignDoubaoSocketError(nsError) {
-                    return
-                }
-                onError(error)
+                let isBenign = self.isBenignDoubaoSocketError(nsError)
+                onError(error, isBenign)
             }
         }
     }
@@ -459,9 +470,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     sequence: sequence,
                     payload: audioPayload
                 )
-                self.sendDoubaoPacket(packet, through: context.ws) { error in
+                self.sendDoubaoPacket(packet, through: context.ws) { error, isBenign in
                     Task { [responseState = context.responseState] in
-                        await responseState.markCompletedWithError(error)
+                        if isBenign {
+                            context.isClosed = true
+                            await responseState.markSocketClosed()
+                        } else {
+                            await responseState.markCompletedWithError(error)
+                        }
                     }
                 }
             }
@@ -521,6 +537,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     } catch {
                         let nsError = error as NSError
                         if self.isBenignDoubaoSocketError(nsError) {
+                            context.isClosed = true
                             await context.responseState.markSocketClosed()
                         } else {
                             VoxtLog.warning("Doubao stream receive parse failed. detail=\(error.localizedDescription)")
@@ -541,6 +558,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 Task {
                     let nsError = error as NSError
                     if self.isBenignDoubaoSocketError(nsError) {
+                        context.isClosed = true
                         await context.responseState.markSocketClosed()
                         return
                     }
@@ -606,7 +624,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await VoxtNetworkSession.active.data(for: request)
             guard let http = response as? HTTPURLResponse else { return nil }
             logHTTPResponse(context: "Doubao handshake probe", response: http, data: data)
             let payload = String(data: data, encoding: .utf8)?
@@ -635,7 +653,12 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
 
         if error.domain == NSURLErrorDomain {
-            return error.code == NSURLErrorCancelled
+            return [
+                NSURLErrorCancelled,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorNotConnectedToInternet
+            ].contains(error.code)
         }
 
         return false
@@ -1064,7 +1087,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         request.setValue(authorizationValue, forHTTPHeaderField: "Authorization")
         request.httpBody = body
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let (bytes, response) = try await VoxtNetworkSession.active.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw NSError(domain: "Voxt.RemoteASR", code: -10, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response."])
         }
@@ -1327,7 +1350,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private func cleanupDoubaoStreamingState() {
         if let context = doubaoStreamingContext {
             context.isClosed = true
-            context.ws.cancel(with: .goingAway, reason: nil)
+            context.ws.cancel(with: .normalClosure, reason: nil)
         }
         doubaoStreamingContext = nil
         stopDoubaoAudioCapture()

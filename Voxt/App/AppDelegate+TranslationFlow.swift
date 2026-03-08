@@ -107,7 +107,8 @@ extension AppDelegate {
         sessionOutputMode = .translation
         recordingStartedAt = startedAt
         recordingStoppedAt = startedAt
-        transcriptionProcessingStartedAt = startedAt
+        transcriptionProcessingStartedAt = nil
+        transcriptionResultReceivedAt = nil
         enhancementContextSnapshot = nil
         lastEnhancementPromptContext = nil
 
