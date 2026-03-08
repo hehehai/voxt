@@ -204,27 +204,24 @@ private struct HistoryRow: View {
                         .font(.headline)
                     detailLine(labelKey: "Engine", value: entry.transcriptionEngine)
                     detailLine(labelKey: "Model", value: entry.transcriptionModel)
+                    optionalDetailLine(labelKey: "Remote ASR Provider", value: entry.remoteASRProvider)
+                    optionalDetailLine(labelKey: "Remote ASR Model", value: entry.remoteASRModel)
+                    optionalDetailLine(labelKey: "Remote ASR Endpoint", value: entry.remoteASREndpoint)
                     detailLine(labelKey: "Enhancement", value: entry.enhancementMode)
                     detailLine(labelKey: "Enhancer Model", value: entry.enhancementModel)
-                    detailLine(
-                        labelKey: "Focused App",
-                        value: entry.focusedAppName ?? String(localized: "N/A")
+                    optionalDetailLine(labelKey: "Remote LLM Provider", value: entry.remoteLLMProvider)
+                    optionalDetailLine(labelKey: "Remote LLM Model", value: entry.remoteLLMModel)
+                    optionalDetailLine(labelKey: "Remote LLM Endpoint", value: entry.remoteLLMEndpoint)
+                    optionalDetailLine(labelKey: "Focused App", value: entry.focusedAppName)
+                    optionalDetailLine(labelKey: "App Group", value: entry.matchedAppGroupName)
+                    optionalDetailLine(labelKey: "URL Group", value: entry.matchedURLGroupName)
+                    optionalDetailLine(
+                        labelKey: "ASR Processing",
+                        value: formattedDuration(entry.transcriptionProcessingDurationSeconds)
                     )
-                    detailLine(
-                        labelKey: "App Group",
-                        value: entry.matchedAppGroupName ?? String(localized: "N/A")
-                    )
-                    detailLine(
-                        labelKey: "URL Group",
-                        value: entry.matchedURLGroupName ?? String(localized: "N/A")
-                    )
-                    detailLine(
-                        labelKey: "Transcription Processing",
-                        value: formattedDuration(entry.transcriptionProcessingDurationSeconds) ?? String(localized: "N/A")
-                    )
-                    detailLine(
+                    optionalDetailLine(
                         labelKey: "LLM Duration",
-                        value: formattedDuration(entry.llmDurationSeconds) ?? String(localized: "N/A")
+                        value: formattedDuration(entry.llmDurationSeconds)
                     )
                 }
                 .padding(.vertical, 10)
@@ -255,6 +252,14 @@ private struct HistoryRow: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.subheadline)
+        }
+    }
+
+    @ViewBuilder
+    private func optionalDetailLine(labelKey: LocalizedStringKey, value: String?) -> some View {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty {
+            detailLine(labelKey: labelKey, value: trimmed)
         }
     }
 

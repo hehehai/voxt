@@ -8,6 +8,12 @@ import ApplicationServices
 /// - Release hotkey key         → calls `onKeyUp`
 @MainActor
 class HotkeyManager {
+    // Hotkey state machine notes:
+    // 1) Translation shortcut has higher priority than transcription.
+    // 2) For modifier-only tap mode (fn / fn+shift), we emit "down" as toggle signal.
+    // 3) We intentionally delay transcription tap by 80ms when translation combo is a superset
+    //    (e.g. fn vs fn+shift), so quick combo presses do not accidentally fire fn.
+    // 4) We keep a short cooldown after translation transitions to suppress stray fn tap events.
     var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
     var onTranslationKeyDown: (() -> Void)?
@@ -155,55 +161,28 @@ class HotkeyManager {
         let translationFlags = cgFlags(from: translationHotkey.modifiers)
         let wasTranslationKeyDown = isTranslationKeyDown
 
-        // Translation hotkey path (higher priority).
-        if translationHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode {
-            if type == .flagsChanged {
-                let comboIsDown = flags.contains(translationFlags)
-                let isFnOnlyHotkey = translationFlags == .maskSecondaryFn
-                let isFunctionKeyEvent = keyCode == UInt16(kVK_Function)
+        if type == .flagsChanged,
+           triggerMode == .tap,
+           (HotkeyModifierInterpreter.isModifierOnly(transcriptionHotkey)
+            || HotkeyModifierInterpreter.isModifierOnly(translationHotkey)) {
+            VoxtLog.info(
+                "Hotkey flagsChanged(tap). keyCode=\(keyCode), flags=\(debugDescription(for: flags)), tHotkey=\(debugDescription(for: transcriptionFlags)), trHotkey=\(debugDescription(for: translationFlags)), isKeyDown=\(isKeyDown), isTranslationKeyDown=\(isTranslationKeyDown), suppressRemainingMs=\(max(Int(suppressTranscriptionTapUntil.timeIntervalSinceNow * 1000), 0))",
+                verbose: true
+            )
+        }
 
-                if triggerMode == .tap {
-                    // Tap semantics:
-                    // - Translation combo emits only "down" and acts as a start trigger.
-                    // - Stop action is centralized to transcription hotkey tap (fn) in AppDelegate.
-                    if (comboIsDown || (isFnOnlyHotkey && isFunctionKeyEvent)) && !isTranslationKeyDown {
-                        VoxtLog.info("Hotkey detect translation modifier combo down (tap).")
-                        cancelPendingTranscriptionTap(resetKeyState: true)
-                        isTranslationKeyDown = true
-                        suppressTranscriptionTapUntil = Date().addingTimeInterval(0.35)
-                        emitTranslationKeyDown()
-                    }
-                    if !comboIsDown && isTranslationKeyDown {
-                        VoxtLog.info("Hotkey detect translation modifier combo up (tap).")
-                        isTranslationKeyDown = false
-                        suppressTranscriptionTapUntil = Date().addingTimeInterval(0.20)
-                    }
-                    // Consume translation combo transitions to avoid falling through
-                    // into transcription fn-only handling during release sequence.
-                    if wasTranslationKeyDown != isTranslationKeyDown || comboIsDown {
-                        return
-                    }
-                } else {
-                    if comboIsDown {
-                        cancelPendingTranslationLongPressRelease()
-                    }
-                    if comboIsDown && !isTranslationKeyDown {
-                        VoxtLog.info("Hotkey detect translation modifier combo down (longPress).")
-                        isTranslationKeyDown = true
-                        emitTranslationKeyDown()
-                    } else if !comboIsDown && isTranslationKeyDown {
-                        VoxtLog.info("Hotkey detect translation modifier combo up (longPress-pending).")
-                        scheduleTranslationLongPressRelease()
-                    } else if isFnOnlyHotkey && isFunctionKeyEvent {
-                        if isTranslationKeyDown {
-                            isTranslationKeyDown = false
-                            emitTranslationKeyUp()
-                        } else {
-                            isTranslationKeyDown = true
-                            emitTranslationKeyDown()
-                        }
-                    }
-                }
+        // Translation path must be evaluated first. If this ordering changes,
+        // fn-only transcription can steal fn+shift transitions and cause flicker/auto-close regressions.
+        if HotkeyModifierInterpreter.isModifierOnly(translationHotkey) {
+            if handleModifierOnlyTranslationEvent(
+                type: type,
+                keyCode: keyCode,
+                flags: flags,
+                triggerMode: triggerMode,
+                translationFlags: translationFlags,
+                wasTranslationKeyDown: wasTranslationKeyDown
+            ) {
+                return
             }
         } else {
             let translationFlagsMatch = flags.contains(translationFlags)
@@ -239,80 +218,20 @@ class HotkeyManager {
             }
         }
 
-        // Transcription hotkey path.
-        if transcriptionHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode {
-            guard type == .flagsChanged else { return }
-            // If translation modifier combo is active, suppress transcription trigger.
-            if translationHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode,
-               flags.contains(translationFlags) || isTranslationKeyDown {
-                VoxtLog.info("Hotkey suppress transcription modifier path because translation combo is active.")
-                cancelPendingTranscriptionTap(resetKeyState: true)
+        // Transcription path runs after translation handling.
+        // This keeps fn+shift and fn responsibilities separated.
+        if HotkeyModifierInterpreter.isModifierOnly(transcriptionHotkey) {
+            if handleModifierOnlyTranscriptionEvent(
+                type: type,
+                keyCode: keyCode,
+                flags: flags,
+                triggerMode: triggerMode,
+                transcriptionHotkey: transcriptionHotkey,
+                translationHotkey: translationHotkey,
+                transcriptionFlags: transcriptionFlags,
+                translationFlags: translationFlags
+            ) {
                 return
-            }
-            let comboIsDown = flags.contains(transcriptionFlags)
-            let isFnOnlyHotkey = transcriptionFlags == .maskSecondaryFn
-            let isFunctionKeyEvent = keyCode == UInt16(kVK_Function)
-
-            if triggerMode == .tap {
-                // Tap semantics for modifier-only transcription hotkey:
-                // emit only "down" as a toggle signal; release transitions are ignored.
-                if Date() < suppressTranscriptionTapUntil {
-                    cancelPendingTranscriptionTap(resetKeyState: true)
-                    if !comboIsDown && isKeyDown {
-                        isKeyDown = false
-                    }
-                    return
-                }
-                let shouldDelayTap = shouldDelayTranscriptionTap(
-                    transcriptionHotkey: transcriptionHotkey,
-                    translationHotkey: translationHotkey,
-                    transcriptionFlags: transcriptionFlags,
-                    translationFlags: translationFlags
-                )
-                if shouldDelayTap {
-                    if (comboIsDown || (isFnOnlyHotkey && isFunctionKeyEvent)) && !isKeyDown {
-                        if flags.contains(translationFlags) {
-                            return
-                        }
-                        isKeyDown = true
-                        schedulePendingTranscriptionTap()
-                    }
-                    if !comboIsDown && isKeyDown {
-                        flushPendingTranscriptionTapIfNeeded()
-                        isKeyDown = false
-                    }
-                    return
-                }
-                if (comboIsDown || (isFnOnlyHotkey && isFunctionKeyEvent)) && !isKeyDown {
-                    if flags.contains(translationFlags) {
-                        return
-                    }
-                    isKeyDown = true
-                    emitKeyDown()
-                }
-                if !comboIsDown && isKeyDown {
-                    isKeyDown = false
-                }
-                cancelPendingTranscriptionTap(resetKeyState: false)
-                return
-            }
-
-            if comboIsDown && !isKeyDown {
-                cancelPendingTranscriptionLongPressRelease()
-                isKeyDown = true
-                emitKeyDown()
-            } else if !comboIsDown && isKeyDown {
-                // Long-press release is confirmed with a short delay to tolerate
-                // transient flags jitter on fn/shift combinations.
-                scheduleTranscriptionLongPressRelease()
-            } else if isFnOnlyHotkey && isFunctionKeyEvent {
-                if isKeyDown {
-                    isKeyDown = false
-                    emitKeyUp()
-                } else {
-                    isKeyDown = true
-                    emitKeyDown()
-                }
             }
             return
         }
@@ -364,23 +283,191 @@ class HotkeyManager {
         transcriptionFlags: CGEventFlags,
         translationFlags: CGEventFlags
     ) -> Bool {
-        guard transcriptionHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode else { return false }
-        guard translationHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode else { return false }
-        guard transcriptionFlags != translationFlags else { return false }
-        return translationFlags.contains(transcriptionFlags)
+        HotkeyModifierInterpreter.shouldDelayTranscriptionTap(
+            transcriptionHotkey: transcriptionHotkey,
+            translationHotkey: translationHotkey,
+            transcriptionFlags: transcriptionFlags,
+            translationFlags: translationFlags
+        )
+    }
+
+    private func handleModifierOnlyTranslationEvent(
+        type: CGEventType,
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        triggerMode: HotkeyPreference.TriggerMode,
+        translationFlags: CGEventFlags,
+        wasTranslationKeyDown: Bool
+    ) -> Bool {
+        guard type == .flagsChanged else { return false }
+
+        let comboIsDown = flags.contains(translationFlags)
+        let translationTriggerDown = HotkeyModifierInterpreter.translationTriggerDown(
+            keyCode: keyCode,
+            flags: flags,
+            translationFlags: translationFlags
+        )
+
+        if triggerMode == .tap {
+            // Tap semantics:
+            // - Translation combo emits only "down" and acts as a start trigger.
+            // - Stop action is centralized to transcription hotkey tap (fn) in AppDelegate.
+            // - We still track combo-up to enter a short suppression window for fn stray events.
+            if translationTriggerDown && !isTranslationKeyDown {
+                VoxtLog.info("Hotkey detect translation modifier combo down (tap).", verbose: true)
+                cancelPendingTranscriptionTap(resetKeyState: true)
+                isTranslationKeyDown = true
+                suppressTranscriptionTapUntil = Date().addingTimeInterval(0.35)
+                emitTranslationKeyDown()
+            }
+            if !comboIsDown && isTranslationKeyDown {
+                VoxtLog.info("Hotkey detect translation modifier combo up (tap).", verbose: true)
+                isTranslationKeyDown = false
+                // Small cooldown to absorb release-order jitter (shift up then fn up).
+                suppressTranscriptionTapUntil = Date().addingTimeInterval(0.20)
+            }
+            // Consume translation combo transitions to avoid falling through
+            // into transcription fn-only handling during release sequence.
+            return wasTranslationKeyDown != isTranslationKeyDown || comboIsDown
+        }
+
+        if comboIsDown {
+            cancelPendingTranslationLongPressRelease()
+        }
+        if comboIsDown && !isTranslationKeyDown {
+            VoxtLog.info("Hotkey detect translation modifier combo down (longPress).", verbose: true)
+            isTranslationKeyDown = true
+            emitTranslationKeyDown()
+        } else if !comboIsDown && isTranslationKeyDown {
+            VoxtLog.info("Hotkey detect translation modifier combo up (longPress-pending).", verbose: true)
+            scheduleTranslationLongPressRelease()
+        } else if translationFlags == .maskSecondaryFn && HotkeyModifierInterpreter.isFunctionKeyEvent(keyCode) {
+            if isTranslationKeyDown {
+                isTranslationKeyDown = false
+                emitTranslationKeyUp()
+            } else {
+                isTranslationKeyDown = true
+                emitTranslationKeyDown()
+            }
+        }
+        return false
+    }
+
+    private func handleModifierOnlyTranscriptionEvent(
+        type: CGEventType,
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        triggerMode: HotkeyPreference.TriggerMode,
+        transcriptionHotkey: HotkeyPreference.Hotkey,
+        translationHotkey: HotkeyPreference.Hotkey,
+        transcriptionFlags: CGEventFlags,
+        translationFlags: CGEventFlags
+    ) -> Bool {
+        guard type == .flagsChanged else { return true }
+
+        // If translation modifier combo is active, suppress transcription trigger.
+        if HotkeyModifierInterpreter.isModifierOnly(translationHotkey),
+           flags.contains(translationFlags) || isTranslationKeyDown {
+            VoxtLog.info("Hotkey suppress transcription modifier path because translation combo is active.", verbose: true)
+            cancelPendingTranscriptionTap(resetKeyState: true)
+            return true
+        }
+
+        let comboIsDown = flags.contains(transcriptionFlags)
+        let transcriptionTriggerDown = HotkeyModifierInterpreter.transcriptionTriggerDown(
+            keyCode: keyCode,
+            flags: flags,
+            transcriptionFlags: transcriptionFlags
+        )
+
+        if triggerMode == .tap {
+            // Tap semantics for modifier-only transcription hotkey:
+            // emit only "down" as a toggle signal; release transitions are ignored.
+            // Translation cooldown check is critical for fn/fn+shift coexistence.
+            if Date() < suppressTranscriptionTapUntil {
+                VoxtLog.info("Hotkey suppress transcription tap due to translation cooldown.", verbose: true)
+                cancelPendingTranscriptionTap(resetKeyState: true)
+                if !comboIsDown && isKeyDown {
+                    isKeyDown = false
+                }
+                return true
+            }
+            let shouldDelayTap = shouldDelayTranscriptionTap(
+                transcriptionHotkey: transcriptionHotkey,
+                translationHotkey: translationHotkey,
+                transcriptionFlags: transcriptionFlags,
+                translationFlags: translationFlags
+            )
+            if shouldDelayTap {
+                // 80ms "combo disambiguation window":
+                // if shift arrives quickly, translation path takes over and fn tap is dropped.
+                if transcriptionTriggerDown && !isKeyDown {
+                    if flags.contains(translationFlags) {
+                        VoxtLog.info("Hotkey delay transcription tap aborted because translation flags are active.", verbose: true)
+                        return true
+                    }
+                    isKeyDown = true
+                    VoxtLog.info("Hotkey scheduling delayed transcription tap.", verbose: true)
+                    schedulePendingTranscriptionTap()
+                }
+                if !comboIsDown && isKeyDown {
+                    // In tap mode we flush immediately so quick fn press still toggles reliably.
+                    VoxtLog.info("Hotkey releasing delayed transcription tap.", verbose: true)
+                    flushPendingTranscriptionTapIfNeeded()
+                    isKeyDown = false
+                }
+                return true
+            }
+            if transcriptionTriggerDown && !isKeyDown {
+                if flags.contains(translationFlags) {
+                    VoxtLog.info("Hotkey transcription tap ignored because translation flags are active.", verbose: true)
+                    return true
+                }
+                isKeyDown = true
+                emitKeyDown()
+            }
+            if !comboIsDown && isKeyDown {
+                isKeyDown = false
+            }
+            cancelPendingTranscriptionTap(resetKeyState: false)
+            return true
+        }
+
+        if comboIsDown && !isKeyDown {
+            cancelPendingTranscriptionLongPressRelease()
+            isKeyDown = true
+            emitKeyDown()
+        } else if !comboIsDown && isKeyDown {
+            // Long-press release is confirmed with a short delay to tolerate
+            // transient flags jitter on fn/shift combinations.
+            scheduleTranscriptionLongPressRelease()
+        } else if transcriptionFlags == .maskSecondaryFn && HotkeyModifierInterpreter.isFunctionKeyEvent(keyCode) {
+            if isKeyDown {
+                isKeyDown = false
+                emitKeyUp()
+            } else {
+                isKeyDown = true
+                emitKeyDown()
+            }
+        }
+        return true
     }
 
     private func schedulePendingTranscriptionTap() {
         pendingTranscriptionTapTask?.cancel()
         pendingTranscriptionTapTask = Task { [weak self] in
             do {
+                // Keep this in sync with AppDelegate.transcriptionStartDebounceInterval (80ms).
                 try await Task.sleep(for: .milliseconds(80))
             } catch {
                 return
             }
             guard let self else { return }
             guard !Task.isCancelled else { return }
-            guard self.isKeyDown, !self.isTranslationKeyDown else { return }
+            guard self.isKeyDown, !self.isTranslationKeyDown else {
+                VoxtLog.info("Hotkey delayed transcription tap dropped. isKeyDown=\(self.isKeyDown), isTranslationKeyDown=\(self.isTranslationKeyDown)", verbose: true)
+                return
+            }
             self.pendingTranscriptionTapTask = nil
             self.emitKeyDown()
         }
@@ -448,30 +535,36 @@ class HotkeyManager {
     }
 
     private func emitKeyDown() {
-        VoxtLog.info("Hotkey emit transcriptionDown")
         Task { @MainActor in
             onKeyDown?()
         }
     }
 
     private func emitKeyUp() {
-        VoxtLog.info("Hotkey emit transcriptionUp")
         Task { @MainActor in
             onKeyUp?()
         }
     }
 
     private func emitTranslationKeyDown() {
-        VoxtLog.info("Hotkey emit translationDown")
         Task { @MainActor in
             onTranslationKeyDown?()
         }
     }
 
     private func emitTranslationKeyUp() {
-        VoxtLog.info("Hotkey emit translationUp")
         Task { @MainActor in
             onTranslationKeyUp?()
         }
+    }
+
+    private func debugDescription(for flags: CGEventFlags) -> String {
+        var values: [String] = []
+        if flags.contains(.maskSecondaryFn) { values.append("fn") }
+        if flags.contains(.maskShift) { values.append("shift") }
+        if flags.contains(.maskControl) { values.append("ctrl") }
+        if flags.contains(.maskAlternate) { values.append("opt") }
+        if flags.contains(.maskCommand) { values.append("cmd") }
+        return values.isEmpty ? "none" : values.joined(separator: "+")
     }
 }

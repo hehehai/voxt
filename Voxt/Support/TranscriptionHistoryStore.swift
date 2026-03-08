@@ -16,6 +16,12 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let focusedAppName: String?
     let matchedAppGroupName: String?
     let matchedURLGroupName: String?
+    let remoteASRProvider: String?
+    let remoteASRModel: String?
+    let remoteASREndpoint: String?
+    let remoteLLMProvider: String?
+    let remoteLLMModel: String?
+    let remoteLLMEndpoint: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -32,6 +38,12 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case focusedAppName
         case matchedAppGroupName
         case matchedURLGroupName
+        case remoteASRProvider
+        case remoteASRModel
+        case remoteASREndpoint
+        case remoteLLMProvider
+        case remoteLLMModel
+        case remoteLLMEndpoint
     }
 
     init(
@@ -48,7 +60,13 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         llmDurationSeconds: TimeInterval?,
         focusedAppName: String?,
         matchedAppGroupName: String?,
-        matchedURLGroupName: String?
+        matchedURLGroupName: String?,
+        remoteASRProvider: String?,
+        remoteASRModel: String?,
+        remoteASREndpoint: String?,
+        remoteLLMProvider: String?,
+        remoteLLMModel: String?,
+        remoteLLMEndpoint: String?
     ) {
         self.id = id
         self.text = text
@@ -64,6 +82,12 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.focusedAppName = focusedAppName
         self.matchedAppGroupName = matchedAppGroupName
         self.matchedURLGroupName = matchedURLGroupName
+        self.remoteASRProvider = remoteASRProvider
+        self.remoteASRModel = remoteASRModel
+        self.remoteASREndpoint = remoteASREndpoint
+        self.remoteLLMProvider = remoteLLMProvider
+        self.remoteLLMModel = remoteLLMModel
+        self.remoteLLMEndpoint = remoteLLMEndpoint
     }
 
     init(from decoder: Decoder) throws {
@@ -82,6 +106,12 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         focusedAppName = try container.decodeIfPresent(String.self, forKey: .focusedAppName)
         matchedAppGroupName = try container.decodeIfPresent(String.self, forKey: .matchedAppGroupName)
         matchedURLGroupName = try container.decodeIfPresent(String.self, forKey: .matchedURLGroupName)
+        remoteASRProvider = try container.decodeIfPresent(String.self, forKey: .remoteASRProvider)
+        remoteASRModel = try container.decodeIfPresent(String.self, forKey: .remoteASRModel)
+        remoteASREndpoint = try container.decodeIfPresent(String.self, forKey: .remoteASREndpoint)
+        remoteLLMProvider = try container.decodeIfPresent(String.self, forKey: .remoteLLMProvider)
+        remoteLLMModel = try container.decodeIfPresent(String.self, forKey: .remoteLLMModel)
+        remoteLLMEndpoint = try container.decodeIfPresent(String.self, forKey: .remoteLLMEndpoint)
     }
 }
 
@@ -160,7 +190,13 @@ final class TranscriptionHistoryStore: ObservableObject {
         llmDurationSeconds: TimeInterval?,
         focusedAppName: String?,
         matchedAppGroupName: String?,
-        matchedURLGroupName: String?
+        matchedURLGroupName: String?,
+        remoteASRProvider: String?,
+        remoteASRModel: String?,
+        remoteASREndpoint: String?,
+        remoteLLMProvider: String?,
+        remoteLLMModel: String?,
+        remoteLLMEndpoint: String?
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -179,7 +215,13 @@ final class TranscriptionHistoryStore: ObservableObject {
             llmDurationSeconds: llmDurationSeconds,
             focusedAppName: focusedAppName,
             matchedAppGroupName: matchedAppGroupName,
-            matchedURLGroupName: matchedURLGroupName
+            matchedURLGroupName: matchedURLGroupName,
+            remoteASRProvider: remoteASRProvider,
+            remoteASRModel: remoteASRModel,
+            remoteASREndpoint: remoteASREndpoint,
+            remoteLLMProvider: remoteLLMProvider,
+            remoteLLMModel: remoteLLMModel,
+            remoteLLMEndpoint: remoteLLMEndpoint
         )
 
         allEntries.insert(entry, at: 0)

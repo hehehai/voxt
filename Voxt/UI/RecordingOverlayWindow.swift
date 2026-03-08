@@ -32,6 +32,15 @@ class OverlayState: ObservableObject {
         transcriber.$isEnhancing.assign(to: &$isEnhancing)
     }
 
+    /// Binds to a RemoteASRTranscriber's published properties.
+    func bind(to transcriber: RemoteASRTranscriber) {
+        cancellables.removeAll()
+        transcriber.$isRecording.assign(to: &$isRecording)
+        transcriber.$audioLevel.assign(to: &$audioLevel)
+        transcriber.$transcribedText.assign(to: &$transcribedText)
+        transcriber.$isEnhancing.assign(to: &$isEnhancing)
+    }
+
     func reset() {
         isRecording = false
         audioLevel = 0

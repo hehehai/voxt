@@ -16,6 +16,7 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
     @AppStorage(AppPreferenceKey.showInDock) private var showInDock = false
     @AppStorage(AppPreferenceKey.autoCheckForUpdates) private var autoCheckForUpdates = true
+    @AppStorage(AppPreferenceKey.useSystemProxy) private var useSystemProxy = false
     @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
 
     @State private var inputDevices: [AudioInputDevice] = []
@@ -45,7 +46,9 @@ struct GeneralSettingsView: View {
                                 Text(device.name).tag(Int(device.id))
                             }
                         }
-                        .frame(width: 260)
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 260, alignment: .trailing)
                     }
 
                     Toggle("Interaction Sounds", isOn: $interactionSoundsEnabled)
@@ -259,6 +262,11 @@ struct GeneralSettingsView: View {
 
                     Toggle("Automatically check for updates", isOn: $autoCheckForUpdates)
                     Text("Let Sparkle periodically check for updates in the background.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Use System Proxy", isOn: $useSystemProxy)
+                    Text("When disabled, Voxt uses direct network connections and bypasses system HTTP/HTTPS/SOCKS proxy settings.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
