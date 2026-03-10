@@ -179,6 +179,17 @@
 "Open Settings" = "打开设置";
 "Check for Updates…" = "检查更新…";
 "Automatically check for updates" = "自动检查更新";
+"Proxy" = "代理";
+"Follow System" = "跟随系统";
+"Follow the macOS proxy settings, disable proxy use entirely, or provide a custom proxy endpoint for Voxt network requests." = "可以跟随 macOS 代理设置、完全关闭代理，或为 Voxt 网络请求单独指定自定义代理。";
+"Custom" = "自定义";
+"Protocol" = "协议";
+"Host" = "主机";
+"Port" = "端口";
+"Username" = "用户名";
+"Password" = "密码";
+"Optional" = "可选";
+"Custom proxy supports HTTP, HTTPS, and SOCKS5 host/port routing. Username and password are saved now, but not injected into requests automatically yet." = "自定义代理支持 HTTP、HTTPS 和 SOCKS5 的主机与端口路由。用户名和密码目前会保存，但暂时还不会自动注入到请求中。";
 "Check update manifest at launch and notify when a newer version is available." = "启动时检查更新清单，发现新版本时提醒。";
 "Update manifest URL is not configured." = "未配置更新清单地址。";
 "Unable to read current app version." = "无法读取当前应用版本。";

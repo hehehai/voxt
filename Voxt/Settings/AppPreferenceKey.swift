@@ -39,6 +39,12 @@ enum AppPreferenceKey {
     static let historyRetentionPeriod = "historyRetentionPeriod"
     static let autoCheckForUpdates = "autoCheckForUpdates"
     static let useSystemProxy = "useSystemProxy"
+    static let networkProxyMode = "networkProxyMode"
+    static let customProxyScheme = "customProxyScheme"
+    static let customProxyHost = "customProxyHost"
+    static let customProxyPort = "customProxyPort"
+    static let customProxyUsername = "customProxyUsername"
+    static let customProxyPassword = "customProxyPassword"
 
     static let defaultEnhancementPrompt = """
         You are Voxt, a speech-to-text transcription assistant. Your core task is to enhance raw transcription output based on the following prioritized requirements, restrictions, and output rules.

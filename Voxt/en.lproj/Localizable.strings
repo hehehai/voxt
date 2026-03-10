@@ -179,6 +179,17 @@
 "Open Settings" = "Open Settings";
 "Check for Updates…" = "Check for Updates…";
 "Automatically check for updates" = "Automatically check for updates";
+"Proxy" = "Proxy";
+"Follow System" = "Follow System";
+"Follow the macOS proxy settings, disable proxy use entirely, or provide a custom proxy endpoint for Voxt network requests." = "Follow the macOS proxy settings, disable proxy use entirely, or provide a custom proxy endpoint for Voxt network requests.";
+"Custom" = "Custom";
+"Protocol" = "Protocol";
+"Host" = "Host";
+"Port" = "Port";
+"Username" = "Username";
+"Password" = "Password";
+"Optional" = "Optional";
+"Custom proxy supports HTTP, HTTPS, and SOCKS5 host/port routing. Username and password are saved now, but not injected into requests automatically yet." = "Custom proxy supports HTTP, HTTPS, and SOCKS5 host/port routing. Username and password are saved now, but not injected into requests automatically yet.";
 "Check update manifest at launch and notify when a newer version is available." = "Check update manifest at launch and notify when a newer version is available.";
 "Update manifest URL is not configured." = "Update manifest URL is not configured.";
 "Unable to read current app version." = "Unable to read current app version.";

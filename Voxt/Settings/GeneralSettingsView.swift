@@ -16,7 +16,12 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
     @AppStorage(AppPreferenceKey.showInDock) private var showInDock = false
     @AppStorage(AppPreferenceKey.autoCheckForUpdates) private var autoCheckForUpdates = true
-    @AppStorage(AppPreferenceKey.useSystemProxy) private var useSystemProxy = false
+    @AppStorage(AppPreferenceKey.networkProxyMode) private var networkProxyModeRaw = VoxtNetworkSession.ProxyMode.system.rawValue
+    @AppStorage(AppPreferenceKey.customProxyScheme) private var customProxySchemeRaw = VoxtNetworkSession.ProxyScheme.http.rawValue
+    @AppStorage(AppPreferenceKey.customProxyHost) private var customProxyHost = ""
+    @AppStorage(AppPreferenceKey.customProxyPort) private var customProxyPort = ""
+    @AppStorage(AppPreferenceKey.customProxyUsername) private var customProxyUsername = ""
+    @AppStorage(AppPreferenceKey.customProxyPassword) private var customProxyPassword = ""
     @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
 
     @State private var inputDevices: [AudioInputDevice] = []
@@ -28,6 +33,20 @@ struct GeneralSettingsView: View {
 
     private var selectedInputDeviceID: AudioDeviceID {
         AudioDeviceID(selectedInputDeviceIDRaw)
+    }
+
+    private var networkProxyMode: Binding<VoxtNetworkSession.ProxyMode> {
+        Binding(
+            get: { VoxtNetworkSession.ProxyMode(rawValue: networkProxyModeRaw) ?? .system },
+            set: { networkProxyModeRaw = $0.rawValue }
+        )
+    }
+
+    private var customProxyScheme: Binding<VoxtNetworkSession.ProxyScheme> {
+        Binding(
+            get: { VoxtNetworkSession.ProxyScheme(rawValue: customProxySchemeRaw) ?? .http },
+            set: { customProxySchemeRaw = $0.rawValue }
+        )
     }
 
     var body: some View {
@@ -265,10 +284,78 @@ struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Toggle("Use System Proxy", isOn: $useSystemProxy)
-                    Text("When disabled, Voxt uses direct network connections and bypasses system HTTP/HTTPS/SOCKS proxy settings.")
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Proxy")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Picker("Proxy", selection: networkProxyMode) {
+                            Text("Follow System").tag(VoxtNetworkSession.ProxyMode.system)
+                            Text("Off").tag(VoxtNetworkSession.ProxyMode.disabled)
+                            Text("Custom").tag(VoxtNetworkSession.ProxyMode.custom)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 220, alignment: .trailing)
+                    }
+                    Text("Follow the macOS proxy settings, disable proxy use entirely, or provide a custom proxy endpoint for Voxt network requests.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    if networkProxyMode.wrappedValue == .custom {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Protocol")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Picker("Protocol", selection: customProxyScheme) {
+                                Text("HTTP").tag(VoxtNetworkSession.ProxyScheme.http)
+                                Text("HTTPS").tag(VoxtNetworkSession.ProxyScheme.https)
+                                Text("SOCKS5").tag(VoxtNetworkSession.ProxyScheme.socks5)
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .frame(width: 160, alignment: .trailing)
+                        }
+
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Host")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            TextField("127.0.0.1", text: $customProxyHost)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 220)
+                        }
+
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Port")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            TextField("7890", text: $customProxyPort)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 120)
+                        }
+
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Username")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            TextField("Optional", text: $customProxyUsername)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 220)
+                        }
+
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Password")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            SecureField("Optional", text: $customProxyPassword)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 220)
+                        }
+
+                        Text("Custom proxy supports HTTP, HTTPS, and SOCKS5 host/port routing. Username and password are saved now, but not injected into requests automatically yet.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if let launchAtLoginError {
                         Text(launchAtLoginError)

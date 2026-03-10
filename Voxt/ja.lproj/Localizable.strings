@@ -179,6 +179,17 @@
 "Open Settings" = "設定を開く";
 "Check for Updates…" = "アップデートを確認…";
 "Automatically check for updates" = "更新を自動確認";
+"Proxy" = "プロキシ";
+"Follow System" = "システムに従う";
+"Follow the macOS proxy settings, disable proxy use entirely, or provide a custom proxy endpoint for Voxt network requests." = "macOS のプロキシ設定に従うか、プロキシを完全に無効にするか、Voxt 専用のカスタムプロキシを指定できます。";
+"Custom" = "カスタム";
+"Protocol" = "プロトコル";
+"Host" = "ホスト";
+"Port" = "ポート";
+"Username" = "ユーザー名";
+"Password" = "パスワード";
+"Optional" = "任意";
+"Custom proxy supports HTTP, HTTPS, and SOCKS5 host/port routing. Username and password are saved now, but not injected into requests automatically yet." = "カスタムプロキシは HTTP / HTTPS / SOCKS5 のホスト・ポート指定に対応しています。ユーザー名とパスワードは保存されますが、現時点では自動挿入はまだ行われません。";
 "Check update manifest at launch and notify when a newer version is available." = "起動時に更新マニフェストを確認し、新しいバージョンがあれば通知します。";
 "Update manifest URL is not configured." = "更新マニフェスト URL が設定されていません。";
 "Unable to read current app version." = "現在のアプリバージョンを取得できません。";

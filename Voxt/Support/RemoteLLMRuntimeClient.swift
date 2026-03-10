@@ -164,9 +164,9 @@ struct RemoteLLMRuntimeClient {
             }
 
             let requestStartedAt = Date()
-            let useSystemProxy = VoxtNetworkSession.isUsingSystemProxy
-            let proxyRoute = resolvedProxyRoute(for: url, useSystemProxy: useSystemProxy)
-            let networkMode = useSystemProxy ? "system" : "direct"
+            let proxySettings = VoxtNetworkSession.currentProxySettings
+            let proxyRoute = resolvedProxyRoute(for: url, settings: proxySettings)
+            let networkMode = VoxtNetworkSession.modeDescription
             VoxtLog.info(
                 "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(tuning.maxTokens), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
             )
@@ -480,12 +480,19 @@ struct RemoteLLMRuntimeClient {
         }
     }
 
-    private func resolvedProxyRoute(for url: URL, useSystemProxy: Bool) -> String {
+    private func resolvedProxyRoute(for url: URL, settings: VoxtNetworkSession.ProxySettings) -> String {
         let detected = resolvedSystemProxyRoute(for: url)
-        guard useSystemProxy else {
+        switch settings.mode {
+        case .system:
+            return "enabled(system),resolved=\(detected)"
+        case .disabled:
             return "disabled(direct),systemDetected=\(detected)"
+        case .custom:
+            guard let port = settings.port, settings.hasValidCustomEndpoint else {
+                return "custom(incomplete),systemDetected=\(detected)"
+            }
+            return "custom(\(settings.scheme.rawValue)://\(settings.host):\(port)),systemDetected=\(detected)"
         }
-        return "enabled(system),resolved=\(detected)"
     }
 
     private func resolvedSystemProxyRoute(for url: URL) -> String {

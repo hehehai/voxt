@@ -166,10 +166,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.historyEnabled: false,
             AppPreferenceKey.historyRetentionPeriod: HistoryRetentionPeriod.thirtyDays.rawValue,
             AppPreferenceKey.autoCheckForUpdates: true,
-            AppPreferenceKey.useSystemProxy: false,
+            AppPreferenceKey.networkProxyMode: VoxtNetworkSession.ProxyMode.system.rawValue,
+            AppPreferenceKey.customProxyScheme: VoxtNetworkSession.ProxyScheme.http.rawValue,
+            AppPreferenceKey.customProxyHost: "",
+            AppPreferenceKey.customProxyPort: "",
+            AppPreferenceKey.customProxyUsername: "",
+            AppPreferenceKey.customProxyPassword: "",
         ])
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
+        Self.migrateLegacyNetworkProxyPreferenceIfNeeded()
         super.init()
     }
 
@@ -280,6 +286,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let oldEnabled = defaults.bool(forKey: "aiEnhanceEnabled")
             enhancementMode = oldEnabled ? .appleIntelligence : .off
         }
+    }
+
+    private static func migrateLegacyNetworkProxyPreferenceIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: AppPreferenceKey.networkProxyMode) == nil,
+              defaults.object(forKey: AppPreferenceKey.useSystemProxy) != nil else {
+            return
+        }
+
+        let legacyUsesSystemProxy = defaults.bool(forKey: AppPreferenceKey.useSystemProxy)
+        let mode: VoxtNetworkSession.ProxyMode = legacyUsesSystemProxy ? .system : .disabled
+        defaults.set(mode.rawValue, forKey: AppPreferenceKey.networkProxyMode)
     }
 
     private func setupHotkey() {
