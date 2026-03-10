@@ -9,6 +9,9 @@ struct WaveformView: View {
     var isEnhancing: Bool = false
     var isCompleting: Bool = false
 
+    private let iconSlotSize = CGSize(width: 16, height: 28)
+    private let barAreaHeight: CGFloat = 28
+
     // Number of bars in the waveform
     private let barCount = 16
     @State private var phases: [Double] = (0..<16).map { Double($0) * 0.4 }
@@ -122,6 +125,7 @@ struct WaveformView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.95))
+                        .frame(width: iconSlotSize.width, height: iconSlotSize.height)
                         .transition(.opacity)
                 } else if isEnhancing {
                     processingSpinner
@@ -131,11 +135,12 @@ struct WaveformView: View {
                         .renderingMode(.template)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 16, height: 16)
+                        .frame(width: iconSlotSize.width, height: iconSlotSize.height)
                         .foregroundStyle(.white)
                         .opacity(0.9)
                         .transition(.opacity)
                 }
-
+                
                 // Bars: processing shimmer when enhancing, waveform otherwise
                 if isEnhancing {
                     processingBars
@@ -145,6 +150,7 @@ struct WaveformView: View {
                         .transition(.opacity)
                 }
             }
+            .frame(height: barAreaHeight)
             .animation(.easeInOut(duration: 0.25), value: isEnhancing)
 
             // Keep text visible during LLM processing to avoid layout flicker.
@@ -239,7 +245,7 @@ struct WaveformView: View {
                     .animation(.easeInOut(duration: 0.1), value: audioLevel)
             }
         }
-        .frame(height: 28)
+        .frame(height: barAreaHeight)
     }
 
     // MARK: - Processing bars (enhancing state)
@@ -252,21 +258,26 @@ struct WaveformView: View {
                     .frame(width: 2.5, height: processingBarHeight(for: index))
             }
         }
-        .frame(height: 24)
+        .frame(height: barAreaHeight)
     }
 
     // MARK: - Processing spinner
 
     private var processingSpinner: some View {
         Circle()
-            .trim(from: 0, to: 0.7)
-            .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-            .frame(width: 14, height: 14)
+            .trim(from: 0.14, to: 0.82)
+            .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 1.35, lineCap: .round))
+            .frame(width: 12, height: 12)
+            .frame(width: iconSlotSize.width, height: iconSlotSize.height)
             .rotationEffect(.degrees(spinAngle))
             .onAppear {
-                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                spinAngle = 0
+                withAnimation(.linear(duration: 0.68).repeatForever(autoreverses: false)) {
                     spinAngle = 360
                 }
+            }
+            .onDisappear {
+                spinAngle = 0
             }
     }
 
