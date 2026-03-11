@@ -24,6 +24,12 @@
 ## Download
 
 - Latest release: https://github.com/hehehai/voxt/releases/latest
+- Install via Homebrew (recommended):
+
+  ```bash
+  brew tap hehehai/tap
+  brew install --cask voxt
+  ```
 
 ## Core Features
 

@@ -23,6 +23,12 @@
 ## 下载
 
 - 最新版本：https://github.com/hehehai/voxt/releases/latest
+- Homebrew 安装方式（推荐）：
+
+  ```bash
+  brew tap hehehai/tap
+  brew install --cask voxt
+  ```
 
 ## 核心功能
 
