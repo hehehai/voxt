@@ -125,6 +125,19 @@ Common local LLM errors / states:
 
 For faster or more realtime transcription and enhancement, configure `Remote ASR` and `Remote LLM` separately in Model Settings. The tables below list only the provider entry points and recommended defaults that Voxt currently exposes in code.
 
+> [!note]
+> For the setup tutorial prompt below, you can give it to any AI assistant and let it help you complete the application and configuration process.
+
+```txt
+https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/README.md
+https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.md
+How do I get started configuring remote ASR and LLM? I want to use Doubao ASR and Alibaba Cloud Bailian LLM. Please give me the full application and configuration workflow.
+
+1. For every step that requires visiting a website, include the exact URL.
+2. Point out the important notes and required configuration items.
+3. Make the key steps more detailed.
+```
+
 For fuller provider notes, signup links, endpoints, and configuration examples, see [docs/RemoteModel.md](docs/RemoteModel.md).
 
 #### Remote ASR Providers

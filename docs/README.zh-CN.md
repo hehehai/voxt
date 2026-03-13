@@ -126,6 +126,19 @@ brew install --cask voxt
 
 为了更快或更实时的转录 / 增强，你可以在“模型”里分别配置 `Remote ASR` 和 `Remote LLM`。下面的表格只列 Voxt 当前代码里真正提供的 provider 入口与默认推荐模型。
 
+> [!note]
+> 配置教程 Prompt，你可以喂给任何 AI 让他辅助你完成申请和配置
+
+```txt
+https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/README.zh-CN.md
+https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.zh-CN.md
+我要如何开始配置远程 ASR 和 LLM，我使用豆包 ASR 和阿里云百炼 LLM，给我一个配置和申请流程
+
+1.每一个需要点击网址的地方，请给出具体的网址
+2.需要注意的地方和需要配置的地方
+3.关键流程详细点可以
+```
+
 更完整的服务商介绍、申请入口、端点和配置示例见：[RemoteModel.zh-CN.md](./RemoteModel.zh-CN.md)。
 
 #### 远程 ASR 服务商
