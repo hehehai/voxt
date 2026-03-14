@@ -34,6 +34,10 @@ extension AppDelegate {
             delegate.enhancementContextSnapshot = nil
             delegate.overlayState.isCompleting = false
             delegate.pendingSessionFinishTask = nil
+            delegate.assistantActionStatuses.removeAll()
+            delegate.assistantActionHistory.removeAll()
+            delegate.assistantStructuredHistory.removeAll()
+            delegate.clearOverlayAnchorScreen()
         }
     }
 

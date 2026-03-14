@@ -6,6 +6,7 @@ struct HotkeyActionResolver {
         case stopRecording
         case startTranscription
         case startTranslation
+        case startAssistant
         case scheduleTranscriptionStart
         case cancelPendingTranscriptionStart
     }
@@ -26,6 +27,9 @@ struct HotkeyActionResolver {
             return [.scheduleTranscriptionStart]
         case .tap:
             if state.isSessionActive {
+                guard state.sessionOutputMode == .transcription || state.sessionOutputMode == .translation else {
+                    return [.ignore]
+                }
                 return state.canStopTapSession ? [.stopRecording] : [.ignore]
             }
             return [.startTranscription]

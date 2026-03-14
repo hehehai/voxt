@@ -39,6 +39,13 @@ A macOS menu bar voice input and translation app. Hold to speak, release to past
 - Rewrite selected text by voice, for example: "Make this shorter and smoother."
 - More than voice input: it also works like a voice-driven AI assistant.
 
+**Run actions with your voice** `fn+option`
+
+- Example: "Open Gmail", "Open Slack", or "Open Calendar".
+- Voxt normalizes the spoken task, matches supported assistant actions or recipes, and runs them with the embedded Action Menu runtime.
+- Optional confirmation, optional visual snapshots, and a recipe library make the flow easier to review, debug, and reuse.
+- Teach mode and learned recipes let successful multi-step runs become editable or reusable automation building blocks.
+
 [![][back-to-top]](#readme-top)
 
 ## Download / Install
@@ -200,6 +207,8 @@ Voxt includes two built-in shortcut presets (`fn Combo` / `command Combo`) and a
 - `Tap (Press to Toggle)`: press once to start, press again to stop
 - `Long Press (Release to End)`: hold to start, release to stop
 
+`Tap (Press to Toggle)` is the current default. You can also record custom shortcuts, distinguish left/right modifiers, and get conflict warnings for combinations such as `⌘Space`, `⌘Tab`, and `⌘Q`.
+
 The examples below use the default `fn Combo` preset.
 
 ### fn Combo
@@ -209,12 +218,14 @@ The examples below use the default `fn Combo` preset.
 | `fn` | Standard transcription | Voice input and speech-to-text | After recording ends, Voxt enhances and outputs the result into the current input target |
 | `fn+shift` | Transcribe and translate | Speak-then-translate, multilingual input | If text is already selected, Voxt translates the selection directly instead of opening the recording flow |
 | `fn+control` | Transcribe and rewrite / prompt | Voice-driven prompt generation, or rewriting selected text by voice | If text is selected, Voxt rewrites against the selection; otherwise it treats your speech as an instruction and generates the result |
+| `fn+option` | Action Menu | Voice-triggered app actions and recipe execution | Voxt prepares the spoken task, optionally asks for confirmation, and runs the matched assistant task or recipe with the embedded runtime |
 
-You can think of them as three working modes:
+You can think of them as four working modes:
 
 - `fn`: turn what you say into text
 - `fn+shift`: turn what you say into a target language, or directly translate selected text
 - `fn+control`: treat your speech as a prompt and let the model generate, rewrite, or polish text
+- `fn+option`: turn your speech into a supported app action or multi-step recipe
 
 Detailed behavior:
 
@@ -233,19 +244,51 @@ Detailed behavior:
   - Your dictated content is treated as an instruction, for example: "Make this reply more polite" or "Shorten this paragraph"
   - If text is selected, Voxt uses the selection as source material and returns a rewritten final result based on your spoken instruction
   - If nothing is selected, it behaves more like a voice-driven AI assistant input flow
+- `fn+option` Action Menu
+  - Tap mode: press `fn+option` to start assistant dictation, then press `fn` to stop
+  - Long-press mode: hold `fn+option` to record, release to stop
+  - Voxt normalizes the task, captures current app context, and tries learned recipes, planner output, built-in/custom recipes, or direct task parsing
+  - If confirmation is enabled, Voxt shows the execution summary before running the action
+  - Best for quick app launches, opening URLs, and supported multi-step flows such as Gmail compose or Slack send flows
 
 Interaction details:
 
 - In tap mode, `fn` is the unified stop key. That means once a translation session has started, pressing `fn` can also end it.
 - To avoid accidental stops, Voxt ignores immediate repeated taps during the very short window right after recording starts.
-- `fn+shift` and `fn+control` have higher priority than plain `fn`, so combo presses are not misclassified as regular transcription.
+- `fn+shift`, `fn+control`, and `fn+option` have higher priority than plain `fn`, so combo presses are not misclassified as regular transcription.
 - All shortcuts can be remapped in Settings, and you can switch to the `command Combo` preset at any time.
+
+[![][back-to-top]](#readme-top)
+
+## Action Menu
+
+`Action Menu` is Voxt's current embedded voice action runtime preview. The current code path no longer treats the older Ghost/MCP prototype as the active execution path; supported tasks now run through Voxt's built-in runtime and recipe system.
+
+- Execution flow:
+  - Normalize the spoken task.
+  - Capture app, window, selected text, current URL, and an optional visual snapshot.
+  - Try learned recipes first, then planner output, then built-in/custom recipe matching, then direct task parsing.
+- Recipe library:
+  - Built-in recipes are installed automatically.
+  - Custom recipes live in Voxt Application Support and can be created, duplicated, pinned, disabled, restored, or edited as JSON.
+  - Successful plans can be learned automatically, and teach mode can save successful runs as editable draft recipes.
+- Current built-in examples:
+  - Open Gmail, Slack, Notion, Linear, X, or Calendar.
+  - Open a Gmail compose draft.
+  - Click Gmail Compose in an existing Gmail tab.
+  - Open a Slack channel and send a message.
+- Safety and history:
+  - Optional confirmation can require approval before execution.
+  - Optional visual snapshots capture the focused window for debugging and future multimodal planning.
+  - Local history entries can include assistant summaries, actions, structured steps, and optional snapshot paths.
 
 [![][back-to-top]](#readme-top)
 
 ## App Settings
 
 <img width="1000" height="731" alt="image" src="https://github.com/user-attachments/assets/7c674413-1a2a-42f0-abdc-862eb7b89a03" />
+
+`General` now also covers configuration export/import, interface language, translation target language, model storage location, local history retention, Action Menu logging, and other daily runtime preferences in addition to the existing recording and UI controls.
 
 
 `General` controls app-level behavior and day-to-day usage preferences. Unlike the Model page, this is not where you choose which ASR or LLM to run. It is where you define how Voxt records, appears on screen, outputs results, starts with macOS, and manages network/configuration behavior.
@@ -368,7 +411,7 @@ Voxt permissions are split by function. If you only use basic voice input, only 
 | Microphone | Required | Recording, speech-to-text, local ASR, remote ASR, translation, rewrite flows | Recording cannot start |
 | Speech Recognition | Optional / as needed | Only for `Direct Dictation` / Apple `SFSpeechRecognizer` | Only system dictation becomes unavailable; MLX and remote ASR still work |
 | Accessibility | Strongly recommended | Global hotkeys, automatically pasting results back into other apps, reading some UI context | Recording still works, but auto-paste and some cross-app interactions are limited |
-| Input Monitoring | Strongly recommended | More reliable global modifier hotkeys, especially `fn`, `fn+shift`, and `fn+control` | Global shortcuts may become unstable, fail, or misfire |
+| Input Monitoring | Strongly recommended | More reliable global modifier hotkeys, especially `fn`, `fn+shift`, `fn+control`, and `fn+option` | Global shortcuts may become unstable, fail, or misfire |
 | Automation | Optional | Reading the current browser tab URL for App Branch URL matching | App Branch can still match by foreground app, but not by webpage URL |
 
 Additional notes:

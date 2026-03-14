@@ -94,10 +94,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let matchedURLGroupName: String?
     }
 
+    struct AssistantActionStatus: Identifiable, Equatable {
+        let id = UUID()
+        let title: String
+    }
+
     enum SessionOutputMode {
         case transcription
         case translation
         case rewrite
+        case assistant
     }
 
     let speechTranscriber = SpeechTranscriber()
@@ -108,7 +114,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let historyStore = TranscriptionHistoryStore()
     let appUpdateManager = AppUpdateManager()
     let interactionSoundPlayer = InteractionSoundPlayer()
-
     let hotkeyManager = HotkeyManager()
     let overlayWindow = RecordingOverlayWindow()
     let overlayState = OverlayState()
@@ -147,6 +152,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingTranscriptionStartTask: Task<Void, Never>?
     var enhancementContextSnapshot: EnhancementContextSnapshot?
     var lastEnhancementPromptContext: EnhancementPromptContext?
+    var assistantActionStatuses: [AssistantActionStatus] = []
+    var assistantActionHistory: [String] = []
+    var assistantStructuredHistory: [AssistantHistoryStep] = []
+    var assistantLastDiagnosis: ActionAssistantStepDiagnosis?
+    var overlayAnchorScreenID: NSNumber?
     let tapStopGuardInterval: TimeInterval = 0.35
     let transcriptionStartDebounceInterval: TimeInterval = 0.08
 
@@ -173,6 +183,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.voiceEndCommandText: "",
             AppPreferenceKey.autoCopyWhenNoFocusedInput: false,
             AppPreferenceKey.appEnhancementEnabled: false,
+            AppPreferenceKey.actionAssistantEnabled: false,
+            AppPreferenceKey.actionAssistantRequiresConfirmation: false,
+            AppPreferenceKey.actionAssistantLoggingEnabled: false,
+            AppPreferenceKey.actionAssistantVisualSnapshotsEnabled: false,
+            AppPreferenceKey.actionAssistantLearnSuccessfulPlansEnabled: false,
+            AppPreferenceKey.actionAssistantTeachModeEnabled: false,
+            AppPreferenceKey.actionAssistantTeachModeAutoOpenDraft: true,
             AppPreferenceKey.translationSystemPrompt: AppPreferenceKey.defaultTranslationPrompt,
             AppPreferenceKey.rewriteSystemPrompt: AppPreferenceKey.defaultRewritePrompt,
             AppPreferenceKey.rewriteCustomLLMModelRepo: CustomLLMModelManager.defaultModelRepo,
@@ -212,6 +229,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func captureOverlayAnchorScreenIfNeeded() {
+        guard overlayAnchorScreenID == nil else { return }
+        overlayAnchorScreenID = currentPreferredOverlayScreen()?.voxtScreenID
+    }
+
+    func clearOverlayAnchorScreen() {
+        overlayAnchorScreenID = nil
+    }
+
+    func currentPreferredOverlayScreen() -> NSScreen? {
+        if let overlayAnchorScreenID,
+           let anchoredScreen = NSScreen.screens.first(where: { $0.voxtScreenID == overlayAnchorScreenID }) {
+            return anchoredScreen
+        }
+
+        let mouseLocation = NSEvent.mouseLocation
+        if let mouseScreen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) {
+            return mouseScreen
+        }
+
+        return NSScreen.main
+    }
+
     var enhancementMode: EnhancementMode {
         get {
             let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementMode)
@@ -231,6 +271,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var appEnhancementEnabled: Bool {
         UserDefaults.standard.bool(forKey: AppPreferenceKey.appEnhancementEnabled)
+    }
+
+    var actionAssistantEnabled: Bool {
+        UserDefaults.standard.bool(forKey: AppPreferenceKey.actionAssistantEnabled)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -358,6 +402,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.handleRewriteHotkeyUp()
         }
+        hotkeyManager.onAssistantKeyDown = { [weak self] in
+            guard let self else { return }
+            self.handleAssistantHotkeyDown()
+        }
+        hotkeyManager.onAssistantKeyUp = { [weak self] in
+            guard let self else { return }
+            self.handleAssistantHotkeyUp()
+        }
         hotkeyManager.start()
         VoxtLog.hotkey("Hotkey callbacks configured.")
     }
@@ -420,8 +472,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleTranscriptionHotkeyDown() {
         let triggerMode = HotkeyPreference.loadTriggerMode()
         VoxtLog.hotkey(
-            "Hotkey callback transcriptionDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
+            "Hotkey callback transcriptionDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel), pendingStart=\(pendingTranscriptionStartTask != nil)",
         )
+        if shouldStopAssistantSessionWithTranscriptionHotkey(triggerMode: triggerMode) {
+            guard !shouldIgnoreTapStop() else { return }
+            endRecording()
+            return
+        }
         let actions = HotkeyActionResolver.resolveTranscriptionDown(
             state: HotkeyActionResolver.State(
                 triggerMode: triggerMode,
@@ -440,8 +497,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleTranscriptionHotkeyUp() {
         let triggerMode = HotkeyPreference.loadTriggerMode()
         guard triggerMode == .longPress else { return }
+        if shouldStopAssistantSessionWithTranscriptionHotkey(triggerMode: triggerMode) {
+            endRecording()
+            return
+        }
         VoxtLog.hotkey(
-            "Hotkey callback transcriptionUp. isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
+            "Hotkey callback transcriptionUp. isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel), pendingStart=\(pendingTranscriptionStartTask != nil)",
         )
         let actions = HotkeyActionResolver.resolveTranscriptionUp(
             state: HotkeyActionResolver.State(
@@ -461,7 +522,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleTranslationHotkeyDown() {
         let triggerMode = HotkeyPreference.loadTriggerMode()
         VoxtLog.hotkey(
-            "Hotkey callback translationDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
+            "Hotkey callback translationDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel), pendingStart=\(pendingTranscriptionStartTask != nil)",
         )
         let actions = HotkeyActionResolver.resolveTranslationDown(
             state: HotkeyActionResolver.State(
@@ -495,11 +556,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func shouldStopAssistantSessionWithTranscriptionHotkey(triggerMode: HotkeyPreference.TriggerMode) -> Bool {
+        guard actionAssistantEnabled else { return false }
+        guard isSessionActive, sessionOutputMode == .assistant else { return false }
+        let transcriptionHotkey = HotkeyPreference.load()
+        guard HotkeyModifierInterpreter.isModifierOnly(transcriptionHotkey) else { return false }
+        return true
+    }
+
     private func handleTranslationHotkeyUp() {
         let triggerMode = HotkeyPreference.loadTriggerMode()
         guard triggerMode == .longPress else { return }
         VoxtLog.hotkey(
-            "Hotkey callback translationUp. isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), selectedTextFlow=\(isSelectedTextTranslationFlow)",
+            "Hotkey callback translationUp. isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel), selectedTextFlow=\(isSelectedTextTranslationFlow)",
         )
         let actions = HotkeyActionResolver.resolveTranslationUp(
             state: HotkeyActionResolver.State(
@@ -548,6 +617,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         endRecording()
     }
 
+    private func handleAssistantHotkeyDown() {
+        guard actionAssistantEnabled else { return }
+        let triggerMode = HotkeyPreference.loadTriggerMode()
+        VoxtLog.hotkey(
+            "Hotkey callback assistantDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel)"
+        )
+        if isSessionActive {
+            guard sessionOutputMode == .assistant else { return }
+            guard triggerMode == .tap else { return }
+            guard !shouldIgnoreTapStop() else { return }
+            endRecording()
+            return
+        }
+        beginRecording(outputMode: .assistant)
+    }
+
+    private func handleAssistantHotkeyUp() {
+        guard actionAssistantEnabled else { return }
+        let triggerMode = HotkeyPreference.loadTriggerMode()
+        guard triggerMode == .longPress else { return }
+        VoxtLog.hotkey(
+            "Hotkey callback assistantUp. isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel)"
+        )
+        guard isSessionActive, sessionOutputMode == .assistant else { return }
+        endRecording()
+    }
+
     private func performHotkeyAction(_ action: HotkeyActionResolver.Action) {
         switch action {
         case .ignore:
@@ -558,6 +654,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             beginRecording(outputMode: .transcription)
         case .startTranslation:
             beginRecording(outputMode: .translation)
+        case .startAssistant:
+            beginRecording(outputMode: .assistant)
         case .scheduleTranscriptionStart:
             schedulePendingTranscriptionStart()
         case .cancelPendingTranscriptionStart:
@@ -615,6 +713,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return "translation"
         case .rewrite:
             return "rewrite"
+        case .assistant:
+            return "assistant"
         }
     }
 

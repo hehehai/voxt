@@ -21,11 +21,12 @@
 
 	<!-- Apple Events to supported browsers for active-tab URL -->
 	<key>com.apple.security.temporary-exception.apple-events</key>
-	<array>
-		<string>com.apple.Safari</string>
-		<string>com.apple.SafariTechnologyPreview</string>
-		<string>com.google.Chrome</string>
-		<string>com.microsoft.edgemac</string>
+		<array>
+			<string>com.apple.Terminal</string>
+			<string>com.apple.Safari</string>
+			<string>com.apple.SafariTechnologyPreview</string>
+			<string>com.google.Chrome</string>
+			<string>com.microsoft.edgemac</string>
 		<string>com.brave.Browser</string>
 		<string>company.thebrowser.Browser</string>
 	</array>

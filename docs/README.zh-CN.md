@@ -39,6 +39,13 @@ macOS 菜单栏语音输入与翻译工具。按住说话，松开即贴，AI转
 - 选中文本转写 ～ “帮我把这段文本精简下，语句要通顺” 。。。
 - AI 助手，不止止语音输入
 
+**用语音触发动作** `fn+option`
+
+- 比如“打开 Gmail”、“打开 Slack”或者“打开日历”。
+- Voxt 会先整理你的口述任务，再匹配可执行的助手动作或 Recipe，并通过内置的 `Action Menu` 运行时执行。
+- 可选执行前确认、可选视觉快照、可管理的 Recipe 库，让整个流程更容易复查、调试和复用。
+- Teach Mode 和 Learned Recipes 可以把成功的多步流程沉淀成可编辑、可复用的自动化模板。
+
 [![][back-to-top]](#readme-top)
 
 ## 下载/安装
@@ -204,6 +211,8 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 - `Tap (Press to Toggle)`：按一次开始，再按一次结束
 - `Long Press (Release to End)`：按下开始，松开结束
 
+当前默认是 `Tap (Press to Toggle)`。你也可以录制自定义快捷键、区分左右修饰键，并在设置里看到与系统级快捷键（例如 `⌘Space`、`⌘Tab`、`⌘Q`）的冲突提示。
+
 下面先以默认的 `fn 组合` 为例说明。
 
 ### fn 组合
@@ -213,12 +222,14 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 | `fn` | 普通转录 | 语音输入、语音转文字 | 录音结束后自动增强并输出到当前输入位置 |
 | `fn+shift` | 转录并翻译 | 边说边翻译、跨语言输入 | 如果当前有选中文本，优先直接翻译选区，不进入录音 |
 | `fn+control` | 转录并转写 / 改写 | 口述提示词生成内容，或用语音改写选中文本 | 如果当前有选区，会结合选中文本做改写；没有选区时按口述指令直接生成结果 |
+| `fn+option` | Action Menu | 语音触发应用动作和 Recipe 执行 | Voxt 会整理口述任务，可选先让你确认，再通过内置运行时执行匹配到的助手任务或 Recipe |
 
-推荐把它理解成三种工作模式：
+推荐把它理解成四种工作模式：
 
 - `fn`：把你说的话直接变成文字
 - `fn+shift`：把你说的话变成目标语言，或者直接翻译当前选中的文字
 - `fn+control`：把你说的话当作 Prompt，让模型帮你生成、改写、润色文本
+- `fn+option`：把你说的话变成可执行的应用动作或多步 Recipe
 
 具体交互如下：
 
@@ -237,13 +248,43 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
   - 你口述的内容会被当成指令，例如“帮我写一段更礼貌的回复”或“把这段改短一点”
   - 如果当前有选中文本，Voxt 会把选区作为原文，让模型按你的口述要求输出最终结果
   - 如果没有选中文本，则更接近“语音驱动的 AI 助手输入”
+- `fn+option` Action Menu
+  - 点按模式：点按 `fn+option` 开始助手口述，再点 `fn` 结束
+  - 长按模式：按下 `fn+option` 开始录音，松开即结束
+  - Voxt 会先整理任务、采集当前应用上下文，然后尝试 Learned Recipe、Planner 输出、内置/自定义 Recipe，或者直接解析成支持的动作
+  - 如果开启了执行前确认，Voxt 会先展示执行摘要，再决定是否真正执行
+  - 适合：快速打开应用、打开网址，以及 Gmail Compose、Slack 发消息这类受支持的多步流程
 
 交互细节：
 
 - 在点按模式下，`fn` 是统一的结束键。也就是说，翻译模式开始后，按 `fn` 也可以结束当前会话。
 - 为了避免误触，刚开始录音后的极短时间内，连续点按不会立刻触发停止。
-- `fn+shift` 和 `fn+control` 的优先级高于普通 `fn`，所以组合键不会误判成普通转录。
+- `fn+shift`、`fn+control` 和 `fn+option` 的优先级高于普通 `fn`，所以组合键不会误判成普通转录。
 - 所有快捷键都可以在设置里改成别的键位，也可以切到 `command 组合` 预设。
+
+[![][back-to-top]](#readme-top)
+
+## Action Menu
+
+`Action Menu` 是 Voxt 当前内置的语音动作运行时预览版。现在代码里的主路径已经不是旧的 Ghost/MCP 原型，而是 Voxt 自己的内置运行时和 Recipe 系统来执行受支持的任务。
+
+- 执行流程：
+  - 先整理口述任务。
+  - 采集当前应用、窗口、选中文本、URL，以及可选的视觉快照。
+  - 优先尝试 Learned Recipe，其次是 Planner 输出，再到内置/自定义 Recipe 匹配，最后才是直接动作解析。
+- Recipe 库：
+  - 内置 Recipe 会自动安装。
+  - 自定义 Recipe 保存在 Voxt Application Support 里，可以新建、复制、Pin、禁用、恢复内置版本，或者直接编辑 JSON。
+  - 成功计划可以自动学习，Teach Mode 也可以把成功执行保存成可编辑的草稿 Recipe。
+- 当前内置示例：
+  - 打开 Gmail、Slack、Notion、Linear、X、Calendar。
+  - 打开预填好的 Gmail 草稿。
+  - 在已打开的 Gmail 页面里点击 Compose。
+  - 打开 Slack 指定频道并发送消息。
+- 安全与历史：
+  - 可选开启执行前确认。
+  - 可选视觉快照会截取当前聚焦窗口，便于调试和后续多模态规划。
+  - 本地历史记录里可以保存 assistant summary、actions、structured steps，以及可选的 snapshot path。
 
 [![][back-to-top]](#readme-top)
 
@@ -252,6 +293,8 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 <img width="933" height="733" alt="image" src="https://github.com/user-attachments/assets/10ceea81-f8f2-4b79-85d5-955b0910c331" />
 
 `General` 主要负责“应用级行为”和“日常使用偏好”的配置。和模型页不同，这里不是决定你用哪个 ASR / LLM，而是决定 Voxt 如何录音、如何显示、如何输出结果、如何随系统启动，以及如何管理网络和配置文件。
+
+除了原本的录音和界面控制，现在 `General` 还会覆盖配置导入导出、界面语言、翻译目标语言、模型存储目录、本地历史保留策略、Action Menu 日志等日常运行时选项。
 
 当前通用设置大致分成这几类：
 
@@ -370,7 +413,7 @@ Voxt 的权限是按功能拆分的。你只使用基础语音输入时，只需
 | 麦克风 | 必需 | 录音、语音转文字、本地 ASR、远程 ASR、翻译、转写 / 改写 | 无法开始录音 |
 | 语音识别 | 按需 | 仅 `Direct Dictation` / Apple `SFSpeechRecognizer` | 仅系统听写不可用，其它 MLX / Remote ASR 不受影响 |
 | 辅助功能（Accessibility） | 强烈建议开启 | 全局快捷键、自动把结果粘贴回其他 App、读取部分界面上下文 | 可以录音，但自动粘贴与部分跨 App 交互会受限 |
-| 输入监控（Input Monitoring） | 强烈建议开启 | 更稳定地监听全局修饰键快捷键，尤其是 `fn`、`fn+shift`、`fn+control` | 全局热键可能不稳定、失效或误判 |
+| 输入监控（Input Monitoring） | 强烈建议开启 | 更稳定地监听全局修饰键快捷键，尤其是 `fn`、`fn+shift`、`fn+control`、`fn+option` | 全局热键可能不稳定、失效或误判 |
 | 自动化（Automation） | 可选 | 读取浏览器当前标签页 URL，用于 App Branch 的 URL 匹配 | App Branch 仍可按前台 App 分组，但无法按网页 URL 精准匹配 |
 
 补充说明：

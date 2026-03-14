@@ -3,7 +3,7 @@ import AppKit
 import CoreAudio
 
 extension AppDelegate {
-    private var defaults: UserDefaults {
+    var defaults: UserDefaults {
         .standard
     }
 
@@ -136,39 +136,7 @@ extension AppDelegate {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let transcriptionModel: String
-        switch transcriptionEngine {
-        case .dictation:
-            transcriptionModel = "Apple Speech Recognition"
-        case .mlxAudio:
-            let repo = mlxModelManager.currentModelRepo
-            transcriptionModel = "\(mlxModelManager.displayTitle(for: repo)) (\(repo))"
-        case .remote:
-            let provider = remoteASRSelectedProvider
-            if let config = remoteASRConfigurations[provider.rawValue], config.hasUsableModel {
-                transcriptionModel = "\(provider.title) (\(config.model))"
-            } else {
-                transcriptionModel = provider.title
-            }
-        }
-
-        let enhancementModel: String
-        switch enhancementMode {
-        case .off:
-            enhancementModel = "None"
-        case .appleIntelligence:
-            enhancementModel = "Apple Intelligence (Foundation Models)"
-        case .customLLM:
-            let repo = customLLMManager.currentModelRepo
-            enhancementModel = "\(customLLMManager.displayTitle(for: repo)) (\(repo))"
-        case .remoteLLM:
-            let provider = remoteLLMSelectedProvider
-            if let config = remoteLLMConfigurations[provider.rawValue], config.hasUsableModel {
-                enhancementModel = "\(provider.title) (\(config.model))"
-            } else {
-                enhancementModel = provider.title
-            }
-        }
+        let metadata = currentHistoryMetadata()
 
         let now = Date()
         let audioDuration = resolvedDuration(from: recordingStartedAt, to: recordingStoppedAt ?? now)
@@ -176,83 +144,88 @@ extension AppDelegate {
         // Measure from recording stop to first ASR text callback when available.
         let processingEnd = transcriptionResultReceivedAt ?? now
         let processingDuration = resolvedDuration(from: transcriptionProcessingStartedAt, to: processingEnd)
-        let focusedAppName = lastEnhancementPromptContext?.focusedAppName ?? NSWorkspace.shared.frontmostApplication?.localizedName
-
-        let remoteASRProviderInfo: String?
-        let remoteASRModelInfo: String?
-        let remoteASREndpointInfo: String?
-        if transcriptionEngine == .remote {
-            let provider = remoteASRSelectedProvider
-            let config = remoteASRConfigurations[provider.rawValue]
-            remoteASRProviderInfo = provider.title
-            remoteASRModelInfo = config?.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? config?.model : nil
-            remoteASREndpointInfo = historyDisplayEndpoint(config?.endpoint)
-        } else {
-            remoteASRProviderInfo = nil
-            remoteASRModelInfo = nil
-            remoteASREndpointInfo = nil
-        }
-
-        let remoteLLMProviderInfo: String?
-        let remoteLLMModelInfo: String?
-        let remoteLLMEndpointInfo: String?
-        if enhancementMode == .remoteLLM {
-            let provider = remoteLLMSelectedProvider
-            let config = remoteLLMConfigurations[provider.rawValue]
-            remoteLLMProviderInfo = provider.title
-            remoteLLMModelInfo = config?.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? config?.model : nil
-            remoteLLMEndpointInfo = historyDisplayEndpoint(config?.endpoint)
-        } else {
-            remoteLLMProviderInfo = nil
-            remoteLLMModelInfo = nil
-            remoteLLMEndpointInfo = nil
-        }
 
         historyStore.append(
             text: trimmed,
             transcriptionEngine: transcriptionEngine.title,
-            transcriptionModel: transcriptionModel,
+            transcriptionModel: metadata.transcriptionModel,
             enhancementMode: enhancementMode.title,
-            enhancementModel: enhancementModel,
+            enhancementModel: metadata.enhancementModel,
             kind: resolvedHistoryKind(),
             isTranslation: sessionOutputMode == .translation,
             audioDurationSeconds: audioDuration,
             transcriptionProcessingDurationSeconds: processingDuration,
             llmDurationSeconds: llmDurationSeconds,
-            focusedAppName: focusedAppName,
+            focusedAppName: metadata.focusedAppName,
             matchedAppGroupName: lastEnhancementPromptContext?.matchedAppGroupName,
             matchedURLGroupName: lastEnhancementPromptContext?.matchedURLGroupName,
-            remoteASRProvider: remoteASRProviderInfo,
-            remoteASRModel: remoteASRModelInfo,
-            remoteASREndpoint: remoteASREndpointInfo,
-            remoteLLMProvider: remoteLLMProviderInfo,
-            remoteLLMModel: remoteLLMModelInfo,
-            remoteLLMEndpoint: remoteLLMEndpointInfo
+            remoteASRProvider: metadata.remoteASRProvider,
+            remoteASRModel: metadata.remoteASRModel,
+            remoteASREndpoint: metadata.remoteASREndpoint,
+            remoteLLMProvider: metadata.remoteLLMProvider,
+            remoteLLMModel: metadata.remoteLLMModel,
+            remoteLLMEndpoint: metadata.remoteLLMEndpoint,
+            assistantSummary: nil,
+            assistantActions: nil,
+            assistantStructuredSteps: nil,
+            assistantSnapshotPath: nil
         )
 
         lastEnhancementPromptContext = nil
         transcriptionResultReceivedAt = nil
     }
 
-    private func resolvedHistoryKind() -> TranscriptionHistoryKind {
-        switch sessionOutputMode {
-        case .transcription:
-            return .normal
-        case .translation:
-            return .translation
-        case .rewrite:
-            return .rewrite
-        }
+    func appendAssistantHistoryIfNeeded(
+        text: String,
+        llmDurationSeconds: TimeInterval?,
+        summary: String,
+        snapshotPath: String? = nil
+    ) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard defaults.bool(forKey: AppPreferenceKey.historyEnabled) else { return }
+
+        let metadata = currentHistoryMetadata()
+
+        let audioDuration = resolvedDuration(from: recordingStartedAt, to: recordingStoppedAt)
+        let processingDuration = resolvedDuration(from: transcriptionProcessingStartedAt, to: transcriptionResultReceivedAt)
+
+        let trimmedSnapshotPath: String? = {
+            let trimmedValue = snapshotPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmedValue.isEmpty ? nil : trimmedValue
+        }()
+
+        historyStore.append(
+            text: trimmed,
+            transcriptionEngine: transcriptionEngine.title,
+            transcriptionModel: metadata.transcriptionModel,
+            enhancementMode: enhancementMode.title,
+            enhancementModel: metadata.enhancementModel,
+            kind: .assistant,
+            isTranslation: false,
+            audioDurationSeconds: audioDuration,
+            transcriptionProcessingDurationSeconds: processingDuration,
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: metadata.focusedAppName,
+            matchedAppGroupName: lastEnhancementPromptContext?.matchedAppGroupName,
+            matchedURLGroupName: lastEnhancementPromptContext?.matchedURLGroupName,
+            remoteASRProvider: metadata.remoteASRProvider,
+            remoteASRModel: metadata.remoteASRModel,
+            remoteASREndpoint: metadata.remoteASREndpoint,
+            remoteLLMProvider: metadata.remoteLLMProvider,
+            remoteLLMModel: metadata.remoteLLMModel,
+            remoteLLMEndpoint: metadata.remoteLLMEndpoint,
+            assistantSummary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            assistantActions: assistantActionHistory.isEmpty ? nil : assistantActionHistory,
+            assistantStructuredSteps: assistantStructuredHistory.isEmpty ? nil : assistantStructuredHistory,
+            assistantSnapshotPath: trimmedSnapshotPath
+        )
+
+        lastEnhancementPromptContext = nil
+        transcriptionResultReceivedAt = nil
     }
 
-    private func resolvedDuration(from start: Date?, to end: Date?) -> TimeInterval? {
-        guard let start, let end else { return nil }
-        let value = end.timeIntervalSince(start)
-        guard value >= 0 else { return nil }
-        return value
-    }
-
-    private func historyDisplayEndpoint(_ endpoint: String?) -> String? {
+    func historyDisplayEndpoint(_ endpoint: String?) -> String? {
         let trimmed = endpoint?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty else { return AppLocalization.localizedString("Default") }
         guard var components = URLComponents(string: trimmed) else { return trimmed }
@@ -266,23 +239,4 @@ extension AppDelegate {
         return components.string ?? trimmed
     }
 
-    private func trimmedStringValue(forKey key: String) -> String {
-        stringValue(forKey: key).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func stringValue(forKey key: String) -> String {
-        defaults.string(forKey: key) ?? ""
-    }
-
-    private func remoteConfigurations(forKey key: String) -> [String: RemoteProviderConfiguration] {
-        RemoteModelConfigurationStore.loadConfigurations(from: stringValue(forKey: key))
-    }
-
-    private func enumValue<T: RawRepresentable>(forKey key: String, default defaultValue: T) -> T where T.RawValue == String {
-        T(rawValue: stringValue(forKey: key)) ?? defaultValue
-    }
-
-    private func enumValue<T: RawRepresentable>(forKey key: String, default defaultValue: T?) -> T? where T.RawValue == String {
-        T(rawValue: stringValue(forKey: key)) ?? defaultValue
-    }
 }

@@ -13,7 +13,7 @@
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Voxt needs automation access to read the active browser tab URL for app branch enhancement.</string>
+    <string>Voxt needs automation access to read browser URLs and control Terminal when setting up Action Assistant.</string>
     <key>NSHumanReadableCopyright</key>
     <string></string>
     <key>NSMicrophoneUsageDescription</key>

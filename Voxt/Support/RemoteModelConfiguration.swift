@@ -161,6 +161,13 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
         return merged.filter { seen.insert($0.id).inserted }
     }
 
+    var supportsVisionInput: Bool {
+        switch self {
+        case .anthropic, .google, .openAI, .ollama, .deepseek, .openrouter, .grok, .zai, .volcengine, .kimi, .lmStudio, .minimax, .aliyunBailian:
+            return true
+        }
+    }
+
     var latestModelOptions: [RemoteModelOption] {
         switch self {
         case .anthropic:

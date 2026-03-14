@@ -155,6 +155,9 @@ struct HotkeyPreference {
     static let defaultTranslationModifiers: NSEvent.ModifierFlags = [.function, .shift]
     static let defaultRewriteKeyCode: UInt16 = modifierOnlyKeyCode
     static let defaultRewriteModifiers: NSEvent.ModifierFlags = [.function, .control]
+    static let legacyActionAssistantKeyCode: UInt16 = UInt16(kVK_Space)
+    static let defaultActionAssistantKeyCode: UInt16 = modifierOnlyKeyCode
+    static let defaultActionAssistantModifiers: NSEvent.ModifierFlags = [.function, .option]
     static let defaultTriggerMode: TriggerMode = .tap
     static let defaultDistinguishModifierSides = false
     static let defaultPreset: Preset = .fnCombo
@@ -170,6 +173,9 @@ struct HotkeyPreference {
             AppPreferenceKey.rewriteHotkeyKeyCode: Int(defaultRewriteKeyCode),
             AppPreferenceKey.rewriteHotkeyModifiers: Int(defaultRewriteModifiers.rawValue),
             AppPreferenceKey.rewriteHotkeySidedModifiers: 0,
+            AppPreferenceKey.actionAssistantHotkeyKeyCode: Int(defaultActionAssistantKeyCode),
+            AppPreferenceKey.actionAssistantHotkeyModifiers: Int(defaultActionAssistantModifiers.rawValue),
+            AppPreferenceKey.actionAssistantHotkeySidedModifiers: 0,
             AppPreferenceKey.hotkeyTriggerMode: defaultTriggerMode.rawValue,
             AppPreferenceKey.hotkeyDistinguishModifierSides: defaultDistinguishModifierSides,
             AppPreferenceKey.hotkeyPreset: defaultPreset.rawValue
@@ -189,6 +195,18 @@ struct HotkeyPreference {
 
         if keyCode == modifierOnlyKeyCode && modifiers == [.control, .option] {
             save(keyCode: defaultKeyCode, modifiers: defaultModifiers, sidedModifiers: [])
+        }
+
+        let preset = loadPreset()
+        let assistant = loadActionAssistant()
+        if preset == .fnCombo,
+           ((assistant.keyCode == legacyActionAssistantKeyCode && assistant.modifiers == [.function]) ||
+            (assistant.keyCode == UInt16(kVK_ANSI_Slash) && assistant.modifiers == [.function])) {
+            saveActionAssistant(
+                keyCode: defaultActionAssistantKeyCode,
+                modifiers: defaultActionAssistantModifiers,
+                sidedModifiers: []
+            )
         }
     }
 
@@ -240,6 +258,22 @@ struct HotkeyPreference {
         UserDefaults.standard.set(sidedModifiers.rawValue, forKey: AppPreferenceKey.rewriteHotkeySidedModifiers)
     }
 
+    static func loadActionAssistant() -> Hotkey {
+        load(
+            keyCodeKey: AppPreferenceKey.actionAssistantHotkeyKeyCode,
+            modifiersKey: AppPreferenceKey.actionAssistantHotkeyModifiers,
+            sidedModifiersKey: AppPreferenceKey.actionAssistantHotkeySidedModifiers,
+            defaultKeyCode: defaultActionAssistantKeyCode,
+            defaultModifiers: defaultActionAssistantModifiers
+        )
+    }
+
+    static func saveActionAssistant(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, sidedModifiers: SidedModifierFlags) {
+        UserDefaults.standard.set(Int(keyCode), forKey: AppPreferenceKey.actionAssistantHotkeyKeyCode)
+        UserDefaults.standard.set(Int(modifiers.rawValue), forKey: AppPreferenceKey.actionAssistantHotkeyModifiers)
+        UserDefaults.standard.set(sidedModifiers.rawValue, forKey: AppPreferenceKey.actionAssistantHotkeySidedModifiers)
+    }
+
     static func loadTriggerMode() -> TriggerMode {
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.hotkeyTriggerMode)
         return TriggerMode(rawValue: raw ?? "") ?? defaultTriggerMode
@@ -267,7 +301,7 @@ struct HotkeyPreference {
             return symbols.isEmpty ? "Unassigned" : symbols
         }
         let key = keyCodeDisplayString(hotkey.keyCode)
-        return symbols.isEmpty ? key : "\(symbols) \(key)"
+        return symbols.isEmpty ? key : "\(symbols) + \(key)"
     }
 
     static func modifierSymbols(
@@ -291,24 +325,26 @@ struct HotkeyPreference {
         if modifiers.contains(.function) {
             parts.append("fn")
         }
-        return parts.joined(separator: usesSides ? " + " : "")
+        return parts.joined(separator: " + ")
     }
 
-    static func presetHotkeys(for preset: Preset) -> (distinguishSides: Bool, transcription: Hotkey, translation: Hotkey, rewrite: Hotkey)? {
+    static func presetHotkeys(for preset: Preset) -> (distinguishSides: Bool, transcription: Hotkey, translation: Hotkey, rewrite: Hotkey, assistant: Hotkey)? {
         switch preset {
         case .fnCombo:
             return (
                 false,
                 Hotkey(keyCode: defaultKeyCode, modifiers: defaultModifiers, sidedModifiers: []),
                 Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
-                Hotkey(keyCode: defaultRewriteKeyCode, modifiers: defaultRewriteModifiers, sidedModifiers: [])
+                Hotkey(keyCode: defaultRewriteKeyCode, modifiers: defaultRewriteModifiers, sidedModifiers: []),
+                Hotkey(keyCode: defaultActionAssistantKeyCode, modifiers: defaultActionAssistantModifiers, sidedModifiers: [])
             )
         case .commandCombo:
             return (
                 true,
                 Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command], sidedModifiers: [.rightCommand]),
                 Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .shift], sidedModifiers: [.rightCommand, .rightShift]),
-                Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption])
+                Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption]),
+                Hotkey(keyCode: UInt16(kVK_ANSI_Slash), modifiers: [.command], sidedModifiers: [.rightCommand])
             )
         case .custom:
             return nil

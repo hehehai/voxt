@@ -6,6 +6,20 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+### Added
+- Added `Action Menu` as a fourth global voice mode, with default shortcut `fn+option` and an embedded preview runtime for supported voice-triggered app actions.
+- Added an `Action Menu` settings tab with execution confirmation, visual snapshot capture, automatic plan learning, teach mode draft capture, and a recipe library for built-in, custom, and learned recipes.
+- Added built-in assistant recipes for common actions such as opening Gmail, Slack, Notion, Linear, X, and Calendar, plus supported multi-step flows such as Gmail compose and Slack send.
+- Added local transcription history controls with retention options and richer assistant metadata, including summaries, actions, structured steps, and optional snapshot paths.
+- Added custom model storage path selection in General settings.
+- Added Japanese as a supported interface language option.
+
+### Changed
+- Updated the default `fn` shortcut preset so `fn+option` is reserved for `Action Menu`, while transcription, translation, and rewrite remain on `fn`, `fn+shift`, and `fn+control`.
+- Expanded hotkey settings with conflict guidance, custom recording for all four flows, and clearer modifier-side behavior.
+- Updated permissions guidance so `Action Menu` documents its dependency on Accessibility automation and the improved reliability from Input Monitoring.
+- Moved assistant execution from the older Ghost/MCP prototype path toward Voxt's embedded runtime and recipe system.
+
 ## [1.5.0] - 2026-03-13
 
 ### Added

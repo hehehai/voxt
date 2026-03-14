@@ -19,11 +19,48 @@ private let hotkeyConflictRules: [HotkeyConflictRule] = [
     HotkeyConflictRule(keyCode: UInt16(kVK_ANSI_W), modifiers: [.command], messageKey: "Conflicts with Close (⌘W).")
 ]
 
+private struct HotkeyAccordion<Content: View>: View {
+    let titleKey: LocalizedStringKey
+    @Binding var isExpanded: Bool
+    let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(titleKey)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    content()
+                }
+                .padding(.leading, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+}
+
 struct HotkeySettingsView: View {
-    private enum RecordingField {
+    private enum RecordingField: Hashable {
         case transcription
         case translation
         case rewrite
+        case assistant
     }
 
     @AppStorage(AppPreferenceKey.hotkeyKeyCode) private var hotkeyKeyCode = Int(HotkeyPreference.defaultKeyCode)
@@ -35,12 +72,23 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.rewriteHotkeyKeyCode) private var rewriteHotkeyKeyCode = Int(HotkeyPreference.defaultRewriteKeyCode)
     @AppStorage(AppPreferenceKey.rewriteHotkeyModifiers) private var rewriteHotkeyModifiers = Int(HotkeyPreference.defaultRewriteModifiers.rawValue)
     @AppStorage(AppPreferenceKey.rewriteHotkeySidedModifiers) private var rewriteHotkeySidedModifiers = 0
+    @AppStorage(AppPreferenceKey.actionAssistantHotkeyKeyCode) private var actionAssistantHotkeyKeyCode = Int(HotkeyPreference.defaultActionAssistantKeyCode)
+    @AppStorage(AppPreferenceKey.actionAssistantHotkeyModifiers) private var actionAssistantHotkeyModifiers = Int(HotkeyPreference.defaultActionAssistantModifiers.rawValue)
+    @AppStorage(AppPreferenceKey.actionAssistantHotkeySidedModifiers) private var actionAssistantHotkeySidedModifiers = 0
     @AppStorage(AppPreferenceKey.hotkeyTriggerMode) private var hotkeyTriggerMode = HotkeyPreference.defaultTriggerMode.rawValue
     @AppStorage(AppPreferenceKey.hotkeyDistinguishModifierSides) private var distinguishModifierSides = HotkeyPreference.defaultDistinguishModifierSides
     @AppStorage(AppPreferenceKey.hotkeyPreset) private var hotkeyPreset = HotkeyPreference.defaultPreset.rawValue
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
+    @AppStorage(AppPreferenceKey.actionAssistantEnabled) private var actionAssistantEnabled = false
 
     @State private var recordingField: RecordingField?
+    @State private var pendingCapturedField: RecordingField?
+    @State private var pendingCapturedHotkey: HotkeyPreference.Hotkey?
+    @State private var isShortcutNotesExpanded = false
+    @State private var isModifierNotesExpanded = false
+    @State private var isConflictNotesExpanded = false
+    @State private var isAssistantNotesExpanded = false
+    @State private var isTipsExpanded = false
 
     private var hotkeyBinding: Binding<UInt16> {
         Binding(
@@ -147,81 +195,38 @@ struct HotkeySettingsView: View {
         )
     }
 
-    private var activeKeyCodeBinding: Binding<UInt16> {
+    private var actionAssistantHotkeyBinding: Binding<UInt16> {
         Binding(
-            get: {
-                switch recordingField {
-                case .translation:
-                    return UInt16(translationHotkeyKeyCode)
-                case .rewrite:
-                    return UInt16(rewriteHotkeyKeyCode)
-                default:
-                    return UInt16(hotkeyKeyCode)
-                }
-            },
-            set: { newValue in
-                switch recordingField {
-                case .translation:
-                    translationHotkeyKeyCode = Int(newValue)
-                case .rewrite:
-                    rewriteHotkeyKeyCode = Int(newValue)
-                default:
-                    hotkeyKeyCode = Int(newValue)
-                }
+            get: { UInt16(actionAssistantHotkeyKeyCode) },
+            set: {
+                actionAssistantHotkeyKeyCode = Int($0)
                 hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
             }
         )
     }
 
-    private var activeModifierBinding: Binding<NSEvent.ModifierFlags> {
+    private var actionAssistantModifierBinding: Binding<NSEvent.ModifierFlags> {
         Binding(
-            get: {
-                switch recordingField {
-                case .translation:
-                    return NSEvent.ModifierFlags(rawValue: UInt(translationHotkeyModifiers)).intersection(.hotkeyRelevant)
-                case .rewrite:
-                    return NSEvent.ModifierFlags(rawValue: UInt(rewriteHotkeyModifiers)).intersection(.hotkeyRelevant)
-                default:
-                    return NSEvent.ModifierFlags(rawValue: UInt(hotkeyModifiers)).intersection(.hotkeyRelevant)
-                }
-            },
-            set: { newValue in
-                switch recordingField {
-                case .translation:
-                    translationHotkeyModifiers = Int(newValue.rawValue)
-                case .rewrite:
-                    rewriteHotkeyModifiers = Int(newValue.rawValue)
-                default:
-                    hotkeyModifiers = Int(newValue.rawValue)
-                }
+            get: { NSEvent.ModifierFlags(rawValue: UInt(actionAssistantHotkeyModifiers)).intersection(.hotkeyRelevant) },
+            set: {
+                actionAssistantHotkeyModifiers = Int($0.rawValue)
                 hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
             }
         )
     }
 
-    private var activeSidedModifierBinding: Binding<SidedModifierFlags> {
+    private var currentActionAssistantHotkey: HotkeyPreference.Hotkey {
+        HotkeyPreference.Hotkey(
+            keyCode: actionAssistantHotkeyBinding.wrappedValue,
+            modifiers: actionAssistantModifierBinding.wrappedValue,
+            sidedModifiers: actionAssistantSidedModifierBinding.wrappedValue
+        )
+    }
+
+    private var actionAssistantSidedModifierBinding: Binding<SidedModifierFlags> {
         Binding(
-            get: {
-                switch recordingField {
-                case .translation:
-                    return SidedModifierFlags(rawValue: translationHotkeySidedModifiers).filtered(by: translationModifierBinding.wrappedValue)
-                case .rewrite:
-                    return SidedModifierFlags(rawValue: rewriteHotkeySidedModifiers).filtered(by: rewriteModifierBinding.wrappedValue)
-                default:
-                    return SidedModifierFlags(rawValue: hotkeySidedModifiers).filtered(by: modifierBinding.wrappedValue)
-                }
-            },
-            set: { newValue in
-                switch recordingField {
-                case .translation:
-                    translationHotkeySidedModifiers = newValue.filtered(by: translationModifierBinding.wrappedValue).rawValue
-                case .rewrite:
-                    rewriteHotkeySidedModifiers = newValue.filtered(by: rewriteModifierBinding.wrappedValue).rawValue
-                default:
-                    hotkeySidedModifiers = newValue.filtered(by: modifierBinding.wrappedValue).rawValue
-                }
-                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-            }
+            get: { SidedModifierFlags(rawValue: actionAssistantHotkeySidedModifiers).filtered(by: actionAssistantModifierBinding.wrappedValue) },
+            set: { actionAssistantHotkeySidedModifiers = $0.filtered(by: actionAssistantModifierBinding.wrappedValue).rawValue }
         )
     }
 
@@ -250,6 +255,47 @@ struct HotkeySettingsView: View {
         )
     }
 
+    private var shortcutConflictMessages: [String] {
+        var messages: [String] = []
+
+        if let conflict = hotkeyConflictMessage(for: currentHotkey) {
+            messages.append(localizedString("Transcription shortcut: %@", conflict))
+        }
+        if let conflict = hotkeyConflictMessage(for: currentTranslationHotkey) {
+            messages.append(localizedString("Translation shortcut: %@", conflict))
+        }
+        if let conflict = hotkeyConflictMessage(for: currentRewriteHotkey) {
+            messages.append(localizedString("Content rewrite shortcut: %@", conflict))
+        }
+        if let conflict = hotkeyConflictMessage(for: currentActionAssistantHotkey) {
+            messages.append(localizedString("Action Assistant shortcut: %@", conflict))
+        }
+        if currentActionAssistantHotkey.modifiers == [.function],
+           currentActionAssistantHotkey.keyCode == UInt16(kVK_Space) {
+            messages.append(String(localized: "Action Assistant shortcut: fn + Space may be reserved by macOS or keyboard firmware on some devices, so recording and triggering can be unreliable."))
+        }
+        if currentHotkey == currentTranslationHotkey {
+            messages.append(String(localized: "Transcription and translation shortcuts should be different."))
+        }
+        if currentHotkey == currentRewriteHotkey {
+            messages.append(String(localized: "Transcription and content rewrite shortcuts should be different."))
+        }
+        if currentTranslationHotkey == currentRewriteHotkey {
+            messages.append(String(localized: "Translation and content rewrite shortcuts should be different."))
+        }
+        if currentHotkey == currentActionAssistantHotkey {
+            messages.append(String(localized: "Transcription and Action Assistant shortcuts should be different."))
+        }
+        if currentTranslationHotkey == currentActionAssistantHotkey {
+            messages.append(String(localized: "Translation and Action Assistant shortcuts should be different."))
+        }
+        if currentRewriteHotkey == currentActionAssistantHotkey {
+            messages.append(String(localized: "Content rewrite and Action Assistant shortcuts should be different."))
+        }
+
+        return messages
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
@@ -275,9 +321,6 @@ struct HotkeySettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Distinguish Left/Right Modifiers")
                                 .foregroundStyle(.secondary)
-                            Text("When enabled, Left Shift and Right Shift are treated as different shortcuts.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Toggle(
@@ -295,92 +338,105 @@ struct HotkeySettingsView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                    HotkeyAccordion(titleKey: "Modifier Key Notes", isExpanded: $isModifierNotesExpanded) {
+                        modifierNotesContent
+                    }
+
                     shortcutInput(
                         titleKey: "Transcription",
-                        hotkey: currentHotkey,
+                        hotkey: displayedHotkey(for: .transcription, current: currentHotkey),
                         isRecording: recordingField == .transcription,
-                        onFocus: { recordingField = .transcription },
+                        isPendingConfirmation: isPendingConfirmation(for: .transcription),
+                        onFocus: { beginRecording(.transcription) },
                         onReset: {
                             hotkeyBinding.wrappedValue = HotkeyPreference.defaultKeyCode
                             modifierBinding.wrappedValue = HotkeyPreference.defaultModifiers
                             sidedModifierBinding.wrappedValue = []
                             hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                        }
+                        },
+                        onCancelPending: discardPendingCapture,
+                        onConfirmPending: confirmPendingCapture
                     )
 
                     shortcutInput(
                         titleKey: "Translation",
-                        hotkey: currentTranslationHotkey,
+                        hotkey: displayedHotkey(for: .translation, current: currentTranslationHotkey),
                         isRecording: recordingField == .translation,
-                        onFocus: { recordingField = .translation },
+                        isPendingConfirmation: isPendingConfirmation(for: .translation),
+                        onFocus: { beginRecording(.translation) },
                         onReset: {
                             translationHotkeyBinding.wrappedValue = HotkeyPreference.defaultTranslationKeyCode
                             translationModifierBinding.wrappedValue = HotkeyPreference.defaultTranslationModifiers
                             translationSidedModifierBinding.wrappedValue = []
                             hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                        }
+                        },
+                        onCancelPending: discardPendingCapture,
+                        onConfirmPending: confirmPendingCapture
                     )
 
                     shortcutInput(
                         titleKey: "Content Rewrite",
-                        hotkey: currentRewriteHotkey,
+                        hotkey: displayedHotkey(for: .rewrite, current: currentRewriteHotkey),
                         isRecording: recordingField == .rewrite,
-                        onFocus: { recordingField = .rewrite },
+                        isPendingConfirmation: isPendingConfirmation(for: .rewrite),
+                        onFocus: { beginRecording(.rewrite) },
                         onReset: {
                             rewriteHotkeyBinding.wrappedValue = HotkeyPreference.defaultRewriteKeyCode
                             rewriteModifierBinding.wrappedValue = HotkeyPreference.defaultRewriteModifiers
                             rewriteSidedModifierBinding.wrappedValue = []
                             hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                        }
+                        },
+                        onCancelPending: discardPendingCapture,
+                        onConfirmPending: confirmPendingCapture
                     )
 
-                    if recordingField != nil {
+                    shortcutInput(
+                        titleKey: "Action Assistant",
+                        hotkey: displayedHotkey(for: .assistant, current: currentActionAssistantHotkey),
+                        isRecording: recordingField == .assistant,
+                        isPendingConfirmation: isPendingConfirmation(for: .assistant),
+                        onFocus: { beginRecording(.assistant) },
+                        onReset: {
+                            actionAssistantHotkeyBinding.wrappedValue = HotkeyPreference.defaultActionAssistantKeyCode
+                            actionAssistantModifierBinding.wrappedValue = HotkeyPreference.defaultActionAssistantModifiers
+                            actionAssistantSidedModifierBinding.wrappedValue = []
+                            hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+                        },
+                        onCancelPending: discardPendingCapture,
+                        onConfirmPending: confirmPendingCapture
+                    )
+
+                    HotkeyAccordion(titleKey: "Shortcut Recording Notes", isExpanded: $isShortcutNotesExpanded) {
+                        shortcutNotesContent
+                    }
+
+                    if recordingField != nil, pendingCapturedField != recordingField {
                         Text("Type your shortcut now. Press Esc to cancel recording.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if pendingCapturedField != nil {
+                        Text("Shortcut captured. Press another shortcut to replace it, or choose Confirm / Cancel.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    if let conflict = hotkeyConflictMessage(for: currentHotkey) {
-                        Text(localizedString("Transcription shortcut: %@", conflict))
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    if let conflict = hotkeyConflictMessage(for: currentTranslationHotkey) {
-                        Text(localizedString("Translation shortcut: %@", conflict))
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    if let conflict = hotkeyConflictMessage(for: currentRewriteHotkey) {
-                        Text(localizedString("Content rewrite shortcut: %@", conflict))
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    if currentHotkey == currentTranslationHotkey {
-                        Text("Transcription and translation shortcuts should be different.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    if currentHotkey == currentRewriteHotkey {
-                        Text("Transcription and content rewrite shortcuts should be different.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    if currentTranslationHotkey == currentRewriteHotkey {
-                        Text("Translation and content rewrite shortcuts should be different.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                    if !shortcutConflictMessages.isEmpty {
+                        HotkeyAccordion(titleKey: "Shortcut Conflict Warnings", isExpanded: $isConflictNotesExpanded) {
+                            conflictNotesContent
+                        }
                     }
 
                     HotkeyRecorderView(
-                        keyCode: activeKeyCodeBinding,
-                        modifiers: activeModifierBinding,
-                        sidedModifiers: activeSidedModifierBinding,
-                        isRecording: isRecordingBinding
+                        isRecording: isRecordingBinding,
+                        onCapture: { capturedHotkey in
+                            guard let field = recordingField else { return }
+                            pendingCapturedField = field
+                            pendingCapturedHotkey = capturedHotkey
+                        },
+                        onCancelCapture: {
+                            discardPendingCapture()
+                            recordingField = nil
+                        }
                     )
                     .frame(width: 0, height: 0)
 
@@ -402,27 +458,28 @@ struct HotkeySettingsView: View {
                 .padding(8)
             }
 
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Action Assistant")
+                        .font(.headline)
+
+                    HotkeyAccordion(titleKey: "Action Assistant Shortcut Notes", isExpanded: $isAssistantNotesExpanded) {
+                        assistantNotesContent
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+
             VoiceEndCommandSettingsSection()
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Tips")
                         .font(.headline)
-                    Text("Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Enable left/right modifier distinction only if you want shortcuts such as Right Command and Right Shift to behave differently from their left-side counterparts.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Long Press: Hold a hotkey to start its session and release it to stop. This works for transcription, translation, and content rewrite.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation and content rewrite hotkeys start their own sessions.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HotkeyAccordion(titleKey: "Hotkey Usage Tips", isExpanded: $isTipsExpanded) {
+                        hotkeyTipsContent
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
@@ -442,6 +499,7 @@ struct HotkeySettingsView: View {
     }
 
     private func applyPreset(_ preset: HotkeyPreference.Preset) {
+        discardPendingCapture()
         hotkeyPreset = preset.rawValue
         guard let values = HotkeyPreference.presetHotkeys(for: preset) else { return }
 
@@ -458,6 +516,10 @@ struct HotkeySettingsView: View {
         rewriteHotkeyKeyCode = Int(values.rewrite.keyCode)
         rewriteHotkeyModifiers = Int(values.rewrite.modifiers.rawValue)
         rewriteHotkeySidedModifiers = values.rewrite.sidedModifiers.rawValue
+
+        actionAssistantHotkeyKeyCode = Int(values.assistant.keyCode)
+        actionAssistantHotkeyModifiers = Int(values.assistant.modifiers.rawValue)
+        actionAssistantHotkeySidedModifiers = values.assistant.sidedModifiers.rawValue
     }
 
     @ViewBuilder
@@ -465,8 +527,11 @@ struct HotkeySettingsView: View {
         titleKey: LocalizedStringKey,
         hotkey: HotkeyPreference.Hotkey,
         isRecording: Bool,
+        isPendingConfirmation: Bool,
         onFocus: @escaping () -> Void,
-        onReset: @escaping () -> Void
+        onReset: @escaping () -> Void,
+        onCancelPending: @escaping () -> Void,
+        onConfirmPending: @escaping () -> Void
     ) -> some View {
         HStack(alignment: .center, spacing: 12) {
             Text(titleKey)
@@ -475,17 +540,57 @@ struct HotkeySettingsView: View {
             Spacer()
 
             HStack(spacing: 8) {
-                Text(isRecording ? String(localized: "Listening...") : HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: distinguishModifierSides))
+                Text(isRecording && !isPendingConfirmation ? String(localized: "Listening...") : HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: distinguishModifierSides))
                     .font(.system(.body, design: .rounded))
-                    .foregroundStyle(isRecording ? .primary : .primary)
-                Spacer()
-                Button(action: onReset) {
-                    Image(systemName: "arrow.counterclockwise")
-                        .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .minimumScaleFactor(0.9)
+                    .layoutPriority(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isPendingConfirmation {
+                    Button("Cancel", action: onCancelPending)
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .frame(height: 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color(nsColor: .controlAccentColor).opacity(0.12))
+                        )
+                    Button("Confirm", action: onConfirmPending)
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .frame(height: 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.18))
+                        )
+                } else if isRecording {
+                    Button("Cancel", action: onCancelPending)
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .frame(height: 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color(nsColor: .controlAccentColor).opacity(0.12))
+                        )
+                } else {
+                    Button(action: onReset) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(Text("Reset shortcut"))
                 }
-                .buttonStyle(.plain)
-                .help(Text("Reset shortcut"))
             }
+            .frame(height: 16)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
@@ -494,11 +599,114 @@ struct HotkeySettingsView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isRecording ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isRecording ? 2 : 1)
+                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
             )
             .contentShape(Rectangle())
             .onTapGesture(perform: onFocus)
             .frame(width: 320, alignment: .trailing)
         }
+    }
+
+    private var modifierNotesContent: some View {
+        Group {
+            helpText("When enabled, Left Shift and Right Shift are treated as different shortcuts.")
+            helpText("Enable left/right modifier distinction only if you want shortcuts such as Right Command and Right Shift to behave differently from their left-side counterparts.")
+        }
+    }
+
+    private var shortcutNotesContent: some View {
+        Group {
+            helpText("Type your shortcut now. Press Esc to cancel recording.")
+            helpText("Shortcut captured. Press another shortcut to replace it, or choose Confirm / Cancel.")
+            helpText("Single fn/Globe shortcuts can behave differently across keyboards and macOS versions. If recording or triggering feels inconsistent, try a non-system combination.")
+        }
+    }
+
+    private var conflictNotesContent: some View {
+        Group {
+            ForEach(Array(shortcutConflictMessages.enumerated()), id: \.offset) { _, message in
+                Text(verbatim: message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var assistantNotesContent: some View {
+        Group {
+            helpText(actionAssistantEnabled
+                ? "Action Assistant is enabled. The shortcut above starts assistant dictation and follows the same tap or long-press trigger mode."
+                : "Action Assistant is disabled. Enable it in General settings to use the configured shortcut.")
+            helpText("The fn Combo preset uses fn + Option for Action Assistant by default. If you switch it to fn + Space manually, some macOS keyboards may treat Globe/Fn + Space as a system-reserved combination.")
+            helpText("fn + Space may be intercepted by macOS or keyboard firmware on some devices. If it cannot be recorded or triggered reliably, use fn + Option or another custom shortcut instead.")
+        }
+    }
+
+    private var hotkeyTipsContent: some View {
+        Group {
+            helpText("Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination.")
+            helpText("Long Press: Hold a hotkey to start its session and release it to stop. This works for transcription, translation, and content rewrite.")
+            helpText("Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation and content rewrite hotkeys start their own sessions.")
+            helpText("Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same.")
+        }
+    }
+
+    private func helpText(_ key: LocalizedStringKey) -> some View {
+        Text(key)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func beginRecording(_ field: RecordingField) {
+        pendingCapturedField = nil
+        pendingCapturedHotkey = nil
+        recordingField = field
+    }
+
+    private func isPendingConfirmation(for field: RecordingField) -> Bool {
+        pendingCapturedField == field && pendingCapturedHotkey != nil
+    }
+
+    private func displayedHotkey(for field: RecordingField, current: HotkeyPreference.Hotkey) -> HotkeyPreference.Hotkey {
+        guard pendingCapturedField == field, let pendingCapturedHotkey else {
+            return current
+        }
+        return pendingCapturedHotkey
+    }
+
+    private func discardPendingCapture() {
+        pendingCapturedField = nil
+        pendingCapturedHotkey = nil
+        recordingField = nil
+    }
+
+    private func confirmPendingCapture() {
+        guard let field = pendingCapturedField, let hotkey = pendingCapturedHotkey else { return }
+
+        switch field {
+        case .transcription:
+            hotkeyBinding.wrappedValue = hotkey.keyCode
+            modifierBinding.wrappedValue = hotkey.modifiers
+            sidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        case .translation:
+            translationHotkeyBinding.wrappedValue = hotkey.keyCode
+            translationModifierBinding.wrappedValue = hotkey.modifiers
+            translationSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        case .rewrite:
+            rewriteHotkeyBinding.wrappedValue = hotkey.keyCode
+            rewriteModifierBinding.wrappedValue = hotkey.modifiers
+            rewriteSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        case .assistant:
+            actionAssistantHotkeyBinding.wrappedValue = hotkey.keyCode
+            actionAssistantModifierBinding.wrappedValue = hotkey.modifiers
+            actionAssistantSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        }
+
+        hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+        pendingCapturedField = nil
+        pendingCapturedHotkey = nil
+        recordingField = nil
     }
 }

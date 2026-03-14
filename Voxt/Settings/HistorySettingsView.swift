@@ -59,72 +59,16 @@ struct HistorySettingsView: View {
                 .padding(8)
             }
 
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("History")
-                            .font(.headline)
-                        Spacer()
-                        Button("Clean All", role: .destructive) {
-                            copiedEntryID = nil
-                            historyStore.clearAll()
-                        }
-                        .controlSize(.small)
-                        .disabled(!historyEnabled || historyStore.entries.isEmpty)
-                    }
-
-                    if !historyEnabled {
-                        Text("History is currently disabled.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if historyStore.entries.isEmpty {
-                        Text("No history yet.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 8) {
-                                ForEach(historyStore.entries) { entry in
-                                    HistoryRow(
-                                        entry: entry,
-                                        isCopied: copiedEntryID == entry.id,
-                                        onCopy: {
-                                            copyToPasteboard(entry.text)
-                                            copiedEntryID = entry.id
-                                            Task {
-                                                try? await Task.sleep(for: .seconds(1.2))
-                                                if copiedEntryID == entry.id {
-                                                    copiedEntryID = nil
-                                                }
-                                            }
-                                        },
-                                        onDelete: {
-                                            historyStore.delete(id: entry.id)
-                                        }
-                                    )
-                                    .onAppear {
-                                        if entry.id == historyStore.entries.last?.id {
-                                            historyStore.loadNextPage()
-                                        }
-                                    }
-                                }
-
-                                if historyStore.hasMore {
-                                    Button("Load More") {
-                                        historyStore.loadNextPage()
-                                    }
-                                    .controlSize(.small)
-                                    .padding(.top, 4)
-                                }
-                            }
-                        }
-                        .frame(maxHeight: .infinity, alignment: .top)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
+            HistoryListSection(
+                historyEnabled: historyEnabled,
+                entries: historyStore.entries,
+                hasMore: historyStore.hasMore,
+                copiedEntryID: copiedEntryID,
+                onClearAll: clearAllHistory,
+                onCopy: copyEntry,
+                onDelete: deleteEntry,
+                onLoadNextPage: historyStore.loadNextPage
+            )
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
@@ -147,182 +91,29 @@ struct HistorySettingsView: View {
         }
     }
 
+    private func clearAllHistory() {
+        copiedEntryID = nil
+        historyStore.clearAll()
+    }
+
+    private func copyEntry(_ entry: TranscriptionHistoryEntry) {
+        copyToPasteboard(entry.text)
+        copiedEntryID = entry.id
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            if copiedEntryID == entry.id {
+                copiedEntryID = nil
+            }
+        }
+    }
+
+    private func deleteEntry(_ id: UUID) {
+        historyStore.delete(id: id)
+    }
+
     private func copyToPasteboard(_ text: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-    }
-}
-
-private struct HistoryRow: View {
-    @Environment(\.locale) private var locale
-
-    let entry: TranscriptionHistoryEntry
-    let isCopied: Bool
-    let onCopy: () -> Void
-    let onDelete: () -> Void
-
-    @State private var showModelInfo = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Button(action: onCopy) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(entry.text)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(3)
-
-                    HStack(spacing: 6) {
-                        historyBadge
-                        Text(metadataText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isCopied {
-                Text("Copied")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            }
-
-            Button {
-                showModelInfo.toggle()
-            } label: {
-                Image(systemName: "info.circle")
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $showModelInfo, arrowEdge: .trailing) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Transcription Details")
-                        .font(.headline)
-                    detailLine(labelKey: "Engine", value: entry.transcriptionEngine)
-                    detailLine(labelKey: "Model", value: entry.transcriptionModel)
-                    optionalDetailLine(labelKey: "Remote ASR Provider", value: entry.remoteASRProvider)
-                    optionalDetailLine(labelKey: "Remote ASR Model", value: entry.remoteASRModel)
-                    optionalDetailLine(labelKey: "Remote ASR Endpoint", value: entry.remoteASREndpoint)
-                    detailLine(labelKey: "Enhancement", value: entry.enhancementMode)
-                    detailLine(labelKey: "Enhancer Model", value: entry.enhancementModel)
-                    optionalDetailLine(labelKey: "Remote LLM Provider", value: entry.remoteLLMProvider)
-                    optionalDetailLine(labelKey: "Remote LLM Model", value: entry.remoteLLMModel)
-                    optionalDetailLine(labelKey: "Remote LLM Endpoint", value: entry.remoteLLMEndpoint)
-                    optionalDetailLine(labelKey: "Focused App", value: entry.focusedAppName)
-                    optionalDetailLine(labelKey: "App Group", value: entry.matchedAppGroupName)
-                    optionalDetailLine(labelKey: "URL Group", value: entry.matchedURLGroupName)
-                    optionalDetailLine(
-                        labelKey: "ASR Processing",
-                        value: formattedDuration(entry.transcriptionProcessingDurationSeconds)
-                    )
-                    optionalDetailLine(
-                        labelKey: "LLM Duration",
-                        value: formattedDuration(entry.llmDurationSeconds)
-                    )
-                }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 8)
-                .frame(width: 340)
-            }
-
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.75))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(.quaternary, lineWidth: 1)
-        )
-    }
-
-    private func detailLine(labelKey: LocalizedStringKey, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(labelKey)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.subheadline)
-        }
-    }
-
-    @ViewBuilder
-    private func optionalDetailLine(labelKey: LocalizedStringKey, value: String?) -> some View {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !trimmed.isEmpty {
-            detailLine(labelKey: labelKey, value: trimmed)
-        }
-    }
-
-    private var metadataText: String {
-        let dateText = entry.createdAt.formatted(
-            .dateTime
-                .locale(locale)
-                .month(.abbreviated)
-                .day()
-                .hour()
-                .minute()
-        )
-        guard let audioDuration = formattedDuration(entry.audioDurationSeconds) else {
-            return dateText
-        }
-        let format = NSLocalizedString("%@ · Audio: %@", comment: "")
-        return String(format: format, locale: locale, dateText, audioDuration)
-    }
-
-    private var historyBadge: some View {
-        Group {
-            if entry.kind == .translation {
-                Text("Translation")
-            } else if entry.kind == .rewrite {
-                Text("Rewrite")
-            } else {
-                Text("Normal")
-            }
-        }
-        .font(.system(size: 10, weight: .semibold))
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule(style: .continuous)
-                .fill(historyBadgeColor.opacity(0.16))
-        )
-        .foregroundStyle(historyBadgeColor)
-    }
-
-    private var historyBadgeColor: Color {
-        switch entry.kind {
-        case .normal:
-            return .secondary
-        case .translation:
-            return .blue
-        case .rewrite:
-            return .orange
-        }
-    }
-
-    private func formattedDuration(_ seconds: TimeInterval?) -> String? {
-        guard let seconds else { return nil }
-        if seconds < 1 {
-            let format = NSLocalizedString("%d ms", comment: "")
-            return String(format: format, locale: locale, Int(seconds * 1000))
-        }
-        if seconds < 60 {
-            let format = NSLocalizedString("%.1f s", comment: "")
-            return String(format: format, locale: locale, seconds)
-        }
-        let minutes = Int(seconds) / 60
-        let remain = Int(seconds) % 60
-        let format = NSLocalizedString("%dm %ds", comment: "")
-        return String(format: format, locale: locale, minutes, remain)
     }
 }

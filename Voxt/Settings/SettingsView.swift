@@ -12,6 +12,7 @@ struct SettingsView: View {
     @ObservedObject var appUpdateManager: AppUpdateManager
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
+    @AppStorage(AppPreferenceKey.actionAssistantEnabled) private var actionAssistantEnabled = false
     @State private var selectedTab: SettingsTab
     @State private var hasMissingPermissions = false
     @State private var missingModelConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue] = []
@@ -42,6 +43,7 @@ struct SettingsView: View {
                 SettingsSidebar(
                     selectedTab: $selectedTab,
                     appEnhancementEnabled: appEnhancementEnabled,
+                    actionAssistantEnabled: actionAssistantEnabled,
                     hasMissingPermissions: hasMissingPermissions,
                     hasMissingModelConfigurationIssues: !missingModelConfigurationIssues.isEmpty,
                     updateBadgeState: updateBadgeState,
@@ -142,7 +144,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var tabContent: some View {
-        if selectedTab == .history || selectedTab == .report || selectedTab == .appEnhancement {
+        if selectedTab == .history || selectedTab == .report || selectedTab == .appEnhancement || selectedTab == .actionAssistant {
             staticTabContent
         } else {
             scrollableTabContent
@@ -156,6 +158,8 @@ struct SettingsView: View {
                 HistorySettingsView(historyStore: historyStore)
             } else if selectedTab == .appEnhancement {
                 AppEnhancementSettingsView()
+            } else if selectedTab == .actionAssistant {
+                ActionAssistantSettingsView()
             } else {
                 ReportSettingsView(historyStore: historyStore)
             }
@@ -182,6 +186,8 @@ struct SettingsView: View {
                         missingConfigurationIssues: missingModelConfigurationIssues
                     )
                 case .appEnhancement:
+                    EmptyView()
+                case .actionAssistant:
                     EmptyView()
                 case .hotkey:
                     HotkeySettingsView()
@@ -240,6 +246,7 @@ struct SettingsView: View {
 private struct SettingsSidebar: View {
     @Binding var selectedTab: SettingsTab
     let appEnhancementEnabled: Bool
+    let actionAssistantEnabled: Bool
     let hasMissingPermissions: Bool
     let hasMissingModelConfigurationIssues: Bool
     let updateBadgeState: UpdateBadgeState
@@ -368,7 +375,8 @@ private struct SettingsSidebar: View {
 
     private var visibleTabs: [SettingsTab] {
         SettingsTab.allCases.filter { tab in
-            appEnhancementEnabled || tab != .appEnhancement
+            (appEnhancementEnabled || tab != .appEnhancement) &&
+            (actionAssistantEnabled || tab != .actionAssistant)
         }
     }
 }

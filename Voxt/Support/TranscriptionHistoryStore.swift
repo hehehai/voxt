@@ -5,6 +5,83 @@ enum TranscriptionHistoryKind: String, Codable {
     case normal
     case translation
     case rewrite
+    case assistant
+}
+
+struct AssistantHistoryStep: Codable, Hashable, Identifiable {
+    struct WaitCondition: Codable, Hashable {
+        let condition: String
+        let value: String?
+        let timeout: Double?
+    }
+
+    let id: UUID
+    let title: String
+    let action: String?
+    let targetApp: String?
+    let targetLabel: String?
+    let targetRole: String?
+    let relativeX: Double?
+    let relativeY: Double?
+    let resolvedTargetLabel: String?
+    let resolvedTargetRole: String?
+    let resolvedRelativeX: Double?
+    let resolvedRelativeY: Double?
+    let success: Bool?
+    let durationMs: Int?
+    let error: String?
+    let diagnosisCategory: String?
+    let diagnosisReason: String?
+    let params: [String: String]?
+    let note: String?
+    let waitAfter: WaitCondition?
+    let recordedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        action: String? = nil,
+        targetApp: String? = nil,
+        targetLabel: String? = nil,
+        targetRole: String? = nil,
+        relativeX: Double? = nil,
+        relativeY: Double? = nil,
+        resolvedTargetLabel: String? = nil,
+        resolvedTargetRole: String? = nil,
+        resolvedRelativeX: Double? = nil,
+        resolvedRelativeY: Double? = nil,
+        success: Bool? = nil,
+        durationMs: Int? = nil,
+        error: String? = nil,
+        diagnosisCategory: String? = nil,
+        diagnosisReason: String? = nil,
+        params: [String: String]? = nil,
+        note: String? = nil,
+        waitAfter: WaitCondition? = nil,
+        recordedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.action = action
+        self.targetApp = targetApp
+        self.targetLabel = targetLabel
+        self.targetRole = targetRole
+        self.relativeX = relativeX
+        self.relativeY = relativeY
+        self.resolvedTargetLabel = resolvedTargetLabel
+        self.resolvedTargetRole = resolvedTargetRole
+        self.resolvedRelativeX = resolvedRelativeX
+        self.resolvedRelativeY = resolvedRelativeY
+        self.success = success
+        self.durationMs = durationMs
+        self.error = error
+        self.diagnosisCategory = diagnosisCategory
+        self.diagnosisReason = diagnosisReason
+        self.params = params
+        self.note = note
+        self.waitAfter = waitAfter
+        self.recordedAt = recordedAt
+    }
 }
 
 struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
@@ -29,6 +106,10 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let remoteLLMProvider: String?
     let remoteLLMModel: String?
     let remoteLLMEndpoint: String?
+    let assistantSummary: String?
+    let assistantActions: [String]?
+    let assistantStructuredSteps: [AssistantHistoryStep]?
+    let assistantSnapshotPath: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -52,6 +133,10 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case remoteLLMProvider
         case remoteLLMModel
         case remoteLLMEndpoint
+        case assistantSummary
+        case assistantActions
+        case assistantStructuredSteps
+        case assistantSnapshotPath
     }
 
     init(
@@ -75,7 +160,11 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteASREndpoint: String?,
         remoteLLMProvider: String?,
         remoteLLMModel: String?,
-        remoteLLMEndpoint: String?
+        remoteLLMEndpoint: String?,
+        assistantSummary: String?,
+        assistantActions: [String]?,
+        assistantStructuredSteps: [AssistantHistoryStep]?,
+        assistantSnapshotPath: String?
     ) {
         self.id = id
         self.text = text
@@ -98,6 +187,10 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.remoteLLMProvider = remoteLLMProvider
         self.remoteLLMModel = remoteLLMModel
         self.remoteLLMEndpoint = remoteLLMEndpoint
+        self.assistantSummary = assistantSummary
+        self.assistantActions = assistantActions
+        self.assistantStructuredSteps = assistantStructuredSteps
+        self.assistantSnapshotPath = assistantSnapshotPath
     }
 
     init(from decoder: Decoder) throws {
@@ -125,6 +218,10 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteLLMProvider = try container.decodeIfPresent(String.self, forKey: .remoteLLMProvider)
         remoteLLMModel = try container.decodeIfPresent(String.self, forKey: .remoteLLMModel)
         remoteLLMEndpoint = try container.decodeIfPresent(String.self, forKey: .remoteLLMEndpoint)
+        assistantSummary = try container.decodeIfPresent(String.self, forKey: .assistantSummary)
+        assistantActions = try container.decodeIfPresent([String].self, forKey: .assistantActions)
+        assistantStructuredSteps = try container.decodeIfPresent([AssistantHistoryStep].self, forKey: .assistantStructuredSteps)
+        assistantSnapshotPath = try container.decodeIfPresent(String.self, forKey: .assistantSnapshotPath)
     }
 }
 
@@ -132,13 +229,13 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
 final class TranscriptionHistoryStore: ObservableObject {
     @Published private(set) var entries: [TranscriptionHistoryEntry] = []
 
-    private var allEntries: [TranscriptionHistoryEntry] = []
+    var allEntries: [TranscriptionHistoryEntry] = []
     private var loadedCount = 0
     private let pageSize = 40
     private let maxStoredEntries = 1000
 
-    private let fileManager = FileManager.default
-    private let defaults = UserDefaults.standard
+    let fileManager = FileManager.default
+    let defaults = UserDefaults.standard
 
     init() {
         reload()
@@ -156,13 +253,13 @@ final class TranscriptionHistoryStore: ObservableObject {
         if applyRetentionPolicyIfNeeded() {
             loadedCount = min(loadedCount, allEntries.count)
             entries = Array(allEntries.prefix(loadedCount))
-            persist()
+            persistEntries()
         }
     }
 
     func reload() {
         do {
-            let url = try historyFileURL()
+            let url = try historyFileLocation()
             guard fileManager.fileExists(atPath: url.path) else {
                 allEntries = []
                 entries = []
@@ -176,7 +273,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             loadedCount = min(pageSize, allEntries.count)
             entries = Array(allEntries.prefix(loadedCount))
             if didPrune {
-                persist()
+                persistEntries()
             }
         } catch {
             allEntries = []
@@ -210,15 +307,17 @@ final class TranscriptionHistoryStore: ObservableObject {
         remoteASREndpoint: String?,
         remoteLLMProvider: String?,
         remoteLLMModel: String?,
-        remoteLLMEndpoint: String?
+        remoteLLMEndpoint: String?,
+        assistantSummary: String?,
+        assistantActions: [String]?,
+        assistantStructuredSteps: [AssistantHistoryStep]?,
+        assistantSnapshotPath: String?
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let entry = TranscriptionHistoryEntry(
-            id: UUID(),
+        let entry = TranscriptionHistoryEntry.make(
             text: trimmed,
-            createdAt: Date(),
             transcriptionEngine: transcriptionEngine,
             transcriptionModel: transcriptionModel,
             enhancementMode: enhancementMode,
@@ -236,7 +335,11 @@ final class TranscriptionHistoryStore: ObservableObject {
             remoteASREndpoint: remoteASREndpoint,
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
-            remoteLLMEndpoint: remoteLLMEndpoint
+            remoteLLMEndpoint: remoteLLMEndpoint,
+            assistantSummary: assistantSummary,
+            assistantActions: assistantActions,
+            assistantStructuredSteps: assistantStructuredSteps,
+            assistantSnapshotPath: assistantSnapshotPath
         )
 
         allEntries.insert(entry, at: 0)
@@ -247,32 +350,21 @@ final class TranscriptionHistoryStore: ObservableObject {
 
         loadedCount = min(max(loadedCount + 1, pageSize), allEntries.count)
         entries = Array(allEntries.prefix(loadedCount))
-        persist()
+        persistEntries()
     }
 
     func delete(id: UUID) {
         allEntries.removeAll { $0.id == id }
         loadedCount = min(loadedCount, allEntries.count)
         entries = Array(allEntries.prefix(loadedCount))
-        persist()
+        persistEntries()
     }
 
     func clearAll() {
         allEntries = []
         entries = []
         loadedCount = 0
-        persist()
-    }
-
-    private func persist() {
-        do {
-            let data = try JSONEncoder().encode(allEntries)
-            let url = try historyFileURL()
-            try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: url, options: [.atomic])
-        } catch {
-            // Keep UI responsive even if persistence fails.
-        }
+        persistEntries()
     }
 
     private var historyEnabled: Bool {
@@ -280,8 +372,7 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     private var historyRetentionPeriod: HistoryRetentionPeriod {
-        let raw = defaults.string(forKey: AppPreferenceKey.historyRetentionPeriod)
-        return HistoryRetentionPeriod(rawValue: raw ?? "") ?? .thirtyDays
+        currentHistoryRetentionPeriod()
     }
 
     private func applyRetentionPolicyIfNeeded(referenceDate: Date = Date()) -> Bool {
@@ -294,15 +385,4 @@ final class TranscriptionHistoryStore: ObservableObject {
         return allEntries.count != originalCount
     }
 
-    private func historyFileURL() throws -> URL {
-        let appSupport = try fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        return appSupport
-            .appendingPathComponent("Voxt", isDirectory: true)
-            .appendingPathComponent("transcription-history.json")
-    }
 }

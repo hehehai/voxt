@@ -41,7 +41,8 @@ struct RemoteLLMRuntimeClient {
     func enhance(
         userPrompt: String,
         provider: RemoteLLMProvider,
-        configuration: RemoteProviderConfiguration
+        configuration: RemoteProviderConfiguration,
+        imageFileURL: URL? = nil
     ) async throws -> String {
         let input = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return "" }
@@ -52,7 +53,8 @@ struct RemoteLLMRuntimeClient {
             inputTextLength: input.count,
             intent: .enhancement,
             provider: provider,
-            configuration: configuration
+            configuration: configuration,
+            imageFileURL: imageFileURL
         )
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -122,7 +124,8 @@ struct RemoteLLMRuntimeClient {
         inputTextLength: Int,
         intent: CompletionIntent,
         provider: RemoteLLMProvider,
-        configuration: RemoteProviderConfiguration
+        configuration: RemoteProviderConfiguration,
+        imageFileURL: URL? = nil
     ) async throws -> String {
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? provider.suggestedModel
@@ -146,6 +149,7 @@ struct RemoteLLMRuntimeClient {
             request.timeoutInterval = requestTimeoutInterval(for: provider)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
+            let imageAttachment = imageAttachment(for: imageFileURL, provider: provider)
             let tuning = generationTuning(
                 for: provider,
                 inputTextLength: inputTextLength,
@@ -161,11 +165,23 @@ struct RemoteLLMRuntimeClient {
                 }
                 request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key")
                 request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                var userContent: [Any] = [["type": "text", "text": userPrompt]]
+                if let imageAttachment {
+                    userContent.append([
+                        "type": "image",
+                        "source": [
+                            "type": "base64",
+                            "media_type": imageAttachment.mimeType,
+                            "data": imageAttachment.base64
+                        ]
+                    ])
+                }
+                let anthropicContent: Any = imageAttachment == nil ? userPrompt : userContent
                 var payload: [String: Any] = [
                     "model": model,
                     "max_tokens": 2048,
                     "messages": [
-                        ["role": "user", "content": userPrompt]
+                        ["role": "user", "content": anthropicContent]
                     ]
                 ]
                 let trimmedSystem = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -187,9 +203,18 @@ struct RemoteLLMRuntimeClient {
                     components.queryItems = items
                 }
                 request.url = components.url
+                var parts: [[String: Any]] = [["text": userPrompt]]
+                if let imageAttachment {
+                    parts.append([
+                        "inline_data": [
+                            "mime_type": imageAttachment.mimeType,
+                            "data": imageAttachment.base64
+                        ]
+                    ])
+                }
                 var payload: [String: Any] = [
                     "contents": [
-                        ["parts": [["text": userPrompt]]]
+                        ["parts": parts]
                     ]
                 ]
                 let trimmedSystem = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -205,7 +230,11 @@ struct RemoteLLMRuntimeClient {
                 request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
                 request.httpBody = try JSONSerialization.data(withJSONObject: [
                     "model": model,
-                    "messages": openAICompatibleMessages(systemPrompt: systemPrompt, userPrompt: userPrompt)
+                    "messages": openAICompatibleMessages(
+                        systemPrompt: systemPrompt,
+                        userPrompt: userPrompt,
+                        imageAttachment: imageAttachment
+                    )
                 ])
             default:
                 let apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -214,7 +243,11 @@ struct RemoteLLMRuntimeClient {
                 }
                 request.httpBody = try JSONSerialization.data(withJSONObject: [
                     "model": model,
-                    "messages": openAICompatibleMessages(systemPrompt: systemPrompt, userPrompt: userPrompt),
+                    "messages": openAICompatibleMessages(
+                        systemPrompt: systemPrompt,
+                        userPrompt: userPrompt,
+                        imageAttachment: imageAttachment
+                    ),
                     "stream": false,
                     "max_tokens": tuning.maxTokens,
                     "temperature": tuning.temperature,
@@ -231,13 +264,15 @@ struct RemoteLLMRuntimeClient {
             )
             VoxtLog.llm(
                 """
-                Remote LLM request content. provider=\(provider.rawValue), endpoint=\(endpointValue), model=\(model)
+                Remote LLM request content. provider=\(provider.rawValue), endpoint=\(endpointValue), model=\(model), hasImage=\(imageAttachment != nil)
                 [system_prompt]
                 \(VoxtLog.llmPreview(systemPrompt))
                 [input]
                 \(VoxtLog.llmPreview(debugInput))
                 [request_content]
                 \(VoxtLog.llmPreview(userPrompt))
+                [image]
+                \(imageAttachment?.sourceDescription ?? "<none>")
                 """
             )
             do {
@@ -454,16 +489,62 @@ struct RemoteLLMRuntimeClient {
         return nil
     }
 
-    private func openAICompatibleMessages(systemPrompt: String, userPrompt: String) -> [[String: String]] {
+    private struct ImageAttachment {
+        let mimeType: String
+        let base64: String
+        let dataURL: String
+        let sourceDescription: String
+    }
+
+    private func imageAttachment(for fileURL: URL?, provider: RemoteLLMProvider) -> ImageAttachment? {
+        guard provider.supportsVisionInput,
+              let fileURL,
+              FileManager.default.fileExists(atPath: fileURL.path),
+              let data = try? Data(contentsOf: fileURL),
+              !data.isEmpty else {
+            return nil
+        }
+
+        let mimeType = mimeType(for: fileURL.pathExtension)
+        let base64 = data.base64EncodedString()
+        return ImageAttachment(
+            mimeType: mimeType,
+            base64: base64,
+            dataURL: "data:\(mimeType);base64,\(base64)",
+            sourceDescription: fileURL.lastPathComponent
+        )
+    }
+
+    private func mimeType(for pathExtension: String) -> String {
+        switch pathExtension.lowercased() {
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "webp":
+            return "image/webp"
+        default:
+            return "image/png"
+        }
+    }
+
+    private func openAICompatibleMessages(systemPrompt: String, userPrompt: String, imageAttachment: ImageAttachment?) -> [[String: Any]] {
+        let userContent: Any
+        if let imageAttachment {
+            userContent = [
+                ["type": "text", "text": userPrompt],
+                ["type": "image_url", "image_url": ["url": imageAttachment.dataURL]]
+            ]
+        } else {
+            userContent = userPrompt
+        }
         let trimmedSystem = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedSystem.isEmpty {
             return [
-                ["role": "user", "content": userPrompt]
+                ["role": "user", "content": userContent]
             ]
         }
         return [
             ["role": "system", "content": systemPrompt],
-            ["role": "user", "content": userPrompt]
+            ["role": "user", "content": userContent]
         ]
     }
 

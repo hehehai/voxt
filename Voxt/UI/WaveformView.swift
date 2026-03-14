@@ -2,12 +2,19 @@ import SwiftUI
 import Foundation
 
 struct WaveformView: View {
+    enum DisplayMode {
+        case transcriptionText
+        case statusOnly
+    }
+
     var audioLevel: Float
     var isRecording: Bool
     var transcribedText: String
     var statusMessage: String = ""
+    var actionItems: [String] = []
     var isEnhancing: Bool = false
     var isCompleting: Bool = false
+    var displayMode: DisplayMode = .transcriptionText
 
     private let iconSlotSize = CGSize(width: 16, height: 28)
     private let barAreaHeight: CGFloat = 28
@@ -19,15 +26,25 @@ struct WaveformView: View {
     @State private var appeared = false
     @State private var textScrollID = UUID()
     @State private var spinAngle: Double = 0
+    @State private var actionPulse = false
 
     /// Whether we have text to show (drives expansion)
     private var displayText: String {
         let message = statusMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         if !message.isEmpty { return message }
+        guard displayMode == .transcriptionText else { return "" }
         return sanitizedDisplayText(transcribedText)
     }
 
     private var hasText: Bool { !displayText.isEmpty }
+    private var visibleActionItems: [String] { Array(actionItems.suffix(2)) }
+    private var showsActionList: Bool { displayMode == .statusOnly && !visibleActionItems.isEmpty }
+
+    private enum ActionBadgeStyle {
+        case active
+        case completed
+        case warning
+    }
 
     private func sanitizedDisplayText(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -152,8 +169,38 @@ struct WaveformView: View {
             .frame(height: barAreaHeight)
             .animation(.easeInOut(duration: 0.25), value: isEnhancing)
 
-            // Keep text visible during LLM processing to avoid layout flicker.
-            if hasText {
+            if showsActionList {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(visibleActionItems.enumerated()), id: \.offset) { index, item in
+                        let isLatest = index == visibleActionItems.count - 1
+                        let badgeStyle = actionBadgeStyle(for: item, isLatest: isLatest)
+                        HStack(alignment: .center, spacing: 8) {
+                            ZStack {
+                                Circle()
+                                    .fill(badgeBackground(for: badgeStyle))
+                                    .scaleEffect(badgeStyle == .active && actionPulse ? 1.08 : 1.0)
+                                Image(systemName: badgeIcon(for: badgeStyle))
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(badgeForeground(for: badgeStyle))
+                            }
+                            .frame(width: 16, height: 16)
+                            Text(item)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(textForeground(for: badgeStyle, isLatest: isLatest))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(rowBackground(for: badgeStyle, isLatest: isLatest))
+                        )
+                    }
+                }
+                .frame(maxWidth: 260, alignment: .leading)
+                .transition(.opacity)
+            } else if hasText {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 0) {
@@ -214,10 +261,83 @@ struct WaveformView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
                 appeared = true
             }
+            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                actionPulse = true
+            }
         }
         .onDisappear {
             stopAnimating()
             appeared = false
+            actionPulse = false
+        }
+    }
+
+    private func actionBadgeStyle(for item: String, isLatest: Bool) -> ActionBadgeStyle {
+        let lowercased = item.lowercased()
+        if lowercased.contains("fail")
+            || lowercased.contains("cancel")
+            || lowercased.contains("error")
+            || lowercased.contains("unsupported")
+            || item.contains("失败")
+            || item.contains("取消")
+            || item.contains("错误") {
+            return .warning
+        }
+        return isLatest ? .active : .completed
+    }
+
+    private func badgeIcon(for style: ActionBadgeStyle) -> String {
+        switch style {
+        case .active:
+            return "arrow.triangle.2.circlepath"
+        case .completed:
+            return "checkmark"
+        case .warning:
+            return "exclamationmark"
+        }
+    }
+
+    private func badgeBackground(for style: ActionBadgeStyle) -> Color {
+        switch style {
+        case .active:
+            return .white.opacity(0.16)
+        case .completed:
+            return .white.opacity(0.09)
+        case .warning:
+            return Color(red: 0.85, green: 0.38, blue: 0.28).opacity(0.22)
+        }
+    }
+
+    private func badgeForeground(for style: ActionBadgeStyle) -> Color {
+        switch style {
+        case .active:
+            return .white.opacity(0.92)
+        case .completed:
+            return .white.opacity(0.72)
+        case .warning:
+            return Color(red: 1.0, green: 0.82, blue: 0.76)
+        }
+    }
+
+    private func rowBackground(for style: ActionBadgeStyle, isLatest: Bool) -> Color {
+        switch style {
+        case .active:
+            return .white.opacity(isLatest ? 0.07 : 0.05)
+        case .completed:
+            return .white.opacity(0.035)
+        case .warning:
+            return Color(red: 0.85, green: 0.38, blue: 0.28).opacity(0.10)
+        }
+    }
+
+    private func textForeground(for style: ActionBadgeStyle, isLatest: Bool) -> Color {
+        switch style {
+        case .active:
+            return .white.opacity(isLatest ? 0.92 : 0.74)
+        case .completed:
+            return .white.opacity(isLatest ? 0.84 : 0.68)
+        case .warning:
+            return Color(red: 1.0, green: 0.85, blue: 0.80)
         }
     }
 

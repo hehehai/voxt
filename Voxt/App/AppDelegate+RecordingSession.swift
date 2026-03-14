@@ -21,14 +21,26 @@ extension AppDelegate {
         activeRecordingSessionID = UUID()
         sessionOutputMode = outputMode
         enhancementContextSnapshot = nil
+        assistantActionHistory = []
+        assistantStructuredHistory = []
+        assistantActionStatuses = []
+        assistantLastDiagnosis = nil
         resetVoiceEndCommandState()
+        captureOverlayAnchorScreenIfNeeded()
 
         VoxtLog.info(
             "Recording started. output=\(sessionOutputLabel(for: outputMode)), engine=\(transcriptionEngine.rawValue)"
         )
 
         applyPreferredInputDevice()
-        overlayState.statusMessage = ""
+        overlayState.displayMode = outputMode == .assistant ? .statusOnly : .transcriptionText
+        overlayState.actionItems = []
+        if outputMode == .assistant {
+            overlayState.actionItems = [String(localized: "Listening for assistant task…")]
+            overlayState.statusMessage = ""
+        } else {
+            overlayState.statusMessage = ""
+        }
 
         if transcriptionEngine == .mlxAudio {
             switch mlxModelManager.state {
@@ -114,6 +126,7 @@ extension AppDelegate {
         recordingStoppedAt = Date()
         overlayState.isCompleting = false
         overlayState.statusMessage = ""
+        overlayState.actionItems = []
         setEnhancingState(false)
         resetVoiceEndCommandState()
         stopActiveRecordingTranscriber()
@@ -155,7 +168,7 @@ extension AppDelegate {
             speechTranscriber.transcribedText = text
         }
 
-        VoxtLog.info("Transcription result received. characters=\(text.count), output=\(sessionOutputMode == .translation ? "translation" : "transcription")")
+        VoxtLog.info("Transcription result received. characters=\(text.count), output=\(sessionOutputLabel(for: sessionOutputMode))")
         VoxtLog.info("Transcription result output mode resolved as \(sessionOutputLabel(for: sessionOutputMode)).", verbose: true)
         VoxtLog.info("Enhancement mode=\(enhancementMode.rawValue), appEnhancementEnabled=\(appEnhancementEnabled)")
 
@@ -166,6 +179,11 @@ extension AppDelegate {
 
         if sessionOutputMode == .rewrite {
             processRewriteTranscription(text, sessionID: sessionID)
+            return
+        }
+
+        if sessionOutputMode == .assistant {
+            processAssistantTranscription(text, sessionID: sessionID)
             return
         }
 
@@ -180,6 +198,8 @@ extension AppDelegate {
             return "translation"
         case .rewrite:
             return "rewrite"
+        case .assistant:
+            return "assistant"
         }
     }
 
@@ -211,6 +231,7 @@ extension AppDelegate {
     func showOverlayStatus(_ message: String, clearAfter seconds: TimeInterval = 2.4) {
         overlayStatusClearTask?.cancel()
         overlayState.statusMessage = message
+        overlayState.actionItems = []
         overlayStatusClearTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .seconds(seconds))
@@ -227,7 +248,11 @@ extension AppDelegate {
         overlayStatusClearTask?.cancel()
         overlayState.reset()
         overlayState.statusMessage = message
-        overlayWindow.show(state: overlayState, position: overlayPosition)
+        overlayWindow.show(
+            state: overlayState,
+            position: overlayPosition,
+            preferredScreen: currentPreferredOverlayScreen()
+        )
 
         overlayReminderTask = Task { [weak self] in
             guard let self else { return }
@@ -271,7 +296,8 @@ extension AppDelegate {
         overlayState.bind(to: mlx)
         overlayWindow.show(
             state: overlayState,
-            position: overlayPosition
+            position: overlayPosition,
+            preferredScreen: currentPreferredOverlayScreen()
         )
         mlx.startRecording()
         guard mlx.isRecording else {
@@ -301,7 +327,8 @@ extension AppDelegate {
             self.overlayState.bind(to: self.speechTranscriber)
             self.overlayWindow.show(
                 state: self.overlayState,
-                position: self.overlayPosition
+                position: self.overlayPosition,
+                preferredScreen: self.currentPreferredOverlayScreen()
             )
             self.speechTranscriber.startRecording()
             guard self.speechTranscriber.isRecording else {
@@ -332,7 +359,8 @@ extension AppDelegate {
             self.overlayState.bind(to: self.remoteASRTranscriber)
             self.overlayWindow.show(
                 state: self.overlayState,
-                position: self.overlayPosition
+                position: self.overlayPosition,
+                preferredScreen: self.currentPreferredOverlayScreen()
             )
             self.remoteASRTranscriber.startRecording()
         }
@@ -352,7 +380,9 @@ extension AppDelegate {
         isSelectedTextTranslationFlow = false
         enhancementContextSnapshot = nil
         lastEnhancementPromptContext = nil
+        assistantActionStatuses.removeAll()
         resetVoiceEndCommandState()
+        clearOverlayAnchorScreen()
         overlayState.reset()
         overlayWindow.hide()
     }

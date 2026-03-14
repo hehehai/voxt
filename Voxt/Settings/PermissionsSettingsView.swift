@@ -99,6 +99,7 @@ struct PermissionsSettingsView: View {
     @State private var browserPickerErrorMessage: String?
 
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
+    @AppStorage(AppPreferenceKey.actionAssistantEnabled) private var actionAssistantEnabled = false
     @AppStorage(AppPreferenceKey.appBranchCustomBrowsers) private var appBranchCustomBrowsersJSON = "[]"
 
     var body: some View {
@@ -150,6 +151,39 @@ struct PermissionsSettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.orange)
                         }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                }
+            }
+
+            if actionAssistantEnabled {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(AppLocalization.localizedString("Action Assistant Permissions"))
+                            .font(.headline)
+
+                        Text(AppLocalization.localizedString("The embedded Action Assistant runtime uses Voxt's own automation stack. Accessibility is required for simulated key presses and app control, and Input Monitoring improves reliability for fn-triggered flows."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        actionAssistantStatusRow(
+                            title: AppLocalization.localizedString("Accessibility Automation"),
+                            description: AppLocalization.localizedString("Required for Action Assistant recipes that type text, press keys, or drive other apps."),
+                            enabled: currentState(for: .accessibility) == .enabled
+                        )
+
+                        actionAssistantStatusRow(
+                            title: AppLocalization.localizedString("Modifier Hotkeys"),
+                            description: AppLocalization.localizedString("Input Monitoring improves reliability for fn-based assistant triggers and simulated modifier combinations."),
+                            enabled: currentState(for: .inputMonitoring) == .enabled
+                        )
+
+                        actionAssistantStatusRow(
+                            title: AppLocalization.localizedString("Recipe Store"),
+                            description: AppLocalization.format("%d recipe(s) available in Voxt Application Support.", ActionAssistantRecipeStore.listRecipes().count),
+                            enabled: !ActionAssistantRecipeStore.listRecipes().isEmpty
+                        )
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
@@ -257,6 +291,24 @@ struct PermissionsSettingsView: View {
                     .fill(state.tint.opacity(0.16))
             )
             .foregroundStyle(state.tint)
+    }
+
+    @ViewBuilder
+    private func actionAssistantStatusRow(title: String, description: String, enabled: Bool) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            statusBadge(for: enabled ? .enabled : .disabled)
+        }
+        .padding(.vertical, 2)
     }
 
     private func refreshStates() {

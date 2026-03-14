@@ -14,6 +14,8 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) private var translateSelectedTextOnTranslationHotkey = true
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
+    @AppStorage(AppPreferenceKey.actionAssistantEnabled) private var actionAssistantEnabled = false
+    @AppStorage(AppPreferenceKey.actionAssistantLoggingEnabled) private var actionAssistantLoggingEnabled = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
     @AppStorage(AppPreferenceKey.showInDock) private var showInDock = false
     @AppStorage(AppPreferenceKey.autoCheckForUpdates) private var autoCheckForUpdates = true
@@ -291,6 +293,28 @@ struct GeneralSettingsView: View {
                     Text("Show the App Enhancement menu and enable app-based enhancement configuration.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    Toggle(isOn: $actionAssistantEnabled) {
+                        HStack(spacing: 8) {
+                            Text("Action Assistant")
+                            Text("Beta")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.orange.opacity(0.15))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+                                )
+                        }
+                    }
+                    Text("Enable Voxt's embedded action assistant flow and show the Action Assistant settings tab.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
@@ -308,6 +332,11 @@ struct GeneralSettingsView: View {
 
                     Toggle("Enable LLM debug logs", isOn: $llmDebugLoggingEnabled)
                     Text("When enabled, Voxt writes detailed local and remote LLM request logs. Disabled by default.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Enable Action Assistant logs", isOn: $actionAssistantLoggingEnabled)
+                    Text("When enabled, Voxt writes detailed planning, execution, and verification logs for Action Assistant. Disabled by default.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

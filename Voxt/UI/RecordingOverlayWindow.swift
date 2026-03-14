@@ -5,12 +5,19 @@ import Combine
 /// Observable state that drives the overlay UI. Either transcriber populates this.
 @MainActor
 class OverlayState: ObservableObject {
+    enum DisplayMode {
+        case transcriptionText
+        case statusOnly
+    }
+
     @Published var isRecording = false
     @Published var audioLevel: Float = 0.0
     @Published var transcribedText = ""
     @Published var statusMessage = ""
+    @Published var actionItems: [String] = []
     @Published var isEnhancing = false
     @Published var isCompleting = false
+    @Published var displayMode: DisplayMode = .transcriptionText
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -46,8 +53,10 @@ class OverlayState: ObservableObject {
         audioLevel = 0
         transcribedText = ""
         statusMessage = ""
+        actionItems = []
         isEnhancing = false
         isCompleting = false
+        displayMode = .transcriptionText
         cancellables.removeAll()
     }
 }
@@ -75,17 +84,21 @@ class RecordingOverlayWindow: NSPanel {
         ignoresMouseEvents = true
     }
 
-    func show(state: OverlayState, position: OverlayPosition) {
+    func show(state: OverlayState, position: OverlayPosition, preferredScreen: NSScreen? = nil) {
         let content = OverlayContent(state: state)
-        let hosting = NSHostingView(rootView: content)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
-        contentView = hosting
-        hostingView = hosting
+        if let hostingView {
+            hostingView.rootView = content
+        } else {
+            let hosting = NSHostingView(rootView: content)
+            hosting.translatesAutoresizingMaskIntoConstraints = false
+            contentView = hosting
+            hostingView = hosting
+        }
 
         // Position at top-center or bottom-center based on settings.
         let size = CGSize(width: 360, height: 140)
         let fixedEdgeDistance: CGFloat = 30
-        if let screen = NSScreen.main {
+        if let screen = preferredScreen ?? NSScreen.main {
             let x = screen.visibleFrame.midX - size.width / 2
             let y: CGFloat
             switch position {
@@ -112,6 +125,12 @@ class RecordingOverlayWindow: NSPanel {
     }
 }
 
+extension NSScreen {
+    var voxtScreenID: NSNumber? {
+        deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    }
+}
+
 // MARK: - SwiftUI content hosted inside the panel
 
 private struct OverlayContent: View {
@@ -123,8 +142,10 @@ private struct OverlayContent: View {
             isRecording: state.isRecording,
             transcribedText: state.transcribedText,
             statusMessage: state.statusMessage,
+            actionItems: state.actionItems,
             isEnhancing: state.isEnhancing,
-            isCompleting: state.isCompleting
+            isCompleting: state.isCompleting,
+            displayMode: state.displayMode == .statusOnly ? .statusOnly : .transcriptionText
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.top, 8)
