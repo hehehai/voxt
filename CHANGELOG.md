@@ -6,6 +6,13 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-03-14
+
+### Fixed
+- Improved Hotkey settings shortcut capture so newly recorded shortcuts stay pending until the user explicitly confirms them.
+- Prevented global hotkey handlers from firing while recording a shortcut in Hotkey settings.
+- Improved modifier-only shortcut capture reliability, including better handling for repeated modifier changes during recording.
+
 ## [1.5.0] - 2026-03-13
 
 ### Added
