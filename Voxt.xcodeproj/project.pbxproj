@@ -665,7 +665,7 @@
 			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
 			requirement = {
 				kind = revision;
-				revision = b76c81fa3d15600e68323b94d740bb346f3455ef;
+				revision = fcbd04daa1bfebe881932f630af2ba6ce9af3274;
 			};
 		};
 		B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */ = {
