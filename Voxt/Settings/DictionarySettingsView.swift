@@ -22,7 +22,6 @@ struct DictionarySettingsView: View {
     @State private var availableGroups: [AppBranchGroup] = []
     @State private var showDictionaryInfo = false
     @State private var showDictionaryAdvancedSettings = false
-    @State private var showSuggestionFilterSettings = false
     @State private var showSuggestionIngestDialog = false
     @State private var suggestionFilterDraft = DictionarySuggestionFilterSettings.defaultValue
     @State private var historyScanModelOptions: [DictionaryHistoryScanModelOption] = []
@@ -67,17 +66,6 @@ struct DictionarySettingsView: View {
                 dictionaryRecognitionEnabled: dictionaryRecognitionEnabled
             )
         }
-        .sheet(isPresented: $showSuggestionFilterSettings) {
-            DictionarySuggestionFilterSettingsDialog(
-                draft: $suggestionFilterDraft,
-                isPresented: $showSuggestionFilterSettings
-            ) {
-                dictionarySuggestionStore.saveFilterSettings(suggestionFilterDraft)
-                suggestionFilterDraft = dictionarySuggestionStore.filterSettings
-                suggestionActionMessage = AppLocalization.localizedString("Saved candidate filter settings.")
-                showSuggestionFilterSettings = false
-            }
-        }
         .sheet(isPresented: $showSuggestionIngestDialog) {
             DictionarySuggestionIngestDialog(
                 pendingHistoryScanCount: pendingHistoryScanCount,
@@ -87,7 +75,7 @@ struct DictionarySettingsView: View {
                 selectedModelID: $selectedHistoryScanModelID,
                 draft: $suggestionFilterDraft,
                 isPresented: $showSuggestionIngestDialog,
-                onApply: { runSuggestionIngest(persistSettings: false) },
+                onIngest: { runSuggestionIngest(persistSettings: false) },
                 onSave: { runSuggestionIngest(persistSettings: true) }
             )
         }
@@ -235,16 +223,6 @@ struct DictionarySettingsView: View {
                     }
                     .controlSize(.small)
                     .disabled(dictionarySuggestionStore.suggestions.isEmpty)
-
-                    Button {
-                        suggestionFilterDraft = dictionarySuggestionStore.filterSettings
-                        showSuggestionFilterSettings = true
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(String(localized: "Candidate Filter Settings"))
                 }
 
                 if dictionarySuggestionStore.historyScanProgress.isRunning {

@@ -159,6 +159,7 @@
 "Actions" = "操作";
 "Cancel" = "取消";
 "Apply" = "应用";
+"Ingest" = "录入";
 "Using" = "使用中";
 "Use" = "使用";
 "Delete" = "删除";
@@ -490,6 +491,7 @@
 "Dictionary Advanced Settings" = "词典高级设置";
 "When enabled, the final output can replace very high-confidence near matches with exact dictionary terms before the text is inserted." = "开启后，最终输出在写入前会将极高置信度的近似词替换为词典中的准确词汇。";
 "One-Click Ingest" = "一键录入";
+"Ingest runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion." = "录入仅使用当前草稿运行一次。保存会先存储 prompt 和阈值参数，然后开始录入。";
 "Scanning..." = "扫描中...";
 "One-Click Add" = "一键添加";
 "Added %d candidates and skipped %d duplicates." = "已添加 %d 个候选词，跳过 %d 个重复项。";

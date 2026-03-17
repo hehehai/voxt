@@ -157,6 +157,7 @@
 "Actions" = "操作";
 "Cancel" = "キャンセル";
 "Apply" = "適用";
+"Ingest" = "取り込み";
 "Using" = "使用中";
 "Use" = "使用";
 "Delete" = "削除";
@@ -504,6 +505,7 @@
 "Dictionary Advanced Settings" = "辞書の詳細設定";
 "When enabled, the final output can replace very high-confidence near matches with exact dictionary terms before the text is inserted." = "有効にすると、最終出力の挿入前に、非常に高い信頼度の近似一致を辞書の正確な用語へ置き換えます。";
 "One-Click Ingest" = "ワンクリック取り込み";
+"Ingest runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion." = "取り込みは現在の下書きで一度だけ実行します。保存は prompt としきい値を保存してから取り込みを開始します。";
 "Scanning..." = "スキャン中...";
 "One-Click Add" = "一括追加";
 "Added %d candidates and skipped %d duplicates." = "%d 件の候補を追加し、%d 件の重複をスキップしました。";

@@ -32,71 +32,6 @@ struct DictionaryAdvancedSettingsDialog: View {
     }
 }
 
-struct DictionarySuggestionFilterSettingsDialog: View {
-    @Binding var draft: DictionarySuggestionFilterSettings
-    @Binding var isPresented: Bool
-    let onSave: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Candidate Filter Settings")
-                .font(.title3.weight(.semibold))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Filter Prompt")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                PromptEditorView(
-                    text: $draft.prompt,
-                    height: 144,
-                    contentPadding: 2
-                )
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Stepper(value: $draft.batchSize, in: DictionarySuggestionFilterSettings.minimumBatchSize...DictionarySuggestionFilterSettings.maximumBatchSize) {
-                    HStack {
-                        Text("Batch Size")
-                        Spacer()
-                        Text("\(draft.batchSize)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Stepper(
-                    value: $draft.maxCandidatesPerBatch,
-                    in: DictionarySuggestionFilterSettings.minimumMaxCandidates...DictionarySuggestionFilterSettings.maximumMaxCandidates
-                ) {
-                    HStack {
-                        Text("Max Candidates Per Batch")
-                        Spacer()
-                        Text("\(draft.maxCandidatesPerBatch)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            HStack {
-                Button("Restore Default") {
-                    draft = .defaultValue
-                }
-
-                Spacer()
-
-                Button("Cancel") {
-                    isPresented = false
-                }
-
-                Button("Save", action: onSave)
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .frame(width: 560)
-    }
-}
-
 struct DictionarySuggestionIngestDialog: View {
     let pendingHistoryScanCount: Int
     let localModelOptions: [DictionaryHistoryScanModelOption]
@@ -105,7 +40,7 @@ struct DictionarySuggestionIngestDialog: View {
     @Binding var selectedModelID: String
     @Binding var draft: DictionarySuggestionFilterSettings
     @Binding var isPresented: Bool
-    let onApply: () -> Void
+    let onIngest: () -> Void
     let onSave: () -> Void
 
     var body: some View {
@@ -185,7 +120,7 @@ struct DictionarySuggestionIngestDialog: View {
                 }
             }
 
-            Text(String(localized: "Apply runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion."))
+            Text(String(localized: "Ingest runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -196,7 +131,7 @@ struct DictionarySuggestionIngestDialog: View {
 
                 Spacer()
 
-                Button(String(localized: "Apply"), action: onApply)
+                Button(String(localized: "Ingest"), action: onIngest)
                     .disabled(selectedModelID.isEmpty)
 
                 Button("Save", action: onSave)

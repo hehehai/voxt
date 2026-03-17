@@ -159,6 +159,7 @@
 "Actions" = "Actions";
 "Cancel" = "Cancel";
 "Apply" = "Apply";
+"Ingest" = "Ingest";
 "Using" = "Using";
 "Use" = "Use";
 "Delete" = "Delete";
@@ -480,6 +481,7 @@
 "No pending dictionary suggestions." = "No pending dictionary suggestions.";
 "Seen %d times" = "Seen %d times";
 "One-Click Ingest" = "One-Click Ingest";
+"Ingest runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion." = "Ingest runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion.";
 "Scanning..." = "Scanning...";
 "One-Click Add" = "One-Click Add";
 "Added %d candidates and skipped %d duplicates." = "Added %d candidates and skipped %d duplicates.";
