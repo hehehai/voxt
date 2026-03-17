@@ -15,6 +15,7 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) private var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) private var translateSelectedTextOnTranslationHotkey = true
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
+    @AppStorage(AppPreferenceKey.alwaysShowRewriteAnswerCard) private var alwaysShowRewriteAnswerCard = false
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
     @AppStorage(AppPreferenceKey.showInDock) private var showInDock = false
@@ -303,6 +304,13 @@ struct GeneralSettingsView: View {
 
                     Toggle("Also copy result to clipboard", isOn: $autoCopyWhenNoFocusedInput)
                     Text("When enabled, Voxt auto-pastes result text and also keeps it in clipboard.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle(isOn: $alwaysShowRewriteAnswerCard) {
+                        Text(String(localized: "Always show rewrite answer card"))
+                    }
+                    Text(String(localized: "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

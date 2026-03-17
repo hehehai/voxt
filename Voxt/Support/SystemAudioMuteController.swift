@@ -143,10 +143,19 @@ final class SystemAudioMuteController {
             mElement: kAudioObjectPropertyElementMain
         )
 
-        var value: CFString = "" as CFString
-        var dataSize = UInt32(MemoryLayout<CFString>.size)
-        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, &value)
+        let valuePointer = UnsafeMutableRawPointer.allocate(
+            byteCount: MemoryLayout<CFString?>.size,
+            alignment: MemoryLayout<CFString?>.alignment
+        )
+        defer { valuePointer.deallocate() }
+
+        valuePointer.initializeMemory(as: CFString?.self, repeating: nil, count: 1)
+        defer { valuePointer.assumingMemoryBound(to: CFString?.self).deinitialize(count: 1) }
+
+        var dataSize = UInt32(MemoryLayout<CFString?>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, valuePointer)
         guard status == noErr else { return nil }
+        guard let value = valuePointer.assumingMemoryBound(to: CFString?.self).pointee else { return nil }
         return value as String
     }
 }

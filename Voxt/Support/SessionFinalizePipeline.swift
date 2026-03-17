@@ -1,5 +1,10 @@
 import Foundation
 
+struct RewriteAnswerPayload {
+    let title: String
+    let content: String
+}
+
 struct SessionFinalizeContext {
     var outputText: String
     let llmDurationSeconds: TimeInterval?
@@ -7,6 +12,7 @@ struct SessionFinalizeContext {
     var dictionaryCorrectedTerms: [String]
     var dictionarySuggestions: [DictionarySuggestionDraft]
     var historyEntryID: UUID?
+    var rewriteAnswerPayload: RewriteAnswerPayload?
 }
 
 protocol SessionFinalizeStage {

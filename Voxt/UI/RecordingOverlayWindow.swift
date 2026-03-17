@@ -1,6 +1,19 @@
 import AppKit
 import SwiftUI
 import Combine
+import QuartzCore
+
+enum OverlayDisplayMode: Equatable {
+    case recording
+    case processing
+    case answer
+}
+
+enum OverlaySessionIconMode: Equatable {
+    case transcription
+    case translation
+    case rewrite
+}
 
 /// Observable state that drives the overlay UI. Either transcriber populates this.
 @MainActor
@@ -11,6 +24,10 @@ class OverlayState: ObservableObject {
     @Published var statusMessage = ""
     @Published var isEnhancing = false
     @Published var isCompleting = false
+    @Published var displayMode: OverlayDisplayMode = .recording
+    @Published var sessionIconMode: OverlaySessionIconMode = .transcription
+    @Published var answerTitle = ""
+    @Published var answerContent = ""
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -48,7 +65,38 @@ class OverlayState: ObservableObject {
         statusMessage = ""
         isEnhancing = false
         isCompleting = false
+        displayMode = .recording
+        sessionIconMode = .transcription
+        answerTitle = ""
+        answerContent = ""
         cancellables.removeAll()
+    }
+
+    func presentRecording(iconMode: OverlaySessionIconMode? = nil) {
+        displayMode = .recording
+        if let iconMode {
+            sessionIconMode = iconMode
+        }
+        answerTitle = ""
+        answerContent = ""
+    }
+
+    func presentProcessing(iconMode: OverlaySessionIconMode? = nil) {
+        guard displayMode != .answer else { return }
+        displayMode = .processing
+        if let iconMode {
+            sessionIconMode = iconMode
+        }
+    }
+
+    func presentAnswer(title: String, content: String) {
+        answerTitle = title
+        answerContent = content
+        displayMode = .answer
+        isRecording = false
+        isEnhancing = false
+        isCompleting = false
+        statusMessage = ""
     }
 }
 
@@ -58,6 +106,10 @@ class RecordingOverlayWindow: NSPanel {
 
     private var hostingView: NSHostingView<OverlayContent>?
     private var visibilityToken: UInt64 = 0
+    private var displayModeCancellable: AnyCancellable?
+    private weak var observedState: OverlayState?
+    private var currentPosition: OverlayPosition = .bottom
+    var onRequestClose: (() -> Void)?
 
     init() {
         super.init(
@@ -76,31 +128,33 @@ class RecordingOverlayWindow: NSPanel {
         ignoresMouseEvents = true
     }
 
+    override var canBecomeKey: Bool { true }
+
     func show(state: OverlayState, position: OverlayPosition) {
         visibilityToken &+= 1
-        let content = OverlayContent(state: state)
-        let hosting = NSHostingView(rootView: content)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
-        contentView = hosting
-        hostingView = hosting
+        currentPosition = position
 
-        // Position at top-center or bottom-center based on settings.
-        let size = CGSize(width: 360, height: 140)
-        let fixedEdgeDistance: CGFloat = 30
-        if let screen = NSScreen.main {
-            let x = screen.visibleFrame.midX - size.width / 2
-            let y: CGFloat
-            switch position {
-            case .bottom:
-                y = screen.visibleFrame.minY + fixedEdgeDistance
-            case .top:
-                y = screen.visibleFrame.maxY - size.height - fixedEdgeDistance
-            }
-            setFrame(CGRect(origin: CGPoint(x: x, y: y), size: size), display: false)
+        let content = OverlayContent(
+            state: state,
+            onClose: { [weak self] in self?.onRequestClose?() }
+        )
+
+        if let hostingView {
+            hostingView.rootView = content
+        } else {
+            let hosting = NSHostingView(rootView: content)
+            hosting.translatesAutoresizingMaskIntoConstraints = false
+            contentView = hosting
+            self.hostingView = hosting
         }
 
-        alphaValue = 1
-        orderFront(nil)
+        observe(state: state)
+        updateAppearance(for: state, animated: isVisible)
+
+        if !isVisible {
+            alphaValue = 1
+            orderFront(nil)
+        }
     }
 
     func hide(completion: (() -> Void)? = nil) {
@@ -115,21 +169,81 @@ class RecordingOverlayWindow: NSPanel {
             completion?()
         })
     }
+
+    private func observe(state: OverlayState) {
+        guard observedState !== state else { return }
+        observedState = state
+        displayModeCancellable = state.$displayMode
+            .receive(on: RunLoop.main)
+            .sink { [weak self, weak state] _ in
+                guard let self, let state else { return }
+                self.updateAppearance(for: state, animated: true)
+            }
+    }
+
+    private func updateAppearance(for state: OverlayState, animated: Bool) {
+        ignoresMouseEvents = state.displayMode != .answer
+        let targetFrame = frame(for: panelSize(for: state.displayMode), position: currentPosition)
+
+        guard !targetFrame.isEmpty else { return }
+        if animated, isVisible {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.22
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                animator().setFrame(targetFrame, display: true)
+            }
+        } else {
+            setFrame(targetFrame, display: true)
+        }
+    }
+
+    private func panelSize(for mode: OverlayDisplayMode) -> CGSize {
+        switch mode {
+        case .recording, .processing:
+            return CGSize(width: 360, height: 140)
+        case .answer:
+            return CGSize(width: 560, height: 340)
+        }
+    }
+
+    private func frame(for size: CGSize, position: OverlayPosition) -> CGRect {
+        let fixedEdgeDistance: CGFloat = 30
+        let visibleFrame = NSScreen.main?.visibleFrame ?? .zero
+        guard !visibleFrame.isEmpty else {
+            return CGRect(origin: frame.origin, size: size)
+        }
+
+        let x = visibleFrame.midX - size.width / 2
+        let y: CGFloat
+        switch position {
+        case .bottom:
+            y = visibleFrame.minY + fixedEdgeDistance
+        case .top:
+            y = visibleFrame.maxY - size.height - fixedEdgeDistance
+        }
+        return CGRect(origin: CGPoint(x: x, y: y), size: size)
+    }
 }
 
 // MARK: - SwiftUI content hosted inside the panel
 
 private struct OverlayContent: View {
     @ObservedObject var state: OverlayState
+    let onClose: () -> Void
 
     var body: some View {
         WaveformView(
+            displayMode: state.displayMode,
+            sessionIconMode: state.sessionIconMode,
             audioLevel: state.audioLevel,
             isRecording: state.isRecording,
             transcribedText: state.transcribedText,
             statusMessage: state.statusMessage,
             isEnhancing: state.isEnhancing,
-            isCompleting: state.isCompleting
+            isCompleting: state.isCompleting,
+            answerTitle: state.answerTitle,
+            answerContent: state.answerContent,
+            onClose: onClose
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.top, 8)

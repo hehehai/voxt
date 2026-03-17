@@ -43,6 +43,7 @@
 "Output" = "出力";
 "Copy to clipboard when no focused input" = "入力フォーカスがない場合はクリップボードへコピー";
 "Always copy result to clipboard" = "結果を常にクリップボードへコピー";
+"AI Answer" = "AI 回答";
 "Also copy result to clipboard" = "結果を同時にクリップボードへコピー";
 "App Behavior" = "アプリ動作";
 "Launch at Login" = "ログイン時に起動";
@@ -155,6 +156,7 @@
 "Custom LLM Models" = "カスタム LLM モデル";
 "Actions" = "操作";
 "Cancel" = "キャンセル";
+"Apply" = "適用";
 "Using" = "使用中";
 "Use" = "使用";
 "Delete" = "削除";
@@ -517,6 +519,19 @@
 "Last scan %@ processed %d history records and added %d suggestions." = "前回のスキャン（%@）では履歴 %d 件を処理し、%d 件の候補を追加しました。";
 "Use LLM to ingest candidate terms?" = "LLM で候補語を取り込みますか？";
 "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms." = "設定済みの LLM を使って %d 件の新しい履歴をバッチ解析し、辞書候補語を抽出します。";
+"%d new history records will be parsed in batches to extract candidate dictionary terms." = "%d 件の新しい履歴をバッチ解析して、辞書候補語を抽出します。";
+"Model" = "モデル";
+"Local Models" = "ローカルモデル";
+"Remote Models" = "リモートモデル";
+"Ingest Prompt" = "取り込み Prompt";
+"Apply runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion." = "適用は現在の下書きで一度だけ実行します。保存は prompt としきい値を保存してから取り込みを開始します。";
+"Local · %@" = "ローカル · %@";
+"Remote · %@" = "リモート · %@";
+"Selected local model is not available." = "選択したローカルモデルは現在利用できません。";
+"Selected remote model is invalid." = "選択したリモートモデルが無効です。";
+"Selected remote model is not configured." = "選択したリモートモデルはまだ設定されていません。";
+"No model was selected for dictionary ingestion." = "辞書取り込み用のモデルが選択されていません。";
+"No configured local or remote model is available for dictionary ingestion. Configure one in Model settings first." = "辞書取り込みに使える設定済みのローカルまたはリモートモデルがありません。先にモデル設定で構成してください。";
 "This runs as a separate task and may take some time depending on the model and history size." = "この処理は別タスクとして実行され、モデルや履歴件数によっては時間がかかる場合があります。";
 "Continue" = "続ける";
 "Apple Intelligence is unavailable." = "Apple Intelligence は現在利用できません。";
@@ -550,3 +565,5 @@
 "Traditional Chinese" = "繁体字中国語";
 "Doubao uses App ID + Access Token for streaming API." = "Doubao のストリーミング API では App ID と Access Token を使用します。";
 "Aliyun ASR in Voxt uses realtime WebSocket only: Qwen models use /api-ws/v1/realtime, Fun/Paraformer models use /api-ws/v1/inference." = "Voxt の Aliyun ASR は realtime WebSocket のみを使います。Qwen モデルは /api-ws/v1/realtime、Fun/Paraformer モデルは /api-ws/v1/inference を使用します。";
+"Always show rewrite answer card" = "常に書き換え回答カードを表示";
+"Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "書き換えにのみ適用されます。無効時は、書き込み可能な入力欄にフォーカスがない場合のみ回答カードを表示します。有効時は、フォーカス状態に関係なく常に回答カードを表示します。";

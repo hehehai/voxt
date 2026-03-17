@@ -28,6 +28,10 @@ extension AppDelegate {
         defaults.bool(forKey: AppPreferenceKey.autoCopyWhenNoFocusedInput)
     }
 
+    var alwaysShowRewriteAnswerCard: Bool {
+        defaults.bool(forKey: AppPreferenceKey.alwaysShowRewriteAnswerCard)
+    }
+
     var translationTargetLanguage: TranslationTargetLanguage {
         enumValue(forKey: AppPreferenceKey.translationTargetLanguage, default: .english)
     }

@@ -116,6 +116,7 @@ extension AppDelegate {
         overlayState.reset()
         overlayState.transcribedText = selectedText
         overlayState.statusMessage = ""
+        overlayState.presentRecording(iconMode: .translation)
         overlayWindow.show(state: overlayState, position: overlayPosition)
 
         let startedAt = Date()
@@ -144,8 +145,12 @@ extension AppDelegate {
     func processRewriteTranscription(_ text: String, sessionID: UUID) {
         guard shouldHandleCallbacks(for: sessionID) else { return }
         let selectedSourceText = selectedTextFromSystemSelection()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        rewriteSessionHasSelectedSourceText = !selectedSourceText.isEmpty
+        let prefersStructuredAnswerOutput = shouldPresentRewriteAnswerOverlay(
+            hasSelectedSourceText: rewriteSessionHasSelectedSourceText
+        )
         VoxtLog.info(
-            "Rewrite flow started. promptChars=\(text.count), selectedSourceChars=\(selectedSourceText.count), enhancementMode=\(enhancementMode.rawValue)"
+            "Rewrite flow started. promptChars=\(text.count), selectedSourceChars=\(selectedSourceText.count), enhancementMode=\(enhancementMode.rawValue), structuredAnswerOutput=\(prefersStructuredAnswerOutput)"
         )
         setEnhancingState(true)
         Task {
@@ -158,10 +163,23 @@ extension AppDelegate {
 
             let llmStartedAt = Date()
             do {
-                let rewritten = try await self.runRewritePipeline(
+                var rewritten = try await self.runRewritePipeline(
                     dictatedText: text,
-                    selectedSourceText: selectedSourceText
+                    selectedSourceText: selectedSourceText,
+                    structuredAnswerOutput: prefersStructuredAnswerOutput
                 )
+                if prefersStructuredAnswerOutput,
+                   self.shouldRetryStructuredRewriteAnswer(for: rewritten) {
+                    VoxtLog.warning("Rewrite structured answer was missing usable content; retrying in direct-answer mode.")
+                    if let retried = try? await self.rewriteText(
+                        dictatedPrompt: text,
+                        sourceText: "",
+                        structuredAnswerOutput: true,
+                        forceNonEmptyAnswer: true
+                    ) {
+                        rewritten = retried
+                    }
+                }
                 guard self.shouldHandleCallbacks(for: sessionID) else { return }
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
                 VoxtLog.info("Rewrite flow succeeded. outputChars=\(rewritten.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
@@ -309,15 +327,24 @@ extension AppDelegate {
         }
     }
 
-    private func rewriteText(dictatedPrompt: String, sourceText: String) async throws -> String {
+    private func rewriteText(
+        dictatedPrompt: String,
+        sourceText: String,
+        structuredAnswerOutput: Bool,
+        forceNonEmptyAnswer: Bool = false
+    ) async throws -> String {
+        let directAnswerMode = structuredAnswerOutput && sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let resolvedPrompt = resolvedRewritePrompt(
             dictatedPrompt: dictatedPrompt,
-            sourceText: sourceText
+            sourceText: sourceText,
+            structuredAnswerOutput: structuredAnswerOutput,
+            directAnswerMode: directAnswerMode,
+            forceNonEmptyAnswer: forceNonEmptyAnswer
         )
         let rewriteRepo = rewriteCustomLLMRepo
         let modelProvider = rewriteModelProvider
         VoxtLog.llm(
-            "Rewrite request. promptChars=\(resolvedPrompt.count), dictatedChars=\(dictatedPrompt.count), sourceChars=\(sourceText.count), provider=\(modelProvider.rawValue), rewriteRepo=\(rewriteRepo)"
+            "Rewrite request. promptChars=\(resolvedPrompt.count), dictatedChars=\(dictatedPrompt.count), sourceChars=\(sourceText.count), provider=\(modelProvider.rawValue), rewriteRepo=\(rewriteRepo), structuredAnswerOutput=\(structuredAnswerOutput), directAnswerMode=\(directAnswerMode), forceNonEmptyAnswer=\(forceNonEmptyAnswer)"
         )
 
         switch modelProvider {
@@ -427,14 +454,70 @@ extension AppDelegate {
         )
     }
 
-    private func resolvedRewritePrompt(dictatedPrompt: String, sourceText: String) -> String {
-        let resolved = rewriteSystemPrompt
+    private func resolvedRewritePrompt(
+        dictatedPrompt: String,
+        sourceText: String,
+        structuredAnswerOutput: Bool,
+        directAnswerMode: Bool,
+        forceNonEmptyAnswer: Bool
+    ) -> String {
+        let basePrompt = rewriteSystemPrompt
             .replacingOccurrences(of: "{{DICTATED_PROMPT}}", with: dictatedPrompt)
             .replacingOccurrences(of: "{{SOURCE_TEXT}}", with: sourceText)
+        let directAnswerConstraint = directAnswerMode
+            ? """
+            Direct-answer mode:
+            - There is no selected source text to rewrite.
+            - Treat the spoken instruction as the full user request.
+            - Do not summarize, label, or restate the instruction itself.
+            - Put the actual answer or requested content into the final output.
+            """
+            : ""
+        let runtimeConstraint = structuredAnswerOutput
+            ? """
+            Runtime output format rules:
+            - Return exactly one JSON object with keys "title" and "content".
+            - "title" must be a short summary of the answer in one line.
+            - "content" must contain the final answer text only.
+            - "content" must not be empty.
+            - Do not wrap the JSON in markdown fences.
+            - Do not add any extra keys, prose, labels, or explanations.
+            """
+            : ""
+        let retryConstraint = forceNonEmptyAnswer
+            ? """
+            Retry rule:
+            - A previous answer returned an empty "content" field.
+            - This time, you must return a non-empty "content".
+            - If the instruction is ambiguous, provide the most helpful direct response instead of leaving "content" empty.
+            """
+            : ""
+        let extraConstraints = [directAnswerConstraint, runtimeConstraint, retryConstraint]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+        let resolved = extraConstraints.isEmpty ? basePrompt : "\(basePrompt)\n\n\(extraConstraints)"
         return appendDictionaryRewriteGlossary(
             to: resolved,
             sourceText: "\(dictatedPrompt)\n\(sourceText)"
         )
+    }
+
+    private func shouldRetryStructuredRewriteAnswer(for text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        if let payload = extractRewriteAnswerPayload(from: trimmed) {
+            return payload.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        let lowered = trimmed.lowercased()
+        let looksStructuredStub =
+            (trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) ||
+            lowered.contains("\"title\"") ||
+            lowered.contains("\"content\"") ||
+            lowered.contains("title:") ||
+            lowered.contains("content:")
+        return looksStructuredStub
     }
 
     private func processSelectedTextTranslation(_ text: String) {
@@ -527,7 +610,8 @@ extension AppDelegate {
 
     private func runRewritePipeline(
         dictatedText: String,
-        selectedSourceText: String
+        selectedSourceText: String,
+        structuredAnswerOutput: Bool
     ) async throws -> String {
         let stages: [any SessionPipelineStage] = [
             EnhanceStage(
@@ -541,7 +625,11 @@ extension AppDelegate {
                 sourceText: selectedSourceText,
                 transform: { [weak self] enhancedPrompt, sourceText in
                     guard let self else { return enhancedPrompt }
-                    return try await self.rewriteText(dictatedPrompt: enhancedPrompt, sourceText: sourceText)
+                    return try await self.rewriteText(
+                        dictatedPrompt: enhancedPrompt,
+                        sourceText: sourceText,
+                        structuredAnswerOutput: structuredAnswerOutput
+                    )
                 }
             )
         ]

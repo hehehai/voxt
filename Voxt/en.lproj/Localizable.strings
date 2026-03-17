@@ -43,6 +43,7 @@
 "Output" = "Output";
 "Copy to clipboard when no focused input" = "Copy to clipboard when no focused input";
 "Always copy result to clipboard" = "Always copy result to clipboard";
+"AI Answer" = "AI Answer";
 "Also copy result to clipboard" = "Also copy result to clipboard";
 "App Behavior" = "App Behavior";
 "Launch at Login" = "Launch at Login";
@@ -157,6 +158,7 @@
 "Custom LLM Models" = "Custom LLM Models";
 "Actions" = "Actions";
 "Cancel" = "Cancel";
+"Apply" = "Apply";
 "Using" = "Using";
 "Use" = "Use";
 "Delete" = "Delete";
@@ -493,6 +495,19 @@
 "Last scan %@ processed %d history records and added %d suggestions." = "Last scan %@ processed %d history records and added %d suggestions.";
 "Use LLM to ingest candidate terms?" = "Use LLM to ingest candidate terms?";
 "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms." = "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms.";
+"%d new history records will be parsed in batches to extract candidate dictionary terms." = "%d new history records will be parsed in batches to extract candidate dictionary terms.";
+"Model" = "Model";
+"Local Models" = "Local Models";
+"Remote Models" = "Remote Models";
+"Ingest Prompt" = "Ingest Prompt";
+"Apply runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion." = "Apply runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion.";
+"Local · %@" = "Local · %@";
+"Remote · %@" = "Remote · %@";
+"Selected local model is not available." = "Selected local model is not available.";
+"Selected remote model is invalid." = "Selected remote model is invalid.";
+"Selected remote model is not configured." = "Selected remote model is not configured.";
+"No model was selected for dictionary ingestion." = "No model was selected for dictionary ingestion.";
+"No configured local or remote model is available for dictionary ingestion. Configure one in Model settings first." = "No configured local or remote model is available for dictionary ingestion. Configure one in Model settings first.";
 "This runs as a separate task and may take some time depending on the model and history size." = "This runs as a separate task and may take some time depending on the model and history size.";
 "Continue" = "Continue";
 "Apple Intelligence is unavailable." = "Apple Intelligence is unavailable.";
@@ -550,3 +565,5 @@
 "System audio recording permission is required for this feature. You can grant it in Settings > Permissions." = "System audio recording permission is required for this feature. You can grant it in Settings > Permissions.";
 "System Audio Recording Permission" = "System Audio Recording Permission";
 "Required only when muting other apps' media audio during recording is enabled." = "Required only when muting other apps' media audio during recording is enabled.";
+"Always show rewrite answer card" = "Always show rewrite answer card";
+"Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card.";

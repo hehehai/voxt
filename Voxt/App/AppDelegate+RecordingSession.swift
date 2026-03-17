@@ -21,6 +21,8 @@ extension AppDelegate {
         activeRecordingSessionID = UUID()
         sessionOutputMode = outputMode
         enhancementContextSnapshot = nil
+        rewriteSessionHasSelectedSourceText = false
+        rewriteSessionHadWritableFocusedInput = outputMode == .rewrite ? hasWritableFocusedTextInput() : false
         resetVoiceEndCommandState()
 
         VoxtLog.info(
@@ -30,6 +32,7 @@ extension AppDelegate {
         applyPreferredInputDevice()
         overlayState.reset()
         overlayState.statusMessage = ""
+        overlayState.presentRecording(iconMode: overlayIconMode(for: outputMode))
 
         if transcriptionEngine == .mlxAudio {
             switch mlxModelManager.state {
@@ -98,6 +101,7 @@ extension AppDelegate {
         if transcriptionProcessingStartedAt == nil {
             transcriptionProcessingStartedAt = recordingStoppedAt
         }
+        overlayState.presentProcessing(iconMode: overlayIconMode(for: sessionOutputMode))
         voiceEndCommandState.lastDetectedCommand = false
         enhancementContextSnapshot = captureEnhancementContextSnapshot()
         stopActiveRecordingTranscriber()
@@ -203,6 +207,17 @@ extension AppDelegate {
         }
     }
 
+    private func overlayIconMode(for outputMode: SessionOutputMode) -> OverlaySessionIconMode {
+        switch outputMode {
+        case .transcription:
+            return .transcription
+        case .translation:
+            return .translation
+        case .rewrite:
+            return .rewrite
+        }
+    }
+
     func startPauseLLMIfNeeded() {
         runPauseEnhancementIfNeeded()
     }
@@ -231,6 +246,7 @@ extension AppDelegate {
     func showOverlayStatus(_ message: String, clearAfter seconds: TimeInterval = 2.4) {
         overlayStatusClearTask?.cancel()
         overlayState.statusMessage = message
+        overlayState.presentRecording(iconMode: overlayIconMode(for: sessionOutputMode))
         overlayStatusClearTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .seconds(seconds))
@@ -247,6 +263,7 @@ extension AppDelegate {
         overlayStatusClearTask?.cancel()
         overlayState.reset()
         overlayState.statusMessage = message
+        overlayState.presentRecording(iconMode: overlayIconMode(for: sessionOutputMode))
         overlayWindow.show(state: overlayState, position: overlayPosition)
 
         overlayReminderTask = Task { [weak self] in
@@ -261,6 +278,9 @@ extension AppDelegate {
 
     func setEnhancingState(_ isEnhancing: Bool) {
         overlayState.isEnhancing = isEnhancing
+        if overlayState.displayMode != .answer {
+            overlayState.displayMode = isEnhancing ? .processing : .recording
+        }
         if transcriptionEngine == .mlxAudio {
             mlxTranscriber?.isEnhancing = isEnhancing
         } else if transcriptionEngine == .remote {
@@ -373,6 +393,8 @@ extension AppDelegate {
         isSelectedTextTranslationFlow = false
         enhancementContextSnapshot = nil
         lastEnhancementPromptContext = nil
+        rewriteSessionHasSelectedSourceText = false
+        rewriteSessionHadWritableFocusedInput = false
         resetVoiceEndCommandState()
         overlayState.reset()
         overlayWindow.hide()

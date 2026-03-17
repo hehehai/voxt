@@ -10,6 +10,7 @@ extension AppDelegate {
         var name: String { "hideOverlay" }
 
         func run(delegate: AppDelegate) {
+            guard delegate.overlayState.displayMode != .answer else { return }
             delegate.overlayWindow.hide()
         }
     }
@@ -41,8 +42,12 @@ extension AppDelegate {
             delegate.sessionOutputMode = .transcription
             delegate.isSelectedTextTranslationFlow = false
             delegate.enhancementContextSnapshot = nil
+            delegate.rewriteSessionHasSelectedSourceText = false
+            delegate.rewriteSessionHadWritableFocusedInput = false
             delegate.overlayState.isCompleting = false
-            delegate.overlayState.reset()
+            if delegate.overlayState.displayMode != .answer {
+                delegate.overlayState.reset()
+            }
             delegate.pendingSessionFinishTask = nil
         }
     }

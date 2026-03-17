@@ -25,8 +25,14 @@ struct VoxtApp: App {
     var body: some Scene {
         Settings {
             SettingsView(
-                onIngestDictionarySuggestionsFromHistory: {
-                    appDelegate.startDictionaryHistorySuggestionScan()
+                availableDictionaryHistoryScanModels: {
+                    appDelegate.availableDictionaryHistoryScanModelOptions()
+                },
+                onIngestDictionarySuggestionsFromHistory: { request, persistSettings in
+                    appDelegate.startDictionaryHistorySuggestionScan(
+                        request: request,
+                        persistSettings: persistSettings
+                    )
                 },
                 mlxModelManager: appDelegate.mlxModelManager,
                 customLLMManager: appDelegate.customLLMManager,
@@ -161,6 +167,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingTranscriptionStartTask: Task<Void, Never>?
     var enhancementContextSnapshot: EnhancementContextSnapshot?
     var lastEnhancementPromptContext: EnhancementPromptContext?
+    var rewriteSessionHasSelectedSourceText = false
+    var rewriteSessionHadWritableFocusedInput = false
     let tapStopGuardInterval: TimeInterval = 0.35
     let transcriptionStartDebounceInterval: TimeInterval = 0.08
     var settingsWindowPresentationState = SettingsWindowPresentationState()
@@ -189,6 +197,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.voiceEndCommandPreset: VoiceEndCommandPreset.over.rawValue,
             AppPreferenceKey.voiceEndCommandText: "",
             AppPreferenceKey.autoCopyWhenNoFocusedInput: false,
+            AppPreferenceKey.alwaysShowRewriteAnswerCard: false,
             AppPreferenceKey.appEnhancementEnabled: false,
             AppPreferenceKey.translationSystemPrompt: AppPreferenceKey.defaultTranslationPrompt,
             AppPreferenceKey.rewriteSystemPrompt: AppPreferenceKey.defaultRewritePrompt,
@@ -313,6 +322,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupHotkey()
         setupEscapeKeyMonitoring()
+        overlayWindow.onRequestClose = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.dismissAnswerOverlay()
+            }
+        }
 
         appUpdateManager.automaticallyChecksForUpdates = autoCheckForUpdates
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
@@ -408,6 +422,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleEscapeKeyEvent(_ event: NSEvent) {
         guard event.keyCode == UInt16(kVK_Escape) else { return }
+        if overlayState.displayMode == .answer {
+            dismissAnswerOverlay()
+            return
+        }
         guard HotkeyPreference.loadTriggerMode() == .tap else { return }
         guard isSessionActive else { return }
         guard !isSelectedTextTranslationFlow else { return }

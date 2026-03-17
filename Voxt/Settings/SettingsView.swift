@@ -6,7 +6,8 @@ import ApplicationServices
 import Combine
 
 struct SettingsView: View {
-    let onIngestDictionarySuggestionsFromHistory: () -> Void
+    let availableDictionaryHistoryScanModels: () -> [DictionaryHistoryScanModelOption]
+    let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
@@ -24,7 +25,8 @@ struct SettingsView: View {
     private let issueRefreshTimer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
 
     init(
-        onIngestDictionarySuggestionsFromHistory: @escaping () -> Void,
+        availableDictionaryHistoryScanModels: @escaping () -> [DictionaryHistoryScanModelOption],
+        onIngestDictionarySuggestionsFromHistory: @escaping (DictionaryHistoryScanRequest, Bool) -> Void,
         mlxModelManager: MLXModelManager,
         customLLMManager: CustomLLMModelManager,
         historyStore: TranscriptionHistoryStore,
@@ -33,6 +35,7 @@ struct SettingsView: View {
         appUpdateManager: AppUpdateManager,
         initialTab: SettingsTab = .general
     ) {
+        self.availableDictionaryHistoryScanModels = availableDictionaryHistoryScanModels
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
         self.mlxModelManager = mlxModelManager
         self.customLLMManager = customLLMManager
@@ -178,6 +181,7 @@ struct SettingsView: View {
                     historyStore: historyStore,
                     dictionaryStore: dictionaryStore,
                     dictionarySuggestionStore: dictionarySuggestionStore,
+                    availableHistoryScanModels: availableDictionaryHistoryScanModels,
                     onIngestSuggestionsFromHistory: onIngestDictionarySuggestionsFromHistory
                 )
             } else if selectedTab == .appEnhancement {
