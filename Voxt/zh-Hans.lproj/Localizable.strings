@@ -551,3 +551,5 @@
 "System audio recording permission is required for this feature. You can grant it in Settings > Permissions." = "此功能需要系统音频录制权限。你可以在 设置 > 权限 中授予。";
 "System Audio Recording Permission" = "系统音频录制权限";
 "Required only when muting other apps' media audio during recording is enabled." = "仅当开启“录制时静音其他应用媒体音频”时才需要。";
+"Always show rewrite answer card" = "始终显示转写答案卡片";
+"Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "仅适用于转写。关闭时，只有在未聚焦可写输入框时才显示答案卡片；开启后，转写无论是否聚焦输入框都会显示答案卡片。";

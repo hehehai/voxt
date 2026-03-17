@@ -185,19 +185,14 @@ extension AppDelegate {
         window.contentViewController = hostingController
         window.isReleasedWhenClosed = false
         window.level = .normal
+        window.center()
         positionWindowTrafficLightButtons(window)
 
         let controller = NSWindowController(window: window)
         controller.shouldCascadeWindows = false
         settingsWindowController = controller
         controller.showWindow(nil)
-
-        DispatchQueue.main.async { [weak self, weak window] in
-            guard let self, let window else { return }
-            window.center()
-            self.positionWindowTrafficLightButtons(window)
-            self.bringWindowToFront(window)
-        }
+        bringWindowToFront(window)
     }
 
     private func bringWindowToFront(_ window: NSWindow) {

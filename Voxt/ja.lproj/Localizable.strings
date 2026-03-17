@@ -551,3 +551,5 @@
 "Traditional Chinese" = "繁体字中国語";
 "Doubao uses App ID + Access Token for streaming API." = "Doubao のストリーミング API では App ID と Access Token を使用します。";
 "Aliyun ASR in Voxt uses realtime WebSocket only: Qwen models use /api-ws/v1/realtime, Fun/Paraformer models use /api-ws/v1/inference." = "Voxt の Aliyun ASR は realtime WebSocket のみを使います。Qwen モデルは /api-ws/v1/realtime、Fun/Paraformer モデルは /api-ws/v1/inference を使用します。";
+"Always show rewrite answer card" = "常に書き換え回答カードを表示";
+"Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "書き換えにのみ適用されます。無効時は、書き込み可能な入力欄にフォーカスがない場合のみ回答カードを表示します。有効時は、フォーカス状態に関係なく常に回答カードを表示します。";

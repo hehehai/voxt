@@ -307,8 +307,10 @@ struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Toggle("Always show rewrite answer card", isOn: $alwaysShowRewriteAnswerCard)
-                    Text("Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card.")
+                    Toggle(isOn: $alwaysShowRewriteAnswerCard) {
+                        Text(String(localized: "Always show rewrite answer card"))
+                    }
+                    Text(String(localized: "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

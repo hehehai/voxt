@@ -551,3 +551,5 @@
 "System audio recording permission is required for this feature. You can grant it in Settings > Permissions." = "System audio recording permission is required for this feature. You can grant it in Settings > Permissions.";
 "System Audio Recording Permission" = "System Audio Recording Permission";
 "Required only when muting other apps' media audio during recording is enabled." = "Required only when muting other apps' media audio during recording is enabled.";
+"Always show rewrite answer card" = "Always show rewrite answer card";
+"Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card.";
