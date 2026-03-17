@@ -126,7 +126,7 @@ struct DictionarySuggestionBulkAddResult: Equatable {
     let skippedCount: Int
 }
 
-struct DictionarySuggestionFilterSettings: Codable, Equatable {
+struct DictionarySuggestionFilterSettings: Codable, Equatable, Hashable {
     var prompt: String
     var batchSize: Int
     var maxCandidatesPerBatch: Int

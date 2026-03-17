@@ -25,8 +25,14 @@ struct VoxtApp: App {
     var body: some Scene {
         Settings {
             SettingsView(
-                onIngestDictionarySuggestionsFromHistory: {
-                    appDelegate.startDictionaryHistorySuggestionScan()
+                availableDictionaryHistoryScanModels: {
+                    appDelegate.availableDictionaryHistoryScanModelOptions()
+                },
+                onIngestDictionarySuggestionsFromHistory: { request, persistSettings in
+                    appDelegate.startDictionaryHistorySuggestionScan(
+                        request: request,
+                        persistSettings: persistSettings
+                    )
                 },
                 mlxModelManager: appDelegate.mlxModelManager,
                 customLLMManager: appDelegate.customLLMManager,

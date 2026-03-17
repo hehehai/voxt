@@ -158,6 +158,7 @@
 "Custom LLM Models" = "Custom LLM Models";
 "Actions" = "Actions";
 "Cancel" = "Cancel";
+"Apply" = "Apply";
 "Using" = "Using";
 "Use" = "Use";
 "Delete" = "Delete";
@@ -494,6 +495,19 @@
 "Last scan %@ processed %d history records and added %d suggestions." = "Last scan %@ processed %d history records and added %d suggestions.";
 "Use LLM to ingest candidate terms?" = "Use LLM to ingest candidate terms?";
 "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms." = "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms.";
+"%d new history records will be parsed in batches to extract candidate dictionary terms." = "%d new history records will be parsed in batches to extract candidate dictionary terms.";
+"Model" = "Model";
+"Local Models" = "Local Models";
+"Remote Models" = "Remote Models";
+"Ingest Prompt" = "Ingest Prompt";
+"Apply runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion." = "Apply runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion.";
+"Local · %@" = "Local · %@";
+"Remote · %@" = "Remote · %@";
+"Selected local model is not available." = "Selected local model is not available.";
+"Selected remote model is invalid." = "Selected remote model is invalid.";
+"Selected remote model is not configured." = "Selected remote model is not configured.";
+"No model was selected for dictionary ingestion." = "No model was selected for dictionary ingestion.";
+"No configured local or remote model is available for dictionary ingestion. Configure one in Model settings first." = "No configured local or remote model is available for dictionary ingestion. Configure one in Model settings first.";
 "This runs as a separate task and may take some time depending on the model and history size." = "This runs as a separate task and may take some time depending on the model and history size.";
 "Continue" = "Continue";
 "Apple Intelligence is unavailable." = "Apple Intelligence is unavailable.";

@@ -1,9 +1,26 @@
 import Foundation
 
+struct DictionaryHistoryScanModelOption: Identifiable, Hashable {
+    enum Source: Hashable {
+        case local
+        case remote
+    }
+
+    let id: String
+    let source: Source
+    let title: String
+    let detail: String
+}
+
+struct DictionaryHistoryScanRequest: Hashable {
+    let modelOptionID: String
+    let filterSettings: DictionarySuggestionFilterSettings
+}
+
 extension AppDelegate {
     private enum DictionaryHistoryScanModel {
         case appleIntelligence
-        case customLLM
+        case customLLM(repo: String)
         case remoteLLM(provider: RemoteLLMProvider, configuration: RemoteProviderConfiguration)
     }
 
@@ -127,6 +144,54 @@ extension AppDelegate {
     }
 
     func startDictionaryHistorySuggestionScan() {
+        startDictionaryHistorySuggestionScan(request: nil, persistSettings: false)
+    }
+
+    func availableDictionaryHistoryScanModelOptions() -> [DictionaryHistoryScanModelOption] {
+        var options: [DictionaryHistoryScanModelOption] = []
+
+        let localRepos = [customLLMManager.currentModelRepo, translationCustomLLMRepo, rewriteCustomLLMRepo]
+        let uniqueLocalRepos = Array(Set(localRepos)).sorted {
+            customLLMManager.displayTitle(for: $0).localizedCaseInsensitiveCompare(customLLMManager.displayTitle(for: $1)) == .orderedAscending
+        }
+
+        for repo in uniqueLocalRepos where customLLMManager.isModelDownloaded(repo: repo) {
+            options.append(
+                DictionaryHistoryScanModelOption(
+                    id: "local:\(repo)",
+                    source: .local,
+                    title: AppLocalization.format(
+                        "Local · %@",
+                        customLLMManager.displayTitle(for: repo)
+                    ),
+                    detail: repo
+                )
+            )
+        }
+
+        for provider in RemoteLLMProvider.allCases {
+            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(
+                provider: provider,
+                stored: remoteLLMConfigurations
+            )
+            guard configuration.isConfigured else { continue }
+            options.append(
+                DictionaryHistoryScanModelOption(
+                    id: "remote:\(provider.rawValue)",
+                    source: .remote,
+                    title: AppLocalization.format("Remote · %@", provider.title),
+                    detail: configuration.model
+                )
+            )
+        }
+
+        return options
+    }
+
+    func startDictionaryHistorySuggestionScan(
+        request: DictionaryHistoryScanRequest?,
+        persistSettings: Bool
+    ) {
         guard !dictionarySuggestionStore.historyScanProgress.isRunning else { return }
 
         let pendingEntries = dictionarySuggestionStore.pendingHistoryEntries(in: historyStore)
@@ -140,19 +205,26 @@ extension AppDelegate {
             return
         }
 
+        if persistSettings, let request {
+            dictionarySuggestionStore.saveFilterSettings(request.filterSettings)
+        }
+
         dictionarySuggestionStore.beginHistoryScan(totalCount: pendingEntries.count)
         Task {
-            await runDictionaryHistorySuggestionScan(entries: pendingEntries)
+            await runDictionaryHistorySuggestionScan(entries: pendingEntries, request: request)
         }
     }
 
-    private func runDictionaryHistorySuggestionScan(entries: [TranscriptionHistoryEntry]) async {
+    private func runDictionaryHistorySuggestionScan(
+        entries: [TranscriptionHistoryEntry],
+        request: DictionaryHistoryScanRequest?
+    ) async {
         let groups = loadDictionaryHistoryScanGroups()
         let groupsByID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
         let groupsByLowercasedName = groups.reduce(into: [String: AppBranchGroup]()) { partialResult, group in
             partialResult[group.name.lowercased()] = group
         }
-        let filterSettings = dictionarySuggestionStore.filterSettings
+        let filterSettings = request?.filterSettings.sanitized() ?? dictionarySuggestionStore.filterSettings
         let batchSize = filterSettings.batchSize
 
         var processedCount = 0
@@ -161,6 +233,7 @@ extension AppDelegate {
         var lastProcessedEntry: TranscriptionHistoryEntry?
 
         do {
+            let model = try resolvedDictionaryHistoryScanModel(for: request)
             for start in stride(from: 0, to: entries.count, by: batchSize) {
                 let batch = Array(entries[start..<min(start + batchSize, entries.count)])
                 let prompt = try dictionaryHistoryScanPrompt(
@@ -169,7 +242,7 @@ extension AppDelegate {
                     groupsByID: groupsByID,
                     groupsByLowercasedName: groupsByLowercasedName
                 )
-                let rawResponse = try await runDictionaryHistoryScanPrompt(prompt)
+                let rawResponse = try await runDictionaryHistoryScanPrompt(prompt, model: model)
                 let parsedCandidates = try parseDictionaryHistoryScanCandidates(
                     from: rawResponse,
                     batch: batch,
@@ -216,8 +289,10 @@ extension AppDelegate {
         }
     }
 
-    private func runDictionaryHistoryScanPrompt(_ prompt: String) async throws -> String {
-        let model = try resolvedDictionaryHistoryScanModel()
+    private func runDictionaryHistoryScanPrompt(
+        _ prompt: String,
+        model: DictionaryHistoryScanModel
+    ) async throws -> String {
         switch model {
         case .appleIntelligence:
             guard let enhancer else {
@@ -235,8 +310,8 @@ extension AppDelegate {
                 code: -2,
                 userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Apple Intelligence requires macOS 26 or later.")]
             )
-        case .customLLM:
-            return try await customLLMManager.enhance(userPrompt: prompt)
+        case .customLLM(let repo):
+            return try await customLLMManager.enhance(userPrompt: prompt, repo: repo)
         case .remoteLLM(let provider, let configuration):
             return try await RemoteLLMRuntimeClient().enhance(
                 userPrompt: prompt,
@@ -244,6 +319,13 @@ extension AppDelegate {
                 configuration: configuration
             )
         }
+    }
+
+    private func resolvedDictionaryHistoryScanModel(for request: DictionaryHistoryScanRequest?) throws -> DictionaryHistoryScanModel {
+        if let request {
+            return try dictionaryHistoryScanModel(for: request.modelOptionID)
+        }
+        return try resolvedDictionaryHistoryScanModel()
     }
 
     private func resolvedDictionaryHistoryScanModel() throws -> DictionaryHistoryScanModel {
@@ -294,13 +376,56 @@ extension AppDelegate {
         guard customLLMManager.isModelDownloaded(repo: customLLMManager.currentModelRepo) else {
             return nil
         }
-        return .customLLM
+        return .customLLM(repo: customLLMManager.currentModelRepo)
     }
 
     private func remoteDictionaryHistoryScanModel() -> DictionaryHistoryScanModel? {
         let context = resolvedRemoteLLMContext(forTranslation: false)
         guard context.configuration.isConfigured else { return nil }
         return .remoteLLM(provider: context.provider, configuration: context.configuration)
+    }
+
+    private func dictionaryHistoryScanModel(for optionID: String) throws -> DictionaryHistoryScanModel {
+        if optionID.hasPrefix("local:") {
+            let repo = String(optionID.dropFirst("local:".count))
+            guard customLLMManager.isModelDownloaded(repo: repo) else {
+                throw NSError(
+                    domain: "Voxt.DictionaryHistoryScan",
+                    code: -5,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Selected local model is not available.")]
+                )
+            }
+            return .customLLM(repo: repo)
+        }
+
+        if optionID.hasPrefix("remote:") {
+            let rawProvider = String(optionID.dropFirst("remote:".count))
+            guard let provider = RemoteLLMProvider(rawValue: rawProvider) else {
+                throw NSError(
+                    domain: "Voxt.DictionaryHistoryScan",
+                    code: -6,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Selected remote model is invalid.")]
+                )
+            }
+            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(
+                provider: provider,
+                stored: remoteLLMConfigurations
+            )
+            guard configuration.isConfigured else {
+                throw NSError(
+                    domain: "Voxt.DictionaryHistoryScan",
+                    code: -7,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Selected remote model is not configured.")]
+                )
+            }
+            return .remoteLLM(provider: provider, configuration: configuration)
+        }
+
+        throw NSError(
+            domain: "Voxt.DictionaryHistoryScan",
+            code: -8,
+            userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("No model was selected for dictionary ingestion.")]
+        )
     }
 
     private func dictionaryHistoryScanPrompt(

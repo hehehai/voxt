@@ -154,8 +154,14 @@ extension AppDelegate {
         }
 
         let contentView = SettingsView(
-            onIngestDictionarySuggestionsFromHistory: {
-                self.startDictionaryHistorySuggestionScan()
+            availableDictionaryHistoryScanModels: {
+                self.availableDictionaryHistoryScanModelOptions()
+            },
+            onIngestDictionarySuggestionsFromHistory: { request, persistSettings in
+                self.startDictionaryHistorySuggestionScan(
+                    request: request,
+                    persistSettings: persistSettings
+                )
             },
             mlxModelManager: mlxModelManager,
             customLLMManager: customLLMManager,

@@ -158,6 +158,7 @@
 "Custom LLM Models" = "自定义 LLM 模型";
 "Actions" = "操作";
 "Cancel" = "取消";
+"Apply" = "应用";
 "Using" = "使用中";
 "Use" = "使用";
 "Delete" = "删除";
@@ -504,6 +505,19 @@
 "Last scan %@ processed %d history records and added %d suggestions." = "上次扫描（%@）处理了 %d 条历史记录，新增 %d 个候选词。";
 "Use LLM to ingest candidate terms?" = "使用 LLM 录入候选词？";
 "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms." = "将使用已配置的 LLM 对 %d 条新历史记录进行分批解析，并提取候选词典词。";
+"%d new history records will be parsed in batches to extract candidate dictionary terms." = "将对 %d 条新历史记录进行分批解析，并提取候选词典词。";
+"Model" = "模型";
+"Local Models" = "本地模型";
+"Remote Models" = "远程模型";
+"Ingest Prompt" = "录入 Prompt";
+"Apply runs with the current draft only. Save stores the prompt and thresholds, then runs ingestion." = "应用仅使用当前草稿运行一次。保存会先存储 prompt 和阈值参数，然后开始录入。";
+"Local · %@" = "本地 · %@";
+"Remote · %@" = "远程 · %@";
+"Selected local model is not available." = "所选本地模型当前不可用。";
+"Selected remote model is invalid." = "所选远程模型无效。";
+"Selected remote model is not configured." = "所选远程模型尚未配置完成。";
+"No model was selected for dictionary ingestion." = "尚未为词典录入选择模型。";
+"No configured local or remote model is available for dictionary ingestion. Configure one in Model settings first." = "当前没有可用于词典录入的已配置本地或远程模型。请先在模型设置中完成配置。";
 "This runs as a separate task and may take some time depending on the model and history size." = "该过程会作为独立任务运行，耗时取决于模型和历史记录数量。";
 "Continue" = "继续";
 "Apple Intelligence is unavailable." = "Apple Intelligence 当前不可用。";

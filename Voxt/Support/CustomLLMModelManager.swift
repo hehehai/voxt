@@ -220,10 +220,14 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func enhance(userPrompt: String) async throws -> String {
+        try await enhance(userPrompt: userPrompt, repo: modelRepo)
+    }
+
+    func enhance(userPrompt: String, repo: String) async throws -> String {
         let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return "" }
 
-        guard isModelDownloaded(repo: modelRepo) else {
+        guard isModelDownloaded(repo: repo) else {
             throw NSError(
                 domain: "Voxt.CustomLLM",
                 code: 404,
@@ -231,21 +235,7 @@ class CustomLLMModelManager: ObservableObject {
             )
         }
 
-        let container: ModelContainer
-        if let cached = inferenceContainer, inferenceModelRepo == modelRepo {
-            container = cached
-        } else {
-            guard let directory = cacheDirectory(for: modelRepo) else {
-                throw NSError(
-                    domain: "Voxt.CustomLLM",
-                    code: -10,
-                    userInfo: [NSLocalizedDescriptionKey: "Invalid local model path."]
-                )
-            }
-            container = try await loadModelContainer(directory: directory)
-            inferenceContainer = container
-            inferenceModelRepo = modelRepo
-        }
+        let container = try await container(for: repo)
 
         let session = ChatSession(container, instructions: "")
         let params = generationParameters(for: .enhancement, inputLength: prompt.count)
@@ -253,26 +243,26 @@ class CustomLLMModelManager: ObservableObject {
 
         let startedAt = Date()
         VoxtLog.llm(
-            "Custom LLM enhance started. repo=\(modelRepo), inputChars=\(prompt.count), maxTokens=\(params.maxTokens ?? 0), temperature=\(params.temperature), topP=\(params.topP), mode=userMessage"
+            "Custom LLM enhance started. repo=\(repo), inputChars=\(prompt.count), maxTokens=\(params.maxTokens ?? 0), temperature=\(params.temperature), topP=\(params.topP), mode=userMessage"
         )
         VoxtLog.llm(
             """
-            Custom LLM enhance content. repo=\(modelRepo)
+            Custom LLM enhance content. repo=\(repo)
             [system_prompt]
             <empty>
             [input]
             \(VoxtLog.llmPreview(prompt))
             """
         )
-        let response = try await session.respond(to: modelPrompt(prompt, repo: modelRepo))
+        let response = try await session.respond(to: modelPrompt(prompt, repo: repo))
         let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
         let cleaned = extractResultText(response)
         VoxtLog.llm(
-            "Custom LLM enhance completed. repo=\(modelRepo), outputChars=\(cleaned.count), elapsedMs=\(elapsedMs)"
+            "Custom LLM enhance completed. repo=\(repo), outputChars=\(cleaned.count), elapsedMs=\(elapsedMs)"
         )
         VoxtLog.llm(
             """
-            Custom LLM enhance output. repo=\(modelRepo)
+            Custom LLM enhance output. repo=\(repo)
             [output]
             \(VoxtLog.llmPreview(cleaned))
             """
