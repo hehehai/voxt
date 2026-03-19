@@ -6,6 +6,12 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-03-19
+
+### Fixed
+- Reissued the latest patch release with Sparkle-compatible plain-text auto-update release notes so update feeds no longer depend on Markdown-formatted release bodies.
+- Includes the rewrite overlay, answer injection, dictionary ingest, history UI, and `fn` hotkey fixes shipped in the 1.6.2 patch line.
+
 ## [1.6.2] - 2026-03-19
 
 ### Changed
