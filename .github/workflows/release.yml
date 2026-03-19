@@ -806,24 +806,26 @@ jobs:
           fi
 
           RELEASE_BODY="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
-          RELEASE_NOTES="$(printf '%s' "$RELEASE_BODY" | python3 - <<'PY'
+          export RELEASE_BODY
+          RELEASE_NOTES="$(
+            python3 -c '
+import os
 import re
-import sys
 
-text = sys.stdin.read().replace('\r', '')
-text = re.sub(r'```.*?```', '', text, flags=re.S)
-text = re.sub(r'`([^`]*)`', r'\1', text)
-text = re.sub(r'!\[([^\]]*)\]\([^)]+\)', r'\1', text)
-text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-text = re.sub(r'^\s{0,3}#{1,6}\s*', '', text, flags=re.M)
-text = re.sub(r'^\s*[-*+]\s+', '- ', text, flags=re.M)
-text = re.sub(r'^\s*\d+\.\s+', '- ', text, flags=re.M)
-text = re.sub(r'^\s*>\s?', '', text, flags=re.M)
-text = re.sub(r'[*_~]', '', text)
-text = re.sub(r'\n{3,}', '\n\n', text)
+text = os.environ.get("RELEASE_BODY", "").replace("\r", "")
+text = re.sub(r"```.*?```", "", text, flags=re.S)
+text = re.sub(r"`([^`]*)`", r"\1", text)
+text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)
+text = re.sub(r"^\s*[-*+]\s+", "- ", text, flags=re.M)
+text = re.sub(r"^\s*\d+\.\s+", "- ", text, flags=re.M)
+text = re.sub(r"^\s*>\s?", "", text, flags=re.M)
+text = re.sub(r"[*_~]", "", text)
+text = re.sub(r"\n{3,}", "\n\n", text)
 print(text.strip())
-PY
-)"
+'
+          )"
           if [ -z "$RELEASE_NOTES" ]; then
             RELEASE_NOTES="Release ${VERSION}."
           fi
