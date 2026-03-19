@@ -196,6 +196,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.userMainLanguageCodes: UserMainLanguageOption.defaultStoredSelectionValue,
             AppPreferenceKey.translationModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.rewriteModelProvider: RewriteModelProvider.customLLM.rawValue,
+            AppPreferenceKey.escapeKeyCancelsOverlaySession: true,
             AppPreferenceKey.translateSelectedTextOnTranslationHotkey: true,
             AppPreferenceKey.voiceEndCommandEnabled: false,
             AppPreferenceKey.voiceEndCommandPreset: VoiceEndCommandPreset.over.rawValue,
@@ -432,6 +433,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleEscapeKeyEvent(_ event: NSEvent) {
         guard event.keyCode == UInt16(kVK_Escape) else { return }
+        guard UserDefaults.standard.object(forKey: AppPreferenceKey.escapeKeyCancelsOverlaySession) as? Bool ?? true else {
+            return
+        }
         if overlayState.displayMode == .answer {
             dismissAnswerOverlay()
             return

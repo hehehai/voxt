@@ -63,6 +63,9 @@
 "Command" = "コマンド";
 "Available presets are over, end, and 完毕. Command matching ignores surrounding spaces and punctuation, including Asian punctuation such as ， 。 ！ ？" = "利用できるプリセットは over、end、完毕 です。コマンド判定では前後の空白や句読点を無視し、 ， 。 ！ ？ のようなアジア言語の記号にも対応します。";
 "Trigger" = "トリガー";
+"Cancel Shortcut" = "キャンセルショートカット";
+"Use Esc to Cancel" = "Esc でキャンセル";
+"When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation." = "有効にすると、Esc で現在のオーバーレイセッションをキャンセルできます。無効にすると、Esc ではキャンセルできなくなります。";
 "Long Press (Release to End)" = "長押し（離すと終了）";
 "Tap (Press to Toggle)" = "タップ（押して開始/終了）";
 "Tips" = "ヒント";

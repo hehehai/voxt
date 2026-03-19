@@ -63,6 +63,9 @@
 "Command" = "指令";
 "Available presets are over, end, and 完毕. Command matching ignores surrounding spaces and punctuation, including Asian punctuation such as ， 。 ！ ？" = "可用预设为 over、end 和 完毕。指令匹配会忽略前后空格和标点，包括中文标点如 ， 。 ！ ？";
 "Trigger" = "触发方式";
+"Cancel Shortcut" = "取消快捷键";
+"Use Esc to Cancel" = "使用 Esc 取消";
+"When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation." = "开启后，按下 Esc 会取消当前 overlay 会话。关闭后，将不再支持通过 Esc 取消。";
 "Long Press (Release to End)" = "长按（松开结束）";
 "Tap (Press to Toggle)" = "点按（按一次开始/结束）";
 "Tips" = "提示";

@@ -106,14 +106,18 @@ struct PermissionsSettingsView: View {
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.appBranchCustomBrowsers) private var appBranchCustomBrowsersJSON = "[]"
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
+    @AppStorage(AppPreferenceKey.transcriptionEngine) private var transcriptionEngineRaw = TranscriptionEngine.mlxAudio.rawValue
+
+    private var transcriptionEngine: TranscriptionEngine {
+        TranscriptionEngine(rawValue: transcriptionEngineRaw) ?? .mlxAudio
+    }
 
     private var permissionKinds: [PermissionKind] {
-        var kinds: [PermissionKind] = [
-            .microphone,
-            .speechRecognition,
-            .accessibility,
-            .inputMonitoring
-        ]
+        var kinds: [PermissionKind] = [.microphone]
+        if transcriptionEngine == .dictation {
+            kinds.append(.speechRecognition)
+        }
+        kinds.append(contentsOf: [.accessibility, .inputMonitoring])
         if muteSystemAudioWhileRecording {
             kinds.append(.systemAudioCapture)
         }
@@ -182,6 +186,9 @@ struct PermissionsSettingsView: View {
             refreshBrowserAutomationStates()
         }
         .onChange(of: muteSystemAudioWhileRecording) { _, _ in
+            refreshStates()
+        }
+        .onChange(of: transcriptionEngineRaw) { _, _ in
             refreshStates()
         }
         .onDisappear {

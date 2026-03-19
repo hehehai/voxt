@@ -39,6 +39,7 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.hotkeyTriggerMode) private var hotkeyTriggerMode = HotkeyPreference.defaultTriggerMode.rawValue
     @AppStorage(AppPreferenceKey.hotkeyDistinguishModifierSides) private var distinguishModifierSides = HotkeyPreference.defaultDistinguishModifierSides
     @AppStorage(AppPreferenceKey.hotkeyPreset) private var hotkeyPreset = HotkeyPreference.defaultPreset.rawValue
+    @AppStorage(AppPreferenceKey.escapeKeyCancelsOverlaySession) private var escapeKeyCancelsOverlaySession = true
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
 
     @State private var recordingField: RecordingField?
@@ -354,6 +355,30 @@ struct HotkeySettingsView: View {
                         .pickerStyle(.menu)
                         .frame(width: 220, alignment: .trailing)
                     }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Cancel Shortcut")
+                        .font(.headline)
+
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Use Esc to Cancel")
+                                .foregroundStyle(.secondary)
+                            Text("When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $escapeKeyCancelsOverlaySession)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)

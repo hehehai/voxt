@@ -63,6 +63,9 @@
 "Command" = "Command";
 "Available presets are over, end, and 完毕. Command matching ignores surrounding spaces and punctuation, including Asian punctuation such as ， 。 ！ ？" = "Available presets are over, end, and 完毕. Command matching ignores surrounding spaces and punctuation, including Asian punctuation such as ， 。 ！ ？";
 "Trigger" = "Trigger";
+"Cancel Shortcut" = "Cancel Shortcut";
+"Use Esc to Cancel" = "Use Esc to Cancel";
+"When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation." = "When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation.";
 "Long Press (Release to End)" = "Long Press (Release to End)";
 "Tap (Press to Toggle)" = "Tap (Press to Toggle)";
 "Tips" = "Tips";
