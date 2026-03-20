@@ -223,6 +223,10 @@ class RecordingOverlayWindow: NSPanel {
     override var canBecomeKey: Bool { true }
 
     func show(state: OverlayState, position: OverlayPosition) {
+        VoxtLog.info(
+            "Overlay show requested. wasVisible=\(isVisible), displayMode=\(state.displayMode), position=\(position.rawValue)",
+            verbose: true
+        )
         visibilityToken &+= 1
         currentPosition = position
         state.isPresented = true
@@ -247,11 +251,12 @@ class RecordingOverlayWindow: NSPanel {
 
         if !isVisible {
             alphaValue = 1
-            orderFront(nil)
+            orderFrontRegardless()
         }
     }
 
     func hide(completion: (() -> Void)? = nil) {
+        VoxtLog.info("Overlay hide requested. isVisible=\(isVisible)", verbose: true)
         observedState?.isPresented = false
         observedState?.audioLevel = 0
 

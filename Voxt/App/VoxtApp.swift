@@ -138,6 +138,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var interfaceLanguageObserver: NSObjectProtocol?
     private var updateAvailabilityObserver: NSObjectProtocol?
     private var selectedInputDeviceObserver: NSObjectProtocol?
+    private var workspaceWillSleepObserver: NSObjectProtocol?
+    private var workspaceDidWakeObserver: NSObjectProtocol?
+    private var workspaceSessionDidBecomeActiveObserver: NSObjectProtocol?
+    private var workspaceSessionDidResignActiveObserver: NSObjectProtocol?
     var audioInputDevicesObserver: AudioInputDeviceObserver?
     private var globalEscapeKeyMonitor: Any?
     private var localEscapeKeyMonitor: Any?
@@ -330,6 +334,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         setupHotkey()
+        setupLifecycleRecoveryObservers()
         setupEscapeKeyMonitoring()
         overlayWindow.onRequestClose = { [weak self] in
             Task { @MainActor [weak self] in
@@ -358,6 +363,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let selectedInputDeviceObserver {
             NotificationCenter.default.removeObserver(selectedInputDeviceObserver)
+        }
+        let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
+        if let workspaceWillSleepObserver {
+            workspaceNotificationCenter.removeObserver(workspaceWillSleepObserver)
+        }
+        if let workspaceDidWakeObserver {
+            workspaceNotificationCenter.removeObserver(workspaceDidWakeObserver)
+        }
+        if let workspaceSessionDidBecomeActiveObserver {
+            workspaceNotificationCenter.removeObserver(workspaceSessionDidBecomeActiveObserver)
+        }
+        if let workspaceSessionDidResignActiveObserver {
+            workspaceNotificationCenter.removeObserver(workspaceSessionDidResignActiveObserver)
         }
         if let globalEscapeKeyMonitor {
             NSEvent.removeMonitor(globalEscapeKeyMonitor)
@@ -419,6 +437,48 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeyManager.start()
         VoxtLog.hotkey("Hotkey callbacks configured.")
+    }
+
+    private func setupLifecycleRecoveryObservers() {
+        let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
+
+        workspaceWillSleepObserver = workspaceNotificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.scheduleHotkeyTransientStateReset(reason: "workspaceWillSleep")
+        }
+
+        workspaceDidWakeObserver = workspaceNotificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.scheduleHotkeyTransientStateReset(reason: "workspaceDidWake")
+        }
+
+        workspaceSessionDidBecomeActiveObserver = workspaceNotificationCenter.addObserver(
+            forName: NSWorkspace.sessionDidBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.scheduleHotkeyTransientStateReset(reason: "workspaceSessionDidBecomeActive")
+        }
+
+        workspaceSessionDidResignActiveObserver = workspaceNotificationCenter.addObserver(
+            forName: NSWorkspace.sessionDidResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.scheduleHotkeyTransientStateReset(reason: "workspaceSessionDidResignActive")
+        }
+    }
+
+    private func scheduleHotkeyTransientStateReset(reason: String) {
+        Task { @MainActor [weak self] in
+            self?.hotkeyManager.resetTransientState(reason: reason)
+        }
     }
 
     private func setupEscapeKeyMonitoring() {
