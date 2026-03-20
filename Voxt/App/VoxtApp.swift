@@ -36,6 +36,7 @@ struct VoxtApp: App {
                 },
                 mlxModelManager: appDelegate.mlxModelManager,
                 customLLMManager: appDelegate.customLLMManager,
+                agentMCPServerController: appDelegate.agentMCPServerController,
                 historyStore: appDelegate.historyStore,
                 dictionaryStore: appDelegate.dictionaryStore,
                 dictionarySuggestionStore: appDelegate.dictionarySuggestionStore,
@@ -125,6 +126,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let dictionaryStore = DictionaryStore()
     let dictionarySuggestionStore = DictionarySuggestionStore()
     let appUpdateManager = AppUpdateManager()
+    let agentMCPServerController = AgentMCPServerController()
     let interactionSoundPlayer = InteractionSoundPlayer()
     let systemAudioMuteController = SystemAudioMuteController()
 
@@ -163,6 +165,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var transcriptionProcessingStartedAt: Date?
     var transcriptionResultReceivedAt: Date?
     var sessionOutputMode: SessionOutputMode = .transcription
+    var sessionInvocationSource: SessionInvocationSource = .hotkey
+    var sessionDeliveryTarget: SessionDeliveryTarget = .systemInput
     var isSelectedTextTranslationFlow = false
     var didCommitSessionOutput = false
     var activeRecordingSessionID = UUID()
@@ -173,6 +177,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var rewriteSessionHasSelectedSourceText = false
     var rewriteSessionHadWritableFocusedInput = false
     var rewriteSessionFallbackInjectBundleID: String?
+    var activeAgentPromptRequest: AgentPromptRequest?
+    var activeAgentPromptContinuation: CheckedContinuation<AgentPromptToolResponse, Never>?
+    var activeAgentPromptState: AgentPromptState = .idle
+    var agentPromptTimeoutTask: Task<Void, Never>?
     let tapStopGuardInterval: TimeInterval = 0.35
     let transcriptionStartDebounceInterval: TimeInterval = 0.08
     var settingsWindowPresentationState = SettingsWindowPresentationState()
@@ -233,6 +241,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.customProxyPort: "",
             AppPreferenceKey.customProxyUsername: "",
             AppPreferenceKey.customProxyPassword: "",
+            AppPreferenceKey.agentMCPEnabled: false,
+            AppPreferenceKey.agentMCPPort: 51090,
+            AppPreferenceKey.agentMCPOpenAtLaunch: true,
+            AppPreferenceKey.agentMCPHistoryEnabled: false,
+            AppPreferenceKey.agentMCPReplyShortcutKeyCode: Int(kVK_Space),
         ])
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
@@ -331,9 +344,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupHotkey()
         setupEscapeKeyMonitoring()
+        agentMCPServerController.attach(appDelegate: self)
+        agentMCPServerController.applyConfigurationOnLaunch()
         overlayWindow.onRequestClose = { [weak self] in
             Task { @MainActor [weak self] in
-                self?.dismissAnswerOverlay()
+                guard let self else { return }
+                if self.overlayState.displayMode == .answerPrompt {
+                    self.cancelAgentPromptInteraction()
+                } else {
+                    self.dismissAnswerOverlay()
+                }
             }
         }
         overlayWindow.onRequestInject = { [weak self] in
@@ -341,11 +361,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.injectAnswerOverlayContent()
             }
         }
+        overlayWindow.onRequestConfirm = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.confirmAgentPromptAndStartRecording()
+            }
+        }
+        overlayWindow.onRequestStop = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.stopAgentPromptRecording()
+            }
+        }
 
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        agentMCPServerController.stopServer()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
     }
 
@@ -439,6 +470,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard UserDefaults.standard.object(forKey: AppPreferenceKey.escapeKeyCancelsOverlaySession) as? Bool ?? true else {
             return
         }
+        if activeAgentPromptRequest != nil {
+            if overlayState.displayMode == .answerPrompt {
+                return
+            }
+            cancelAgentPromptInteraction()
+            return
+        }
         if overlayState.displayMode == .answer {
             dismissAnswerOverlay()
             return
@@ -460,6 +498,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranscriptionTapDown() {
+        guard activeAgentPromptRequest == nil else { return }
         if isSessionActive {
             // In tap mode, fn is the unified "toggle stop" key.
             // This intentionally allows ending active translation sessions with fn.
@@ -471,6 +510,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranslationTapDown() {
+        guard activeAgentPromptRequest == nil else { return }
         if isSessionActive {
             guard sessionOutputMode == .translation else {
                 VoxtLog.info("Tap translation down ignored: active session belongs to transcription.", verbose: true)
@@ -484,6 +524,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranscriptionHotkeyDown() {
+        guard activeAgentPromptRequest == nil else { return }
         let triggerMode = HotkeyPreference.loadTriggerMode()
         VoxtLog.hotkey(
             "Hotkey callback transcriptionDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
@@ -504,6 +545,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranscriptionHotkeyUp() {
+        guard activeAgentPromptRequest == nil else { return }
         let triggerMode = HotkeyPreference.loadTriggerMode()
         guard triggerMode == .longPress else { return }
         VoxtLog.hotkey(
@@ -525,6 +567,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranslationHotkeyDown() {
+        guard activeAgentPromptRequest == nil else { return }
         let triggerMode = HotkeyPreference.loadTriggerMode()
         VoxtLog.hotkey(
             "Hotkey callback translationDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
@@ -562,6 +605,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranslationHotkeyUp() {
+        guard activeAgentPromptRequest == nil else { return }
         let triggerMode = HotkeyPreference.loadTriggerMode()
         guard triggerMode == .longPress else { return }
         VoxtLog.hotkey(
@@ -583,6 +627,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleRewriteHotkeyDown() {
+        guard activeAgentPromptRequest == nil else { return }
         let triggerMode = HotkeyPreference.loadTriggerMode()
         VoxtLog.hotkey(
             "Hotkey callback rewriteDown. mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel), pendingStart=\(pendingTranscriptionStartTask != nil)",
@@ -605,6 +650,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleRewriteHotkeyUp() {
+        guard activeAgentPromptRequest == nil else { return }
         let triggerMode = HotkeyPreference.loadTriggerMode()
         guard triggerMode == .longPress else { return }
         VoxtLog.hotkey(
@@ -644,6 +690,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard !Task.isCancelled else { return }
             guard !self.isSessionActive else {
                 VoxtLog.hotkey("Pending transcription start dropped: session already active.")
+                self.pendingTranscriptionStartTask = nil
+                return
+            }
+            guard self.activeAgentPromptRequest == nil else {
                 self.pendingTranscriptionStartTask = nil
                 return
             }

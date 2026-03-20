@@ -87,6 +87,294 @@ struct GeneralAudioCard: View {
     }
 }
 
+struct AgentMCPSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let statusTitle: String
+    let statusDetail: String
+    let endpoint: String
+    let claudeCommand: String
+    let codexCommand: String
+    let testMessage: String?
+    let isTestingConnection: Bool
+    let copiedClaudeCommand: Bool
+    let copiedCodexCommand: Bool
+    @Binding var port: Int
+    @Binding var historyEnabled: Bool
+    let onRefreshStatus: () -> Void
+    let onCopyClaudeCommand: () -> Void
+    let onCopyCodexCommand: () -> Void
+    let onTestConnection: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center) {
+                Text(AppLocalization.localizedString("MCP Server"))
+                    .font(.title3.weight(.semibold))
+                statusBadge
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Label(AppLocalization.localizedString("Close"), systemImage: "xmark")
+                }
+                .controlSize(.small)
+            }
+
+            GeneralSettingsCard(
+                title: "Server",
+                spacing: 10,
+                headerAccessory: {
+                    Button(action: onRefreshStatus) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(AppLocalization.localizedString("Refresh Status")))
+                    .help(AppLocalization.localizedString("Refresh Status"))
+                }
+            ) {
+                Text(statusDetail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(alignment: .firstTextBaseline) {
+                    Text(AppLocalization.localizedString("Port"))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    ClampedIntegerTextField(
+                        value: $port,
+                        range: 1024...65535,
+                        width: 110
+                    )
+                }
+
+                HStack(alignment: .firstTextBaseline) {
+                    Text(AppLocalization.localizedString("Endpoint"))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(endpoint)
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+
+                Divider()
+
+                HStack(alignment: .center, spacing: 8) {
+                    Toggle(AppLocalization.localizedString("Save agent answers to History"), isOn: $historyEnabled)
+
+                    InfoPopoverButton(
+                        message: AppLocalization.localizedString("Agent answers never go back into the current input field. Enable this only if you want voice answers kept in Voxt history.")
+                    )
+                }
+            }
+
+            GeneralSettingsCard(title: "Connect", spacing: 10) {
+                HStack(alignment: .center, spacing: 8) {
+                    Button {
+                        onTestConnection()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isTestingConnection {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text(
+                                isTestingConnection
+                                    ? AppLocalization.localizedString("Testing...")
+                                    : AppLocalization.localizedString("Test Connection")
+                            )
+                        }
+                    }
+                    .disabled(isTestingConnection)
+
+                    if let testMessage, !testMessage.isEmpty {
+                        Text(testMessage)
+                            .font(.caption)
+                            .foregroundStyle(testMessageColor)
+                            .lineLimit(2)
+                    }
+                }
+
+                commandBlock(
+                    title: AppLocalization.localizedString("Claude Code"),
+                    command: claudeCommand,
+                    isCopied: copiedClaudeCommand,
+                    onCopy: onCopyClaudeCommand
+                )
+                commandBlock(
+                    title: AppLocalization.localizedString("Codex"),
+                    command: codexCommand,
+                    isCopied: copiedCodexCommand,
+                    onCopy: onCopyCodexCommand
+                )
+
+                Divider()
+
+                Text(AppLocalization.localizedString("Enable this server to let Claude Code or Codex ask you questions in Voxt and receive your spoken answer as text."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(AppLocalization.localizedString("After it shows Running, add the endpoint to your client with one of the commands above. If startup fails, the status here will show the reason directly."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(width: 560)
+    }
+
+    private var statusBadge: some View {
+        Text(statusTitle)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(statusBadgeForegroundColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(statusBadgeBackgroundColor)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(statusBadgeStrokeColor, lineWidth: 1)
+            )
+    }
+
+    private func commandBlock(
+        title: String,
+        command: String,
+        isCopied: Bool,
+        onCopy: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                AnswerHeaderActionButton(
+                    accessibilityLabel: AppLocalization.localizedString("Copy"),
+                    action: onCopy
+                ) {
+                    Image(systemName: isCopied ? "checkmark.circle.fill" : "document.on.document")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(isCopied ? Color.green : Color.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text(command)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
+        }
+    }
+
+    private var statusBadgeBackgroundColor: Color {
+        switch normalizedStatusKind {
+        case .running:
+            return Color.green.opacity(0.14)
+        case .starting:
+            return Color.orange.opacity(0.14)
+        case .portInUse, .permissionBlocked, .error:
+            return Color.red.opacity(0.12)
+        case .stopped:
+            return Color.secondary.opacity(0.12)
+        }
+    }
+
+    private var statusBadgeStrokeColor: Color {
+        switch normalizedStatusKind {
+        case .running:
+            return Color.green.opacity(0.35)
+        case .starting:
+            return Color.orange.opacity(0.35)
+        case .portInUse, .permissionBlocked, .error:
+            return Color.red.opacity(0.3)
+        case .stopped:
+            return Color.secondary.opacity(0.24)
+        }
+    }
+
+    private var statusBadgeForegroundColor: Color {
+        switch normalizedStatusKind {
+        case .running:
+            return Color.green
+        case .starting:
+            return Color.orange
+        case .portInUse, .permissionBlocked, .error:
+            return Color.red
+        case .stopped:
+            return Color.secondary
+        }
+    }
+
+    private var testMessageColor: Color {
+        let lowercased = testMessage?.lowercased() ?? ""
+        if lowercased.contains("succeeded") || lowercased.contains("成功") || lowercased.contains("成功しました") {
+            return .green
+        }
+        if isTestingConnection {
+            return .secondary
+        }
+        return .secondary
+    }
+
+    private var normalizedStatusKind: MCPStatusKind {
+        switch statusTitle {
+        case AppLocalization.localizedString("Running"):
+            return .running
+        case AppLocalization.localizedString("Starting"):
+            return .starting
+        case AppLocalization.localizedString("Port in Use"):
+            return .portInUse
+        case AppLocalization.localizedString("Permission Blocked"):
+            return .permissionBlocked
+        case AppLocalization.localizedString("Error"):
+            return .error
+        default:
+            return .stopped
+        }
+    }
+}
+
+private struct InfoPopoverButton: View {
+    let message: String
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            Text(message)
+                .font(.caption)
+                .multilineTextAlignment(.leading)
+                .frame(width: 260, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+        }
+    }
+}
+
+private enum MCPStatusKind {
+    case stopped
+    case starting
+    case running
+    case portInUse
+    case permissionBlocked
+    case error
+}
+
 struct GeneralTranscriptionUICard: View {
     @Binding var overlayPosition: OverlayPosition
     @Binding var overlayCardOpacity: Int
@@ -331,6 +619,9 @@ struct GeneralOutputCard: View {
     @Binding var autoCopyWhenNoFocusedInput: Bool
     @Binding var translateSelectedTextOnTranslationHotkey: Bool
     @Binding var appEnhancementEnabled: Bool
+    @Binding var agentMCPEnabled: Bool
+    let showMCPSettingsButton: Bool
+    let onOpenMCPSettings: () -> Void
 
     var body: some View {
         GeneralSettingsCard(title: "Output") {
@@ -341,6 +632,41 @@ struct GeneralOutputCard: View {
 
             Toggle("Translate selected text with translation shortcut", isOn: $translateSelectedTextOnTranslationHotkey)
             Text("When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .center, spacing: 8) {
+                Toggle(isOn: $agentMCPEnabled) {
+                    HStack(spacing: 8) {
+                        Text(AppLocalization.localizedString("MCP Server"))
+                        if agentMCPEnabled {
+                            Text(AppLocalization.localizedString("MCP"))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.blue)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.blue.opacity(0.12))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                if showMCPSettingsButton {
+                    Button(action: onOpenMCPSettings) {
+                        Label(AppLocalization.localizedString("Settings"), systemImage: "gearshape")
+                    }
+                    .controlSize(.small)
+                }
+            }
+            Text(AppLocalization.localizedString("When enabled, Voxt exposes a local MCP endpoint so Claude Code and Codex can ask you questions by voice."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -487,26 +813,44 @@ struct GeneralAppBehaviorCard: View {
     }
 }
 
-private struct GeneralSettingsCard<Content: View>: View {
+private struct GeneralSettingsCard<Content: View, HeaderAccessory: View>: View {
     let title: LocalizedStringKey
     let spacing: CGFloat
+    @ViewBuilder let headerAccessory: () -> HeaderAccessory
     @ViewBuilder let content: () -> Content
 
     init(
         title: LocalizedStringKey,
         spacing: CGFloat = 12,
         @ViewBuilder content: @escaping () -> Content
+    ) where HeaderAccessory == EmptyView {
+        self.title = title
+        self.spacing = spacing
+        self.headerAccessory = { EmptyView() }
+        self.content = content
+    }
+
+    init(
+        title: LocalizedStringKey,
+        spacing: CGFloat = 12,
+        @ViewBuilder headerAccessory: @escaping () -> HeaderAccessory,
+        @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.spacing = spacing
+        self.headerAccessory = headerAccessory
         self.content = content
     }
 
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: spacing) {
-                Text(title)
-                    .font(.headline)
+                HStack(alignment: .center, spacing: 8) {
+                    Text(title)
+                        .font(.headline)
+                    Spacer(minLength: 8)
+                    headerAccessory()
+                }
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)

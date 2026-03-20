@@ -5,9 +5,17 @@ import AVFoundation
 import Speech
 
 extension AppDelegate {
-    func beginRecording(outputMode: SessionOutputMode) {
-        guard !isSessionActive else { return }
-        guard preflightPermissionsForRecording() else { return }
+    @discardableResult
+    func beginRecording(
+        outputMode: SessionOutputMode,
+        invocationSource: SessionInvocationSource = .hotkey,
+        deliveryTarget: SessionDeliveryTarget = .systemInput
+    ) -> Bool {
+        guard !isSessionActive else { return false }
+        guard activeAgentPromptRequest == nil || invocationSource == .mcp else { return false }
+        sessionInvocationSource = invocationSource
+        sessionDeliveryTarget = deliveryTarget
+        guard preflightPermissionsForRecording() else { return false }
 
         cancelPendingFinishTasks()
         overlayState.isCompleting = false
@@ -43,7 +51,12 @@ extension AppDelegate {
         applyPreferredInputDevice()
         overlayState.reset()
         overlayState.statusMessage = ""
-        overlayState.presentRecording(iconMode: overlayIconMode(for: outputMode))
+        overlayState.presentRecording(
+            iconMode: overlayIconMode(for: outputMode),
+            capturesKeyboardShortcuts: invocationSource == .mcp,
+            keyboardShortcutKeyCode: invocationSource == .mcp ? agentMCPReplyShortcutKeyCode : nil,
+            keyboardShortcutLabel: invocationSource == .mcp ? agentMCPReplyShortcutLabel : nil
+        )
 
         if transcriptionEngine == .mlxAudio {
             switch mlxModelManager.state {
@@ -67,6 +80,9 @@ extension AppDelegate {
         isSessionActive = true
         pendingSystemAudioMuteTask?.cancel()
         pendingSystemAudioMuteTask = nil
+        if invocationSource == .mcp {
+            activeAgentPromptState = .recording
+        }
         overlayWindow.show(
             state: overlayState,
             position: overlayPosition
@@ -93,6 +109,7 @@ extension AppDelegate {
         }
 
         startCapture()
+        return true
     }
 
     func endRecording() {
@@ -113,6 +130,9 @@ extension AppDelegate {
             transcriptionProcessingStartedAt = recordingStoppedAt
         }
         overlayState.presentProcessing(iconMode: overlayIconMode(for: sessionOutputMode))
+        if sessionInvocationSource == .mcp {
+            activeAgentPromptState = .transcribing
+        }
         voiceEndCommandState.lastDetectedCommand = false
         enhancementContextSnapshot = captureEnhancementContextSnapshot()
         stopActiveRecordingTranscriber()
@@ -154,6 +174,16 @@ extension AppDelegate {
         stopActiveRecordingTranscriber()
 
         VoxtLog.info("Cancelled session invalidated. sessionID=\(cancelledSessionID.uuidString)", verbose: true)
+        if sessionDeliveryTarget == .mcpResponse {
+            let response = AgentPromptToolResponse.cancelled()
+            let continuation = activeAgentPromptContinuation
+            activeAgentPromptContinuation = nil
+            activeAgentPromptRequest = nil
+            agentPromptTimeoutTask?.cancel()
+            agentPromptTimeoutTask = nil
+            activeAgentPromptState = .cancelled
+            continuation?.resume(returning: response)
+        }
         executeSessionEndPipeline()
     }
 
@@ -193,6 +223,11 @@ extension AppDelegate {
         VoxtLog.info("Transcription result received. characters=\(text.count), output=\(sessionOutputMode == .translation ? "translation" : "transcription")")
         VoxtLog.info("Transcription result output mode resolved as \(sessionOutputLabel(for: sessionOutputMode)).", verbose: true)
         VoxtLog.info("Enhancement mode=\(enhancementMode.rawValue), appEnhancementEnabled=\(appEnhancementEnabled)")
+
+        if sessionDeliveryTarget == .mcpResponse {
+            processAgentPromptTranscription(text, sessionID: sessionID)
+            return
+        }
 
         if sessionOutputMode == .translation {
             processTranslatedTranscription(text, sessionID: sessionID)
@@ -268,6 +303,7 @@ extension AppDelegate {
         overlayStatusClearTask?.cancel()
         overlayState.statusMessage = message
         overlayState.presentRecording(iconMode: overlayIconMode(for: sessionOutputMode))
+        overlayWindow.show(state: overlayState, position: overlayPosition)
         overlayStatusClearTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .seconds(seconds))
@@ -280,6 +316,24 @@ extension AppDelegate {
     }
 
     func showOverlayReminder(_ message: String, autoHideAfter seconds: TimeInterval = 2.4) {
+        if sessionInvocationSource == .mcp {
+            overlayReminderTask?.cancel()
+            overlayStatusClearTask?.cancel()
+            overlayState.statusMessage = message
+            overlayState.presentRecording(iconMode: overlayIconMode(for: sessionOutputMode))
+            overlayWindow.show(state: overlayState, position: overlayPosition)
+            overlayReminderTask = Task { [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(for: .seconds(seconds))
+                guard !Task.isCancelled else { return }
+                self.overlayState.statusMessage = ""
+                if self.activeAgentPromptRequest == nil {
+                    self.overlayWindow.hide()
+                }
+                self.overlayReminderTask = nil
+            }
+            return
+        }
         overlayReminderTask?.cancel()
         overlayStatusClearTask?.cancel()
         overlayState.reset()
@@ -338,7 +392,7 @@ extension AppDelegate {
         mlx.startRecording()
         guard mlx.isRecording else {
             VoxtLog.warning("MLX recording session did not enter recording state.")
-            resetSessionAfterFailedStart()
+            resetSessionAfterFailedStart(errorCode: .transcriptionFailed)
             return
         }
     }
@@ -351,7 +405,7 @@ extension AppDelegate {
                 self.showOverlayReminder(
                     String(localized: "Please enable required permissions in Settings > Permissions.")
                 )
-                self.resetSessionAfterFailedStart()
+                self.resetSessionAfterFailedStart(errorCode: .permissionDenied)
                 return
             }
 
@@ -369,7 +423,7 @@ extension AppDelegate {
             self.speechTranscriber.startRecording()
             guard self.speechTranscriber.isRecording else {
                 VoxtLog.warning("Speech recording session did not enter recording state.")
-                self.resetSessionAfterFailedStart()
+                self.resetSessionAfterFailedStart(errorCode: .transcriptionFailed)
                 return
             }
         }
@@ -383,7 +437,7 @@ extension AppDelegate {
                 self.showOverlayReminder(
                     String(localized: "Please enable required permissions in Settings > Permissions.")
                 )
-                self.resetSessionAfterFailedStart()
+                self.resetSessionAfterFailedStart(errorCode: .permissionDenied)
                 return
             }
 
@@ -402,7 +456,23 @@ extension AppDelegate {
         }
     }
 
-    private func resetSessionAfterFailedStart() {
+    private func resetSessionAfterFailedStart(errorCode: AgentPromptErrorCode = .transcriptionFailed) {
+        if sessionDeliveryTarget == .mcpResponse {
+            let message: String
+            switch errorCode {
+            case .permissionDenied:
+                message = AppLocalization.localizedString("Voxt could not start recording because a required permission is missing.")
+            default:
+                message = AppLocalization.localizedString("Voxt could not start recording.")
+            }
+            let continuation = activeAgentPromptContinuation
+            activeAgentPromptContinuation = nil
+            activeAgentPromptRequest = nil
+            agentPromptTimeoutTask?.cancel()
+            agentPromptTimeoutTask = nil
+            activeAgentPromptState = .failed
+            continuation?.resume(returning: .error(errorCode, message: message))
+        }
         cancelSessionControlTasks()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
         isSessionActive = false
@@ -410,6 +480,8 @@ extension AppDelegate {
         didCommitSessionOutput = false
         activeRecordingSessionID = UUID()
         sessionOutputMode = .transcription
+        sessionInvocationSource = .hotkey
+        sessionDeliveryTarget = .systemInput
         recordingStartedAt = nil
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
@@ -587,7 +659,7 @@ extension AppDelegate {
         }
     }
 
-    private func stopActiveRecordingTranscriber() {
+    func stopActiveRecordingTranscriber() {
         if transcriptionEngine == .mlxAudio, isMLXReady {
             mlxTranscriber?.stopRecording()
         } else if transcriptionEngine == .remote {

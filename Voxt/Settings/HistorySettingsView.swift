@@ -349,6 +349,8 @@ private struct HistoryRow: View {
                 Text("Translation")
             } else if entry.kind == .rewrite {
                 Text("Rewrite")
+            } else if entry.kind == .agentPrompt {
+                Text("Agent")
             } else {
                 Text("Normal")
             }
@@ -371,6 +373,8 @@ private struct HistoryRow: View {
             return .blue
         case .rewrite:
             return .orange
+        case .agentPrompt:
+            return .green
         }
     }
 

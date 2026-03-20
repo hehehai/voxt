@@ -10,6 +10,7 @@ struct SettingsView: View {
     let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
+    @ObservedObject var agentMCPServerController: AgentMCPServerController
     @ObservedObject var historyStore: TranscriptionHistoryStore
     @ObservedObject var dictionaryStore: DictionaryStore
     @ObservedObject var dictionarySuggestionStore: DictionarySuggestionStore
@@ -29,6 +30,7 @@ struct SettingsView: View {
         onIngestDictionarySuggestionsFromHistory: @escaping (DictionaryHistoryScanRequest, Bool) -> Void,
         mlxModelManager: MLXModelManager,
         customLLMManager: CustomLLMModelManager,
+        agentMCPServerController: AgentMCPServerController,
         historyStore: TranscriptionHistoryStore,
         dictionaryStore: DictionaryStore,
         dictionarySuggestionStore: DictionarySuggestionStore,
@@ -39,6 +41,7 @@ struct SettingsView: View {
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
         self.mlxModelManager = mlxModelManager
         self.customLLMManager = customLLMManager
+        self.agentMCPServerController = agentMCPServerController
         self.historyStore = historyStore
         self.dictionaryStore = dictionaryStore
         self.dictionarySuggestionStore = dictionarySuggestionStore
@@ -200,7 +203,10 @@ struct SettingsView: View {
             Group {
                 switch selectedTab {
                 case .general:
-                    GeneralSettingsView(appUpdateManager: appUpdateManager)
+                    GeneralSettingsView(
+                        appUpdateManager: appUpdateManager,
+                        agentMCPServerController: agentMCPServerController
+                    )
                 case .permissions:
                     PermissionsSettingsView()
                 case .report:

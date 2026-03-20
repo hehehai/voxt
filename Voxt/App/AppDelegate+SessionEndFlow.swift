@@ -40,11 +40,18 @@ extension AppDelegate {
         func run(delegate: AppDelegate) {
             delegate.isSessionActive = false
             delegate.sessionOutputMode = .transcription
+            delegate.sessionInvocationSource = .hotkey
+            delegate.sessionDeliveryTarget = .systemInput
             delegate.isSelectedTextTranslationFlow = false
             delegate.enhancementContextSnapshot = nil
             delegate.rewriteSessionHasSelectedSourceText = false
             delegate.rewriteSessionHadWritableFocusedInput = false
             delegate.rewriteSessionFallbackInjectBundleID = nil
+            delegate.agentPromptTimeoutTask?.cancel()
+            delegate.agentPromptTimeoutTask = nil
+            delegate.activeAgentPromptRequest = nil
+            delegate.activeAgentPromptContinuation = nil
+            delegate.activeAgentPromptState = .idle
             delegate.overlayState.isCompleting = false
             if delegate.overlayState.displayMode != .answer {
                 delegate.overlayState.reset()

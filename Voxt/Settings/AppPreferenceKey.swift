@@ -76,6 +76,11 @@ enum AppPreferenceKey {
     static let customProxyPort = "customProxyPort"
     static let customProxyUsername = "customProxyUsername"
     static let customProxyPassword = "customProxyPassword"
+    static let agentMCPEnabled = "agentMCPEnabled"
+    static let agentMCPPort = "agentMCPPort"
+    static let agentMCPOpenAtLaunch = "agentMCPOpenAtLaunch"
+    static let agentMCPHistoryEnabled = "agentMCPHistoryEnabled"
+    static let agentMCPReplyShortcutKeyCode = "agentMCPReplyShortcutKeyCode"
 
     static let defaultEnhancementPrompt = """
         You are Voxt, a speech-to-text transcription assistant. Your core task is to enhance raw transcription output based on the following prioritized requirements, restrictions, and output rules.

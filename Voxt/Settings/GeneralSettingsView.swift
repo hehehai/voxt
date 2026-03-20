@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct GeneralSettingsView: View {
     let appUpdateManager: AppUpdateManager
+    @ObservedObject var agentMCPServerController: AgentMCPServerController
     @AppStorage(AppPreferenceKey.selectedInputDeviceID) private var selectedInputDeviceIDRaw = 0
     @AppStorage(AppPreferenceKey.interactionSoundsEnabled) private var interactionSoundsEnabled = true
     @AppStorage(AppPreferenceKey.interactionSoundPreset) private var interactionSoundPresetRaw = InteractionSoundPreset.soft.rawValue
@@ -31,6 +32,9 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.customProxyUsername) private var customProxyUsername = ""
     @AppStorage(AppPreferenceKey.customProxyPassword) private var customProxyPassword = ""
     @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
+    @AppStorage(AppPreferenceKey.agentMCPEnabled) private var agentMCPEnabled = false
+    @AppStorage(AppPreferenceKey.agentMCPPort) private var agentMCPPort = 51090
+    @AppStorage(AppPreferenceKey.agentMCPHistoryEnabled) private var agentMCPHistoryEnabled = false
 
     @State private var inputDevices: [AudioInputDevice] = []
     @State private var launchAtLoginError: String?
@@ -41,6 +45,11 @@ struct GeneralSettingsView: View {
     @State private var configurationTransferMessage: String?
     @State private var isUserMainLanguageSheetPresented = false
     @State private var systemAudioPermissionMessage: String?
+    @State private var isAgentMCPSettingsPresented = false
+    @State private var agentMCPTestMessage: String?
+    @State private var isTestingAgentMCPConnection = false
+    @State private var copiedAgentMCPCommand: AgentMCPCommandCopyTarget?
+    @State private var resetCopiedAgentMCPCommandTask: Task<Void, Never>?
 
     private var selectedInputDeviceID: AudioDeviceID {
         AudioDeviceID(selectedInputDeviceIDRaw)
@@ -154,7 +163,10 @@ struct GeneralSettingsView: View {
             GeneralOutputCard(
                 autoCopyWhenNoFocusedInput: $autoCopyWhenNoFocusedInput,
                 translateSelectedTextOnTranslationHotkey: $translateSelectedTextOnTranslationHotkey,
-                appEnhancementEnabled: $appEnhancementEnabled
+                appEnhancementEnabled: $appEnhancementEnabled,
+                agentMCPEnabled: $agentMCPEnabled,
+                showMCPSettingsButton: agentMCPEnabled,
+                onOpenMCPSettings: { isAgentMCPSettingsPresented = true }
             )
 
             GeneralLoggingCard(
@@ -261,6 +273,9 @@ struct GeneralSettingsView: View {
         .onChange(of: modelStorageRootPath) { _, _ in
             refreshModelStorageDisplayPath()
         }
+        .onChange(of: agentMCPPort) { _, newValue in
+            agentMCPPort = min(max(newValue, 1024), 65535)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .voxtAudioInputDevicesDidChange)) { _ in
             refreshInputDevices()
         }
@@ -271,6 +286,29 @@ struct GeneralSettingsView: View {
             ) { updatedCodes in
                 userMainLanguageCodesRaw = UserMainLanguageOption.storageValue(for: updatedCodes)
             }
+        }
+        .sheet(isPresented: $isAgentMCPSettingsPresented) {
+            AgentMCPSettingsSheet(
+                statusTitle: agentMCPServerController.displayStatusTitle,
+                statusDetail: agentMCPServerController.displayStatusDetail,
+                endpoint: agentMCPServerController.endpointURLString,
+                claudeCommand: agentMCPServerController.claudeCommand,
+                codexCommand: agentMCPServerController.codexCommand,
+                testMessage: agentMCPTestMessage,
+                isTestingConnection: isTestingAgentMCPConnection,
+                copiedClaudeCommand: copiedAgentMCPCommand == .claude,
+                copiedCodexCommand: copiedAgentMCPCommand == .codex,
+                port: $agentMCPPort,
+                historyEnabled: $agentMCPHistoryEnabled,
+                onRefreshStatus: refreshAgentMCPStatus,
+                onCopyClaudeCommand: {
+                    copyAgentMCPCommand(agentMCPServerController.claudeCommand, target: .claude)
+                },
+                onCopyCodexCommand: {
+                    copyAgentMCPCommand(agentMCPServerController.codexCommand, target: .codex)
+                },
+                onTestConnection: testAgentMCPConnection
+            )
         }
         .id(interfaceLanguageRaw)
     }
@@ -298,6 +336,47 @@ struct GeneralSettingsView: View {
 
     private var interfaceLanguage: AppInterfaceLanguage {
         AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
+    }
+
+    private func copyTextToPasteboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private func testAgentMCPConnection() {
+        Task {
+            await MainActor.run {
+                isTestingAgentMCPConnection = true
+                agentMCPTestMessage = AppLocalization.localizedString("Testing connection...")
+            }
+            let message = await agentMCPServerController.testConnection()
+            await MainActor.run {
+                isTestingAgentMCPConnection = false
+                agentMCPTestMessage = message
+            }
+        }
+    }
+
+    private func refreshAgentMCPStatus() {
+        Task {
+            await agentMCPServerController.refreshStatus()
+        }
+    }
+
+    private func copyAgentMCPCommand(_ text: String, target: AgentMCPCommandCopyTarget) {
+        copyTextToPasteboard(text)
+        copiedAgentMCPCommand = target
+
+        resetCopiedAgentMCPCommandTask?.cancel()
+        resetCopiedAgentMCPCommandTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            guard !Task.isCancelled else { return }
+            if copiedAgentMCPCommand == target {
+                copiedAgentMCPCommand = nil
+            }
+            resetCopiedAgentMCPCommandTask = nil
+        }
     }
 
     private func chooseModelStorageDirectory() {
@@ -374,4 +453,9 @@ struct GeneralSettingsView: View {
     private func postOverlayAppearanceDidChange() {
         NotificationCenter.default.post(name: .voxtOverlayAppearanceDidChange, object: nil)
     }
+}
+
+private enum AgentMCPCommandCopyTarget {
+    case claude
+    case codex
 }

@@ -19,8 +19,14 @@ struct WaveformView: View {
     var answerTitle: String = ""
     var answerContent: String = ""
     var canInjectAnswer: Bool = false
+    var promptTitle: String = ""
+    var promptContextHint: String = ""
+    var promptQuestions: [String] = []
+    var canConfirmPrompt: Bool = false
+    var promptShortcutLabel: String = AppLocalization.localizedString("Space")
     var onInject: () -> Void = {}
     var onClose: () -> Void = {}
+    var onConfirm: () -> Void = {}
 
     private let iconSlotSize = CGSize(width: 16, height: 28)
     private let barAreaHeight: CGFloat = 28
@@ -45,7 +51,9 @@ struct WaveformView: View {
 
     private var hasText: Bool { !displayText.isEmpty }
     private var isAnswerMode: Bool { displayMode == .answer }
-    private var isCompact: Bool { !hasText && !isAnswerMode }
+    private var isPromptMode: Bool { displayMode == .answerPrompt }
+    private var isCardMode: Bool { isAnswerMode || isPromptMode }
+    private var isCompact: Bool { !hasText && !isCardMode }
     private var cornerRadius: CGFloat { CGFloat(min(max(overlayCardCornerRadius, 0), 40)) }
     private var cardOpacity: Double { Double(min(max(overlayCardOpacity, 0), 100)) / 100.0 }
     private var textOverflows: Bool { displayText.count > 38 }
@@ -53,16 +61,16 @@ struct WaveformView: View {
 
     var body: some View {
         Group {
-            if isAnswerMode {
-                answerCard
+            if isCardMode {
+                cardContent
                     .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             } else {
                 compactCard
                     .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
             }
         }
-        .padding(.horizontal, isAnswerMode ? 18 : (isCompact ? 14 : 20))
-        .padding(.vertical, isAnswerMode ? 16 : (isCompact ? 10 : 12))
+        .padding(.horizontal, isCardMode ? 18 : (isCompact ? 14 : 20))
+        .padding(.vertical, isCardMode ? 16 : (isCompact ? 10 : 12))
         .background(cardBackground)
         .animation(.spring(response: 0.38, dampingFraction: 0.78), value: displayMode)
         .animation(.spring(response: 0.4, dampingFraction: 0.55, blendDuration: 0.1), value: isCompact)
@@ -151,16 +159,29 @@ struct WaveformView: View {
         }
     }
 
-    private var answerCard: some View {
-        WaveformAnswerCard(
-            title: answerTitle,
-            content: answerContent,
-            canInjectAnswer: canInjectAnswer,
-            didCopyAnswer: didCopyAnswer,
-            onInject: onInject,
-            onCopy: copyAnswerToPasteboard,
-            onClose: onClose
-        )
+    @ViewBuilder
+    private var cardContent: some View {
+        if isPromptMode {
+            OverlayPromptCard(
+                title: promptTitle,
+                contextHint: promptContextHint,
+                questions: promptQuestions,
+                shortcutLabel: promptShortcutLabel,
+                canConfirm: canConfirmPrompt,
+                onConfirm: onConfirm,
+                onClose: onClose
+            )
+        } else {
+            WaveformAnswerCard(
+                title: answerTitle,
+                content: answerContent,
+                canInjectAnswer: canInjectAnswer,
+                didCopyAnswer: didCopyAnswer,
+                onInject: onInject,
+                onCopy: copyAnswerToPasteboard,
+                onClose: onClose
+            )
+        }
     }
 
     @ViewBuilder
@@ -402,7 +423,7 @@ struct WaveformView: View {
             return isRecording ? (1.0 / 20.0) : nil
         case .processing:
             return 1.0 / 10.0
-        case .answer:
+        case .answer, .answerPrompt:
             return nil
         }
     }
@@ -413,7 +434,7 @@ struct WaveformView: View {
             return isRecording ? 0.16 : 0
         case .processing:
             return 0.06
-        case .answer:
+        case .answer, .answerPrompt:
             return 0
         }
     }

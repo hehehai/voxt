@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import CoreAudio
+import Carbon
 
 extension AppDelegate {
     private var defaults: UserDefaults {
@@ -77,6 +78,15 @@ extension AppDelegate {
             return presetCommand
         }
         return trimmedStringValue(forKey: AppPreferenceKey.voiceEndCommandText)
+    }
+
+    var agentMCPReplyShortcutKeyCode: UInt16 {
+        let raw = defaults.object(forKey: AppPreferenceKey.agentMCPReplyShortcutKeyCode) as? Int ?? Int(kVK_Space)
+        return UInt16(raw)
+    }
+
+    var agentMCPReplyShortcutLabel: String {
+        HotkeyPreference.keyCodeDisplayString(agentMCPReplyShortcutKeyCode)
     }
 
     var translationSystemPrompt: String {
@@ -169,6 +179,9 @@ extension AppDelegate {
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
     ) -> UUID? {
         guard historyEnabled else { return nil }
+        if sessionInvocationSource == .mcp && !agentMCPHistoryEnabled {
+            return nil
+        }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -282,6 +295,9 @@ extension AppDelegate {
     }
 
     private func resolvedHistoryKind() -> TranscriptionHistoryKind {
+        if sessionInvocationSource == .mcp {
+            return .agentPrompt
+        }
         switch sessionOutputMode {
         case .transcription:
             return .normal

@@ -197,6 +197,7 @@ extension AppDelegate {
             },
             mlxModelManager: mlxModelManager,
             customLLMManager: customLLMManager,
+            agentMCPServerController: agentMCPServerController,
             historyStore: historyStore,
             dictionaryStore: dictionaryStore,
             dictionarySuggestionStore: dictionarySuggestionStore,

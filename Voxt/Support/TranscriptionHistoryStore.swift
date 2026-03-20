@@ -5,6 +5,7 @@ enum TranscriptionHistoryKind: String, Codable {
     case normal
     case translation
     case rewrite
+    case agentPrompt
 }
 
 struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {

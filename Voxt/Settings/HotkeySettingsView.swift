@@ -25,6 +25,7 @@ struct HotkeySettingsView: View {
         case transcription
         case translation
         case rewrite
+        case mcpReply
     }
 
     @AppStorage(AppPreferenceKey.hotkeyKeyCode) private var hotkeyKeyCode = Int(HotkeyPreference.defaultKeyCode)
@@ -41,6 +42,8 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.hotkeyPreset) private var hotkeyPreset = HotkeyPreference.defaultPreset.rawValue
     @AppStorage(AppPreferenceKey.escapeKeyCancelsOverlaySession) private var escapeKeyCancelsOverlaySession = true
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
+    @AppStorage(AppPreferenceKey.agentMCPEnabled) private var agentMCPEnabled = false
+    @AppStorage(AppPreferenceKey.agentMCPReplyShortcutKeyCode) private var agentMCPReplyShortcutKeyCode = Int(kVK_Space)
 
     @State private var recordingField: RecordingField?
     @State private var pendingCapturedField: RecordingField?
@@ -150,6 +153,11 @@ struct HotkeySettingsView: View {
             get: { SidedModifierFlags(rawValue: rewriteHotkeySidedModifiers).filtered(by: rewriteModifierBinding.wrappedValue) },
             set: { rewriteHotkeySidedModifiers = $0.filtered(by: rewriteModifierBinding.wrappedValue).rawValue }
         )
+    }
+
+    private var currentMCPReplyShortcutKeyCode: UInt16 {
+        let raw = agentMCPReplyShortcutKeyCode == 0 ? Int(kVK_Space) : agentMCPReplyShortcutKeyCode
+        return UInt16(raw)
     }
 
     private var isRecordingBinding: Binding<Bool> {
@@ -271,7 +279,11 @@ struct HotkeySettingsView: View {
                     )
 
                     if recordingField != nil, pendingCapturedField != recordingField {
-                        Text("Type your shortcut now. Press Esc to cancel recording.")
+                        Text(
+                            recordingField == .mcpReply
+                                ? LocalizedStringKey("Press a single key now. Modifier combinations are not supported. Press Esc to cancel recording.")
+                                : LocalizedStringKey("Type your shortcut now. Press Esc to cancel recording.")
+                        )
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else if pendingCapturedField != nil {
@@ -326,6 +338,13 @@ struct HotkeySettingsView: View {
                         isRecording: isRecordingBinding,
                         onCapture: { capturedHotkey in
                             guard let field = recordingField else { return }
+                            if field == .mcpReply && !isValidMCPReplyShortcut(capturedHotkey) {
+                                pendingCapturedField = nil
+                                pendingCapturedHotkey = nil
+                                recorderMessageKey = "MCP reply shortcut only supports a single non-modifier key."
+                                return
+                            }
+                            recorderMessageKey = nil
                             pendingCapturedField = field
                             pendingCapturedHotkey = capturedHotkey
                         },
@@ -358,6 +377,38 @@ struct HotkeySettingsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
+            }
+
+            if agentMCPEnabled {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("MCP Reply Shortcut")
+                            .font(.headline)
+
+                        singleKeyShortcutInput(
+                            titleKey: "MCP Reply",
+                            displayText: displayedMCPReplyShortcutText,
+                            isRecording: recordingField == .mcpReply,
+                            isPendingConfirmation: isPendingConfirmation(for: .mcpReply),
+                            onFocus: { beginRecording(.mcpReply) },
+                            onReset: {
+                                agentMCPReplyShortcutKeyCode = Int(kVK_Space)
+                            },
+                            onCancelPending: discardPendingCapture,
+                            onConfirmPending: confirmPendingCapture
+                        )
+
+                        Text("Only a single non-modifier key is supported. This key starts MCP reply recording from the prompt card and stops it while recording.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("Voice End Command also works for MCP replies when enabled below.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                }
             }
 
             GroupBox {
@@ -531,9 +582,95 @@ struct HotkeySettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private func singleKeyShortcutInput(
+        titleKey: LocalizedStringKey,
+        displayText: String,
+        isRecording: Bool,
+        isPendingConfirmation: Bool,
+        onFocus: @escaping () -> Void,
+        onReset: @escaping () -> Void,
+        onCancelPending: @escaping () -> Void,
+        onConfirmPending: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(titleKey)
+                .font(.body)
+                .foregroundStyle(.secondary)
+            Spacer()
+
+            HStack(spacing: 8) {
+                Text(isRecording && !isPendingConfirmation ? String(localized: "Listening...") : displayText)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .minimumScaleFactor(0.9)
+                    .layoutPriority(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isPendingConfirmation {
+                    Button("Cancel", action: onCancelPending)
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .frame(height: 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color(nsColor: .controlAccentColor).opacity(0.12))
+                        )
+                    Button("Confirm", action: onConfirmPending)
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .frame(height: 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.18))
+                        )
+                } else if isRecording {
+                    Button("Cancel", action: onCancelPending)
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .frame(height: 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color(nsColor: .controlAccentColor).opacity(0.12))
+                        )
+                } else {
+                    Button(action: onReset) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(Text("Reset shortcut"))
+                }
+            }
+            .frame(height: 16)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onFocus)
+            .frame(width: 320, alignment: .trailing)
+        }
+    }
+
     private func beginRecording(_ field: RecordingField) {
         pendingCapturedField = nil
         pendingCapturedHotkey = nil
+        recorderMessageKey = nil
         recordingField = field
     }
 
@@ -546,6 +683,17 @@ struct HotkeySettingsView: View {
             return current
         }
         return pendingCapturedHotkey
+    }
+
+    private var displayedMCPReplyShortcutText: String {
+        guard pendingCapturedField == .mcpReply, let pendingCapturedHotkey else {
+            return HotkeyPreference.keyCodeDisplayString(currentMCPReplyShortcutKeyCode)
+        }
+        return HotkeyPreference.keyCodeDisplayString(pendingCapturedHotkey.keyCode)
+    }
+
+    private func isValidMCPReplyShortcut(_ hotkey: HotkeyPreference.Hotkey) -> Bool {
+        hotkey.modifiers.isEmpty && hotkey.keyCode != UInt16(kVK_Escape)
     }
 
     private func discardPendingCapture() {
@@ -571,11 +719,16 @@ struct HotkeySettingsView: View {
             rewriteHotkeyBinding.wrappedValue = hotkey.keyCode
             rewriteModifierBinding.wrappedValue = hotkey.modifiers
             rewriteSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        case .mcpReply:
+            agentMCPReplyShortcutKeyCode = Int(hotkey.keyCode)
         }
 
-        hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+        if field != .mcpReply {
+            hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+        }
         pendingCapturedField = nil
         pendingCapturedHotkey = nil
         recordingField = nil
+        recorderMessageKey = nil
     }
 }

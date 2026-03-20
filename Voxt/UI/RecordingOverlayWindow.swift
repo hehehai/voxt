@@ -2,11 +2,13 @@ import AppKit
 import SwiftUI
 import Combine
 import QuartzCore
+import Carbon
 
 enum OverlayDisplayMode: Equatable {
     case recording
     case processing
     case answer
+    case answerPrompt
 }
 
 enum OverlaySessionIconMode: Equatable {
@@ -30,6 +32,13 @@ class OverlayState: ObservableObject {
     @Published var answerTitle = ""
     @Published var answerContent = ""
     @Published var canInjectAnswer = false
+    @Published var promptTitle = ""
+    @Published var promptContextHint = ""
+    @Published var promptQuestions: [String] = []
+    @Published var canConfirmPrompt = false
+    @Published var keyboardShortcutKeyCode: UInt16 = UInt16(kVK_Space)
+    @Published var keyboardShortcutLabel = AppLocalization.localizedString("Space")
+    @Published var capturesKeyboardShortcuts = false
     @Published var isPresented = false
 
     private var cancellables = Set<AnyCancellable>()
@@ -80,31 +89,65 @@ class OverlayState: ObservableObject {
         answerTitle = ""
         answerContent = ""
         canInjectAnswer = false
+        promptTitle = ""
+        promptContextHint = ""
+        promptQuestions = []
+        canConfirmPrompt = false
+        keyboardShortcutKeyCode = UInt16(kVK_Space)
+        keyboardShortcutLabel = AppLocalization.localizedString("Space")
+        capturesKeyboardShortcuts = false
         isPresented = false
         cancellables.removeAll()
     }
 
-    func presentRecording(iconMode: OverlaySessionIconMode? = nil) {
+    func presentRecording(
+        iconMode: OverlaySessionIconMode? = nil,
+        capturesKeyboardShortcuts: Bool = false,
+        keyboardShortcutKeyCode: UInt16? = nil,
+        keyboardShortcutLabel: String? = nil
+    ) {
         displayMode = .recording
         if let iconMode {
             sessionIconMode = iconMode
         }
         answerTitle = ""
         answerContent = ""
+        promptTitle = ""
+        promptContextHint = ""
+        promptQuestions = []
+        canConfirmPrompt = false
+        if let keyboardShortcutKeyCode {
+            self.keyboardShortcutKeyCode = keyboardShortcutKeyCode
+        }
+        if let keyboardShortcutLabel {
+            self.keyboardShortcutLabel = keyboardShortcutLabel
+        }
+        self.capturesKeyboardShortcuts = capturesKeyboardShortcuts
     }
 
-    func presentProcessing(iconMode: OverlaySessionIconMode? = nil) {
+    func presentProcessing(
+        iconMode: OverlaySessionIconMode? = nil,
+        capturesKeyboardShortcuts: Bool = false
+    ) {
         guard displayMode != .answer else { return }
         displayMode = .processing
         if let iconMode {
             sessionIconMode = iconMode
         }
+        self.capturesKeyboardShortcuts = capturesKeyboardShortcuts
     }
 
     func presentAnswer(title: String, content: String, canInject: Bool) {
         answerTitle = title
         answerContent = content
         canInjectAnswer = canInject
+        promptTitle = ""
+        promptContextHint = ""
+        promptQuestions = []
+        canConfirmPrompt = false
+        keyboardShortcutKeyCode = UInt16(kVK_Space)
+        keyboardShortcutLabel = AppLocalization.localizedString("Space")
+        capturesKeyboardShortcuts = false
         displayMode = .answer
         isRecording = false
         audioLevel = 0
@@ -112,6 +155,34 @@ class OverlayState: ObservableObject {
         isRequesting = false
         isCompleting = false
         statusMessage = ""
+    }
+
+    func presentAgentPrompt(
+        title: String,
+        contextHint: String?,
+        questions: [String],
+        shortcutKeyCode: UInt16,
+        shortcutLabel: String,
+        canConfirm: Bool = true
+    ) {
+        promptTitle = title
+        promptContextHint = contextHint ?? ""
+        promptQuestions = questions
+        canConfirmPrompt = canConfirm
+        keyboardShortcutKeyCode = shortcutKeyCode
+        keyboardShortcutLabel = shortcutLabel
+        capturesKeyboardShortcuts = true
+        answerTitle = ""
+        answerContent = ""
+        canInjectAnswer = false
+        displayMode = .answerPrompt
+        isRecording = false
+        audioLevel = 0
+        isEnhancing = false
+        isRequesting = false
+        isCompleting = false
+        statusMessage = ""
+        transcribedText = ""
     }
 
     var shouldAnimateVisuals: Bool {
@@ -193,6 +264,8 @@ class RecordingOverlayWindow: NSPanel {
     private var currentPosition: OverlayPosition = .bottom
     var onRequestClose: (() -> Void)?
     var onRequestInject: (() -> Void)?
+    var onRequestConfirm: (() -> Void)?
+    var onRequestStop: (() -> Void)?
 
     init() {
         super.init(
@@ -221,6 +294,7 @@ class RecordingOverlayWindow: NSPanel {
     }
 
     override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 
     func show(state: OverlayState, position: OverlayPosition) {
         visibilityToken &+= 1
@@ -230,7 +304,8 @@ class RecordingOverlayWindow: NSPanel {
         let content = OverlayContent(
             state: state,
             onInject: { [weak self] in self?.onRequestInject?() },
-            onClose: { [weak self] in self?.onRequestClose?() }
+            onClose: { [weak self] in self?.onRequestClose?() },
+            onConfirm: { [weak self] in self?.onRequestConfirm?() }
         )
 
         if let hostingView {
@@ -247,7 +322,15 @@ class RecordingOverlayWindow: NSPanel {
 
         if !isVisible {
             alphaValue = 1
-            orderFront(nil)
+            if shouldActivateWindow(for: state) {
+                makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            } else {
+                orderFront(nil)
+            }
+        } else if shouldActivateWindow(for: state) {
+            makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
@@ -277,15 +360,16 @@ class RecordingOverlayWindow: NSPanel {
         guard observedState !== state else { return }
         observedState = state
         displayModeCancellable = state.$displayMode
+            .combineLatest(state.$capturesKeyboardShortcuts)
             .receive(on: RunLoop.main)
-            .sink { [weak self, weak state] _ in
+            .sink { [weak self, weak state] _, _ in
                 guard let self, let state else { return }
                 self.updateAppearance(for: state, animated: true)
             }
     }
 
     private func updateAppearance(for state: OverlayState, animated: Bool) {
-        ignoresMouseEvents = state.displayMode != .answer
+        ignoresMouseEvents = !isInteractiveMode(state)
         let targetFrame = frame(for: panelSize(for: state.displayMode), position: currentPosition)
 
         guard !targetFrame.isEmpty else { return }
@@ -304,9 +388,56 @@ class RecordingOverlayWindow: NSPanel {
         switch mode {
         case .recording, .processing:
             return CGSize(width: 360, height: 140)
-        case .answer:
+        case .answer, .answerPrompt:
             return CGSize(width: 560, height: 340)
         }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard let observedState else {
+            super.keyDown(with: event)
+            return
+        }
+
+        switch observedState.displayMode {
+        case .answerPrompt:
+            switch event.keyCode {
+            case observedState.keyboardShortcutKeyCode:
+                onRequestConfirm?()
+            case 53:
+                onRequestClose?()
+            default:
+                super.keyDown(with: event)
+            }
+        case .recording where observedState.capturesKeyboardShortcuts:
+            switch event.keyCode {
+            case observedState.keyboardShortcutKeyCode:
+                onRequestStop?()
+            case 53:
+                onRequestClose?()
+            default:
+                super.keyDown(with: event)
+            }
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        guard let observedState else {
+            super.flagsChanged(with: event)
+            return
+        }
+
+        if observedState.displayMode == .recording,
+           observedState.capturesKeyboardShortcuts,
+           event.keyCode == UInt16(kVK_Function),
+           event.modifierFlags.contains(.function) {
+            onRequestStop?()
+            return
+        }
+
+        super.flagsChanged(with: event)
     }
 
     private func frame(for size: CGSize, position: OverlayPosition) -> CGRect {
@@ -331,6 +462,14 @@ class RecordingOverlayWindow: NSPanel {
         let storedValue = UserDefaults.standard.object(forKey: AppPreferenceKey.overlayScreenEdgeInset) as? Int ?? 30
         return CGFloat(min(max(storedValue, 0), 120))
     }
+
+    private func isInteractiveMode(_ state: OverlayState) -> Bool {
+        state.displayMode == .answer || state.displayMode == .answerPrompt || state.capturesKeyboardShortcuts
+    }
+
+    private func shouldActivateWindow(for state: OverlayState) -> Bool {
+        state.displayMode == .answerPrompt || state.capturesKeyboardShortcuts
+    }
 }
 
 // MARK: - SwiftUI content hosted inside the panel
@@ -339,6 +478,7 @@ private struct OverlayContent: View {
     @ObservedObject var state: OverlayState
     let onInject: () -> Void
     let onClose: () -> Void
+    let onConfirm: () -> Void
 
     var body: some View {
         WaveformView(
@@ -355,8 +495,14 @@ private struct OverlayContent: View {
             answerTitle: state.answerTitle,
             answerContent: state.answerContent,
             canInjectAnswer: state.canInjectAnswer,
+            promptTitle: state.promptTitle,
+            promptContextHint: state.promptContextHint,
+            promptQuestions: state.promptQuestions,
+            canConfirmPrompt: state.canConfirmPrompt,
+            promptShortcutLabel: state.keyboardShortcutLabel,
             onInject: onInject,
-            onClose: onClose
+            onClose: onClose,
+            onConfirm: onConfirm
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.top, 8)
