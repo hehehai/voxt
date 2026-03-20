@@ -60,32 +60,22 @@ extension AppDelegate {
         let glossary = context.glossaryText()
         guard !glossary.isEmpty else { return prompt }
 
-        let instruction: String
+        let glossaryPurpose: DictionaryGlossaryPurpose
         switch purpose {
         case "enhancement":
-            instruction = """
-            ### Dictionary Guidance
-            Prefer these exact spellings when the transcript context indicates the user meant them:
-            \(glossary)
-
-            If a nearby phrase looks like one of these terms, prefer the exact spelling above.
-            """
+            glossaryPurpose = .enhancement
         case "translation":
-            instruction = """
-            ### Dictionary Guidance
-            When the source text refers to these proper nouns or product terms, preserve their exact spelling unless translation clearly requires otherwise:
-            \(glossary)
-            """
+            glossaryPurpose = .translation
         default:
-            instruction = """
-            ### Dictionary Guidance
-            Prefer these exact term spellings in the final output when relevant:
-            \(glossary)
-            """
+            glossaryPurpose = .rewrite
         }
 
-        VoxtLog.info("Dictionary glossary appended. purpose=\(purpose), terms=\(context.candidates.count)")
-        return "\(prompt)\n\n\(instruction)"
+        VoxtLog.info("Dictionary glossary appended. purpose=\(glossaryPurpose), terms=\(context.candidates.count)")
+        return DictionaryGlossaryPromptComposer.append(
+            prompt: prompt,
+            glossary: glossary,
+            purpose: glossaryPurpose
+        )
     }
 
     func resolveDictionaryCorrection(for text: String) -> DictionaryCorrectionResult {
@@ -124,7 +114,7 @@ extension AppDelegate {
         dictionarySuggestionStore.applyDiscoveredSuggestions(suggestions, historyEntryID: historyEntryID)
     }
 
-    private func activeDictionaryGroupID() -> UUID? {
+    func activeDictionaryGroupID() -> UUID? {
         if let matchedGroupID = lastEnhancementPromptContext?.matchedGroupID {
             return matchedGroupID
         }

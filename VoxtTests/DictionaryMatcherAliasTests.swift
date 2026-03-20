@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class DictionaryMatcherAliasTests: XCTestCase {
     func testReplacementTermsReplaceAllOccurrencesWithoutAutomaticCorrection() {
         let matcher = DictionaryMatcher(

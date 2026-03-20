@@ -3,8 +3,8 @@ import AppKit
 import ApplicationServices
 
 extension AppDelegate {
-    static let rawTranscriptionTemplateVariable = "{{RAW_TRANSCRIPTION}}"
-    static let userMainLanguageTemplateVariable = "{{USER_MAIN_LANGUAGE}}"
+    static let rawTranscriptionTemplateVariable = EnhancementPromptResolver.rawTranscriptionTemplateVariable
+    static let userMainLanguageTemplateVariable = EnhancementPromptResolver.userMainLanguageTemplateVariable
 
     struct EnhancementPromptResolution {
         enum Delivery {
@@ -31,100 +31,65 @@ extension AppDelegate {
     }
 
     func resolvedEnhancementPrompt(rawTranscription: String) -> EnhancementPromptResolution {
-        let fallbackPrompt = resolvedGlobalEnhancementPrompt()
-        let resolvedFallback = EnhancementPromptResolution(
-            content: resolveGlobalEnhancementPromptTemplate(fallbackPrompt, rawTranscription: rawTranscription),
-            delivery: .systemPrompt
-        )
-
-        guard appEnhancementEnabled else {
-            VoxtLog.info("Enhancement prompt source: global/default (app branch disabled)")
-            return resolvedFallback
-        }
-
         let groups = loadAppBranchGroups()
-        guard !groups.isEmpty else {
-            VoxtLog.info("Enhancement prompt source: global/default (no app branch groups)")
-            return resolvedFallback
-        }
-
         let urlsByID = loadAppBranchURLsByID()
         let context = currentEnhancementContext()
         let frontmostBundleID = context.bundleID
         let focusedAppName = NSWorkspace.shared.frontmostApplication?.localizedName
-
-        if isBrowserBundleID(frontmostBundleID) {
-            let activeURL = activeBrowserTabURL(frontmostBundleID: frontmostBundleID)
-            let normalizedActiveURL = normalizedURLForMatching(activeURL)
-
-            guard let normalizedActiveURL else {
-                lastEnhancementPromptContext = EnhancementPromptContext(
-                    focusedAppName: focusedAppName,
-                    matchedGroupID: nil,
-                    matchedAppGroupName: nil,
-                    matchedURLGroupName: nil
-                )
-                VoxtLog.info("Enhancement prompt source: global/default (browser url unavailable), bundleID=\(frontmostBundleID ?? "nil")")
-                return resolvedFallback
-            }
-
-            if let match = firstURLPromptMatch(groups: groups, urlsByID: urlsByID, normalizedURL: normalizedActiveURL) {
-                lastEnhancementPromptContext = EnhancementPromptContext(
-                    focusedAppName: focusedAppName,
-                    matchedGroupID: match.groupID,
-                    matchedAppGroupName: nil,
-                    matchedURLGroupName: match.groupName
-                )
-                VoxtLog.info("Enhancement prompt source: group(url) group=\(match.groupName), pattern=\(match.pattern), url=\(normalizedActiveURL)")
-                return EnhancementPromptResolution(
-                    content: appendDictionaryEnhancementGlossary(
-                        to: resolveEnhancementPromptVariables(in: match.prompt, rawTranscription: rawTranscription),
-                        sourceText: rawTranscription
-                    ),
-                    delivery: .userMessage
-                )
-            }
-
-            lastEnhancementPromptContext = EnhancementPromptContext(
-                focusedAppName: focusedAppName,
-                matchedGroupID: nil,
-                matchedAppGroupName: nil,
-                matchedURLGroupName: nil
+        let normalizedActiveURL = isBrowserBundleID(frontmostBundleID)
+            ? AppBranchURLPatternService.normalizedURLForMatching(
+                activeBrowserTabURL(frontmostBundleID: frontmostBundleID)
             )
-            VoxtLog.info("Enhancement prompt source: global/default (browser url no group match), bundleID=\(frontmostBundleID ?? "nil"), url=\(normalizedActiveURL)")
-            return resolvedFallback
-        }
+            : nil
+        let glossary = dictionaryStore.glossaryContext(
+            for: rawTranscription,
+            activeGroupID: activeDictionaryGroupID()
+        )?.glossaryText()
 
-        if let frontmostBundleID {
-            for group in groups where group.appBundleIDs.contains(frontmostBundleID) {
-                let prompt = group.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !prompt.isEmpty {
-                    lastEnhancementPromptContext = EnhancementPromptContext(
-                        focusedAppName: focusedAppName,
-                        matchedGroupID: group.id,
-                        matchedAppGroupName: group.name,
-                        matchedURLGroupName: nil
-                    )
-                    VoxtLog.info("Enhancement prompt source: group(app) group=\(group.name), bundleID=\(frontmostBundleID)")
-                    return EnhancementPromptResolution(
-                        content: appendDictionaryEnhancementGlossary(
-                            to: resolveEnhancementPromptVariables(in: prompt, rawTranscription: rawTranscription),
-                            sourceText: rawTranscription
-                        ),
-                        delivery: .userMessage
-                    )
-                }
-            }
-        }
+        let resolution = EnhancementPromptResolver.resolve(
+            .init(
+                globalPrompt: resolvedGlobalEnhancementPrompt(),
+                rawTranscription: rawTranscription,
+                userMainLanguagePromptValue: userMainLanguagePromptValue,
+                dictionaryGlossary: glossary,
+                appEnhancementEnabled: appEnhancementEnabled,
+                groups: groups,
+                urlsByID: urlsByID,
+                frontmostBundleID: frontmostBundleID,
+                focusedAppName: focusedAppName,
+                normalizedActiveURL: normalizedActiveURL,
+                supportedBrowserBundleIDs: supportedBrowserBundleIDs()
+            )
+        )
 
         lastEnhancementPromptContext = EnhancementPromptContext(
-            focusedAppName: focusedAppName,
-            matchedGroupID: nil,
-            matchedAppGroupName: nil,
-            matchedURLGroupName: nil
+            focusedAppName: resolution.promptContext.focusedAppName,
+            matchedGroupID: resolution.promptContext.matchedGroupID,
+            matchedAppGroupName: resolution.promptContext.matchedAppGroupName,
+            matchedURLGroupName: resolution.promptContext.matchedURLGroupName
         )
-        VoxtLog.info("Enhancement prompt source: global/default (no group match), bundleID=\(frontmostBundleID ?? "nil")")
-        return resolvedFallback
+
+        switch resolution.source {
+        case .globalDefault(.appBranchDisabled):
+            VoxtLog.info("Enhancement prompt source: global/default (app branch disabled)")
+        case .globalDefault(.noGroups):
+            VoxtLog.info("Enhancement prompt source: global/default (no app branch groups)")
+        case .globalDefault(.browserURLUnavailable(let bundleID)):
+            VoxtLog.info("Enhancement prompt source: global/default (browser url unavailable), bundleID=\(bundleID ?? "nil")")
+        case .globalDefault(.browserURLNoMatch(let bundleID, let url)):
+            VoxtLog.info("Enhancement prompt source: global/default (browser url no group match), bundleID=\(bundleID ?? "nil"), url=\(url)")
+        case .globalDefault(.noGroupMatch(let bundleID)):
+            VoxtLog.info("Enhancement prompt source: global/default (no group match), bundleID=\(bundleID ?? "nil")")
+        case .appGroup(let groupName, let bundleID):
+            VoxtLog.info("Enhancement prompt source: group(app) group=\(groupName), bundleID=\(bundleID)")
+        case .urlGroup(let groupName, let pattern, let url):
+            VoxtLog.info("Enhancement prompt source: group(url) group=\(groupName), pattern=\(pattern), url=\(url)")
+        }
+
+        return EnhancementPromptResolution(
+            content: resolution.content,
+            delivery: resolution.delivery == EnhancementPromptResolver.Delivery.systemPrompt ? .systemPrompt : .userMessage
+        )
     }
 
     func captureEnhancementContextSnapshot() -> EnhancementContextSnapshot {
@@ -145,10 +110,14 @@ extension AppDelegate {
 
         if isBrowserBundleID(frontmostBundleID) {
             let activeURL = activeBrowserTabURL(frontmostBundleID: frontmostBundleID)
-            guard let normalizedActiveURL = normalizedURLForMatching(activeURL) else {
+            guard let normalizedActiveURL = AppBranchURLPatternService.normalizedURLForMatching(activeURL) else {
                 return (nil, nil)
             }
-            if let match = firstURLGroupMatch(groups: groups, urlsByID: urlsByID, normalizedURL: normalizedActiveURL) {
+            if let match = AppBranchURLPatternService.firstGroupMatch(
+                groups: groups,
+                urlsByID: urlsByID,
+                normalizedURL: normalizedActiveURL
+            ) {
                 return (match.groupID, match.groupName)
             }
             return (nil, nil)
@@ -161,62 +130,27 @@ extension AppDelegate {
         return (nil, nil)
     }
 
-    private func firstURLPromptMatch(
-        groups: [StoredAppBranchGroup],
-        urlsByID: [UUID: String],
-        normalizedURL: String
-    ) -> (groupID: UUID, prompt: String, groupName: String, pattern: String)? {
-        for group in groups {
-            for urlID in group.urlPatternIDs {
-                guard let pattern = urlsByID[urlID], wildcardMatches(pattern: pattern, candidate: normalizedURL) else {
-                    continue
-                }
-                let prompt = group.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !prompt.isEmpty {
-                    return (group.id, prompt, group.name, pattern)
-                }
-            }
-        }
-        return nil
-    }
-
-    private func firstURLGroupMatch(
-        groups: [StoredAppBranchGroup],
-        urlsByID: [UUID: String],
-        normalizedURL: String
-    ) -> (groupID: UUID, groupName: String)? {
-        for group in groups {
-            for urlID in group.urlPatternIDs {
-                guard let pattern = urlsByID[urlID], wildcardMatches(pattern: pattern, candidate: normalizedURL) else {
-                    continue
-                }
-                return (group.id, group.name)
-            }
-        }
-        return nil
-    }
-
     private func resolveEnhancementPromptVariables(in prompt: String, rawTranscription: String) -> String {
         prompt
             .replacingOccurrences(of: Self.rawTranscriptionTemplateVariable, with: rawTranscription)
             .replacingOccurrences(of: Self.userMainLanguageTemplateVariable, with: userMainLanguagePromptValue)
     }
 
-    private func loadAppBranchGroups() -> [StoredAppBranchGroup] {
+    private func loadAppBranchGroups() -> [AppBranchGroup] {
         guard let data = UserDefaults.standard.data(forKey: AppPreferenceKey.appBranchGroups) else { return [] }
-        return (try? JSONDecoder().decode([StoredAppBranchGroup].self, from: data)) ?? []
+        return (try? JSONDecoder().decode([AppBranchGroup].self, from: data)) ?? []
     }
 
     private func loadAppBranchURLsByID() -> [UUID: String] {
         guard let data = UserDefaults.standard.data(forKey: AppPreferenceKey.appBranchURLs),
-              let items = try? JSONDecoder().decode([StoredBranchURLItem].self, from: data)
+              let items = try? JSONDecoder().decode([BranchURLItem].self, from: data)
         else {
             return [:]
         }
 
         var result: [UUID: String] = [:]
         for item in items {
-            result[item.id] = item.pattern.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            result[item.id] = AppBranchURLPatternService.normalizedPattern(item.pattern)
         }
         return result
     }
@@ -469,27 +403,4 @@ extension AppDelegate {
         return documentValue as? String
     }
 
-    private func normalizedURLForMatching(_ rawURL: String?) -> String? {
-        guard let rawURL else { return nil }
-        let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        let withScheme: String = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
-        if let components = URLComponents(string: withScheme), let host = components.host?.lowercased() {
-            let path = components.path.isEmpty ? "/" : components.path.lowercased()
-            return "\(host)\(path)"
-        }
-        return trimmed.lowercased()
-    }
-
-    private func wildcardMatches(pattern: String, candidate: String) -> Bool {
-        let normalizedPattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedPattern.isEmpty else { return false }
-
-        let escaped = NSRegularExpression.escapedPattern(for: normalizedPattern)
-        let regexPattern = "^" + escaped.replacingOccurrences(of: "\\*", with: ".*") + "$"
-        guard let regex = try? NSRegularExpression(pattern: regexPattern, options: []) else { return false }
-        let range = NSRange(location: 0, length: (candidate as NSString).length)
-        return regex.firstMatch(in: candidate.lowercased(), options: [], range: range) != nil
-    }
 }

@@ -28,6 +28,16 @@ struct ConfigurationExportDocument: FileDocument {
 enum ConfigurationTransferManager {
     static let sensitivePlaceholder = "__VOXT_REQUIRED__"
 
+    struct FileEnvironment {
+        let dictionaryEntriesURL: () throws -> URL
+        let dictionarySuggestionsURL: () throws -> URL
+
+        static let live = FileEnvironment(
+            dictionaryEntriesURL: { try dictionaryFileURL() },
+            dictionarySuggestionsURL: { try dictionarySuggestionsFileURL() }
+        )
+    }
+
     struct ExportPayload: Codable {
         var version: Int
         var exportedAt: String
@@ -535,20 +545,27 @@ enum ConfigurationTransferManager {
         }
     }
 
-    static func exportJSONString(defaults: UserDefaults = .standard) throws -> String {
+    static func exportJSONString(
+        defaults: UserDefaults = .standard,
+        environment: FileEnvironment = .live
+    ) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(makeExportPayload(defaults: defaults))
+        let data = try encoder.encode(makeExportPayload(defaults: defaults, environment: environment))
         guard let text = String(data: data, encoding: .utf8) else {
             throw CocoaError(.fileWriteUnknown)
         }
         return text
     }
 
-    static func importConfiguration(from json: String, defaults: UserDefaults = .standard) throws {
+    static func importConfiguration(
+        from json: String,
+        defaults: UserDefaults = .standard,
+        environment: FileEnvironment = .live
+    ) throws {
         let data = Data(json.utf8)
         let payload = try JSONDecoder().decode(ExportPayload.self, from: data)
-        apply(payload: payload, defaults: defaults)
+        apply(payload: payload, defaults: defaults, environment: environment)
     }
 
     static func missingConfigurationIssues(
@@ -631,7 +648,10 @@ enum ConfigurationTransferManager {
         return Array(Set(issues)).sorted { $0.id < $1.id }
     }
 
-    private static func makeExportPayload(defaults: UserDefaults) -> ExportPayload {
+    private static func makeExportPayload(
+        defaults: UserDefaults,
+        environment: FileEnvironment
+    ) -> ExportPayload {
         let general = GeneralSettings(
             interfaceLanguage: defaults.string(forKey: AppPreferenceKey.interfaceLanguage) ?? AppInterfaceLanguage.system.rawValue,
             selectedInputDeviceID: defaults.integer(forKey: AppPreferenceKey.selectedInputDeviceID),
@@ -700,8 +720,8 @@ enum ConfigurationTransferManager {
                 suggestionFilterSettings: loadDictionarySuggestionFilterSettings(defaults: defaults),
                 suggestionIngestModelOptionID: defaults.string(forKey: AppPreferenceKey.dictionarySuggestionIngestModelOptionID) ?? "",
                 historyScanCheckpoint: loadDictionaryHistoryScanCheckpoint(defaults: defaults),
-                entries: loadDictionaryEntries(),
-                suggestions: loadDictionarySuggestions()
+                entries: loadDictionaryEntries(environment: environment),
+                suggestions: loadDictionarySuggestions(environment: environment)
             ),
             appBranch: .init(
                 appEnhancementEnabled: defaults.bool(forKey: AppPreferenceKey.appEnhancementEnabled),
@@ -727,7 +747,11 @@ enum ConfigurationTransferManager {
         )
     }
 
-    private static func apply(payload: ExportPayload, defaults: UserDefaults) {
+    private static func apply(
+        payload: ExportPayload,
+        defaults: UserDefaults,
+        environment: FileEnvironment
+    ) {
         let general = payload.general
         let model = payload.model
         let dictionary = payload.dictionary
@@ -798,8 +822,8 @@ enum ConfigurationTransferManager {
                 defaults.set(suggestionFilterData, forKey: AppPreferenceKey.dictionarySuggestionFilterSettings)
             }
             persistDictionaryHistoryScanCheckpoint(dictionary.historyScanCheckpoint, defaults: defaults)
-            persistDictionaryEntries(dictionary.entries)
-            persistDictionarySuggestions(dictionary.suggestions)
+            persistDictionaryEntries(dictionary.entries, environment: environment)
+            persistDictionarySuggestions(dictionary.suggestions, environment: environment)
         }
 
         defaults.set(appBranch.appEnhancementEnabled, forKey: AppPreferenceKey.appEnhancementEnabled)
@@ -899,8 +923,8 @@ enum ConfigurationTransferManager {
         return urls.map { ExportedBranchURLItem(id: $0.id, pattern: $0.pattern, iconPlaceholder: "url-icon-placeholder") }
     }
 
-    private static func loadDictionaryEntries() -> [DictionaryEntry] {
-        guard let url = try? dictionaryFileURL(),
+    private static func loadDictionaryEntries(environment: FileEnvironment) -> [DictionaryEntry] {
+        guard let url = try? environment.dictionaryEntriesURL(),
               let data = try? Data(contentsOf: url),
               let entries = try? JSONDecoder().decode([DictionaryEntry].self, from: data)
         else {
@@ -949,8 +973,11 @@ enum ConfigurationTransferManager {
         defaults.set(data, forKey: AppPreferenceKey.dictionarySuggestionHistoryScanCheckpoint)
     }
 
-    private static func persistDictionaryEntries(_ entries: [DictionaryEntry]) {
-        guard let url = try? dictionaryFileURL(),
+    private static func persistDictionaryEntries(
+        _ entries: [DictionaryEntry],
+        environment: FileEnvironment
+    ) {
+        guard let url = try? environment.dictionaryEntriesURL(),
               let data = try? JSONEncoder().encode(entries)
         else {
             return
@@ -964,8 +991,8 @@ enum ConfigurationTransferManager {
         }
     }
 
-    private static func loadDictionarySuggestions() -> [DictionarySuggestion] {
-        guard let url = try? dictionarySuggestionsFileURL(),
+    private static func loadDictionarySuggestions(environment: FileEnvironment) -> [DictionarySuggestion] {
+        guard let url = try? environment.dictionarySuggestionsURL(),
               let data = try? Data(contentsOf: url),
               let suggestions = try? JSONDecoder().decode([DictionarySuggestion].self, from: data)
         else {
@@ -974,8 +1001,11 @@ enum ConfigurationTransferManager {
         return suggestions
     }
 
-    private static func persistDictionarySuggestions(_ suggestions: [DictionarySuggestion]) {
-        guard let url = try? dictionarySuggestionsFileURL(),
+    private static func persistDictionarySuggestions(
+        _ suggestions: [DictionarySuggestion],
+        environment: FileEnvironment
+    ) {
+        guard let url = try? environment.dictionarySuggestionsURL(),
               let data = try? JSONEncoder().encode(suggestions)
         else {
             return

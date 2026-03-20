@@ -81,12 +81,24 @@ enum AudioInputDeviceManager {
         from devices: [AudioInputDevice],
         preferredID: AudioDeviceID?
     ) -> AudioDeviceID? {
+        resolvedInputDeviceID(
+            from: devices,
+            preferredID: preferredID,
+            defaultDeviceID: defaultInputDeviceID()
+        )
+    }
+
+    static func resolvedInputDeviceID(
+        from devices: [AudioInputDevice],
+        preferredID: AudioDeviceID?,
+        defaultDeviceID: AudioDeviceID?
+    ) -> AudioDeviceID? {
         if let preferredID,
            devices.contains(where: { $0.id == preferredID }) {
             return preferredID
         }
 
-        if let defaultDeviceID = defaultInputDeviceID(),
+        if let defaultDeviceID,
            devices.contains(where: { $0.id == defaultDeviceID }) {
             return defaultDeviceID
         }
