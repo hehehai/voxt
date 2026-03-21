@@ -9,11 +9,18 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.translationSystemPrompt) var translationPrompt = AppPreferenceKey.defaultTranslationPrompt
     @AppStorage(AppPreferenceKey.rewriteSystemPrompt) var rewritePrompt = AppPreferenceKey.defaultRewritePrompt
     @AppStorage(AppPreferenceKey.mlxModelRepo) var modelRepo = MLXModelManager.defaultModelRepo
+    @AppStorage(AppPreferenceKey.whisperModelID) var whisperModelID = WhisperKitModelManager.defaultModelID
+    @AppStorage(AppPreferenceKey.whisperTemperature) var whisperTemperature = 0.0
+    @AppStorage(AppPreferenceKey.whisperVADEnabled) var whisperVADEnabled = true
+    @AppStorage(AppPreferenceKey.whisperTimestampsEnabled) var whisperTimestampsEnabled = false
+    @AppStorage(AppPreferenceKey.whisperRealtimeEnabled) var whisperRealtimeEnabled = true
     @AppStorage(AppPreferenceKey.customLLMModelRepo) var customLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.translationCustomLLMModelRepo) var translationCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.rewriteCustomLLMModelRepo) var rewriteCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.translationModelProvider) var translationModelProviderRaw = TranslationModelProvider.customLLM.rawValue
+    @AppStorage(AppPreferenceKey.translationFallbackModelProvider) var translationFallbackModelProviderRaw = TranslationModelProvider.customLLM.rawValue
     @AppStorage(AppPreferenceKey.rewriteModelProvider) var rewriteModelProviderRaw = RewriteModelProvider.customLLM.rawValue
+    @AppStorage(AppPreferenceKey.translationTargetLanguage) var translationTargetLanguageRaw = TranslationTargetLanguage.english.rawValue
     @AppStorage(AppPreferenceKey.remoteASRSelectedProvider) var remoteASRSelectedProviderRaw = RemoteASRProvider.openAIWhisper.rawValue
     @AppStorage(AppPreferenceKey.remoteASRProviderConfigurations) var remoteASRProviderConfigurationsRaw = ""
     @AppStorage(AppPreferenceKey.asrHintSettings) var asrHintSettingsRaw = ASRHintSettingsStore.defaultStoredValue()
@@ -26,6 +33,7 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.interfaceLanguage) var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
 
     @ObservedObject var mlxModelManager: MLXModelManager
+    @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     let missingConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue]
 
@@ -33,6 +41,7 @@ struct ModelSettingsView: View {
     @State var editingASRProvider: RemoteASRProvider?
     @State var editingLLMProvider: RemoteLLMProvider?
     @State var isASRHintSettingsPresented = false
+    @State var isWhisperConfigPresented = false
 
     let modelStateRefreshTimer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
 
@@ -58,6 +67,16 @@ struct ModelSettingsView: View {
 
     var selectedRewriteModelProvider: RewriteModelProvider {
         RewriteModelProvider(rawValue: rewriteModelProviderRaw) ?? .customLLM
+    }
+
+    var selectedTranslationFallbackModelProvider: TranslationModelProvider {
+        TranslationProviderResolver.sanitizedFallbackProvider(
+            TranslationModelProvider(rawValue: translationFallbackModelProviderRaw) ?? .customLLM
+        )
+    }
+
+    var selectedTranslationTargetLanguage: TranslationTargetLanguage {
+        TranslationTargetLanguage(rawValue: translationTargetLanguageRaw) ?? .english
     }
 
     var remoteASRConfigurations: [String: RemoteProviderConfiguration] {
@@ -117,6 +136,10 @@ struct ModelSettingsView: View {
                         mlxModelSection
                     }
 
+                    if selectedEngine == .whisperKit {
+                        whisperModelSection
+                    }
+
                     if selectedEngine == .remote {
                         remoteASRSection
                     }
@@ -169,12 +192,21 @@ struct ModelSettingsView: View {
             }
             mlxModelManager.updateModel(repo: canonicalRepo)
         }
+        .onChange(of: whisperModelID) { _, newValue in
+            let canonicalModelID = WhisperKitModelManager.canonicalModelID(newValue)
+            if canonicalModelID != newValue {
+                whisperModelID = canonicalModelID
+                return
+            }
+            whisperModelManager.updateModel(id: canonicalModelID)
+        }
         .onChange(of: customLLMRepo) { _, newValue in
             customLLMManager.updateModel(repo: newValue)
             ensureTranslationModelSelectionConsistency()
             ensureRewriteModelSelectionConsistency()
         }
         .onChange(of: translationModelProviderRaw) { _, _ in
+            syncTranslationFallbackProvider()
             ensureTranslationModelSelectionConsistency()
         }
         .onChange(of: rewriteModelProviderRaw) { _, _ in
@@ -189,6 +221,7 @@ struct ModelSettingsView: View {
         }
         .onReceive(modelStateRefreshTimer) { _ in
             refreshModelInstallStateIfNeeded()
+            syncTranslationFallbackProvider()
             ensureTranslationModelSelectionConsistency()
             ensureRewriteModelSelectionConsistency()
         }
@@ -229,6 +262,9 @@ struct ModelSettingsView: View {
             ) { updated in
                 saveASRHintSettings(updated, for: selectedASRHintTarget)
             }
+        }
+        .sheet(isPresented: $isWhisperConfigPresented) {
+            whisperConfigurationSheet
         }
         .id(interfaceLanguageRaw)
     }

@@ -1,6 +1,23 @@
 import SwiftUI
 
 extension ModelSettingsView {
+    var whisperModelSelectionBinding: Binding<String> {
+        Binding(
+            get: {
+                let canonicalModelID = WhisperKitModelManager.canonicalModelID(whisperModelID)
+                if canonicalModelID != whisperModelID {
+                    DispatchQueue.main.async {
+                        whisperModelID = canonicalModelID
+                    }
+                }
+                return canonicalModelID
+            },
+            set: { newValue in
+                whisperModelID = WhisperKitModelManager.canonicalModelID(newValue)
+            }
+        )
+    }
+
     var translationProviderOptions: [ModelSettingsProviderOption] {
         TranslationModelProvider.allCases.map {
             ModelSettingsProviderOption(id: $0.rawValue, titleKey: $0.titleKey)
@@ -43,6 +60,8 @@ extension ModelSettingsView {
             return configuredRemoteLLMOptions
         case .customLLM:
             return installedCustomLLMOptions
+        case .whisperKit:
+            return []
         }
     }
 
@@ -64,6 +83,8 @@ extension ModelSettingsView {
                     translationRemoteLLMProviderRaw = newValue
                 case .customLLM:
                     translationCustomLLMRepo = newValue
+                case .whisperKit:
+                    break
                 }
             }
         )
@@ -108,11 +129,17 @@ extension ModelSettingsView {
     }
 
     var currentTranslationSelectionRaw: String {
-        switch selectedTranslationModelProvider {
+        translationSelectionRaw(for: selectedTranslationModelProvider)
+    }
+
+    func translationSelectionRaw(for provider: TranslationModelProvider) -> String {
+        switch provider {
         case .remoteLLM:
             return translationRemoteLLMProviderRaw
         case .customLLM:
             return translationCustomLLMRepo
+        case .whisperKit:
+            return translationSelectionRaw(for: selectedTranslationFallbackModelProvider)
         }
     }
 
@@ -126,13 +153,56 @@ extension ModelSettingsView {
     }
 
     var translationModelLabelText: String {
-        selectedTranslationModelProvider == .remoteLLM ? "Remote LLM Model" : "Custom LLM Model"
+        switch selectedTranslationModelProvider {
+        case .remoteLLM:
+            return "Remote LLM Model"
+        case .customLLM:
+            return "Custom LLM Model"
+        case .whisperKit:
+            return "Whisper Model"
+        }
     }
 
     var translationModelEmptyStateText: String {
-        selectedTranslationModelProvider == .remoteLLM
-            ? "No configured remote LLM model yet. Configure a provider above."
-            : "No installed custom LLM model yet. Install one in the table above."
+        switch selectedTranslationModelProvider {
+        case .remoteLLM:
+            return "No configured remote LLM model yet. Configure a provider above."
+        case .customLLM:
+            return "No installed custom LLM model yet. Install one in the table above."
+        case .whisperKit:
+            return ""
+        }
+    }
+
+    var translationModelDisplayText: String? {
+        guard selectedTranslationModelProvider == .whisperKit else { return nil }
+        return whisperModelManager.displayTitle(for: whisperModelID)
+    }
+
+    var translationProviderStatusMessage: String? {
+        if let warning = TranslationProviderResolver.warningMessage(
+            selectedProvider: selectedTranslationModelProvider,
+            transcriptionEngine: selectedEngine,
+            targetLanguage: selectedTranslationTargetLanguage,
+            whisperModelState: whisperModelManager.state
+        ) {
+            return warning
+        }
+
+        guard selectedTranslationModelProvider == .whisperKit else { return nil }
+        return AppLocalization.format(
+            "Whisper translation reuses the current Whisper ASR model. It translates speech directly to English and falls back to %@ when Whisper direct translation is unavailable.",
+            selectedTranslationFallbackModelProvider.title
+        )
+    }
+
+    var translationProviderStatusIsWarning: Bool {
+        TranslationProviderResolver.warningMessage(
+            selectedProvider: selectedTranslationModelProvider,
+            transcriptionEngine: selectedEngine,
+            targetLanguage: selectedTranslationTargetLanguage,
+            whisperModelState: whisperModelManager.state
+        ) != nil
     }
 
     var rewriteModelLabelText: String {
@@ -165,6 +235,8 @@ extension ModelSettingsView {
             } else {
                 translationCustomLLMRepo = customLLMRepo
             }
+        case .whisperKit:
+            return
         }
     }
 

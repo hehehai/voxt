@@ -38,9 +38,15 @@ extension AppDelegate {
                 let current = self.overlayState.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard current == input else { return }
 
-                self.mlxTranscriber?.transcribedText = enhanced
-                self.remoteASRTranscriber.transcribedText = enhanced
-                self.speechTranscriber.transcribedText = enhanced
+                let displayText = self.sessionOutputMode == .translation
+                    ? enhanced
+                    : ChineseScriptNormalizer.normalize(enhanced, preferredMainLanguage: self.userMainLanguage)
+
+                self.mlxTranscriber?.transcribedText = displayText
+                self.whisperTranscriber?.transcribedText = displayText
+                self.remoteASRTranscriber.transcribedText = displayText
+                self.speechTranscriber.transcribedText = displayText
+                self.overlayState.transcribedText = displayText
             } catch {
                 VoxtLog.warning("Pause-time LLM enhancement skipped: \(error)")
             }

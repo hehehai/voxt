@@ -9,6 +9,13 @@ final class ConfigurationTransferManagerTests: XCTestCase {
 
         sourceDefaults.set(AppInterfaceLanguage.english.rawValue, forKey: AppPreferenceKey.interfaceLanguage)
         sourceDefaults.set(UserMainLanguageOption.storageValue(for: ["zh-TW", "en"]), forKey: AppPreferenceKey.userMainLanguageCodes)
+        sourceDefaults.set(TranscriptionEngine.whisperKit.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
+        sourceDefaults.set("small", forKey: AppPreferenceKey.whisperModelID)
+        sourceDefaults.set(0.4, forKey: AppPreferenceKey.whisperTemperature)
+        sourceDefaults.set(false, forKey: AppPreferenceKey.whisperVADEnabled)
+        sourceDefaults.set(true, forKey: AppPreferenceKey.whisperTimestampsEnabled)
+        sourceDefaults.set(false, forKey: AppPreferenceKey.whisperRealtimeEnabled)
+        sourceDefaults.set(TranslationModelProvider.remoteLLM.rawValue, forKey: AppPreferenceKey.translationFallbackModelProvider)
         sourceDefaults.set("secret-password", forKey: AppPreferenceKey.customProxyPassword)
         sourceDefaults.set(
             RemoteModelConfigurationStore.saveConfigurations([
@@ -54,6 +61,13 @@ final class ConfigurationTransferManagerTests: XCTestCase {
             UserMainLanguageOption.storedSelection(from: targetDefaults.string(forKey: AppPreferenceKey.userMainLanguageCodes)),
             ["zh-hant", "en"]
         )
+        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.transcriptionEngine), TranscriptionEngine.whisperKit.rawValue)
+        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.whisperModelID), "small")
+        XCTAssertEqual(targetDefaults.double(forKey: AppPreferenceKey.whisperTemperature), 0.4, accuracy: 0.0001)
+        XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.whisperVADEnabled))
+        XCTAssertTrue(targetDefaults.bool(forKey: AppPreferenceKey.whisperTimestampsEnabled))
+        XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.whisperRealtimeEnabled))
+        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider), TranslationModelProvider.remoteLLM.rawValue)
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.customProxyPassword), "")
 
         let importedRemote = RemoteModelConfigurationStore.loadConfigurations(
@@ -130,5 +144,42 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertEqual(decoded.suggestionIngestModelOptionID, "")
         XCTAssertTrue(decoded.entries.isEmpty)
         XCTAssertTrue(decoded.suggestions.isEmpty)
+    }
+
+    func testModelSettingsDecoderBackfillsWhisperFields() throws {
+        let json = """
+        {
+          "transcriptionEngine": "mlxAudio",
+          "enhancementMode": "off",
+          "enhancementSystemPrompt": "",
+          "translationSystemPrompt": "",
+          "rewriteSystemPrompt": "",
+          "mlxModelRepo": "mlx-community/Qwen3-ASR-0.6B-4bit",
+          "customLLMModelRepo": "Qwen/Qwen2-1.5B-Instruct",
+          "translationCustomLLMModelRepo": "Qwen/Qwen2-1.5B-Instruct",
+          "rewriteCustomLLMModelRepo": "Qwen/Qwen2-1.5B-Instruct",
+          "translationModelProvider": "customLLM",
+          "rewriteModelProvider": "customLLM",
+          "remoteASRSelectedProvider": "openAIWhisper",
+          "remoteLLMSelectedProvider": "openAI",
+          "translationRemoteLLMProvider": "",
+          "rewriteRemoteLLMProvider": "",
+          "useHfMirror": false,
+          "remoteASRProviderConfigurations": [],
+          "remoteLLMProviderConfigurations": []
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            ConfigurationTransferManager.ModelSettings.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(decoded.whisperModelID, WhisperKitModelManager.defaultModelID)
+        XCTAssertEqual(decoded.whisperTemperature, 0.0, accuracy: 0.0001)
+        XCTAssertTrue(decoded.whisperVADEnabled)
+        XCTAssertFalse(decoded.whisperTimestampsEnabled)
+        XCTAssertTrue(decoded.whisperRealtimeEnabled)
+        XCTAssertEqual(decoded.translationFallbackModelProvider, TranslationModelProvider.customLLM.rawValue)
     }
 }

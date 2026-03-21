@@ -60,8 +60,9 @@ extension AppDelegate {
 
     func processTranslatedTranscription(_ text: String, sessionID: UUID) {
         guard shouldHandleCallbacks(for: sessionID) else { return }
+        let resolution = resolvedTranslationProviderResolution(isSelectedTextTranslation: false)
         VoxtLog.info(
-            "Translation flow started. inputChars=\(text.count), targetLanguage=\(translationTargetLanguage.instructionName), enhancementMode=\(enhancementMode.rawValue)"
+            "Translation flow started. inputChars=\(text.count), targetLanguage=\(translationTargetLanguage.instructionName), enhancementMode=\(enhancementMode.rawValue), provider=\(resolution.provider.rawValue)"
         )
         setEnhancingState(true)
         Task {
@@ -94,6 +95,13 @@ extension AppDelegate {
                 self.commitTranscription(text, llmDurationSeconds: nil)
             }
         }
+    }
+
+    func processWhisperTranslatedTranscription(_ text: String, sessionID: UUID) {
+        guard shouldHandleCallbacks(for: sessionID) else { return }
+        VoxtLog.info("Whisper direct translation completed. outputChars=\(text.count)")
+        commitTranscription(text, llmDurationSeconds: nil)
+        finishSession()
     }
 
     func beginSelectedTextTranslationIfPossible() -> Bool {
@@ -285,9 +293,10 @@ extension AppDelegate {
             strict: false
         )
         let translationRepo = translationCustomLLMRepo
-        let modelProvider = translationModelProvider
+        let resolution = resolvedTranslationProviderResolution(isSelectedTextTranslation: isSelectedTextTranslationFlow)
+        let modelProvider = resolution.provider
         VoxtLog.llm(
-            "Translation request. promptChars=\(resolvedPrompt.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), translationRepo=\(translationRepo)"
+            "Translation request. promptChars=\(resolvedPrompt.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo)"
         )
 
         switch modelProvider {
@@ -324,6 +333,8 @@ extension AppDelegate {
                 provider: context.provider,
                 configuration: context.configuration
             )
+        case .whisperKit:
+            return text
         }
     }
 
@@ -390,9 +401,10 @@ extension AppDelegate {
             strict: true
         )
         let translationRepo = translationCustomLLMRepo
-        let modelProvider = translationModelProvider
+        let resolution = resolvedTranslationProviderResolution(isSelectedTextTranslation: isSelectedTextTranslationFlow)
+        let modelProvider = resolution.provider
         VoxtLog.llm(
-            "Strict translation retry. promptChars=\(strictPrompt.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), translationRepo=\(translationRepo)"
+            "Strict translation retry. promptChars=\(strictPrompt.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo)"
         )
 
         switch modelProvider {
@@ -417,7 +429,20 @@ extension AppDelegate {
                 provider: context.provider,
                 configuration: context.configuration
             )
+        case .whisperKit:
+            return text
         }
+    }
+
+    private func resolvedTranslationProviderResolution(isSelectedTextTranslation: Bool) -> TranslationProviderResolution {
+        TranslationProviderResolver.resolve(
+            selectedProvider: translationModelProvider,
+            fallbackProvider: translationFallbackModelProvider,
+            transcriptionEngine: transcriptionEngine,
+            targetLanguage: translationTargetLanguage,
+            isSelectedTextTranslation: isSelectedTextTranslation,
+            whisperModelState: whisperModelManager.state
+        )
     }
 
     private func resolvedTranslationPrompt(

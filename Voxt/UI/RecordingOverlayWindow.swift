@@ -67,6 +67,17 @@ class OverlayState: ObservableObject {
         )
     }
 
+    /// Binds to a WhisperKitTranscriber's published properties.
+    func bind(to transcriber: WhisperKitTranscriber) {
+        bind(
+            isRecording: transcriber.$isRecording.eraseToAnyPublisher(),
+            audioLevel: transcriber.$audioLevel.eraseToAnyPublisher(),
+            transcribedText: transcriber.$transcribedText.eraseToAnyPublisher(),
+            isEnhancing: transcriber.$isEnhancing.eraseToAnyPublisher(),
+            isRequesting: Just(false).eraseToAnyPublisher()
+        )
+    }
+
     func reset() {
         isRecording = false
         audioLevel = 0
@@ -248,8 +259,9 @@ class RecordingOverlayWindow: NSPanel {
 
         observe(state: state)
         updateAppearance(for: state, animated: isVisible)
-        hostingView?.layoutSubtreeIfNeeded()
-        contentView?.layoutSubtreeIfNeeded()
+        hostingView?.needsLayout = true
+        contentView?.needsLayout = true
+        hostingView?.displayIfNeeded()
         contentView?.displayIfNeeded()
         displayIfNeeded()
 

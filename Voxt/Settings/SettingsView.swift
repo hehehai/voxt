@@ -9,6 +9,7 @@ struct SettingsView: View {
     let availableDictionaryHistoryScanModels: () -> [DictionaryHistoryScanModelOption]
     let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
     @ObservedObject var mlxModelManager: MLXModelManager
+    @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
     @ObservedObject var dictionaryStore: DictionaryStore
@@ -28,6 +29,7 @@ struct SettingsView: View {
         availableDictionaryHistoryScanModels: @escaping () -> [DictionaryHistoryScanModelOption],
         onIngestDictionarySuggestionsFromHistory: @escaping (DictionaryHistoryScanRequest, Bool) -> Void,
         mlxModelManager: MLXModelManager,
+        whisperModelManager: WhisperKitModelManager,
         customLLMManager: CustomLLMModelManager,
         historyStore: TranscriptionHistoryStore,
         dictionaryStore: DictionaryStore,
@@ -38,6 +40,7 @@ struct SettingsView: View {
         self.availableDictionaryHistoryScanModels = availableDictionaryHistoryScanModels
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
         self.mlxModelManager = mlxModelManager
+        self.whisperModelManager = whisperModelManager
         self.customLLMManager = customLLMManager
         self.historyStore = historyStore
         self.dictionaryStore = dictionaryStore
@@ -208,6 +211,7 @@ struct SettingsView: View {
                 case .model:
                     ModelSettingsView(
                         mlxModelManager: mlxModelManager,
+                        whisperModelManager: whisperModelManager,
                         customLLMManager: customLLMManager,
                         missingConfigurationIssues: missingModelConfigurationIssues
                     )
@@ -248,6 +252,7 @@ struct SettingsView: View {
     private func refreshModelConfigurationBadge() {
         missingModelConfigurationIssues = ConfigurationTransferManager.missingConfigurationIssues(
             mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager
         )
     }

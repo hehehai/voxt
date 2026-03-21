@@ -35,6 +35,39 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(payload.prompt, "Primary Traditional Chinese")
     }
 
+    func testResolveWhisperKitUsesBaseLanguageAndResolvedPrompt() {
+        let payload = ASRHintResolver.resolve(
+            target: .whisperKit,
+            settings: ASRHintSettings(
+                followsUserMainLanguage: true,
+                promptTemplate: "Bias {{USER_MAIN_LANGUAGE}} punctuation"
+            ),
+            userLanguageCodes: ["zh-Hant"]
+        )
+
+        XCTAssertEqual(payload.language, "zh")
+        XCTAssertEqual(payload.prompt, "Bias Traditional Chinese punctuation")
+    }
+
+    func testResolvedWhisperSettingsDefaultToEmptyPrompt() {
+        let settings = ASRHintSettingsStore.resolvedSettings(for: .whisperKit, rawValue: nil)
+
+        XCTAssertTrue(settings.followsUserMainLanguage)
+        XCTAssertEqual(settings.promptTemplate, "")
+    }
+
+    func testSanitizedWhisperLegacyDefaultPromptMigratesToEmpty() {
+        let settings = ASRHintSettingsStore.sanitized(
+            ASRHintSettings(
+                followsUserMainLanguage: true,
+                promptTemplate: AppPreferenceKey.legacyDefaultWhisperASRHintPrompt
+            ),
+            for: .whisperKit
+        )
+
+        XCTAssertEqual(settings.promptTemplate, "")
+    }
+
     func testResolveDoubaoUsesVariantMappingForTraditionalChinese() {
         let payload = ASRHintResolver.resolve(
             target: .doubaoASR,

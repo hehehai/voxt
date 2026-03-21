@@ -11,7 +11,10 @@ extension ModelSettingsView {
             modelPickerTitle: "Translation Model",
             modelOptions: translationModelOptions,
             selectedModelBinding: translationModelSelectionBinding,
+            modelDisplayText: translationModelDisplayText,
             emptyStateText: translationModelEmptyStateText,
+            statusMessage: translationProviderStatusMessage,
+            statusIsWarning: translationProviderStatusIsWarning,
             promptTitle: "Translation Prompt",
             promptText: $translationPrompt,
             defaultPromptText: AppPreferenceKey.defaultTranslationPrompt,
@@ -29,7 +32,10 @@ extension ModelSettingsView {
             modelPickerTitle: "Content Rewrite Model",
             modelOptions: rewriteModelOptions,
             selectedModelBinding: rewriteModelSelectionBinding,
+            modelDisplayText: nil,
             emptyStateText: rewriteModelEmptyStateText,
+            statusMessage: nil,
+            statusIsWarning: false,
             promptTitle: "Content Rewrite Prompt",
             promptText: $rewritePrompt,
             defaultPromptText: AppPreferenceKey.defaultRewritePrompt,
@@ -108,6 +114,136 @@ extension ModelSettingsView {
                 .foregroundStyle(.secondary)
             }
         }
+    }
+
+    @ViewBuilder
+    var whisperModelSection: some View {
+        Divider()
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Model")
+                .font(.subheadline.weight(.medium))
+
+            HStack(alignment: .center, spacing: 12) {
+                Picker("Model", selection: whisperModelSelectionBinding) {
+                    ForEach(WhisperKitModelManager.availableModels) { model in
+                        Text(LocalizedStringKey(model.title)).tag(model.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: 260, alignment: .leading)
+
+                Spacer()
+
+                Button("Configure") {
+                    isWhisperConfigPresented = true
+                }
+                .controlSize(.regular)
+
+                HStack(spacing: 6) {
+                    Toggle("Use China mirror", isOn: $useHfMirror)
+                        .toggleStyle(.switch)
+
+                    Button {
+                        showMirrorInfo.toggle()
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showMirrorInfo, arrowEdge: .top) {
+                        Text("https://hf-mirror.com/")
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                    }
+                }
+            }
+
+            Text(whisperModelLocalizedDescription(for: whisperModelID))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(whisperConfigurationSummary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        ModelTableView(title: "Whisper Models", rows: whisperRows)
+
+        if let activeDownload = whisperModelManager.activeDownload {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(
+                    String(
+                        format: NSLocalizedString("Downloading: %d%% • %@", comment: ""),
+                        Int(activeDownload.progress * 100),
+                        ModelDownloadProgressFormatter.progressText(
+                            completed: activeDownload.completed,
+                            total: activeDownload.total
+                        )
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+                Text(
+                    ModelDownloadProgressFormatter.fileProgressText(
+                        currentFile: activeDownload.currentFile,
+                        currentFileCompleted: activeDownload.currentFileCompleted,
+                        currentFileTotal: activeDownload.currentFileTotal,
+                        completedFiles: activeDownload.completedFiles,
+                        totalFiles: activeDownload.totalFiles
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    var whisperConfigurationSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Whisper Configuration")
+                .font(.title3.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    Toggle("Enable VAD", isOn: $whisperVADEnabled)
+                        .toggleStyle(.switch)
+                    Toggle("Enable Timestamps", isOn: $whisperTimestampsEnabled)
+                        .toggleStyle(.switch)
+                    Toggle("Realtime", isOn: $whisperRealtimeEnabled)
+                        .toggleStyle(.switch)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Temperature")
+                        Spacer()
+                        Text(String(format: "%.1f", whisperTemperature))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $whisperTemperature, in: 0...1, step: 0.1)
+                }
+            }
+
+            Text("These settings apply to Whisper transcription sessions. Standard ASR always uses transcribe; Whisper translate is only used by the translation hotkey when Whisper translation is selected. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button("Done") {
+                    isWhisperConfigPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
     }
 
     @ViewBuilder

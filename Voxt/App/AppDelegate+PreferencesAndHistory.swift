@@ -100,6 +100,11 @@ extension AppDelegate {
         enumValue(forKey: AppPreferenceKey.translationModelProvider, default: .customLLM)
     }
 
+    var translationFallbackModelProvider: TranslationModelProvider {
+        let stored = enumValue(forKey: AppPreferenceKey.translationFallbackModelProvider, default: Optional<TranslationModelProvider>.none)
+        return TranslationProviderResolver.sanitizedFallbackProvider(stored ?? .customLLM)
+    }
+
     var remoteASRSelectedProvider: RemoteASRProvider {
         enumValue(forKey: AppPreferenceKey.remoteASRSelectedProvider, default: .openAIWhisper)
     }
@@ -149,6 +154,22 @@ extension AppDelegate {
         defaults.bool(forKey: AppPreferenceKey.showInDock)
     }
 
+    var whisperTemperature: Double {
+        defaults.double(forKey: AppPreferenceKey.whisperTemperature)
+    }
+
+    var whisperVADEnabled: Bool {
+        defaults.object(forKey: AppPreferenceKey.whisperVADEnabled) as? Bool ?? true
+    }
+
+    var whisperTimestampsEnabled: Bool {
+        defaults.object(forKey: AppPreferenceKey.whisperTimestampsEnabled) as? Bool ?? false
+    }
+
+    var whisperRealtimeEnabled: Bool {
+        defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true
+    }
+
     var historyEnabled: Bool {
         defaults.bool(forKey: AppPreferenceKey.historyEnabled)
     }
@@ -180,6 +201,9 @@ extension AppDelegate {
         case .mlxAudio:
             let repo = mlxModelManager.currentModelRepo
             transcriptionModel = "\(mlxModelManager.displayTitle(for: repo)) (\(repo))"
+        case .whisperKit:
+            let modelID = whisperModelManager.currentModelID
+            transcriptionModel = "\(whisperModelManager.displayTitle(for: modelID)) (\(modelID))"
         case .remote:
             let provider = remoteASRSelectedProvider
             if let config = remoteASRConfigurations[provider.rawValue], config.hasUsableModel {
@@ -266,6 +290,9 @@ extension AppDelegate {
             remoteLLMProvider: remoteLLMProviderInfo,
             remoteLLMModel: remoteLLMModelInfo,
             remoteLLMEndpoint: remoteLLMEndpointInfo,
+            whisperWordTimings: transcriptionEngine == .whisperKit && whisperTimestampsEnabled
+                ? whisperTranscriber?.latestWordTimings
+                : nil,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
             dictionarySuggestedTerms: dictionarySuggestedTerms

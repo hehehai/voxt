@@ -196,6 +196,7 @@ extension AppDelegate {
                 )
             },
             mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
             historyStore: historyStore,
             dictionaryStore: dictionaryStore,

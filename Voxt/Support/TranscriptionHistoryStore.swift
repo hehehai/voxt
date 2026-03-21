@@ -7,6 +7,13 @@ enum TranscriptionHistoryKind: String, Codable {
     case rewrite
 }
 
+struct WhisperHistoryWordTiming: Codable, Hashable {
+    let word: String
+    let startSeconds: Double
+    let endSeconds: Double
+    let probability: Double
+}
+
 struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let id: UUID
     let text: String
@@ -30,6 +37,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let remoteLLMProvider: String?
     let remoteLLMModel: String?
     let remoteLLMEndpoint: String?
+    let whisperWordTimings: [WhisperHistoryWordTiming]?
     let dictionaryHitTerms: [String]
     let dictionaryCorrectedTerms: [String]
     let dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
@@ -57,6 +65,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case remoteLLMProvider
         case remoteLLMModel
         case remoteLLMEndpoint
+        case whisperWordTimings
         case dictionaryHitTerms
         case dictionaryCorrectedTerms
         case dictionarySuggestedTerms
@@ -85,6 +94,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteLLMProvider: String?,
         remoteLLMModel: String?,
         remoteLLMEndpoint: String?,
+        whisperWordTimings: [WhisperHistoryWordTiming]?,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
@@ -111,6 +121,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.remoteLLMProvider = remoteLLMProvider
         self.remoteLLMModel = remoteLLMModel
         self.remoteLLMEndpoint = remoteLLMEndpoint
+        self.whisperWordTimings = whisperWordTimings
         self.dictionaryHitTerms = dictionaryHitTerms
         self.dictionaryCorrectedTerms = dictionaryCorrectedTerms
         self.dictionarySuggestedTerms = dictionarySuggestedTerms
@@ -142,6 +153,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteLLMProvider = try container.decodeIfPresent(String.self, forKey: .remoteLLMProvider)
         remoteLLMModel = try container.decodeIfPresent(String.self, forKey: .remoteLLMModel)
         remoteLLMEndpoint = try container.decodeIfPresent(String.self, forKey: .remoteLLMEndpoint)
+        whisperWordTimings = try container.decodeIfPresent([WhisperHistoryWordTiming].self, forKey: .whisperWordTimings)
         dictionaryHitTerms = try container.decodeIfPresent([String].self, forKey: .dictionaryHitTerms) ?? []
         dictionaryCorrectedTerms = try container.decodeIfPresent([String].self, forKey: .dictionaryCorrectedTerms) ?? []
         dictionarySuggestedTerms = try container.decodeIfPresent([DictionarySuggestionSnapshot].self, forKey: .dictionarySuggestedTerms) ?? []
@@ -233,6 +245,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         remoteLLMProvider: String?,
         remoteLLMModel: String?,
         remoteLLMEndpoint: String?,
+        whisperWordTimings: [WhisperHistoryWordTiming]?,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
@@ -263,6 +276,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            whisperWordTimings: whisperWordTimings,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
             dictionarySuggestedTerms: dictionarySuggestedTerms
@@ -395,6 +409,7 @@ private extension TranscriptionHistoryEntry {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            whisperWordTimings: whisperWordTimings,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
             dictionarySuggestedTerms: dictionarySuggestedTerms

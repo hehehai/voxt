@@ -228,10 +228,16 @@ enum ConfigurationTransferManager {
         var rewriteSystemPrompt: String
         var asrHintSettings: String
         var mlxModelRepo: String
+        var whisperModelID: String
+        var whisperTemperature: Double
+        var whisperVADEnabled: Bool
+        var whisperTimestampsEnabled: Bool
+        var whisperRealtimeEnabled: Bool
         var customLLMModelRepo: String
         var translationCustomLLMModelRepo: String
         var rewriteCustomLLMModelRepo: String
         var translationModelProvider: String
+        var translationFallbackModelProvider: String
         var rewriteModelProvider: String
         var remoteASRSelectedProvider: String
         var remoteLLMSelectedProvider: String
@@ -249,10 +255,16 @@ enum ConfigurationTransferManager {
             case rewriteSystemPrompt
             case asrHintSettings
             case mlxModelRepo
+            case whisperModelID
+            case whisperTemperature
+            case whisperVADEnabled
+            case whisperTimestampsEnabled
+            case whisperRealtimeEnabled
             case customLLMModelRepo
             case translationCustomLLMModelRepo
             case rewriteCustomLLMModelRepo
             case translationModelProvider
+            case translationFallbackModelProvider
             case rewriteModelProvider
             case remoteASRSelectedProvider
             case remoteLLMSelectedProvider
@@ -271,10 +283,16 @@ enum ConfigurationTransferManager {
             rewriteSystemPrompt: String,
             asrHintSettings: String,
             mlxModelRepo: String,
+            whisperModelID: String,
+            whisperTemperature: Double,
+            whisperVADEnabled: Bool,
+            whisperTimestampsEnabled: Bool,
+            whisperRealtimeEnabled: Bool,
             customLLMModelRepo: String,
             translationCustomLLMModelRepo: String,
             rewriteCustomLLMModelRepo: String,
             translationModelProvider: String,
+            translationFallbackModelProvider: String,
             rewriteModelProvider: String,
             remoteASRSelectedProvider: String,
             remoteLLMSelectedProvider: String,
@@ -291,10 +309,16 @@ enum ConfigurationTransferManager {
             self.rewriteSystemPrompt = rewriteSystemPrompt
             self.asrHintSettings = asrHintSettings
             self.mlxModelRepo = mlxModelRepo
+            self.whisperModelID = whisperModelID
+            self.whisperTemperature = whisperTemperature
+            self.whisperVADEnabled = whisperVADEnabled
+            self.whisperTimestampsEnabled = whisperTimestampsEnabled
+            self.whisperRealtimeEnabled = whisperRealtimeEnabled
             self.customLLMModelRepo = customLLMModelRepo
             self.translationCustomLLMModelRepo = translationCustomLLMModelRepo
             self.rewriteCustomLLMModelRepo = rewriteCustomLLMModelRepo
             self.translationModelProvider = translationModelProvider
+            self.translationFallbackModelProvider = translationFallbackModelProvider
             self.rewriteModelProvider = rewriteModelProvider
             self.remoteASRSelectedProvider = remoteASRSelectedProvider
             self.remoteLLMSelectedProvider = remoteLLMSelectedProvider
@@ -314,10 +338,16 @@ enum ConfigurationTransferManager {
             rewriteSystemPrompt = try container.decode(String.self, forKey: .rewriteSystemPrompt)
             asrHintSettings = try container.decodeIfPresent(String.self, forKey: .asrHintSettings) ?? ASRHintSettingsStore.defaultStoredValue()
             mlxModelRepo = try container.decode(String.self, forKey: .mlxModelRepo)
+            whisperModelID = try container.decodeIfPresent(String.self, forKey: .whisperModelID) ?? WhisperKitModelManager.defaultModelID
+            whisperTemperature = try container.decodeIfPresent(Double.self, forKey: .whisperTemperature) ?? 0.0
+            whisperVADEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperVADEnabled) ?? true
+            whisperTimestampsEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperTimestampsEnabled) ?? false
+            whisperRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperRealtimeEnabled) ?? true
             customLLMModelRepo = try container.decode(String.self, forKey: .customLLMModelRepo)
             translationCustomLLMModelRepo = try container.decode(String.self, forKey: .translationCustomLLMModelRepo)
             rewriteCustomLLMModelRepo = try container.decode(String.self, forKey: .rewriteCustomLLMModelRepo)
             translationModelProvider = try container.decode(String.self, forKey: .translationModelProvider)
+            translationFallbackModelProvider = try container.decodeIfPresent(String.self, forKey: .translationFallbackModelProvider) ?? TranslationModelProvider.customLLM.rawValue
             rewriteModelProvider = try container.decode(String.self, forKey: .rewriteModelProvider)
             remoteASRSelectedProvider = try container.decode(String.self, forKey: .remoteASRSelectedProvider)
             remoteLLMSelectedProvider = try container.decode(String.self, forKey: .remoteLLMSelectedProvider)
@@ -513,6 +543,7 @@ enum ConfigurationTransferManager {
             case remoteASRProvider(RemoteASRProvider)
             case remoteLLMProvider(RemoteLLMProvider)
             case mlxModel(String)
+            case whisperModel(String)
             case customLLMModel(String)
             case translationRemoteLLM(RemoteLLMProvider)
             case rewriteRemoteLLM(RemoteLLMProvider)
@@ -531,6 +562,8 @@ enum ConfigurationTransferManager {
                 return "llm:\(provider.rawValue)"
             case .mlxModel(let repo):
                 return "mlx:\(repo)"
+            case .whisperModel(let modelID):
+                return "whisper:\(modelID)"
             case .customLLMModel(let repo):
                 return "custom:\(repo)"
             case .translationRemoteLLM(let provider):
@@ -571,6 +604,7 @@ enum ConfigurationTransferManager {
     static func missingConfigurationIssues(
         defaults: UserDefaults = .standard,
         mlxModelManager: MLXModelManager,
+        whisperModelManager: WhisperKitModelManager,
         customLLMManager: CustomLLMModelManager
     ) -> [MissingConfigurationIssue] {
         var issues: [MissingConfigurationIssue] = []
@@ -586,6 +620,11 @@ enum ConfigurationTransferManager {
             let repo = defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
             if !mlxModelManager.isModelDownloaded(repo: repo) {
                 issues.append(.init(scope: .mlxModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
+            }
+        } else if engine == .whisperKit {
+            let modelID = defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID
+            if !whisperModelManager.isModelDownloaded(id: modelID) {
+                issues.append(.init(scope: .whisperModel(modelID), message: AppLocalization.localizedString("Model needs to be installed.")))
             }
         }
 
@@ -612,6 +651,9 @@ enum ConfigurationTransferManager {
         }
 
         let translationProvider = TranslationModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationModelProvider) ?? "") ?? .customLLM
+        let translationFallbackProvider = TranslationProviderResolver.sanitizedFallbackProvider(
+            TranslationModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider) ?? "") ?? .customLLM
+        )
         switch translationProvider {
         case .remoteLLM:
             let raw = defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? ""
@@ -625,6 +667,32 @@ enum ConfigurationTransferManager {
             let repo = defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
             if !customLLMManager.isModelDownloaded(repo: repo) {
                 issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
+            }
+        case .whisperKit:
+            let resolution = TranslationProviderResolver.resolve(
+                selectedProvider: .whisperKit,
+                fallbackProvider: translationFallbackProvider,
+                transcriptionEngine: engine,
+                targetLanguage: TranslationTargetLanguage(rawValue: defaults.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? "") ?? .english,
+                isSelectedTextTranslation: false,
+                whisperModelState: whisperModelManager.state
+            )
+            switch resolution.provider {
+            case .customLLM:
+                let repo = defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
+                if !customLLMManager.isModelDownloaded(repo: repo) {
+                    issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
+                }
+            case .remoteLLM:
+                let raw = defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? ""
+                if let provider = RemoteLLMProvider(rawValue: raw.isEmpty ? selectedRemoteLLM.rawValue : raw) {
+                    let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
+                    if !config.isConfigured {
+                        issues.append(.init(scope: .translationRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
+                    }
+                }
+            case .whisperKit:
+                break
             }
         }
 
@@ -689,7 +757,7 @@ enum ConfigurationTransferManager {
         )
 
         return ExportPayload(
-            version: 9,
+            version: 11,
             exportedAt: ISO8601DateFormatter().string(from: Date()),
             general: general,
             model: .init(
@@ -700,10 +768,16 @@ enum ConfigurationTransferManager {
                 rewriteSystemPrompt: defaults.string(forKey: AppPreferenceKey.rewriteSystemPrompt) ?? AppPreferenceKey.defaultRewritePrompt,
                 asrHintSettings: defaults.string(forKey: AppPreferenceKey.asrHintSettings) ?? ASRHintSettingsStore.defaultStoredValue(),
                 mlxModelRepo: defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo,
+                whisperModelID: defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID,
+                whisperTemperature: defaults.object(forKey: AppPreferenceKey.whisperTemperature) as? Double ?? 0.0,
+                whisperVADEnabled: defaults.object(forKey: AppPreferenceKey.whisperVADEnabled) as? Bool ?? true,
+                whisperTimestampsEnabled: defaults.object(forKey: AppPreferenceKey.whisperTimestampsEnabled) as? Bool ?? false,
+                whisperRealtimeEnabled: defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true,
                 customLLMModelRepo: defaults.string(forKey: AppPreferenceKey.customLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
                 translationCustomLLMModelRepo: defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
                 rewriteCustomLLMModelRepo: defaults.string(forKey: AppPreferenceKey.rewriteCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
                 translationModelProvider: defaults.string(forKey: AppPreferenceKey.translationModelProvider) ?? TranslationModelProvider.customLLM.rawValue,
+                translationFallbackModelProvider: defaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider) ?? TranslationModelProvider.customLLM.rawValue,
                 rewriteModelProvider: defaults.string(forKey: AppPreferenceKey.rewriteModelProvider) ?? RewriteModelProvider.customLLM.rawValue,
                 remoteASRSelectedProvider: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? RemoteASRProvider.openAIWhisper.rawValue,
                 remoteLLMSelectedProvider: defaults.string(forKey: AppPreferenceKey.remoteLLMSelectedProvider) ?? RemoteLLMProvider.openAI.rawValue,
@@ -800,10 +874,21 @@ enum ConfigurationTransferManager {
         defaults.set(model.rewriteSystemPrompt, forKey: AppPreferenceKey.rewriteSystemPrompt)
         defaults.set(model.asrHintSettings, forKey: AppPreferenceKey.asrHintSettings)
         defaults.set(model.mlxModelRepo, forKey: AppPreferenceKey.mlxModelRepo)
+        defaults.set(WhisperKitModelManager.canonicalModelID(model.whisperModelID), forKey: AppPreferenceKey.whisperModelID)
+        defaults.set(model.whisperTemperature, forKey: AppPreferenceKey.whisperTemperature)
+        defaults.set(model.whisperVADEnabled, forKey: AppPreferenceKey.whisperVADEnabled)
+        defaults.set(model.whisperTimestampsEnabled, forKey: AppPreferenceKey.whisperTimestampsEnabled)
+        defaults.set(model.whisperRealtimeEnabled, forKey: AppPreferenceKey.whisperRealtimeEnabled)
         defaults.set(model.customLLMModelRepo, forKey: AppPreferenceKey.customLLMModelRepo)
         defaults.set(model.translationCustomLLMModelRepo, forKey: AppPreferenceKey.translationCustomLLMModelRepo)
         defaults.set(model.rewriteCustomLLMModelRepo, forKey: AppPreferenceKey.rewriteCustomLLMModelRepo)
         defaults.set(model.translationModelProvider, forKey: AppPreferenceKey.translationModelProvider)
+        defaults.set(
+            TranslationProviderResolver.sanitizedFallbackProvider(
+                TranslationModelProvider(rawValue: model.translationFallbackModelProvider) ?? .customLLM
+            ).rawValue,
+            forKey: AppPreferenceKey.translationFallbackModelProvider
+        )
         defaults.set(model.rewriteModelProvider, forKey: AppPreferenceKey.rewriteModelProvider)
         defaults.set(model.remoteASRSelectedProvider, forKey: AppPreferenceKey.remoteASRSelectedProvider)
         defaults.set(model.remoteLLMSelectedProvider, forKey: AppPreferenceKey.remoteLLMSelectedProvider)

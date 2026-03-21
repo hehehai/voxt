@@ -41,6 +41,7 @@ extension AppDelegate {
             delegate.isSessionActive = false
             delegate.sessionOutputMode = .transcription
             delegate.isSelectedTextTranslationFlow = false
+            delegate.sessionUsesWhisperDirectTranslation = false
             delegate.sessionTargetApplicationPID = nil
             delegate.sessionTargetApplicationBundleID = nil
             delegate.enhancementContextSnapshot = nil

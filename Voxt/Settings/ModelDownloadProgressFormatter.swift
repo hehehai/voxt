@@ -20,7 +20,13 @@ enum ModelDownloadProgressFormatter {
         return AppLocalization.format("Downloaded: %@", completedText)
     }
 
-    static func fileProgressText(currentFile: String?, completedFiles: Int, totalFiles: Int) -> String {
+    static func fileProgressText(
+        currentFile: String?,
+        currentFileCompleted: Int64 = 0,
+        currentFileTotal: Int64 = 0,
+        completedFiles: Int,
+        totalFiles: Int
+    ) -> String {
         let filesText: String
         if totalFiles > 0 {
             filesText = AppLocalization.format("%d/%d files", completedFiles, totalFiles)
@@ -33,6 +39,14 @@ enum ModelDownloadProgressFormatter {
         }
 
         let fileName = (currentFile as NSString).lastPathComponent
-        return AppLocalization.format("Downloading: %@ (%@)", fileName, filesText)
+        guard currentFileTotal > 0 else {
+            return AppLocalization.format("Downloading: %@ (%@)", fileName, filesText)
+        }
+
+        let currentProgressText = progressText(
+            completed: min(max(currentFileCompleted, 0), currentFileTotal),
+            total: currentFileTotal
+        )
+        return AppLocalization.format("Downloading: %@ (%@ · %@)", fileName, currentProgressText, filesText)
     }
 }

@@ -76,7 +76,10 @@ struct ModelTaskSettingsCard: View {
     let modelPickerTitle: LocalizedStringKey
     let modelOptions: [TranslationModelOption]
     let selectedModelBinding: Binding<String>
+    let modelDisplayText: String?
     let emptyStateText: String
+    let statusMessage: String?
+    let statusIsWarning: Bool
     let promptTitle: LocalizedStringKey
     @Binding var promptText: String
     let defaultPromptText: String
@@ -101,7 +104,10 @@ struct ModelTaskSettingsCard: View {
                     Text(modelLabelText)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if modelOptions.isEmpty {
+                    if let modelDisplayText {
+                        Text(modelDisplayText)
+                            .foregroundStyle(.secondary)
+                    } else if modelOptions.isEmpty {
                         Text("Not available")
                             .foregroundStyle(.tertiary)
                     } else {
@@ -110,6 +116,7 @@ struct ModelTaskSettingsCard: View {
                                 Text(option.title).tag(option.id)
                             }
                         }
+                        .id("model-picker-\(selectedProviderID)")
                         .pickerStyle(.menu)
                         .labelsHidden()
                         .frame(maxWidth: 280, alignment: .trailing)
@@ -120,6 +127,12 @@ struct ModelTaskSettingsCard: View {
                     Text(emptyStateText)
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+
+                if let statusMessage {
+                    Text(statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(statusIsWarning ? .orange : .secondary)
                 }
 
                 ResettablePromptSection(

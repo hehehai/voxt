@@ -2,6 +2,7 @@ import Foundation
 
 enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
     case mlxAudio
+    case whisperKit
     case openAIWhisper
     case glmASR
     case doubaoASR
@@ -13,6 +14,8 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .mlxAudio:
             return AppLocalization.localizedString("MLX Audio")
+        case .whisperKit:
+            return AppLocalization.localizedString("Whisper")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI Whisper")
         case .glmASR:
@@ -26,7 +29,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
 
     var supportsPromptEditor: Bool {
         switch self {
-        case .openAIWhisper, .glmASR:
+        case .whisperKit, .openAIWhisper, .glmASR:
             return true
         case .mlxAudio, .doubaoASR, .aliyunBailianASR:
             return false
@@ -39,6 +42,8 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
 
     var defaultPromptTemplate: String {
         switch self {
+        case .whisperKit:
+            return AppPreferenceKey.defaultWhisperASRHintPrompt
         case .openAIWhisper:
             return AppPreferenceKey.defaultOpenAIASRHintPrompt
         case .glmASR:
@@ -52,6 +57,8 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .mlxAudio:
             return AppLocalization.localizedString("MLX uses language hints only. Prompt editing is not applied for on-device MLX ASR.")
+        case .whisperKit:
+            return AppLocalization.localizedString("Whisper uses the resolved main language and a short prompt bias. Keep the prompt concise and recognition-focused.")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition.")
         case .glmASR:
@@ -67,6 +74,8 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch engine {
         case .mlxAudio:
             return .mlxAudio
+        case .whisperKit:
+            return .whisperKit
         case .remote:
             switch remoteProvider ?? .openAIWhisper {
             case .openAIWhisper:
@@ -135,11 +144,22 @@ enum ASRHintSettingsStore {
     }
 
     static func sanitized(_ settings: ASRHintSettings, for target: ASRHintTarget) -> ASRHintSettings {
-        ASRHintSettings(
+        let trimmedPrompt: String
+        if target.supportsPromptEditor {
+            let candidate = settings.promptTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+            if target == .whisperKit,
+               candidate == AppPreferenceKey.legacyDefaultWhisperASRHintPrompt.trimmingCharacters(in: .whitespacesAndNewlines) {
+                trimmedPrompt = ""
+            } else {
+                trimmedPrompt = candidate
+            }
+        } else {
+            trimmedPrompt = ""
+        }
+
+        return ASRHintSettings(
             followsUserMainLanguage: settings.followsUserMainLanguage,
-            promptTemplate: target.supportsPromptEditor
-                ? settings.promptTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
-                : ""
+            promptTemplate: trimmedPrompt
         )
     }
 }
@@ -170,6 +190,11 @@ enum ASRHintResolver {
             return ResolvedASRHintPayload(
                 language: settings.followsUserMainLanguage ? resolvedMLXLanguage(mainLanguage: mainLanguage, modelRepo: mlxModelRepo) : nil,
                 prompt: nil
+            )
+        case .whisperKit:
+            return ResolvedASRHintPayload(
+                language: settings.followsUserMainLanguage ? resolvedOpenAILanguage(mainLanguage) : nil,
+                prompt: prompt
             )
         case .openAIWhisper:
             return ResolvedASRHintPayload(

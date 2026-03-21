@@ -2,6 +2,49 @@ import AppKit
 import SwiftUI
 
 extension ModelSettingsView {
+    var whisperRows: [ModelTableRow] {
+        WhisperKitModelManager.availableModels.map { model in
+            let isDownloaded = whisperModelManager.isModelDownloaded(id: model.id)
+            let actions: [ModelTableAction]
+            if isDownloadingWhisperModel(model.id) {
+                actions = [
+                    ModelTableAction(title: "Cancel") {
+                        whisperModelManager.cancelDownload()
+                    }
+                ]
+            } else if isDownloaded {
+                actions = [
+                    ModelTableAction(
+                        title: LocalizedStringKey(isCurrentWhisperModel(model.id) ? "Using" : "Use"),
+                        isEnabled: !isCurrentWhisperModel(model.id)
+                    ) {
+                        useWhisperModel(model.id)
+                    },
+                    ModelTableAction(title: "Delete", role: .destructive) {
+                        deleteWhisperModel(model.id)
+                    }
+                ]
+            } else {
+                actions = [
+                    ModelTableAction(title: "Download", isEnabled: !isAnotherWhisperModelDownloading(model.id)) {
+                        downloadWhisperModel(model.id)
+                    }
+                ]
+            }
+
+            return ModelTableRow(
+                id: model.id,
+                title: AppLocalization.localizedString(model.title),
+                isActive: isCurrentWhisperModel(model.id),
+                status: whisperModelStatusText(for: model.id),
+                badgeText: hasIssue(for: .whisperModel(model.id)) ? String(localized: "Needs Setup") : nil,
+                isTitleUnderlined: isDownloaded,
+                onTapTitle: isDownloaded ? { openWhisperModelDirectory(model.id) } : nil,
+                actions: actions
+            )
+        }
+    }
+
     var remoteASRRows: [ModelTableRow] {
         RemoteASRProvider.allCases.map { provider in
             let config = RemoteModelConfigurationStore.resolvedASRConfiguration(
@@ -176,10 +219,22 @@ extension ModelSettingsView {
         mlxModelManager.updateModel(repo: canonicalRepo)
     }
 
+    func useWhisperModel(_ modelID: String) {
+        let canonicalModelID = WhisperKitModelManager.canonicalModelID(modelID)
+        whisperModelID = canonicalModelID
+        whisperModelManager.updateModel(id: canonicalModelID)
+    }
+
     func downloadModel(_ repo: String) {
         Task {
             await mlxModelManager.downloadModel(repo: repo)
             modelRepo = MLXModelManager.canonicalModelRepo(repo)
+        }
+    }
+
+    func downloadWhisperModel(_ modelID: String) {
+        Task {
+            await whisperModelManager.downloadModel(id: modelID)
         }
     }
 
@@ -190,8 +245,19 @@ extension ModelSettingsView {
         }
     }
 
+    func deleteWhisperModel(_ modelID: String) {
+        whisperModelManager.deleteModel(id: modelID)
+        if WhisperKitModelManager.canonicalModelID(modelID) == WhisperKitModelManager.canonicalModelID(whisperModelID) {
+            whisperModelManager.checkExistingModel()
+        }
+    }
+
     func isCurrentModel(_ repo: String) -> Bool {
         MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(modelRepo)
+    }
+
+    func isCurrentWhisperModel(_ modelID: String) -> Bool {
+        WhisperKitModelManager.canonicalModelID(modelID) == WhisperKitModelManager.canonicalModelID(whisperModelID)
     }
 
     func isDownloadingModel(_ repo: String) -> Bool {
@@ -202,9 +268,18 @@ extension ModelSettingsView {
         return false
     }
 
+    func isDownloadingWhisperModel(_ modelID: String) -> Bool {
+        whisperModelManager.activeDownload?.modelID == WhisperKitModelManager.canonicalModelID(modelID)
+    }
+
     func isAnotherModelDownloading(_ repo: String) -> Bool {
         guard case .downloading = mlxModelManager.state else { return false }
         return !isCurrentModel(repo)
+    }
+
+    func isAnotherWhisperModelDownloading(_ modelID: String) -> Bool {
+        guard let activeDownloadModelID = whisperModelManager.activeDownload?.modelID else { return false }
+        return activeDownloadModelID != WhisperKitModelManager.canonicalModelID(modelID)
     }
 
     func modelStatusText(for repo: String) -> String {
@@ -229,6 +304,50 @@ extension ModelSettingsView {
         }
 
         let remoteSize = mlxModelManager.remoteSizeText(repo: repo)
+        return AppLocalization.format("Not installed (%@)", remoteSize)
+    }
+
+    func whisperModelStatusText(for modelID: String) -> String {
+        if let activeDownload = whisperModelManager.activeDownload,
+           activeDownload.modelID == WhisperKitModelManager.canonicalModelID(modelID) {
+            let overallText = AppLocalization.format(
+                "Downloading %@",
+                ModelDownloadProgressFormatter.progressText(
+                    completed: activeDownload.completed,
+                    total: activeDownload.total
+                )
+            )
+            let fileText = ModelDownloadProgressFormatter.fileProgressText(
+                currentFile: activeDownload.currentFile,
+                currentFileCompleted: activeDownload.currentFileCompleted,
+                currentFileTotal: activeDownload.currentFileTotal,
+                completedFiles: activeDownload.completedFiles,
+                totalFiles: activeDownload.totalFiles
+            )
+            return AppLocalization.format(
+                "%@ • %@",
+                overallText,
+                fileText
+            )
+        }
+
+        if let message = whisperModelManager.downloadErrorMessage(for: modelID) {
+            return "Error: \(message)"
+        }
+
+        if isCurrentWhisperModel(modelID), case .error(let message) = whisperModelManager.state {
+            return "Error: \(message)"
+        }
+
+        let installedSize = whisperModelManager.modelSizeOnDisk(id: modelID)
+        if whisperModelManager.isModelDownloaded(id: modelID) {
+            if installedSize.isEmpty {
+                return AppLocalization.localizedString("Installed")
+            }
+            return AppLocalization.format("Installed (%@)", installedSize)
+        }
+
+        let remoteSize = whisperModelManager.remoteSizeText(id: modelID)
         return AppLocalization.format("Not installed (%@)", remoteSize)
     }
 
@@ -336,6 +455,7 @@ extension ModelSettingsView {
     func updateMirrorSetting() {
         let url = useHfMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
         mlxModelManager.updateHubBaseURL(url)
+        whisperModelManager.updateHubBaseURL(url)
         customLLMManager.updateHubBaseURL(url)
     }
 
@@ -348,6 +468,14 @@ extension ModelSettingsView {
             mlxModelManager.checkExistingModel()
         }
 
+        if case .downloading = whisperModelManager.state {
+            // Keep current transient state during active downloads.
+        } else if case .loading = whisperModelManager.state {
+            // Avoid resetting while model is being loaded.
+        } else {
+            whisperModelManager.checkExistingModel()
+        }
+
         if case .downloading = customLLMManager.state {
             // Keep current transient state during active downloads.
         } else {
@@ -357,6 +485,11 @@ extension ModelSettingsView {
 
     func openMLXModelDirectory(_ repo: String) {
         guard let folderURL = mlxModelManager.modelDirectoryURL(repo: repo) else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
+    }
+
+    func openWhisperModelDirectory(_ modelID: String) {
+        guard let folderURL = whisperModelManager.modelDirectoryURL(id: modelID) else { return }
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
     }
 
@@ -383,6 +516,21 @@ extension ModelSettingsView {
             }
             return LocalizedStringKey("")
         }
+    }
+
+    func whisperModelLocalizedDescription(for modelID: String) -> LocalizedStringKey {
+        if let model = WhisperKitModelManager.availableModels.first(where: { $0.id == modelID }) {
+            return LocalizedStringKey(model.description)
+        }
+        return LocalizedStringKey("")
+    }
+
+    var whisperConfigurationSummary: String {
+        let vad = AppLocalization.localizedString(whisperVADEnabled ? "VAD On" : "VAD Off")
+        let timestamps = AppLocalization.localizedString(whisperTimestampsEnabled ? "Timestamps On" : "Timestamps Off")
+        let realtime = AppLocalization.localizedString(whisperRealtimeEnabled ? "Realtime On" : "Quality Mode")
+        let temperature = String(format: "%.1f", whisperTemperature)
+        return AppLocalization.format("Temperature: %@ · %@ · %@ · %@", temperature, vad, timestamps, realtime)
     }
 
     func asrCredentialHint(for provider: RemoteASRProvider) -> String? {

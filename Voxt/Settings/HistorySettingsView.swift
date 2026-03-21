@@ -246,6 +246,21 @@ private struct HistoryRow: View {
                                     value: formattedDuration(entry.llmDurationSeconds)
                                 )
 
+                                if let whisperWordTimings = entry.whisperWordTimings,
+                                   !whisperWordTimings.isEmpty {
+                                    Divider()
+                                        .padding(.vertical, 2)
+                                    Text("Whisper Timestamps")
+                                        .font(.headline)
+
+                                    ForEach(Array(whisperWordTimings.enumerated()), id: \.offset) { _, timing in
+                                        detailLine(
+                                            labelKey: LocalizedStringKey(timeRangeLabel(for: timing)),
+                                            value: timing.word
+                                        )
+                                    }
+                                }
+
                                 if hasDictionaryActivity {
                                     Divider()
                                         .padding(.vertical, 2)
@@ -408,5 +423,14 @@ private struct HistoryRow: View {
         let remain = Int(seconds) % 60
         let format = NSLocalizedString("%dm %ds", comment: "")
         return String(format: format, locale: locale, minutes, remain)
+    }
+
+    private func timeRangeLabel(for timing: WhisperHistoryWordTiming) -> String {
+        String(
+            format: NSLocalizedString("%.2fs → %.2fs", comment: ""),
+            locale: locale,
+            timing.startSeconds,
+            timing.endSeconds
+        )
     }
 }

@@ -35,6 +35,7 @@ struct VoxtApp: App {
                     )
                 },
                 mlxModelManager: appDelegate.mlxModelManager,
+                whisperModelManager: appDelegate.whisperModelManager,
                 customLLMManager: appDelegate.customLLMManager,
                 historyStore: appDelegate.historyStore,
                 dictionaryStore: appDelegate.dictionaryStore,
@@ -118,8 +119,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let speechTranscriber = SpeechTranscriber()
     var mlxTranscriber: MLXTranscriber?
+    var whisperTranscriber: WhisperKitTranscriber?
     let remoteASRTranscriber = RemoteASRTranscriber()
     let mlxModelManager: MLXModelManager
+    let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
     let historyStore = TranscriptionHistoryStore()
     let dictionaryStore = DictionaryStore()
@@ -179,6 +182,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var rewriteSessionHasSelectedSourceText = false
     var rewriteSessionHadWritableFocusedInput = false
     var rewriteSessionFallbackInjectBundleID: String?
+    var sessionUsesWhisperDirectTranslation = false
     let tapStopGuardInterval: TimeInterval = 0.35
     let transcriptionStartDebounceInterval: TimeInterval = 0.08
     var settingsWindowPresentationState = SettingsWindowPresentationState()
@@ -189,6 +193,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let useMirror = UserDefaults.standard.bool(forKey: AppPreferenceKey.useHfMirror)
         let hubURL = useMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
         mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: hubURL)
+        let whisperModelID = UserDefaults.standard.string(forKey: AppPreferenceKey.whisperModelID)
+            ?? WhisperKitModelManager.defaultModelID
+        whisperModelManager = WhisperKitModelManager(modelID: whisperModelID, hubBaseURL: hubURL)
         let llmRepo = UserDefaults.standard.string(forKey: AppPreferenceKey.customLLMModelRepo)
             ?? CustomLLMModelManager.defaultModelRepo
         customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: hubURL)
@@ -216,6 +223,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.translationSystemPrompt: AppPreferenceKey.defaultTranslationPrompt,
             AppPreferenceKey.rewriteSystemPrompt: AppPreferenceKey.defaultRewritePrompt,
             AppPreferenceKey.asrHintSettings: ASRHintSettingsStore.defaultStoredValue(),
+            AppPreferenceKey.whisperModelID: WhisperKitModelManager.defaultModelID,
+            AppPreferenceKey.whisperTemperature: 0.0,
+            AppPreferenceKey.whisperVADEnabled: true,
+            AppPreferenceKey.whisperTimestampsEnabled: false,
+            AppPreferenceKey.whisperRealtimeEnabled: true,
+            AppPreferenceKey.translationFallbackModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.rewriteCustomLLMModelRepo: CustomLLMModelManager.defaultModelRepo,
             AppPreferenceKey.remoteASRSelectedProvider: RemoteASRProvider.openAIWhisper.rawValue,
             AppPreferenceKey.remoteASRProviderConfigurations: "",

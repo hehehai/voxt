@@ -277,6 +277,20 @@ extension AppDelegate {
             value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
+        if sessionOutputMode != .translation {
+            let normalizedChineseScript = ChineseScriptNormalizer.normalize(
+                value,
+                preferredMainLanguage: userMainLanguage
+            )
+            if normalizedChineseScript != value {
+                VoxtLog.info(
+                    "Normalized Chinese script variant for final output. preferred=\(userMainLanguage.code), chars=\(normalizedChineseScript.count)",
+                    verbose: true
+                )
+            }
+            value = normalizedChineseScript
+        }
+
         return value
     }
 

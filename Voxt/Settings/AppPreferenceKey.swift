@@ -4,9 +4,15 @@ enum AppPreferenceKey {
     static let enhancementSystemPrompt = "enhancementSystemPrompt"
     static let translationSystemPrompt = "translationSystemPrompt"
     static let mlxModelRepo = "mlxModelRepo"
+    static let whisperModelID = "whisperModelID"
+    static let whisperTemperature = "whisperTemperature"
+    static let whisperVADEnabled = "whisperVADEnabled"
+    static let whisperTimestampsEnabled = "whisperTimestampsEnabled"
+    static let whisperRealtimeEnabled = "whisperRealtimeEnabled"
     static let customLLMModelRepo = "customLLMModelRepo"
     static let translationCustomLLMModelRepo = "translationCustomLLMModelRepo"
     static let translationModelProvider = "translationModelProvider"
+    static let translationFallbackModelProvider = "translationFallbackModelProvider"
     static let rewriteSystemPrompt = "rewriteSystemPrompt"
     static let rewriteCustomLLMModelRepo = "rewriteCustomLLMModelRepo"
     static let rewriteModelProvider = "rewriteModelProvider"
@@ -161,4 +167,10 @@ enum AppPreferenceKey {
     static let defaultGLMASRHintPrompt = """
         The speaker's primary language is {{USER_MAIN_LANGUAGE}}. Prioritize accurate recognition in that language. Preserve names, terminology, mixed-language content, and code-like text exactly as spoken.
         """
+
+    static let legacyDefaultWhisperASRHintPrompt = """
+        The speaker's primary language is {{USER_MAIN_LANGUAGE}}. Prioritize accurate recognition in that language. Preserve mixed-language words, names, product terms, URLs, and code-like text exactly as spoken.
+        """
+
+    static let defaultWhisperASRHintPrompt = ""
 }

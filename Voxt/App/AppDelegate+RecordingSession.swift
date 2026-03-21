@@ -9,7 +9,8 @@ extension AppDelegate {
         guard !isSessionActive else { return }
         let startDecision = RecordingStartPlanner.resolve(
             selectedEngine: transcriptionEngine,
-            mlxModelState: mlxModelManager.state
+            mlxModelState: mlxModelManager.state,
+            whisperModelState: whisperModelManager.state
         )
         guard case .start(let recordingEngine) = startDecision else {
             if case .blocked(let reason) = startDecision {
@@ -33,6 +34,7 @@ extension AppDelegate {
         sessionOutputMode = outputMode
         enhancementContextSnapshot = nil
         rewriteSessionHasSelectedSourceText = false
+        sessionUsesWhisperDirectTranslation = false
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
         let frontmostBundleID = frontmostApplication?.bundleIdentifier
         let sessionTargetBundleID = fallbackInjectBundleID(from: frontmostBundleID)
@@ -67,6 +69,8 @@ extension AppDelegate {
             guard let self else { return }
             if recordingEngine == .mlxAudio {
                 self.startMLXRecordingSession()
+            } else if recordingEngine == .whisperKit {
+                self.startWhisperRecordingSession()
             } else if recordingEngine == .remote {
                 self.startRemoteRecordingSession()
             } else {
@@ -133,6 +137,7 @@ extension AppDelegate {
         activeRecordingSessionID = UUID()
         isSessionCancellationRequested = true
         didCommitSessionOutput = true
+        sessionUsesWhisperDirectTranslation = false
         sessionTargetApplicationPID = nil
         sessionTargetApplicationBundleID = nil
 
@@ -179,6 +184,8 @@ extension AppDelegate {
             remoteASRTranscriber.transcribedText = text
         } else if transcriptionEngine == .mlxAudio {
             mlxTranscriber?.transcribedText = text
+        } else if transcriptionEngine == .whisperKit {
+            whisperTranscriber?.transcribedText = text
         } else {
             speechTranscriber.transcribedText = text
         }
@@ -188,6 +195,10 @@ extension AppDelegate {
         VoxtLog.info("Enhancement mode=\(enhancementMode.rawValue), appEnhancementEnabled=\(appEnhancementEnabled)")
 
         if sessionOutputMode == .translation {
+            if sessionUsesWhisperDirectTranslation {
+                processWhisperTranslatedTranscription(text, sessionID: sessionID)
+                return
+            }
             processTranslatedTranscription(text, sessionID: sessionID)
             return
         }
@@ -297,6 +308,8 @@ extension AppDelegate {
         }
         if transcriptionEngine == .mlxAudio {
             mlxTranscriber?.isEnhancing = isEnhancing
+        } else if transcriptionEngine == .whisperKit {
+            whisperTranscriber?.isEnhancing = isEnhancing
         } else if transcriptionEngine == .remote {
             remoteASRTranscriber.isEnhancing = isEnhancing
         } else {
@@ -306,6 +319,15 @@ extension AppDelegate {
 
     private var isMLXReady: Bool {
         switch mlxModelManager.state {
+        case .downloaded, .ready, .loading:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var isWhisperReady: Bool {
+        switch whisperModelManager.state {
         case .downloaded, .ready, .loading:
             return true
         default:
@@ -372,6 +394,58 @@ extension AppDelegate {
         }
     }
 
+    private func startWhisperRecordingSession() {
+        let whisper = whisperTranscriber ?? WhisperKitTranscriber(modelManager: whisperModelManager)
+        whisperTranscriber = whisper
+
+        Task { [weak self] in
+            guard let self else { return }
+            let granted = await whisper.requestPermissions()
+            guard granted else {
+                self.showOverlayReminder(
+                    String(localized: "Please enable required permissions in Settings > Permissions.")
+                )
+                self.resetSessionAfterFailedStart()
+                return
+            }
+
+            let useWhisperDirectTranslation = self.shouldUseWhisperDirectTranslationForCurrentSession()
+            let failureMessage = await whisper.prepareSession(
+                outputMode: self.sessionOutputMode,
+                useBuiltInTranslationTask: useWhisperDirectTranslation
+            )
+            if let failureMessage {
+                self.showOverlayReminder(failureMessage)
+                self.resetSessionAfterFailedStart()
+                return
+            }
+
+            self.overlayState.statusMessage = ""
+            let sessionID = self.activeRecordingSessionID
+            whisper.transcribedText = ""
+            whisper.setPreferredInputDevice(self.selectedInputDeviceID)
+            whisper.onPartialTranscription = { [weak self] text in
+                guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
+                self.overlayState.transcribedText = text
+            }
+            whisper.onTranscriptionFinished = { [weak self] text in
+                self?.processTranscription(text, sessionID: sessionID)
+            }
+            self.overlayState.bind(to: whisper)
+            self.overlayWindow.show(
+                state: self.overlayState,
+                position: self.overlayPosition
+            )
+            self.sessionUsesWhisperDirectTranslation = useWhisperDirectTranslation
+            if let startFailureMessage = await whisper.startRecordingSession() {
+                VoxtLog.warning("Whisper recording session did not enter recording state. reason=\(startFailureMessage)")
+                self.showOverlayReminder(startFailureMessage)
+                self.resetSessionAfterFailedStart()
+                return
+            }
+        }
+    }
+
     private func startRemoteRecordingSession() {
         Task { [weak self] in
             guard let self else { return }
@@ -407,6 +481,7 @@ extension AppDelegate {
         didCommitSessionOutput = false
         activeRecordingSessionID = UUID()
         sessionOutputMode = .transcription
+        sessionUsesWhisperDirectTranslation = false
         recordingStartedAt = nil
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
@@ -458,22 +533,36 @@ extension AppDelegate {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
-        guard transcriptionEngine == .remote, remoteASRSelectedProvider == .openAIWhisper else {
-            return trimmed
+        let extractedText: String
+        if transcriptionEngine == .remote, remoteASRSelectedProvider == .openAIWhisper {
+            guard (trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) ||
+                  (trimmed.hasPrefix("[") && trimmed.hasSuffix("]")) else {
+                extractedText = trimmed
+                let normalized = ChineseScriptNormalizer.normalize(extractedText, preferredMainLanguage: userMainLanguage)
+                return normalized
+            }
+
+            guard let data = trimmed.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data),
+                  let extracted = extractTranscriptionTextValue(from: object),
+                  !extracted.isEmpty else {
+                extractedText = trimmed
+                let normalized = ChineseScriptNormalizer.normalize(extractedText, preferredMainLanguage: userMainLanguage)
+                return normalized
+            }
+            extractedText = extracted
+        } else {
+            extractedText = trimmed
         }
 
-        guard (trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) ||
-              (trimmed.hasPrefix("[") && trimmed.hasSuffix("]")) else {
-            return trimmed
+        let normalized = ChineseScriptNormalizer.normalize(extractedText, preferredMainLanguage: userMainLanguage)
+        if normalized != extractedText {
+            VoxtLog.info(
+                "Normalized Chinese script variant for ASR output. preferred=\(userMainLanguage.code), chars=\(normalized.count)",
+                verbose: true
+            )
         }
-
-        guard let data = trimmed.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let extracted = extractTranscriptionTextValue(from: object),
-              !extracted.isEmpty else {
-            return trimmed
-        }
-        return extracted
+        return normalized
     }
 
     private func stopRecordingFallbackTimeoutSeconds() -> TimeInterval {
@@ -527,6 +616,7 @@ extension AppDelegate {
     private func applyPreferredInputDevice() {
         speechTranscriber.setPreferredInputDevice(selectedInputDeviceID)
         mlxTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
+        whisperTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
     }
 
     private func startSilenceMonitoringIfNeeded() {
@@ -564,7 +654,15 @@ extension AppDelegate {
                         self.mlxTranscriber?.forceIntermediateTranscription()
                     }
 
-                    if self.transcriptionEngine == .mlxAudio,
+                    if self.transcriptionEngine == .whisperKit,
+                       !self.whisperRealtimeEnabled,
+                       silentDuration >= 2.0,
+                       !self.didTriggerPauseTranscription {
+                        self.didTriggerPauseTranscription = true
+                        self.whisperTranscriber?.forceIntermediateTranscription()
+                    }
+
+                    if (self.transcriptionEngine == .mlxAudio || self.transcriptionEngine == .whisperKit),
                        silentDuration >= 4.0,
                        !self.didTriggerPauseLLM {
                         self.didTriggerPauseLLM = true
@@ -589,6 +687,8 @@ extension AppDelegate {
     private func stopActiveRecordingTranscriber() {
         if transcriptionEngine == .mlxAudio, isMLXReady {
             mlxTranscriber?.stopRecording()
+        } else if transcriptionEngine == .whisperKit, isWhisperReady {
+            whisperTranscriber?.stopRecording()
         } else if transcriptionEngine == .remote {
             remoteASRTranscriber.stopRecording()
         } else {
@@ -601,6 +701,17 @@ extension AppDelegate {
         didTriggerPauseTranscription = false
         didTriggerPauseLLM = false
         voiceEndCommandState.lastDetectedCommand = false
+    }
+
+    private func shouldUseWhisperDirectTranslationForCurrentSession() -> Bool {
+        TranslationProviderResolver.resolve(
+            selectedProvider: translationModelProvider,
+            fallbackProvider: translationFallbackModelProvider,
+            transcriptionEngine: transcriptionEngine,
+            targetLanguage: translationTargetLanguage,
+            isSelectedTextTranslation: false,
+            whisperModelState: whisperModelManager.state
+        ).usesWhisperDirectTranslation
     }
 
     private func triggerVoiceEndCommandStop() {
