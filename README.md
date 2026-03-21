@@ -64,7 +64,13 @@ Voxt separates ASR provider models and LLM provider models. They are used for sp
 
 ### Local Models
 
-With newer macOS versions and MLX support, Voxt currently ships with 5 built-in local ASR options in code, plus a set of downloadable local LLM models for enhancement, translation, and rewriting.
+With newer macOS versions and local model support, Voxt currently ships with:
+
+- `MLX Audio` local ASR models
+- `Whisper` via WhisperKit, as a separate local ASR engine
+- a set of downloadable local LLM models for enhancement, translation, and rewriting
+
+Whisper is not a sub-mode of `MLX Audio`. In Model Settings it appears as its own engine, with its own model list, download flow, and runtime options.
 
 > [!NOTE]
 > "Current status / errors" below comes from the current project code. "Language support / speed / recommendation" is summarized from model cards plus project descriptions. Speed and recommendation are for model selection guidance, not a unified benchmark.
@@ -86,6 +92,39 @@ Voxt also supports `Direct Dictation` via Apple `SFSpeechRecognizer`:
 | Parakeet 0.6B | `mlx-community/parakeet-tdt-0.6b-v3` | 0.6B / bf16 | Model card lists 25 languages; project copy positions it as lightweight English-first STT | Very fast | Medium-high | Lightweight high-speed option, especially suitable for English-heavy workflows |
 | GLM-ASR Nano (4bit) | `mlx-community/GLM-ASR-Nano-2512-4bit` | MLX 4bit, about 1.28 GB | Current model card clearly states Chinese and English | Fast | High | Smallest footprint, ideal for quick drafts and low-friction deployment |
 
+#### Whisper (WhisperKit)
+
+Voxt also supports `Whisper` as a separate on-device ASR engine through WhisperKit.
+
+- Built-in model list: `tiny`, `base`, `small`, `medium`, `large-v3`
+- Current download source: Hugging Face style model paths via `argmaxinc/whisperkit-coreml`
+- China mirror: supported through the app's mirror setting
+- Common runtime options:
+  - `Realtime` toggle, enabled by default
+  - `VAD`
+  - `Timestamps`
+  - `Temperature`
+- Current behavior:
+  - standard transcription uses Whisper `transcribe`
+  - translation hotkey can optionally use Whisper's built-in `translate-to-English` task when Translation provider is set to `Whisper`
+  - if Whisper translation is unavailable for the current case, Voxt falls back to the selected LLM translation provider
+
+Curated Whisper model list in Voxt:
+
+| Model | Approx. Download Size | Recommendation | Notes |
+| --- | --- | --- | --- |
+| Whisper Tiny | about 76.6 MB | Medium | Smallest footprint, best for quick local drafts |
+| Whisper Base | about 146.7 MB | High | Default Whisper balance for quality and speed |
+| Whisper Small | about 486.5 MB | High | Better recognition quality with moderate local cost |
+| Whisper Medium | about 1.53 GB | Very high | Accuracy-first local option with heavier download and memory use |
+| Whisper Large-v3 | about 3.09 GB | Very high | Largest local Whisper option, best suited to Apple Silicon Macs with enough disk and memory headroom |
+
+Whisper-specific notes:
+
+- Whisper follows your selected main language for simplified/traditional Chinese output normalization.
+- Whisper translation is only direct for speech-to-English scenarios; selected-text translation still uses the normal text translation flow.
+- If a Whisper model download is interrupted or corrupted, Voxt now treats it as incomplete and requires a clean re-download instead of trying to load a broken model.
+
 Common local ASR errors / states:
 
 - `Invalid model identifier`
@@ -94,6 +133,7 @@ Common local ASR errors / states:
 - `Model load failed (...)`
 - `Size unavailable`
 - If you accidentally point to an alignment-only repo, Voxt will show `alignment-only and not supported by Voxt transcription`
+- Whisper may additionally surface incomplete-download or broken-model errors if required Core ML weight files are missing
 
 #### Local LLM Models
 

@@ -65,7 +65,13 @@ brew install --cask voxt
 
 ### 本地模型
 
-依赖新版 macOS 的 MLX 支持，Voxt 当前在代码中内置了 5 个本地 ASR 模型，以及一组可下载的本地 LLM 模型（用于文本增强、翻译、改写）。
+依赖新版 macOS 与本地模型能力，Voxt 当前提供：
+
+- `MLX Audio` 本地 ASR 模型
+- 通过 WhisperKit 接入的 `Whisper` 独立本地 ASR 引擎
+- 一组可下载的本地 LLM 模型（用于文本增强、翻译、改写）
+
+Whisper 不是 `MLX Audio` 的子模式，而是在模型页里独立显示的一个引擎，有自己的模型列表、下载流程和运行时配置。
 
 > [!NOTE]
 > 下表中的“当前状态 / 报错”来自当前项目代码；“语言支持 / 速度 / 推荐度”优先参考模型卡与项目内描述整理。速度与推荐度用于帮助选型，不是统一 benchmark。
@@ -87,6 +93,39 @@ brew install --cask voxt
 | Parakeet 0.6B | `mlx-community/parakeet-tdt-0.6b-v3` | 0.6B / bf16 | 模型卡标注 25 种语言；项目内文案按英文轻量 STT 定位 | 很快 | 中高 | 轻量高速，英文场景优先 |
 | GLM-ASR Nano (4bit) | `mlx-community/GLM-ASR-Nano-2512-4bit` | MLX 4bit，约 1.28 GB | 当前模型卡明确标注中英 | 快 | 高 | 最轻量，适合快速草稿与低门槛部署 |
 
+#### Whisper（WhisperKit）
+
+Voxt 还支持通过 WhisperKit 使用 `Whisper` 作为独立的本地 ASR 引擎。
+
+- 内置模型列表：`tiny`、`base`、`small`、`medium`、`large-v3`
+- 当前下载源：基于 Hugging Face 风格路径的 `argmaxinc/whisperkit-coreml`
+- 支持中国镜像：跟随应用里的镜像开关
+- 当前可配置项：
+  - `Realtime`，默认开启
+  - `VAD`
+  - `Timestamps`
+  - `Temperature`
+- 当前行为：
+  - 普通转录默认使用 Whisper 的 `transcribe`
+  - 翻译快捷键可选用 Whisper 内建的 `translate-to-English`
+  - 如果当前场景不支持 Whisper 直翻，Voxt 会自动回退到已选的 LLM 翻译 provider
+
+Voxt 当前内置的 Whisper 模型：
+
+| 模型 | 约下载体积 | 推荐度 | 说明 |
+| --- | --- | --- | --- |
+| Whisper Tiny | 约 76.6 MB | 中 | 体积最小，适合快速本地草稿 |
+| Whisper Base | 约 146.7 MB | 高 | 默认 Whisper 均衡选项 |
+| Whisper Small | 约 486.5 MB | 高 | 识别质量更好，资源开销适中 |
+| Whisper Medium | 约 1.53 GB | 很高 | 精度优先，本地下载与内存占用更重 |
+| Whisper Large-v3 | 约 3.09 GB | 很高 | 体积最大，更适合磁盘和内存充足的 Apple Silicon Mac |
+
+Whisper 相关说明：
+
+- 如果主语言设置为简体中文 / 繁体中文，Whisper 输出会按主语言做简繁归一化。
+- Whisper 直翻目前只适用于“语音翻到英文”的场景；选中文本翻译仍然走原有文本翻译链路。
+- 如果 Whisper 模型下载中断或文件不完整，Voxt 会把它视为未完成模型，并要求重新下载，而不是继续尝试加载损坏模型。
+
 本地 ASR 常见报错 / 状态：
 
 - `Invalid model identifier`
@@ -95,6 +134,7 @@ brew install --cask voxt
 - `Model load failed (...)`
 - `Size unavailable`
 - 如果误配到对齐专用仓库，会提示 `alignment-only and not supported by Voxt transcription`
+- 如果 Whisper 缺少关键 Core ML 权重文件，也可能出现“下载不完整 / 模型损坏”相关错误
 
 #### 本地 LLM 模型
 
