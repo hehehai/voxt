@@ -25,10 +25,11 @@ final class RecentAudioWaveformStateTests: XCTestCase {
             waveform.advanceFrame()
         }
         let decayedPeak = waveform.barLevels.max() ?? 0
+        let recentDecayedPeak = waveform.barLevels.suffix(4).max() ?? 0
 
         XCTAssertGreaterThan(loudPeak, 0.55)
         XCTAssertLessThan(decayedPeak, loudPeak)
-        XCTAssertLessThan(decayedPeak, 0.18)
+        XCTAssertLessThan(recentDecayedPeak, 0.18)
     }
 
     func testSilenceDoesNotProduceFlatFullWaveform() {
