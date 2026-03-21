@@ -5,6 +5,7 @@ enum TranscriptionHistoryKind: String, Codable {
     case normal
     case translation
     case rewrite
+    case meeting
 }
 
 struct WhisperHistoryWordTiming: Codable, Hashable {
@@ -38,6 +39,8 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let remoteLLMModel: String?
     let remoteLLMEndpoint: String?
     let whisperWordTimings: [WhisperHistoryWordTiming]?
+    let meetingSegments: [MeetingTranscriptSegment]?
+    let meetingAudioRelativePath: String?
     let dictionaryHitTerms: [String]
     let dictionaryCorrectedTerms: [String]
     let dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
@@ -66,6 +69,8 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case remoteLLMModel
         case remoteLLMEndpoint
         case whisperWordTimings
+        case meetingSegments
+        case meetingAudioRelativePath
         case dictionaryHitTerms
         case dictionaryCorrectedTerms
         case dictionarySuggestedTerms
@@ -95,6 +100,8 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteLLMModel: String?,
         remoteLLMEndpoint: String?,
         whisperWordTimings: [WhisperHistoryWordTiming]?,
+        meetingSegments: [MeetingTranscriptSegment]? = nil,
+        meetingAudioRelativePath: String? = nil,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
@@ -122,6 +129,8 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.remoteLLMModel = remoteLLMModel
         self.remoteLLMEndpoint = remoteLLMEndpoint
         self.whisperWordTimings = whisperWordTimings
+        self.meetingSegments = meetingSegments
+        self.meetingAudioRelativePath = meetingAudioRelativePath
         self.dictionaryHitTerms = dictionaryHitTerms
         self.dictionaryCorrectedTerms = dictionaryCorrectedTerms
         self.dictionarySuggestedTerms = dictionarySuggestedTerms
@@ -154,6 +163,8 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteLLMModel = try container.decodeIfPresent(String.self, forKey: .remoteLLMModel)
         remoteLLMEndpoint = try container.decodeIfPresent(String.self, forKey: .remoteLLMEndpoint)
         whisperWordTimings = try container.decodeIfPresent([WhisperHistoryWordTiming].self, forKey: .whisperWordTimings)
+        meetingSegments = try container.decodeIfPresent([MeetingTranscriptSegment].self, forKey: .meetingSegments)
+        meetingAudioRelativePath = try container.decodeIfPresent(String.self, forKey: .meetingAudioRelativePath)
         dictionaryHitTerms = try container.decodeIfPresent([String].self, forKey: .dictionaryHitTerms) ?? []
         dictionaryCorrectedTerms = try container.decodeIfPresent([String].self, forKey: .dictionaryCorrectedTerms) ?? []
         dictionarySuggestedTerms = try container.decodeIfPresent([DictionarySuggestionSnapshot].self, forKey: .dictionarySuggestedTerms) ?? []
@@ -182,6 +193,10 @@ final class TranscriptionHistoryStore: ObservableObject {
 
     var allHistoryEntries: [TranscriptionHistoryEntry] {
         allEntries
+    }
+
+    func entry(id: UUID) -> TranscriptionHistoryEntry? {
+        allEntries.first(where: { $0.id == id })
     }
 
     func updateRetentionPolicy() {
@@ -246,6 +261,8 @@ final class TranscriptionHistoryStore: ObservableObject {
         remoteLLMModel: String?,
         remoteLLMEndpoint: String?,
         whisperWordTimings: [WhisperHistoryWordTiming]?,
+        meetingSegments: [MeetingTranscriptSegment]? = nil,
+        meetingAudioRelativePath: String? = nil,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
@@ -277,6 +294,8 @@ final class TranscriptionHistoryStore: ObservableObject {
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
             whisperWordTimings: whisperWordTimings,
+            meetingSegments: meetingSegments,
+            meetingAudioRelativePath: meetingAudioRelativePath,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
             dictionarySuggestedTerms: dictionarySuggestedTerms
@@ -295,17 +314,42 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     func delete(id: UUID) {
+        let removed = allEntries.filter { $0.id == id }
         allEntries.removeAll { $0.id == id }
         loadedCount = min(loadedCount, allEntries.count)
         entries = Array(allEntries.prefix(loadedCount))
+        removed.forEach(removeMeetingAudioIfNeeded(for:))
         persist()
     }
 
     func clearAll() {
+        allEntries.forEach(removeMeetingAudioIfNeeded(for:))
         allEntries = []
         entries = []
         loadedCount = 0
         persist()
+    }
+
+    func importMeetingAudioArchive(from sourceURL: URL) throws -> String {
+        let relativePath = "meeting/\(UUID().uuidString).wav"
+        let destinationURL = try historyAssetsDirectoryURL().appendingPathComponent(relativePath)
+        try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            try fileManager.removeItem(at: destinationURL)
+        }
+        try fileManager.moveItem(at: sourceURL, to: destinationURL)
+        return relativePath
+    }
+
+    func meetingAudioURL(for entry: TranscriptionHistoryEntry) -> URL? {
+        guard let relativePath = entry.meetingAudioRelativePath, !relativePath.isEmpty else {
+            return nil
+        }
+        do {
+            return try historyAssetsDirectoryURL().appendingPathComponent(relativePath)
+        } catch {
+            return nil
+        }
     }
 
     func applyDictionarySuggestedTerms(_ snapshotsByHistoryID: [UUID: [DictionarySuggestionSnapshot]]) {
@@ -354,7 +398,9 @@ final class TranscriptionHistoryStore: ObservableObject {
 
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate
         let originalCount = allEntries.count
+        let removedEntries = allEntries.filter { $0.createdAt < cutoff }
         allEntries.removeAll { $0.createdAt < cutoff }
+        removedEntries.forEach(removeMeetingAudioIfNeeded(for:))
         return allEntries.count != originalCount
     }
 
@@ -368,6 +414,30 @@ final class TranscriptionHistoryStore: ObservableObject {
         return appSupport
             .appendingPathComponent("Voxt", isDirectory: true)
             .appendingPathComponent("transcription-history.json")
+    }
+
+    private func historyAssetsDirectoryURL() throws -> URL {
+        let appSupport = try fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        return appSupport
+            .appendingPathComponent("Voxt", isDirectory: true)
+            .appendingPathComponent("transcription-history-assets", isDirectory: true)
+    }
+
+    private func removeMeetingAudioIfNeeded(for entry: TranscriptionHistoryEntry) {
+        guard let relativePath = entry.meetingAudioRelativePath, !relativePath.isEmpty else { return }
+        do {
+            let url = try historyAssetsDirectoryURL().appendingPathComponent(relativePath)
+            if fileManager.fileExists(atPath: url.path) {
+                try fileManager.removeItem(at: url)
+            }
+        } catch {
+            return
+        }
     }
 
     private func mergeSnapshots(
@@ -410,6 +480,8 @@ private extension TranscriptionHistoryEntry {
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
             whisperWordTimings: whisperWordTimings,
+            meetingSegments: meetingSegments,
+            meetingAudioRelativePath: meetingAudioRelativePath,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
             dictionarySuggestedTerms: dictionarySuggestedTerms

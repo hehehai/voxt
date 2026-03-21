@@ -117,6 +117,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case rewrite
     }
 
+    enum MeetingSessionCompletionDisposition {
+        case discard
+        case save
+        case saveAndOpenDetail
+    }
+
     let speechTranscriber = SpeechTranscriber()
     var mlxTranscriber: MLXTranscriber?
     var whisperTranscriber: WhisperKitTranscriber?
@@ -133,7 +139,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let hotkeyManager = HotkeyManager()
     let overlayWindow = RecordingOverlayWindow()
+    let meetingOverlayWindow = MeetingOverlayWindow()
+    let meetingDetailWindowManager = MeetingDetailWindowManager.shared
     let overlayState = OverlayState()
+    lazy var meetingSessionCoordinator = MeetingSessionCoordinator(
+        whisperModelManager: whisperModelManager,
+        preferredInputDeviceIDProvider: { [weak self] in
+            self?.selectedInputDeviceID
+        },
+        realtimeTranslationTargetLanguageProvider: { [weak self] in
+            self?.meetingRealtimeTranslationTargetLanguage
+        },
+        realtimeTranslationHandler: { [weak self] text, targetLanguage in
+            guard let self else { return text }
+            return try await self.translateMeetingRealtimeText(text, targetLanguage: targetLanguage)
+        }
+    )
     var statusItem: NSStatusItem?
 
     var enhancer: TextEnhancer?
@@ -183,6 +204,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var rewriteSessionHadWritableFocusedInput = false
     var rewriteSessionFallbackInjectBundleID: String?
     var sessionUsesWhisperDirectTranslation = false
+    var pendingMeetingSessionCompletionDisposition: MeetingSessionCompletionDisposition = .save
     let tapStopGuardInterval: TimeInterval = 0.35
     let transcriptionStartDebounceInterval: TimeInterval = 0.08
     var settingsWindowPresentationState = SettingsWindowPresentationState()
@@ -214,6 +236,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.rewriteModelProvider: RewriteModelProvider.customLLM.rawValue,
             AppPreferenceKey.escapeKeyCancelsOverlaySession: true,
             AppPreferenceKey.translateSelectedTextOnTranslationHotkey: true,
+            AppPreferenceKey.meetingNotesBetaEnabled: false,
+            AppPreferenceKey.meetingOverlayCollapsed: false,
+            AppPreferenceKey.meetingRealtimeTranslateEnabled: false,
+            AppPreferenceKey.meetingRealtimeTranslationTargetLanguage: "",
             AppPreferenceKey.voiceEndCommandEnabled: false,
             AppPreferenceKey.voiceEndCommandPreset: VoiceEndCommandPreset.over.rawValue,
             AppPreferenceKey.voiceEndCommandText: "",
@@ -371,11 +397,70 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.injectAnswerOverlayContent()
             }
         }
+        meetingOverlayWindow.onRequestClose = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.requestMeetingSessionCloseConfirmation()
+            }
+        }
+        meetingOverlayWindow.onRequestCollapseToggle = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.toggleMeetingOverlayCollapse()
+            }
+        }
+        meetingOverlayWindow.onRequestPauseToggle = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.toggleMeetingPause()
+            }
+        }
+        meetingOverlayWindow.onRequestDetail = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.showLiveMeetingDetailWindow()
+            }
+        }
+        meetingOverlayWindow.onRequestRealtimeTranslateToggle = { [weak self] isEnabled in
+            Task { @MainActor [weak self] in
+                self?.handleMeetingRealtimeTranslationToggle(isEnabled)
+            }
+        }
+        meetingOverlayWindow.onRequestRealtimeTranslationLanguageConfirm = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.confirmMeetingRealtimeTranslationLanguageSelection()
+            }
+        }
+        meetingOverlayWindow.onRequestRealtimeTranslationLanguageCancel = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.cancelMeetingRealtimeTranslationLanguageSelection()
+            }
+        }
+        meetingOverlayWindow.onRequestCancelMeeting = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.cancelMeetingSessionWithoutSaving()
+            }
+        }
+        meetingOverlayWindow.onRequestFinishMeeting = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.finishMeetingSessionAndOpenDetail()
+            }
+        }
+        meetingOverlayWindow.onRequestDismissCloseConfirmation = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.dismissMeetingSessionCloseConfirmation()
+            }
+        }
+        meetingOverlayWindow.onRequestCopySegment = { [weak self] segment in
+            Task { @MainActor [weak self] in
+                self?.copyMeetingSegment(segment)
+            }
+        }
 
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if meetingSessionCoordinator.isActive {
+            meetingSessionCoordinator.stop()
+        }
+        meetingDetailWindowManager.closeLiveWindow()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
     }
 
@@ -460,6 +545,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.handleRewriteHotkeyUp()
         }
+        hotkeyManager.onMeetingKeyDown = { [weak self] in
+            guard let self else { return }
+            self.handleMeetingHotkeyDown()
+        }
         hotkeyManager.start()
         VoxtLog.hotkey("Hotkey callbacks configured.")
     }
@@ -526,6 +615,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if overlayState.displayMode == .answer {
             dismissAnswerOverlay()
+            return
+        }
+        if meetingSessionCoordinator.isActive {
+            if meetingSessionCoordinator.overlayState.isCloseConfirmationPresented {
+                dismissMeetingSessionCloseConfirmation()
+            } else {
+                requestMeetingSessionCloseConfirmation()
+            }
             return
         }
         guard HotkeyPreference.loadTriggerMode() == .tap else { return }
@@ -626,6 +723,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         for action in actions where action == .cancelPendingTranscriptionStart {
             performHotkeyAction(action)
+        }
+        guard !meetingSessionCoordinator.isActive else {
+            showOverlayStatus(
+                String(localized: "Meeting Notes is currently active. Close it before starting another recording."),
+                clearAfter: 2.2
+            )
+            return
         }
         guard !isSessionActive else {
             VoxtLog.hotkey("Translation down ignored: session already active.")
@@ -738,7 +842,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func cancelPendingTranscriptionStart() {
+    func cancelPendingTranscriptionStart() {
         if pendingTranscriptionStartTask != nil {
             VoxtLog.hotkey("Canceled pending transcription start.")
         }

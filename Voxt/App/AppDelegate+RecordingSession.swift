@@ -6,6 +6,13 @@ import Speech
 
 extension AppDelegate {
     func beginRecording(outputMode: SessionOutputMode) {
+        guard !meetingSessionCoordinator.isActive else {
+            showOverlayStatus(
+                String(localized: "Meeting Notes is currently active. Close it before starting another recording."),
+                clearAfter: 2.2
+            )
+            return
+        }
         guard !isSessionActive else { return }
         let startDecision = RecordingStartPlanner.resolve(
             selectedEngine: transcriptionEngine,
@@ -326,7 +333,7 @@ extension AppDelegate {
         }
     }
 
-    private var isWhisperReady: Bool {
+    var isWhisperReady: Bool {
         switch whisperModelManager.state {
         case .downloaded, .ready, .loading:
             return true
@@ -400,6 +407,7 @@ extension AppDelegate {
 
         Task { [weak self] in
             guard let self else { return }
+            let sessionID = self.activeRecordingSessionID
             let granted = await whisper.requestPermissions()
             guard granted else {
                 self.showOverlayReminder(
@@ -421,7 +429,6 @@ extension AppDelegate {
             }
 
             self.overlayState.statusMessage = ""
-            let sessionID = self.activeRecordingSessionID
             whisper.transcribedText = ""
             whisper.setPreferredInputDevice(self.selectedInputDeviceID)
             whisper.onPartialTranscription = { [weak self] text in

@@ -330,6 +330,7 @@ struct GeneralModelStorageCard: View {
 struct GeneralOutputCard: View {
     @Binding var autoCopyWhenNoFocusedInput: Bool
     @Binding var translateSelectedTextOnTranslationHotkey: Bool
+    @Binding var meetingNotesBetaEnabled: Bool
     @Binding var appEnhancementEnabled: Bool
 
     var body: some View {
@@ -341,6 +342,28 @@ struct GeneralOutputCard: View {
 
             Toggle("Translate selected text with translation shortcut", isOn: $translateSelectedTextOnTranslationHotkey)
             Text("When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle(isOn: $meetingNotesBetaEnabled) {
+                HStack(spacing: 8) {
+                    Text("Meeting Notes")
+                    Text("Beta")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.orange.opacity(0.15))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+                        )
+                }
+            }
+            Text("Enable the meeting notes hotkey, dedicated meeting overlay, and related permissions.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

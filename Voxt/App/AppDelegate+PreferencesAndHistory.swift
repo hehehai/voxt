@@ -20,6 +20,10 @@ extension AppDelegate {
         defaults.bool(forKey: AppPreferenceKey.muteSystemAudioWhileRecording)
     }
 
+    var meetingNotesBetaEnabled: Bool {
+        defaults.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled)
+    }
+
     var overlayPosition: OverlayPosition {
         enumValue(forKey: AppPreferenceKey.overlayPosition, default: .bottom)
     }
@@ -34,6 +38,13 @@ extension AppDelegate {
 
     var translationTargetLanguage: TranslationTargetLanguage {
         enumValue(forKey: AppPreferenceKey.translationTargetLanguage, default: .english)
+    }
+
+    var meetingRealtimeTranslationTargetLanguage: TranslationTargetLanguage? {
+        enumValue(
+            forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage,
+            default: Optional<TranslationTargetLanguage>.none
+        )
     }
 
     var userMainLanguageCodes: [String] {
