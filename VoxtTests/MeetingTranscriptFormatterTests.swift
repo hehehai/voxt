@@ -14,7 +14,10 @@ final class MeetingTranscriptFormatterTests: XCTestCase {
             text: "你好，开始吧。"
         )
 
-        XCTAssertEqual(MeetingTranscriptFormatter.copyString(for: segment), "00:09 我 你好，开始吧。")
+        XCTAssertEqual(
+            MeetingTranscriptFormatter.copyString(for: segment),
+            "00:09 \(MeetingSpeaker.me.displayTitle) 你好，开始吧。"
+        )
     }
 
     func testJoinedTextPreservesSegmentOrderWithLineBreaks() {
@@ -34,8 +37,8 @@ final class MeetingTranscriptFormatterTests: XCTestCase {
         XCTAssertEqual(
             MeetingTranscriptFormatter.joinedText(for: [first, second]),
             """
-            00:03 我 先过一下议程。
-            00:07 them 好的，我先看一下。
+            00:03 \(MeetingSpeaker.me.displayTitle) 先过一下议程。
+            00:07 \(MeetingSpeaker.them.displayTitle) 好的，我先看一下。
             """
         )
     }
@@ -52,7 +55,7 @@ final class MeetingTranscriptFormatterTests: XCTestCase {
         XCTAssertEqual(
             MeetingTranscriptFormatter.joinedText(for: [segment]),
             """
-            00:12 them Can you send the latest timeline?
+            00:12 \(MeetingSpeaker.them.displayTitle) Can you send the latest timeline?
                -> 你可以发送最新的时间线吗？
             """
         )
@@ -72,7 +75,10 @@ final class MeetingTranscriptFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(merged, [snapshot])
-        XCTAssertEqual(MeetingTranscriptFormatter.joinedText(for: merged), "00:04 我 我们继续。")
+        XCTAssertEqual(
+            MeetingTranscriptFormatter.joinedText(for: merged),
+            "00:04 \(MeetingSpeaker.me.displayTitle) 我们继续。"
+        )
     }
 
     func testMergedSegmentsForPersistencePrefersFinalTranslatedContent() {
