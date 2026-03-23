@@ -64,8 +64,8 @@ final class MeetingLiveSessionSupportTests: XCTestCase {
 
         let frames = prebuffer.snapshot()
         XCTAssertEqual(frames.count, 2)
-        XCTAssertEqual(frames.first?.samples.first, 0.2, accuracy: 0.0001)
-        XCTAssertEqual(frames.last?.samples.first, 0.3, accuracy: 0.0001)
+        XCTAssertEqual(frames.first?.samples.first ?? 0, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(frames.last?.samples.first ?? 0, 0.3, accuracy: 0.0001)
     }
 
     func testTranscriptStateSubtractsAllPriorFrozenText() {
