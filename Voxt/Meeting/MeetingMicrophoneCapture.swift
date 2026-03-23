@@ -20,6 +20,7 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
     private var audioEngine: AVAudioEngine?
     private var hasTapInstalled = false
     private var preferredInputDeviceID: AudioDeviceID?
+    private var hasLoggedFirstCallback = false
 
     deinit {
         stop()
@@ -33,6 +34,7 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
         stop()
         let audioEngine = AVAudioEngine()
         self.audioEngine = audioEngine
+        hasLoggedFirstCallback = false
 
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
@@ -41,8 +43,17 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
             throw CaptureError.inputUnavailable
         }
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            onBuffer(buffer, Self.normalizedRMS(from: buffer))
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            guard let copiedBuffer = Self.copyPCMBuffer(buffer) else { return }
+            let level = Self.normalizedRMS(from: copiedBuffer)
+            if self?.hasLoggedFirstCallback == false {
+                self?.hasLoggedFirstCallback = true
+                VoxtLog.info(
+                    "Meeting microphone callback received. sampleRate=\(Int(copiedBuffer.format.sampleRate)), channels=\(copiedBuffer.format.channelCount), frames=\(copiedBuffer.frameLength)",
+                    verbose: true
+                )
+            }
+            onBuffer(copiedBuffer, level)
         }
         hasTapInstalled = true
 
@@ -71,6 +82,7 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
         }
         audioEngine.reset()
         self.audioEngine = nil
+        hasLoggedFirstCallback = false
         VoxtLog.info("Meeting microphone capture stopped.", verbose: true)
     }
 
@@ -99,5 +111,31 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
 
     private static func normalizedRMS(from buffer: AVAudioPCMBuffer) -> Float {
         AudioLevelMeter.normalizedLevel(from: buffer)
+    }
+
+    private static func copyPCMBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) else {
+            return nil
+        }
+        copy.frameLength = buffer.frameLength
+
+        let sourceBuffers = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+        let destinationBuffers = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        guard sourceBuffers.count == destinationBuffers.count else { return nil }
+
+        for index in 0..<sourceBuffers.count {
+            let source = sourceBuffers[index]
+            let destination = destinationBuffers[index]
+            let copySize = min(Int(source.mDataByteSize), Int(destination.mDataByteSize))
+            guard copySize > 0,
+                  let sourceData = source.mData,
+                  let destinationData = destination.mData
+            else {
+                continue
+            }
+            memcpy(destinationData, sourceData, copySize)
+            destinationBuffers[index].mDataByteSize = UInt32(copySize)
+        }
+        return copy
     }
 }

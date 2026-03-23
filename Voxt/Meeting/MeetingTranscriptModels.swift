@@ -1,6 +1,6 @@
 import Foundation
 
-enum MeetingSpeaker: String, Codable, Hashable {
+enum MeetingSpeaker: String, Codable, Hashable, Sendable {
     case me
     case them
 
@@ -14,7 +14,7 @@ enum MeetingSpeaker: String, Codable, Hashable {
     }
 }
 
-struct MeetingTranscriptSegment: Identifiable, Codable, Hashable {
+struct MeetingTranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let speaker: MeetingSpeaker
     let startSeconds: TimeInterval
@@ -22,15 +22,17 @@ struct MeetingTranscriptSegment: Identifiable, Codable, Hashable {
     let text: String
     let translatedText: String?
     let isTranslationPending: Bool
+    let preventsAdjacentMerge: Bool
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         speaker: MeetingSpeaker,
         startSeconds: TimeInterval,
         endSeconds: TimeInterval?,
         text: String,
         translatedText: String? = nil,
-        isTranslationPending: Bool = false
+        isTranslationPending: Bool = false,
+        preventsAdjacentMerge: Bool = false
     ) {
         self.id = id
         self.speaker = speaker
@@ -39,6 +41,7 @@ struct MeetingTranscriptSegment: Identifiable, Codable, Hashable {
         self.text = text
         self.translatedText = translatedText
         self.isTranslationPending = isTranslationPending
+        self.preventsAdjacentMerge = preventsAdjacentMerge
     }
 
     func updatingTranslation(
@@ -52,18 +55,52 @@ struct MeetingTranscriptSegment: Identifiable, Codable, Hashable {
             endSeconds: endSeconds,
             text: text,
             translatedText: translatedText,
-            isTranslationPending: isTranslationPending
+            isTranslationPending: isTranslationPending,
+            preventsAdjacentMerge: preventsAdjacentMerge
         )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case speaker
+        case startSeconds
+        case endSeconds
+        case text
+        case translatedText
+        case isTranslationPending
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        speaker = try container.decode(MeetingSpeaker.self, forKey: .speaker)
+        startSeconds = try container.decode(TimeInterval.self, forKey: .startSeconds)
+        endSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .endSeconds)
+        text = try container.decode(String.self, forKey: .text)
+        translatedText = try container.decodeIfPresent(String.self, forKey: .translatedText)
+        isTranslationPending = try container.decodeIfPresent(Bool.self, forKey: .isTranslationPending) ?? false
+        preventsAdjacentMerge = false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(speaker, forKey: .speaker)
+        try container.encode(startSeconds, forKey: .startSeconds)
+        try container.encodeIfPresent(endSeconds, forKey: .endSeconds)
+        try container.encode(text, forKey: .text)
+        try container.encodeIfPresent(translatedText, forKey: .translatedText)
+        try container.encode(isTranslationPending, forKey: .isTranslationPending)
     }
 }
 
 enum MeetingTranscriptFormatter {
-    private static let adjacentMergeGapThreshold: TimeInterval = 2.0
+    nonisolated private static let adjacentMergeGapThreshold: TimeInterval = 2.0
 
     nonisolated static func meaningfulSegments(for segments: [MeetingTranscriptSegment]) -> [MeetingTranscriptSegment] {
         segments.filter { segment in
-            let hasOriginalText = !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let hasTranslatedText = !(segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            let hasOriginalText = isMeaningfulText(segment.text)
+            let hasTranslatedText = isMeaningfulText(segment.translatedText)
             return hasOriginalText || hasTranslatedText
         }
     }
@@ -130,10 +167,11 @@ enum MeetingTranscriptFormatter {
         previous: MeetingTranscriptSegment,
         next: MeetingTranscriptSegment
     ) -> MeetingTranscriptSegment? {
+        guard !previous.preventsAdjacentMerge, !next.preventsAdjacentMerge else { return nil }
         guard previous.speaker == next.speaker else { return nil }
         guard next.startSeconds >= previous.startSeconds else { return nil }
         let previousEnd = previous.endSeconds ?? previous.startSeconds
-        guard next.startSeconds - previousEnd <= adjacentMergeGapThreshold else { return nil }
+        guard next.startSeconds - previousEnd <= Self.adjacentMergeGapThreshold else { return nil }
 
         return MeetingTranscriptSegment(
             id: previous.id,
@@ -142,7 +180,8 @@ enum MeetingTranscriptFormatter {
             endSeconds: max(previousEnd, next.endSeconds ?? next.startSeconds),
             text: mergedText(previous.text, next.text),
             translatedText: nil,
-            isTranslationPending: false
+            isTranslationPending: false,
+            preventsAdjacentMerge: false
         )
     }
 
@@ -177,7 +216,8 @@ enum MeetingTranscriptFormatter {
             endSeconds: preferred.endSeconds ?? fallback.endSeconds,
             text: preferredText.isEmpty ? fallbackText : preferredText,
             translatedText: (translatedText?.isEmpty == false ? translatedText : fallbackTranslatedText),
-            isTranslationPending: preferred.isTranslationPending && (translatedText?.isEmpty ?? true)
+            isTranslationPending: preferred.isTranslationPending && (translatedText?.isEmpty ?? true),
+            preventsAdjacentMerge: preferred.preventsAdjacentMerge || fallback.preventsAdjacentMerge
         )
     }
 
@@ -204,5 +244,18 @@ enum MeetingTranscriptFormatter {
         }
         let alphanumerics = CharacterSet.alphanumerics
         return alphanumerics.contains(leftLast) && alphanumerics.contains(rightFirst)
+    }
+
+    private nonisolated static func isMeaningfulText(_ value: String?) -> Bool {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else {
+            return false
+        }
+        let uuidPattern = #"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"#
+        if trimmed.range(of: uuidPattern, options: .regularExpression) != nil {
+            return false
+        }
+        return true
     }
 }

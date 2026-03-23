@@ -36,6 +36,7 @@ final class MeetingSystemAudioCapture: @unchecked Sendable {
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var ioProcID: AudioDeviceIOProcID?
     private var callback: ((AVAudioPCMBuffer, Float) -> Void)?
+    private var hasLoggedFirstCallback = false
 
     deinit {
         stop()
@@ -44,6 +45,7 @@ final class MeetingSystemAudioCapture: @unchecked Sendable {
     func start(onBuffer: @escaping (AVAudioPCMBuffer, Float) -> Void) throws {
         stop()
         callback = onBuffer
+        hasLoggedFirstCallback = false
 
         let outputDeviceID = try Self.defaultOutputDeviceID()
         let outputUID = try Self.deviceUID(for: outputDeviceID)
@@ -142,6 +144,7 @@ final class MeetingSystemAudioCapture: @unchecked Sendable {
         self.tapID = AudioObjectID(kAudioObjectUnknown)
         self.ioProcID = nil
         callback = nil
+        hasLoggedFirstCallback = false
         lock.unlock()
 
         if aggregateDeviceID != AudioDeviceID(kAudioObjectUnknown) {
@@ -191,6 +194,13 @@ final class MeetingSystemAudioCapture: @unchecked Sendable {
             destinationBuffers[index].mDataByteSize = UInt32(copySize)
         }
 
+        if !hasLoggedFirstCallback {
+            hasLoggedFirstCallback = true
+            VoxtLog.info(
+                "Meeting system audio callback received. sampleRate=\(Int(format.sampleRate)), channels=\(format.channelCount), frames=\(pcmBuffer.frameLength)",
+                verbose: true
+            )
+        }
         callback?(pcmBuffer, Self.normalizedRMS(from: pcmBuffer))
     }
 
