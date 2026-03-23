@@ -6,6 +6,17 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-03-23
+
+### Added
+- Added a first-run setup guide in the main window with step-by-step onboarding for language, models, transcription, translation, rewrite, app enhancement, and meeting notes.
+
+### Changed
+- Refined the onboarding flow with simpler shortcut presets, contextual permission prompts, inline demo videos, and localized guidance across English, Simplified Chinese, and Japanese.
+
+### Fixed
+- Fixed meeting transcript translation updates so existing translated text stays visible while background refreshes complete, instead of flashing a loading state on every update.
+
 ## [1.7.0] - 2026-03-23
 
 ### Added
