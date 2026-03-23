@@ -51,6 +51,7 @@ enum ConfigurationTransferManager {
     struct GeneralSettings: Codable {
         var interfaceLanguage: String
         var selectedInputDeviceID: Int
+        var modelStorageRootPath: String
         var interactionSoundsEnabled: Bool
         var interactionSoundPreset: String
         var muteSystemAudioWhileRecording: Bool
@@ -61,6 +62,10 @@ enum ConfigurationTransferManager {
         var translationTargetLanguage: String
         var userMainLanguageCodes: [String]
         var translateSelectedTextOnTranslationHotkey: Bool
+        var meetingNotesBetaEnabled: Bool
+        var meetingOverlayCollapsed: Bool
+        var meetingRealtimeTranslateEnabled: Bool
+        var meetingRealtimeTranslationTargetLanguage: String
         var voiceEndCommandEnabled: Bool
         var voiceEndCommandPreset: String
         var voiceEndCommandText: String
@@ -84,6 +89,7 @@ enum ConfigurationTransferManager {
         private enum CodingKeys: String, CodingKey {
             case interfaceLanguage
             case selectedInputDeviceID
+            case modelStorageRootPath
             case interactionSoundsEnabled
             case interactionSoundPreset
             case muteSystemAudioWhileRecording
@@ -94,6 +100,10 @@ enum ConfigurationTransferManager {
             case translationTargetLanguage
             case userMainLanguageCodes
             case translateSelectedTextOnTranslationHotkey
+            case meetingNotesBetaEnabled
+            case meetingOverlayCollapsed
+            case meetingRealtimeTranslateEnabled
+            case meetingRealtimeTranslationTargetLanguage
             case voiceEndCommandEnabled
             case voiceEndCommandPreset
             case voiceEndCommandText
@@ -118,6 +128,7 @@ enum ConfigurationTransferManager {
         init(
             interfaceLanguage: String,
             selectedInputDeviceID: Int,
+            modelStorageRootPath: String,
             interactionSoundsEnabled: Bool,
             interactionSoundPreset: String,
             muteSystemAudioWhileRecording: Bool,
@@ -128,6 +139,10 @@ enum ConfigurationTransferManager {
             translationTargetLanguage: String,
             userMainLanguageCodes: [String],
             translateSelectedTextOnTranslationHotkey: Bool,
+            meetingNotesBetaEnabled: Bool,
+            meetingOverlayCollapsed: Bool,
+            meetingRealtimeTranslateEnabled: Bool,
+            meetingRealtimeTranslationTargetLanguage: String,
             voiceEndCommandEnabled: Bool,
             voiceEndCommandPreset: String,
             voiceEndCommandText: String,
@@ -150,6 +165,7 @@ enum ConfigurationTransferManager {
         ) {
             self.interfaceLanguage = interfaceLanguage
             self.selectedInputDeviceID = selectedInputDeviceID
+            self.modelStorageRootPath = modelStorageRootPath
             self.interactionSoundsEnabled = interactionSoundsEnabled
             self.interactionSoundPreset = interactionSoundPreset
             self.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
@@ -160,6 +176,10 @@ enum ConfigurationTransferManager {
             self.translationTargetLanguage = translationTargetLanguage
             self.userMainLanguageCodes = UserMainLanguageOption.sanitizedSelection(userMainLanguageCodes)
             self.translateSelectedTextOnTranslationHotkey = translateSelectedTextOnTranslationHotkey
+            self.meetingNotesBetaEnabled = meetingNotesBetaEnabled
+            self.meetingOverlayCollapsed = meetingOverlayCollapsed
+            self.meetingRealtimeTranslateEnabled = meetingRealtimeTranslateEnabled
+            self.meetingRealtimeTranslationTargetLanguage = meetingRealtimeTranslationTargetLanguage
             self.voiceEndCommandEnabled = voiceEndCommandEnabled
             self.voiceEndCommandPreset = voiceEndCommandPreset
             self.voiceEndCommandText = voiceEndCommandText
@@ -185,6 +205,7 @@ enum ConfigurationTransferManager {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             interfaceLanguage = try container.decode(String.self, forKey: .interfaceLanguage)
             selectedInputDeviceID = try container.decode(Int.self, forKey: .selectedInputDeviceID)
+            modelStorageRootPath = try container.decodeIfPresent(String.self, forKey: .modelStorageRootPath) ?? ""
             interactionSoundsEnabled = try container.decode(Bool.self, forKey: .interactionSoundsEnabled)
             interactionSoundPreset = try container.decode(String.self, forKey: .interactionSoundPreset)
             muteSystemAudioWhileRecording = try container.decodeIfPresent(Bool.self, forKey: .muteSystemAudioWhileRecording) ?? false
@@ -198,6 +219,10 @@ enum ConfigurationTransferManager {
                     ?? UserMainLanguageOption.defaultSelectionCodes()
             )
             translateSelectedTextOnTranslationHotkey = try container.decode(Bool.self, forKey: .translateSelectedTextOnTranslationHotkey)
+            meetingNotesBetaEnabled = try container.decodeIfPresent(Bool.self, forKey: .meetingNotesBetaEnabled) ?? false
+            meetingOverlayCollapsed = try container.decodeIfPresent(Bool.self, forKey: .meetingOverlayCollapsed) ?? false
+            meetingRealtimeTranslateEnabled = try container.decodeIfPresent(Bool.self, forKey: .meetingRealtimeTranslateEnabled) ?? false
+            meetingRealtimeTranslationTargetLanguage = try container.decodeIfPresent(String.self, forKey: .meetingRealtimeTranslationTargetLanguage) ?? ""
             voiceEndCommandEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceEndCommandEnabled) ?? false
             voiceEndCommandPreset = try container.decodeIfPresent(String.self, forKey: .voiceEndCommandPreset) ?? VoiceEndCommandPreset.over.rawValue
             voiceEndCommandText = try container.decodeIfPresent(String.self, forKey: .voiceEndCommandText) ?? ""
@@ -233,6 +258,7 @@ enum ConfigurationTransferManager {
         var whisperVADEnabled: Bool
         var whisperTimestampsEnabled: Bool
         var whisperRealtimeEnabled: Bool
+        var whisperKeepResidentLoaded: Bool
         var customLLMModelRepo: String
         var translationCustomLLMModelRepo: String
         var rewriteCustomLLMModelRepo: String
@@ -260,6 +286,7 @@ enum ConfigurationTransferManager {
             case whisperVADEnabled
             case whisperTimestampsEnabled
             case whisperRealtimeEnabled
+            case whisperKeepResidentLoaded
             case customLLMModelRepo
             case translationCustomLLMModelRepo
             case rewriteCustomLLMModelRepo
@@ -288,6 +315,7 @@ enum ConfigurationTransferManager {
             whisperVADEnabled: Bool,
             whisperTimestampsEnabled: Bool,
             whisperRealtimeEnabled: Bool,
+            whisperKeepResidentLoaded: Bool,
             customLLMModelRepo: String,
             translationCustomLLMModelRepo: String,
             rewriteCustomLLMModelRepo: String,
@@ -314,6 +342,7 @@ enum ConfigurationTransferManager {
             self.whisperVADEnabled = whisperVADEnabled
             self.whisperTimestampsEnabled = whisperTimestampsEnabled
             self.whisperRealtimeEnabled = whisperRealtimeEnabled
+            self.whisperKeepResidentLoaded = whisperKeepResidentLoaded
             self.customLLMModelRepo = customLLMModelRepo
             self.translationCustomLLMModelRepo = translationCustomLLMModelRepo
             self.rewriteCustomLLMModelRepo = rewriteCustomLLMModelRepo
@@ -343,6 +372,7 @@ enum ConfigurationTransferManager {
             whisperVADEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperVADEnabled) ?? true
             whisperTimestampsEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperTimestampsEnabled) ?? false
             whisperRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperRealtimeEnabled) ?? true
+            whisperKeepResidentLoaded = try container.decodeIfPresent(Bool.self, forKey: .whisperKeepResidentLoaded) ?? true
             customLLMModelRepo = try container.decode(String.self, forKey: .customLLMModelRepo)
             translationCustomLLMModelRepo = try container.decode(String.self, forKey: .translationCustomLLMModelRepo)
             rewriteCustomLLMModelRepo = try container.decode(String.self, forKey: .rewriteCustomLLMModelRepo)
@@ -439,6 +469,9 @@ enum ConfigurationTransferManager {
         var rewriteHotkeyKeyCode: Int
         var rewriteHotkeyModifiers: Int
         var rewriteHotkeySidedModifiers: Int
+        var meetingHotkeyKeyCode: Int
+        var meetingHotkeyModifiers: Int
+        var meetingHotkeySidedModifiers: Int
         var hotkeyTriggerMode: String
         var hotkeyDistinguishModifierSides: Bool
         var hotkeyPreset: String
@@ -454,6 +487,9 @@ enum ConfigurationTransferManager {
             case rewriteHotkeyKeyCode
             case rewriteHotkeyModifiers
             case rewriteHotkeySidedModifiers
+            case meetingHotkeyKeyCode
+            case meetingHotkeyModifiers
+            case meetingHotkeySidedModifiers
             case hotkeyTriggerMode
             case hotkeyDistinguishModifierSides
             case hotkeyPreset
@@ -470,6 +506,9 @@ enum ConfigurationTransferManager {
             rewriteHotkeyKeyCode: Int,
             rewriteHotkeyModifiers: Int,
             rewriteHotkeySidedModifiers: Int,
+            meetingHotkeyKeyCode: Int,
+            meetingHotkeyModifiers: Int,
+            meetingHotkeySidedModifiers: Int,
             hotkeyTriggerMode: String,
             hotkeyDistinguishModifierSides: Bool,
             hotkeyPreset: String,
@@ -484,6 +523,9 @@ enum ConfigurationTransferManager {
             self.rewriteHotkeyKeyCode = rewriteHotkeyKeyCode
             self.rewriteHotkeyModifiers = rewriteHotkeyModifiers
             self.rewriteHotkeySidedModifiers = rewriteHotkeySidedModifiers
+            self.meetingHotkeyKeyCode = meetingHotkeyKeyCode
+            self.meetingHotkeyModifiers = meetingHotkeyModifiers
+            self.meetingHotkeySidedModifiers = meetingHotkeySidedModifiers
             self.hotkeyTriggerMode = hotkeyTriggerMode
             self.hotkeyDistinguishModifierSides = hotkeyDistinguishModifierSides
             self.hotkeyPreset = hotkeyPreset
@@ -501,6 +543,9 @@ enum ConfigurationTransferManager {
             rewriteHotkeyKeyCode = try container.decode(Int.self, forKey: .rewriteHotkeyKeyCode)
             rewriteHotkeyModifiers = try container.decode(Int.self, forKey: .rewriteHotkeyModifiers)
             rewriteHotkeySidedModifiers = try container.decode(Int.self, forKey: .rewriteHotkeySidedModifiers)
+            meetingHotkeyKeyCode = try container.decodeIfPresent(Int.self, forKey: .meetingHotkeyKeyCode) ?? Int(HotkeyPreference.defaultMeetingKeyCode)
+            meetingHotkeyModifiers = try container.decodeIfPresent(Int.self, forKey: .meetingHotkeyModifiers) ?? Int(HotkeyPreference.defaultMeetingModifiers.rawValue)
+            meetingHotkeySidedModifiers = try container.decodeIfPresent(Int.self, forKey: .meetingHotkeySidedModifiers) ?? 0
             hotkeyTriggerMode = try container.decode(String.self, forKey: .hotkeyTriggerMode)
             hotkeyDistinguishModifierSides = try container.decode(Bool.self, forKey: .hotkeyDistinguishModifierSides)
             hotkeyPreset = try container.decode(String.self, forKey: .hotkeyPreset)
@@ -514,11 +559,55 @@ enum ConfigurationTransferManager {
     struct SanitizedRemoteProviderConfiguration: Codable {
         var providerID: String
         var model: String
+        var meetingModel: String
         var endpoint: String
         var apiKey: String
         var appID: String
         var accessToken: String
         var openAIChunkPseudoRealtimeEnabled: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case providerID
+            case model
+            case meetingModel
+            case endpoint
+            case apiKey
+            case appID
+            case accessToken
+            case openAIChunkPseudoRealtimeEnabled
+        }
+
+        init(
+            providerID: String,
+            model: String,
+            meetingModel: String,
+            endpoint: String,
+            apiKey: String,
+            appID: String,
+            accessToken: String,
+            openAIChunkPseudoRealtimeEnabled: Bool
+        ) {
+            self.providerID = providerID
+            self.model = model
+            self.meetingModel = meetingModel
+            self.endpoint = endpoint
+            self.apiKey = apiKey
+            self.appID = appID
+            self.accessToken = accessToken
+            self.openAIChunkPseudoRealtimeEnabled = openAIChunkPseudoRealtimeEnabled
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            providerID = try container.decode(String.self, forKey: .providerID)
+            model = try container.decodeIfPresent(String.self, forKey: .model) ?? ""
+            meetingModel = try container.decodeIfPresent(String.self, forKey: .meetingModel) ?? ""
+            endpoint = try container.decodeIfPresent(String.self, forKey: .endpoint) ?? ""
+            apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+            appID = try container.decodeIfPresent(String.self, forKey: .appID) ?? ""
+            accessToken = try container.decodeIfPresent(String.self, forKey: .accessToken) ?? ""
+            openAIChunkPseudoRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .openAIChunkPseudoRealtimeEnabled) ?? false
+        }
     }
 
     struct ExportedAppBranchGroup: Codable {
@@ -632,6 +721,10 @@ enum ConfigurationTransferManager {
             let config = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: selectedRemoteASR, stored: remoteASR)
             if !config.isConfigured {
                 issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Configuration required.")))
+            } else if defaults.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled),
+                      RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(selectedRemoteASR),
+                      !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: selectedRemoteASR, configuration: config) {
+                issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Meeting ASR configuration required.")))
             }
         }
 
@@ -723,6 +816,7 @@ enum ConfigurationTransferManager {
         let general = GeneralSettings(
             interfaceLanguage: defaults.string(forKey: AppPreferenceKey.interfaceLanguage) ?? AppInterfaceLanguage.system.rawValue,
             selectedInputDeviceID: defaults.integer(forKey: AppPreferenceKey.selectedInputDeviceID),
+            modelStorageRootPath: defaults.string(forKey: AppPreferenceKey.modelStorageRootPath) ?? "",
             interactionSoundsEnabled: defaults.bool(forKey: AppPreferenceKey.interactionSoundsEnabled),
             interactionSoundPreset: defaults.string(forKey: AppPreferenceKey.interactionSoundPreset) ?? "",
             muteSystemAudioWhileRecording: defaults.bool(forKey: AppPreferenceKey.muteSystemAudioWhileRecording),
@@ -735,6 +829,10 @@ enum ConfigurationTransferManager {
                 from: defaults.string(forKey: AppPreferenceKey.userMainLanguageCodes)
             ),
             translateSelectedTextOnTranslationHotkey: defaults.object(forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey) as? Bool ?? true,
+            meetingNotesBetaEnabled: defaults.object(forKey: AppPreferenceKey.meetingNotesBetaEnabled) as? Bool ?? false,
+            meetingOverlayCollapsed: defaults.object(forKey: AppPreferenceKey.meetingOverlayCollapsed) as? Bool ?? false,
+            meetingRealtimeTranslateEnabled: defaults.object(forKey: AppPreferenceKey.meetingRealtimeTranslateEnabled) as? Bool ?? false,
+            meetingRealtimeTranslationTargetLanguage: defaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage) ?? "",
             voiceEndCommandEnabled: defaults.object(forKey: AppPreferenceKey.voiceEndCommandEnabled) as? Bool ?? false,
             voiceEndCommandPreset: defaults.string(forKey: AppPreferenceKey.voiceEndCommandPreset) ?? VoiceEndCommandPreset.over.rawValue,
             voiceEndCommandText: defaults.string(forKey: AppPreferenceKey.voiceEndCommandText) ?? "",
@@ -757,7 +855,7 @@ enum ConfigurationTransferManager {
         )
 
         return ExportPayload(
-            version: 11,
+            version: 15,
             exportedAt: ISO8601DateFormatter().string(from: Date()),
             general: general,
             model: .init(
@@ -773,6 +871,7 @@ enum ConfigurationTransferManager {
                 whisperVADEnabled: defaults.object(forKey: AppPreferenceKey.whisperVADEnabled) as? Bool ?? true,
                 whisperTimestampsEnabled: defaults.object(forKey: AppPreferenceKey.whisperTimestampsEnabled) as? Bool ?? false,
                 whisperRealtimeEnabled: defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true,
+                whisperKeepResidentLoaded: defaults.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? true,
                 customLLMModelRepo: defaults.string(forKey: AppPreferenceKey.customLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
                 translationCustomLLMModelRepo: defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
                 rewriteCustomLLMModelRepo: defaults.string(forKey: AppPreferenceKey.rewriteCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
@@ -813,6 +912,9 @@ enum ConfigurationTransferManager {
                 rewriteHotkeyKeyCode: defaults.integer(forKey: AppPreferenceKey.rewriteHotkeyKeyCode),
                 rewriteHotkeyModifiers: defaults.integer(forKey: AppPreferenceKey.rewriteHotkeyModifiers),
                 rewriteHotkeySidedModifiers: defaults.integer(forKey: AppPreferenceKey.rewriteHotkeySidedModifiers),
+                meetingHotkeyKeyCode: defaults.integer(forKey: AppPreferenceKey.meetingHotkeyKeyCode),
+                meetingHotkeyModifiers: defaults.integer(forKey: AppPreferenceKey.meetingHotkeyModifiers),
+                meetingHotkeySidedModifiers: defaults.integer(forKey: AppPreferenceKey.meetingHotkeySidedModifiers),
                 hotkeyTriggerMode: defaults.string(forKey: AppPreferenceKey.hotkeyTriggerMode) ?? HotkeyPreference.defaultTriggerMode.rawValue,
                 hotkeyDistinguishModifierSides: defaults.object(forKey: AppPreferenceKey.hotkeyDistinguishModifierSides) as? Bool ?? HotkeyPreference.defaultDistinguishModifierSides,
                 hotkeyPreset: defaults.string(forKey: AppPreferenceKey.hotkeyPreset) ?? HotkeyPreference.defaultPreset.rawValue,
@@ -834,6 +936,8 @@ enum ConfigurationTransferManager {
 
         defaults.set(general.interfaceLanguage, forKey: AppPreferenceKey.interfaceLanguage)
         defaults.set(general.selectedInputDeviceID, forKey: AppPreferenceKey.selectedInputDeviceID)
+        defaults.set(general.modelStorageRootPath, forKey: AppPreferenceKey.modelStorageRootPath)
+        defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
         defaults.set(general.interactionSoundsEnabled, forKey: AppPreferenceKey.interactionSoundsEnabled)
         defaults.set(general.interactionSoundPreset, forKey: AppPreferenceKey.interactionSoundPreset)
         defaults.set(general.muteSystemAudioWhileRecording, forKey: AppPreferenceKey.muteSystemAudioWhileRecording)
@@ -847,6 +951,10 @@ enum ConfigurationTransferManager {
             forKey: AppPreferenceKey.userMainLanguageCodes
         )
         defaults.set(general.translateSelectedTextOnTranslationHotkey, forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
+        defaults.set(general.meetingNotesBetaEnabled, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
+        defaults.set(general.meetingOverlayCollapsed, forKey: AppPreferenceKey.meetingOverlayCollapsed)
+        defaults.set(general.meetingRealtimeTranslateEnabled, forKey: AppPreferenceKey.meetingRealtimeTranslateEnabled)
+        defaults.set(general.meetingRealtimeTranslationTargetLanguage, forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage)
         defaults.set(general.voiceEndCommandEnabled, forKey: AppPreferenceKey.voiceEndCommandEnabled)
         defaults.set(general.voiceEndCommandPreset, forKey: AppPreferenceKey.voiceEndCommandPreset)
         defaults.set(general.voiceEndCommandText, forKey: AppPreferenceKey.voiceEndCommandText)
@@ -879,6 +987,7 @@ enum ConfigurationTransferManager {
         defaults.set(model.whisperVADEnabled, forKey: AppPreferenceKey.whisperVADEnabled)
         defaults.set(model.whisperTimestampsEnabled, forKey: AppPreferenceKey.whisperTimestampsEnabled)
         defaults.set(model.whisperRealtimeEnabled, forKey: AppPreferenceKey.whisperRealtimeEnabled)
+        defaults.set(model.whisperKeepResidentLoaded, forKey: AppPreferenceKey.whisperKeepResidentLoaded)
         defaults.set(model.customLLMModelRepo, forKey: AppPreferenceKey.customLLMModelRepo)
         defaults.set(model.translationCustomLLMModelRepo, forKey: AppPreferenceKey.translationCustomLLMModelRepo)
         defaults.set(model.rewriteCustomLLMModelRepo, forKey: AppPreferenceKey.rewriteCustomLLMModelRepo)
@@ -940,6 +1049,9 @@ enum ConfigurationTransferManager {
         defaults.set(hotkey.rewriteHotkeyKeyCode, forKey: AppPreferenceKey.rewriteHotkeyKeyCode)
         defaults.set(hotkey.rewriteHotkeyModifiers, forKey: AppPreferenceKey.rewriteHotkeyModifiers)
         defaults.set(hotkey.rewriteHotkeySidedModifiers, forKey: AppPreferenceKey.rewriteHotkeySidedModifiers)
+        defaults.set(hotkey.meetingHotkeyKeyCode, forKey: AppPreferenceKey.meetingHotkeyKeyCode)
+        defaults.set(hotkey.meetingHotkeyModifiers, forKey: AppPreferenceKey.meetingHotkeyModifiers)
+        defaults.set(hotkey.meetingHotkeySidedModifiers, forKey: AppPreferenceKey.meetingHotkeySidedModifiers)
         defaults.set(hotkey.hotkeyTriggerMode, forKey: AppPreferenceKey.hotkeyTriggerMode)
         defaults.set(hotkey.hotkeyDistinguishModifierSides, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
         defaults.set(hotkey.hotkeyPreset, forKey: AppPreferenceKey.hotkeyPreset)
@@ -952,6 +1064,7 @@ enum ConfigurationTransferManager {
             SanitizedRemoteProviderConfiguration(
                 providerID: $0.providerID,
                 model: $0.model,
+                meetingModel: $0.meetingModel,
                 endpoint: $0.endpoint,
                 apiKey: sanitizeSensitive($0.apiKey),
                 appID: sanitizeSensitive($0.appID),
@@ -968,6 +1081,7 @@ enum ConfigurationTransferManager {
                 RemoteProviderConfiguration(
                     providerID: item.providerID,
                     model: item.model,
+                    meetingModel: item.meetingModel,
                     endpoint: item.endpoint,
                     apiKey: resolveImportedSensitive(item.apiKey),
                     appID: resolveImportedSensitive(item.appID),

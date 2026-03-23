@@ -113,6 +113,43 @@ struct LoadingSpinnerIconView: View {
     }
 }
 
+struct ModelInitializingIconView: View {
+    private let viewport = CGSize(width: 24, height: 24)
+
+    @State private var animate = false
+
+    var body: some View {
+        ZStack {
+            SVGPathShape(
+                pathData: "M18.35 19.68C17.8 21.09 16.46 22 14.95 22H9.04998C7.52998 22 6.19998 21.09 5.64998 19.68C5.09998 18.26 5.47998 16.69 6.59998 15.67L10.65 12H13.36L17.4 15.67C18.52 16.69 18.89 18.26 18.35 19.68Z",
+                viewport: viewport
+            )
+            .fill(.white.opacity(0.42))
+
+            SVGPathShape(
+                pathData: "M13.82 18.1393H10.18C9.8 18.1393 9.5 17.8293 9.5 17.4593C9.5 17.0793 9.81 16.7793 10.18 16.7793H13.82C14.2 16.7793 14.5 17.0893 14.5 17.4593C14.5 17.8293 14.19 18.1393 13.82 18.1393Z",
+                viewport: viewport
+            )
+            .fill(.white)
+
+            SVGPathShape(
+                pathData: "M18.3502 4.32C17.8002 2.91 16.4602 2 14.9502 2H9.05016C7.54016 2 6.20016 2.91 5.65016 4.32C5.11016 5.74 5.48016 7.31 6.61016 8.33L10.6502 12H13.3602L17.4002 8.33C18.5202 7.31 18.8902 5.74 18.3502 4.32ZM13.8202 7.23H10.1802C9.80016 7.23 9.50016 6.92 9.50016 6.55C9.50016 6.18 9.81016 5.87 10.1802 5.87H13.8202C14.2002 5.87 14.5002 6.18 14.5002 6.55C14.5002 6.92 14.1902 7.23 13.8202 7.23Z",
+                viewport: viewport
+            )
+            .fill(.white)
+        }
+        .rotationEffect(.degrees(animate ? 360 : 0))
+        .scaleEffect(animate ? 1.04 : 0.96)
+        .opacity(animate ? 0.98 : 0.62)
+        .onAppear {
+            animate = false
+            withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
+                animate = true
+            }
+        }
+    }
+}
+
 struct CopyIconView: View {
     var body: some View {
         ZStack {

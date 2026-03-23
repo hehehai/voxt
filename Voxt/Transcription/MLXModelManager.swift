@@ -104,6 +104,7 @@ class MLXModelManager: ObservableObject {
     }
 
     var currentModelRepo: String { modelRepo }
+    var isCurrentModelLoaded: Bool { loadedModel != nil && loadedRepo == modelRepo }
 
     func displayTitle(for repo: String) -> String {
         let canonicalRepo = Self.canonicalModelRepo(repo)
@@ -173,6 +174,10 @@ class MLXModelManager: ObservableObject {
 
     static func canonicalModelRepo(_ repo: String) -> String {
         legacyModelRepoMap[repo] ?? repo
+    }
+
+    static func isRealtimeCapableModelRepo(_ repo: String) -> Bool {
+        canonicalModelRepo(repo) == "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"
     }
 
     func updateHubBaseURL(_ url: URL) {

@@ -155,6 +155,8 @@ struct HotkeyPreference {
     static let defaultTranslationModifiers: NSEvent.ModifierFlags = [.function, .shift]
     static let defaultRewriteKeyCode: UInt16 = modifierOnlyKeyCode
     static let defaultRewriteModifiers: NSEvent.ModifierFlags = [.function, .control]
+    static let defaultMeetingKeyCode: UInt16 = modifierOnlyKeyCode
+    static let defaultMeetingModifiers: NSEvent.ModifierFlags = [.function, .option]
     static let defaultTriggerMode: TriggerMode = .tap
     static let defaultDistinguishModifierSides = false
     static let defaultPreset: Preset = .fnCombo
@@ -170,6 +172,9 @@ struct HotkeyPreference {
             AppPreferenceKey.rewriteHotkeyKeyCode: Int(defaultRewriteKeyCode),
             AppPreferenceKey.rewriteHotkeyModifiers: Int(defaultRewriteModifiers.rawValue),
             AppPreferenceKey.rewriteHotkeySidedModifiers: 0,
+            AppPreferenceKey.meetingHotkeyKeyCode: Int(defaultMeetingKeyCode),
+            AppPreferenceKey.meetingHotkeyModifiers: Int(defaultMeetingModifiers.rawValue),
+            AppPreferenceKey.meetingHotkeySidedModifiers: 0,
             AppPreferenceKey.hotkeyTriggerMode: defaultTriggerMode.rawValue,
             AppPreferenceKey.hotkeyDistinguishModifierSides: defaultDistinguishModifierSides,
             AppPreferenceKey.hotkeyPreset: defaultPreset.rawValue
@@ -240,6 +245,22 @@ struct HotkeyPreference {
         UserDefaults.standard.set(sidedModifiers.rawValue, forKey: AppPreferenceKey.rewriteHotkeySidedModifiers)
     }
 
+    static func loadMeeting() -> Hotkey {
+        load(
+            keyCodeKey: AppPreferenceKey.meetingHotkeyKeyCode,
+            modifiersKey: AppPreferenceKey.meetingHotkeyModifiers,
+            sidedModifiersKey: AppPreferenceKey.meetingHotkeySidedModifiers,
+            defaultKeyCode: defaultMeetingKeyCode,
+            defaultModifiers: defaultMeetingModifiers
+        )
+    }
+
+    static func saveMeeting(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, sidedModifiers: SidedModifierFlags) {
+        UserDefaults.standard.set(Int(keyCode), forKey: AppPreferenceKey.meetingHotkeyKeyCode)
+        UserDefaults.standard.set(Int(modifiers.rawValue), forKey: AppPreferenceKey.meetingHotkeyModifiers)
+        UserDefaults.standard.set(sidedModifiers.rawValue, forKey: AppPreferenceKey.meetingHotkeySidedModifiers)
+    }
+
     static func loadTriggerMode() -> TriggerMode {
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.hotkeyTriggerMode)
         return TriggerMode(rawValue: raw ?? "") ?? defaultTriggerMode
@@ -294,21 +315,23 @@ struct HotkeyPreference {
         return parts.joined(separator: usesSides ? " + " : "")
     }
 
-    static func presetHotkeys(for preset: Preset) -> (distinguishSides: Bool, transcription: Hotkey, translation: Hotkey, rewrite: Hotkey)? {
+    static func presetHotkeys(for preset: Preset) -> (distinguishSides: Bool, transcription: Hotkey, translation: Hotkey, rewrite: Hotkey, meeting: Hotkey)? {
         switch preset {
         case .fnCombo:
             return (
                 false,
                 Hotkey(keyCode: defaultKeyCode, modifiers: defaultModifiers, sidedModifiers: []),
                 Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
-                Hotkey(keyCode: defaultRewriteKeyCode, modifiers: defaultRewriteModifiers, sidedModifiers: [])
+                Hotkey(keyCode: defaultRewriteKeyCode, modifiers: defaultRewriteModifiers, sidedModifiers: []),
+                Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: [])
             )
         case .commandCombo:
             return (
                 true,
                 Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command], sidedModifiers: [.rightCommand]),
                 Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .shift], sidedModifiers: [.rightCommand, .rightShift]),
-                Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption])
+                Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption]),
+                Hotkey(keyCode: UInt16(kVK_ANSI_L), modifiers: [.command], sidedModifiers: [.rightCommand])
             )
         case .custom:
             return nil

@@ -51,19 +51,28 @@ extension ModelSettingsView {
                 provider: provider,
                 stored: remoteASRConfigurations
             )
-            let status = config.isConfigured
-                ? AppLocalization.format("Configured model: %@", config.model)
-                : AppLocalization.localizedString("Not configured")
+            let isSelected = selectedRemoteASRProvider == provider
+            let status = remoteASRStatusText(
+                for: provider,
+                configuration: config,
+                showMeetingSetupDetails: isSelected
+            )
+            let needsMeetingSetup =
+                isSelected &&
+                meetingNotesBetaEnabled &&
+                RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider) &&
+                config.isConfigured &&
+                !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: provider, configuration: config)
             return ModelTableRow(
                 id: provider.rawValue,
                 title: provider.title,
-                isActive: selectedRemoteASRProvider == provider,
+                isActive: isSelected,
                 status: status,
-                badgeText: hasIssue(for: .remoteASRProvider(provider)) ? String(localized: "Needs Setup") : nil,
+                badgeText: (hasIssue(for: .remoteASRProvider(provider)) || needsMeetingSetup) ? String(localized: "Needs Setup") : nil,
                 actions: [
                     ModelTableAction(
-                        title: LocalizedStringKey(selectedRemoteASRProvider == provider ? "Using" : "Use"),
-                        isEnabled: selectedRemoteASRProvider != provider
+                        title: LocalizedStringKey(isSelected ? "Using" : "Use"),
+                        isEnabled: !isSelected
                     ) {
                         useRemoteASRProvider(provider)
                     },
@@ -427,6 +436,28 @@ extension ModelSettingsView {
         remoteASRProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfigurations(updated)
     }
 
+    func remoteASRStatusText(
+        for provider: RemoteASRProvider,
+        configuration: RemoteProviderConfiguration,
+        showMeetingSetupDetails: Bool = true
+    ) -> String {
+        guard configuration.isConfigured else {
+            return AppLocalization.localizedString("Not configured")
+        }
+
+        var lines = [AppLocalization.format("Configured model: %@", configuration.model)]
+        if showMeetingSetupDetails,
+           meetingNotesBetaEnabled,
+           RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider) {
+            if configuration.hasUsableMeetingModel {
+                lines.append(RemoteASRMeetingConfiguration.configuredMeetingModelStatus(configuration.meetingModel))
+            } else {
+                lines.append(RemoteASRMeetingConfiguration.missingMeetingModelStatus(provider: provider))
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     func resolvedASRHintSettings(for target: ASRHintTarget) -> ASRHintSettings {
         ASRHintSettingsStore.resolvedSettings(for: target, rawValue: asrHintSettingsRaw)
     }
@@ -529,8 +560,9 @@ extension ModelSettingsView {
         let vad = AppLocalization.localizedString(whisperVADEnabled ? "VAD On" : "VAD Off")
         let timestamps = AppLocalization.localizedString(whisperTimestampsEnabled ? "Timestamps On" : "Timestamps Off")
         let realtime = AppLocalization.localizedString(whisperRealtimeEnabled ? "Realtime On" : "Quality Mode")
+        let resident = AppLocalization.localizedString(whisperKeepResidentLoaded ? "Resident On" : "Resident Off")
         let temperature = String(format: "%.1f", whisperTemperature)
-        return AppLocalization.format("Temperature: %@ · %@ · %@ · %@", temperature, vad, timestamps, realtime)
+        return AppLocalization.format("Temperature: %@ · %@ · %@ · %@ · %@", temperature, vad, timestamps, realtime, resident)
     }
 
     func asrCredentialHint(for provider: RemoteASRProvider) -> String? {

@@ -34,6 +34,7 @@ enum TestFactories {
     static func makeRemoteConfiguration(
         providerID: String,
         model: String,
+        meetingModel: String = "",
         endpoint: String = "",
         apiKey: String = "",
         appID: String = "",
@@ -43,6 +44,7 @@ enum TestFactories {
         RemoteProviderConfiguration(
             providerID: providerID,
             model: model,
+            meetingModel: meetingModel,
             endpoint: endpoint,
             apiKey: apiKey,
             appID: appID,

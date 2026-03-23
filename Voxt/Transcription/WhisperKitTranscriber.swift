@@ -94,6 +94,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     static let offlineFirstPartialMinimumSeconds: Double = 5.0
 
     @Published var isRecording = false
+    @Published var isModelInitializing = false
     @Published var audioLevel: Float = 0.0
     @Published var transcribedText = ""
     @Published var isEnhancing = false
@@ -146,6 +147,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         preparedOutputMode = outputMode
         preparedUseBuiltInTranslationTask = useBuiltInTranslationTask
         lastStartFailureMessage = nil
+        isModelInitializing = !modelManager.isCurrentModelLoaded
 
         do {
             modelManager.beginActiveUse()
@@ -153,6 +155,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             preparedWhisper = try await modelManager.loadWhisper()
             return nil
         } catch {
+            isModelInitializing = false
             cleanupPreparedWhisperIfNeeded()
             let message = String(localized: "Whisper failed to load the selected model.")
             lastStartFailureMessage = message
@@ -171,6 +174,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     func startRecordingSession() async -> String? {
         guard !isRecording else { return nil }
         guard preparedWhisper != nil else {
+            isModelInitializing = false
             let message = String(localized: "Whisper is not ready yet. Open Settings > Model and try again.")
             lastStartFailureMessage = message
             VoxtLog.warning("Whisper start blocked: model is not prepared.")
@@ -190,6 +194,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         do {
             try startAudioCaptureGraph()
             isRecording = true
+            isModelInitializing = false
             let revision = sessionRevision
             scheduleCaptureStartupWatchdog(revision: revision)
             partialLoopTask = Task { [weak self] in
@@ -197,6 +202,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             }
             return nil
         } catch {
+            isModelInitializing = false
             let message = String(localized: "Whisper failed to start recording.")
             lastStartFailureMessage = message
             VoxtLog.error("Whisper transcriber start failed: \(error)")
@@ -212,6 +218,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
         let revision = sessionRevision
         isRecording = false
+        isModelInitializing = false
         audioLevel = 0
 
         partialLoopTask?.cancel()
@@ -492,6 +499,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         sampleStore.clear()
         transcribedText = ""
         audioLevel = 0
+        isModelInitializing = false
         latestWordTimings = []
         audioStreamTranscriber = nil
         preparedWhisper?.audioProcessor.stopRecording()
@@ -526,6 +534,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
         preparedWhisper = nil
         preparedUseBuiltInTranslationTask = false
+        isModelInitializing = false
     }
 
     private func startAudioCaptureGraph() throws {

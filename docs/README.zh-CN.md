@@ -6,7 +6,7 @@
 
 macOS 菜单栏语音输入与翻译工具。按住说话，松开即贴，AI转写，不同 APP、URL 不同规则。
 
-[English](./README.md) · **简体中文** · [反馈问题][github-issues-link] · [提示词](./Prompt.zh-CN.md)
+[English](./README.md) · **简体中文** · [反馈问题][github-issues-link] · [提示词](./Prompt.zh-CN.md) · [会议文档](./Meeting.zh-CN.md) · [转写文档](./Rewrite.zh-CN.md)
 
 [![][github-release-shield]][github-release-link]
 [![][macos-version-shield]][macos-version-link]
@@ -40,6 +40,19 @@ macOS 菜单栏语音输入与翻译工具。按住说话，松开即贴，AI转
 - 选中文本转写 ～ “帮我把这段文本精简下，语句要通顺” 。。。
 - 可选“转写答案卡片”，在当前没有可写输入框时也能稳定查看和接收长结果
 - AI 助手，不止止语音输入
+
+**会议记录（Beta）** `fn+option`
+
+- 独立的悬浮会议卡片，适合长时间会议、通话、访谈场景 (支持实时翻译)。
+- 当前 Beta 使用双音源：
+  - 麦克风标记为 `我`
+  - 系统音频标记为 `them`
+- 会议模式会跟随当前全局 ASR 引擎：
+  - `Whisper`
+  - `MLX Audio`
+  - `Remote ASR`
+- 实时性跟随当前引擎 / 模型 / provider 配置能力。
+- live 会议卡片已在窗口级别标记为不可共享，正常屏幕共享 / 窗口共享时不应把它带出去。
 
 [![][back-to-top]](#readme-top)
 
@@ -190,13 +203,21 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 | 服务商 | 项目内置模型选项 | 支持语言 | 实时支持 | 速度 | 推荐度 | 当前接入方式 |
 | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI Whisper / Transcribe | `whisper-1`、`gpt-4o-mini-transcribe`、`gpt-4o-transcribe` | 多语言 | 部分支持，Voxt 当前是文件转写；可开启分片伪实时预览 | 中 | 高 | `v1/audio/transcriptions` |
-| Doubao ASR | `volc.seedasr.sauc.duration`、`volc.bigasr.sauc.duration` | 中文优先，适合中英混说 / 实时场景 | 是 | 快 | 高 | WebSocket 流式识别 |
+| Doubao ASR | `volc.seedasr.sauc.duration`、`volc.bigasr.sauc.duration`，会议：`volc.bigasr.auc_turbo` | 中文优先，适合中英混说 | 普通转录支持实时，会议走分段 / 文件模式 | 快 | 高 | 普通转录走 WebSocket，会议走 HTTP flash/file ASR |
 | GLM ASR | `glm-asr-2512`、`glm-asr-1` | 官方定位覆盖多场景、多口音；Voxt 当前按普通转写接入 | 否（当前实现为上传转写） | 中 | 中高 | HTTP transcription endpoint |
-| Aliyun Bailian ASR | `qwen3-asr-flash-realtime`、`fun-asr-realtime`、`paraformer-realtime-*` | 取决于模型：Qwen3 ASR 为多语言，Fun/Paraformer 覆盖中英或多语 | 是 | 快 | 高 | WebSocket 实时识别，Qwen / Fun / Paraformer 走不同端点 |
+| Aliyun Bailian ASR | `qwen3-asr-flash-realtime`、`fun-asr-realtime`、`paraformer-realtime-*`，会议：`qwen3-asr-flash-filetrans`、`fun-asr`、`paraformer-v2` | 取决于模型：Qwen3 ASR 为多语言，Fun/Paraformer 覆盖中英或多语 | 普通转录支持实时，会议走分段 / 文件模式 | 快 | 高 | 普通转录走 WebSocket，会议走异步 / 文件 ASR |
+
+对 `Doubao ASR` 和 `Aliyun Bailian ASR`，会议模式有独立的 `Meeting ASR` 模型配置：
+
+- 只有在开启 `Meeting Notes (Beta)` 后，`设置 > 模型 > Remote ASR > [服务商]` 中才会显示这一段
+- 会议不会复用普通实时 ASR 模型，而是只使用单独配置的会议模型
+- 如果会议模型没配好，Voxt 会阻止启动会议，并在 provider 列表里显示配置提示
+- 可以先点 `Test Meeting ASR` 验证会议专用请求链路是否可达
 
 远程 ASR 常见报错 / 状态：
 
 - `Needs Setup`
+- `未配置会议 ASR`
 - OpenAI / GLM / Aliyun 缺少 API Key
 - Doubao 缺少 `Access Token` 或 `App ID`
 - `Invalid ASR endpoint URL`
@@ -262,6 +283,12 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 - `fn+shift`：把你说的话变成目标语言，或者直接翻译当前选中的文字
 - `fn+control`：把你说的话当作 Prompt，让模型帮你生成、改写、润色文本
 
+当你在 `General > Output` 中开启 `Meeting Notes (Beta)` 后，还会多出第四个快捷键：
+
+| 快捷键 | 动作 | 典型用途 | 默认交互 |
+| --- | --- | --- | --- |
+| `fn+option` | 会议记录 | 实时会议记录、会后查看与导出 | 拉起独立会议卡片，结束后保存为 `会议` 历史记录 |
+
 具体交互如下：
 
 - `fn` 普通转录
@@ -288,6 +315,90 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 - 所有快捷键都可以在设置里改成别的键位，也可以切到 `command 组合` 预设。
 
 [![][back-to-top]](#readme-top)
+
+## 会议记录（Beta）
+
+`会议记录（Beta）` 是一条独立于普通转录 / 翻译 / 转写的新流程，适合长时间会议、远程通话、播客录制等场景。它不会把文本自动注入当前输入框，也不复用普通转录悬浮层。
+
+完整说明见：[Meeting.zh-CN.md](./Meeting.zh-CN.md)。
+
+### 如何开启
+
+- 默认关闭。
+- 在 `General > Output > Meeting Notes (Beta)` 中开启。
+- 开启后：
+  - Hotkey 页会出现会议快捷键
+  - Permissions 页会出现会议相关权限
+  - 才能使用会议悬浮卡片
+
+### 当前 Beta 的实现方式
+
+- ASR 引擎：跟随当前全局转录引擎
+  - `Whisper`
+  - `MLX Audio`
+  - `Remote ASR`
+- `Direct Dictation` 当前不支持会议模式
+- 音频来源：
+  - 麦克风 -> `我`
+  - 系统音频 -> `them`
+- 当前 Beta v1 是按音源区分说话方，不是真正的 diarization。
+- 实时行为跟随当前引擎 / 模型 / provider 能力：
+  - `Whisper`：跟随全局 `Realtime` 开关
+  - `MLX Audio`：实时型模型走更低延迟更新
+  - `Remote ASR`：`Doubao` 和 `Aliyun` 在会议里使用独立的会议分段 / 文件模型，`OpenAI` 和 `GLM` 继续走现有的分段会议链路
+- 两路音频分段最后会合并成一个统一的会议时间线，并保存到 `会议` 历史记录中。
+
+### 会议悬浮卡片
+
+会议卡片更偏实时采集，支持：
+
+- 收起成只显示头部的紧凑状态
+- 暂停 / 继续
+- 关闭时二次确认
+- 带时间戳的会议列表
+- 点击段落复制
+- 只有当你当前接近底部时，才自动滚动到最新内容
+
+正常结束会议时，会依次发生：
+
+- 关闭会议卡片
+- 保存一条 `会议` 历史记录
+- 自动打开会议详情窗口
+
+如果你选择的是 `取消转录`，这次会议会被直接丢弃，不会写入历史记录。
+
+### 会议实时翻译
+
+会议实时翻译和普通 `fn+shift` 不是一套交互：
+
+- 只翻译 `them` 段落
+- `我` 的段落保留原文
+- 每次开启会议实时翻译，都需要重新选择目标语言
+- 上一次选择的语言只作为默认高亮项，不会自动直接生效
+- 如果这场会议本身已经有译文，再打开开关时会直接显示，不会重复翻译
+- 会议实时翻译始终走 LLM 翻译链路；如果全局翻译 provider 选的是 Whisper，会议翻译会自动回退到保存的非 Whisper provider
+
+### 会议详情窗口
+
+会议详情窗口同时服务于：
+
+- 正在进行中的 live meeting
+- 历史记录里的会议条目
+
+它支持：
+
+- 查看完整的带时间戳会议转录
+- 在 `them` 段落下展示译文
+- 如果有归档音频，可在详情里回放
+- 导出为 `.txt`
+
+详情窗口也有自己的翻译开关。如果这条会议还没有译文，打开开关后会先弹语言选择，再在详情窗口里完成翻译。
+
+### 隐私与共享
+
+- live 会议悬浮卡片已经在窗口级别设置为不可共享。
+- 这意味着正常屏幕共享 / 窗口共享时，会议卡片不应被一起分享出去。
+- 历史记录项和会议详情窗口仍然是普通应用界面；只有 live 的会议悬浮卡片会被显式排除。
 
 ## 应用设置
 
@@ -353,6 +464,7 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 - `Always show rewrite answer card`
 - `Translate selected text with translation shortcut`
 - `App Enhancement (Beta)`
+- `Meeting Notes (Beta)`
 
 这里控制的是结果如何输出，以及是否启用上下文增强能力：
 
@@ -360,6 +472,7 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 - 开启“始终显示转写答案卡片”后，转写结果会固定走答案卡片，不再只在没有可写输入框时才弹出
 - 开启“选中文本翻译”后，按翻译快捷键时如果已有选区，会优先直接翻译并替换选中文本
 - 开启 `App Enhancement` 后，才会显示和启用基于 App / URL 的上下文增强配置
+- 开启 `Meeting Notes (Beta)` 后，才会显示会议快捷键、会议权限，以及会议历史 / 详情这整条独立流程
 
 ### 语音结束命令
 

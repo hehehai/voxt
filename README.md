@@ -6,7 +6,7 @@
 
 A macOS menu bar voice input and translation app. Hold to speak, release to paste. <br>AI transcription with different rules for different apps and URLs.
 
-**English** · [简体中文](./docs/README.zh-CN.md) · [Report Issues][github-issues-link] · [Prompt](./docs/Prompt.md)
+**English** · [简体中文](./docs/README.zh-CN.md) · [Report Issues][github-issues-link] · [Prompt](./docs/Prompt.md) · [Meeting](./docs/Meeting.md) · [Rewrite](./docs/Rewrite.md)
 
 [![][github-release-shield]][github-release-link]
 [![][macos-version-shield]][macos-version-link]
@@ -40,6 +40,19 @@ A macOS menu bar voice input and translation app. Hold to speak, release to past
 - Rewrite selected text by voice, for example: "Make this shorter and smoother."
 - Optional rewrite answer card keeps generated content visible even when no writable input is focused.
 - More than voice input: it also works like a voice-driven AI assistant.
+
+**Meeting Notes (Beta)** `fn+option`
+
+- A dedicated floating meeting card for long-running conversation capture.
+- Current beta uses dual-source capture:
+  - microphone is labeled as `Me`
+  - system audio is labeled as `Them`
+- Meeting mode follows the current ASR engine:
+  - `Whisper`
+  - `MLX Audio`
+  - `Remote ASR`
+- Realtime behavior follows the current engine/model/provider configuration when available.
+- The live meeting card is configured as non-shareable at the window level so it should stay out of normal screen sharing / window sharing output.
 
 [![][back-to-top]](#readme-top)
 
@@ -187,13 +200,21 @@ For fuller provider notes, signup links, endpoints, and configuration examples, 
 | Provider | Built-in Model Options | Language Support | Realtime Support | Speed | Recommendation | Current Integration |
 | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI Whisper / Transcribe | `whisper-1`, `gpt-4o-mini-transcribe`, `gpt-4o-transcribe` | Multilingual | Partial. Voxt currently uses file-based transcription, with optional chunked pseudo-realtime preview | Medium | High | `v1/audio/transcriptions` |
-| Doubao ASR | `volc.seedasr.sauc.duration`, `volc.bigasr.sauc.duration` | Chinese-first, well suited to mixed Chinese/English realtime usage | Yes | Fast | High | Streaming WebSocket ASR |
+| Doubao ASR | `volc.seedasr.sauc.duration`, `volc.bigasr.sauc.duration`, meeting: `volc.bigasr.auc_turbo` | Chinese-first, well suited to mixed Chinese/English usage | Yes for normal transcription, meeting uses chunk/file mode | Fast | High | WebSocket ASR for normal transcription, HTTP flash/file ASR for meetings |
 | GLM ASR | `glm-asr-2512`, `glm-asr-1` | Officially positioned for broad scenarios and accents; Voxt currently integrates it as standard upload-based transcription | No (current implementation is upload transcription) | Medium | Medium-high | HTTP transcription endpoint |
-| Aliyun Bailian ASR | `qwen3-asr-flash-realtime`, `fun-asr-realtime`, `paraformer-realtime-*` | Depends on model family: Qwen3 ASR is multilingual, Fun/Paraformer cover Chinese-English or broader multilingual use | Yes | Fast | High | Realtime WebSocket ASR, with separate endpoints for Qwen / Fun / Paraformer families |
+| Aliyun Bailian ASR | `qwen3-asr-flash-realtime`, `fun-asr-realtime`, `paraformer-realtime-*`, meeting: `qwen3-asr-flash-filetrans`, `fun-asr`, `paraformer-v2` | Depends on model family: Qwen3 ASR is multilingual, Fun/Paraformer cover Chinese-English or broader multilingual use | Yes for normal transcription, meeting uses chunk/file mode | Fast | High | Realtime WebSocket ASR plus meeting-specific async/file ASR |
+
+Meeting Notes has a separate `Meeting ASR` model slot for `Doubao ASR` and `Aliyun Bailian ASR`.
+
+- The section appears in `Settings > Model > Remote ASR > [Provider]` only when `Meeting Notes (Beta)` is enabled.
+- Meetings do not reuse the provider's normal realtime model. They use the dedicated meeting model instead.
+- If the meeting model is missing, Voxt blocks meeting start and shows setup guidance in the provider list.
+- Use `Test Meeting ASR` to verify the meeting-specific request path before starting a meeting.
 
 Common remote ASR errors / states:
 
 - `Needs Setup`
+- `Meeting ASR not configured`
 - Missing API key for OpenAI / GLM / Aliyun
 - Missing `Access Token` or `App ID` for Doubao
 - `Invalid ASR endpoint URL`
@@ -258,6 +279,12 @@ You can think of them as three working modes:
 - `fn+shift`: turn what you say into a target language, or directly translate selected text
 - `fn+control`: treat your speech as a prompt and let the model generate, rewrite, or polish text
 
+When `Meeting Notes (Beta)` is enabled in `General > Output`, Voxt also exposes a fourth shortcut:
+
+| Shortcut | Action | Typical Use | Default Interaction |
+| --- | --- | --- | --- |
+| `fn+option` | Meeting notes | Live meeting capture and later review | Starts the dedicated meeting overlay and saves a `Meeting` history entry when finished |
+
 Detailed behavior:
 
 - `fn` standard transcription
@@ -284,6 +311,90 @@ Interaction details:
 - All shortcuts can be remapped in Settings, and you can switch to the `command Combo` preset at any time.
 
 [![][back-to-top]](#readme-top)
+
+## Meeting Notes (Beta)
+
+`Meeting Notes (Beta)` is a separate module for meetings, calls, and long conversation capture. It does not inject text into the focused input and does not reuse the normal recording overlay.
+
+For a full walkthrough, see [docs/Meeting.md](./docs/Meeting.md).
+
+### How To Enable It
+
+- Disabled by default.
+- Turn it on in `General > Output > Meeting Notes (Beta)`.
+- After enabling:
+  - the meeting shortcut appears in Hotkey settings
+  - meeting-related permissions appear in the Permissions page
+  - the meeting overlay becomes available
+
+### Current Beta Architecture
+
+- ASR engine: follows the current transcription engine
+  - `Whisper`
+  - `MLX Audio`
+  - `Remote ASR`
+- `Direct Dictation` is currently not available for meetings.
+- Audio sources:
+  - microphone -> `Me`
+  - system audio -> `Them`
+- Speaker separation in beta v1 is source-based, not true diarization.
+- Realtime behavior currently follows engine/model/provider capability:
+  - `Whisper`: follows the global `Realtime` toggle
+  - `MLX Audio`: realtime-capable models use lower-latency meeting updates
+  - `Remote ASR`: `Doubao` and `Aliyun` use dedicated meeting chunk/file transcription models; `OpenAI` and `GLM` keep their existing chunk-based meeting path
+- Live segments are merged into one timeline and saved into History as `Meeting`.
+
+### Meeting Overlay
+
+The live meeting card is optimized for capture:
+
+- collapsible header-only mode
+- pause / resume
+- close with secondary confirmation
+- timestamped transcript list
+- click-to-copy per segment
+- auto-scroll that follows new content only when you are already near the bottom
+
+Finishing a meeting normally:
+
+- closes the meeting card
+- saves a `Meeting` history entry
+- opens the meeting detail window automatically
+
+If you choose `Cancel Transcription`, the meeting is discarded and no history entry is created.
+
+### Realtime Translation In Meeting Mode
+
+Meeting mode has its own realtime translation behavior:
+
+- translation is applied to `Them` segments only
+- `Me` segments stay as original text
+- every time you enable meeting realtime translation, Voxt asks you to choose a target language
+- the last selected language is only highlighted as the default choice in the picker
+- if a meeting already contains translated segments, turning the switch back on simply reveals those translated lines again
+- meeting realtime translation always uses the LLM translation path; if your global provider is set to `Whisper`, Voxt falls back to the saved non-Whisper translation provider for meeting translation
+
+### Meeting Detail Window
+
+The meeting detail window is shared by:
+
+- live meeting sessions
+- saved meeting history entries
+
+It supports:
+
+- reading the full timestamped transcript
+- showing translated lines under `Them` segments
+- replaying archived meeting audio when available
+- exporting the transcript as `.txt`
+
+The detail window also has its own translation switch. If the meeting has not been translated yet, turning it on opens the language picker and then translates the meeting content there.
+
+### Privacy / Sharing Behavior
+
+- The live floating meeting overlay is marked as non-shareable at the window level.
+- This is intended to keep the meeting card out of normal screen sharing and window sharing output.
+- The history entry and detail window remain normal app UI; only the live meeting overlay is explicitly excluded from sharing.
 
 ## App Settings
 
@@ -350,6 +461,7 @@ This is especially important for local model users.
 - `Always show rewrite answer card`
 - `Translate selected text with translation shortcut`
 - `App Enhancement (Beta)`
+- `Meeting Notes (Beta)`
 
 This section controls how Voxt returns output and whether context-aware enhancement is enabled:
 
@@ -357,6 +469,7 @@ This section controls how Voxt returns output and whether context-aware enhancem
 - When "Always show rewrite answer card" is on, rewrite results always open in the answer card instead of only appearing when no writable input is focused
 - When "Translate selected text with translation shortcut" is on, the translation shortcut directly translates and replaces the current selection if any text is highlighted
 - When `App Enhancement` is enabled, Voxt shows and activates app- and URL-aware enhancement configuration
+- When `Meeting Notes (Beta)` is enabled, Voxt exposes the dedicated meeting shortcut, meeting permissions, and meeting history/detail flow
 
 ### Voice End Command
 

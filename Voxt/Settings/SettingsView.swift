@@ -18,6 +18,7 @@ struct SettingsView: View {
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
+    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @State private var selectedTab: SettingsTab
     @State private var hasMissingPermissions = false
     @State private var missingModelConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue] = []
@@ -126,6 +127,9 @@ struct SettingsView: View {
             }
         }
         .onChange(of: muteSystemAudioWhileRecording) { _, _ in
+            refreshPermissionBadge()
+        }
+        .onChange(of: meetingNotesBetaEnabled) { _, _ in
             refreshPermissionBadge()
         }
         .alert(
@@ -239,7 +243,9 @@ struct SettingsView: View {
         let speechGranted = SFSpeechRecognizer.authorizationStatus() == .authorized
         let accessibilityGranted = AccessibilityPermissionManager.isTrusted()
         let inputMonitoringGranted: Bool
-        let requiresSystemAudioCapture = UserDefaults.standard.bool(forKey: AppPreferenceKey.muteSystemAudioWhileRecording)
+        let requiresSystemAudioCapture =
+            UserDefaults.standard.bool(forKey: AppPreferenceKey.muteSystemAudioWhileRecording) ||
+            UserDefaults.standard.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled)
         let systemAudioCaptureGranted = !requiresSystemAudioCapture || SystemAudioCapturePermission.authorizationStatus() == .authorized
         if #available(macOS 10.15, *) {
             inputMonitoringGranted = CGPreflightListenEventAccess()

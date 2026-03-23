@@ -104,6 +104,60 @@ extension AppDelegate {
         finishSession()
     }
 
+    func translateMeetingRealtimeText(_ text: String, targetLanguage: TranslationTargetLanguage) async throws -> String {
+        let resolution = MeetingTranslationSupport.resolvedProvider(
+            selectedProvider: translationModelProvider,
+            fallbackProvider: translationFallbackModelProvider,
+            transcriptionEngine: transcriptionEngine,
+            targetLanguage: targetLanguage,
+            whisperModelState: whisperModelManager.state
+        )
+        let resolvedPrompt = resolvedTranslationPrompt(
+            targetLanguage: targetLanguage,
+            sourceText: text,
+            strict: false
+        )
+
+        switch resolution.provider {
+        case .customLLM:
+            let repo = translationCustomLLMRepo
+            guard customLLMManager.isModelDownloaded(repo: repo) else {
+                throw NSError(
+                    domain: "Voxt.MeetingTranslation",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Custom LLM model is not installed.")]
+                )
+            }
+            return try await customLLMManager.translate(
+                text,
+                targetLanguage: targetLanguage,
+                systemPrompt: resolvedPrompt,
+                modelRepo: repo
+            )
+        case .remoteLLM:
+            let context = resolvedRemoteLLMContext(forTranslation: true)
+            guard context.configuration.hasUsableModel else {
+                throw NSError(
+                    domain: "Voxt.MeetingTranslation",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("No configured remote LLM model yet.")]
+                )
+            }
+            return try await RemoteLLMRuntimeClient().translate(
+                text: text,
+                systemPrompt: resolvedPrompt,
+                provider: context.provider,
+                configuration: context.configuration
+            )
+        case .whisperKit:
+            throw NSError(
+                domain: "Voxt.MeetingTranslation",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Meeting realtime translation requires a text-capable translation provider.")]
+            )
+        }
+    }
+
     func beginSelectedTextTranslationIfPossible() -> Bool {
         guard translateSelectedTextOnTranslationHotkey else { return false }
         guard !isSessionActive else { return false }

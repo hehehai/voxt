@@ -16,6 +16,9 @@ final class HotkeyManagerTests: XCTestCase {
         AppPreferenceKey.rewriteHotkeyKeyCode,
         AppPreferenceKey.rewriteHotkeyModifiers,
         AppPreferenceKey.rewriteHotkeySidedModifiers,
+        AppPreferenceKey.meetingHotkeyKeyCode,
+        AppPreferenceKey.meetingHotkeyModifiers,
+        AppPreferenceKey.meetingHotkeySidedModifiers,
         AppPreferenceKey.hotkeyTriggerMode,
         AppPreferenceKey.hotkeyDistinguishModifierSides,
         AppPreferenceKey.hotkeyPreset,
@@ -119,9 +122,11 @@ final class HotkeyManagerTests: XCTestCase {
                 isKeyDown: false,
                 isTranslationKeyDown: false,
                 isRewriteKeyDown: false,
+                isMeetingKeyDown: false,
                 hasTranscriptionModifierTapCandidate: false,
                 hasTranslationModifierTapCandidate: false,
                 hasRewriteModifierTapCandidate: false,
+                hasMeetingModifierTapCandidate: false,
                 sawNonModifierKeyDuringFunctionChord: false,
                 currentSidedModifiers: []
             )

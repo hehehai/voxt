@@ -20,11 +20,17 @@ enum RemoteProviderConfigurationPolicy {
         if case .asr(let provider) = target {
             return provider == .doubaoASR
         }
+        if case .meetingASR(let provider) = target {
+            return provider == .doubaoASR
+        }
         return false
     }
 
     static func isOpenAIASRTest(_ target: RemoteProviderTestTarget) -> Bool {
         if case .asr(let provider) = target {
+            return provider == .openAIWhisper
+        }
+        if case .meetingASR(let provider) = target {
             return provider == .openAIWhisper
         }
         return false
@@ -34,6 +40,8 @@ enum RemoteProviderConfigurationPolicy {
         switch target {
         case .asr:
             return "asr"
+        case .meetingASR:
+            return "meeting-asr"
         case .llm:
             return "llm"
         }
@@ -43,6 +51,8 @@ enum RemoteProviderConfigurationPolicy {
         switch target {
         case .asr(let provider):
             return provider.modelOptions
+        case .meetingASR(let provider):
+            return RemoteASRMeetingConfiguration.meetingModelOptions(for: provider)
         case .llm(let provider):
             return provider.modelOptions
         }
@@ -112,6 +122,9 @@ enum RemoteProviderConfigurationPolicy {
                 RemoteEndpointPreset(id: "aliyun-asr-fun-ap-southeast-1", title: "Realtime WS · Singapore", url: "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference"),
                 RemoteEndpointPreset(id: "aliyun-asr-fun-us-east-1", title: "Realtime WS · US (Virginia)", url: "wss://dashscope-us.aliyuncs.com/api-ws/v1/inference")
             ]
+        case .meetingASR(let provider):
+            guard provider == .aliyunBailianASR else { return [] }
+            return AliyunMeetingASRConfiguration.endpointPresets(for: resolvedModel)
         case .llm(let provider):
             guard provider == .aliyunBailian else { return [] }
             return [

@@ -106,6 +106,10 @@ enum AudioInputDeviceManager {
         return devices.first?.id
     }
 
+    static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        snapshotAvailableInputDevices().contains(where: { $0.id == deviceID })
+    }
+
     static func makeDevicesObserver(onChange: @escaping @Sendable () -> Void) -> AudioInputDeviceObserver? {
         AudioInputDeviceObserver(onChange: onChange)
     }

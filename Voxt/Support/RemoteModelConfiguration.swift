@@ -8,9 +8,13 @@ struct RemoteModelOption: Hashable, Identifiable {
 enum DoubaoASRConfiguration {
     static let modelV2 = "volc.seedasr.sauc.duration"
     static let modelV1 = "volc.bigasr.sauc.duration"
+    static let meetingModelTurbo = "volc.bigasr.auc_turbo"
+    static let meetingModelV2 = "volc.seedasr.auc"
+    static let meetingModelV1 = "volc.bigasr.auc"
     static let defaultNostreamEndpoint = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
     static let defaultStreamingEndpointV1 = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
     static let defaultStreamingEndpointV2 = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+    static let defaultMeetingFlashEndpoint = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
     static let requestAudioFormat = "wav"
     static let streamingAudioFormat = "pcm"
     static let requestAudioCodec = "raw"
@@ -18,6 +22,15 @@ enum DoubaoASRConfiguration {
     static func resolvedEndpoint(_ endpoint: String, model: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
+            if let url = URL(string: trimmed) {
+                let normalizedPath = url.path.lowercased()
+                if normalizedPath.hasSuffix("/api/v3/sauc/bigmodel_async") {
+                    return trimmed.replacingOccurrences(of: "/api/v3/sauc/bigmodel_async", with: "/api/v3/sauc/bigmodel_nostream")
+                }
+                if normalizedPath.hasSuffix("/api/v3/sauc/bigmodel") {
+                    return trimmed.replacingOccurrences(of: "/api/v3/sauc/bigmodel", with: "/api/v3/sauc/bigmodel_nostream")
+                }
+            }
             return trimmed
         }
 
@@ -43,6 +56,56 @@ enum DoubaoASRConfiguration {
     static func resolvedResourceID(_ model: String) -> String {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? modelV2 : trimmed
+    }
+
+    static func isMeetingFlashModel(_ model: String) -> Bool {
+        resolvedResourceID(model) == meetingModelTurbo
+    }
+
+    static func canonicalMeetingModel(_ model: String) -> String {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch trimmed {
+        case "", meetingModelV1, meetingModelV2:
+            return meetingModelTurbo
+        default:
+            return trimmed
+        }
+    }
+
+    static func resolvedMeetingFlashEndpoint(_ endpoint: String) -> String {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return defaultMeetingFlashEndpoint }
+        guard var components = URLComponents(string: trimmed) else { return trimmed }
+        if components.scheme == "wss" {
+            components.scheme = "https"
+        } else if components.scheme == "ws" {
+            components.scheme = "http"
+        }
+        let path = components.path.lowercased()
+        if path.hasSuffix("/api/v3/auc/bigmodel/recognize/flash") {
+            return components.string ?? trimmed
+        }
+        if path.hasSuffix("/api/v3/auc/bigmodel/query") {
+            components.path = components.path.replacingOccurrences(of: "/api/v3/auc/bigmodel/query", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
+            return components.string ?? trimmed
+        }
+        if path.hasSuffix("/api/v3/auc/bigmodel/submit") {
+            components.path = components.path.replacingOccurrences(of: "/api/v3/auc/bigmodel/submit", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
+            return components.string ?? trimmed
+        }
+        if path.hasSuffix("/api/v3/sauc/bigmodel_nostream") {
+            components.path = components.path.replacingOccurrences(of: "/api/v3/sauc/bigmodel_nostream", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
+            return components.string ?? trimmed
+        }
+        if path.hasSuffix("/api/v3/sauc/bigmodel_async") {
+            components.path = components.path.replacingOccurrences(of: "/api/v3/sauc/bigmodel_async", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
+            return components.string ?? trimmed
+        }
+        if path.hasSuffix("/api/v3/sauc/bigmodel") {
+            components.path = components.path.replacingOccurrences(of: "/api/v3/sauc/bigmodel", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
+            return components.string ?? trimmed
+        }
+        return components.string ?? trimmed
     }
 
     static func fullRequestPayload(
@@ -505,6 +568,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
 struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     let providerID: String
     var model: String
+    var meetingModel: String
     var endpoint: String
     var apiKey: String
     var appID: String
@@ -517,6 +581,10 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var hasUsableMeetingModel: Bool {
+        !meetingModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var isConfigured: Bool {
         hasUsableModel && (
             !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
@@ -527,6 +595,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     init(
         providerID: String,
         model: String,
+        meetingModel: String = "",
         endpoint: String,
         apiKey: String,
         appID: String = "",
@@ -535,6 +604,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     ) {
         self.providerID = providerID
         self.model = model
+        self.meetingModel = meetingModel
         self.endpoint = endpoint
         self.apiKey = apiKey
         self.appID = appID
@@ -545,6 +615,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case providerID
         case model
+        case meetingModel
         case endpoint
         case apiKey
         case appID
@@ -556,6 +627,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         providerID = try container.decode(String.self, forKey: .providerID)
         model = try container.decodeIfPresent(String.self, forKey: .model) ?? ""
+        meetingModel = try container.decodeIfPresent(String.self, forKey: .meetingModel) ?? ""
         endpoint = try container.decodeIfPresent(String.self, forKey: .endpoint) ?? ""
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
         appID = try container.decodeIfPresent(String.self, forKey: .appID) ?? ""
@@ -605,6 +677,7 @@ enum RemoteModelConfigurationStore {
         return RemoteProviderConfiguration(
             providerID: provider.rawValue,
             model: provider.suggestedModel,
+            meetingModel: "",
             endpoint: "",
             apiKey: ""
         )
@@ -620,6 +693,7 @@ enum RemoteModelConfigurationStore {
         return RemoteProviderConfiguration(
             providerID: provider.rawValue,
             model: provider.suggestedModel,
+            meetingModel: "",
             endpoint: "",
             apiKey: ""
         )

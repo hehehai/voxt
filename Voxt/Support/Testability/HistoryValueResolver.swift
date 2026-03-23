@@ -1,7 +1,7 @@
 import Foundation
 
 enum HistoryValueResolver {
-    nonisolated static func resolvedKind(for sessionOutputMode: AppDelegate.SessionOutputMode) -> TranscriptionHistoryKind {
+    static func resolvedKind(for sessionOutputMode: AppDelegate.SessionOutputMode) -> TranscriptionHistoryKind {
         switch sessionOutputMode {
         case .transcription:
             return .normal
@@ -12,13 +12,13 @@ enum HistoryValueResolver {
         }
     }
 
-    nonisolated static func resolvedDuration(from start: Date?, to end: Date?) -> TimeInterval? {
+    static func resolvedDuration(from start: Date?, to end: Date?) -> TimeInterval? {
         guard let start, let end else { return nil }
         let value = end.timeIntervalSince(start)
         return value >= 0 ? value : nil
     }
 
-    nonisolated static func historyDisplayEndpoint(_ endpoint: String?) -> String? {
+    static func historyDisplayEndpoint(_ endpoint: String?) -> String? {
         let trimmed = endpoint?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty else { return AppLocalization.localizedString("Default") }
         guard var components = URLComponents(string: trimmed) else { return trimmed }

@@ -282,7 +282,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let provider = activeProvider ?? selectedProvider
         let configuration = selectedProviderConfiguration(for: provider)
         let hintPayload = resolvedHintPayload(for: provider, configuration: configuration)
+        return try await transcribeAudioFile(
+            fileURL: fileURL,
+            provider: provider,
+            configuration: configuration,
+            hintPayload: hintPayload
+        )
+    }
 
+    private func transcribeAudioFile(
+        fileURL: URL,
+        provider: RemoteASRProvider,
+        configuration: RemoteProviderConfiguration,
+        hintPayload: ResolvedASRHintPayload
+    ) async throws -> String {
         switch provider {
         case .openAIWhisper:
             return try await transcribeOpenAI(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
@@ -326,6 +339,48 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
         let all = RemoteModelConfigurationStore.loadConfigurations(from: raw)
         return RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: all)
+    }
+
+    func currentMeetingConfiguration() -> (provider: RemoteASRProvider, configuration: RemoteProviderConfiguration) {
+        let provider = selectedProvider
+        let configuration = selectedProviderConfiguration(for: provider)
+        return (
+            provider,
+            RemoteASRMeetingConfiguration.resolvedMeetingConfiguration(
+                provider: provider,
+                configuration: configuration
+            )
+        )
+    }
+
+    func transcribeMeetingAudioFile(_ fileURL: URL) async throws -> String {
+        let currentMeeting = currentMeetingConfiguration()
+        let provider = currentMeeting.provider
+        let configuration = currentMeeting.configuration
+        guard configuration.isConfigured else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -101,
+                userInfo: [NSLocalizedDescriptionKey: "Remote ASR is not configured yet."]
+            )
+        }
+        guard RemoteASRMeetingConfiguration.hasValidMeetingModel(
+            provider: provider,
+            configuration: configuration
+        ) else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -102,
+                userInfo: [NSLocalizedDescriptionKey: RemoteASRMeetingConfiguration.startBlockedMessage(for: provider, configuration: configuration)]
+            )
+        }
+        let hintPayload = resolvedHintPayload(for: provider, configuration: configuration)
+        return try await transcribeAudioFile(
+            fileURL: fileURL,
+            provider: provider,
+            configuration: configuration,
+            hintPayload: hintPayload
+        )
     }
 
     private func resolvedHintPayload(
@@ -471,6 +526,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         guard !appID.isEmpty else {
             throw NSError(domain: "Voxt.RemoteASR", code: -4, userInfo: [NSLocalizedDescriptionKey: "Doubao App ID is empty."])
         }
+        if DoubaoASRConfiguration.isMeetingFlashModel(resourceID) {
+            return try await transcribeDoubaoMeetingFlash(
+                fileURL: fileURL,
+                appID: appID,
+                accessToken: accessToken,
+                resourceID: resourceID,
+                endpoint: DoubaoASRConfiguration.resolvedMeetingFlashEndpoint(configuration.endpoint)
+            )
+        }
         return try await transcribeDoubaoWebSocket(
             fileURL: fileURL,
             appID: appID,
@@ -481,15 +545,76 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
     }
 
+    private func transcribeDoubaoMeetingFlash(
+        fileURL: URL,
+        appID: String,
+        accessToken: String,
+        resourceID: String,
+        endpoint: String
+    ) async throws -> String {
+        guard let url = URL(string: endpoint) else {
+            throw NSError(domain: "Voxt.RemoteASR", code: -34, userInfo: [NSLocalizedDescriptionKey: "Invalid Doubao meeting endpoint URL."])
+        }
+
+        let audioData = try Data(contentsOf: fileURL)
+        let body: [String: Any] = [
+            "user": ["uid": "voxt-meeting"],
+            "audio": ["data": audioData.base64EncodedString()],
+            "request": [
+                "enable_itn": true,
+                "enable_punc": true,
+                "enable_ddc": true,
+                "show_utterances": true
+            ]
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
+        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
+        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
+        request.setValue(UUID().uuidString.lowercased(), forHTTPHeaderField: "X-Api-Request-Id")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await VoxtNetworkSession.active.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "Voxt.RemoteASR", code: -35, userInfo: [NSLocalizedDescriptionKey: "Invalid Doubao meeting HTTP response."])
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let payload = String(data: data.prefix(500), encoding: .utf8) ?? ""
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "Doubao meeting ASR request failed (HTTP \(http.statusCode)): \(payload)"]
+            )
+        }
+
+        let object = try JSONSerialization.jsonObject(with: data)
+        if let text = extractDoubaoText(in: object), !text.isEmpty {
+            return text
+        }
+        if let text = extractText(in: object), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return ""
+    }
+
     private func transcribeAliyunBailian(fileURL: URL, configuration: RemoteProviderConfiguration) async throws -> String {
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? RemoteASRProvider.aliyunBailianASR.suggestedModel
             : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isAliyunFunRealtimeModel(model) || isAliyunQwenRealtimeModel(model) else {
+        guard isAliyunFunRealtimeModel(model)
+                || isAliyunQwenRealtimeModel(model)
+                || isAliyunFileTranscriptionModel(model)
+                || AliyunMeetingASRConfiguration.routing(for: model) == .compatibleShortAudio
+        else {
             throw NSError(
                 domain: "Voxt.RemoteASR",
                 code: -33,
-                userInfo: [NSLocalizedDescriptionKey: "Aliyun ASR in Voxt supports realtime WebSocket models only. Please select a Qwen/Fun/Paraformer realtime model."]
+                userInfo: [NSLocalizedDescriptionKey: "Aliyun ASR in Voxt supports Qwen/Fun/Paraformer transcription models only."]
             )
         }
 
@@ -497,7 +622,18 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         guard !token.isEmpty else {
             throw NSError(domain: "Voxt.RemoteASR", code: -30, userInfo: [NSLocalizedDescriptionKey: "Aliyun Bailian API key is empty."])
         }
-        let endpoint = URL(string: resolvedAliyunRealtimeEndpoint(configuration.endpoint))!
+        if let validationError = AliyunMeetingASRConfiguration.validationError(model: model, endpoint: configuration.endpoint) {
+            throw NSError(domain: "Voxt.RemoteASR", code: -36, userInfo: [NSLocalizedDescriptionKey: validationError])
+        }
+        if isAliyunFileTranscriptionModel(model) {
+            return try await AliyunMeetingASRClient.transcribe(
+                fileURL: fileURL,
+                apiKey: token,
+                model: model,
+                endpoint: configuration.endpoint
+            )
+        }
+        let endpoint = URL(string: AliyunMeetingASRConfiguration.resolvedCompatibleEndpoint(configuration.endpoint, model: model))!
         let fileData = try Data(contentsOf: fileURL)
         let dataURI = "data:\(audioMIMEType(for: fileURL));base64,\(fileData.base64EncodedString())"
 
@@ -542,7 +678,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
 
         let object = try JSONSerialization.jsonObject(with: data)
-        if let text = extractAliyunBailianASRText(from: object), !text.isEmpty {
+        if let text = AliyunMeetingASRClient.extractText(from: object), !text.isEmpty {
             return text
         }
         throw NSError(domain: "Voxt.RemoteASR", code: -32, userInfo: [NSLocalizedDescriptionKey: "Aliyun Bailian ASR returned no text content."])
@@ -569,12 +705,18 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         request.timeoutInterval = 45
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
-        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
         ws.resume()
 
         let taskID = UUID().uuidString.lowercased()
         let responseState = AliyunFunResponseState()
-        let context = AliyunFunStreamingContext(ws: ws, taskID: taskID, responseState: responseState)
+        let context = AliyunFunStreamingContext(
+            session: managedSocket.session,
+            ws: ws,
+            taskID: taskID,
+            responseState: responseState
+        )
         aliyunStreamingContext = context
         receiveAliyunFunMessages(context)
 
@@ -773,11 +915,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
         ws.resume()
 
         let responseState = AliyunQwenResponseState()
-        let context = AliyunQwenStreamingContext(ws: ws, responseState: responseState)
+        let context = AliyunQwenStreamingContext(
+            session: managedSocket.session,
+            ws: ws,
+            responseState: responseState
+        )
         aliyunQwenStreamingContext = context
         receiveAliyunQwenMessages(context)
         sendAliyunQwenSessionUpdate(through: ws, hintPayload: hintPayload) { error in
@@ -987,10 +1134,12 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             "Doubao websocket connect. endpoint=\(endpoint), resource=\(resourceID)"
         )
 
-        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
         ws.resume()
         defer {
             ws.cancel(with: .goingAway, reason: nil)
+            _ = managedSocket.session
         }
 
         let reqID = UUID().uuidString.lowercased()
@@ -1095,9 +1244,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             "Doubao stream connect. endpoint=\(endpoint), resource=\(resourceID)"
         )
 
-        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
         ws.resume()
-        let context = DoubaoStreamingContext(ws: ws, responseState: DoubaoResponseState())
+        let context = DoubaoStreamingContext(
+            session: managedSocket.session,
+            ws: ws,
+            responseState: DoubaoResponseState()
+        )
         doubaoStreamingContext = context
         receiveDoubaoMessages(context, endpoint: endpoint, resourceID: resourceID, appID: appID, accessToken: accessToken)
 
@@ -2110,63 +2264,6 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func extractAliyunBailianASRText(from object: Any) -> String? {
-        if let dict = object as? [String: Any] {
-            if let choices = dict["choices"] as? [[String: Any]],
-               let first = choices.first,
-               let message = first["message"] as? [String: Any] {
-                if let content = message["content"] as? String {
-                    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        return trimmed
-                    }
-                }
-
-                if let blocks = message["content"] as? [[String: Any]] {
-                    let texts = blocks.compactMap { block -> String? in
-                        if let text = block["text"] as? String {
-                            return text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        }
-                        return nil
-                    }.filter { !$0.isEmpty }
-                    if !texts.isEmpty {
-                        return texts.joined(separator: "\n")
-                    }
-                }
-            }
-
-            if let output = dict["output"] as? [String: Any] {
-                if let text = output["text"] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return text
-                }
-                if let results = output["results"] as? [[String: Any]] {
-                    let texts = results.compactMap { item in
-                        (item["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    }.filter { !$0.isEmpty }
-                    if !texts.isEmpty {
-                        return texts.joined(separator: "\n")
-                    }
-                }
-            }
-        }
-        return nil
-    }
-
-    private func resolvedAliyunRealtimeEndpoint(_ endpoint: String) -> String {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-        }
-        if let url = URL(string: trimmed) {
-            let normalizedPath = url.path.lowercased()
-            if normalizedPath.hasSuffix("/chat/completions") { return trimmed }
-            if normalizedPath.hasSuffix("/models") {
-                return replacingPathSuffix(in: trimmed, oldSuffix: "/models", newSuffix: "/chat/completions")
-            }
-        }
-        return trimmed
-    }
-
     private func resolvedAliyunFunRealtimeEndpoint(_ endpoint: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
@@ -2198,6 +2295,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private func isAliyunQwenRealtimeModel(_ model: String) -> Bool {
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalized.hasPrefix("qwen3-asr-flash-realtime")
+    }
+
+    private func isAliyunFileTranscriptionModel(_ model: String) -> Bool {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasPrefix("qwen3-asr-flash-filetrans")
+            || normalized == "fun-asr"
+            || normalized == "paraformer-v2"
     }
 
     private func resolvedAliyunQwenRealtimeEndpoint(_ endpoint: String, model: String) -> String {
@@ -2458,12 +2562,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
 @MainActor
 private final class AliyunQwenStreamingContext {
+    let session: URLSession
     let ws: URLSessionWebSocketTask
     let responseState: AliyunQwenResponseState
     var isClosed = false
     var didStartAudioStream = false
 
-    init(ws: URLSessionWebSocketTask, responseState: AliyunQwenResponseState) {
+    init(session: URLSession, ws: URLSessionWebSocketTask, responseState: AliyunQwenResponseState) {
+        self.session = session
         self.ws = ws
         self.responseState = responseState
     }
@@ -2535,13 +2641,15 @@ private actor AliyunQwenResponseState {
 
 @MainActor
 private final class AliyunFunStreamingContext {
+    let session: URLSession
     let ws: URLSessionWebSocketTask
     let taskID: String
     let responseState: AliyunFunResponseState
     var isClosed = false
     var didStartAudioStream = false
 
-    init(ws: URLSessionWebSocketTask, taskID: String, responseState: AliyunFunResponseState) {
+    init(session: URLSession, ws: URLSessionWebSocketTask, taskID: String, responseState: AliyunFunResponseState) {
+        self.session = session
         self.ws = ws
         self.taskID = taskID
         self.responseState = responseState
@@ -2619,6 +2727,7 @@ private actor AliyunFunResponseState {
 
 @MainActor
 private final class DoubaoStreamingContext {
+    let session: URLSession
     let ws: URLSessionWebSocketTask
     let responseState: DoubaoResponseState
     var isClosed = false
@@ -2628,7 +2737,8 @@ private final class DoubaoStreamingContext {
     var nextAudioSequence: Int32 = 2
     var lastAudioSequence: Int32 = 0
 
-    init(ws: URLSessionWebSocketTask, responseState: DoubaoResponseState) {
+    init(session: URLSession, ws: URLSessionWebSocketTask, responseState: DoubaoResponseState) {
+        self.session = session
         self.ws = ws
         self.responseState = responseState
     }

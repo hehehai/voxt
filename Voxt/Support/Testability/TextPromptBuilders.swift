@@ -1,7 +1,7 @@
 import Foundation
 
 struct TranslationPromptBuilder {
-    nonisolated static func build(
+    static func build(
         systemPrompt: String,
         targetLanguage: TranslationTargetLanguage,
         sourceText: String,
@@ -37,7 +37,7 @@ struct TranslationPromptBuilder {
 }
 
 struct RewritePromptBuilder {
-    nonisolated static func build(
+    static func build(
         systemPrompt: String,
         dictatedPrompt: String,
         sourceText: String,

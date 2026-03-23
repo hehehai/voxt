@@ -51,7 +51,7 @@ struct EnhancementPromptResolver {
     static let rawTranscriptionTemplateVariable = "{{RAW_TRANSCRIPTION}}"
     static let userMainLanguageTemplateVariable = "{{USER_MAIN_LANGUAGE}}"
 
-    nonisolated static func resolve(_ input: Input) -> Output {
+    static func resolve(_ input: Input) -> Output {
         let fallbackPrompt = resolvedGlobalPrompt(input.globalPrompt)
 
         func makeFallback(reason: GlobalFallbackReason) -> Output {
@@ -139,12 +139,12 @@ struct EnhancementPromptResolver {
         return makeFallback(reason: .noGroupMatch(bundleID: input.frontmostBundleID))
     }
 
-    nonisolated private static func resolvedGlobalPrompt(_ prompt: String) -> String {
+    private static func resolvedGlobalPrompt(_ prompt: String) -> String {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? AppPreferenceKey.defaultEnhancementPrompt : trimmed
     }
 
-    nonisolated private static func resolvedPrompt(
+    private static func resolvedPrompt(
         template: String,
         rawTranscription: String,
         userMainLanguagePromptValue: String,

@@ -3,6 +3,8 @@ import Foundation
 
 struct RemoteProviderConfigurationSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
+    @AppStorage(AppPreferenceKey.remoteASRSelectedProvider) private var selectedRemoteASRProviderRaw = RemoteASRProvider.openAIWhisper.rawValue
 
     let providerTitle: String
     let credentialHint: String?
@@ -13,6 +15,8 @@ struct RemoteProviderConfigurationSheet: View {
 
     @State private var selectedProviderModel = ""
     @State private var customModelID = ""
+    @State private var selectedMeetingModel = ""
+    @State private var customMeetingModelID = ""
     @State private var endpoint = ""
     @State private var apiKey = ""
     @State private var appID = ""
@@ -28,6 +32,10 @@ struct RemoteProviderConfigurationSheet: View {
                 .font(.headline)
 
             modelSection
+
+            if showsMeetingASRSection {
+                meetingModelSection
+            }
 
             if !isDoubaoASRTest {
                 endpointAndKeySection
@@ -47,6 +55,13 @@ struct RemoteProviderConfigurationSheet: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let activeProviderNotice {
+                Text(activeProviderNotice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             actionSection
 
             if let testResultMessage, !testResultMessage.isEmpty {
@@ -61,6 +76,8 @@ struct RemoteProviderConfigurationSheet: View {
         .onAppear {
             configureModelSelection()
             customModelID = configuration.model
+            configureMeetingModelSelection()
+            customMeetingModelID = configuration.meetingModel
             endpoint = configuration.endpoint
             apiKey = configuration.apiKey
             appID = configuration.appID
@@ -150,6 +167,35 @@ struct RemoteProviderConfigurationSheet: View {
         }
     }
 
+    private var meetingModelSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Meeting ASR")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Picker("Meeting ASR", selection: meetingModelSelectionBinding) {
+                ForEach(meetingModelOptions, id: \.self) { option in
+                    Text(option.title).tag(option.id)
+                }
+                Text("Custom...").tag(customModelOptionID)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if resolvedMeetingSelectionForPicker == customModelOptionID {
+                Text("Custom Meeting Model ID")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("e.g. qwen3-asr-flash-filetrans", text: $customMeetingModelID)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Text("Used only for Meeting Notes transcription.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var doubaoCredentialsSection: some View {
         Group {
             VStack(alignment: .leading, spacing: 8) {
@@ -191,6 +237,13 @@ struct RemoteProviderConfigurationSheet: View {
             }
             .disabled(isTestingConnection)
 
+            if showsMeetingASRSection {
+                Button("Test Meeting ASR") {
+                    testMeetingConnection()
+                }
+                .disabled(isTestingConnection)
+            }
+
             Spacer()
             Button("Cancel") {
                 dismiss()
@@ -207,6 +260,7 @@ struct RemoteProviderConfigurationSheet: View {
         RemoteProviderConfiguration(
             providerID: configuration.providerID,
             model: resolvedModelValue(),
+            meetingModel: resolvedMeetingModelValue(),
             endpoint: isDoubaoASRTest ? "" : endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
             apiKey: isDoubaoASRTest ? "" : apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
             appID: appID.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -216,24 +270,39 @@ struct RemoteProviderConfigurationSheet: View {
     }
 
     private func testConnection() {
+        runConnectionTest(for: testTarget, modelForLog: currentConfigurationSnapshot.model)
+    }
+
+    private func testMeetingConnection() {
+        guard let provider = asrProviderForSheet else { return }
+        runConnectionTest(
+            for: .meetingASR(provider),
+            modelForLog: currentConfigurationSnapshot.meetingModel
+        )
+    }
+
+    private func runConnectionTest(
+        for target: RemoteProviderTestTarget,
+        modelForLog: String
+    ) {
         let snapshot = currentConfigurationSnapshot
         isTestingConnection = true
         testResultMessage = nil
         testResultIsSuccess = false
         VoxtLog.info(
-            "Remote provider test started. target=\(testTargetLogName), provider=\(configuration.providerID), model=\(snapshot.model), endpoint=\(sanitizedEndpointForLog(snapshot.endpoint)), hasAPIKey=\(!snapshot.apiKey.isEmpty), hasAppID=\(!snapshot.appID.isEmpty), hasAccessToken=\(!snapshot.accessToken.isEmpty)"
+            "Remote provider test started. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), meetingModel=\(snapshot.meetingModel), endpoint=\(sanitizedEndpointForLog(snapshot.endpoint)), hasAPIKey=\(!snapshot.apiKey.isEmpty), hasAppID=\(!snapshot.appID.isEmpty), hasAccessToken=\(!snapshot.accessToken.isEmpty)"
         )
 
         Task {
             do {
-                let tester = RemoteProviderConnectivityTester(testTarget: testTarget)
+                let tester = RemoteProviderConnectivityTester(testTarget: target)
                 let message = try await tester.run(configuration: snapshot)
                 await MainActor.run {
                     isTestingConnection = false
                     testResultIsSuccess = true
                     testResultMessage = message
                     VoxtLog.info(
-                        "Remote provider test succeeded. target=\(testTargetLogName), provider=\(configuration.providerID), model=\(snapshot.model), message=\(message)"
+                        "Remote provider test succeeded. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), message=\(message)"
                     )
                 }
             } catch {
@@ -242,7 +311,7 @@ struct RemoteProviderConfigurationSheet: View {
                     testResultIsSuccess = false
                     testResultMessage = error.localizedDescription
                     VoxtLog.warning(
-                        "Remote provider test failed. target=\(testTargetLogName), provider=\(configuration.providerID), model=\(snapshot.model), error=\(error.localizedDescription)"
+                        "Remote provider test failed. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), error=\(error.localizedDescription)"
                     )
                 }
             }
@@ -268,6 +337,37 @@ struct RemoteProviderConfigurationSheet: View {
 
     private var customModelOptionID: String {
         RemoteProviderConfigurationPolicy.customModelOptionID
+    }
+
+    private var asrProviderForSheet: RemoteASRProvider? {
+        if case .asr(let provider) = testTarget {
+            return provider
+        }
+        if case .meetingASR(let provider) = testTarget {
+            return provider
+        }
+        return nil
+    }
+
+    private var activeProviderNotice: String? {
+        guard let provider = asrProviderForSheet else { return nil }
+        let active = RemoteASRProvider(rawValue: selectedRemoteASRProviderRaw) ?? .openAIWhisper
+        guard active != provider else { return nil }
+        return AppLocalization.format(
+            "Current active Remote ASR provider is %@. Testing %@ here does not switch the active provider.",
+            active.title,
+            provider.title
+        )
+    }
+
+    private var showsMeetingASRSection: Bool {
+        guard meetingNotesBetaEnabled, let provider = asrProviderForSheet else { return false }
+        return RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider)
+    }
+
+    private var meetingModelOptions: [RemoteModelOption] {
+        guard let provider = asrProviderForSheet else { return [] }
+        return RemoteASRMeetingConfiguration.meetingModelOptions(for: provider)
     }
 
     private var providerModelOptions: [RemoteModelOption] {
@@ -317,12 +417,65 @@ struct RemoteProviderConfigurationSheet: View {
         )
     }
 
+    private func configureMeetingModelSelection() {
+        let trimmed = configuration.meetingModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let optionIDs = Set(meetingModelOptions.map(\.id))
+        if optionIDs.contains(trimmed) {
+            selectedMeetingModel = trimmed
+            return
+        }
+        if let provider = asrProviderForSheet {
+            let suggested = RemoteASRMeetingConfiguration.suggestedMeetingModel(for: provider)
+            if optionIDs.contains(suggested) {
+                selectedMeetingModel = suggested
+                return
+            }
+        }
+        selectedMeetingModel = customModelOptionID
+    }
+
     private func resolvedModelValue() -> String {
         RemoteProviderConfigurationPolicy.resolvedModelValue(
             target: testTarget,
             resolvedSelection: resolvedSelectionForPicker,
             customModelID: customModelID
         )
+    }
+
+    private var resolvedMeetingSelectionForPicker: String {
+        let trimmed = selectedMeetingModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let optionIDs = Set(meetingModelOptions.map(\.id))
+        if optionIDs.contains(trimmed) {
+            return trimmed
+        }
+        let configured = configuration.meetingModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if optionIDs.contains(configured) {
+            return configured
+        }
+        return customModelOptionID
+    }
+
+    private var meetingModelSelectionBinding: Binding<String> {
+        Binding(
+            get: { resolvedMeetingSelectionForPicker },
+            set: {
+                selectedMeetingModel = $0
+                if $0 != customModelOptionID,
+                   customMeetingModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    customMeetingModelID = $0
+                }
+            }
+        )
+    }
+
+    private func resolvedMeetingModelValue() -> String {
+        guard showsMeetingASRSection else {
+            return configuration.meetingModel
+        }
+        if resolvedMeetingSelectionForPicker == customModelOptionID {
+            return customMeetingModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return resolvedMeetingSelectionForPicker
     }
 
     private var endpointPresets: [RemoteEndpointPreset] {

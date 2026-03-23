@@ -25,6 +25,7 @@ struct HotkeySettingsView: View {
         case transcription
         case translation
         case rewrite
+        case meeting
     }
 
     @AppStorage(AppPreferenceKey.hotkeyKeyCode) private var hotkeyKeyCode = Int(HotkeyPreference.defaultKeyCode)
@@ -36,6 +37,10 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.rewriteHotkeyKeyCode) private var rewriteHotkeyKeyCode = Int(HotkeyPreference.defaultRewriteKeyCode)
     @AppStorage(AppPreferenceKey.rewriteHotkeyModifiers) private var rewriteHotkeyModifiers = Int(HotkeyPreference.defaultRewriteModifiers.rawValue)
     @AppStorage(AppPreferenceKey.rewriteHotkeySidedModifiers) private var rewriteHotkeySidedModifiers = 0
+    @AppStorage(AppPreferenceKey.meetingHotkeyKeyCode) private var meetingHotkeyKeyCode = Int(HotkeyPreference.defaultMeetingKeyCode)
+    @AppStorage(AppPreferenceKey.meetingHotkeyModifiers) private var meetingHotkeyModifiers = Int(HotkeyPreference.defaultMeetingModifiers.rawValue)
+    @AppStorage(AppPreferenceKey.meetingHotkeySidedModifiers) private var meetingHotkeySidedModifiers = 0
+    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.hotkeyTriggerMode) private var hotkeyTriggerMode = HotkeyPreference.defaultTriggerMode.rawValue
     @AppStorage(AppPreferenceKey.hotkeyDistinguishModifierSides) private var distinguishModifierSides = HotkeyPreference.defaultDistinguishModifierSides
     @AppStorage(AppPreferenceKey.hotkeyPreset) private var hotkeyPreset = HotkeyPreference.defaultPreset.rawValue
@@ -149,6 +154,41 @@ struct HotkeySettingsView: View {
         Binding(
             get: { SidedModifierFlags(rawValue: rewriteHotkeySidedModifiers).filtered(by: rewriteModifierBinding.wrappedValue) },
             set: { rewriteHotkeySidedModifiers = $0.filtered(by: rewriteModifierBinding.wrappedValue).rawValue }
+        )
+    }
+
+    private var meetingHotkeyBinding: Binding<UInt16> {
+        Binding(
+            get: { UInt16(meetingHotkeyKeyCode) },
+            set: {
+                meetingHotkeyKeyCode = Int($0)
+                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+            }
+        )
+    }
+
+    private var meetingModifierBinding: Binding<NSEvent.ModifierFlags> {
+        Binding(
+            get: { NSEvent.ModifierFlags(rawValue: UInt(meetingHotkeyModifiers)).intersection(.hotkeyRelevant) },
+            set: {
+                meetingHotkeyModifiers = Int($0.rawValue)
+                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+            }
+        )
+    }
+
+    private var currentMeetingHotkey: HotkeyPreference.Hotkey {
+        HotkeyPreference.Hotkey(
+            keyCode: meetingHotkeyBinding.wrappedValue,
+            modifiers: meetingModifierBinding.wrappedValue,
+            sidedModifiers: meetingSidedModifierBinding.wrappedValue
+        )
+    }
+
+    private var meetingSidedModifierBinding: Binding<SidedModifierFlags> {
+        Binding(
+            get: { SidedModifierFlags(rawValue: meetingHotkeySidedModifiers).filtered(by: meetingModifierBinding.wrappedValue) },
+            set: { meetingHotkeySidedModifiers = $0.filtered(by: meetingModifierBinding.wrappedValue).rawValue }
         )
     }
 
@@ -270,6 +310,24 @@ struct HotkeySettingsView: View {
                         onConfirmPending: confirmPendingCapture
                     )
 
+                    if meetingNotesBetaEnabled {
+                        shortcutInput(
+                            titleKey: "Meeting Notes",
+                            hotkey: displayedHotkey(for: .meeting, current: currentMeetingHotkey),
+                            isRecording: recordingField == .meeting,
+                            isPendingConfirmation: isPendingConfirmation(for: .meeting),
+                            onFocus: { beginRecording(.meeting) },
+                            onReset: {
+                                meetingHotkeyBinding.wrappedValue = HotkeyPreference.defaultMeetingKeyCode
+                                meetingModifierBinding.wrappedValue = HotkeyPreference.defaultMeetingModifiers
+                                meetingSidedModifierBinding.wrappedValue = []
+                                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+                            },
+                            onCancelPending: discardPendingCapture,
+                            onConfirmPending: confirmPendingCapture
+                        )
+                    }
+
                     if recordingField != nil, pendingCapturedField != recordingField {
                         Text("Type your shortcut now. Press Esc to cancel recording.")
                             .font(.caption)
@@ -304,6 +362,13 @@ struct HotkeySettingsView: View {
                             .foregroundStyle(.red)
                     }
 
+                    if meetingNotesBetaEnabled,
+                       let conflict = hotkeyConflictMessage(for: currentMeetingHotkey) {
+                        Text(localizedString("Meeting notes shortcut: %@", conflict))
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
                     if currentHotkey == currentTranslationHotkey {
                         Text("Transcription and translation shortcuts should be different.")
                             .font(.caption)
@@ -318,6 +383,24 @@ struct HotkeySettingsView: View {
 
                     if currentTranslationHotkey == currentRewriteHotkey {
                         Text("Translation and content rewrite shortcuts should be different.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if meetingNotesBetaEnabled, currentHotkey == currentMeetingHotkey {
+                        Text("Transcription and meeting notes shortcuts should be different.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if meetingNotesBetaEnabled, currentTranslationHotkey == currentMeetingHotkey {
+                        Text("Translation and meeting notes shortcuts should be different.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if meetingNotesBetaEnabled, currentRewriteHotkey == currentMeetingHotkey {
+                        Text("Content rewrite and meeting notes shortcuts should be different.")
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
@@ -402,6 +485,11 @@ struct HotkeySettingsView: View {
                     Text("Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation and content rewrite hotkeys start their own sessions.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if meetingNotesBetaEnabled {
+                        Text("Meeting notes: Tap the meeting shortcut to start the dedicated meeting overlay. Tap it again to stop the meeting session.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Text("Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -444,6 +532,10 @@ struct HotkeySettingsView: View {
         rewriteHotkeyKeyCode = Int(values.rewrite.keyCode)
         rewriteHotkeyModifiers = Int(values.rewrite.modifiers.rawValue)
         rewriteHotkeySidedModifiers = values.rewrite.sidedModifiers.rawValue
+
+        meetingHotkeyKeyCode = Int(values.meeting.keyCode)
+        meetingHotkeyModifiers = Int(values.meeting.modifiers.rawValue)
+        meetingHotkeySidedModifiers = values.meeting.sidedModifiers.rawValue
     }
 
     @ViewBuilder
@@ -571,6 +663,10 @@ struct HotkeySettingsView: View {
             rewriteHotkeyBinding.wrappedValue = hotkey.keyCode
             rewriteModifierBinding.wrappedValue = hotkey.modifiers
             rewriteSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        case .meeting:
+            meetingHotkeyBinding.wrappedValue = hotkey.keyCode
+            meetingModifierBinding.wrappedValue = hotkey.modifiers
+            meetingSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
         }
 
         hotkeyPreset = HotkeyPreference.Preset.custom.rawValue

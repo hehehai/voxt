@@ -47,7 +47,7 @@ struct PermissionsSettingsView: View {
             case .inputMonitoring:
                 return "Required for reliable global modifier hotkeys (such as fn)."
             case .systemAudioCapture:
-                return "Required only when muting other apps' media audio during recording is enabled."
+                return "Required for Meeting Notes and for muting other apps' media audio during recording."
             }
         }
     }
@@ -106,6 +106,7 @@ struct PermissionsSettingsView: View {
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.appBranchCustomBrowsers) private var appBranchCustomBrowsersJSON = "[]"
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
+    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.transcriptionEngine) private var transcriptionEngineRaw = TranscriptionEngine.mlxAudio.rawValue
 
     private var transcriptionEngine: TranscriptionEngine {
@@ -118,7 +119,7 @@ struct PermissionsSettingsView: View {
             kinds.append(.speechRecognition)
         }
         kinds.append(contentsOf: [.accessibility, .inputMonitoring])
-        if muteSystemAudioWhileRecording {
+        if muteSystemAudioWhileRecording || meetingNotesBetaEnabled {
             kinds.append(.systemAudioCapture)
         }
         return kinds
@@ -186,6 +187,9 @@ struct PermissionsSettingsView: View {
             refreshBrowserAutomationStates()
         }
         .onChange(of: muteSystemAudioWhileRecording) { _, _ in
+            refreshStates()
+        }
+        .onChange(of: meetingNotesBetaEnabled) { _, _ in
             refreshStates()
         }
         .onChange(of: transcriptionEngineRaw) { _, _ in

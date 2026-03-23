@@ -3,6 +3,7 @@ import zlib
 
 enum RemoteProviderTestTarget {
     case asr(RemoteASRProvider)
+    case meetingASR(RemoteASRProvider)
     case llm(RemoteLLMProvider)
 }
 
@@ -17,6 +18,8 @@ struct RemoteProviderConnectivityTester {
         switch testTarget {
         case .asr(let provider):
             return try await testASRProvider(provider, configuration: configuration)
+        case .meetingASR(let provider):
+            return try await testMeetingASRProvider(provider, configuration: configuration)
         case .llm(let provider):
             return try await testLLMProvider(provider, configuration: configuration)
         }
@@ -91,10 +94,92 @@ struct RemoteProviderConnectivityTester {
         }
     }
 
+    private func testMeetingASRProvider(
+        _ provider: RemoteASRProvider,
+        configuration: RemoteProviderConfiguration
+    ) async throws -> String {
+        guard RemoteASRMeetingConfiguration.hasValidMeetingModel(
+            provider: provider,
+            configuration: configuration
+        ) else {
+            throw NSError(
+                domain: "Voxt.Settings",
+                code: -6,
+                userInfo: [NSLocalizedDescriptionKey: RemoteASRMeetingConfiguration.startBlockedMessage(for: provider, configuration: configuration)]
+            )
+        }
+
+        let meetingConfiguration = RemoteASRMeetingConfiguration.resolvedMeetingConfiguration(
+            provider: provider,
+            configuration: configuration
+        )
+
+        switch provider {
+        case .doubaoASR:
+            let token = meetingConfiguration.accessToken
+            guard !token.isEmpty else {
+                throw NSError(domain: "Voxt.Settings", code: -7, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Doubao Access Token is required for testing.")])
+            }
+            guard !meetingConfiguration.appID.isEmpty else {
+                throw NSError(domain: "Voxt.Settings", code: -8, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Doubao App ID is required for testing.")])
+            }
+            let endpoint = DoubaoASRConfiguration.resolvedMeetingFlashEndpoint(
+                meetingConfiguration.endpoint
+            )
+            return try await testDoubaoMeetingReachability(
+                endpoint: endpoint,
+                appID: meetingConfiguration.appID,
+                accessToken: token,
+                model: meetingConfiguration.model,
+                successMessage: AppLocalization.localizedString("Connection test succeeded (Meeting ASR reachable).")
+            )
+        case .aliyunBailianASR:
+            guard !meetingConfiguration.apiKey.isEmpty else {
+                throw NSError(domain: "Voxt.Settings", code: -9, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Aliyun Bailian API Key is required for testing.")])
+            }
+            let model = meetingConfiguration.model.isEmpty
+                ? RemoteASRMeetingConfiguration.suggestedMeetingModel(for: provider)
+                : meetingConfiguration.model
+            switch AliyunMeetingASRConfiguration.routing(for: model) {
+            case .asyncFileTranscription:
+                let endpoint = AliyunMeetingASRConfiguration.resolvedTranscriptionEndpoint(
+                    meetingConfiguration.endpoint,
+                    model: model
+                )
+                return try await testAliyunMeetingReachability(
+                    endpoint: endpoint,
+                    apiKey: meetingConfiguration.apiKey,
+                    model: model,
+                    successMessage: AppLocalization.localizedString("Connection test succeeded (Meeting ASR reachable).")
+                )
+            case .compatibleShortAudio:
+                let endpoint = AliyunMeetingASRConfiguration.resolvedCompatibleEndpoint(
+                    meetingConfiguration.endpoint,
+                    model: model
+                )
+                return try await testAliyunASRRealtimeReachability(
+                    endpoint: endpoint,
+                    apiKey: meetingConfiguration.apiKey,
+                    model: model,
+                    successMessage: AppLocalization.localizedString("Connection test succeeded (Meeting ASR reachable).")
+                )
+            case nil:
+                throw NSError(
+                    domain: "Voxt.Settings",
+                    code: -125,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.format("Aliyun meeting ASR model %@ is not supported.", model)]
+                )
+            }
+        case .openAIWhisper, .glmASR:
+            return try await testASRProvider(provider, configuration: configuration)
+        }
+    }
+
     private func testAliyunASRRealtimeReachability(
         endpoint: String,
         apiKey: String,
-        model: String
+        model: String,
+        successMessage: String = ""
     ) async throws -> String {
         let audioDataURI = "data:audio/wav;base64,\(silentTestWavData().base64EncodedString())"
         let body: [String: Any] = [
@@ -118,7 +203,43 @@ struct RemoteProviderConnectivityTester {
         return try await testJSONPOSTReachability(
             endpoint: endpoint,
             headers: ["Authorization": "Bearer \(apiKey)"],
-            body: body
+            body: body,
+            successMessage: successMessage
+        )
+    }
+
+    private func testAliyunMeetingReachability(
+        endpoint: String,
+        apiKey: String,
+        model: String,
+        successMessage: String
+    ) async throws -> String {
+        let body: [String: Any] = [
+            "model": model,
+            "input": [
+                "file_url": "https://dashscope.oss-cn-beijing.aliyuncs.com/audios/welcome.mp3"
+            ],
+            "parameters": [
+                "channel_id": [0]
+            ]
+        ]
+
+        guard let url = URL(string: endpoint) else {
+            throw NSError(domain: "Voxt.Settings", code: -124, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid endpoint URL.")])
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("enable", forHTTPHeaderField: "X-DashScope-Async")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await sendLLMTestRequest(
+            request,
+            context: "Aliyun meeting ASR test",
+            successMessage: successMessage
         )
     }
 
@@ -638,7 +759,8 @@ struct RemoteProviderConnectivityTester {
     private func testJSONPOSTReachability(
         endpoint: String,
         headers: [String: String],
-        body: [String: Any]
+        body: [String: Any],
+        successMessage: String = ""
     ) async throws -> String {
         guard let url = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.Settings", code: -35, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid endpoint URL.")])
@@ -653,10 +775,18 @@ struct RemoteProviderConnectivityTester {
             request.setValue(value, forHTTPHeaderField: key)
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try await sendLLMTestRequest(request, context: "LLM JSON POST test")
+        return try await sendLLMTestRequest(
+            request,
+            context: "LLM JSON POST test",
+            successMessage: successMessage
+        )
     }
 
-    private func sendLLMTestRequest(_ request: URLRequest, context: String) async throws -> String {
+    private func sendLLMTestRequest(
+        _ request: URLRequest,
+        context: String,
+        successMessage: String = ""
+    ) async throws -> String {
         let bodyPreview = request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<empty>"
         logHTTPRequest(context: context, request: request, bodyPreview: bodyPreview)
         let (data, response) = try await VoxtNetworkSession.active.data(for: request)
@@ -667,6 +797,9 @@ struct RemoteProviderConnectivityTester {
 
         let payload = String(data: data.prefix(220), encoding: .utf8) ?? ""
         if (200...299).contains(http.statusCode) {
+            if !successMessage.isEmpty {
+                return successMessage
+            }
             return AppLocalization.format("Connection test succeeded (HTTP %d).", http.statusCode)
         }
         if http.statusCode == 400 || http.statusCode == 422 {
@@ -764,7 +897,8 @@ struct RemoteProviderConnectivityTester {
         endpoint: String,
         appID: String,
         accessToken: String,
-        model: String
+        model: String,
+        successMessage: String = ""
     ) async throws -> String {
         guard let url = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.Settings", code: -12, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid WebSocket endpoint URL.")])
@@ -833,6 +967,9 @@ struct RemoteProviderConnectivityTester {
                     throw NSError(domain: "Voxt.Settings", code: 403, userInfo: [NSLocalizedDescriptionKey: errorText])
                 }
                 if parsed.hasText || parsed.isFinal || parsed.messageType == 0xB || parsed.messageType == 0x9 {
+                    if !successMessage.isEmpty {
+                        return successMessage
+                    }
                     return AppLocalization.localizedString("Connection test succeeded (Doubao WebSocket reachable).")
                 }
             }
@@ -854,6 +991,75 @@ struct RemoteProviderConnectivityTester {
             }
             throw error
         }
+    }
+
+    private func testDoubaoMeetingReachability(
+        endpoint: String,
+        appID: String,
+        accessToken: String,
+        model: String,
+        successMessage: String
+    ) async throws -> String {
+        guard let url = URL(string: endpoint) else {
+            throw NSError(domain: "Voxt.Settings", code: -122, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid endpoint URL.")])
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
+        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
+        request.setValue(normalizedDoubaoResourceID(model), forHTTPHeaderField: "X-Api-Resource-Id")
+        request.setValue(UUID().uuidString.lowercased(), forHTTPHeaderField: "X-Api-Request-Id")
+        let body: [String: Any] = [
+            "user": ["uid": "voxt-test"],
+            "audio": ["data": silentTestWavData().base64EncodedString()],
+            "request": [
+                "enable_itn": true,
+                "enable_punc": true,
+                "enable_ddc": true,
+                "show_utterances": true
+            ]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        logHTTPRequest(
+            context: "Doubao meeting ASR flash test",
+            request: request,
+            bodyPreview: "{\"audio\":\"<base64 wav>\",\"request\":{\"show_utterances\":true}}"
+        )
+
+        let (data, response) = try await VoxtNetworkSession.active.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "Voxt.Settings", code: -123, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid server response.")])
+        }
+        logHTTPResponse(context: "Doubao meeting ASR flash test", response: http, data: data)
+
+        let payload = String(data: data.prefix(220), encoding: .utf8) ?? ""
+        if (200...299).contains(http.statusCode) {
+            let apiStatus = http.value(forHTTPHeaderField: "X-Api-Status-Code")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if apiStatus.isEmpty || apiStatus == "20000000" {
+                return successMessage
+            }
+            let apiMessage = http.value(forHTTPHeaderField: "X-Api-Message")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !apiMessage.isEmpty {
+                return AppLocalization.format("Meeting ASR endpoint reachable. %@", apiMessage)
+            }
+            return successMessage
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw NSError(
+                domain: "Voxt.Settings",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.format("Server reachable, but authentication failed (HTTP %d). %@", http.statusCode, payload)]
+            )
+        }
+        throw NSError(
+            domain: "Voxt.Settings",
+            code: http.statusCode,
+            userInfo: [NSLocalizedDescriptionKey: AppLocalization.format("Connection failed (HTTP %d). %@", http.statusCode, payload)]
+        )
     }
 
     private func receiveWebSocketMessage(
@@ -1367,6 +1573,8 @@ struct RemoteProviderConnectivityTester {
         switch testTarget {
         case .asr:
             return "asr"
+        case .meetingASR:
+            return "meeting-asr"
         case .llm:
             return "llm"
         }

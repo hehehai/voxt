@@ -25,6 +25,7 @@ class HotkeyManager {
     var onTranslationKeyUp: (() -> Void)?
     var onRewriteKeyDown: (() -> Void)?
     var onRewriteKeyUp: (() -> Void)?
+    var onMeetingKeyDown: (() -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -34,9 +35,12 @@ class HotkeyManager {
     private var activeTranslationKeyCode: UInt16?
     private var isRewriteKeyDown = false
     private var activeRewriteKeyCode: UInt16?
+    private var isMeetingKeyDown = false
+    private var activeMeetingKeyCode: UInt16?
     private var hasTranscriptionModifierTapCandidate = false
     private var hasTranslationModifierTapCandidate = false
     private var hasRewriteModifierTapCandidate = false
+    private var hasMeetingModifierTapCandidate = false
     private var sawNonModifierKeyDuringFunctionChord = false
     private var currentSidedModifiers: SidedModifierFlags = []
     private var suppressTranscriptionTapUntil = Date.distantPast
@@ -46,6 +50,7 @@ class HotkeyManager {
     private var pendingTranscriptionLongPressReleaseTask: Task<Void, Never>?
     private var pendingTranslationLongPressReleaseTask: Task<Void, Never>?
     private var pendingRewriteLongPressReleaseTask: Task<Void, Never>?
+    private var pendingMeetingLongPressReleaseTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var didPromptAccessibility = false
     private var didPromptInputMonitoring = false
@@ -77,6 +82,8 @@ class HotkeyManager {
         pendingTranslationLongPressReleaseTask = nil
         pendingRewriteLongPressReleaseTask?.cancel()
         pendingRewriteLongPressReleaseTask = nil
+        pendingMeetingLongPressReleaseTask?.cancel()
+        pendingMeetingLongPressReleaseTask = nil
     }
 
     func start() {
@@ -86,10 +93,11 @@ class HotkeyManager {
         let transcriptionHotkey = HotkeyPreference.load()
         let translationHotkey = HotkeyPreference.loadTranslation()
         let rewriteHotkey = HotkeyPreference.loadRewrite()
+        let meetingHotkey = HotkeyPreference.loadMeeting()
         let distinguishModifierSides = HotkeyPreference.loadDistinguishModifierSides()
         VoxtLog.info("Starting hotkey manager.")
         VoxtLog.hotkey(
-            "Hotkey bindings. transcription=\(HotkeyPreference.displayString(for: transcriptionHotkey, distinguishModifierSides: distinguishModifierSides)), translation=\(HotkeyPreference.displayString(for: translationHotkey, distinguishModifierSides: distinguishModifierSides)), rewrite=\(HotkeyPreference.displayString(for: rewriteHotkey, distinguishModifierSides: distinguishModifierSides)), trigger=\(HotkeyPreference.loadTriggerMode().rawValue)"
+            "Hotkey bindings. transcription=\(HotkeyPreference.displayString(for: transcriptionHotkey, distinguishModifierSides: distinguishModifierSides)), translation=\(HotkeyPreference.displayString(for: translationHotkey, distinguishModifierSides: distinguishModifierSides)), rewrite=\(HotkeyPreference.displayString(for: rewriteHotkey, distinguishModifierSides: distinguishModifierSides)), meeting=\(HotkeyPreference.displayString(for: meetingHotkey, distinguishModifierSides: distinguishModifierSides)), trigger=\(HotkeyPreference.loadTriggerMode().rawValue)"
         )
         guard preflightAndPromptPermissionsIfNeeded() else {
             scheduleRetry()
@@ -250,6 +258,7 @@ class HotkeyManager {
         let transcriptionHotkey = HotkeyPreference.load()
         let translationHotkey = HotkeyPreference.loadTranslation()
         let rewriteHotkey = HotkeyPreference.loadRewrite()
+        let meetingHotkey = HotkeyPreference.loadMeeting()
         let distinguishModifierSides = HotkeyPreference.loadDistinguishModifierSides()
         let triggerMode = HotkeyPreference.loadTriggerMode()
         if type == .flagsChanged {
@@ -258,8 +267,10 @@ class HotkeyManager {
         let transcriptionFlags = HotkeyPreference.cgFlags(from: transcriptionHotkey.modifiers)
         let translationFlags = HotkeyPreference.cgFlags(from: translationHotkey.modifiers)
         let rewriteFlags = HotkeyPreference.cgFlags(from: rewriteHotkey.modifiers)
+        let meetingFlags = HotkeyPreference.cgFlags(from: meetingHotkey.modifiers)
         let wasTranslationKeyDown = isTranslationKeyDown
         let wasRewriteKeyDown = isRewriteKeyDown
+        let wasMeetingKeyDown = isMeetingKeyDown
 
         resetTransientStateIfIdleGapSuggestsStaleState(
             triggerMode: triggerMode,
@@ -290,10 +301,11 @@ class HotkeyManager {
             triggerMode: triggerMode,
             transcriptionHotkey: transcriptionHotkey,
             translationHotkey: translationHotkey,
-            rewriteHotkey: rewriteHotkey
+            rewriteHotkey: rewriteHotkey,
+            meetingHotkey: meetingHotkey
            ) {
             VoxtLog.hotkey(
-                "Hotkey flagsChanged(tap). keyCode=\(keyCode), flags=\(debugDescription(for: flags)), tHotkey=\(debugDescription(for: transcriptionFlags)), trHotkey=\(debugDescription(for: translationFlags)), rwHotkey=\(debugDescription(for: rewriteFlags)), isKeyDown=\(isKeyDown), isTranslationKeyDown=\(isTranslationKeyDown), isRewriteKeyDown=\(isRewriteKeyDown), sawNonModifier=\(sawNonModifierKeyDuringFunctionChord), suppressRemainingMs=\(max(Int(suppressTranscriptionTapUntil.timeIntervalSinceNow * 1000), 0))"
+                "Hotkey flagsChanged(tap). keyCode=\(keyCode), flags=\(debugDescription(for: flags)), tHotkey=\(debugDescription(for: transcriptionFlags)), trHotkey=\(debugDescription(for: translationFlags)), rwHotkey=\(debugDescription(for: rewriteFlags)), mtHotkey=\(debugDescription(for: meetingFlags)), isKeyDown=\(isKeyDown), isTranslationKeyDown=\(isTranslationKeyDown), isRewriteKeyDown=\(isRewriteKeyDown), isMeetingKeyDown=\(isMeetingKeyDown), sawNonModifier=\(sawNonModifierKeyDuringFunctionChord), suppressRemainingMs=\(max(Int(suppressTranscriptionTapUntil.timeIntervalSinceNow * 1000), 0))"
             )
         }
 
@@ -405,6 +417,56 @@ class HotkeyManager {
             }
         }
 
+        if HotkeyModifierInterpreter.isModifierOnly(meetingHotkey) {
+            if handleModifierOnlyMeetingEvent(
+                type: type,
+                keyCode: keyCode,
+                flags: flags,
+                currentSidedModifiers: currentSidedModifiers,
+                meetingHotkey: meetingHotkey,
+                distinguishModifierSides: distinguishModifierSides,
+                triggerMode: triggerMode,
+                meetingFlags: meetingFlags,
+                wasMeetingKeyDown: wasMeetingKeyDown
+            ) {
+                return
+            }
+        } else {
+            let meetingFlagsMatch = HotkeyPreference.hotkeyMatches(
+                meetingHotkey,
+                eventFlags: flags,
+                sidedModifiers: currentSidedModifiers,
+                distinguishModifierSides: distinguishModifierSides
+            )
+            switch type {
+            case .keyDown:
+                if keyCode == meetingHotkey.keyCode, meetingFlagsMatch, !isAutoRepeat {
+                    if triggerMode == .tap {
+                        emitMeetingKeyDown()
+                    } else if !isMeetingKeyDown {
+                        isMeetingKeyDown = true
+                        activeMeetingKeyCode = keyCode
+                        emitMeetingKeyDown()
+                    }
+                    return
+                }
+            case .keyUp:
+                if triggerMode == .tap {
+                    if activeMeetingKeyCode == keyCode {
+                        activeMeetingKeyCode = nil
+                    }
+                    return
+                }
+                if isMeetingKeyDown, activeMeetingKeyCode == keyCode {
+                    isMeetingKeyDown = false
+                    activeMeetingKeyCode = nil
+                    return
+                }
+            default:
+                break
+            }
+        }
+
         // Transcription path runs after translation handling.
         // This keeps fn+shift and fn responsibilities separated.
         if HotkeyModifierInterpreter.isModifierOnly(transcriptionHotkey) {
@@ -416,11 +478,13 @@ class HotkeyManager {
                 transcriptionHotkey: transcriptionHotkey,
                 translationHotkey: translationHotkey,
                 rewriteHotkey: rewriteHotkey,
+                meetingHotkey: meetingHotkey,
                 currentSidedModifiers: currentSidedModifiers,
                 distinguishModifierSides: distinguishModifierSides,
                 transcriptionFlags: transcriptionFlags,
                 translationFlags: translationFlags,
-                rewriteFlags: rewriteFlags
+                rewriteFlags: rewriteFlags,
+                meetingFlags: meetingFlags
             ) {
                 return
             }
@@ -468,15 +532,17 @@ class HotkeyManager {
         transcriptionHotkey: HotkeyPreference.Hotkey,
         translationHotkey: HotkeyPreference.Hotkey,
         rewriteHotkey: HotkeyPreference.Hotkey,
+        meetingHotkey: HotkeyPreference.Hotkey,
         transcriptionFlags: CGEventFlags,
         translationFlags: CGEventFlags,
-        rewriteFlags: CGEventFlags
+        rewriteFlags: CGEventFlags,
+        meetingFlags: CGEventFlags
     ) -> Bool {
         HotkeyModifierInterpreter.shouldDelayTranscriptionTap(
             transcriptionHotkey: transcriptionHotkey,
-            prioritizedModifierHotkeys: [translationHotkey, rewriteHotkey],
+            prioritizedModifierHotkeys: [translationHotkey, rewriteHotkey, meetingHotkey],
             transcriptionFlags: transcriptionFlags,
-            prioritizedFlags: [translationFlags, rewriteFlags]
+            prioritizedFlags: [translationFlags, rewriteFlags, meetingFlags]
         )
     }
 
@@ -504,8 +570,10 @@ class HotkeyManager {
         let hasStaleHigherPriorityState =
             isTranslationKeyDown ||
             isRewriteKeyDown ||
+            isMeetingKeyDown ||
             hasTranslationModifierTapCandidate ||
-            hasRewriteModifierTapCandidate
+            hasRewriteModifierTapCandidate ||
+            hasMeetingModifierTapCandidate
         let hasStaleFunctionTapState =
             flags.contains(.maskSecondaryFn) &&
             (isKeyDown || hasTranscriptionModifierTapCandidate)
@@ -544,9 +612,11 @@ class HotkeyManager {
         isKeyDown ||
         isTranslationKeyDown ||
         isRewriteKeyDown ||
+        isMeetingKeyDown ||
         hasTranscriptionModifierTapCandidate ||
         hasTranslationModifierTapCandidate ||
         hasRewriteModifierTapCandidate ||
+        hasMeetingModifierTapCandidate ||
         sawNonModifierKeyDuringFunctionChord ||
         !currentSidedModifiers.isEmpty
     }
@@ -557,9 +627,10 @@ class HotkeyManager {
         triggerMode: HotkeyPreference.TriggerMode,
         transcriptionHotkey: HotkeyPreference.Hotkey,
         translationHotkey: HotkeyPreference.Hotkey,
-        rewriteHotkey: HotkeyPreference.Hotkey
+        rewriteHotkey: HotkeyPreference.Hotkey,
+        meetingHotkey: HotkeyPreference.Hotkey
     ) -> Bool {
-        guard typeRequiresTapFlagsLog(triggerMode: triggerMode, transcriptionHotkey: transcriptionHotkey, translationHotkey: translationHotkey, rewriteHotkey: rewriteHotkey) else {
+        guard typeRequiresTapFlagsLog(triggerMode: triggerMode, transcriptionHotkey: transcriptionHotkey, translationHotkey: translationHotkey, rewriteHotkey: rewriteHotkey, meetingHotkey: meetingHotkey) else {
             return false
         }
 
@@ -568,9 +639,11 @@ class HotkeyManager {
         isKeyDown ||
         isTranslationKeyDown ||
         isRewriteKeyDown ||
+        isMeetingKeyDown ||
         hasTranscriptionModifierTapCandidate ||
         hasTranslationModifierTapCandidate ||
         hasRewriteModifierTapCandidate ||
+        hasMeetingModifierTapCandidate ||
         sawNonModifierKeyDuringFunctionChord
     }
 
@@ -578,12 +651,14 @@ class HotkeyManager {
         triggerMode: HotkeyPreference.TriggerMode,
         transcriptionHotkey: HotkeyPreference.Hotkey,
         translationHotkey: HotkeyPreference.Hotkey,
-        rewriteHotkey: HotkeyPreference.Hotkey
+        rewriteHotkey: HotkeyPreference.Hotkey,
+        meetingHotkey: HotkeyPreference.Hotkey
     ) -> Bool {
         guard triggerMode == .tap else { return false }
         return HotkeyModifierInterpreter.isModifierOnly(transcriptionHotkey)
             || HotkeyModifierInterpreter.isModifierOnly(translationHotkey)
             || HotkeyModifierInterpreter.isModifierOnly(rewriteHotkey)
+            || HotkeyModifierInterpreter.isModifierOnly(meetingHotkey)
     }
 
     private func handleModifierOnlyTranslationEvent(
@@ -732,6 +807,72 @@ class HotkeyManager {
         return false
     }
 
+    private func handleModifierOnlyMeetingEvent(
+        type: CGEventType,
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        currentSidedModifiers: SidedModifierFlags,
+        meetingHotkey: HotkeyPreference.Hotkey,
+        distinguishModifierSides: Bool,
+        triggerMode: HotkeyPreference.TriggerMode,
+        meetingFlags: CGEventFlags,
+        wasMeetingKeyDown: Bool
+    ) -> Bool {
+        guard type == .flagsChanged else { return false }
+
+        let comboIsDown = HotkeyPreference.hotkeyMatches(
+            meetingHotkey,
+            eventFlags: flags,
+            sidedModifiers: currentSidedModifiers,
+            distinguishModifierSides: distinguishModifierSides
+        )
+        let meetingTriggerDown = HotkeyModifierInterpreter.translationTriggerDown(
+            keyCode: keyCode,
+            comboIsDown: comboIsDown,
+            eventFlags: flags,
+            translationFlags: meetingFlags
+        )
+
+        if triggerMode == .tap {
+            if meetingTriggerDown && !isMeetingKeyDown {
+                VoxtLog.hotkey("Hotkey detect meeting modifier combo down (tap).")
+                cancelPendingTranscriptionTap(resetKeyState: true)
+                isMeetingKeyDown = true
+                hasMeetingModifierTapCandidate = true
+                suppressTranscriptionTapUntil = Date().addingTimeInterval(0.35)
+            }
+            if !comboIsDown && isMeetingKeyDown {
+                VoxtLog.hotkey("Hotkey detect meeting modifier combo up (tap).")
+                if hasMeetingModifierTapCandidate {
+                    VoxtLog.hotkey("Hotkey meeting modifier tap confirmed on release.")
+                    emitMeetingKeyDown()
+                }
+                hasMeetingModifierTapCandidate = false
+                isMeetingKeyDown = false
+                suppressTranscriptionTapUntil = Date().addingTimeInterval(0.20)
+            }
+            return wasMeetingKeyDown != isMeetingKeyDown || comboIsDown
+        }
+
+        if comboIsDown {
+            cancelPendingMeetingLongPressRelease()
+        }
+        if comboIsDown && !isMeetingKeyDown {
+            VoxtLog.hotkey("Hotkey detect meeting modifier combo down (longPress).")
+            isMeetingKeyDown = true
+            emitMeetingKeyDown()
+        } else if !comboIsDown && isMeetingKeyDown {
+            VoxtLog.hotkey("Hotkey detect meeting modifier combo up (longPress-pending).")
+            scheduleMeetingLongPressRelease()
+        } else if meetingFlags == .maskSecondaryFn && HotkeyModifierInterpreter.isFunctionKeyEvent(keyCode) {
+            isMeetingKeyDown.toggle()
+            if isMeetingKeyDown {
+                emitMeetingKeyDown()
+            }
+        }
+        return false
+    }
+
     private func handleModifierOnlyTranscriptionEvent(
         type: CGEventType,
         keyCode: UInt16,
@@ -740,11 +881,13 @@ class HotkeyManager {
         transcriptionHotkey: HotkeyPreference.Hotkey,
         translationHotkey: HotkeyPreference.Hotkey,
         rewriteHotkey: HotkeyPreference.Hotkey,
+        meetingHotkey: HotkeyPreference.Hotkey,
         currentSidedModifiers: SidedModifierFlags,
         distinguishModifierSides: Bool,
         transcriptionFlags: CGEventFlags,
         translationFlags: CGEventFlags,
-        rewriteFlags: CGEventFlags
+        rewriteFlags: CGEventFlags,
+        meetingFlags: CGEventFlags
     ) -> Bool {
         guard type == .flagsChanged else { return true }
 
@@ -764,6 +907,17 @@ class HotkeyManager {
                 distinguishModifierSides: distinguishModifierSides
             ) || isRewriteKeyDown)) {
             VoxtLog.info("Hotkey suppress transcription modifier path because higher-priority combo is active.", verbose: true)
+            cancelPendingTranscriptionTap(resetKeyState: true)
+            return true
+        }
+        if HotkeyModifierInterpreter.isModifierOnly(meetingHotkey) &&
+            (HotkeyPreference.hotkeyMatches(
+                meetingHotkey,
+                eventFlags: flags,
+                sidedModifiers: currentSidedModifiers,
+                distinguishModifierSides: distinguishModifierSides
+            ) || isMeetingKeyDown) {
+            VoxtLog.info("Hotkey suppress transcription modifier path because meeting combo is active.", verbose: true)
             cancelPendingTranscriptionTap(resetKeyState: true)
             return true
         }
@@ -813,12 +967,13 @@ class HotkeyManager {
             if isFunctionReleaseEvent && !isKeyDown {
                 if !sawNonModifierKeyDuringFunctionChord,
                    !isTranslationKeyDown,
-                   !isRewriteKeyDown {
+                   !isRewriteKeyDown,
+                   !isMeetingKeyDown {
                     VoxtLog.hotkey("Hotkey transcription fn-only tap confirmed on release without non-modifier key.")
                     emitKeyDown()
                 } else {
                     VoxtLog.hotkey(
-                        "Hotkey transcription fn-only release ignored. sawNonModifier=\(sawNonModifierKeyDuringFunctionChord), isTranslationKeyDown=\(isTranslationKeyDown), isRewriteKeyDown=\(isRewriteKeyDown)"
+                        "Hotkey transcription fn-only release ignored. sawNonModifier=\(sawNonModifierKeyDuringFunctionChord), isTranslationKeyDown=\(isTranslationKeyDown), isRewriteKeyDown=\(isRewriteKeyDown), isMeetingKeyDown=\(isMeetingKeyDown)"
                     )
                 }
                 sawNonModifierKeyDuringFunctionChord = false
@@ -961,7 +1116,7 @@ class HotkeyManager {
 
     private func invalidateModifierOnlyTapCandidates(for keyCode: UInt16) {
         let keyLabel = HotkeyPreference.keyCodeDisplayString(keyCode)
-        if hasTranscriptionModifierTapCandidate || hasTranslationModifierTapCandidate || hasRewriteModifierTapCandidate {
+        if hasTranscriptionModifierTapCandidate || hasTranslationModifierTapCandidate || hasRewriteModifierTapCandidate || hasMeetingModifierTapCandidate {
             VoxtLog.hotkey("Hotkey invalidated modifier-only tap candidate because non-modifier key went down. key=\(keyLabel)")
         }
         cancelPendingTranscriptionTap(resetKeyState: true)
@@ -970,6 +1125,7 @@ class HotkeyManager {
         hasTranscriptionModifierTapCandidate = false
         hasTranslationModifierTapCandidate = false
         hasRewriteModifierTapCandidate = false
+        hasMeetingModifierTapCandidate = false
     }
 
     private func isModifierKeyCode(_ keyCode: UInt16) -> Bool {
@@ -1034,6 +1190,27 @@ class HotkeyManager {
         pendingRewriteLongPressReleaseTask = nil
     }
 
+    private func scheduleMeetingLongPressRelease() {
+        pendingMeetingLongPressReleaseTask?.cancel()
+        pendingMeetingLongPressReleaseTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(80))
+            } catch {
+                return
+            }
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            guard self.isMeetingKeyDown else { return }
+            self.pendingMeetingLongPressReleaseTask = nil
+            self.isMeetingKeyDown = false
+        }
+    }
+
+    private func cancelPendingMeetingLongPressRelease() {
+        pendingMeetingLongPressReleaseTask?.cancel()
+        pendingMeetingLongPressReleaseTask = nil
+    }
+
     private func scheduleTranscriptionLongPressRelease() {
         pendingTranscriptionLongPressReleaseTask?.cancel()
         pendingTranscriptionLongPressReleaseTask = Task { [weak self] in
@@ -1080,6 +1257,10 @@ class HotkeyManager {
         onRewriteKeyUp?()
     }
 
+    private func emitMeetingKeyDown() {
+        onMeetingKeyDown?()
+    }
+
     private func debugDescription(for flags: CGEventFlags) -> String {
         var values: [String] = []
         if flags.contains(.maskSecondaryFn) { values.append("fn") }
@@ -1097,9 +1278,12 @@ class HotkeyManager {
         activeTranslationKeyCode = nil
         isRewriteKeyDown = false
         activeRewriteKeyCode = nil
+        isMeetingKeyDown = false
+        activeMeetingKeyCode = nil
         hasTranscriptionModifierTapCandidate = false
         hasTranslationModifierTapCandidate = false
         hasRewriteModifierTapCandidate = false
+        hasMeetingModifierTapCandidate = false
         sawNonModifierKeyDuringFunctionChord = false
         currentSidedModifiers = []
         suppressTranscriptionTapUntil = .distantPast
@@ -1116,6 +1300,8 @@ class HotkeyManager {
         pendingTranslationLongPressReleaseTask = nil
         pendingRewriteLongPressReleaseTask?.cancel()
         pendingRewriteLongPressReleaseTask = nil
+        pendingMeetingLongPressReleaseTask?.cancel()
+        pendingMeetingLongPressReleaseTask = nil
     }
 }
 
@@ -1125,9 +1311,11 @@ extension HotkeyManager {
         let isKeyDown: Bool
         let isTranslationKeyDown: Bool
         let isRewriteKeyDown: Bool
+        let isMeetingKeyDown: Bool
         let hasTranscriptionModifierTapCandidate: Bool
         let hasTranslationModifierTapCandidate: Bool
         let hasRewriteModifierTapCandidate: Bool
+        let hasMeetingModifierTapCandidate: Bool
         let sawNonModifierKeyDuringFunctionChord: Bool
         let currentSidedModifiers: SidedModifierFlags
     }
@@ -1174,9 +1362,11 @@ extension HotkeyManager {
             isKeyDown: isKeyDown,
             isTranslationKeyDown: isTranslationKeyDown,
             isRewriteKeyDown: isRewriteKeyDown,
+            isMeetingKeyDown: isMeetingKeyDown,
             hasTranscriptionModifierTapCandidate: hasTranscriptionModifierTapCandidate,
             hasTranslationModifierTapCandidate: hasTranslationModifierTapCandidate,
             hasRewriteModifierTapCandidate: hasRewriteModifierTapCandidate,
+            hasMeetingModifierTapCandidate: hasMeetingModifierTapCandidate,
             sawNonModifierKeyDuringFunctionChord: sawNonModifierKeyDuringFunctionChord,
             currentSidedModifiers: currentSidedModifiers
         )

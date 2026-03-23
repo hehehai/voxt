@@ -8,6 +8,8 @@ struct WaveformView: View {
 
     var displayMode: OverlayDisplayMode
     var sessionIconMode: OverlaySessionIconMode
+    var isModelInitializing: Bool = false
+    var initializingEngine: TranscriptionEngine? = nil
     var audioLevel: Float
     var isRecording: Bool
     var shouldAnimate: Bool
@@ -50,6 +52,7 @@ struct WaveformView: View {
     private var cardOpacity: Double { Double(min(max(overlayCardOpacity, 0), 100)) / 100.0 }
     private var textOverflows: Bool { displayText.count > 38 }
     private var showsLoadingSpinner: Bool { isEnhancing || isRequesting }
+    private var showsInitializationIcon: Bool { isModelInitializing && !showsLoadingSpinner }
 
     var body: some View {
         Group {
@@ -171,6 +174,9 @@ struct WaveformView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.95))
+                .frame(width: 14, height: 14, alignment: .center)
+        } else if showsInitializationIcon {
+            ModelInitializingIconView()
                 .frame(width: 14, height: 14, alignment: .center)
         } else {
             compactModeIcon
@@ -300,6 +306,9 @@ struct WaveformView: View {
         if showsLoadingSpinner {
             LoadingSpinnerIconView(isAnimating: shouldAnimate)
                 .frame(width: 14, height: 14)
+        } else if showsInitializationIcon {
+            ModelInitializingIconView()
+                .frame(width: 14, height: 14)
         } else {
             switch sessionIconMode {
             case .transcription:
@@ -324,14 +333,19 @@ struct WaveformView: View {
         let phase = phases[index]
         let sine = (sin(phase) + 1) / 2
 
+        if isModelInitializing {
+            let quietPattern: [CGFloat] = [4.0, 4.7, 5.4, 6.0, 5.0, 4.3, 5.2, 5.8]
+            return quietPattern[index % quietPattern.count]
+        }
+
         if isRecording {
             let level = normalizedAudioLevel(audioLevel)
             let audioEnvelope = pow(level, 0.84)
             let travelEnvelope = recordingTravelEnvelope(for: index)
             let ambientEnvelope = CGFloat(sine * 0.65 + 0.35)
-            let baseFloor = 0.10 + min(0.08, level * 0.12)
-            let travelStrength = 0.18 + audioEnvelope * 0.82
-            let ambientStrength = 0.08 + audioEnvelope * 0.24
+            let baseFloor = 0.012 + min(0.025, level * 0.03)
+            let travelStrength = 0.005 + audioEnvelope * 0.95
+            let ambientStrength = 0.004 + audioEnvelope * 0.05
             let mixedEnvelope = min(1.0, baseFloor + travelEnvelope * travelStrength + ambientEnvelope * ambientStrength)
             let driven = minH + (maxH - minH) * mixedEnvelope
             return max(minH, driven)
@@ -345,17 +359,20 @@ struct WaveformView: View {
     }
 
     private func glowOpacity(for index: Int) -> Double {
+        if isModelInitializing {
+            return 0.03
+        }
         guard isRecording else { return 0.08 }
         let level = Double(normalizedAudioLevel(audioLevel))
         let travelEnvelope = Double(recordingTravelEnvelope(for: index))
         let ambientPulse = (sin(phases[index] * 1.15) + 1) / 2
-        let glow = 0.07 + ambientPulse * 0.05 + travelEnvelope * 0.12 + level * (0.04 + travelEnvelope * 0.1)
-        return min(0.32, glow)
+        let glow = 0.02 + ambientPulse * 0.01 + travelEnvelope * 0.05 + level * (0.025 + travelEnvelope * 0.07)
+        return min(0.2, glow)
     }
 
     private func normalizedAudioLevel(_ raw: Float) -> CGFloat {
         let clamped = max(0, min(raw, 1))
-        let gained = min(1.0, pow(Double(clamped), 0.82) * 1.05)
+        let gained = min(1.0, pow(Double(clamped), 1.08) * 0.56)
         return CGFloat(gained)
     }
 
@@ -434,21 +451,23 @@ struct WaveformView: View {
         stopAnimating(resetPhases: false)
         currentAnimationInterval = interval
         animTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            let speed = animationSpeed
-            guard speed > 0 else { return }
-            if displayMode == .recording && isRecording {
-                travelPhase.formTruncatingRemainder(dividingBy: Double(barCount))
-                travelPhase += 0.62
-                if travelPhase >= Double(barCount) {
-                    travelPhase -= Double(barCount)
-                }
+            Task { @MainActor in
+                let speed = animationSpeed
+                guard speed > 0 else { return }
+                if displayMode == .recording && isRecording {
+                    travelPhase.formTruncatingRemainder(dividingBy: Double(barCount))
+                    travelPhase += 0.62
+                    if travelPhase >= Double(barCount) {
+                        travelPhase -= Double(barCount)
+                    }
 
-                for i in 0..<barCount {
-                    phases[i] += 0.11 + Double(i) * 0.004
-                }
-            } else {
-                for i in 0..<barCount {
-                    phases[i] += speed + Double(i) * 0.006
+                    for i in 0..<barCount {
+                        phases[i] += 0.11 + Double(i) * 0.004
+                    }
+                } else {
+                    for i in 0..<barCount {
+                        phases[i] += speed + Double(i) * 0.006
+                    }
                 }
             }
         }

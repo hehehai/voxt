@@ -97,6 +97,7 @@ final class WhisperKitModelManager: ObservableObject {
     private var hubBaseURL: URL
     private var loadedWhisper: WhisperKit?
     private var loadedModelID: String?
+    private var loadingTask: Task<WhisperKit, Error>?
     private var downloadTask: Task<Void, Never>?
     private var sizeTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
@@ -112,6 +113,13 @@ final class WhisperKitModelManager: ObservableObject {
     }
 
     var currentModelID: String { modelID }
+    var isCurrentModelLoaded: Bool { loadedWhisper != nil && loadedModelID == modelID }
+    private var shouldKeepResidentLoaded: Bool {
+        let defaults = UserDefaults.standard
+        let keepResident = defaults.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? true
+        let engineRaw = defaults.string(forKey: AppPreferenceKey.transcriptionEngine) ?? ""
+        return keepResident && engineRaw == TranscriptionEngine.whisperKit.rawValue
+    }
 
     static func canonicalModelID(_ modelID: String) -> String {
         availableModels.contains(where: { $0.id == modelID }) ? modelID : defaultModelID
@@ -121,6 +129,8 @@ final class WhisperKitModelManager: ObservableObject {
         let canonicalModelID = Self.canonicalModelID(id)
         guard canonicalModelID != modelID else { return }
         cancelIdleUnloadTask()
+        loadingTask?.cancel()
+        loadingTask = nil
         modelID = canonicalModelID
         loadedWhisper = nil
         loadedModelID = nil
@@ -133,6 +143,13 @@ final class WhisperKitModelManager: ObservableObject {
         hubBaseURL = url
         fetchRemoteSize(for: modelID)
         prefetchAllModelSizes()
+    }
+
+    func refreshResidencyPolicy() {
+        cancelIdleUnloadTask()
+        guard activeUseCount == 0, loadedWhisper != nil else { return }
+        guard !shouldKeepResidentLoaded else { return }
+        scheduleIdleUnloadIfNeeded()
     }
 
     func beginActiveUse() {
@@ -151,6 +168,9 @@ final class WhisperKitModelManager: ObservableObject {
         if let loadedWhisper, loadedModelID == modelID {
             return loadedWhisper
         }
+        if let loadingTask {
+            return try await loadingTask.value
+        }
 
         guard let modelFolder = modelDirectoryURL(id: modelID) else {
             state = .notDownloaded
@@ -162,30 +182,40 @@ final class WhisperKitModelManager: ObservableObject {
         }
 
         state = .loading
-        do {
-            let whisper = try await WhisperKit(
+        let targetModelID = modelID
+        let targetHubBaseURL = hubBaseURL
+        let targetDownloadBase = downloadRootURL()
+        let targetModelFolder = modelFolder.path
+        let loadingTask = Task<WhisperKit, Error> {
+            try await WhisperKit(
                 WhisperKitConfig(
-                    model: modelID,
-                    downloadBase: downloadRootURL(),
+                    model: targetModelID,
+                    downloadBase: targetDownloadBase,
                     modelRepo: Self.repo,
-                    modelEndpoint: hubBaseURL.absoluteString,
-                    modelFolder: modelFolder.path,
+                    modelEndpoint: targetHubBaseURL.absoluteString,
+                    modelFolder: targetModelFolder,
                     verbose: false,
                     load: true,
                     download: false
                 )
             )
+        }
+        self.loadingTask = loadingTask
+        do {
+            let whisper = try await loadingTask.value
+            self.loadingTask = nil
             loadedWhisper = whisper
-            loadedModelID = modelID
+            loadedModelID = targetModelID
             state = .ready
             return whisper
         } catch {
+            self.loadingTask = nil
             if WhisperModelArtifacts.isCorruptLoadFailure(error),
-               let invalidFolder = rawModelDirectoryURL(id: modelID) {
+               let invalidFolder = rawModelDirectoryURL(id: targetModelID) {
                 try? FileManager.default.removeItem(at: invalidFolder)
                 loadedWhisper = nil
                 loadedModelID = nil
-                downloadErrorByID[modelID] = String(localized: "Installed Whisper model is incomplete. Please download it again.")
+                downloadErrorByID[targetModelID] = String(localized: "Installed Whisper model is incomplete. Please download it again.")
                 state = .notDownloaded
             } else {
                 state = .error("Model load failed: \(error.localizedDescription)")
@@ -838,6 +868,7 @@ final class WhisperKitModelManager: ObservableObject {
 
     private func scheduleIdleUnloadIfNeeded() {
         cancelIdleUnloadTask()
+        guard !shouldKeepResidentLoaded else { return }
         idleUnloadTask = Task { [weak self] in
             guard let self else { return }
             do {

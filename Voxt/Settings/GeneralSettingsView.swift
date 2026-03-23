@@ -17,6 +17,7 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.translationTargetLanguage) private var translationTargetLanguageRaw = TranslationTargetLanguage.english.rawValue
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) private var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) private var translateSelectedTextOnTranslationHotkey = true
+    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
@@ -154,6 +155,7 @@ struct GeneralSettingsView: View {
             GeneralOutputCard(
                 autoCopyWhenNoFocusedInput: $autoCopyWhenNoFocusedInput,
                 translateSelectedTextOnTranslationHotkey: $translateSelectedTextOnTranslationHotkey,
+                meetingNotesBetaEnabled: $meetingNotesBetaEnabled,
                 appEnhancementEnabled: $appEnhancementEnabled
             )
 

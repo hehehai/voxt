@@ -3,6 +3,16 @@ import CFNetwork
 import Network
 
 enum VoxtNetworkSession {
+    final class ManagedWebSocketTask {
+        let session: URLSession
+        let task: URLSessionWebSocketTask
+
+        init(session: URLSession, task: URLSessionWebSocketTask) {
+            self.session = session
+            self.task = task
+        }
+    }
+
     enum ProxyMode: String, CaseIterable, Identifiable {
         case system
         case disabled
@@ -149,6 +159,13 @@ enum VoxtNetworkSession {
         }
     }
 
+    static func makeWebSocketTask(with request: URLRequest) -> ManagedWebSocketTask {
+        let settings = currentProxySettings
+        let session = makeSession(for: settings)
+        let task = session.webSocketTask(with: request)
+        return ManagedWebSocketTask(session: session, task: task)
+    }
+
     private static func customSession(settings: ProxySettings) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -156,6 +173,26 @@ enum VoxtNetworkSession {
         configuration.proxyConfigurations = customProxyConfigurations(settings: settings)
         let delegate = settings.hasCredentials ? ProxyAuthenticationDelegate(settings: settings) : nil
         return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+    }
+
+    private static func makeSession(for settings: ProxySettings) -> URLSession {
+        switch settings.mode {
+        case .system:
+            return URLSession(configuration: .default)
+        case .disabled:
+            let configuration = URLSessionConfiguration.ephemeral
+            applyDirectProxyBypass(to: configuration)
+            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+            return URLSession(configuration: configuration)
+        case .custom:
+            guard settings.hasValidCustomEndpoint else {
+                let configuration = URLSessionConfiguration.ephemeral
+                applyDirectProxyBypass(to: configuration)
+                configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+                return URLSession(configuration: configuration)
+            }
+            return customSession(settings: settings)
+        }
     }
 
     private static func applyDirectProxyBypass(to configuration: URLSessionConfiguration) {

@@ -9,6 +9,7 @@ enum AppPreferenceKey {
     static let whisperVADEnabled = "whisperVADEnabled"
     static let whisperTimestampsEnabled = "whisperTimestampsEnabled"
     static let whisperRealtimeEnabled = "whisperRealtimeEnabled"
+    static let whisperKeepResidentLoaded = "whisperKeepResidentLoaded"
     static let customLLMModelRepo = "customLLMModelRepo"
     static let translationCustomLLMModelRepo = "translationCustomLLMModelRepo"
     static let translationModelProvider = "translationModelProvider"
@@ -35,6 +36,9 @@ enum AppPreferenceKey {
     static let rewriteHotkeyKeyCode = "rewriteHotkeyKeyCode"
     static let rewriteHotkeyModifiers = "rewriteHotkeyModifiers"
     static let rewriteHotkeySidedModifiers = "rewriteHotkeySidedModifiers"
+    static let meetingHotkeyKeyCode = "meetingHotkeyKeyCode"
+    static let meetingHotkeyModifiers = "meetingHotkeyModifiers"
+    static let meetingHotkeySidedModifiers = "meetingHotkeySidedModifiers"
     static let hotkeyTriggerMode = "hotkeyTriggerMode"
     static let hotkeyDistinguishModifierSides = "hotkeyDistinguishModifierSides"
     static let hotkeyPreset = "hotkeyPreset"
@@ -52,6 +56,10 @@ enum AppPreferenceKey {
     static let translationTargetLanguage = "translationTargetLanguage"
     static let userMainLanguageCodes = "userMainLanguageCodes"
     static let translateSelectedTextOnTranslationHotkey = "translateSelectedTextOnTranslationHotkey"
+    static let meetingNotesBetaEnabled = "meetingNotesBetaEnabled"
+    static let meetingOverlayCollapsed = "meetingOverlayCollapsed"
+    static let meetingRealtimeTranslateEnabled = "meetingRealtimeTranslateEnabled"
+    static let meetingRealtimeTranslationTargetLanguage = "meetingRealtimeTranslationTargetLanguage"
     static let voiceEndCommandEnabled = "voiceEndCommandEnabled"
     static let voiceEndCommandPreset = "voiceEndCommandPreset"
     static let voiceEndCommandText = "voiceEndCommandText"
@@ -104,6 +112,7 @@ enum AppPreferenceKey {
         2. Do not add, remove, or rephrase any content with actual semantic meaning in the final valid content.
         3. Do not add commentary, explanations, or additional notes.
         4. If there is mixed language, retain the original language type and semantics—do not translate any part.
+        5. If the cleaned result has no meaningful content, return an empty string. Do not output placeholders, cleanup notices, or meta statements such as "（无有效语义内容，已按规则清理）".
 
         ### Output Requirement:
         Return only the cleaned-up transcription text (no extra content, tags, or explanations).

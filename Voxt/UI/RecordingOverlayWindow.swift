@@ -19,6 +19,8 @@ enum OverlaySessionIconMode: Equatable {
 @MainActor
 class OverlayState: ObservableObject {
     @Published var isRecording = false
+    @Published var isModelInitializing = false
+    @Published var initializingEngine: TranscriptionEngine?
     @Published var audioLevel: Float = 0.0
     @Published var transcribedText = ""
     @Published var statusMessage = ""
@@ -38,10 +40,12 @@ class OverlayState: ObservableObject {
     func bind(to transcriber: SpeechTranscriber) {
         bind(
             isRecording: transcriber.$isRecording.eraseToAnyPublisher(),
+            isModelInitializing: Just(false).eraseToAnyPublisher(),
             audioLevel: transcriber.$audioLevel.eraseToAnyPublisher(),
             transcribedText: transcriber.$transcribedText.eraseToAnyPublisher(),
             isEnhancing: transcriber.$isEnhancing.eraseToAnyPublisher(),
-            isRequesting: Just(false).eraseToAnyPublisher()
+            isRequesting: Just(false).eraseToAnyPublisher(),
+            initializingEngine: .none
         )
     }
 
@@ -49,10 +53,12 @@ class OverlayState: ObservableObject {
     func bind(to transcriber: MLXTranscriber) {
         bind(
             isRecording: transcriber.$isRecording.eraseToAnyPublisher(),
+            isModelInitializing: transcriber.$isModelInitializing.eraseToAnyPublisher(),
             audioLevel: transcriber.$audioLevel.eraseToAnyPublisher(),
             transcribedText: transcriber.$transcribedText.eraseToAnyPublisher(),
             isEnhancing: transcriber.$isEnhancing.eraseToAnyPublisher(),
-            isRequesting: Just(false).eraseToAnyPublisher()
+            isRequesting: Just(false).eraseToAnyPublisher(),
+            initializingEngine: .mlxAudio
         )
     }
 
@@ -60,10 +66,12 @@ class OverlayState: ObservableObject {
     func bind(to transcriber: RemoteASRTranscriber) {
         bind(
             isRecording: transcriber.$isRecording.eraseToAnyPublisher(),
+            isModelInitializing: Just(false).eraseToAnyPublisher(),
             audioLevel: transcriber.$audioLevel.eraseToAnyPublisher(),
             transcribedText: transcriber.$transcribedText.eraseToAnyPublisher(),
             isEnhancing: transcriber.$isEnhancing.eraseToAnyPublisher(),
-            isRequesting: transcriber.$isRequesting.eraseToAnyPublisher()
+            isRequesting: transcriber.$isRequesting.eraseToAnyPublisher(),
+            initializingEngine: .none
         )
     }
 
@@ -71,15 +79,19 @@ class OverlayState: ObservableObject {
     func bind(to transcriber: WhisperKitTranscriber) {
         bind(
             isRecording: transcriber.$isRecording.eraseToAnyPublisher(),
+            isModelInitializing: transcriber.$isModelInitializing.eraseToAnyPublisher(),
             audioLevel: transcriber.$audioLevel.eraseToAnyPublisher(),
             transcribedText: transcriber.$transcribedText.eraseToAnyPublisher(),
             isEnhancing: transcriber.$isEnhancing.eraseToAnyPublisher(),
-            isRequesting: Just(false).eraseToAnyPublisher()
+            isRequesting: Just(false).eraseToAnyPublisher(),
+            initializingEngine: .whisperKit
         )
     }
 
     func reset() {
         isRecording = false
+        isModelInitializing = false
+        initializingEngine = nil
         audioLevel = 0
         transcribedText = ""
         statusMessage = ""
@@ -126,18 +138,21 @@ class OverlayState: ObservableObject {
     }
 
     var shouldAnimateVisuals: Bool {
-        isPresented && (isRecording || displayMode == .processing || isEnhancing || isRequesting)
+        isPresented && (isRecording || isModelInitializing || displayMode == .processing || isEnhancing || isRequesting)
     }
 
     private func bind(
         isRecording recordingPublisher: AnyPublisher<Bool, Never>,
+        isModelInitializing modelInitializingPublisher: AnyPublisher<Bool, Never>,
         audioLevel audioLevelPublisher: AnyPublisher<Float, Never>,
         transcribedText transcribedTextPublisher: AnyPublisher<String, Never>,
         isEnhancing isEnhancingPublisher: AnyPublisher<Bool, Never>,
-        isRequesting isRequestingPublisher: AnyPublisher<Bool, Never>
+        isRequesting isRequestingPublisher: AnyPublisher<Bool, Never>,
+        initializingEngine: TranscriptionEngine?
     ) {
         cancellables.removeAll()
         audioLevel = 0
+        self.initializingEngine = initializingEngine
 
         recordingPublisher
             .receive(on: RunLoop.main)
@@ -145,6 +160,18 @@ class OverlayState: ObservableObject {
                 guard let self else { return }
                 self.isRecording = isRecording
                 if !isRecording {
+                    self.audioLevel = 0
+                }
+            }
+            .store(in: &cancellables)
+
+        modelInitializingPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isInitializing in
+                guard let self else { return }
+                self.isModelInitializing = isInitializing
+                self.initializingEngine = isInitializing ? initializingEngine : nil
+                if isInitializing {
                     self.audioLevel = 0
                 }
             }
@@ -261,9 +288,6 @@ class RecordingOverlayWindow: NSPanel {
         updateAppearance(for: state, animated: isVisible)
         hostingView?.needsLayout = true
         contentView?.needsLayout = true
-        hostingView?.displayIfNeeded()
-        contentView?.displayIfNeeded()
-        displayIfNeeded()
 
         if !isVisible {
             alphaValue = 1
@@ -365,6 +389,8 @@ private struct OverlayContent: View {
         WaveformView(
             displayMode: state.displayMode,
             sessionIconMode: state.sessionIconMode,
+            isModelInitializing: state.isModelInitializing,
+            initializingEngine: state.initializingEngine,
             audioLevel: state.audioLevel,
             isRecording: state.isRecording,
             shouldAnimate: state.shouldAnimateVisuals,

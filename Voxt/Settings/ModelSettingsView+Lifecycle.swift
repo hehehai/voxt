@@ -17,6 +17,9 @@ extension ModelSettingsView {
         if UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) == nil {
             whisperRealtimeEnabled = true
         }
+        if UserDefaults.standard.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) == nil {
+            whisperKeepResidentLoaded = true
+        }
 
         if customLLMRepo.isEmpty {
             customLLMRepo = CustomLLMModelManager.defaultModelRepo
@@ -63,6 +66,7 @@ extension ModelSettingsView {
         ensureTranslationModelSelectionConsistency()
         ensureRewriteModelSelectionConsistency()
         updateMirrorSetting()
+        whisperModelManager.refreshResidencyPolicy()
         refreshModelInstallStateIfNeeded()
     }
 

@@ -218,6 +218,9 @@ extension ModelSettingsView {
                         .toggleStyle(.switch)
                 }
 
+                Toggle("Keep Resident", isOn: $whisperKeepResidentLoaded)
+                    .toggleStyle(.switch)
+
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Temperature")
@@ -231,6 +234,10 @@ extension ModelSettingsView {
             }
 
             Text("These settings apply to Whisper transcription sessions. Standard ASR always uses transcribe; Whisper translate is only used by the translation hotkey when Whisper translation is selected. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("When enabled and Whisper is the selected engine, Voxt preloads Whisper after app launch and keeps it resident in memory for faster first use.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

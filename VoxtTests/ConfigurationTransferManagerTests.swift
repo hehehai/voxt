@@ -16,6 +16,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         sourceDefaults.set(true, forKey: AppPreferenceKey.whisperTimestampsEnabled)
         sourceDefaults.set(false, forKey: AppPreferenceKey.whisperRealtimeEnabled)
         sourceDefaults.set(TranslationModelProvider.remoteLLM.rawValue, forKey: AppPreferenceKey.translationFallbackModelProvider)
+        sourceDefaults.set(TranslationTargetLanguage.japanese.rawValue, forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage)
         sourceDefaults.set("secret-password", forKey: AppPreferenceKey.customProxyPassword)
         sourceDefaults.set(
             RemoteModelConfigurationStore.saveConfigurations([
@@ -68,6 +69,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertTrue(targetDefaults.bool(forKey: AppPreferenceKey.whisperTimestampsEnabled))
         XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.whisperRealtimeEnabled))
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider), TranslationModelProvider.remoteLLM.rawValue)
+        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage), TranslationTargetLanguage.japanese.rawValue)
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.customProxyPassword), "")
 
         let importedRemote = RemoteModelConfigurationStore.loadConfigurations(
@@ -123,6 +125,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertFalse(decoded.muteSystemAudioWhileRecording)
         XCTAssertEqual(decoded.overlayCardOpacity, 82)
         XCTAssertEqual(decoded.userMainLanguageCodes, UserMainLanguageOption.defaultSelectionCodes())
+        XCTAssertEqual(decoded.meetingRealtimeTranslationTargetLanguage, "")
         XCTAssertFalse(decoded.alwaysShowRewriteAnswerCard)
     }
 

@@ -366,11 +366,26 @@ struct UserMainLanguageOption: Identifiable, Hashable {
 enum TranslationTargetLanguage: String, CaseIterable, Identifiable {
     case english
     case chineseSimplified
+    case chineseTraditional
     case japanese
     case korean
     case spanish
     case french
     case german
+    case dutch
+    case turkish
+    case polish
+    case ukrainian
+    case portuguese
+    case italian
+    case russian
+    case arabic
+    case hebrew
+    case hindi
+    case thai
+    case vietnamese
+    case indonesian
+    case malay
 
     var id: String { rawValue }
 
@@ -378,11 +393,26 @@ enum TranslationTargetLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .english: return "English"
         case .chineseSimplified: return "Chinese (Simplified)"
+        case .chineseTraditional: return "Chinese (Traditional)"
         case .japanese: return "Japanese"
         case .korean: return "Korean"
         case .spanish: return "Spanish"
         case .french: return "French"
         case .german: return "German"
+        case .dutch: return "Dutch"
+        case .turkish: return "Turkish"
+        case .polish: return "Polish"
+        case .ukrainian: return "Ukrainian"
+        case .portuguese: return "Portuguese"
+        case .italian: return "Italian"
+        case .russian: return "Russian"
+        case .arabic: return "Arabic"
+        case .hebrew: return "Hebrew"
+        case .hindi: return "Hindi"
+        case .thai: return "Thai"
+        case .vietnamese: return "Vietnamese"
+        case .indonesian: return "Indonesian"
+        case .malay: return "Malay"
         }
     }
 
@@ -392,11 +422,26 @@ enum TranslationTargetLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .english: return "English"
         case .chineseSimplified: return "Chinese (Simplified)"
+        case .chineseTraditional: return "Chinese (Traditional)"
         case .japanese: return "Japanese"
         case .korean: return "Korean"
         case .spanish: return "Spanish"
         case .french: return "French"
         case .german: return "German"
+        case .dutch: return "Dutch"
+        case .turkish: return "Turkish"
+        case .polish: return "Polish"
+        case .ukrainian: return "Ukrainian"
+        case .portuguese: return "Portuguese"
+        case .italian: return "Italian"
+        case .russian: return "Russian"
+        case .arabic: return "Arabic"
+        case .hebrew: return "Hebrew"
+        case .hindi: return "Hindi"
+        case .thai: return "Thai"
+        case .vietnamese: return "Vietnamese"
+        case .indonesian: return "Indonesian"
+        case .malay: return "Malay"
         }
     }
 
@@ -404,11 +449,26 @@ enum TranslationTargetLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .english: return "English"
         case .chineseSimplified: return "Simplified Chinese"
+        case .chineseTraditional: return "Traditional Chinese"
         case .japanese: return "Japanese"
         case .korean: return "Korean"
         case .spanish: return "Spanish"
         case .french: return "French"
         case .german: return "German"
+        case .dutch: return "Dutch"
+        case .turkish: return "Turkish"
+        case .polish: return "Polish"
+        case .ukrainian: return "Ukrainian"
+        case .portuguese: return "Portuguese"
+        case .italian: return "Italian"
+        case .russian: return "Russian"
+        case .arabic: return "Arabic"
+        case .hebrew: return "Hebrew"
+        case .hindi: return "Hindi"
+        case .thai: return "Thai"
+        case .vietnamese: return "Vietnamese"
+        case .indonesian: return "Indonesian"
+        case .malay: return "Malay"
         }
     }
 }
