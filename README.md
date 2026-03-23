@@ -316,6 +316,8 @@ Interaction details:
 
 `Meeting Notes (Beta)` is a separate module for meetings, calls, and long conversation capture. It does not inject text into the focused input and does not reuse the normal recording overlay.
 
+<video src="https://storage.actnow.dev/common/voxt/voxt-meeting-record-demo.mp4" controls preload="none" width="100%"></video>
+
 For a full walkthrough, see [docs/Meeting.md](./docs/Meeting.md).
 
 ### How To Enable It
@@ -564,6 +566,8 @@ Additional notes:
 ## What Is App Branch? (Beta)
 
 <img width="1018" height="729" alt="image" src="https://github.com/user-attachments/assets/888871a9-f5d1-4463-9fc7-91797cc2053a" />
+
+<video src="https://storage.actnow.dev/common/voxt/voxt-app-branch-demo.mp4" controls preload="none" width="100%"></video>
 
 > [!IMPORTANT]
 > `App Branch` is not enabled by default. You must first turn on `App Enhancement` in `General -> Output` before App Branch groups and URL-based behavior take effect.

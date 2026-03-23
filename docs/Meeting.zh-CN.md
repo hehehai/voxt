@@ -6,6 +6,8 @@
 
 会议记录是一条独立于普通转录的长时采集流程，适合会议、通话、访谈、播客等场景。
 
+<video src="https://storage.actnow.dev/common/voxt/voxt-meeting-record-demo.mp4" controls preload="none" width="100%"></video>
+
 - 使用独立的会议快捷键启动
 - 打开的是会议悬浮卡片，不是普通转录卡片
 - 不会把文本自动写回当前输入框

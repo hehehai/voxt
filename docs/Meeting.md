@@ -6,6 +6,8 @@ This document explains Voxt's Meeting Notes mode: what it does, how to configure
 
 Meeting Notes is a separate long-running capture mode for meetings, calls, interviews, and podcasts.
 
+<video src="https://storage.actnow.dev/common/voxt/voxt-meeting-record-demo.mp4" controls preload="none" width="100%"></video>
+
 - Starts with the dedicated meeting shortcut
 - Opens a floating meeting card instead of the normal transcription card
 - Does not paste text into the focused input

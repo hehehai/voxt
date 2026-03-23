@@ -56,6 +56,18 @@ Rewrite uses the dedicated rewrite prompt.
 
 Voxt also applies the normal enhancement chain to the dictated instruction before the rewrite step when appropriate.
 
+## App Enhancement And Rewrite
+
+When `App Enhancement` is enabled, rewrite can become context-aware.
+
+<video src="https://storage.actnow.dev/common/voxt/voxt-app-branch-demo.mp4" controls preload="none" width="100%"></video>
+
+- Voxt can switch prompts and rules based on the current app or browser URL
+- the same rewrite shortcut can behave differently in coding tools, chat apps, email, or docs
+- this is especially useful when you want different rewrite tone, formatting, or terminology by context
+
+`App Enhancement` does not replace rewrite itself. It changes the prompt routing and context that rewrite uses.
+
 ## Rewrite Answer Card
 
 Rewrite can keep the result visible in an answer card instead of relying only on direct text insertion.
