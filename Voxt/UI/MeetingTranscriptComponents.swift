@@ -25,11 +25,11 @@ struct MeetingTranscriptScrollView: View {
                         LazyVStack(alignment: .leading, spacing: 12) {
                             if segments.isEmpty {
                                 VStack(spacing: 10) {
-                                    Text(String(localized: "会议开始后，这里会持续显示 我 / them 的时间线。"))
+                                    Text(String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts."))
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundStyle(.white.opacity(0.7))
 
-                                    Text(String(localized: "滚动离开底部时会暂停自动滚动。"))
+                                    Text(String(localized: "Automatic scrolling pauses when you scroll away from the bottom."))
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(.white.opacity(0.42))
                                 }
@@ -95,7 +95,7 @@ struct MeetingTranscriptScrollView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.down")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text(String(localized: "最新"))
+                                Text(String(localized: "Latest"))
                                     .font(.system(size: 12, weight: .semibold))
                             }
                             .foregroundStyle(.white.opacity(0.92))

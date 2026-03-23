@@ -13,15 +13,15 @@ private enum HistoryFilterTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all:
-            return String(localized: "全部")
+            return String(localized: "All")
         case .transcription:
-            return String(localized: "转录")
+            return String(localized: "Transcription")
         case .translation:
-            return String(localized: "翻译")
+            return String(localized: "Translation")
         case .rewrite:
-            return String(localized: "转写")
+            return String(localized: "Rewrite")
         case .meeting:
-            return String(localized: "会议")
+            return String(localized: "Meeting")
         }
     }
 
@@ -342,7 +342,7 @@ private struct HistoryRow: View {
                     }
 
                     if entry.kind == .meeting {
-                        Button(String(localized: "详情")) {
+                        Button(String(localized: "Detail")) {
                             MeetingDetailWindowManager.shared.presentHistoryMeeting(
                                 entry: entry,
                                 audioURL: meetingAudioURL,

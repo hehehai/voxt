@@ -25,6 +25,7 @@ struct SettingsView: View {
     @State private var hasNoAvailableMicrophones = false
     @State private var missingModelConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue] = []
     @State private var languageRefreshToken = UUID()
+    @State private var displayMode: SettingsDisplayMode
     private let issueRefreshTimer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
 
     init(
@@ -37,7 +38,8 @@ struct SettingsView: View {
         dictionaryStore: DictionaryStore,
         dictionarySuggestionStore: DictionarySuggestionStore,
         appUpdateManager: AppUpdateManager,
-        initialNavigationTarget: SettingsNavigationTarget = SettingsNavigationTarget(tab: .report)
+        initialNavigationTarget: SettingsNavigationTarget = SettingsNavigationTarget(tab: .report),
+        initialDisplayMode: SettingsDisplayMode = .normal
     ) {
         self.availableDictionaryHistoryScanModels = availableDictionaryHistoryScanModels
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
@@ -50,6 +52,7 @@ struct SettingsView: View {
         self.appUpdateManager = appUpdateManager
         _selectedTab = State(initialValue: initialNavigationTarget.tab)
         _navigationRequest = State(initialValue: SettingsNavigationRequest(target: initialNavigationTarget))
+        _displayMode = State(initialValue: initialDisplayMode)
     }
 
     var body: some View {
@@ -57,47 +60,13 @@ struct SettingsView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color(nsColor: .windowBackgroundColor))
 
-            HStack(alignment: .top, spacing: 8) {
-                SettingsSidebar(
-                    selectedTab: $selectedTab,
-                    onSelectTab: { tab in
-                        navigationRequest = nil
-                        selectedTab = tab
-                    },
-                    appEnhancementEnabled: appEnhancementEnabled,
-                    hasMissingPermissions: hasMissingPermissions,
-                    hasNoAvailableMicrophones: hasNoAvailableMicrophones,
-                    hasMissingModelConfigurationIssues: !missingModelConfigurationIssues.isEmpty,
-                    updateBadgeState: updateBadgeState,
-                    onTapPermissionBadge: {
-                        navigationRequest = nil
-                        selectedTab = .permissions
-                    },
-                    onTapMicrophoneBadge: {
-                        selectedTab = .general
-                        navigationRequest = SettingsNavigationRequest(
-                            target: SettingsNavigationTarget(tab: .general, section: .generalAudio)
-                        )
-                    },
-                    onTapModelBadge: {
-                        navigationRequest = nil
-                        selectedTab = .model
-                    },
-                    onTapUpdateBadge: {
-                        appUpdateManager.checkForUpdatesWithUserInterface()
-                    }
-                )
-                    .frame(width: 170)
-                    .frame(maxHeight: .infinity, alignment: .top)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(selectedTab.titleKey)
-                        .font(.title3.weight(.semibold))
-                        .padding(.horizontal, 8)
-
-                    tabContent
+            Group {
+                switch displayMode {
+                case .normal:
+                    normalSettingsContent
+                case .onboarding:
+                    onboardingContent
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 10)
@@ -122,6 +91,7 @@ struct SettingsView: View {
             refreshMicrophoneBadge()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtSettingsSelectTab)) { notification in
+            guard case .normal = displayMode else { return }
             guard let target = SettingsNavigationTarget(notification: notification)
             else {
                 return
@@ -130,6 +100,7 @@ struct SettingsView: View {
             navigationRequest = SettingsNavigationRequest(target: target)
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtSettingsNavigate)) { notification in
+            guard case .normal = displayMode else { return }
             guard let target = SettingsNavigationTarget(notification: notification) else { return }
             selectedTab = target.tab
             navigationRequest = SettingsNavigationRequest(target: target)
@@ -160,8 +131,90 @@ struct SettingsView: View {
         }
     }
 
+    private var normalSettingsContent: some View {
+        HStack(alignment: .top, spacing: 8) {
+            SettingsSidebar(
+                selectedTab: $selectedTab,
+                onSelectTab: { tab in
+                    navigationRequest = nil
+                    selectedTab = tab
+                },
+                appEnhancementEnabled: appEnhancementEnabled,
+                hasMissingPermissions: hasMissingPermissions,
+                hasNoAvailableMicrophones: hasNoAvailableMicrophones,
+                hasMissingModelConfigurationIssues: !missingModelConfigurationIssues.isEmpty,
+                updateBadgeState: updateBadgeState,
+                onTapPermissionBadge: {
+                    navigationRequest = nil
+                    selectedTab = .permissions
+                },
+                onTapMicrophoneBadge: {
+                    selectedTab = .general
+                    navigationRequest = SettingsNavigationRequest(
+                        target: SettingsNavigationTarget(tab: .general, section: .generalAudio)
+                    )
+                },
+                onTapModelBadge: {
+                    navigationRequest = nil
+                    selectedTab = .model
+                },
+                onTapUpdateBadge: {
+                    appUpdateManager.checkForUpdatesWithUserInterface()
+                }
+            )
+            .frame(width: 170)
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    Text(selectedTab.titleKey)
+                        .font(.title3.weight(.semibold))
+
+                    Spacer(minLength: 0)
+
+                    if selectedTab == .report {
+                        Button("Guide") {
+                            enterOnboarding(step: .language)
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.horizontal, 8)
+
+                tabContent
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var onboardingContent: some View {
+        OnboardingSettingsView(
+            currentStep: onboardingStepBinding,
+            mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager,
+            customLLMManager: customLLMManager,
+            appUpdateManager: appUpdateManager,
+            onExit: exitOnboarding,
+            onFinish: finishOnboarding
+        )
+    }
+
     private var interfaceLanguage: AppInterfaceLanguage {
         AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
+    }
+
+    private var onboardingStepBinding: Binding<OnboardingStep> {
+        Binding(
+            get: {
+                if case .onboarding(let step) = displayMode {
+                    return step
+                }
+                return .language
+            },
+            set: { newStep in
+                displayMode = .onboarding(step: newStep)
+            }
+        )
     }
 
     private var updateBadgeState: UpdateBadgeState {
@@ -222,7 +275,10 @@ struct SettingsView: View {
                     case .general:
                         GeneralSettingsView(
                             appUpdateManager: appUpdateManager,
-                            navigationRequest: navigationRequest
+                            navigationRequest: navigationRequest,
+                            onOpenSetupGuide: {
+                                enterOnboarding(step: .language)
+                            }
                         )
                     case .permissions:
                         PermissionsSettingsView(navigationRequest: navigationRequest)
@@ -307,6 +363,25 @@ struct SettingsView: View {
 
     private func refreshMicrophoneBadge() {
         hasNoAvailableMicrophones = AudioInputDeviceManager.availableInputDevices().isEmpty
+    }
+
+    private func enterOnboarding(step: OnboardingStep) {
+        OnboardingPreferenceManager.saveLastStep(step)
+        displayMode = .onboarding(step: step)
+    }
+
+    private func exitOnboarding() {
+        OnboardingPreferenceManager.markCompleted()
+        navigationRequest = nil
+        selectedTab = .report
+        displayMode = .normal
+    }
+
+    private func finishOnboarding() {
+        OnboardingPreferenceManager.markCompleted()
+        navigationRequest = nil
+        selectedTab = .report
+        displayMode = .normal
     }
 
 }

@@ -263,7 +263,7 @@ private struct MeetingOverlayCard: View {
             .frame(maxHeight: 220)
 
             HStack(spacing: 10) {
-                Button(String(localized: "取消")) {
+                Button(String(localized: "Cancel")) {
                     onCancelRealtimeTranslationLanguage()
                 }
                 .buttonStyle(.plain)
@@ -279,7 +279,7 @@ private struct MeetingOverlayCard: View {
                         .strokeBorder(.white.opacity(0.1), lineWidth: 1)
                 )
 
-                Button(String(localized: "开始翻译")) {
+                Button(String(localized: "Start Translation")) {
                     onConfirmRealtimeTranslationLanguage()
                 }
                 .buttonStyle(.plain)

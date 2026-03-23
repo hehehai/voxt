@@ -265,6 +265,10 @@ private final class MeetingDetailViewModel: ObservableObject {
             let resolvedTranslatedText = incomingTranslatedText?.isEmpty == false
                 ? incomingTranslatedText
                 : (existingTranslatedText?.isEmpty == false ? existingTranslatedText : nil)
+            let textChanged =
+                existing.text.trimmingCharacters(in: .whitespacesAndNewlines) !=
+                incoming.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let shouldRefreshTranslation = (existingTranslatedText?.isEmpty == false) && textChanged
 
             return MeetingTranscriptSegment(
                 id: incoming.id,
@@ -273,7 +277,7 @@ private final class MeetingDetailViewModel: ObservableObject {
                 endSeconds: incoming.endSeconds,
                 text: incoming.text,
                 translatedText: resolvedTranslatedText,
-                isTranslationPending: incoming.isTranslationPending || existing.isTranslationPending
+                isTranslationPending: incoming.isTranslationPending || existing.isTranslationPending || shouldRefreshTranslation
             )
         }
     }
@@ -318,7 +322,7 @@ private final class MeetingDetailViewModel: ObservableObject {
     private func shouldTranslate(segment: MeetingTranscriptSegment) -> Bool {
         guard segment.speaker == .them else { return false }
         let translatedText = segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return translatedText.isEmpty && !segment.isTranslationPending
+        return (translatedText.isEmpty || segment.isTranslationPending) && translationTasks[segment.id] == nil
     }
 
     private func markSegment(_ id: UUID, update: (MeetingTranscriptSegment) -> MeetingTranscriptSegment) {
@@ -564,12 +568,12 @@ private struct MeetingDetailWindowView: View {
             .frame(maxHeight: 220)
 
             HStack(spacing: 10) {
-                Button(String(localized: "取消")) {
+                Button(String(localized: "Cancel")) {
                     viewModel.cancelTranslationLanguageSelection()
                 }
                 .controlSize(.small)
 
-                Button(String(localized: "开始翻译")) {
+                Button(String(localized: "Start Translation")) {
                     viewModel.confirmTranslationLanguageSelection()
                 }
                 .controlSize(.small)
@@ -619,7 +623,7 @@ private struct MeetingDetailWindowView: View {
                 .scaleEffect(0.82)
             }
 
-            Button(String(localized: "导出")) {
+            Button(String(localized: "Export")) {
                 try? viewModel.export()
             }
             .controlSize(.small)

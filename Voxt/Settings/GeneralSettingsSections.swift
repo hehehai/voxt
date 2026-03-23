@@ -4,12 +4,16 @@ struct GeneralConfigurationCard: View {
     let message: String?
     let onExport: () -> Void
     let onImport: () -> Void
+    let onOpenSetupGuide: (() -> Void)?
 
     var body: some View {
         GeneralSettingsCard(title: "Configuration") {
             HStack(spacing: 8) {
                 Button("Export Configuration", action: onExport)
                 Button("Import Configuration", action: onImport)
+                if let onOpenSetupGuide {
+                    Button("Open Setup Guide", action: onOpenSetupGuide)
+                }
             }
 
             Text("Export your current general, model, dictionary, voice end command, app branch, and hotkey settings to a JSON file. Sensitive fields are replaced with placeholders during export and must be filled in again after import.")
@@ -544,7 +548,7 @@ struct GeneralAppBehaviorCard: View {
     }
 }
 
-private struct GeneralSettingsCard<Content: View>: View {
+struct GeneralSettingsCard<Content: View>: View {
     let title: LocalizedStringKey
     let spacing: CGFloat
     @ViewBuilder let content: () -> Content
@@ -572,7 +576,7 @@ private struct GeneralSettingsCard<Content: View>: View {
     }
 }
 
-private struct GeneralLanguageSettingBlock<Control: View>: View {
+struct GeneralLanguageSettingBlock<Control: View>: View {
     let title: LocalizedStringKey
     let description: LocalizedStringKey
     @ViewBuilder let control: () -> Control

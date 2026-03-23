@@ -39,5 +39,35 @@ final class SettingsTypesTests: XCTestCase {
         XCTAssertEqual(sanitized.batchSize, DictionarySuggestionFilterSettings.maximumBatchSize)
         XCTAssertEqual(sanitized.maxCandidatesPerBatch, DictionarySuggestionFilterSettings.minimumMaxCandidates)
     }
-}
 
+    func testOnboardingStepStatusResolverMatchesExpectedRules() {
+        let readySnapshot = OnboardingStepStatusSnapshot(
+            hasModelIssues: false,
+            hasRecordingMicrophone: true,
+            hasRecordingPermissions: true,
+            hasRewriteIssues: false,
+            appEnhancementEnabled: true,
+            meetingNotesEnabled: true,
+            hasMeetingIssues: false
+        )
+        let blockedSnapshot = OnboardingStepStatusSnapshot(
+            hasModelIssues: true,
+            hasRecordingMicrophone: false,
+            hasRecordingPermissions: false,
+            hasRewriteIssues: true,
+            appEnhancementEnabled: false,
+            meetingNotesEnabled: true,
+            hasMeetingIssues: true
+        )
+
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .language, snapshot: blockedSnapshot), .ready)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .model, snapshot: blockedSnapshot), .needsSetup)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .transcription, snapshot: blockedSnapshot), .needsSetup)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .translation, snapshot: blockedSnapshot), .ready)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .rewrite, snapshot: blockedSnapshot), .needsSetup)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .appEnhancement, snapshot: blockedSnapshot), .optional)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .meeting, snapshot: blockedSnapshot), .needsSetup)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .finish, snapshot: blockedSnapshot), .done)
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .meeting, snapshot: readySnapshot), .ready)
+    }
+}

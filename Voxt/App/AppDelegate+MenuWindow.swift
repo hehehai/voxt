@@ -298,7 +298,8 @@ extension AppDelegate {
             dictionaryStore: dictionaryStore,
             dictionarySuggestionStore: dictionarySuggestionStore,
             appUpdateManager: appUpdateManager,
-            initialNavigationTarget: navigationRequest.target
+            initialNavigationTarget: navigationRequest.target,
+            initialDisplayMode: resolvedInitialDisplayMode(for: navigationRequest.target)
         )
         .frame(width: 760, height: 560)
 
@@ -338,6 +339,14 @@ extension AppDelegate {
 
     func openMainWindow(selectTab: SettingsTab?) {
         openMainWindow(target: SettingsNavigationTarget(tab: selectTab ?? .report))
+    }
+
+    private func resolvedInitialDisplayMode(for target: SettingsNavigationTarget) -> SettingsDisplayMode {
+        if OnboardingPreferenceManager.shouldPresentOnLaunch() {
+            let step = OnboardingPreferenceManager.savedLastStep() ?? .language
+            return .onboarding(step: step)
+        }
+        return .normal
     }
 
     private func bringWindowToFront(_ window: NSWindow) {

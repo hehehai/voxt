@@ -58,6 +58,35 @@ extension AppDelegate {
     // MARK: - Translation Flow
     // Keeps translation/enhancement orchestration isolated from recording lifecycle.
 
+    func runTranslationPreview(_ text: String) async throws -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let previousSelectedTextTranslationFlow = isSelectedTextTranslationFlow
+        isSelectedTextTranslationFlow = false
+        defer {
+            isSelectedTextTranslationFlow = previousSelectedTextTranslationFlow
+        }
+
+        return try await runTranslationPipeline(
+            text: trimmed,
+            targetLanguage: translationTargetLanguage,
+            includeEnhancement: false,
+            allowStrictRetry: true
+        )
+    }
+
+    func runRewritePreview(dictatedPrompt: String, sourceText: String) async throws -> String {
+        let trimmedPrompt = dictatedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSource = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty || !trimmedSource.isEmpty else { return "" }
+
+        return try await runRewritePipeline(
+            dictatedText: trimmedPrompt,
+            selectedSourceText: trimmedSource,
+            structuredAnswerOutput: trimmedSource.isEmpty
+        )
+    }
+
     func processTranslatedTranscription(_ text: String, sessionID: UUID) {
         guard shouldHandleCallbacks(for: sessionID) else { return }
         let resolution = resolvedTranslationProviderResolution(isSelectedTextTranslation: false)

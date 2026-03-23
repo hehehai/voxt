@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct GeneralSettingsView: View {
     let appUpdateManager: AppUpdateManager
     let navigationRequest: SettingsNavigationRequest?
+    let onOpenSetupGuide: (() -> Void)?
     @AppStorage(AppPreferenceKey.interactionSoundsEnabled) private var interactionSoundsEnabled = true
     @AppStorage(AppPreferenceKey.interactionSoundPreset) private var interactionSoundPresetRaw = InteractionSoundPreset.soft.rawValue
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
@@ -112,7 +113,8 @@ struct GeneralSettingsView: View {
             GeneralConfigurationCard(
                 message: configurationTransferMessage,
                 onExport: exportConfiguration,
-                onImport: importConfiguration
+                onImport: importConfiguration,
+                onOpenSetupGuide: onOpenSetupGuide
             )
             .settingsNavigationAnchor(.generalConfiguration)
 

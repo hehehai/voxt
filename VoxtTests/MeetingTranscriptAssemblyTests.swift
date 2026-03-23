@@ -76,4 +76,56 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertEqual(secondResult.segments.count, 2)
         XCTAssertTrue(secondResult.supersededSegmentIDs.isEmpty)
     }
+
+    func testUpdatedSegmentPreservesExistingTranslationWhileRefreshIsPending() {
+        let id = UUID()
+        let existing = MeetingTranscriptSegment(
+            id: id,
+            speaker: .them,
+            startSeconds: 2,
+            endSeconds: 4,
+            text: "hello there",
+            translatedText: "你好",
+            isTranslationPending: false
+        )
+        let updated = MeetingTranscriptSegment(
+            id: id,
+            speaker: .them,
+            startSeconds: 2,
+            endSeconds: 5,
+            text: "hello there again"
+        )
+
+        let result = MeetingTranscriptAssembler.apply(.final(updated), to: [existing])
+
+        XCTAssertEqual(result.segments.count, 1)
+        XCTAssertEqual(result.segments[0].translatedText, "你好")
+        XCTAssertTrue(result.segments[0].isTranslationPending)
+    }
+
+    func testUpdatedSegmentDoesNotEnterPendingStateWithoutExistingTranslation() {
+        let id = UUID()
+        let existing = MeetingTranscriptSegment(
+            id: id,
+            speaker: .them,
+            startSeconds: 2,
+            endSeconds: 4,
+            text: "hello there",
+            translatedText: nil,
+            isTranslationPending: false
+        )
+        let updated = MeetingTranscriptSegment(
+            id: id,
+            speaker: .them,
+            startSeconds: 2,
+            endSeconds: 5,
+            text: "hello there again"
+        )
+
+        let result = MeetingTranscriptAssembler.apply(.final(updated), to: [existing])
+
+        XCTAssertEqual(result.segments.count, 1)
+        XCTAssertNil(result.segments[0].translatedText)
+        XCTAssertFalse(result.segments[0].isTranslationPending)
+    }
 }

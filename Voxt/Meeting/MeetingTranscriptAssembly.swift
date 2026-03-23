@@ -51,14 +51,19 @@ enum MeetingTranscriptAssembler {
 
         if let existingIndex = segments.firstIndex(where: { $0.id == segment.id }) {
             let existing = segments[existingIndex]
+            let existingTranslatedText = existing.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let preservesTranslatedText = existingTranslatedText?.isEmpty == false
+            let textChanged =
+                existing.text.trimmingCharacters(in: .whitespacesAndNewlines) !=
+                segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
             segments[existingIndex] = MeetingTranscriptSegment(
                 id: existing.id,
                 speaker: segment.speaker,
                 startSeconds: existing.startSeconds,
                 endSeconds: segment.endSeconds,
                 text: segment.text,
-                translatedText: isFinal ? existing.translatedText : nil,
-                isTranslationPending: false,
+                translatedText: preservesTranslatedText ? existing.translatedText : nil,
+                isTranslationPending: existing.isTranslationPending || (preservesTranslatedText && textChanged),
                 preventsAdjacentMerge: existing.preventsAdjacentMerge || segment.preventsAdjacentMerge
             )
             return finalizeIfNeeded(at: existingIndex, isFinal: isFinal, in: segments)

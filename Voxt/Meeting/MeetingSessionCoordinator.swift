@@ -571,12 +571,14 @@ final class MeetingSessionCoordinator {
 
     private func translateEligibleSegmentsIfNeeded() {
         for segment in overlayState.segments where segment.speaker == .them {
-            let alreadyHasTranslation = !(segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-            guard !alreadyHasTranslation else { continue }
+            let needsTranslation =
+                segment.isTranslationPending ||
+                (segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            guard needsTranslation else { continue }
             queueRealtimeTranslation(
                 for: segment.isTranslationPending
                     ? segment
-                    : segment.updatingTranslation(translatedText: nil, isTranslationPending: true)
+                    : segment.updatingTranslation(translatedText: segment.translatedText, isTranslationPending: true)
             )
         }
         overlayState.segments = overlayState.segments.map { segment in
