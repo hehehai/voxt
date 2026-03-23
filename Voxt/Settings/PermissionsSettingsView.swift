@@ -7,6 +7,8 @@ import Carbon
 import UniformTypeIdentifiers
 
 struct PermissionsSettingsView: View {
+    let navigationRequest: SettingsNavigationRequest?
+
     private enum PermissionKind: String, CaseIterable, Identifiable {
         case microphone
         case speechRecognition
@@ -143,6 +145,7 @@ struct PermissionsSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.permissionsMain)
 
             if appEnhancementEnabled {
                 GroupBox {
@@ -178,6 +181,7 @@ struct PermissionsSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
                 }
+                .settingsNavigationAnchor(.permissionsAppBranchURLAuthorization)
             }
         }
         .onAppear {

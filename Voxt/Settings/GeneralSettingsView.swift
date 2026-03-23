@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct GeneralSettingsView: View {
     let appUpdateManager: AppUpdateManager
+    let navigationRequest: SettingsNavigationRequest?
     @AppStorage(AppPreferenceKey.selectedInputDeviceID) private var selectedInputDeviceIDRaw = 0
     @AppStorage(AppPreferenceKey.interactionSoundsEnabled) private var interactionSoundsEnabled = true
     @AppStorage(AppPreferenceKey.interactionSoundPreset) private var interactionSoundPresetRaw = InteractionSoundPreset.soft.rawValue
@@ -116,6 +117,7 @@ struct GeneralSettingsView: View {
                 onExport: exportConfiguration,
                 onImport: importConfiguration
             )
+            .settingsNavigationAnchor(.generalConfiguration)
 
             GeneralAudioCard(
                 inputDevices: inputDevices,
@@ -126,6 +128,7 @@ struct GeneralSettingsView: View {
                 interactionSoundPreset: interactionSoundPresetSelection,
                 onTrySound: { interactionSoundPlayer.playPreview(preset: interactionSoundPreset) }
             )
+            .settingsNavigationAnchor(.generalAudio)
 
             GeneralTranscriptionUICard(
                 overlayPosition: overlayPosition,
@@ -133,6 +136,7 @@ struct GeneralSettingsView: View {
                 overlayCardCornerRadius: $overlayCardCornerRadius,
                 overlayScreenEdgeInset: $overlayScreenEdgeInset
             )
+            .settingsNavigationAnchor(.generalTranscriptionUI)
 
             GeneralLanguagesCard(
                 interfaceLanguage: interfaceLanguageSelection,
@@ -140,6 +144,7 @@ struct GeneralSettingsView: View {
                 userMainLanguageSummary: userMainLanguageSummary,
                 onEditUserMainLanguage: { isUserMainLanguageSheetPresented = true }
             )
+            .settingsNavigationAnchor(.generalLanguages)
 
             GeneralModelStorageCard(
                 displayPath: modelStorageDisplayPath.isEmpty ? ModelStorageDirectoryManager.defaultRootURL.path : modelStorageDisplayPath,
@@ -151,6 +156,7 @@ struct GeneralSettingsView: View {
                 },
                 onChoose: chooseModelStorageDirectory
             )
+            .settingsNavigationAnchor(.generalModelStorage)
 
             GeneralOutputCard(
                 autoCopyWhenNoFocusedInput: $autoCopyWhenNoFocusedInput,
@@ -158,11 +164,13 @@ struct GeneralSettingsView: View {
                 meetingNotesBetaEnabled: $meetingNotesBetaEnabled,
                 appEnhancementEnabled: $appEnhancementEnabled
             )
+            .settingsNavigationAnchor(.generalOutput)
 
             GeneralLoggingCard(
                 hotkeyDebugLoggingEnabled: $hotkeyDebugLoggingEnabled,
                 llmDebugLoggingEnabled: $llmDebugLoggingEnabled
             )
+            .settingsNavigationAnchor(.generalLogging)
 
             GeneralAppBehaviorCard(
                 launchAtLogin: $launchAtLogin,
@@ -176,6 +184,7 @@ struct GeneralSettingsView: View {
                 customProxyPassword: $customProxyPassword,
                 launchAtLoginError: launchAtLoginError
             )
+            .settingsNavigationAnchor(.generalAppBehavior)
         }
         .onAppear {
             refreshInputDevices()

@@ -20,10 +20,10 @@ struct SettingsView: View {
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
     @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @State private var selectedTab: SettingsTab
+    @State private var navigationRequest: SettingsNavigationRequest?
     @State private var hasMissingPermissions = false
     @State private var missingModelConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue] = []
     @State private var languageRefreshToken = UUID()
-    @State private var updateBadgeAlertMessage: String?
     private let issueRefreshTimer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
 
     init(
@@ -36,7 +36,7 @@ struct SettingsView: View {
         dictionaryStore: DictionaryStore,
         dictionarySuggestionStore: DictionarySuggestionStore,
         appUpdateManager: AppUpdateManager,
-        initialTab: SettingsTab = .general
+        initialNavigationTarget: SettingsNavigationTarget = SettingsNavigationTarget(tab: .report)
     ) {
         self.availableDictionaryHistoryScanModels = availableDictionaryHistoryScanModels
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
@@ -47,7 +47,8 @@ struct SettingsView: View {
         self.dictionaryStore = dictionaryStore
         self.dictionarySuggestionStore = dictionarySuggestionStore
         self.appUpdateManager = appUpdateManager
-        _selectedTab = State(initialValue: initialTab)
+        _selectedTab = State(initialValue: initialNavigationTarget.tab)
+        _navigationRequest = State(initialValue: SettingsNavigationRequest(target: initialNavigationTarget))
     }
 
     var body: some View {
@@ -58,18 +59,24 @@ struct SettingsView: View {
             HStack(alignment: .top, spacing: 8) {
                 SettingsSidebar(
                     selectedTab: $selectedTab,
+                    onSelectTab: { tab in
+                        navigationRequest = nil
+                        selectedTab = tab
+                    },
                     appEnhancementEnabled: appEnhancementEnabled,
                     hasMissingPermissions: hasMissingPermissions,
                     hasMissingModelConfigurationIssues: !missingModelConfigurationIssues.isEmpty,
                     updateBadgeState: updateBadgeState,
                     onTapPermissionBadge: {
+                        navigationRequest = nil
                         selectedTab = .permissions
                     },
                     onTapModelBadge: {
+                        navigationRequest = nil
                         selectedTab = .model
                     },
                     onTapUpdateBadge: {
-                        presentUpdateBadgeDetails()
+                        appUpdateManager.checkForUpdatesWithUserInterface()
                     }
                 )
                     .frame(width: 170)
@@ -102,12 +109,17 @@ struct SettingsView: View {
             refreshModelConfigurationBadge()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtSettingsSelectTab)) { notification in
-            guard let rawValue = notification.userInfo?["tab"] as? String,
-                  let targetTab = SettingsTab(rawValue: rawValue)
+            guard let target = SettingsNavigationTarget(notification: notification)
             else {
                 return
             }
-            selectedTab = targetTab
+            selectedTab = target.tab
+            navigationRequest = SettingsNavigationRequest(target: target)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .voxtSettingsNavigate)) { notification in
+            guard let target = SettingsNavigationTarget(notification: notification) else { return }
+            selectedTab = target.tab
+            navigationRequest = SettingsNavigationRequest(target: target)
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtInterfaceLanguageDidChange)) { _ in
             languageRefreshToken = UUID()
@@ -123,6 +135,7 @@ struct SettingsView: View {
         }
         .onChange(of: appEnhancementEnabled) { _, isEnabled in
             if !isEnabled, selectedTab == .appEnhancement {
+                navigationRequest = nil
                 selectedTab = .model
             }
         }
@@ -132,22 +145,6 @@ struct SettingsView: View {
         .onChange(of: meetingNotesBetaEnabled) { _, _ in
             refreshPermissionBadge()
         }
-        .alert(
-            String(localized: "Update Information"),
-            isPresented: Binding(
-                get: { updateBadgeAlertMessage != nil },
-                set: { if !$0 { updateBadgeAlertMessage = nil } }
-            ),
-            actions: {
-                Button(String(localized: "Check Again")) {
-                    appUpdateManager.checkForUpdates(source: .manual)
-                }
-                Button(String(localized: "OK"), role: .cancel) {}
-            },
-            message: {
-                Text(updateBadgeAlertMessage ?? "")
-            }
-        )
     }
 
     private var interfaceLanguage: AppInterfaceLanguage {
@@ -181,7 +178,8 @@ struct SettingsView: View {
                 HistorySettingsView(
                     historyStore: historyStore,
                     dictionaryStore: dictionaryStore,
-                    dictionarySuggestionStore: dictionarySuggestionStore
+                    dictionarySuggestionStore: dictionarySuggestionStore,
+                    navigationRequest: navigationRequest
                 )
             } else if selectedTab == .dictionary {
                 DictionarySettingsView(
@@ -189,10 +187,11 @@ struct SettingsView: View {
                     dictionaryStore: dictionaryStore,
                     dictionarySuggestionStore: dictionarySuggestionStore,
                     availableHistoryScanModels: availableDictionaryHistoryScanModels,
-                    onIngestSuggestionsFromHistory: onIngestDictionarySuggestionsFromHistory
+                    onIngestSuggestionsFromHistory: onIngestDictionarySuggestionsFromHistory,
+                    navigationRequest: navigationRequest
                 )
             } else if selectedTab == .appEnhancement {
-                AppEnhancementSettingsView()
+                AppEnhancementSettingsView(navigationRequest: navigationRequest)
             } else {
                 ReportSettingsView(historyStore: historyStore)
             }
@@ -203,39 +202,69 @@ struct SettingsView: View {
     }
 
     private var scrollableTabContent: some View {
-        ScrollView {
-            Group {
-                switch selectedTab {
-                case .general:
-                    GeneralSettingsView(appUpdateManager: appUpdateManager)
-                case .permissions:
-                    PermissionsSettingsView()
-                case .report:
-                    EmptyView()
-                case .model:
-                    ModelSettingsView(
-                        mlxModelManager: mlxModelManager,
-                        whisperModelManager: whisperModelManager,
-                        customLLMManager: customLLMManager,
-                        missingConfigurationIssues: missingModelConfigurationIssues
-                    )
-                case .dictionary:
-                    EmptyView()
-                case .appEnhancement:
-                    EmptyView()
-                case .hotkey:
-                    HotkeySettingsView()
-                case .about:
-                    AboutSettingsView(appUpdateManager: appUpdateManager)
-                case .history:
-                    EmptyView()
+        ScrollViewReader { proxy in
+            ScrollView {
+                Group {
+                    switch selectedTab {
+                    case .general:
+                        GeneralSettingsView(
+                            appUpdateManager: appUpdateManager,
+                            navigationRequest: navigationRequest
+                        )
+                    case .permissions:
+                        PermissionsSettingsView(navigationRequest: navigationRequest)
+                    case .report:
+                        EmptyView()
+                    case .model:
+                        ModelSettingsView(
+                            mlxModelManager: mlxModelManager,
+                            whisperModelManager: whisperModelManager,
+                            customLLMManager: customLLMManager,
+                            missingConfigurationIssues: missingModelConfigurationIssues,
+                            navigationRequest: navigationRequest
+                        )
+                    case .dictionary:
+                        EmptyView()
+                    case .appEnhancement:
+                        EmptyView()
+                    case .hotkey:
+                        HotkeySettingsView()
+                    case .about:
+                        AboutSettingsView(
+                            appUpdateManager: appUpdateManager,
+                            navigationRequest: navigationRequest
+                        )
+                    case .history:
+                        EmptyView()
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 8)
+                .padding(.top, 2)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.horizontal, 8)
-            .padding(.top, 2)
+            .onAppear {
+                scrollScrollableContentIfNeeded(with: navigationRequest, proxy: proxy)
+            }
+            .onChange(of: navigationRequest?.id) { _, _ in
+                scrollScrollableContentIfNeeded(with: navigationRequest, proxy: proxy)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func scrollScrollableContentIfNeeded(with request: SettingsNavigationRequest?, proxy: ScrollViewProxy) {
+        guard let request,
+              request.target.tab == selectedTab,
+              let section = request.target.section
+        else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                proxy.scrollTo(section.rawValue, anchor: .top)
+            }
+        }
     }
 
     private func refreshPermissionBadge() {
@@ -263,27 +292,11 @@ struct SettingsView: View {
         )
     }
 
-    private func presentUpdateBadgeDetails() {
-        switch updateBadgeState {
-        case .checkFailed(let issue):
-            updateBadgeAlertMessage = AppLocalization.format(
-                "Unable to check for updates.\n\n%@",
-                issue
-            )
-        case .newVersion(let version):
-            let resolvedVersion = version ?? AppLocalization.localizedString("A new version is available.")
-            updateBadgeAlertMessage = AppLocalization.format(
-                "A new version of Voxt is available:\n%@",
-                resolvedVersion
-            )
-        case .none:
-            updateBadgeAlertMessage = AppLocalization.localizedString("No update information is currently available.")
-        }
-    }
 }
 
 private struct SettingsSidebar: View {
     @Binding var selectedTab: SettingsTab
+    let onSelectTab: (SettingsTab) -> Void
     let appEnhancementEnabled: Bool
     let hasMissingPermissions: Bool
     let hasMissingModelConfigurationIssues: Bool
@@ -296,7 +309,7 @@ private struct SettingsSidebar: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(visibleTabs) { tab in
                 Button {
-                    selectedTab = tab
+                    onSelectTab(tab)
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: tab.iconName)

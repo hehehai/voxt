@@ -209,7 +209,7 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 
 对 `Doubao ASR` 和 `Aliyun Bailian ASR`，会议模式有独立的 `Meeting ASR` 模型配置：
 
-- 只有在开启 `Meeting Notes (Beta)` 后，`设置 > 模型 > Remote ASR > [服务商]` 中才会显示这一段
+- 只有在开启 `Meeting Notes (Beta)` 后，主窗口里的 `模型 > Remote ASR > [服务商]` 中才会显示这一段
 - 会议不会复用普通实时 ASR 模型，而是只使用单独配置的会议模型
 - 如果会议模型没配好，Voxt 会阻止启动会议，并在 provider 列表里显示配置提示
 - 可以先点 `Test Meeting ASR` 验证会议专用请求链路是否可达
@@ -400,9 +400,11 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 - 这意味着正常屏幕共享 / 窗口共享时，会议卡片不应被一起分享出去。
 - 历史记录项和会议详情窗口仍然是普通应用界面；只有 live 的会议悬浮卡片会被显式排除。
 
-## 应用设置
+## 应用主窗口
 
 <img width="933" height="733" alt="image" src="https://github.com/user-attachments/assets/10ceea81-f8f2-4b79-85d5-955b0910c331" />
+
+Voxt 现在使用的是普通应用主窗口，不再是 macOS 特殊语义的“设置窗口”。托盘菜单会打开 `看板` 或 `通用`，而 `帮助` 菜单下提供 `Voxt`、`GitHub`、`作者`、`问题反馈`、`日志` 这些入口。
 
 `General` 主要负责“应用级行为”和“日常使用偏好”的配置。和模型页不同，这里不是决定你用哪个 ASR / LLM，而是决定 Voxt 如何录音、如何显示、如何输出结果、如何随系统启动，以及如何管理网络和配置文件。
 
@@ -506,7 +508,7 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 这里更偏“应用运行方式”：
 
 - 如果你希望 Voxt 常驻菜单栏，通常会开启开机启动
-- 如果你希望更方便从 Dock 进入设置，可以开启 Dock 显示
+- 如果你希望更方便从 Dock 进入主窗口，可以开启 Dock 显示
 - 如果你在受限网络、公司网络或代理环境下使用远程模型，`Proxy` 设置会直接影响远程 ASR / Remote LLM 的连通性
 
 当前自定义代理支持：
@@ -605,7 +607,7 @@ App Branch 本身不一定需要额外权限，取决于你使用到哪一层：
 - 没有这个权限时，Voxt 仍然可以工作，但会退回到普通全局 Prompt，或者只按 App 分组
 
 > [!TIP]
-> 只给你真正需要做 URL 分组的浏览器授权就够了，不需要一次性全部开启。最稳妥的做法是在 `Settings > Permissions > App Branch URL Authorization` 里逐个授权、逐个测试。
+> 只给你真正需要做 URL 分组的浏览器授权就够了，不需要一次性全部开启。最稳妥的做法是在主窗口的 `权限 > App Branch URL Authorization` 里逐个授权、逐个测试。
 
 当前项目中已经内置 / 支持的浏览器 URL 读取方式包括：
 
@@ -619,7 +621,7 @@ App Branch 本身不一定需要额外权限，取决于你使用到哪一层：
 建议：
 
 - 只给你真正用于 URL 分组的浏览器授权，不需要全部开启
-- 在 `Settings > Permissions > App Branch URL Authorization` 中逐个授权、逐个测试最稳妥
+- 在主窗口的 `权限 > App Branch URL Authorization` 中逐个授权、逐个测试最稳妥
 - 如果出现 `Browser URL read test failed: permission denied.`，通常就是浏览器自动化权限尚未放行
 
 [![][back-to-top]](#readme-top)

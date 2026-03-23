@@ -1,6 +1,6 @@
 # Prompt
 
-This document summarizes Voxt's current default prompts, template variables, runtime rules, and recommended writing patterns, so custom prompts remain stable and predictable in Settings.
+This document summarizes Voxt's current default prompts, template variables, runtime rules, and recommended writing patterns, so custom prompts remain stable and predictable in the main window.
 
 > [!IMPORTANT]
 > Most prompts in Voxt are not "chat-style conversational prompts". They are single-turn task prompts. The best results usually come from prompts that are explicit, constrained, and strict about output boundaries.
@@ -388,7 +388,7 @@ When the foreground app is a browser, App Branch prefers URL matching.
    - Edge
    - Brave
    - Arc
-   - or any custom browser added in Settings
+   - or any custom browser added in the main window
 2. If script-based reading fails
    - try `Accessibility` fallback and read the browser window's `AXDocument`
 3. If URL reading succeeds

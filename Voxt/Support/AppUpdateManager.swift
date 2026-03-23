@@ -60,6 +60,25 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         automaticallyChecksForUpdates = newValue
     }
 
+    func checkForUpdatesWithUserInterface() {
+        lastCheckSource = .manual
+        reportIssue(nil)
+        guard sparkleIsAvailable, let updaterController else {
+            reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
+            return
+        }
+        guard isInstallerServiceAvailable() else {
+            VoxtLog.error("Sparkle installer services unavailable. Unable to present interactive update flow.")
+            reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
+            return
+        }
+
+        logInstallerServiceAvailability()
+        NSApp.activate(ignoringOtherApps: true)
+        VoxtLog.info("Manual update check triggered via Sparkle user interface.")
+        updaterController.updater.checkForUpdates()
+    }
+
     func checkForUpdates(source: CheckSource) {
         lastCheckSource = source
         reportIssue(nil)

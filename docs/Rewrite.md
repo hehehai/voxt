@@ -37,7 +37,7 @@ Examples:
 
 ## Model And Provider Selection
 
-Rewrite follows the rewrite model/provider settings in `Settings > Model`.
+Rewrite follows the rewrite model/provider settings in the main window's `Model` page.
 
 Current rewrite providers:
 
@@ -50,7 +50,7 @@ Rewrite does not use ASR provider settings for the generation step; ASR is only 
 
 Rewrite uses the dedicated rewrite prompt.
 
-- you can customize it in Settings
+- you can customize it in the main window
 - the spoken instruction becomes part of the rewrite request
 - selected text, if present, is passed in as source material
 

@@ -4,6 +4,7 @@
 "Hotkey" = "ホットキー";
 "About" = "このアプリについて";
 "Settings…" = "設定…";
+"Open Voxt" = "Voxt を開く";
 "Quit Voxt" = "Voxt を終了";
 "Permissions Required" = "権限が必要です";
 "Voxt needs Microphone access. If you use Direct Dictation, enable Speech Recognition in System Settings → Privacy & Security." = "Voxt にはマイクへのアクセスが必要です。Direct Dictation を使う場合は、システム設定 → プライバシーとセキュリティ で音声認識を有効にしてください。";
@@ -97,6 +98,7 @@
 "License" = "ライセンス";
 "Apache License 2.0" = "Apache 2.0 ライセンス";
 "Project" = "プロジェクト";
+"GitHub" = "GitHub";
 "Author" = "作者";
 "No microphone available" = "利用可能なマイクがありません";
 "Thanks" = "謝辞";
@@ -305,7 +307,8 @@
 "Custom LLM model is not installed. Open Settings > Model to install it." = "カスタム LLM モデルが未インストールです。設定 > モデルでインストールしてください。";
 "Version %@ is skipped." = "バージョン %@ はスキップ済みです。";
 "Skipped version %@." = "バージョン %@ をスキップしました。";
-"Report" = "レポート";
+"Report" = "ダッシュボード";
+"Dashboard" = "ダッシュボード";
 "Total Dictation Time" = "総口述時間";
 "Total Dictation Characters" = "口述文字数";
 "Time Saved" = "節約時間";
@@ -727,3 +730,10 @@
 "Ukrainian" = "ウクライナ語";
 "Hebrew" = "ヘブライ語";
 "Malay" = "マレー語";
+"Navigate" = "移動";
+"Settings" = "設定";
+"Dictionary Entries" = "辞書項目";
+"Sources" = "ソース";
+"History Settings" = "履歴設定";
+"History Entries" = "履歴項目";
+"Transcription Test" = "文字起こしテスト";

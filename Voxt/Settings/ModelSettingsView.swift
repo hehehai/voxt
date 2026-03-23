@@ -38,6 +38,7 @@ struct ModelSettingsView: View {
     @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     let missingConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue]
+    let navigationRequest: SettingsNavigationRequest?
 
     @State var showMirrorInfo = false
     @State var editingASRProvider: RemoteASRProvider?
@@ -149,6 +150,7 @@ struct ModelSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.modelEngine)
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
@@ -180,10 +182,14 @@ struct ModelSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.modelTextEnhancement)
 
             translationSettingsCard
+                .settingsNavigationAnchor(.modelTranslation)
             rewriteSettingsCard
+                .settingsNavigationAnchor(.modelContentRewrite)
             TranscriptionTestSectionView()
+                .settingsNavigationAnchor(.modelTranscriptionTest)
         }
         .onAppear(perform: handleOnAppear)
         .onChange(of: modelRepo) { _, newValue in

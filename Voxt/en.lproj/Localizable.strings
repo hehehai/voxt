@@ -4,6 +4,7 @@
 "Hotkey" = "Hotkey";
 "About" = "About";
 "Settings…" = "Settings…";
+"Open Voxt" = "Open Voxt";
 "Quit Voxt" = "Quit Voxt";
 "Permissions Required" = "Permissions Required";
 "Voxt needs Microphone access. If you use Direct Dictation, enable Speech Recognition in System Settings → Privacy & Security." = "Voxt needs Microphone access. If you use Direct Dictation, enable Speech Recognition in System Settings → Privacy & Security.";
@@ -98,6 +99,7 @@
 "License" = "License";
 "Apache License 2.0" = "Apache License 2.0";
 "Project" = "Project";
+"GitHub" = "GitHub";
 "Feedback" = "Feedback";
 "No microphone available" = "No microphone available";
 "Author" = "Author";
@@ -308,7 +310,8 @@
 "Custom LLM model is not installed. Open Settings > Model to install it." = "Custom LLM model is not installed. Open Settings > Model to install it.";
 "Version %@ is skipped." = "Version %@ is skipped.";
 "Skipped version %@." = "Skipped version %@.";
-"Report" = "Report";
+"Report" = "Dashboard";
+"Dashboard" = "Dashboard";
 "Total Dictation Time" = "Total Dictation Time";
 "Total Dictation Characters" = "Total Dictation Characters";
 "Time Saved" = "Time Saved";
@@ -728,3 +731,10 @@
 "Ukrainian" = "Ukrainian";
 "Hebrew" = "Hebrew";
 "Malay" = "Malay";
+"Navigate" = "Navigate";
+"Settings" = "Settings";
+"Dictionary Entries" = "Dictionary Entries";
+"Sources" = "Sources";
+"History Settings" = "History Settings";
+"History Entries" = "History Entries";
+"Transcription Test" = "Transcription Test";

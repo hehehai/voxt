@@ -21,7 +21,7 @@ This is not true diarization yet.
 
 ## How To Enable It
 
-1. Open `Settings > General > Output`
+1. Open the main window, then go to `General > Output`
 2. Turn on `Meeting Notes (Beta)`
 3. Grant the required permissions:
    - microphone
@@ -30,8 +30,8 @@ This is not true diarization yet.
 
 After enabling it:
 
-- the meeting shortcut appears in `Settings > Hotkey`
-- meeting-related permissions appear in `Settings > Permissions`
+- the meeting shortcut appears in the main window's `Hotkey` page
+- meeting-related permissions appear in the main window's `Permissions` page
 - meeting history becomes available in History filters
 
 ## Supported ASR Engines
@@ -66,7 +66,7 @@ Meeting Notes follows the current global transcription engine.
 For `Doubao ASR` and `Aliyun Bailian ASR`:
 
 - `Meeting Notes` does not use the provider's live websocket path
-- configure `Meeting ASR` separately in `Settings > Model > Remote ASR > [Provider]`
+- configure `Meeting ASR` separately in the main window under `Model > Remote ASR > [Provider]`
 - if the meeting model is missing, meeting start is blocked
 - use `Test Meeting ASR` to verify the meeting-specific request path
 

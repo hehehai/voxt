@@ -83,7 +83,7 @@ With newer macOS versions and local model support, Voxt currently ships with:
 - `Whisper` via WhisperKit, as a separate local ASR engine
 - a set of downloadable local LLM models for enhancement, translation, and rewriting
 
-Whisper is not a sub-mode of `MLX Audio`. In Model Settings it appears as its own engine, with its own model list, download flow, and runtime options.
+Whisper is not a sub-mode of `MLX Audio`. In the main window's `Model` page it appears as its own engine, with its own model list, download flow, and runtime options.
 
 > [!NOTE]
 > "Current status / errors" below comes from the current project code. "Language support / speed / recommendation" is summarized from model cards plus project descriptions. Speed and recommendation are for model selection guidance, not a unified benchmark.
@@ -178,7 +178,7 @@ Common local LLM errors / states:
 
 ### Remote Provider Models
 
-For faster or more realtime transcription and enhancement, configure `Remote ASR` and `Remote LLM` separately in Model Settings. The tables below list only the provider entry points and recommended defaults that Voxt currently exposes in code.
+For faster or more realtime transcription and enhancement, configure `Remote ASR` and `Remote LLM` separately in the main window's `Model` page. The tables below list only the provider entry points and recommended defaults that Voxt currently exposes in code.
 
 > [!note]
 > For the setup tutorial prompt below, you can give it to any AI assistant and let it help you complete the application and configuration process.
@@ -206,7 +206,7 @@ For fuller provider notes, signup links, endpoints, and configuration examples, 
 
 Meeting Notes has a separate `Meeting ASR` model slot for `Doubao ASR` and `Aliyun Bailian ASR`.
 
-- The section appears in `Settings > Model > Remote ASR > [Provider]` only when `Meeting Notes (Beta)` is enabled.
+- The section appears in the main window under `Model > Remote ASR > [Provider]` only when `Meeting Notes (Beta)` is enabled.
 - Meetings do not reuse the provider's normal realtime model. They use the dedicated meeting model instead.
 - If the meeting model is missing, Voxt blocks meeting start and shows setup guidance in the provider list.
 - Use `Test Meeting ASR` to verify the meeting-specific request path before starting a meeting.
@@ -308,7 +308,7 @@ Interaction details:
 - In tap mode, `fn` is the unified stop key. That means once a translation session has started, pressing `fn` can also end it.
 - To avoid accidental stops, Voxt ignores immediate repeated taps during the very short window right after recording starts.
 - `fn+shift` and `fn+control` have higher priority than plain `fn`, so combo presses are not misclassified as regular transcription.
-- All shortcuts can be remapped in Settings, and you can switch to the `command Combo` preset at any time.
+- All shortcuts can be remapped in the main window, and you can switch to the `command Combo` preset at any time.
 
 [![][back-to-top]](#readme-top)
 
@@ -396,10 +396,11 @@ The detail window also has its own translation switch. If the meeting has not be
 - This is intended to keep the meeting card out of normal screen sharing and window sharing output.
 - The history entry and detail window remain normal app UI; only the live meeting overlay is explicitly excluded from sharing.
 
-## App Settings
+## Main Window
 
 <img width="1000" height="731" alt="image" src="https://github.com/user-attachments/assets/7c674413-1a2a-42f0-abdc-862eb7b89a03" />
 
+Voxt now uses a normal app main window instead of a special macOS-only Settings window. The tray menu opens `Dashboard` or `General`, and the `Help` menu exposes `Voxt`, `GitHub`, `Author`, `Feedback`, and `Logs`.
 
 `General` controls app-level behavior and day-to-day usage preferences. Unlike the Model page, this is not where you choose which ASR or LLM to run. It is where you define how Voxt records, appears on screen, outputs results, starts with macOS, and manages network/configuration behavior.
 
@@ -603,7 +604,7 @@ If you want to use `URL rules`, this is the most important permission area:
 - Without this permission, Voxt still works, but falls back to the global prompt or app-only matching
 
 > [!TIP]
-> Only authorize the browsers you actually want to use for URL grouping. The safest workflow is to grant and test them one by one in `Settings > Permissions > App Branch URL Authorization`.
+> Only authorize the browsers you actually want to use for URL grouping. The safest workflow is to grant and test them one by one in the main window under `Permissions > App Branch URL Authorization`.
 
 Built-in or supported browser URL read targets in the current project include:
 
@@ -612,12 +613,12 @@ Built-in or supported browser URL read targets in the current project include:
 - Microsoft Edge
 - Brave
 - Arc
-- plus any custom browsers you add manually in Settings
+- plus any custom browsers you add manually in the main window
 
 Recommendations:
 
 - only authorize the browsers you really need for URL grouping
-- grant and test them one by one in `Settings > Permissions > App Branch URL Authorization`
+- grant and test them one by one in the main window under `Permissions > App Branch URL Authorization`
 - if you see `Browser URL read test failed: permission denied.`, it usually means browser automation has not been approved yet
 
 [![][back-to-top]](#readme-top)

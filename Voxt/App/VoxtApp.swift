@@ -13,42 +13,185 @@ struct VoiceEndCommandState {
     let silenceDuration: TimeInterval = 1.0
 }
 
-struct SettingsWindowPresentationState {
+struct MainWindowPresentationState {
     var shouldRestoreAfterUpdate = false
 }
 
 @main
 struct VoxtApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
 
     var body: some Scene {
         Settings {
-            SettingsView(
-                availableDictionaryHistoryScanModels: {
-                    appDelegate.availableDictionaryHistoryScanModelOptions()
-                },
-                onIngestDictionarySuggestionsFromHistory: { request, persistSettings in
-                    appDelegate.startDictionaryHistorySuggestionScan(
-                        request: request,
-                        persistSettings: persistSettings
-                    )
-                },
-                mlxModelManager: appDelegate.mlxModelManager,
-                whisperModelManager: appDelegate.whisperModelManager,
-                customLLMManager: appDelegate.customLLMManager,
-                historyStore: appDelegate.historyStore,
-                dictionaryStore: appDelegate.dictionaryStore,
-                dictionarySuggestionStore: appDelegate.dictionarySuggestionStore,
-                appUpdateManager: appDelegate.appUpdateManager
-            )
-                .frame(width: 760, height: 560)
-                .environment(\.locale, interfaceLanguage.locale)
+            EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button(AppLocalization.localizedString("General")) {
+                    Task { @MainActor in
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general))
+                    }
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+            MainWindowNavigationCommands(appDelegate: appDelegate)
+            HelpNavigationCommands(appDelegate: appDelegate)
         }
     }
+}
 
-    private var interfaceLanguage: AppInterfaceLanguage {
-        AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
+struct MainWindowNavigationCommands: Commands {
+    @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
+    let appDelegate: AppDelegate
+
+    var body: some Commands {
+        CommandMenu("Navigate") {
+            Button(AppLocalization.localizedString("Dashboard")) {
+                appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .report))
+            }
+
+            Menu(AppLocalization.localizedString("General")) {
+                Button(AppLocalization.localizedString("General")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general))
+                }
+                Divider()
+                Button(AppLocalization.localizedString("Configuration")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalConfiguration))
+                }
+                Button(AppLocalization.localizedString("Audio")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalAudio))
+                }
+                Button(AppLocalization.localizedString("Transcription UI")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalTranscriptionUI))
+                }
+                Button(AppLocalization.localizedString("Languages")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalLanguages))
+                }
+                Button(AppLocalization.localizedString("Model Storage")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalModelStorage))
+                }
+                Button(AppLocalization.localizedString("Output")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalOutput))
+                }
+                Button(AppLocalization.localizedString("Logging")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalLogging))
+                }
+                Button(AppLocalization.localizedString("App Behavior")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalAppBehavior))
+                }
+            }
+
+            Menu(AppLocalization.localizedString("Model")) {
+                Button(AppLocalization.localizedString("Model")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model))
+                }
+                Divider()
+                Button(AppLocalization.localizedString("Engine")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelEngine))
+                }
+                Button(AppLocalization.localizedString("Text Enhancement")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelTextEnhancement))
+                }
+                Button(AppLocalization.localizedString("Translation")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelTranslation))
+                }
+                Button(AppLocalization.localizedString("Content Rewrite")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelContentRewrite))
+                }
+                Button(AppLocalization.localizedString("Transcription Test")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelTranscriptionTest))
+                }
+            }
+
+            Menu(AppLocalization.localizedString("Dictionary")) {
+                Button(AppLocalization.localizedString("Dictionary")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary))
+                }
+                Divider()
+                Button(AppLocalization.localizedString("Settings")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary, section: .dictionarySettings))
+                }
+                Button(AppLocalization.localizedString("Dictionary Entries")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary, section: .dictionaryEntries))
+                }
+            }
+
+            if appEnhancementEnabled {
+                Menu(AppLocalization.localizedString("App Branch")) {
+                    Button(AppLocalization.localizedString("App Branch")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .appEnhancement))
+                    }
+                    Divider()
+                    Button(AppLocalization.localizedString("Sources")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .appEnhancement, section: .appBranchSources))
+                    }
+                    Button(AppLocalization.localizedString("Groups")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .appEnhancement, section: .appBranchGroups))
+                    }
+                }
+            }
+
+            Menu(AppLocalization.localizedString("History")) {
+                Button(AppLocalization.localizedString("History")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .history))
+                }
+                Divider()
+                Button(AppLocalization.localizedString("History Settings")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .history, section: .historySettings))
+                }
+                Button(AppLocalization.localizedString("History Entries")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .history, section: .historyEntries))
+                }
+            }
+
+            Menu(AppLocalization.localizedString("Permissions")) {
+                Button(AppLocalization.localizedString("Permissions")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .permissions))
+                }
+                Divider()
+                Button(AppLocalization.localizedString("Permissions")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .permissions, section: .permissionsMain))
+                }
+                if appEnhancementEnabled {
+                    Button(AppLocalization.localizedString("App Branch URL Authorization")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .permissions, section: .permissionsAppBranchURLAuthorization))
+                    }
+                }
+            }
+
+            Button(AppLocalization.localizedString("Hotkey")) {
+                appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .hotkey))
+            }
+
+        }
+    }
+}
+
+struct HelpNavigationCommands: Commands {
+    let appDelegate: AppDelegate
+    private let projectURL = URL(string: "https://github.com/hehehai/voxt")!
+    private let feedbackURL = URL(string: "https://github.com/hehehai/voxt/issues/new/choose")!
+    private let authorURL = URL(string: "https://www.hehehai.cn/")!
+
+    var body: some Commands {
+        CommandGroup(after: .help) {
+            Divider()
+            Button(AppLocalization.localizedString("Voxt")) {
+                appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .about, section: .aboutVoxt))
+            }
+            Button(AppLocalization.localizedString("GitHub")) {
+                NSWorkspace.shared.open(projectURL)
+            }
+            Button(AppLocalization.localizedString("Author")) {
+                NSWorkspace.shared.open(authorURL)
+            }
+            Button(AppLocalization.localizedString("Feedback")) {
+                NSWorkspace.shared.open(feedbackURL)
+            }
+            Button(AppLocalization.localizedString("Logs")) {
+                appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .about, section: .aboutLogs))
+            }
+        }
     }
 }
 
@@ -159,7 +302,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
 
     var enhancer: TextEnhancer?
-    var settingsWindowController: NSWindowController?
+    var mainWindowController: NSWindowController?
     private var interfaceLanguageObserver: NSObjectProtocol?
     private var updateAvailabilityObserver: NSObjectProtocol?
     private var selectedInputDeviceObserver: NSObjectProtocol?
@@ -211,7 +354,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingMeetingSessionCompletionDisposition: MeetingSessionCompletionDisposition = .save
     let tapStopGuardInterval: TimeInterval = 0.35
     let transcriptionStartDebounceInterval: TimeInterval = 0.08
-    var settingsWindowPresentationState = SettingsWindowPresentationState()
+    var mainWindowPresentationState = MainWindowPresentationState()
 
     override init() {
         let repo = UserDefaults.standard.string(forKey: AppPreferenceKey.mlxModelRepo)
@@ -356,10 +499,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         refreshInputDevicesSnapshot(reason: "launch")
         buildMenu()
         appUpdateManager.onUpdatePresentationWillBegin = { [weak self] in
-            self?.prepareSettingsWindowForUpdatePresentation()
+            self?.prepareMainWindowForUpdatePresentation()
         }
         appUpdateManager.onUpdatePresentationDidEnd = { [weak self] in
-            self?.restoreSettingsWindowAfterUpdateSessionIfNeeded()
+            self?.restoreMainWindowAfterUpdateSessionIfNeeded()
         }
         selectedInputDeviceObserver = NotificationCenter.default.addObserver(
             forName: .voxtSelectedInputDeviceDidChange,
@@ -458,8 +601,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        presentMainWindowOnLaunchIfNeeded()
         scheduleWhisperIdleWarmupIfNeeded()
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !flag else { return true }
+        openMainWindow(selectTab: nil)
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {

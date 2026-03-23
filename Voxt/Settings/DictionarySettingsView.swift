@@ -14,6 +14,7 @@ struct DictionarySettingsView: View {
     @ObservedObject var dictionarySuggestionStore: DictionarySuggestionStore
     let availableHistoryScanModels: () -> [DictionaryHistoryScanModelOption]
     let onIngestSuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
+    let navigationRequest: SettingsNavigationRequest?
 
     @State private var selectedFilter: DictionaryFilter = .all
     @State private var dialog: DictionaryDialog?
@@ -53,11 +54,23 @@ struct DictionarySettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            settingsCard
-            dictionaryListCard
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    settingsCard
+                        .settingsNavigationAnchor(.dictionarySettings)
+                    dictionaryListCard
+                        .settingsNavigationAnchor(.dictionaryEntries)
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+            }
+            .onAppear {
+                scrollToNavigationTargetIfNeeded(using: proxy)
+            }
+            .onChange(of: navigationRequest?.id) { _, _ in
+                scrollToNavigationTargetIfNeeded(using: proxy)
+            }
         }
-        .frame(maxHeight: .infinity, alignment: .top)
         .sheet(item: $dialog) { currentDialog in
             dialogView(for: currentDialog)
         }
@@ -83,6 +96,21 @@ struct DictionarySettingsView: View {
         .onAppear(perform: reloadContent)
         .onReceive(NotificationCenter.default.publisher(for: .voxtConfigurationDidImport)) { _ in
             reloadContent()
+        }
+    }
+
+    private func scrollToNavigationTargetIfNeeded(using proxy: ScrollViewProxy) {
+        guard let navigationRequest,
+              navigationRequest.target.tab == .dictionary,
+              let section = navigationRequest.target.section
+        else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                proxy.scrollTo(section.rawValue, anchor: .top)
+            }
         }
     }
 

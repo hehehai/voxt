@@ -10,13 +10,13 @@ extension AppDelegate {
     func buildMenu() {
         let menu = NSMenu()
 
-        let settingsItem = NSMenuItem(title: AppLocalization.localizedString("Settings…"), action: #selector(openSettings), keyEquivalent: ",")
-        settingsItem.target = self
-        menu.addItem(settingsItem)
+        let dashboardItem = NSMenuItem(title: AppLocalization.localizedString("Dashboard"), action: #selector(openDashboardFromMenu), keyEquivalent: "")
+        dashboardItem.target = self
+        menu.addItem(dashboardItem)
 
-        let reportItem = NSMenuItem(title: AppLocalization.localizedString("Report"), action: #selector(openReportSettings), keyEquivalent: "")
-        reportItem.target = self
-        menu.addItem(reportItem)
+        let generalItem = NSMenuItem(title: AppLocalization.localizedString("General"), action: #selector(openGeneralFromMenu), keyEquivalent: ",")
+        generalItem.target = self
+        menu.addItem(generalItem)
 
         let dictionaryItem = NSMenuItem(
             title: AppLocalization.localizedString("Dictionary"),
@@ -29,6 +29,8 @@ extension AppDelegate {
         let microphoneItem = NSMenuItem(title: AppLocalization.localizedString("Microphone"), action: nil, keyEquivalent: "")
         microphoneItem.submenu = buildMicrophoneMenu()
         menu.addItem(microphoneItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         let checkUpdatesItem = NSMenuItem(
             title: AppLocalization.localizedString("Check for Updates…"),
@@ -138,7 +140,7 @@ extension AppDelegate {
     @objc private func checkForUpdates() {
         performAfterStatusMenuDismissal {
             VoxtLog.info("Manual update check triggered from menu.")
-            self.appUpdateManager.checkForUpdates(source: .manual)
+            self.appUpdateManager.checkForUpdatesWithUserInterface()
         }
     }
 
@@ -149,21 +151,21 @@ extension AppDelegate {
         }
     }
 
-    @objc private func openSettings() {
+    @objc private func openDashboardFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openSettingsWindow(selectTab: nil)
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .report))
         }
     }
 
-    @objc private func openReportSettings() {
+    @objc private func openGeneralFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openSettingsWindow(selectTab: .report)
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .general))
         }
     }
 
     @objc private func openDictionarySettings() {
         performAfterStatusMenuDismissal {
-            self.openSettingsWindow(selectTab: .dictionary)
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary))
         }
     }
 
@@ -172,14 +174,26 @@ extension AppDelegate {
         NotificationCenter.default.post(name: .voxtSelectedInputDeviceDidChange, object: nil)
     }
 
-    func openSettingsWindow(selectTab: SettingsTab?) {
-        if let window = settingsWindowController?.window {
-            if let selectTab {
-                NotificationCenter.default.post(
-                    name: .voxtSettingsSelectTab,
-                    object: nil,
-                    userInfo: ["tab": selectTab.rawValue]
-                )
+    func presentMainWindowOnLaunchIfNeeded() {
+        guard LaunchPresentationPolicy.shouldPresentMainWindowOnLaunch() else { return }
+        openMainWindow()
+    }
+
+    func openMainWindow() {
+        openMainWindow(target: SettingsNavigationTarget(tab: .report))
+    }
+
+    func openMainWindow(target: SettingsNavigationTarget) {
+        let navigationRequest = SettingsNavigationRequest(target: target)
+
+        if let window = mainWindowController?.window {
+            NotificationCenter.default.post(
+                name: .voxtSettingsNavigate,
+                object: nil,
+                userInfo: navigationRequest.target.userInfo
+            )
+            if !window.isVisible {
+                centerMainWindow(window)
             }
             bringWindowToFront(window)
             return
@@ -202,7 +216,7 @@ extension AppDelegate {
             dictionaryStore: dictionaryStore,
             dictionarySuggestionStore: dictionarySuggestionStore,
             appUpdateManager: appUpdateManager,
-            initialTab: selectTab ?? .general
+            initialNavigationTarget: navigationRequest.target
         )
         .frame(width: 760, height: 560)
 
@@ -214,7 +228,7 @@ extension AppDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = ""
+        window.title = "Voxt"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.toolbar = nil
@@ -224,23 +238,59 @@ extension AppDelegate {
         window.contentViewController = hostingController
         window.isReleasedWhenClosed = false
         window.level = .normal
-        window.center()
+        window.delegate = self
         positionWindowTrafficLightButtons(window)
 
         let controller = NSWindowController(window: window)
         controller.shouldCascadeWindows = false
-        settingsWindowController = controller
+        mainWindowController = controller
         controller.showWindow(nil)
         bringWindowToFront(window)
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window else { return }
+            self.centerMainWindow(window)
+            self.bringWindowToFront(window)
+        }
         scheduleTrafficLightButtonPositionUpdate(for: window)
+    }
+
+    func openMainWindow(selectTab: SettingsTab?) {
+        openMainWindow(target: SettingsNavigationTarget(tab: selectTab ?? .report))
     }
 
     private func bringWindowToFront(_ window: NSWindow) {
         NSApp.activate(ignoringOtherApps: true)
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         positionWindowTrafficLightButtons(window)
         scheduleTrafficLightButtonPositionUpdate(for: window)
+    }
+
+    private func centerMainWindow(_ window: NSWindow) {
+        guard let screen = targetScreenForMainWindow(window) else {
+            window.center()
+            return
+        }
+
+        let visibleFrame = screen.visibleFrame
+        let windowFrame = window.frame
+        let origin = CGPoint(
+            x: round(visibleFrame.midX - (windowFrame.width / 2)),
+            y: round(visibleFrame.midY - (windowFrame.height / 2))
+        )
+        window.setFrameOrigin(origin)
+    }
+
+    private func targetScreenForMainWindow(_ window: NSWindow) -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        if let pointerScreen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) {
+            return pointerScreen
+        }
+
+        return window.screen ?? NSScreen.main
     }
 
     private func performAfterStatusMenuDismissal(_ action: @escaping @MainActor () -> Void) {
@@ -292,26 +342,26 @@ extension AppDelegate {
         NSApp.terminate(nil)
     }
 
-    func prepareSettingsWindowForUpdatePresentation() {
-        guard let window = settingsWindowController?.window else {
-            settingsWindowPresentationState = SettingsWindowPresentationState()
+    func prepareMainWindowForUpdatePresentation() {
+        guard let window = mainWindowController?.window else {
+            mainWindowPresentationState = MainWindowPresentationState()
             return
         }
 
         let shouldRestore = window.isVisible && !window.isMiniaturized
-        settingsWindowPresentationState.shouldRestoreAfterUpdate = shouldRestore
+        mainWindowPresentationState.shouldRestoreAfterUpdate = shouldRestore
         guard shouldRestore else { return }
 
-        VoxtLog.info("Temporarily hiding settings window before presenting update UI.")
+        VoxtLog.info("Temporarily hiding main window before presenting update UI.")
         window.orderOut(nil)
     }
 
-    func restoreSettingsWindowAfterUpdateSessionIfNeeded() {
-        guard settingsWindowPresentationState.shouldRestoreAfterUpdate else { return }
-        settingsWindowPresentationState = SettingsWindowPresentationState()
+    func restoreMainWindowAfterUpdateSessionIfNeeded() {
+        guard mainWindowPresentationState.shouldRestoreAfterUpdate else { return }
+        mainWindowPresentationState = MainWindowPresentationState()
 
-        guard let window = settingsWindowController?.window else { return }
-        VoxtLog.info("Restoring settings window after update UI finished.")
+        guard let window = mainWindowController?.window else { return }
+        VoxtLog.info("Restoring main window after update UI finished.")
         bringWindowToFront(window)
     }
 
@@ -325,5 +375,13 @@ extension AppDelegate {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
         }
         NSApp.terminate(nil)
+    }
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender == mainWindowController?.window else { return true }
+        sender.orderOut(nil)
+        return false
     }
 }

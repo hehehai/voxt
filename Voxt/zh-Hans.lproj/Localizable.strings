@@ -4,6 +4,7 @@
 "Hotkey" = "快捷键";
 "About" = "关于";
 "Settings…" = "设置…";
+"Open Voxt" = "打开 Voxt";
 "Quit Voxt" = "退出 Voxt";
 "Permissions Required" = "需要权限";
 "Voxt needs Microphone access. If you use Direct Dictation, enable Speech Recognition in System Settings → Privacy & Security." = "Voxt 需要麦克风权限。如果使用 Direct Dictation，请在 系统设置 → 隐私与安全性 中开启语音识别权限。";
@@ -98,6 +99,7 @@
 "License" = "许可证";
 "Apache License 2.0" = "Apache 2.0 许可证";
 "Project" = "项目";
+"GitHub" = "GitHub";
 "Feedback" = "问题反馈";
 "No microphone available" = "没有可用的麦克风";
 "Author" = "作者";
@@ -308,7 +310,8 @@
 "Custom LLM model is not installed. Open Settings > Model to install it." = "自定义 LLM 模型尚未安装，请在设置 > 模型中安装。";
 "Version %@ is skipped." = "版本 %@ 已被跳过。";
 "Skipped version %@." = "已跳过版本 %@。";
-"Report" = "报告";
+"Report" = "看板";
+"Dashboard" = "看板";
 "Total Dictation Time" = "总口述时间";
 "Total Dictation Characters" = "口述字数";
 "Time Saved" = "节省时间";
@@ -728,3 +731,10 @@
 "Ukrainian" = "乌克兰语";
 "Hebrew" = "希伯来语";
 "Malay" = "马来语";
+"Navigate" = "导航";
+"Settings" = "设置";
+"Dictionary Entries" = "词典条目";
+"Sources" = "来源";
+"History Settings" = "历史设置";
+"History Entries" = "历史记录";
+"Transcription Test" = "转录测试";

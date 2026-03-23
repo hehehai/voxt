@@ -48,6 +48,7 @@ struct HistorySettingsView: View {
     @ObservedObject var historyStore: TranscriptionHistoryStore
     @ObservedObject var dictionaryStore: DictionaryStore
     @ObservedObject var dictionarySuggestionStore: DictionarySuggestionStore
+    let navigationRequest: SettingsNavigationRequest?
     @State private var copiedEntryID: UUID?
     @State private var showRetentionInfo = false
     @State private var selectedFilter: HistoryFilterTab = .all
@@ -61,120 +62,133 @@ struct HistorySettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .center, spacing: 12) {
-                        Toggle("Enable Transcription History", isOn: $historyEnabled)
-                        Spacer(minLength: 12)
-                        HStack(spacing: 4) {
-                            Text("Retention")
-                                .font(.subheadline)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .center, spacing: 12) {
+                                Toggle("Enable Transcription History", isOn: $historyEnabled)
+                                Spacer(minLength: 12)
+                                HStack(spacing: 4) {
+                                    Text("Retention")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Button {
+                                        showRetentionInfo.toggle()
+                                    } label: {
+                                        Image(systemName: "info.circle")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .popover(isPresented: $showRetentionInfo, arrowEdge: .top) {
+                                        Text(AppLocalization.localizedString("History older than the selected retention time is automatically deleted."))
+                                            .font(.caption)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 8)
+                                            .frame(width: 280, alignment: .leading)
+                                    }
+                                }
+                                Picker("Retention", selection: $historyRetentionPeriodRaw) {
+                                    ForEach(HistoryRetentionPeriod.allCases) { option in
+                                        Text(option.title).tag(option.rawValue)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .labelsHidden()
+                                .fixedSize(horizontal: true, vertical: false)
+                                .disabled(!historyEnabled)
+                            }
+
+                            Text("When enabled, each completed transcription result will be saved in local history.")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Button {
-                                showRetentionInfo.toggle()
-                            } label: {
-                                Image(systemName: "info.circle")
-                                    .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                    }
+                    .settingsNavigationAnchor(.historySettings)
+
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .center, spacing: 12) {
+                                HistoryFilterTabPicker(selectedTab: $selectedFilter)
+                                Spacer(minLength: 12)
+                                Button("Clean All", role: .destructive) {
+                                    copiedEntryID = nil
+                                    historyStore.clearAll()
+                                }
+                                .controlSize(.small)
+                                .disabled(historyStore.entries.isEmpty)
                             }
-                            .buttonStyle(.plain)
-                            .popover(isPresented: $showRetentionInfo, arrowEdge: .top) {
-                                Text(AppLocalization.localizedString("History older than the selected retention time is automatically deleted."))
+
+                            if historyStore.entries.isEmpty && !historyEnabled {
+                                Text("History is currently disabled.")
                                     .font(.caption)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .frame(width: 280, alignment: .leading)
-                            }
-                        }
-                        Picker("Retention", selection: $historyRetentionPeriodRaw) {
-                            ForEach(HistoryRetentionPeriod.allCases) { option in
-                                Text(option.title).tag(option.rawValue)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .fixedSize(horizontal: true, vertical: false)
-                        .disabled(!historyEnabled)
-                    }
-
-                    Text("When enabled, each completed transcription result will be saved in local history.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-            }
-
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .center, spacing: 12) {
-                        HistoryFilterTabPicker(selectedTab: $selectedFilter)
-                        Spacer(minLength: 12)
-                        Button("Clean All", role: .destructive) {
-                            copiedEntryID = nil
-                            historyStore.clearAll()
-                        }
-                        .controlSize(.small)
-                        .disabled(historyStore.entries.isEmpty)
-                    }
-
-                    if historyStore.entries.isEmpty && !historyEnabled {
-                        Text("History is currently disabled.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if historyStore.entries.isEmpty {
-                        Text("No history yet.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if filteredEntries.isEmpty {
-                        Text("No entries in this category yet.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 8) {
-                                ForEach(filteredEntries) { entry in
-                                    HistoryRow(
-                                        entry: entry,
-                                        meetingAudioURL: historyStore.meetingAudioURL(for: entry),
-                                        isCopied: copiedEntryID == entry.id,
-                                        onCopy: {
-                                            copyToPasteboard(entry.text)
-                                            copiedEntryID = entry.id
-                                            Task {
-                                                try? await Task.sleep(for: .seconds(1.2))
-                                                if copiedEntryID == entry.id {
-                                                    copiedEntryID = nil
+                                    .foregroundStyle(.secondary)
+                            } else if historyStore.entries.isEmpty {
+                                Text("No history yet.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else if filteredEntries.isEmpty {
+                                Text("No entries in this category yet.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ScrollView {
+                                    LazyVStack(spacing: 8) {
+                                        ForEach(filteredEntries) { entry in
+                                            HistoryRow(
+                                                entry: entry,
+                                                meetingAudioURL: historyStore.meetingAudioURL(for: entry),
+                                                isCopied: copiedEntryID == entry.id,
+                                                onCopy: {
+                                                    copyToPasteboard(entry.text)
+                                                    copiedEntryID = entry.id
+                                                    Task {
+                                                        try? await Task.sleep(for: .seconds(1.2))
+                                                        if copiedEntryID == entry.id {
+                                                            copiedEntryID = nil
+                                                        }
+                                                    }
+                                                },
+                                                onDelete: {
+                                                    historyStore.delete(id: entry.id)
+                                                }
+                                            )
+                                            .onAppear {
+                                                if entry.id == filteredEntries.last?.id {
+                                                    historyStore.loadNextPage()
                                                 }
                                             }
-                                        },
-                                        onDelete: {
-                                            historyStore.delete(id: entry.id)
                                         }
-                                    )
-                                    .onAppear {
-                                        if entry.id == filteredEntries.last?.id {
-                                            historyStore.loadNextPage()
-                                        }
-                                    }
-                                }
 
-                                if historyStore.hasMore {
-                                    Button("Load More") {
-                                        historyStore.loadNextPage()
+                                        if historyStore.hasMore {
+                                            Button("Load More") {
+                                                historyStore.loadNextPage()
+                                            }
+                                            .controlSize(.small)
+                                            .padding(.top, 4)
+                                        }
                                     }
-                                    .controlSize(.small)
-                                    .padding(.top, 4)
                                 }
+                                .frame(maxHeight: .infinity, alignment: .top)
                             }
                         }
-                        .frame(maxHeight: .infinity, alignment: .top)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
                     }
+                    .settingsNavigationAnchor(.historyEntries)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
+            .onAppear {
+                scrollToNavigationTargetIfNeeded(using: proxy)
+            }
+            .onChange(of: navigationRequest?.id) { _, _ in
+                scrollToNavigationTargetIfNeeded(using: proxy)
+            }
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
@@ -194,6 +208,21 @@ struct HistorySettingsView: View {
             }
             historyStore.updateRetentionPolicy()
             historyStore.reload()
+        }
+    }
+
+    private func scrollToNavigationTargetIfNeeded(using proxy: ScrollViewProxy) {
+        guard let navigationRequest,
+              navigationRequest.target.tab == .history,
+              let section = navigationRequest.target.section
+        else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                proxy.scrollTo(section.rawValue, anchor: .top)
+            }
         }
     }
 

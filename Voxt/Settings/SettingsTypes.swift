@@ -2,6 +2,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let voxtSettingsSelectTab = Notification.Name("voxt.settings.selectTab")
+    static let voxtSettingsNavigate = Notification.Name("voxt.settings.navigate")
     static let voxtInterfaceLanguageDidChange = Notification.Name("voxt.interfaceLanguage.didChange")
     static let voxtConfigurationDidImport = Notification.Name("voxt.configuration.didImport")
     static let voxtSelectedInputDeviceDidChange = Notification.Name("voxt.selectedInputDevice.didChange")
@@ -9,9 +10,162 @@ extension Notification.Name {
     static let voxtOverlayAppearanceDidChange = Notification.Name("voxt.overlayAppearance.didChange")
 }
 
+enum SettingsNavigationSection: String, Hashable {
+    case generalConfiguration
+    case generalAudio
+    case generalTranscriptionUI
+    case generalLanguages
+    case generalModelStorage
+    case generalOutput
+    case generalLogging
+    case generalAppBehavior
+    case modelEngine
+    case modelTextEnhancement
+    case modelTranslation
+    case modelContentRewrite
+    case modelTranscriptionTest
+    case dictionarySettings
+    case dictionaryEntries
+    case appBranchSources
+    case appBranchGroups
+    case historySettings
+    case historyEntries
+    case permissionsMain
+    case permissionsAppBranchURLAuthorization
+    case aboutVoxt
+    case aboutProject
+    case aboutAuthor
+    case aboutThanks
+    case aboutLogs
+
+    var tab: SettingsTab {
+        switch self {
+        case .generalConfiguration,
+             .generalAudio,
+             .generalTranscriptionUI,
+             .generalLanguages,
+             .generalModelStorage,
+             .generalOutput,
+             .generalLogging,
+             .generalAppBehavior:
+            return .general
+        case .modelEngine,
+             .modelTextEnhancement,
+             .modelTranslation,
+             .modelContentRewrite,
+             .modelTranscriptionTest:
+            return .model
+        case .dictionarySettings,
+             .dictionaryEntries:
+            return .dictionary
+        case .appBranchSources,
+             .appBranchGroups:
+            return .appEnhancement
+        case .historySettings,
+             .historyEntries:
+            return .history
+        case .permissionsMain,
+             .permissionsAppBranchURLAuthorization:
+            return .permissions
+        case .aboutVoxt,
+             .aboutProject,
+             .aboutAuthor,
+             .aboutThanks,
+             .aboutLogs:
+            return .about
+        }
+    }
+
+    var titleKey: String {
+        switch self {
+        case .generalConfiguration: return "Configuration"
+        case .generalAudio: return "Audio"
+        case .generalTranscriptionUI: return "Transcription UI"
+        case .generalLanguages: return "Languages"
+        case .generalModelStorage: return "Model Storage"
+        case .generalOutput: return "Output"
+        case .generalLogging: return "Logging"
+        case .generalAppBehavior: return "App Behavior"
+        case .modelEngine: return "Engine"
+        case .modelTextEnhancement: return "Text Enhancement"
+        case .modelTranslation: return "Translation"
+        case .modelContentRewrite: return "Content Rewrite"
+        case .modelTranscriptionTest: return "Transcription Test"
+        case .dictionarySettings: return "Settings"
+        case .dictionaryEntries: return "Dictionary Entries"
+        case .appBranchSources: return "Sources"
+        case .appBranchGroups: return "Groups"
+        case .historySettings: return "History Settings"
+        case .historyEntries: return "History Entries"
+        case .permissionsMain: return "Permissions"
+        case .permissionsAppBranchURLAuthorization: return "App Branch URL Authorization"
+        case .aboutVoxt: return "Voxt"
+        case .aboutProject: return "Project"
+        case .aboutAuthor: return "Author"
+        case .aboutThanks: return "Thanks"
+        case .aboutLogs: return "Logs"
+        }
+    }
+
+    var title: String {
+        AppLocalization.localizedString(titleKey)
+    }
+}
+
+struct SettingsNavigationTarget: Hashable {
+    let tab: SettingsTab
+    let section: SettingsNavigationSection?
+
+    init(tab: SettingsTab, section: SettingsNavigationSection? = nil) {
+        self.tab = tab
+        self.section = section
+    }
+
+    init?(notification: Notification) {
+        guard let rawTab = notification.userInfo?["tab"] as? String,
+              let tab = SettingsTab(rawValue: rawTab)
+        else {
+            return nil
+        }
+
+        let section: SettingsNavigationSection?
+        if let rawSection = notification.userInfo?["section"] as? String,
+           !rawSection.isEmpty {
+            section = SettingsNavigationSection(rawValue: rawSection)
+        } else {
+            section = nil
+        }
+
+        self.init(tab: tab, section: section)
+    }
+
+    var userInfo: [String: String] {
+        [
+            "tab": tab.rawValue,
+            "section": section?.rawValue ?? ""
+        ]
+    }
+}
+
+struct SettingsNavigationRequest: Identifiable, Equatable {
+    let id: UUID
+    let target: SettingsNavigationTarget
+
+    init(id: UUID = UUID(), target: SettingsNavigationTarget) {
+        self.id = id
+        self.target = target
+    }
+}
+
+extension View {
+    func settingsNavigationAnchor(_ section: SettingsNavigationSection) -> some View {
+        id(section.rawValue)
+    }
+}
+
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general
     case report
+    case general
     case model
     case dictionary
     case appEnhancement
@@ -27,7 +181,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .permissions: return "Permissions"
         case .history: return "History"
-        case .report: return "Report"
+        case .report: return "Dashboard"
         case .model: return "Model"
         case .dictionary: return "Dictionary"
         case .appEnhancement: return "App Branch"
@@ -43,7 +197,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .permissions: return "Permissions"
         case .history: return "History"
-        case .report: return "Report"
+        case .report: return "Dashboard"
         case .model: return "Model"
         case .dictionary: return "Dictionary"
         case .appEnhancement: return "App Branch"

@@ -21,7 +21,7 @@
 
 ## 如何开启
 
-1. 打开 `设置 > 通用 > 输出`
+1. 打开主窗口，进入 `通用 > 输出`
 2. 开启 `Meeting Notes (Beta)`
 3. 授予所需权限：
    - 麦克风
@@ -66,7 +66,7 @@
 对 `豆包 ASR` 和 `阿里云百炼 ASR`：
 
 - 会议模式不再走 provider 的 live websocket 转写
-- 需要在 `设置 > 模型 > Remote ASR > [服务商]` 里单独配置 `Meeting ASR`
+- 需要在主窗口的 `模型 > Remote ASR > [服务商]` 里单独配置 `Meeting ASR`
 - 如果会议模型未配置，Voxt 会阻止启动会议
 - 可以用 `Test Meeting ASR` 先验证会议专用请求链路
 

@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct AboutSettingsView: View {
     let appUpdateManager: AppUpdateManager
+    let navigationRequest: SettingsNavigationRequest?
     @Environment(\.locale) private var locale
 
     @State private var latestLogUpdateDate: Date?
@@ -46,7 +47,7 @@ struct AboutSettingsView: View {
                         }
                         Spacer(minLength: 0)
                         Button(String(localized: "Check for Updates…")) {
-                            appUpdateManager.checkForUpdates(source: .manual)
+                            appUpdateManager.checkForUpdatesWithUserInterface()
                         }
                         .controlSize(.small)
                     }
@@ -56,6 +57,7 @@ struct AboutSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.aboutVoxt)
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
@@ -69,6 +71,7 @@ struct AboutSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.aboutProject)
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
@@ -80,6 +83,7 @@ struct AboutSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.aboutAuthor)
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
@@ -99,6 +103,7 @@ struct AboutSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.aboutThanks)
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
@@ -139,6 +144,7 @@ struct AboutSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
             }
+            .settingsNavigationAnchor(.aboutLogs)
         }
         .background(
             WindowAccessor { window in

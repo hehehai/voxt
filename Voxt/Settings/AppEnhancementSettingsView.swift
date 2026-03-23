@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 struct AppEnhancementSettingsView: View {
+    let navigationRequest: SettingsNavigationRequest?
     @AppStorage(AppPreferenceKey.interfaceLanguage) var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
 
     @State var apps: [BranchApp] = []
@@ -19,9 +20,21 @@ struct AppEnhancementSettingsView: View {
     @State var modalErrorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sourceListCard
-            groupListCard
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    sourceListCard
+                        .settingsNavigationAnchor(.appBranchSources)
+                    groupListCard
+                        .settingsNavigationAnchor(.appBranchGroups)
+                }
+            }
+            .onAppear {
+                scrollToNavigationTargetIfNeeded(using: proxy)
+            }
+            .onChange(of: navigationRequest?.id) { _, _ in
+                scrollToNavigationTargetIfNeeded(using: proxy)
+            }
         }
         .onAppear(perform: handleOnAppear)
         .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didActivateApplicationNotification)) { _ in
@@ -37,5 +50,20 @@ struct AppEnhancementSettingsView: View {
             modalView(for: currentModal)
         }
         .id(interfaceLanguageRaw)
+    }
+
+    private func scrollToNavigationTargetIfNeeded(using proxy: ScrollViewProxy) {
+        guard let navigationRequest,
+              navigationRequest.target.tab == .appEnhancement,
+              let section = navigationRequest.target.section
+        else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                proxy.scrollTo(section.rawValue, anchor: .top)
+            }
+        }
     }
 }
