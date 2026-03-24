@@ -320,7 +320,7 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 
 `会议记录（Beta）` 是一条独立于普通转录 / 翻译 / 转写的新流程，适合长时间会议、远程通话、播客录制等场景。它不会把文本自动注入当前输入框，也不复用普通转录悬浮层。
 
-<video src="https://storage.actnow.dev/common/voxt/voxt-meeting-record-demo.mp4" controls preload="none" width="100%"></video>
+<video src="https://github.com/user-attachments/assets/89e4fcb2-8730-40b4-9244-3a02d0072fb5" controls preload="none" width="100%"></video>
 
 完整说明见：[Meeting.zh-CN.md](./Meeting.zh-CN.md)。
 
@@ -570,7 +570,7 @@ Voxt 的权限是按功能拆分的。你只使用基础语音输入时，只需
 
 <img width="979" height="712" alt="image" src="https://github.com/user-attachments/assets/1217df7a-7333-4d7f-93ce-67c5b1ae8f9d" />
 
-<video src="https://storage.actnow.dev/common/voxt/voxt-app-branch-demo.mp4" controls preload="none" width="100%"></video>
+<video src="https://github.com/user-attachments/assets/72e361eb-45c3-4f54-ac66-78d4787c7253" controls preload="none" width="100%"></video>
 
 > [!IMPORTANT]
 > `App Branch` 默认不会自动启用。需要先在“通用” -> “输出”里开启 `应用增强（App Enhancement）`，相关分组和 URL 能力才会生效。

@@ -60,7 +60,7 @@ Voxt also applies the normal enhancement chain to the dictated instruction befor
 
 When `App Enhancement` is enabled, rewrite can become context-aware.
 
-<video src="https://storage.actnow.dev/common/voxt/voxt-app-branch-demo.mp4" controls preload="none" width="100%"></video>
+<video src="https://github.com/user-attachments/assets/72e361eb-45c3-4f54-ac66-78d4787c7253" controls preload="none" width="100%"></video>
 
 - Voxt can switch prompts and rules based on the current app or browser URL
 - the same rewrite shortcut can behave differently in coding tools, chat apps, email, or docs
