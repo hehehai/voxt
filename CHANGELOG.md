@@ -6,6 +6,18 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-03-24
+
+### Added
+- Added an AI meeting summary sidebar with saved summaries and follow-up chat directly inside Meeting details.
+- Added a screen sharing toggle in the meeting overlay so meeting captures can include shared-screen context when needed.
+
+### Changed
+- Refreshed the settings and Meeting detail interfaces with more consistent controls, layouts, and localized guidance.
+
+### Fixed
+- Improved meeting summary and onboarding reliability with tighter prompt handling and more isolated preference test coverage.
+
 ## [1.7.1] - 2026-03-23
 
 ### Added
