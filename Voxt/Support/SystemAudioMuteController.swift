@@ -3,6 +3,12 @@ import CoreAudio
 
 @MainActor
 final class SystemAudioMuteController {
+    private enum MuteStrategy {
+        case bundleIDBased(String)
+        case processObjectBased(AudioObjectID)
+        case unavailable
+    }
+
     private struct ProcessTapSession {
         let tapID: AudioObjectID
         let aggregateDeviceID: AudioObjectID
@@ -34,25 +40,73 @@ final class SystemAudioMuteController {
     }
 
     private func activateProcessTapMuteIfPossible() -> Bool {
-        guard let bundleID = Bundle.main.bundleIdentifier,
-              !bundleID.isEmpty,
-              let outputDeviceID = defaultOutputDeviceID(),
+        guard let outputDeviceID = defaultOutputDeviceID(),
               let outputUID = deviceUID(for: outputDeviceID)
         else {
+            VoxtLog.warning("System audio mute unavailable: failed to resolve default output device.")
             return false
         }
 
+        switch resolvedMuteStrategy() {
+        case .bundleIDBased(let bundleID):
+            VoxtLog.info("System audio mute strategy=bundleIDBased", verbose: true)
+            return activateBundleIDProcessTapMute(bundleID: bundleID, outputUID: outputUID)
+        case .processObjectBased(let processObjectID):
+            VoxtLog.info("System audio mute strategy=processObjectBased", verbose: true)
+            return activateProcessObjectTapMute(processObjectID: processObjectID, outputUID: outputUID)
+        case .unavailable:
+            VoxtLog.warning("System audio mute unavailable: failed to resolve mute strategy.")
+            return false
+        }
+    }
+
+    private func resolvedMuteStrategy() -> MuteStrategy {
+        if #available(macOS 26.0, *) {
+            if let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty {
+                return .bundleIDBased(bundleID)
+            }
+        }
+
+        if let processObjectID = currentProcessObjectID() {
+            return .processObjectBased(processObjectID)
+        }
+
+        return .unavailable
+    }
+
+    private func activateBundleIDProcessTapMute(bundleID: String, outputUID: String) -> Bool {
         let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
         tapDescription.uuid = UUID()
         tapDescription.name = "Voxt System Audio Mute"
         tapDescription.isPrivate = true
-        tapDescription.isProcessRestoreEnabled = true
-        tapDescription.bundleIDs = [bundleID]
         tapDescription.muteBehavior = .muted
+
+        if #available(macOS 26.0, *) {
+            tapDescription.isProcessRestoreEnabled = true
+            tapDescription.bundleIDs = [bundleID]
+        }
+
+        return startProcessTapSession(tapDescription: tapDescription, outputUID: outputUID)
+    }
+
+    private func activateProcessObjectTapMute(processObjectID: AudioObjectID, outputUID: String) -> Bool {
+        let tapDescription = CATapDescription(
+            stereoGlobalTapButExcludeProcesses: [processObjectID]
+        )
+        tapDescription.uuid = UUID()
+        tapDescription.name = "Voxt System Audio Mute"
+        tapDescription.isPrivate = true
+        tapDescription.muteBehavior = CATapMuteBehavior.muted
+
+        return startProcessTapSession(tapDescription: tapDescription, outputUID: outputUID)
+    }
+
+    private func startProcessTapSession(tapDescription: CATapDescription, outputUID: String) -> Bool {
 
         var tapID = AudioObjectID(kAudioObjectUnknown)
         let tapCreateStatus = AudioHardwareCreateProcessTap(tapDescription, &tapID)
         guard tapCreateStatus == noErr, tapID != AudioObjectID(kAudioObjectUnknown) else {
+            VoxtLog.warning("System audio mute tap creation failed. status=\(tapCreateStatus)")
             return false
         }
 
@@ -81,6 +135,7 @@ final class SystemAudioMuteController {
         let aggregateStatus = AudioHardwareCreateAggregateDevice(aggregateDescription as CFDictionary, &aggregateDeviceID)
         guard aggregateStatus == noErr, aggregateDeviceID != AudioObjectID(kAudioObjectUnknown) else {
             AudioHardwareDestroyProcessTap(tapID)
+            VoxtLog.warning("System audio mute aggregate device creation failed. status=\(aggregateStatus)")
             return false
         }
 
@@ -96,6 +151,7 @@ final class SystemAudioMuteController {
         guard ioProcStatus == noErr, let ioProcID else {
             AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
             AudioHardwareDestroyProcessTap(tapID)
+            VoxtLog.warning("System audio mute IOProc creation failed. status=\(ioProcStatus)")
             return false
         }
 
@@ -104,6 +160,7 @@ final class SystemAudioMuteController {
             AudioDeviceDestroyIOProcID(aggregateDeviceID, ioProcID)
             AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
             AudioHardwareDestroyProcessTap(tapID)
+            VoxtLog.warning("System audio mute start failed. status=\(startStatus)")
             return false
         }
 
@@ -113,6 +170,32 @@ final class SystemAudioMuteController {
             ioProcID: ioProcID
         )
         return true
+    }
+
+    private func currentProcessObjectID() -> AudioObjectID? {
+        var pid = getpid()
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var processObjectID = AudioObjectID(kAudioObjectUnknown)
+        var dataSize = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = withUnsafePointer(to: &pid) { pidPointer in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<pid_t>.size),
+                pidPointer,
+                &dataSize,
+                &processObjectID
+            )
+        }
+        guard status == noErr, processObjectID != AudioObjectID(kAudioObjectUnknown) else {
+            VoxtLog.warning("System audio mute process object lookup failed. status=\(status)")
+            return nil
+        }
+        return processObjectID
     }
 
     private func defaultOutputDeviceID() -> AudioDeviceID? {

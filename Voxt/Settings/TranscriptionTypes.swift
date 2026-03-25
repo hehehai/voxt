@@ -65,6 +65,34 @@ enum EnhancementMode: String, CaseIterable, Identifiable {
         case .remoteLLM: return AppLocalization.localizedString("Remote LLM")
         }
     }
+
+    static func availableModes(appleIntelligenceAvailable: Bool) -> [EnhancementMode] {
+        allCases.filter { mode in
+            mode != .appleIntelligence || appleIntelligenceAvailable
+        }
+    }
+
+    static func resolved(
+        storedRawValue: String?,
+        appleIntelligenceAvailable: Bool,
+        customLLMAvailable: Bool,
+        remoteLLMAvailable: Bool
+    ) -> EnhancementMode {
+        let requestedMode = EnhancementMode(rawValue: storedRawValue ?? "") ?? .off
+        guard requestedMode == .appleIntelligence, !appleIntelligenceAvailable else {
+            return requestedMode
+        }
+
+        if customLLMAvailable {
+            return .customLLM
+        }
+
+        if remoteLLMAvailable {
+            return .remoteLLM
+        }
+
+        return .off
+    }
 }
 
 enum TranslationModelProvider: String, CaseIterable, Identifiable {

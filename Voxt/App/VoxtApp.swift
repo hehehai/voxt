@@ -303,7 +303,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     )
     var statusItem: NSStatusItem?
 
-    var enhancer: TextEnhancer?
+    var enhancer: (any TextEnhancing)?
     var mainWindowController: NSWindowController?
     private var interfaceLanguageObserver: NSObjectProtocol?
     private var updateAvailabilityObserver: NSObjectProtocol?
@@ -455,8 +455,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var enhancementMode: EnhancementMode {
         get {
-            let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementMode)
-            return EnhancementMode(rawValue: raw ?? "") ?? .off
+            EnhancementMode.resolved(
+                storedRawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementMode),
+                appleIntelligenceAvailable: appleIntelligenceAvailableForCurrentEnvironment,
+                customLLMAvailable: customEnhancementModelAvailable,
+                remoteLLMAvailable: remoteEnhancementModelAvailable
+            )
         }
         set {
             let previous = enhancementMode
@@ -474,12 +478,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.bool(forKey: AppPreferenceKey.appEnhancementEnabled)
     }
 
+    private var appleIntelligenceAvailableForCurrentEnvironment: Bool {
+        if #available(macOS 26.0, *) {
+            return TextEnhancer.isAvailable
+        }
+        return false
+    }
+
+    private var customEnhancementModelAvailable: Bool {
+        customLLMManager.isModelDownloaded(repo: customLLMManager.currentModelRepo)
+    }
+
+    private var remoteEnhancementModelAvailable: Bool {
+        let configuration = resolvedRemoteLLMContext(forTranslation: false).configuration
+        return configuration.isConfigured && configuration.hasUsableModel
+    }
+
     private var isRunningUnitTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
+    private var currentSystemVersionLogDescription: String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let versionString = "macOS \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        let buildString = ProcessInfo.processInfo.operatingSystemVersionString
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(versionString) (\(buildString))"
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         VoxtLog.info("Voxt launching.")
+        VoxtLog.info("Runtime system version: \(currentSystemVersionLogDescription)")
         migrateLegacyPreferences()
 
         if isRunningUnitTests {

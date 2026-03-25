@@ -53,7 +53,12 @@ struct ModelSettingsView: View {
     }
 
     var selectedEnhancementMode: EnhancementMode {
-        EnhancementMode(rawValue: enhancementModeRaw) ?? .off
+        EnhancementMode.resolved(
+            storedRawValue: enhancementModeRaw,
+            appleIntelligenceAvailable: appleIntelligenceAvailable,
+            customLLMAvailable: customEnhancementModelAvailable,
+            remoteLLMAvailable: remoteEnhancementModelAvailable
+        )
     }
 
     var selectedRemoteASRProvider: RemoteASRProvider {
@@ -103,6 +108,31 @@ struct ModelSettingsView: View {
             return TextEnhancer.isAvailable
         }
         return false
+    }
+
+    var customEnhancementModelAvailable: Bool {
+        customLLMManager.isModelDownloaded(repo: customLLMManager.currentModelRepo)
+    }
+
+    var remoteEnhancementModelAvailable: Bool {
+        let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(
+            provider: selectedRemoteLLMProvider,
+            stored: remoteLLMConfigurations
+        )
+        return configuration.isConfigured && configuration.hasUsableModel
+    }
+
+    var enhancementModeOptions: [SettingsMenuOption<String>] {
+        EnhancementMode.availableModes(appleIntelligenceAvailable: appleIntelligenceAvailable).map { mode in
+            SettingsMenuOption(value: mode.rawValue, title: mode.title)
+        }
+    }
+
+    var enhancementModeSelection: Binding<String> {
+        Binding(
+            get: { selectedEnhancementMode.rawValue },
+            set: { enhancementModeRaw = $0 }
+        )
     }
 
     var body: some View {
@@ -158,10 +188,8 @@ struct ModelSettingsView: View {
                         .font(.headline)
 
                     SettingsMenuPicker(
-                        selection: $enhancementModeRaw,
-                        options: EnhancementMode.allCases.map { mode in
-                            SettingsMenuOption(value: mode.rawValue, title: mode.title)
-                        },
+                        selection: enhancementModeSelection,
+                        options: enhancementModeOptions,
                         selectedTitle: selectedEnhancementMode.title,
                         width: 260
                     )

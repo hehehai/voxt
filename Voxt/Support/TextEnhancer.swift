@@ -1,11 +1,22 @@
 import Foundation
 import FoundationModels
 
+@MainActor
+protocol TextEnhancing: AnyObject {
+    func enhance(_ rawText: String, systemPrompt: String) async throws -> String
+    func enhance(userPrompt: String) async throws -> String
+    func translate(
+        _ text: String,
+        targetLanguage: TranslationTargetLanguage,
+        systemPrompt: String
+    ) async throws -> String
+}
+
 /// Uses Apple Intelligence (on-device Foundation Models) to clean up
 /// and enhance raw speech transcription output.
 @available(macOS 26.0, *)
 @MainActor
-class TextEnhancer {
+class TextEnhancer: TextEnhancing {
     @Generable
     struct EnhancementOutput {
         var resultText: String
