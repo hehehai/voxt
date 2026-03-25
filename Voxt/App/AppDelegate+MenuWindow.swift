@@ -104,6 +104,7 @@ extension AppDelegate {
 
     func refreshInputDevicesSnapshot(reason: String) {
         inputDevicesRefreshTask?.cancel()
+        VoxtLog.info("Refreshing audio input snapshot. reason=\(reason)", verbose: true)
 
         inputDevicesRefreshTask = Task { [weak self] in
             let devices = await Task.detached(priority: .utility) {
@@ -131,6 +132,19 @@ extension AppDelegate {
 
         let devicesChanged = previousDevices != devices
         let selectionChanged = previousSelectedUID != resolvedState.activeUID
+        let previousUIDs = Set(previousDevices.map(\.uid))
+        let currentUIDs = Set(devices.map(\.uid))
+        let addedDevices = devices.filter { !previousUIDs.contains($0.uid) }
+        let removedDevices = previousDevices.filter { !currentUIDs.contains($0.uid) }
+
+        if devicesChanged {
+            VoxtLog.info(
+                """
+                Audio input hardware change applied. reason=\(reason), previousCount=\(previousDevices.count), currentCount=\(devices.count), added=\(describeDevices(addedDevices)), removed=\(describeDevices(removedDevices))
+                """
+            )
+        }
+
         guard devicesChanged || selectionChanged else { return }
 
         if devicesChanged {
@@ -144,6 +158,11 @@ extension AppDelegate {
             verbose: true
         )
         buildMenu()
+    }
+
+    private func describeDevices(_ devices: [AudioInputDevice]) -> String {
+        guard !devices.isEmpty else { return "[]" }
+        return "[" + devices.map { "\($0.name){uid=\($0.uid),id=\($0.id)}" }.joined(separator: ", ") + "]"
     }
 
     @objc private func checkForUpdates() {

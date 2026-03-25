@@ -126,6 +126,17 @@ enum AudioInputDeviceManager {
         AudioInputDeviceObserver(onChange: onChange)
     }
 
+    nonisolated static func selectorDescription(_ selector: AudioObjectPropertySelector) -> String {
+        switch selector {
+        case kAudioHardwarePropertyDevices:
+            return "devices"
+        case kAudioHardwarePropertyDefaultInputDevice:
+            return "defaultInputDevice"
+        default:
+            return String(selector)
+        }
+    }
+
     nonisolated private static func hasInputStream(deviceID: AudioDeviceID) -> Bool {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,
@@ -192,7 +203,12 @@ final class AudioInputDeviceObserver {
 
     init?(onChange: @escaping @Sendable () -> Void) {
         self.onChange = onChange
-        self.block = { _, _ in
+        self.block = { numberAddresses, addresses in
+            let selectorValues = UnsafeBufferPointer(start: addresses, count: Int(numberAddresses)).map {
+                AudioInputDeviceManager.selectorDescription($0.mSelector)
+            }
+            let selectors = selectorValues.isEmpty ? "unknown" : selectorValues.joined(separator: ",")
+            VoxtLog.info("Audio input device observer fired. selectors=\(selectors)")
             onChange()
         }
 
@@ -224,6 +240,7 @@ final class AudioInputDeviceObserver {
         }
 
         isRegistered = true
+        VoxtLog.info("Audio input device observer registered.")
     }
 
     deinit {
@@ -231,5 +248,6 @@ final class AudioInputDeviceObserver {
         let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &devicesAddress, queue, block)
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &defaultInputAddress, queue, block)
+        VoxtLog.info("Audio input device observer removed.", verbose: true)
     }
 }

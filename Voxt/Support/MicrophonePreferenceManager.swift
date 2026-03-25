@@ -38,6 +38,20 @@ enum MicrophonePreferenceManager {
         saveTrackedRecords(records, defaults: defaults)
         defaults.set(priorityUIDs, forKey: AppPreferenceKey.microphonePriorityUIDs)
 
+        let addedUIDs = newlyAvailableUIDs(
+            availableDevices: availableDevices,
+            previousAvailableUIDs: previousAvailableUIDs
+        )
+        let removedUIDs = removedUIDs(
+            availableDevices: availableDevices,
+            previousAvailableUIDs: previousAvailableUIDs
+        )
+        VoxtLog.info(
+            """
+            Microphone sync resolved. current=\(currentActiveUID ?? "none"), resolved=\(activeUID ?? "none"), default=\(defaultUID ?? "none"), autoSwitch=\(autoSwitchEnabled), added=\(formatUIDList(addedUIDs)), removed=\(formatUIDList(removedUIDs)), priority=\(formatUIDList(priorityUIDs)), available=\(formatDevices(availableDevices))
+            """
+        )
+
         return resolvedState(
             activeDevice: activeDevice,
             availableDevices: availableDevices,
@@ -262,6 +276,9 @@ enum MicrophonePreferenceManager {
             guard autoSwitchEnabled,
                   let previousAvailableUIDs
             else {
+                VoxtLog.info(
+                    "Microphone auto selection kept current device. current=\(currentActiveUID), autoSwitch=\(autoSwitchEnabled), previousSnapshotKnown=\(previousAvailableUIDs != nil)"
+                )
                 return currentActiveUID
             }
 
@@ -271,24 +288,62 @@ enum MicrophonePreferenceManager {
                 guard !previousAvailableUIDs.contains(uid) else { return false }
                 return priorityRank(for: uid, priorityUIDs: priorityUIDs) < currentRank
             }) {
+                VoxtLog.info(
+                    "Microphone auto selection promoted higher-priority device. previous=\(currentActiveUID), promoted=\(promotedUID), previousRank=\(currentRank), promotedRank=\(priorityRank(for: promotedUID, priorityUIDs: priorityUIDs))"
+                )
                 return promotedUID
             }
 
+            VoxtLog.info(
+                "Microphone auto selection kept current device after priority evaluation. current=\(currentActiveUID), currentRank=\(currentRank), newlyAvailable=\(formatUIDList(newlyAvailableUIDs(availableDevices: availableDevices, previousAvailableUIDs: previousAvailableUIDs)))"
+            )
             return currentActiveUID
         }
 
         if let prioritizedUID = priorityUIDs.first(where: { availableByUID[$0] != nil }) {
+            VoxtLog.info("Microphone auto selection chose prioritized device. uid=\(prioritizedUID)")
             return prioritizedUID
         }
 
         if let defaultUID, availableByUID[defaultUID] != nil {
+            VoxtLog.info("Microphone auto selection fell back to system default. uid=\(defaultUID)")
             return defaultUID
         }
 
-        return availableDevices.first?.uid
+        let fallbackUID = availableDevices.first?.uid
+        VoxtLog.info("Microphone auto selection fell back to first available device. uid=\(fallbackUID ?? "none")")
+        return fallbackUID
     }
 
     private static func priorityRank(for uid: String, priorityUIDs: [String]) -> Int {
         priorityUIDs.firstIndex(of: uid) ?? Int.max
+    }
+
+    private static func newlyAvailableUIDs(
+        availableDevices: [AudioInputDevice],
+        previousAvailableUIDs: Set<String>?
+    ) -> [String] {
+        guard let previousAvailableUIDs else { return [] }
+        return availableDevices.map(\.uid).filter { !previousAvailableUIDs.contains($0) }
+    }
+
+    private static func removedUIDs(
+        availableDevices: [AudioInputDevice],
+        previousAvailableUIDs: Set<String>?
+    ) -> [String] {
+        guard let previousAvailableUIDs else { return [] }
+        let currentUIDs = Set(availableDevices.map(\.uid))
+        return previousAvailableUIDs.filter { !currentUIDs.contains($0) }.sorted()
+    }
+
+    private static func formatUIDList(_ uids: [String]) -> String {
+        uids.isEmpty ? "[]" : "[\(uids.joined(separator: ", "))]"
+    }
+
+    private static func formatDevices(_ devices: [AudioInputDevice]) -> String {
+        guard !devices.isEmpty else { return "[]" }
+        return devices
+            .map { "\($0.name){uid=\($0.uid),id=\($0.id)}" }
+            .joined(separator: ", ")
     }
 }
