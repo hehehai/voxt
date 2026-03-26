@@ -14,7 +14,7 @@ actor MeetingAudioArchive {
         switch speaker {
         case .me:
             meSamples.append(contentsOf: preparedSamples)
-        case .them:
+        case .them, .remote:
             themSamples.append(contentsOf: preparedSamples)
         }
     }

@@ -671,8 +671,8 @@
 "Using %@" = "使用中: %@";
 "Realtime Translation" = "リアルタイム翻訳";
 "Choose Translation Language" = "翻訳言語を選択";
-"Realtime translation only translates Them segments." = "リアルタイム翻訳は「相手」のセグメントのみ翻訳します。";
-"Realtime translation in detail view only translates Them segments." = "詳細ビューのリアルタイム翻訳は「相手」のセグメントのみ翻訳します。";
+"Realtime translation only translates remote-speaker segments." = "リアルタイム翻訳は遠隔話者のセグメントのみ翻訳します。";
+"Realtime translation in detail view translates remote-speaker segments only." = "詳細ビューのリアルタイム翻訳は遠隔話者のセグメントのみ翻訳します。";
 "End this meeting transcription?" = "この会議の文字起こしを終了しますか？";
 "Canceling will discard this meeting; finishing will save it and open Meeting Details." = "文字起こしをキャンセルするとこの会議は破棄されます。終了すると保存され、会議詳細が開きます。";
 "Cancel Transcription" = "文字起こしをキャンセル";
@@ -883,7 +883,7 @@
 "Detail" = "詳細";
 "Start Translation" = "翻訳を開始";
 "Latest" = "最新";
-"The transcript timeline for Me / Them will appear here once the meeting starts." = "会議が始まると、ここに Me / Them のタイムラインが表示されます。";
+"The transcript timeline for you and remote speakers will appear here once the meeting starts." = "会議が始まると、ここに自分と遠隔話者のタイムラインが表示されます。";
 "Automatic scrolling pauses when you scroll away from the bottom." = "下端から離れると自動スクロールは一時停止します。";
 "Meeting Transcript UI Shareable" = "会議文字起こし UI を共有可能にする";
 "Leave this off to keep the meeting transcript overlay private. Turn it on if you want the UI to appear in screen sharing or screen recordings." = "オフのままなら会議文字起こしオーバーレイは非公開になり、画面共有や画面録画に表示されません。共有したい場合のみオンにしてください。";

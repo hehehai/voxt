@@ -71,6 +71,9 @@ enum ConfigurationTransferManager {
         var meetingOverlayCollapsed: Bool
         var meetingRealtimeTranslateEnabled: Bool
         var meetingRealtimeTranslationTargetLanguage: String
+        var meetingEnableSpeakerDiarization: Bool
+        var meetingDiarizationVariant: String
+        var meetingEchoMitigationEnabled: Bool
         var voiceEndCommandEnabled: Bool
         var voiceEndCommandPreset: String
         var voiceEndCommandText: String
@@ -114,6 +117,9 @@ enum ConfigurationTransferManager {
             case meetingOverlayCollapsed
             case meetingRealtimeTranslateEnabled
             case meetingRealtimeTranslationTargetLanguage
+            case meetingEnableSpeakerDiarization
+            case meetingDiarizationVariant
+            case meetingEchoMitigationEnabled
             case voiceEndCommandEnabled
             case voiceEndCommandPreset
             case voiceEndCommandText
@@ -162,6 +168,9 @@ enum ConfigurationTransferManager {
             meetingOverlayCollapsed: Bool,
             meetingRealtimeTranslateEnabled: Bool,
             meetingRealtimeTranslationTargetLanguage: String,
+            meetingEnableSpeakerDiarization: Bool,
+            meetingDiarizationVariant: String,
+            meetingEchoMitigationEnabled: Bool,
             voiceEndCommandEnabled: Bool,
             voiceEndCommandPreset: String,
             voiceEndCommandText: String,
@@ -205,6 +214,9 @@ enum ConfigurationTransferManager {
             self.meetingOverlayCollapsed = meetingOverlayCollapsed
             self.meetingRealtimeTranslateEnabled = meetingRealtimeTranslateEnabled
             self.meetingRealtimeTranslationTargetLanguage = meetingRealtimeTranslationTargetLanguage
+            self.meetingEnableSpeakerDiarization = meetingEnableSpeakerDiarization
+            self.meetingDiarizationVariant = meetingDiarizationVariant
+            self.meetingEchoMitigationEnabled = meetingEchoMitigationEnabled
             self.voiceEndCommandEnabled = voiceEndCommandEnabled
             self.voiceEndCommandPreset = voiceEndCommandPreset
             self.voiceEndCommandText = voiceEndCommandText
@@ -258,6 +270,9 @@ enum ConfigurationTransferManager {
             meetingOverlayCollapsed = try container.decodeIfPresent(Bool.self, forKey: .meetingOverlayCollapsed) ?? false
             meetingRealtimeTranslateEnabled = try container.decodeIfPresent(Bool.self, forKey: .meetingRealtimeTranslateEnabled) ?? false
             meetingRealtimeTranslationTargetLanguage = try container.decodeIfPresent(String.self, forKey: .meetingRealtimeTranslationTargetLanguage) ?? ""
+            meetingEnableSpeakerDiarization = try container.decodeIfPresent(Bool.self, forKey: .meetingEnableSpeakerDiarization) ?? false
+            meetingDiarizationVariant = try container.decodeIfPresent(String.self, forKey: .meetingDiarizationVariant) ?? "dihard3"
+            meetingEchoMitigationEnabled = try container.decodeIfPresent(Bool.self, forKey: .meetingEchoMitigationEnabled) ?? true
             voiceEndCommandEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceEndCommandEnabled) ?? false
             voiceEndCommandPreset = try container.decodeIfPresent(String.self, forKey: .voiceEndCommandPreset) ?? VoiceEndCommandPreset.over.rawValue
             voiceEndCommandText = try container.decodeIfPresent(String.self, forKey: .voiceEndCommandText) ?? ""
@@ -303,6 +318,9 @@ enum ConfigurationTransferManager {
             try container.encode(meetingOverlayCollapsed, forKey: .meetingOverlayCollapsed)
             try container.encode(meetingRealtimeTranslateEnabled, forKey: .meetingRealtimeTranslateEnabled)
             try container.encode(meetingRealtimeTranslationTargetLanguage, forKey: .meetingRealtimeTranslationTargetLanguage)
+            try container.encode(meetingEnableSpeakerDiarization, forKey: .meetingEnableSpeakerDiarization)
+            try container.encode(meetingDiarizationVariant, forKey: .meetingDiarizationVariant)
+            try container.encode(meetingEchoMitigationEnabled, forKey: .meetingEchoMitigationEnabled)
             try container.encode(voiceEndCommandEnabled, forKey: .voiceEndCommandEnabled)
             try container.encode(voiceEndCommandPreset, forKey: .voiceEndCommandPreset)
             try container.encode(voiceEndCommandText, forKey: .voiceEndCommandText)
@@ -918,6 +936,9 @@ enum ConfigurationTransferManager {
             meetingOverlayCollapsed: defaults.object(forKey: AppPreferenceKey.meetingOverlayCollapsed) as? Bool ?? false,
             meetingRealtimeTranslateEnabled: defaults.object(forKey: AppPreferenceKey.meetingRealtimeTranslateEnabled) as? Bool ?? false,
             meetingRealtimeTranslationTargetLanguage: defaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage) ?? "",
+            meetingEnableSpeakerDiarization: defaults.object(forKey: AppPreferenceKey.meetingEnableSpeakerDiarization) as? Bool ?? false,
+            meetingDiarizationVariant: defaults.string(forKey: AppPreferenceKey.meetingDiarizationVariant) ?? "dihard3",
+            meetingEchoMitigationEnabled: defaults.object(forKey: AppPreferenceKey.meetingEchoMitigationEnabled) as? Bool ?? true,
             voiceEndCommandEnabled: defaults.object(forKey: AppPreferenceKey.voiceEndCommandEnabled) as? Bool ?? false,
             voiceEndCommandPreset: defaults.string(forKey: AppPreferenceKey.voiceEndCommandPreset) ?? VoiceEndCommandPreset.over.rawValue,
             voiceEndCommandText: defaults.string(forKey: AppPreferenceKey.voiceEndCommandText) ?? "",
@@ -1050,6 +1071,9 @@ enum ConfigurationTransferManager {
         defaults.set(general.meetingOverlayCollapsed, forKey: AppPreferenceKey.meetingOverlayCollapsed)
         defaults.set(general.meetingRealtimeTranslateEnabled, forKey: AppPreferenceKey.meetingRealtimeTranslateEnabled)
         defaults.set(general.meetingRealtimeTranslationTargetLanguage, forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage)
+        defaults.set(general.meetingEnableSpeakerDiarization, forKey: AppPreferenceKey.meetingEnableSpeakerDiarization)
+        defaults.set(general.meetingDiarizationVariant, forKey: AppPreferenceKey.meetingDiarizationVariant)
+        defaults.set(general.meetingEchoMitigationEnabled, forKey: AppPreferenceKey.meetingEchoMitigationEnabled)
         defaults.set(general.voiceEndCommandEnabled, forKey: AppPreferenceKey.voiceEndCommandEnabled)
         defaults.set(general.voiceEndCommandPreset, forKey: AppPreferenceKey.voiceEndCommandPreset)
         defaults.set(general.voiceEndCommandText, forKey: AppPreferenceKey.voiceEndCommandText)

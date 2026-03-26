@@ -568,7 +568,7 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     private func shouldTranslate(segment: MeetingTranscriptSegment) -> Bool {
-        guard segment.speaker == .them else { return false }
+        guard segment.speaker.isRemote else { return false }
         let translatedText = segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return (translatedText.isEmpty || segment.isTranslationPending) && translationTasks[segment.id] == nil
     }

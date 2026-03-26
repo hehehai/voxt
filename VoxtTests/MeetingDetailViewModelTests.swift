@@ -329,6 +329,71 @@ final class MeetingDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.resolvedSummaryModelSelectionID, "remote-llm:available")
     }
 
+    func testHistoryTranslationIncludesRemoteSpeakerSegments() async {
+        let viewModel = MeetingDetailViewModel(
+            title: "Meeting Details",
+            subtitle: "Today",
+            historyEntryID: UUID(),
+            initialSummary: nil,
+            initialSummaryChatMessages: [],
+            initialSummarySettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Default summary prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            summaryModelOptions: [],
+            summarySettingsProvider: {
+                MeetingSummarySettingsSnapshot(
+                    autoGenerate: false,
+                    promptTemplate: "Default summary prompt",
+                    modelSelectionID: "custom-llm:test"
+                )
+            },
+            summaryModelOptionsProvider: { [] },
+            segments: [
+                MeetingTranscriptSegment(
+                    speaker: .me,
+                    startSeconds: 0,
+                    endSeconds: 1,
+                    text: "local segment"
+                ),
+                MeetingTranscriptSegment(
+                    speaker: .remote(1),
+                    startSeconds: 1,
+                    endSeconds: 2,
+                    text: "remote segment"
+                )
+            ],
+            audioURL: nil,
+            translationHandler: { text, _ in "translated: \(text)" },
+            summaryStatusProvider: { _ in
+                MeetingSummaryProviderStatus(isAvailable: false, message: "Unavailable")
+            },
+            summaryGenerator: { _, settings in
+                MeetingSummarySnapshot(
+                    title: "Unused",
+                    body: "Unused",
+                    todoItems: [],
+                    generatedAt: Date(),
+                    settingsSnapshot: settings
+                )
+            },
+            summaryPersistence: { _, _ in nil },
+            summaryChatAnswerer: { _, _, _, _, _ in "" },
+            summaryChatPersistence: { _, _ in nil }
+        )
+
+        viewModel.setTranslationEnabled(true)
+        viewModel.confirmTranslationLanguageSelection()
+        try? await Task.sleep(for: .milliseconds(150))
+
+        XCTAssertNil(viewModel.segments.first(where: { $0.speaker == .me })?.translatedText)
+        XCTAssertEqual(
+            viewModel.segments.first(where: { $0.speaker == .remote(1) })?.translatedText,
+            "translated: remote segment"
+        )
+    }
+
     private func makeHistoryViewModel(
         initialSettings: MeetingSummarySettingsSnapshot,
         modelOptions: [MeetingSummaryModelOption]

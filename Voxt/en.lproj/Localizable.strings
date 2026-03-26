@@ -672,8 +672,8 @@
 "Using %@" = "Using %@";
 "Realtime Translation" = "Realtime Translation";
 "Choose Translation Language" = "Choose Translation Language";
-"Realtime translation only translates Them segments." = "Realtime translation only translates Them segments.";
-"Realtime translation in detail view only translates Them segments." = "Realtime translation in detail view only translates Them segments.";
+"Realtime translation only translates remote-speaker segments." = "Realtime translation only translates remote-speaker segments.";
+"Realtime translation in detail view translates remote-speaker segments only." = "Realtime translation in detail view translates remote-speaker segments only.";
 "End this meeting transcription?" = "End this meeting transcription?";
 "Canceling will discard this meeting; finishing will save it and open Meeting Details." = "Canceling will discard this meeting; finishing will save it and open Meeting Details.";
 "Cancel Transcription" = "Cancel Transcription";
@@ -931,7 +931,7 @@
 "Detail" = "Detail";
 "Start Translation" = "Start Translation";
 "Latest" = "Latest";
-"The transcript timeline for Me / Them will appear here once the meeting starts." = "The transcript timeline for Me / Them will appear here once the meeting starts.";
+"The transcript timeline for you and remote speakers will appear here once the meeting starts." = "The transcript timeline for you and remote speakers will appear here once the meeting starts.";
 "Automatic scrolling pauses when you scroll away from the bottom." = "Automatic scrolling pauses when you scroll away from the bottom.";
 "Meeting Transcript UI Shareable" = "Meeting Transcript UI Shareable";
 "Leave this off to keep the meeting transcript overlay private. Turn it on if you want the UI to appear in screen sharing or screen recordings." = "Leave this off to keep the meeting transcript overlay private. Turn it on if you want the UI to appear in screen sharing or screen recordings.";

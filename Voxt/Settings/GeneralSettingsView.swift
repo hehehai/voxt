@@ -20,6 +20,9 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) private var translateSelectedTextOnTranslationHotkey = true
     @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.hideMeetingOverlayFromScreenSharing) private var hideMeetingOverlayFromScreenSharing = false
+    @AppStorage(AppPreferenceKey.meetingEnableSpeakerDiarization) private var meetingEnableSpeakerDiarization = false
+    @AppStorage(AppPreferenceKey.meetingDiarizationVariant) private var meetingDiarizationVariantRaw = MeetingDiarizationVariant.dihard3.rawValue
+    @AppStorage(AppPreferenceKey.meetingEchoMitigationEnabled) private var meetingEchoMitigationEnabled = true
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
@@ -86,6 +89,13 @@ struct GeneralSettingsView: View {
         Binding(
             get: { VoxtNetworkSession.ProxyScheme(rawValue: customProxySchemeRaw) ?? .http },
             set: { customProxySchemeRaw = $0.rawValue }
+        )
+    }
+
+    private var meetingDiarizationVariantSelection: Binding<MeetingDiarizationVariant> {
+        Binding(
+            get: { MeetingDiarizationVariant(rawValue: meetingDiarizationVariantRaw) ?? .dihard3 },
+            set: { meetingDiarizationVariantRaw = $0.rawValue }
         )
     }
 
@@ -168,6 +178,13 @@ struct GeneralSettingsView: View {
                 appEnhancementEnabled: $appEnhancementEnabled
             )
             .settingsNavigationAnchor(.generalOutput)
+
+            GeneralMeetingNotesCard(
+                meetingNotesBetaEnabled: $meetingNotesBetaEnabled,
+                meetingEnableSpeakerDiarization: $meetingEnableSpeakerDiarization,
+                meetingDiarizationVariant: meetingDiarizationVariantSelection,
+                meetingEchoMitigationEnabled: $meetingEchoMitigationEnabled
+            )
 
             GeneralLoggingCard(
                 hotkeyDebugLoggingEnabled: $hotkeyDebugLoggingEnabled,

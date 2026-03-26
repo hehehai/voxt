@@ -450,6 +450,45 @@ struct GeneralLoggingCard: View {
     }
 }
 
+struct GeneralMeetingNotesCard: View {
+    @Binding var meetingNotesBetaEnabled: Bool
+    @Binding var meetingEnableSpeakerDiarization: Bool
+    @Binding var meetingDiarizationVariant: MeetingDiarizationVariant
+    @Binding var meetingEchoMitigationEnabled: Bool
+
+    var body: some View {
+        if meetingNotesBetaEnabled {
+            GeneralSettingsCard(title: "Meeting Notes") {
+                Toggle("Identify multiple remote speakers", isOn: $meetingEnableSpeakerDiarization)
+                Text("Runs local diarization on system audio so remote participants can be labeled as Remote 1, Remote 2, and so on.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if meetingEnableSpeakerDiarization {
+                    HStack(alignment: .center) {
+                        Text("Diarization Variant")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        SettingsMenuPicker(
+                            selection: $meetingDiarizationVariant,
+                            options: MeetingDiarizationVariant.allCases.map { variant in
+                                SettingsMenuOption(value: variant, title: variant.displayTitle)
+                            },
+                            selectedTitle: meetingDiarizationVariant.displayTitle,
+                            width: 260
+                        )
+                    }
+                }
+
+                Toggle("Reduce duplicate transcript from speaker echo", isOn: $meetingEchoMitigationEnabled)
+                Text("Uses transcript-level duplicate detection to reduce repeated remote text caused by speaker bleed. This is not system-level echo cancellation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 struct GeneralAppBehaviorCard: View {
     @Binding var launchAtLogin: Bool
     @Binding var showInDock: Bool

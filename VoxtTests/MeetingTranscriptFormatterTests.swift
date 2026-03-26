@@ -12,7 +12,7 @@ final class MeetingTranscriptFormatterTests: XCTestCase {
                 translatedText: "你好。"
             ),
             MeetingTranscriptSegment(
-                speaker: .them,
+                speaker: .remote(2),
                 startSeconds: 4,
                 endSeconds: 7,
                 text: "Let's ship on Friday.",
@@ -22,7 +22,7 @@ final class MeetingTranscriptFormatterTests: XCTestCase {
 
         let text = MeetingTranscriptFormatter.llmInputText(for: segments)
 
-        XCTAssertEqual(text, "Me：Hello there.\nThem：Let's ship on Friday.")
+        XCTAssertEqual(text, "Me：Hello there.\nRemote 2：Let's ship on Friday.")
         XCTAssertFalse(text.contains("00:01"))
         XCTAssertFalse(text.contains("->"))
         XCTAssertFalse(text.contains("你好"))

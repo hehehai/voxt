@@ -559,7 +559,7 @@ private struct MeetingDetailWindowView: View {
     private var transcriptEmptyState: some View {
         if viewModel.segments.isEmpty {
             VStack(spacing: 10) {
-                Text(String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts."))
+                Text(String(localized: "The transcript timeline for you and remote speakers will appear here once the meeting starts."))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.secondary)
 
@@ -585,11 +585,12 @@ private struct MeetingDetailWindowView: View {
     private var speakerMarksPane: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                speakerOverviewCard(for: .me)
-                speakerOverviewCard(for: .them)
+                ForEach(speakerOverviewSpeakers, id: \.rawValue) { speaker in
+                    speakerOverviewCard(for: speaker)
+                }
             }
 
-            ForEach([MeetingSpeaker.me, MeetingSpeaker.them], id: \.rawValue) { speaker in
+            ForEach(displayedSpeakerMarks, id: \.rawValue) { speaker in
                 let segments = displayedSegments.filter { $0.speaker == speaker }
                 if !segments.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
@@ -656,6 +657,34 @@ private struct MeetingDetailWindowView: View {
         )
     }
 
+    private var speakerOverviewSpeakers: [MeetingSpeaker] {
+        orderedSpeakers(in: displayedSegments)
+    }
+
+    private var displayedSpeakerMarks: [MeetingSpeaker] {
+        orderedSpeakers(in: displayedSegments)
+    }
+
+    private func orderedSpeakers(in segments: [MeetingTranscriptSegment]) -> [MeetingSpeaker] {
+        let speakers = Array(Set(segments.map(\.speaker)))
+        return speakers.sorted { lhs, rhs in
+            switch (lhs, rhs) {
+            case (.me, .me), (.them, .them):
+                return false
+            case (.me, _):
+                return true
+            case (_, .me):
+                return false
+            case (.them, _):
+                return true
+            case (_, .them):
+                return false
+            case (.remote(let leftIndex), .remote(let rightIndex)):
+                return leftIndex < rightIndex
+            }
+        }
+    }
+
     @ViewBuilder
     private var playbackPane: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -720,7 +749,7 @@ private struct MeetingDetailWindowView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.primary)
 
-            Text(String(localized: "Realtime translation in detail view only translates Them segments."))
+            Text(String(localized: "Realtime translation in detail view translates remote-speaker segments only."))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
 

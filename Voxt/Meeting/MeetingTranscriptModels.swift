@@ -1,8 +1,43 @@
 import Foundation
 
-enum MeetingSpeaker: String, Codable, Hashable, Sendable {
+nonisolated enum MeetingSpeaker: RawRepresentable, Codable, Hashable, Sendable {
+    typealias RawValue = String
+
     case me
     case them
+    case remote(Int)
+
+    init?(rawValue: String) {
+        switch rawValue {
+        case "me":
+            self = .me
+        case "them":
+            self = .them
+        default:
+            guard rawValue.hasPrefix("remote_"),
+                  let index = Int(rawValue.dropFirst("remote_".count)),
+                  index > 0
+            else {
+                return nil
+            }
+            self = .remote(index)
+        }
+    }
+
+    var rawValue: String {
+        storageKey
+    }
+
+    nonisolated var storageKey: String {
+        switch self {
+        case .me:
+            return "me"
+        case .them:
+            return "them"
+        case .remote(let index):
+            return "remote_\(index)"
+        }
+    }
 
     nonisolated var displayTitle: String {
         switch self {
@@ -10,11 +45,42 @@ enum MeetingSpeaker: String, Codable, Hashable, Sendable {
             return "Me"
         case .them:
             return "Them"
+        case .remote(let index):
+            return "Remote \(index)"
         }
+    }
+
+    nonisolated var isRemote: Bool {
+        switch self {
+        case .me:
+            return false
+        case .them, .remote:
+            return true
+        }
+    }
+
+    nonisolated var remoteIndex: Int? {
+        switch self {
+        case .remote(let index):
+            return index
+        case .me, .them:
+            return nil
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = MeetingSpeaker(rawValue: rawValue) ?? .them
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(storageKey)
     }
 }
 
-struct MeetingTranscriptSegment: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct MeetingTranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let speaker: MeetingSpeaker
     let startSeconds: TimeInterval
@@ -48,6 +114,32 @@ struct MeetingTranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         translatedText: String?,
         isTranslationPending: Bool
     ) -> MeetingTranscriptSegment {
+        MeetingTranscriptSegment(
+            id: id,
+            speaker: speaker,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+            text: text,
+            translatedText: translatedText,
+            isTranslationPending: isTranslationPending,
+            preventsAdjacentMerge: preventsAdjacentMerge
+        )
+    }
+
+    func updatingSpeaker(_ speaker: MeetingSpeaker) -> MeetingTranscriptSegment {
+        MeetingTranscriptSegment(
+            id: id,
+            speaker: speaker,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+            text: text,
+            translatedText: translatedText,
+            isTranslationPending: isTranslationPending,
+            preventsAdjacentMerge: preventsAdjacentMerge
+        )
+    }
+
+    func updatingText(_ text: String) -> MeetingTranscriptSegment {
         MeetingTranscriptSegment(
             id: id,
             speaker: speaker,

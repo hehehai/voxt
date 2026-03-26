@@ -47,6 +47,8 @@ A macOS menu bar voice input and translation app. Hold to speak, release to past
 - Current beta uses dual-source capture:
   - microphone is labeled as `Me`
   - system audio is labeled as `Them`
+- Optional remote-speaker diarization can relabel system audio as `Remote 1`, `Remote 2`, and more.
+- Optional duplicate-transcript mitigation reduces repeated remote text caused by speaker bleed.
 - Meeting mode follows the current ASR engine:
   - `Whisper`
   - `MLX Audio`
@@ -339,7 +341,8 @@ For a full walkthrough, see [docs/Meeting.md](./docs/Meeting.md).
 - Audio sources:
   - microphone -> `Me`
   - system audio -> `Them`
-- Speaker separation in beta v1 is source-based, not true diarization.
+- Optional remote-speaker diarization can split system audio into `Remote 1..N`.
+- Local microphone audio still stays on `Me`; this is not full-session diarization.
 - Realtime behavior currently follows engine/model/provider capability:
   - `Whisper`: follows the global `Realtime` toggle
   - `MLX Audio`: realtime-capable models use lower-latency meeting updates
@@ -369,7 +372,7 @@ If you choose `Cancel Transcription`, the meeting is discarded and no history en
 
 Meeting mode has its own realtime translation behavior:
 
-- translation is applied to `Them` segments only
+- translation is applied to remote-speaker segments only
 - `Me` segments stay as original text
 - every time you enable meeting realtime translation, Voxt asks you to choose a target language
 - the last selected language is only highlighted as the default choice in the picker
@@ -386,7 +389,7 @@ The meeting detail window is shared by:
 It supports:
 
 - reading the full timestamped transcript
-- showing translated lines under `Them` segments
+- showing translated lines under remote-speaker segments
 - replaying archived meeting audio when available
 - exporting the transcript as `.txt`
 

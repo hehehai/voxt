@@ -213,7 +213,7 @@ private struct MeetingOverlayCard: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.92))
 
-            Text(String(localized: "Realtime translation only translates Them segments."))
+            Text(String(localized: "Realtime translation only translates remote-speaker segments."))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
 

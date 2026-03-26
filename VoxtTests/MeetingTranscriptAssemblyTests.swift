@@ -77,6 +77,42 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertTrue(secondResult.supersededSegmentIDs.isEmpty)
     }
 
+    func testDifferentRemoteSpeakersDoNotMerge() {
+        let first = MeetingTranscriptSegment(
+            id: UUID(),
+            speaker: .remote(1),
+            startSeconds: 1,
+            endSeconds: 2,
+            text: "hello"
+        )
+        let second = MeetingTranscriptSegment(
+            id: UUID(),
+            speaker: .remote(2),
+            startSeconds: 2.2,
+            endSeconds: 3.1,
+            text: "world"
+        )
+
+        let firstResult = MeetingTranscriptAssembler.apply(.final(first), to: [])
+        let secondResult = MeetingTranscriptAssembler.apply(.final(second), to: firstResult.segments)
+
+        XCTAssertEqual(secondResult.segments.count, 2)
+        XCTAssertTrue(secondResult.supersededSegmentIDs.isEmpty)
+    }
+
+    func testMeetingSpeakerDecodesLegacyAndRemoteValues() throws {
+        let decoder = JSONDecoder()
+
+        let legacyData = #"{"id":"0F8FAD5B-D9CB-469F-A165-70867728950E","speaker":"them","startSeconds":0,"endSeconds":1,"text":"hello","isTranslationPending":false}"#.data(using: .utf8)!
+        let remoteData = #"{"id":"7D444840-9DC0-11D1-B245-5FFDCE74FAD2","speaker":"remote_2","startSeconds":0,"endSeconds":1,"text":"hello","isTranslationPending":false}"#.data(using: .utf8)!
+
+        let legacySegment = try decoder.decode(MeetingTranscriptSegment.self, from: legacyData)
+        let remoteSegment = try decoder.decode(MeetingTranscriptSegment.self, from: remoteData)
+
+        XCTAssertEqual(legacySegment.speaker, .them)
+        XCTAssertEqual(remoteSegment.speaker, .remote(2))
+    }
+
     func testUpdatedSegmentPreservesExistingTranslationWhileRefreshIsPending() {
         let id = UUID()
         let existing = MeetingTranscriptSegment(

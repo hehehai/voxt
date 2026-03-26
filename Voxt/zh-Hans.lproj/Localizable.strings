@@ -672,8 +672,8 @@
 "Using %@" = "当前使用：%@";
 "Realtime Translation" = "实时翻译";
 "Choose Translation Language" = "选择翻译语言";
-"Realtime translation only translates Them segments." = "实时翻译只会翻译“对方”的段落。";
-"Realtime translation in detail view only translates Them segments." = "详情里的实时翻译只会翻译“对方”的段落。";
+"Realtime translation only translates remote-speaker segments." = "实时翻译只会翻译远端说话人的段落。";
+"Realtime translation in detail view translates remote-speaker segments only." = "详情里的实时翻译只会翻译远端说话人的段落。";
 "End this meeting transcription?" = "结束这场会议转录？";
 "Canceling will discard this meeting; finishing will save it and open Meeting Details." = "取消转录不会保存这场会议；结束转录会保存记录并打开会议详情。";
 "Cancel Transcription" = "取消转录";
@@ -931,7 +931,7 @@
 "Detail" = "详情";
 "Start Translation" = "开始翻译";
 "Latest" = "最新";
-"The transcript timeline for Me / Them will appear here once the meeting starts." = "会议开始后，这里会持续显示 我 / them 的时间线。";
+"The transcript timeline for you and remote speakers will appear here once the meeting starts." = "会议开始后，这里会持续显示你和远端说话人的时间线。";
 "Automatic scrolling pauses when you scroll away from the bottom." = "滚动离开底部时会暂停自动滚动。";
 "Meeting Transcript UI Shareable" = "会议转录 UI 可共享";
 "Leave this off to keep the meeting transcript overlay private. Turn it on if you want the UI to appear in screen sharing or screen recordings." = "默认关闭时，会议转录悬浮层会保持私有，不会出现在屏幕共享或屏幕录制中。开启后，UI 将可以被共享。";

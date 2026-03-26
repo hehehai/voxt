@@ -14,12 +14,14 @@ Meeting Notes is a separate long-running capture mode for meetings, calls, inter
 - Saves results into a dedicated `Meeting` history type
 - Can open a detail window for timeline review, translation, and export
 
-Current beta uses source-based separation:
+Current beta starts with source-based separation:
 
 - microphone audio is labeled as `Me`
 - system audio is labeled as `Them`
+- optional `Identify multiple remote speakers` can relabel system audio into `Remote 1`, `Remote 2`, and so on
+- optional duplicate-transcript mitigation can reduce repeated remote text caused by speaker bleed
 
-This is not true diarization yet.
+This is still not full-session diarization across both local and remote participants.
 
 ## How To Enable It
 
@@ -85,7 +87,7 @@ The meeting card is optimized for long-running capture.
 - close with secondary confirmation
 - per-segment timestamp list
 - click to copy a segment
-- optional realtime translation for `Them`
+- optional realtime translation for remote speakers
 - live detail window
 
 If a meeting already contains transcript content, ending it from a collapsed card will auto-expand first so the confirmation dialog is easier to use.
@@ -97,7 +99,7 @@ Meeting realtime translation follows the app's existing translation model/provid
 - uses the same translation provider selection as normal translation
 - uses the same fallback rules
 - uses its own remembered target language for meeting mode
-- translates only `Them` segments in the current UI
+- translates only remote-speaker segments in the current UI
 
 If the selected translation provider cannot be used directly for text translation in meeting mode, Voxt falls back through the normal resolver behavior.
 
@@ -118,10 +120,45 @@ The detail window supports:
 
 ## Notes And Limitations
 
-- Current beta is source-based (`Me` / `Them`), not full speaker diarization
+- Current beta can identify multiple remote speakers on system audio, but it does not diarize the local microphone against every participant
 - Meeting mode is isolated from normal transcription / translation / rewrite sessions
 - Meeting mode uses a dedicated history type and detail flow
 - Cold local-model startup can still take time on first use; Voxt shows model initialization state in the overlay
+- Duplicate-transcript mitigation is transcript-level cleanup, not system-level echo cancellation
 - For remote providers, Voxt keeps the meeting UI uniform, but transport differs by provider capability:
   - `Doubao` / `Aliyun` meetings use provider-specific chunk/file transcription models
   - other providers stay on their existing chunk-based meeting path
+
+## Manual Validation
+
+Voxt still uses the currently selected ASR engine and model for meeting transcription itself.
+
+- `Whisper`: continues to use the currently selected Whisper model and realtime setting
+- `MLX Audio`: continues to use the currently selected MLX model
+- `Remote ASR`: continues to use the configured meeting-capable remote provider path
+
+`FluidAudio` is currently used only for remote-speaker attribution on system audio. It does not replace the ASR engine, and it does not perform full-system echo cancellation.
+
+Recommended manual validation flow:
+
+1. Open `General > Output > Meeting Notes`
+2. Turn on `Identify multiple remote speakers`
+3. Leave `Reduce duplicate transcript from speaker echo` enabled
+4. Start a Zoom / Meet / Teams call with speaker output routed to system audio
+5. Speak locally through the microphone and ask two remote people to alternate speaking
+
+Expected results:
+
+- your own speech still appears as `Me`
+- remote speech may stay as `Them` when only one remote speaker is active
+- when diarization has enough evidence for multiple remote speakers, later segments should appear as `Remote 1`, `Remote 2`, and so on
+- remote-speaker translation should apply to both `Them` and `Remote n`
+- obvious speaker-bleed duplicates should be dropped or trimmed on the remote side
+
+Useful test cases:
+
+- two remote speakers take turns every 5 to 10 seconds
+- remote speaker interrupts another remote speaker
+- you repeat a sentence locally while the laptop speaker is loud enough to bleed into the mic
+- disable diarization and confirm everything falls back to `Me` / `Them`
+- disable duplicate mitigation and confirm repeated remote transcript becomes easier to reproduce

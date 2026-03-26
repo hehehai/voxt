@@ -25,7 +25,7 @@ struct MeetingTranscriptScrollView: View {
                         LazyVStack(alignment: .leading, spacing: 12) {
                             if segments.isEmpty {
                                 VStack(spacing: 10) {
-                                    Text(String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts."))
+                                    Text(String(localized: "The transcript timeline for you and remote speakers will appear here once the meeting starts."))
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundStyle(.white.opacity(0.7))
 

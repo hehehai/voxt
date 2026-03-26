@@ -21,6 +21,7 @@ final class MeetingSessionCoordinator {
     private var liveAudioPrebuffers: [MeetingSpeaker: MeetingLiveAudioPrebuffer] = [:]
     private var activeLocalEngine: TranscriptionEngine?
     private var activeEngineContext: MeetingASREngineContext?
+    private var speakerAttributor: (any MeetingSpeakerAttributing)?
     private var isStopping = false
     private var recordingStartedAt: Date?
     private var accumulatedRecordingDuration: TimeInterval = 0
@@ -32,10 +33,12 @@ final class MeetingSessionCoordinator {
     private var microphoneStartupRetryCount = 0
     private var micLevel: Float = 0
     private var systemLevel: Float = 0
+    private var lastSpeakerAttributionRefreshAt = Date.distantPast
     private var loggedInitialBufferSpeakers = Set<MeetingSpeaker>()
     private var loggedChunkSpeakers = Set<MeetingSpeaker>()
     private var loggedSampleExtractionFailureSpeakers = Set<MeetingSpeaker>()
     private let audioArchive = MeetingAudioArchive()
+    private let echoMitigator = MeetingEchoMitigator()
     private let realtimeTranslationTargetLanguageProvider: @MainActor () -> TranslationTargetLanguage?
     private let realtimeTranslationHandler: @MainActor (String, TranslationTargetLanguage) async throws -> String
     private var isStarting = false
@@ -108,6 +111,7 @@ final class MeetingSessionCoordinator {
             let transcriber = try await makeTranscriber(for: engineContext)
             try Task.checkCancellation()
             self.transcriber = transcriber
+            try await prepareSpeakerAttributorIfNeeded()
             try await startLiveSessionsIfNeeded(for: engineContext)
             try Task.checkCancellation()
             try startCaptures()
@@ -187,6 +191,8 @@ final class MeetingSessionCoordinator {
             await self.transcriber?.cancelPendingWork()
             await self.flushPendingAudio()
             await self.finishLiveSessionsIfNeeded()
+            await self.speakerAttributor?.finalizeSession()
+            await self.refreshRemoteSpeakerAttributionIfNeeded(force: true)
             await MainActor.run {
                 self.cancelTranslationTasks()
                 self.clearPendingTranslationState()
@@ -296,6 +302,11 @@ final class MeetingSessionCoordinator {
         let task = Task { [weak self] in
             guard let self else { return }
             await self.audioArchive.append(samples: samples, sampleRate: sampleRate, speaker: speaker)
+            if speaker == .them {
+                let speakerAttributor = await MainActor.run { self.speakerAttributor }
+                await speakerAttributor?.feedSystemAudio(samples: samples, sampleRate: sampleRate)
+                await self.refreshRemoteSpeakerAttributionIfNeeded()
+            }
             if await MainActor.run(body: { self.usesLiveSessionPath }) {
                 await MainActor.run {
                     self.liveAudioPrebuffers[speaker, default: MeetingLiveAudioPrebuffer(maxDuration: 1.0)]
@@ -368,10 +379,8 @@ final class MeetingSessionCoordinator {
             return
         }
         if let segment = await transcriber.transcribe(chunk: chunk) {
-            await MainActor.run { [weak self] in
-                guard let self, self.overlayState.isPresented else { return }
-                self.applyTranscriptEvent(chunk.isFinal ? .final(segment) : .partial(segment))
-            }
+            guard overlayState.isPresented else { return }
+            await handleIncomingTranscriptEvent(chunk.isFinal ? .final(segment) : .partial(segment))
         }
     }
 
@@ -395,9 +404,12 @@ final class MeetingSessionCoordinator {
 
     private func cleanupSessionState(shouldLogCaptureStop: Bool = true) {
         stopCaptures(shouldLog: shouldLogCaptureStop)
+        let speakerAttributor = self.speakerAttributor
+        self.speakerAttributor = nil
         Task {
             await self.transcriber?.cancelPendingWork()
             await self.cancelLiveSessionsIfNeeded()
+            await speakerAttributor?.resetSession()
         }
         cancelTranslationTasks()
         micLevel = 0
@@ -405,6 +417,7 @@ final class MeetingSessionCoordinator {
         loggedInitialBufferSpeakers.removeAll()
         loggedChunkSpeakers.removeAll()
         loggedSampleExtractionFailureSpeakers.removeAll()
+        lastSpeakerAttributionRefreshAt = .distantPast
         recordingStartedAt = nil
         accumulatedRecordingDuration = 0
         pendingChunks.removeAll()
@@ -565,12 +578,12 @@ final class MeetingSessionCoordinator {
 
     private func shouldTranslate(segment: MeetingTranscriptSegment) -> Bool {
         overlayState.realtimeTranslateEnabled &&
-        segment.speaker == .them &&
+        segment.speaker.isRemote &&
         realtimeTranslationTargetLanguageProvider() != nil
     }
 
     private func translateEligibleSegmentsIfNeeded() {
-        for segment in overlayState.segments where segment.speaker == .them {
+        for segment in overlayState.segments where segment.speaker.isRemote {
             let needsTranslation =
                 segment.isTranslationPending ||
                 (segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
@@ -583,7 +596,7 @@ final class MeetingSessionCoordinator {
         }
         overlayState.segments = overlayState.segments.map { segment in
             guard overlayState.realtimeTranslateEnabled,
-                  segment.speaker == .them,
+                  segment.speaker.isRemote,
                   (segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             else {
                 return segment
@@ -594,7 +607,7 @@ final class MeetingSessionCoordinator {
 
     private func queueRealtimeTranslation(for segment: MeetingTranscriptSegment) {
         guard overlayState.realtimeTranslateEnabled,
-              segment.speaker == .them,
+              segment.speaker.isRemote,
               translationTasks[segment.id] == nil,
               let targetLanguage = realtimeTranslationTargetLanguageProvider()
         else {
@@ -674,6 +687,65 @@ final class MeetingSessionCoordinator {
         overlayState.segments[index] = transform(overlayState.segments[index])
     }
 
+    private func removeSegmentIfPresent(_ segmentID: UUID) {
+        guard let index = overlayState.segments.firstIndex(where: { $0.id == segmentID }) else { return }
+        cancelTranslationTask(for: segmentID)
+        overlayState.segments.remove(at: index)
+    }
+
+    private func prepareSpeakerAttributorIfNeeded() async throws {
+        guard UserDefaults.standard.object(forKey: AppPreferenceKey.meetingEnableSpeakerDiarization) as? Bool ?? false else {
+            speakerAttributor = nil
+            return
+        }
+
+        let variant = MeetingDiarizationVariant(
+            rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.meetingDiarizationVariant) ?? ""
+        ) ?? .dihard3
+        let diarizationManager = MeetingDiarizationManager()
+        try await diarizationManager.load(variant: variant)
+        speakerAttributor = diarizationManager
+    }
+
+    private func preparedTranscriptSegment(
+        _ segment: MeetingTranscriptSegment,
+        isFinal: Bool
+    ) async -> MeetingTranscriptSegment? {
+        var preparedSegment = segment
+        if let speakerAttributor {
+            let attributedSpeaker = await speakerAttributor.attributedSpeaker(
+                for: preparedSegment.speaker,
+                startSeconds: preparedSegment.startSeconds,
+                endSeconds: preparedSegment.endSeconds
+            )
+            preparedSegment = preparedSegment.updatingSpeaker(attributedSpeaker)
+        }
+
+        guard UserDefaults.standard.object(forKey: AppPreferenceKey.meetingEchoMitigationEnabled) as? Bool ?? true else {
+            return preparedSegment
+        }
+
+        let mitigated = echoMitigator.mitigate(preparedSegment, against: overlayState.segments)
+        guard isFinal else { return mitigated }
+        return mitigated
+    }
+
+    private func handleIncomingTranscriptEvent(_ event: MeetingTranscriptEvent) async {
+        switch event {
+        case .partial(let segment):
+            guard let preparedSegment = await preparedTranscriptSegment(segment, isFinal: false) else { return }
+            applyTranscriptEvent(.partial(preparedSegment))
+        case .final(let segment):
+            guard let preparedSegment = await preparedTranscriptSegment(segment, isFinal: true) else {
+                removeSegmentIfPresent(segment.id)
+                return
+            }
+            applyTranscriptEvent(.final(preparedSegment))
+        case .failed, .finished:
+            applyTranscriptEvent(event)
+        }
+    }
+
     private func applyTranscriptEvent(_ event: MeetingTranscriptEvent) {
         switch event {
         case .failed(let speaker, let message):
@@ -705,6 +777,41 @@ final class MeetingSessionCoordinator {
         )
         updateSegment(finalizedSegmentID) { _ in translationReadySegment }
         queueRealtimeTranslation(for: translationReadySegment)
+    }
+
+    private func refreshRemoteSpeakerAttributionIfNeeded(force: Bool = false) async {
+        guard let speakerAttributor else { return }
+
+        let now = Date()
+        if !force, now.timeIntervalSince(lastSpeakerAttributionRefreshAt) < 0.9 {
+            return
+        }
+        lastSpeakerAttributionRefreshAt = now
+
+        let latestVisibleSecond = overlayState.segments
+            .map { $0.endSeconds ?? $0.startSeconds }
+            .max() ?? 0
+        let recentWindowStart = max(latestVisibleSecond - 20, 0)
+
+        var updatedSegments = overlayState.segments
+        var changed = false
+
+        for index in updatedSegments.indices {
+            let segment = updatedSegments[index]
+            guard segment.speaker.isRemote, segment.startSeconds >= recentWindowStart else { continue }
+            let attributedSpeaker = await speakerAttributor.attributedSpeaker(
+                for: segment.speaker,
+                startSeconds: segment.startSeconds,
+                endSeconds: segment.endSeconds
+            )
+            guard attributedSpeaker != segment.speaker else { continue }
+            updatedSegments[index] = segment.updatingSpeaker(attributedSpeaker)
+            changed = true
+        }
+
+        if changed {
+            overlayState.segments = updatedSegments
+        }
     }
 
     private func reconfigureAccumulators(for profile: MeetingChunkingProfile) {
@@ -791,10 +898,14 @@ final class MeetingSessionCoordinator {
         liveSessions[.them] = themSession
 
         try await meSession.start(timelineOffsetSeconds: timelineOffsetSeconds) { [weak self] event in
-            self?.applyTranscriptEvent(event)
+            Task { @MainActor [weak self] in
+                await self?.handleIncomingTranscriptEvent(event)
+            }
         }
         try await themSession.start(timelineOffsetSeconds: timelineOffsetSeconds) { [weak self] event in
-            self?.applyTranscriptEvent(event)
+            Task { @MainActor [weak self] in
+                await self?.handleIncomingTranscriptEvent(event)
+            }
         }
     }
 
@@ -878,7 +989,9 @@ final class MeetingSessionCoordinator {
             let session = try liveSessionFactory.makeSession(for: speaker, timelineOffsetSeconds: timelineOffsetSeconds)
             liveSessions[speaker] = session
             try await session.start(timelineOffsetSeconds: timelineOffsetSeconds) { [weak self] event in
-                self?.applyTranscriptEvent(event)
+                Task { @MainActor [weak self] in
+                    await self?.handleIncomingTranscriptEvent(event)
+                }
             }
             return session
         } catch {
