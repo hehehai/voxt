@@ -9,51 +9,6 @@ import UniformTypeIdentifiers
 struct PermissionsSettingsView: View {
     let navigationRequest: SettingsNavigationRequest?
 
-    private enum PermissionKind: String, CaseIterable, Identifiable {
-        case microphone
-        case speechRecognition
-        case accessibility
-        case inputMonitoring
-        case systemAudioCapture
-
-        var id: String { rawValue }
-
-        var logKey: String {
-            switch self {
-            case .microphone: return "mic"
-            case .speechRecognition: return "speech"
-            case .accessibility: return "accessibility"
-            case .inputMonitoring: return "inputMonitoring"
-            case .systemAudioCapture: return "systemAudioCapture"
-            }
-        }
-
-        var titleKey: LocalizedStringKey {
-            switch self {
-            case .microphone: return "Microphone Permission"
-            case .speechRecognition: return "Speech Recognition Permission"
-            case .accessibility: return "Accessibility Permission"
-            case .inputMonitoring: return "Input Monitoring Permission"
-            case .systemAudioCapture: return "System Audio Recording Permission"
-            }
-        }
-
-        var descriptionKey: LocalizedStringKey {
-            switch self {
-            case .microphone:
-                return "Required to capture audio for transcription."
-            case .speechRecognition:
-                return "Required for Apple Direct Dictation engine."
-            case .accessibility:
-                return "Required to paste transcription text into other apps."
-            case .inputMonitoring:
-                return "Required for reliable global modifier hotkeys (such as fn)."
-            case .systemAudioCapture:
-                return "Required for Meeting Notes and for muting other apps' media audio during recording."
-            }
-        }
-    }
-
     private enum PermissionState: Equatable {
         case enabled
         case disabled
@@ -94,9 +49,9 @@ struct PermissionsSettingsView: View {
         let lastErrorCode: Int?
     }
 
-    @State private var states: [PermissionKind: PermissionState] = [:]
-    @State private var monitoringKinds: Set<PermissionKind> = []
-    @State private var monitorTasks: [PermissionKind: Task<Void, Never>] = [:]
+    @State private var states: [SettingsPermissionKind: PermissionState] = [:]
+    @State private var monitoringKinds: Set<SettingsPermissionKind> = []
+    @State private var monitorTasks: [SettingsPermissionKind: Task<Void, Never>] = [:]
 
     @State private var browserTargets: [BrowserAutomationTarget] = []
     @State private var browserAutomationStates: [String: PermissionState] = [:]
@@ -115,16 +70,16 @@ struct PermissionsSettingsView: View {
         TranscriptionEngine(rawValue: transcriptionEngineRaw) ?? .mlxAudio
     }
 
-    private var permissionKinds: [PermissionKind] {
-        var kinds: [PermissionKind] = [.microphone]
-        if transcriptionEngine == .dictation {
-            kinds.append(.speechRecognition)
-        }
-        kinds.append(contentsOf: [.accessibility, .inputMonitoring])
-        if muteSystemAudioWhileRecording || meetingNotesBetaEnabled {
-            kinds.append(.systemAudioCapture)
-        }
-        return kinds
+    private var permissionRequirementContext: SettingsPermissionRequirementContext {
+        SettingsPermissionRequirementContext(
+            selectedEngine: transcriptionEngine,
+            muteSystemAudioWhileRecording: muteSystemAudioWhileRecording,
+            meetingNotesEnabled: meetingNotesBetaEnabled
+        )
+    }
+
+    private var permissionKinds: [SettingsPermissionKind] {
+        SettingsPermissionRequirementResolver.requiredPermissions(context: permissionRequirementContext)
     }
 
     var body: some View {
@@ -205,7 +160,7 @@ struct PermissionsSettingsView: View {
     }
 
     @ViewBuilder
-    private func permissionRow(_ kind: PermissionKind) -> some View {
+    private func permissionRow(_ kind: SettingsPermissionKind) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(kind.titleKey)
@@ -297,7 +252,7 @@ struct PermissionsSettingsView: View {
     }
 
     private func refreshStates() {
-        var snapshot: [PermissionKind: PermissionState] = [:]
+        var snapshot: [SettingsPermissionKind: PermissionState] = [:]
         for kind in permissionKinds {
             snapshot[kind] = currentState(for: kind)
         }
@@ -305,25 +260,11 @@ struct PermissionsSettingsView: View {
         VoxtLog.info("Permission status: \(permissionSnapshotText(snapshot))")
     }
 
-    private func currentState(for kind: PermissionKind) -> PermissionState {
-        switch kind {
-        case .microphone:
-            return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized ? .enabled : .disabled
-        case .speechRecognition:
-            return SFSpeechRecognizer.authorizationStatus() == .authorized ? .enabled : .disabled
-        case .accessibility:
-            return AccessibilityPermissionManager.isTrusted() ? .enabled : .disabled
-        case .inputMonitoring:
-            if #available(macOS 10.15, *) {
-                return CGPreflightListenEventAccess() ? .enabled : .disabled
-            }
-            return .enabled
-        case .systemAudioCapture:
-            return SystemAudioCapturePermission.authorizationStatus() == .authorized ? .enabled : .disabled
-        }
+    private func currentState(for kind: SettingsPermissionKind) -> PermissionState {
+        SettingsPermissionGrantResolver.isGranted(kind) ? .enabled : .disabled
     }
 
-    private func requestPermission(_ kind: PermissionKind) {
+    private func requestPermission(_ kind: SettingsPermissionKind) {
         let initial = currentState(for: kind)
         states[kind] = initial
         VoxtLog.info("Permission request triggered: \(kind.logKey)=\(initial == .enabled ? "on" : "off")")
@@ -347,7 +288,7 @@ struct PermissionsSettingsView: View {
         }
     }
 
-    private func startMonitoring(kind: PermissionKind, initialState: PermissionState) {
+    private func startMonitoring(kind: SettingsPermissionKind, initialState: PermissionState) {
         monitorTasks[kind]?.cancel()
         monitoringKinds.insert(kind)
 
@@ -615,7 +556,7 @@ struct PermissionsSettingsView: View {
         )
     }
 
-    private func openSettings(for kind: PermissionKind) {
+    private func openSettings(for kind: SettingsPermissionKind) {
         let urlString: String
         switch kind {
         case .microphone:
@@ -642,7 +583,7 @@ struct PermissionsSettingsView: View {
         }
     }
 
-    private func permissionSnapshotText(_ snapshot: [PermissionKind: PermissionState]) -> String {
+    private func permissionSnapshotText(_ snapshot: [SettingsPermissionKind: PermissionState]) -> String {
         permissionKinds
             .map { kind in
                 let state = snapshot[kind] ?? .disabled

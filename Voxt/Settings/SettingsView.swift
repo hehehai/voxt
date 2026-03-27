@@ -19,6 +19,7 @@ struct SettingsView: View {
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
     @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
+    @AppStorage(AppPreferenceKey.transcriptionEngine) private var transcriptionEngineRaw = TranscriptionEngine.mlxAudio.rawValue
     @State private var selectedTab: SettingsTab
     @State private var navigationRequest: SettingsNavigationRequest?
     @State private var hasMissingPermissions = false
@@ -132,6 +133,9 @@ struct SettingsView: View {
             refreshPermissionBadge()
         }
         .onChange(of: meetingNotesBetaEnabled) { _, _ in
+            refreshPermissionBadge()
+        }
+        .onChange(of: transcriptionEngineRaw) { _, _ in
             refreshPermissionBadge()
         }
     }
@@ -342,20 +346,15 @@ struct SettingsView: View {
     }
 
     private func refreshPermissionBadge() {
-        let microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        let speechGranted = SFSpeechRecognizer.authorizationStatus() == .authorized
-        let accessibilityGranted = AccessibilityPermissionManager.isTrusted()
-        let inputMonitoringGranted: Bool
-        let requiresSystemAudioCapture =
-            UserDefaults.standard.bool(forKey: AppPreferenceKey.muteSystemAudioWhileRecording) ||
-            UserDefaults.standard.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled)
-        let systemAudioCaptureGranted = !requiresSystemAudioCapture || SystemAudioCapturePermission.authorizationStatus() == .authorized
-        if #available(macOS 10.15, *) {
-            inputMonitoringGranted = CGPreflightListenEventAccess()
-        } else {
-            inputMonitoringGranted = true
-        }
-        hasMissingPermissions = !(microphoneGranted && speechGranted && accessibilityGranted && inputMonitoringGranted && systemAudioCaptureGranted)
+        let engine = TranscriptionEngine(rawValue: transcriptionEngineRaw) ?? .mlxAudio
+        let context = SettingsPermissionRequirementContext(
+            selectedEngine: engine,
+            muteSystemAudioWhileRecording: muteSystemAudioWhileRecording,
+            meetingNotesEnabled: meetingNotesBetaEnabled
+        )
+
+        hasMissingPermissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
+            .contains { !SettingsPermissionGrantResolver.isGranted($0) }
     }
 
     private func refreshModelConfigurationBadge() {
