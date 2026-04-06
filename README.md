@@ -97,13 +97,25 @@ Voxt also supports `Direct Dictation` via Apple `SFSpeechRecognizer`:
 
 #### Local ASR Models
 
-| Model | Repository ID | Size | Language Support | Speed | Recommendation | Current Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| Qwen3-ASR 0.6B (4bit) | `mlx-community/Qwen3-ASR-0.6B-4bit` | 0.6B / 4bit | 30 languages including Chinese, English, Cantonese, and more | Fast | High | Default local ASR, best overall quality/speed balance |
-| Qwen3-ASR 1.7B (bf16) | `mlx-community/Qwen3-ASR-1.7B-bf16` | 1.7B / bf16 | Same multilingual family as 0.6B | Medium | Very high | Accuracy-first option with higher memory and storage cost |
-| Voxtral Realtime Mini 4B (fp16) | `mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16` | 4B / fp16 | 13 languages including Chinese, English, Japanese, Korean, and more | Medium | Medium-high | Realtime-oriented model with the largest footprint in this list |
-| Parakeet 0.6B | `mlx-community/parakeet-tdt-0.6b-v3` | 0.6B / bf16 | Model card lists 25 languages; project copy positions it as lightweight English-first STT | Very fast | Medium-high | Lightweight high-speed option, especially suitable for English-heavy workflows |
-| GLM-ASR Nano (4bit) | `mlx-community/GLM-ASR-Nano-2512-4bit` | MLX 4bit, about 1.28 GB | Current model card clearly states Chinese and English | Fast | High | Smallest footprint, ideal for quick drafts and low-friction deployment |
+Voxt's current `MLX Audio` catalog is broader than the short default picker suggests. The app currently exposes the following local STT families:
+
+| Family | Built-in Variants | Language / Runtime Notes | Recommendation |
+| --- | --- | --- | --- |
+| Qwen3-ASR 0.6B | `4bit`, `6bit`, `8bit`, `bf16` | Multilingual general-purpose ASR with the lowest Qwen3 footprint | Default local ASR family; best overall balance |
+| Qwen3-ASR 1.7B | `4bit`, `6bit`, `8bit`, `bf16` | Larger multilingual Qwen3 family with higher accuracy and memory cost | Accuracy-first local ASR |
+| Voxtral Realtime Mini 4B | `4bit`, `6bit`, `fp16` | Multilingual realtime-oriented family; these are the MLX Audio models Voxt currently treats as realtime-capable | Best when you want local realtime behavior |
+| Parakeet | `tdt_ctc-110m`, `tdt-0.6b-v2`, `tdt-0.6b-v3`, `ctc-0.6b`, `rnnt-0.6b`, `tdt-1.1b`, `tdt_ctc-1.1b`, `ctc-1.1b`, `rnnt-1.1b` | English-first family with both lightweight and higher-capacity options | Best for English-heavy workflows and fast local iteration |
+| GLM-ASR Nano | `2512-4bit` | Smallest current footprint; model card positions it around Chinese and English usage | Good low-friction starter model |
+| Granite Speech 4.0 | `1b-speech-5bit` | Compact multilingual speech model between nano-tier and larger multilingual stacks | Balanced alternative when you want more quality than nano-tier |
+| FireRed ASR 2 | `AED-mlx` | Offline-focused beam-search ASR path | Use when offline quality matters more than lightness |
+| SenseVoice | `SenseVoiceSmall` | Fast multilingual model with language and event detection | Good utility choice for mixed-language or event-heavy audio |
+
+Notes for the current MLX Audio integration:
+
+- Voxt stores MLX Audio downloads under its `mlx-audio` model storage root and checks canonical model identifiers before deciding whether a model is already installed.
+- Older saved model IDs are auto-migrated to the current canonical IDs for `Parakeet`, `GLM-ASR Nano`, `Voxtral Realtime`, and `FireRed ASR 2`, so existing settings should continue working after upgrade.
+- Alignment-only repositories are rejected explicitly; for example, `Qwen3-ForcedAligner` is not treated as a transcription model.
+- The current package source is the Voxt mirror fork `hehehai/mlx-audio-swift` pinned to `0.1.2-voxt.1`. See [docs/MLXAudioDependency.md](docs/MLXAudioDependency.md) for the tag policy.
 
 #### Whisper (WhisperKit)
 

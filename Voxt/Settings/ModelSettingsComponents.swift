@@ -232,7 +232,7 @@ struct ModelTableRow: Identifiable {
 struct ModelTableView: View {
     let title: LocalizedStringKey
     let rows: [ModelTableRow]
-    var maxHeight: CGFloat? = nil
+    var viewportHeight: CGFloat = 280
 
     var body: some View {
         VStack(spacing: 0) {
@@ -255,7 +255,7 @@ struct ModelTableView: View {
                     tableRows
                 }
             }
-            .frame(maxHeight: maxHeight)
+            .frame(height: viewportHeight)
         }
         .tableContainerStyle
     }

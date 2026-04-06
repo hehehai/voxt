@@ -360,8 +360,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var mainWindowPresentationState = MainWindowPresentationState()
 
     override init() {
-        let repo = UserDefaults.standard.string(forKey: AppPreferenceKey.mlxModelRepo)
+        let storedRepo = UserDefaults.standard.string(forKey: AppPreferenceKey.mlxModelRepo)
             ?? MLXModelManager.defaultModelRepo
+        let repo = MLXModelManager.canonicalModelRepo(storedRepo)
+        if repo != storedRepo {
+            UserDefaults.standard.set(repo, forKey: AppPreferenceKey.mlxModelRepo)
+        }
         let useMirror = UserDefaults.standard.bool(forKey: AppPreferenceKey.useHfMirror)
         let hubURL = useMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
         mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: hubURL)

@@ -530,23 +530,11 @@ extension ModelSettingsView {
     }
 
     func modelLocalizedDescription(for repo: String) -> LocalizedStringKey {
-        switch MLXModelManager.canonicalModelRepo(repo) {
-        case "mlx-community/Qwen3-ASR-0.6B-4bit":
-            return "Balanced quality and speed with low memory use."
-        case "mlx-community/Qwen3-ASR-1.7B-bf16":
-            return "High accuracy flagship model with higher memory usage."
-        case "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16":
-            return "Realtime-oriented model with larger memory footprint."
-        case "mlx-community/parakeet-tdt-0.6b-v3":
-            return "Fast, lightweight English STT."
-        case "mlx-community/GLM-ASR-Nano-2512-4bit":
-            return "Smallest footprint for quick drafts."
-        default:
-            if let model = MLXModelManager.availableModels.first(where: { $0.id == repo }) {
-                return LocalizedStringKey(model.description)
-            }
-            return LocalizedStringKey("")
+        let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
+        if let model = MLXModelManager.availableModels.first(where: { $0.id == canonicalRepo }) {
+            return LocalizedStringKey(model.description)
         }
+        return LocalizedStringKey("")
     }
 
     func whisperModelLocalizedDescription(for modelID: String) -> LocalizedStringKey {

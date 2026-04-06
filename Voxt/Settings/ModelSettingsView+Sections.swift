@@ -88,7 +88,7 @@ extension ModelSettingsView {
                 .foregroundStyle(.secondary)
         }
 
-        ModelTableView(title: "Models", rows: mlxRows)
+        ModelTableView(title: "Models", rows: mlxRows, viewportHeight: 320)
 
         if case .downloading(let progress, let completed, let total, let currentFile, let completedFiles, let totalFiles) = mlxModelManager.state {
             VStack(alignment: .leading, spacing: 6) {
@@ -170,7 +170,7 @@ extension ModelSettingsView {
                 .foregroundStyle(.secondary)
         }
 
-        ModelTableView(title: "Whisper Models", rows: whisperRows)
+        ModelTableView(title: "Whisper Models", rows: whisperRows, viewportHeight: 260)
 
         if let activeDownload = whisperModelManager.activeDownload {
             VStack(alignment: .leading, spacing: 6) {
@@ -288,7 +288,7 @@ extension ModelSettingsView {
             variables: ModelSettingsPromptVariables.enhancement
         )
 
-        ModelTableView(title: "Custom LLM Models", rows: customLLMRows, maxHeight: 260)
+        ModelTableView(title: "Custom LLM Models", rows: customLLMRows, viewportHeight: 260)
 
         if case .downloading(let progress, let completed, let total, let currentFile, let completedFiles, let totalFiles) = customLLMManager.state {
             VStack(alignment: .leading, spacing: 6) {
@@ -323,7 +323,7 @@ extension ModelSettingsView {
         Text("Remote ASR Providers")
             .font(.subheadline.weight(.medium))
 
-        ModelTableView(title: "Providers", rows: remoteASRRows, maxHeight: 220)
+        ModelTableView(title: "Providers", rows: remoteASRRows, viewportHeight: 220)
     }
 
     @ViewBuilder
@@ -343,6 +343,6 @@ extension ModelSettingsView {
                 .foregroundStyle(.secondary)
         }
 
-        ModelTableView(title: "Remote LLM Providers", rows: remoteLLMRows, maxHeight: 280)
+        ModelTableView(title: "Remote LLM Providers", rows: remoteLLMRows, viewportHeight: 280)
     }
 }

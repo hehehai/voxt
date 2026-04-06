@@ -29,6 +29,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         )
         sourceDefaults.set(UserMainLanguageOption.storageValue(for: ["zh-TW", "en"]), forKey: AppPreferenceKey.userMainLanguageCodes)
         sourceDefaults.set(TranscriptionEngine.whisperKit.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
+        sourceDefaults.set("mlx-community/Voxtral-Mini-4B-Realtime-2602", forKey: AppPreferenceKey.mlxModelRepo)
         sourceDefaults.set("small", forKey: AppPreferenceKey.whisperModelID)
         sourceDefaults.set(0.4, forKey: AppPreferenceKey.whisperTemperature)
         sourceDefaults.set(false, forKey: AppPreferenceKey.whisperVADEnabled)
@@ -92,6 +93,10 @@ final class ConfigurationTransferManagerTests: XCTestCase {
             ]
         )
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.transcriptionEngine), TranscriptionEngine.whisperKit.rawValue)
+        XCTAssertEqual(
+            targetDefaults.string(forKey: AppPreferenceKey.mlxModelRepo),
+            "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"
+        )
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.whisperModelID), "small")
         XCTAssertEqual(targetDefaults.double(forKey: AppPreferenceKey.whisperTemperature), 0.4, accuracy: 0.0001)
         XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.whisperVADEnabled))
@@ -226,5 +231,37 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertFalse(decoded.whisperTimestampsEnabled)
         XCTAssertTrue(decoded.whisperRealtimeEnabled)
         XCTAssertEqual(decoded.translationFallbackModelProvider, TranslationModelProvider.customLLM.rawValue)
+    }
+
+    func testModelSettingsDecoderCanonicalizesLegacyMLXRepo() throws {
+        let json = """
+        {
+          "transcriptionEngine": "mlxAudio",
+          "enhancementMode": "off",
+          "enhancementSystemPrompt": "",
+          "translationSystemPrompt": "",
+          "rewriteSystemPrompt": "",
+          "mlxModelRepo": "mlx-community/Parakeet-0.6B",
+          "customLLMModelRepo": "Qwen/Qwen2-1.5B-Instruct",
+          "translationCustomLLMModelRepo": "Qwen/Qwen2-1.5B-Instruct",
+          "rewriteCustomLLMModelRepo": "Qwen/Qwen2-1.5B-Instruct",
+          "translationModelProvider": "customLLM",
+          "rewriteModelProvider": "customLLM",
+          "remoteASRSelectedProvider": "openAIWhisper",
+          "remoteLLMSelectedProvider": "openAI",
+          "translationRemoteLLMProvider": "",
+          "rewriteRemoteLLMProvider": "",
+          "useHfMirror": false,
+          "remoteASRProviderConfigurations": [],
+          "remoteLLMProviderConfigurations": []
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            ConfigurationTransferManager.ModelSettings.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(decoded.mlxModelRepo, "mlx-community/parakeet-tdt-0.6b-v3")
     }
 }

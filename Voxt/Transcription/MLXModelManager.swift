@@ -39,6 +39,12 @@ class MLXModelManager: ObservableObject {
         let description: String
     }
 
+    private static let realtimeCapableModelRepos: Set<String> = [
+        "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+        "mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit",
+        "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
+    ]
+
     static let defaultModelRepo = "mlx-community/Qwen3-ASR-0.6B-4bit"
 
     static let availableModels: [ModelOption] = [
@@ -48,9 +54,49 @@ class MLXModelManager: ObservableObject {
             description: "Balanced quality and speed with low memory use."
         ),
         ModelOption(
+            id: "mlx-community/Qwen3-ASR-0.6B-6bit",
+            title: "Qwen3-ASR 0.6B (6bit)",
+            description: "Better accuracy than 4bit with moderate memory usage."
+        ),
+        ModelOption(
+            id: "mlx-community/Qwen3-ASR-0.6B-8bit",
+            title: "Qwen3-ASR 0.6B (8bit)",
+            description: "Highest-precision 0.6B option with higher memory usage."
+        ),
+        ModelOption(
+            id: "mlx-community/Qwen3-ASR-0.6B-bf16",
+            title: "Qwen3-ASR 0.6B (bf16)",
+            description: "Full-precision 0.6B model for maximum local quality."
+        ),
+        ModelOption(
+            id: "mlx-community/Qwen3-ASR-1.7B-4bit",
+            title: "Qwen3-ASR 1.7B (4bit)",
+            description: "Larger multilingual model tuned for accuracy at lower memory cost."
+        ),
+        ModelOption(
+            id: "mlx-community/Qwen3-ASR-1.7B-6bit",
+            title: "Qwen3-ASR 1.7B (6bit)",
+            description: "High-accuracy flagship model with a balanced memory footprint."
+        ),
+        ModelOption(
+            id: "mlx-community/Qwen3-ASR-1.7B-8bit",
+            title: "Qwen3-ASR 1.7B (8bit)",
+            description: "High-precision 1.7B model for stronger recognition quality."
+        ),
+        ModelOption(
             id: "mlx-community/Qwen3-ASR-1.7B-bf16",
             title: "Qwen3-ASR 1.7B (bf16)",
             description: "High accuracy flagship model with higher memory usage."
+        ),
+        ModelOption(
+            id: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+            title: "Voxtral Realtime Mini 4B (4bit)",
+            description: "Realtime-oriented multilingual model with reduced memory use."
+        ),
+        ModelOption(
+            id: "mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit",
+            title: "Voxtral Realtime Mini 4B (6bit)",
+            description: "Realtime multilingual model with a balanced quality-to-memory tradeoff."
         ),
         ModelOption(
             id: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
@@ -58,19 +104,76 @@ class MLXModelManager: ObservableObject {
             description: "Realtime-oriented model with larger memory footprint."
         ),
         ModelOption(
+            id: "mlx-community/parakeet-tdt_ctc-110m",
+            title: "Parakeet TDT CTC 110M",
+            description: "Smallest Parakeet option for fast English transcription."
+        ),
+        ModelOption(
+            id: "mlx-community/parakeet-tdt-0.6b-v2",
+            title: "Parakeet TDT 0.6B v2",
+            description: "Lightweight English TDT model for lower-memory local transcription."
+        ),
+        ModelOption(
             id: "mlx-community/parakeet-tdt-0.6b-v3",
-            title: "Parakeet 0.6B",
+            title: "Parakeet TDT 0.6B v3",
             description: "Fast, lightweight English STT."
+        ),
+        ModelOption(
+            id: "mlx-community/parakeet-ctc-0.6b",
+            title: "Parakeet CTC 0.6B",
+            description: "Compact English CTC model with low memory use."
+        ),
+        ModelOption(
+            id: "mlx-community/parakeet-rnnt-0.6b",
+            title: "Parakeet RNNT 0.6B",
+            description: "Compact English RNNT model for streaming-friendly decoding."
+        ),
+        ModelOption(
+            id: "mlx-community/parakeet-tdt-1.1b",
+            title: "Parakeet TDT 1.1B",
+            description: "Larger English model with improved recognition quality."
+        ),
+        ModelOption(
+            id: "mlx-community/parakeet-tdt_ctc-1.1b",
+            title: "Parakeet TDT CTC 1.1B",
+            description: "Higher-capacity Parakeet hybrid model for English transcription."
+        ),
+        ModelOption(
+            id: "mlx-community/parakeet-ctc-1.1b",
+            title: "Parakeet CTC 1.1B",
+            description: "Higher-accuracy English CTC model with increased memory usage."
+        ),
+        ModelOption(
+            id: "mlx-community/parakeet-rnnt-1.1b",
+            title: "Parakeet RNNT 1.1B",
+            description: "Higher-accuracy English RNNT model for heavier local setups."
         ),
         ModelOption(
             id: "mlx-community/GLM-ASR-Nano-2512-4bit",
             title: "GLM-ASR Nano (4bit)",
             description: "Smallest footprint for quick drafts."
+        ),
+        ModelOption(
+            id: "mlx-community/granite-4.0-1b-speech-5bit",
+            title: "Granite Speech 4.0 1B (5bit)",
+            description: "Multilingual speech model with stronger accuracy than the nano tier."
+        ),
+        ModelOption(
+            id: "mlx-community/FireRedASR2-AED-mlx",
+            title: "FireRed ASR 2",
+            description: "Beam-search ASR model tuned for higher offline accuracy."
+        ),
+        ModelOption(
+            id: "mlx-community/SenseVoiceSmall",
+            title: "SenseVoice Small",
+            description: "Fast multilingual model with built-in language and event detection."
         )
     ]
     private static let legacyModelRepoMap: [String: String] = [
         "mlx-community/Parakeet-0.6B": "mlx-community/parakeet-tdt-0.6b-v3",
         "mlx-community/GLM-ASR-Nano-4bit": "mlx-community/GLM-ASR-Nano-2512-4bit",
+        "mlx-community/Voxtral-Mini-4B-Realtime-2602": "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
+        "mlx-community/FireRedASR2": "mlx-community/FireRedASR2-AED-mlx",
     ]
 
     enum ModelSizeState: Equatable {
@@ -177,7 +280,7 @@ class MLXModelManager: ObservableObject {
     }
 
     static func isRealtimeCapableModelRepo(_ repo: String) -> Bool {
-        canonicalModelRepo(repo) == "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"
+        realtimeCapableModelRepos.contains(canonicalModelRepo(repo))
     }
 
     func updateHubBaseURL(_ url: URL) {
@@ -346,6 +449,12 @@ class MLXModelManager: ObservableObject {
         if lower.contains("glmasr") || lower.contains("glm-asr") {
             return try await GLMASRModel.fromPretrained(repo)
         }
+        if lower.contains("firered") {
+            return try await FireRedASR2Model.fromPretrained(repo)
+        }
+        if lower.contains("sensevoice") {
+            return try await SenseVoiceModel.fromPretrained(repo)
+        }
         if lower.contains("qwen3-asr") || lower.contains("qwen3_asr") {
             return try await Qwen3ASRModel.fromPretrained(repo)
         }
@@ -354,6 +463,9 @@ class MLXModelManager: ObservableObject {
         }
         if lower.contains("parakeet") {
             return try await ParakeetModel.fromPretrained(repo)
+        }
+        if lower.contains("granite") {
+            return try await GraniteSpeechModel.fromPretrained(repo)
         }
 
         return try await Qwen3ASRModel.fromPretrained(repo)

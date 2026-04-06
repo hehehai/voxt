@@ -416,7 +416,7 @@ enum ConfigurationTransferManager {
             self.translationSystemPrompt = translationSystemPrompt
             self.rewriteSystemPrompt = rewriteSystemPrompt
             self.asrHintSettings = asrHintSettings
-            self.mlxModelRepo = mlxModelRepo
+            self.mlxModelRepo = MLXModelManager.canonicalModelRepo(mlxModelRepo)
             self.whisperModelID = whisperModelID
             self.whisperTemperature = whisperTemperature
             self.whisperVADEnabled = whisperVADEnabled
@@ -446,7 +446,9 @@ enum ConfigurationTransferManager {
             translationSystemPrompt = try container.decode(String.self, forKey: .translationSystemPrompt)
             rewriteSystemPrompt = try container.decode(String.self, forKey: .rewriteSystemPrompt)
             asrHintSettings = try container.decodeIfPresent(String.self, forKey: .asrHintSettings) ?? ASRHintSettingsStore.defaultStoredValue()
-            mlxModelRepo = try container.decode(String.self, forKey: .mlxModelRepo)
+            mlxModelRepo = MLXModelManager.canonicalModelRepo(
+                try container.decode(String.self, forKey: .mlxModelRepo)
+            )
             whisperModelID = try container.decodeIfPresent(String.self, forKey: .whisperModelID) ?? WhisperKitModelManager.defaultModelID
             whisperTemperature = try container.decodeIfPresent(Double.self, forKey: .whisperTemperature) ?? 0.0
             whisperVADEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperVADEnabled) ?? true
@@ -786,7 +788,9 @@ enum ConfigurationTransferManager {
         let remoteLLM = RemoteModelConfigurationStore.loadConfigurations(from: defaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? "")
 
         if engine == .mlxAudio {
-            let repo = defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
+            let repo = MLXModelManager.canonicalModelRepo(
+                defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
+            )
             if !mlxModelManager.isModelDownloaded(repo: repo) {
                 issues.append(.init(scope: .mlxModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
             }
@@ -952,7 +956,9 @@ enum ConfigurationTransferManager {
                 translationSystemPrompt: defaults.string(forKey: AppPreferenceKey.translationSystemPrompt) ?? AppPreferenceKey.defaultTranslationPrompt,
                 rewriteSystemPrompt: defaults.string(forKey: AppPreferenceKey.rewriteSystemPrompt) ?? AppPreferenceKey.defaultRewritePrompt,
                 asrHintSettings: defaults.string(forKey: AppPreferenceKey.asrHintSettings) ?? ASRHintSettingsStore.defaultStoredValue(),
-                mlxModelRepo: defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo,
+                mlxModelRepo: MLXModelManager.canonicalModelRepo(
+                    defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
+                ),
                 whisperModelID: defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID,
                 whisperTemperature: defaults.object(forKey: AppPreferenceKey.whisperTemperature) as? Double ?? 0.0,
                 whisperVADEnabled: defaults.object(forKey: AppPreferenceKey.whisperVADEnabled) as? Bool ?? true,
@@ -1081,7 +1087,7 @@ enum ConfigurationTransferManager {
         defaults.set(model.translationSystemPrompt, forKey: AppPreferenceKey.translationSystemPrompt)
         defaults.set(model.rewriteSystemPrompt, forKey: AppPreferenceKey.rewriteSystemPrompt)
         defaults.set(model.asrHintSettings, forKey: AppPreferenceKey.asrHintSettings)
-        defaults.set(model.mlxModelRepo, forKey: AppPreferenceKey.mlxModelRepo)
+        defaults.set(MLXModelManager.canonicalModelRepo(model.mlxModelRepo), forKey: AppPreferenceKey.mlxModelRepo)
         defaults.set(WhisperKitModelManager.canonicalModelID(model.whisperModelID), forKey: AppPreferenceKey.whisperModelID)
         defaults.set(model.whisperTemperature, forKey: AppPreferenceKey.whisperTemperature)
         defaults.set(model.whisperVADEnabled, forKey: AppPreferenceKey.whisperVADEnabled)
