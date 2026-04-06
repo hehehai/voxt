@@ -2,6 +2,16 @@ import XCTest
 @testable import Voxt
 
 final class ConfigurationTransferManagerTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        VoxtSecureStorage.clearAllForTesting()
+    }
+
+    override func tearDown() {
+        VoxtSecureStorage.clearAllForTesting()
+        super.tearDown()
+    }
+
     func testExportImportRoundTripUsesIsolatedEnvironmentAndSanitizesSecrets() throws {
         let sourceDefaults = TestDoubles.makeUserDefaults()
         let sourceDirectory = try TemporaryDirectory()
@@ -89,7 +99,9 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.whisperRealtimeEnabled))
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider), TranslationModelProvider.remoteLLM.rawValue)
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage), TranslationTargetLanguage.japanese.rawValue)
-        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.customProxyPassword), "")
+        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.customProxyUsername) ?? "", "")
+        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.customProxyPassword) ?? "", "")
+        XCTAssertEqual(VoxtNetworkSession.proxyCredentials(defaults: targetDefaults).password, "")
 
         let importedRemote = RemoteModelConfigurationStore.loadConfigurations(
             from: targetDefaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? ""

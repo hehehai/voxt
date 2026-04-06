@@ -3,6 +3,11 @@ import CFNetwork
 import Network
 
 enum VoxtNetworkSession {
+    private enum SecureField: String {
+        case customProxyUsername
+        case customProxyPassword
+    }
+
     final class ManagedWebSocketTask {
         let session: URLSession
         let task: URLSessionWebSocketTask
@@ -105,6 +110,7 @@ enum VoxtNetworkSession {
     }()
 
     static var currentProxySettings: ProxySettings {
+        let credentials = currentProxyCredentials()
         let defaults = UserDefaults.standard
         let mode = ProxyMode(rawValue: defaults.string(forKey: AppPreferenceKey.networkProxyMode) ?? "") ?? .system
         let scheme = ProxyScheme(rawValue: defaults.string(forKey: AppPreferenceKey.customProxyScheme) ?? "") ?? .http
@@ -112,17 +118,50 @@ enum VoxtNetworkSession {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let portText = (defaults.string(forKey: AppPreferenceKey.customProxyPort) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let username = defaults.string(forKey: AppPreferenceKey.customProxyUsername) ?? ""
-        let password = defaults.string(forKey: AppPreferenceKey.customProxyPassword) ?? ""
 
         return ProxySettings(
             mode: mode,
             scheme: scheme,
             host: host,
             port: Int(portText),
-            username: username,
-            password: password
+            username: credentials.username,
+            password: credentials.password
         )
+    }
+
+    static func currentProxyCredentials() -> (username: String, password: String) {
+        proxyCredentials(defaults: .standard)
+    }
+
+    static func proxyCredentials(defaults: UserDefaults) -> (username: String, password: String) {
+        (
+            secureValue(
+                for: .customProxyUsername,
+                fallbackDefaultsKey: AppPreferenceKey.customProxyUsername,
+                defaults: defaults
+            ),
+            secureValue(
+                for: .customProxyPassword,
+                fallbackDefaultsKey: AppPreferenceKey.customProxyPassword,
+                defaults: defaults
+            )
+        )
+    }
+
+    static func setCustomProxyCredentials(
+        username: String,
+        password: String,
+        defaults: UserDefaults = .standard
+    ) {
+        VoxtSecureStorage.set(username, for: secureAccount(for: .customProxyUsername))
+        VoxtSecureStorage.set(password, for: secureAccount(for: .customProxyPassword))
+        defaults.removeObject(forKey: AppPreferenceKey.customProxyUsername)
+        defaults.removeObject(forKey: AppPreferenceKey.customProxyPassword)
+    }
+
+    static func migrateLegacyProxyCredentials(defaults: UserDefaults = .standard) {
+        migrateLegacyValue(for: .customProxyUsername, defaultsKey: AppPreferenceKey.customProxyUsername, defaults: defaults)
+        migrateLegacyValue(for: .customProxyPassword, defaultsKey: AppPreferenceKey.customProxyPassword, defaults: defaults)
     }
 
     static var isUsingSystemProxy: Bool {
@@ -213,6 +252,35 @@ enum VoxtNetworkSession {
             kCFNetworkProxiesExcludeSimpleHostnames as String: false
         ]
         configuration.proxyConfigurations = []
+    }
+
+    private static func secureValue(
+        for field: SecureField,
+        fallbackDefaultsKey: String,
+        defaults: UserDefaults
+    ) -> String {
+        if let stored = VoxtSecureStorage.string(for: secureAccount(for: field)) {
+            return stored
+        }
+
+        let legacyValue = defaults.string(forKey: fallbackDefaultsKey) ?? ""
+        if !legacyValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            VoxtSecureStorage.set(legacyValue, for: secureAccount(for: field))
+            defaults.removeObject(forKey: fallbackDefaultsKey)
+        }
+        return legacyValue
+    }
+
+    private static func migrateLegacyValue(for field: SecureField, defaultsKey: String, defaults: UserDefaults) {
+        let legacyValue = defaults.string(forKey: defaultsKey) ?? ""
+        if !legacyValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            VoxtSecureStorage.set(legacyValue, for: secureAccount(for: field))
+        }
+        defaults.removeObject(forKey: defaultsKey)
+    }
+
+    private static func secureAccount(for field: SecureField) -> String {
+        "network-proxy.\(field.rawValue)"
     }
 
     private static func customProxyDictionary(settings: ProxySettings) -> [AnyHashable: Any] {
