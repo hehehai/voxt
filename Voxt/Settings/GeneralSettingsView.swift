@@ -31,8 +31,6 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.customProxyScheme) private var customProxySchemeRaw = VoxtNetworkSession.ProxyScheme.http.rawValue
     @AppStorage(AppPreferenceKey.customProxyHost) private var customProxyHost = ""
     @AppStorage(AppPreferenceKey.customProxyPort) private var customProxyPort = ""
-    @AppStorage(AppPreferenceKey.customProxyUsername) private var customProxyUsername = ""
-    @AppStorage(AppPreferenceKey.customProxyPassword) private var customProxyPassword = ""
     @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
 
     @State private var inputDevices: [AudioInputDevice] = []
@@ -46,6 +44,8 @@ struct GeneralSettingsView: View {
     @State private var isUserMainLanguageSheetPresented = false
     @State private var isMicrophonePriorityDialogPresented = false
     @State private var systemAudioPermissionMessage: String?
+    @State private var customProxyUsername = ""
+    @State private var customProxyPassword = ""
 
     private var networkProxyMode: Binding<VoxtNetworkSession.ProxyMode> {
         Binding(
@@ -207,6 +207,7 @@ struct GeneralSettingsView: View {
             }
             AppBehaviorController.applyDockVisibility(showInDock: showInDock)
             refreshModelStorageDisplayPath()
+            refreshProxyCredentials()
         }
         .onChange(of: launchAtLogin) { _, newValue in
             if isSyncingLaunchAtLoginState { return }
@@ -267,6 +268,12 @@ struct GeneralSettingsView: View {
         }
         .onChange(of: modelStorageRootPath) { _, _ in
             refreshModelStorageDisplayPath()
+        }
+        .onChange(of: customProxyUsername) { _, _ in
+            persistProxyCredentials()
+        }
+        .onChange(of: customProxyPassword) { _, _ in
+            persistProxyCredentials()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtAudioInputDevicesDidChange)) { _ in
             refreshInputDevices()
@@ -343,6 +350,19 @@ struct GeneralSettingsView: View {
         }
     }
 
+    private func refreshProxyCredentials() {
+        let credentials = VoxtNetworkSession.currentProxyCredentials()
+        customProxyUsername = credentials.username
+        customProxyPassword = credentials.password
+    }
+
+    private func persistProxyCredentials() {
+        VoxtNetworkSession.setCustomProxyCredentials(
+            username: customProxyUsername,
+            password: customProxyPassword
+        )
+    }
+
     private func exportConfiguration() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
@@ -380,6 +400,7 @@ struct GeneralSettingsView: View {
             NotificationCenter.default.post(name: .voxtOverlayAppearanceDidChange, object: nil)
             refreshInputDevices()
             refreshModelStorageDisplayPath()
+            refreshProxyCredentials()
             configurationTransferMessage = String(localized: "Configuration imported successfully. Included dictionary data was restored, and sensitive fields need to be filled in again if required.")
         } catch {
             configurationTransferMessage = String(format: NSLocalizedString("Configuration import failed: %@", comment: ""), error.localizedDescription)

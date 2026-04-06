@@ -2,6 +2,16 @@ import XCTest
 @testable import Voxt
 
 final class RemoteModelConfigurationTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        VoxtSecureStorage.clearAllForTesting()
+    }
+
+    override func tearDown() {
+        VoxtSecureStorage.clearAllForTesting()
+        super.tearDown()
+    }
+
     func testDoubaoConfigurationUsesExpectedDefaults() {
         XCTAssertEqual(DoubaoASRConfiguration.resolvedEndpoint("", model: ""), DoubaoASRConfiguration.defaultNostreamEndpoint)
         XCTAssertEqual(
@@ -55,6 +65,9 @@ final class RemoteModelConfigurationTests: XCTestCase {
         let raw = RemoteModelConfigurationStore.saveConfigurations(stored)
         let roundTrip = RemoteModelConfigurationStore.loadConfigurations(from: raw)
 
+        XCTAssertFalse(raw.contains("secret"))
+        XCTAssertFalse(raw.contains("app-id"))
+        XCTAssertFalse(raw.contains("token"))
         XCTAssertEqual(roundTrip, stored)
     }
 

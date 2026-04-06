@@ -893,6 +893,8 @@ enum ConfigurationTransferManager {
         defaults: UserDefaults,
         environment: FileEnvironment
     ) -> ExportPayload {
+        let proxyCredentials = VoxtNetworkSession.proxyCredentials(defaults: defaults)
+
         let general = GeneralSettings(
             interfaceLanguage: defaults.string(forKey: AppPreferenceKey.interfaceLanguage) ?? AppInterfaceLanguage.system.rawValue,
             selectedInputDeviceID: defaults.integer(forKey: AppPreferenceKey.selectedInputDeviceID),
@@ -935,8 +937,8 @@ enum ConfigurationTransferManager {
             customProxyScheme: defaults.string(forKey: AppPreferenceKey.customProxyScheme) ?? "",
             customProxyHost: defaults.string(forKey: AppPreferenceKey.customProxyHost) ?? "",
             customProxyPort: defaults.string(forKey: AppPreferenceKey.customProxyPort) ?? "",
-            customProxyUsername: defaults.string(forKey: AppPreferenceKey.customProxyUsername) ?? "",
-            customProxyPassword: sanitizeSensitive(defaults.string(forKey: AppPreferenceKey.customProxyPassword) ?? "")
+            customProxyUsername: proxyCredentials.username,
+            customProxyPassword: sanitizeSensitive(proxyCredentials.password)
         )
 
         return ExportPayload(
@@ -1067,8 +1069,11 @@ enum ConfigurationTransferManager {
         defaults.set(general.customProxyScheme, forKey: AppPreferenceKey.customProxyScheme)
         defaults.set(general.customProxyHost, forKey: AppPreferenceKey.customProxyHost)
         defaults.set(general.customProxyPort, forKey: AppPreferenceKey.customProxyPort)
-        defaults.set(general.customProxyUsername, forKey: AppPreferenceKey.customProxyUsername)
-        defaults.set(resolveImportedSensitive(general.customProxyPassword), forKey: AppPreferenceKey.customProxyPassword)
+        VoxtNetworkSession.setCustomProxyCredentials(
+            username: general.customProxyUsername,
+            password: resolveImportedSensitive(general.customProxyPassword),
+            defaults: defaults
+        )
 
         defaults.set(model.transcriptionEngine, forKey: AppPreferenceKey.transcriptionEngine)
         defaults.set(model.enhancementMode, forKey: AppPreferenceKey.enhancementMode)

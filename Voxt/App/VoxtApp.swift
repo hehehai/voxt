@@ -439,6 +439,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
         Self.migrateLegacyNetworkProxyPreferenceIfNeeded()
+        RemoteModelConfigurationStore.migrateLegacyStoredSecrets()
+        VoxtNetworkSession.migrateLegacyProxyCredentials()
         super.init()
         AppDelegate.shared = self
     }
