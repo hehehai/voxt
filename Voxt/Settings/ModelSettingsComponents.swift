@@ -233,6 +233,7 @@ struct ModelTableView: View {
     let title: LocalizedStringKey
     let rows: [ModelTableRow]
     var viewportHeight: CGFloat = 280
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -254,10 +255,24 @@ struct ModelTableView: View {
                 VStack(spacing: 0) {
                     tableRows
                 }
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .preference(key: ModelTableContentHeightPreferenceKey.self, value: proxy.size.height)
+                    }
+                }
             }
-            .frame(height: viewportHeight)
+            .frame(height: resolvedViewportHeight)
+        }
+        .onPreferenceChange(ModelTableContentHeightPreferenceKey.self) { newHeight in
+            contentHeight = newHeight
         }
         .tableContainerStyle
+    }
+
+    private var resolvedViewportHeight: CGFloat {
+        guard contentHeight > 0 else { return viewportHeight }
+        return min(contentHeight, viewportHeight)
     }
 
     @ViewBuilder
@@ -328,6 +343,14 @@ struct ModelTableView: View {
                     )
             }
         }
+    }
+}
+
+private struct ModelTableContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
