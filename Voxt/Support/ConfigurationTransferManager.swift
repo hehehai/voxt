@@ -806,7 +806,7 @@ enum ConfigurationTransferManager {
             if !config.isConfigured {
                 issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Configuration required.")))
             } else if defaults.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled),
-                      RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(selectedRemoteASR),
+                      RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(selectedRemoteASR, configuration: config),
                       !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: selectedRemoteASR, configuration: config) {
                 issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Meeting ASR configuration required.")))
             }

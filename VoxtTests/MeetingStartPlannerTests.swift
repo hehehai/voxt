@@ -47,23 +47,7 @@ final class MeetingStartPlannerTests: XCTestCase {
         XCTAssertEqual(allowed, .start(.remote))
     }
 
-    func testDoubaoMeetingRequiresDedicatedMeetingModel() {
-        let blocked = MeetingStartPlanner.resolve(
-            selectedEngine: .remote,
-            mlxModelState: .ready,
-            whisperModelState: .ready,
-            remoteASRProvider: .doubaoASR,
-            remoteASRConfiguration: .init(
-                providerID: RemoteASRProvider.doubaoASR.rawValue,
-                model: DoubaoASRConfiguration.modelV2,
-                endpoint: "",
-                apiKey: "",
-                appID: "app-id",
-                accessToken: "token"
-            )
-        )
-        XCTAssertEqual(blocked, .blocked(.remoteASRMeetingUnavailable(.doubaoASR)))
-
+    func testDoubaoMeetingUsesConfiguredRealtimeProvider() {
         let allowed = MeetingStartPlanner.resolve(
             selectedEngine: .remote,
             mlxModelState: .ready,
@@ -72,7 +56,6 @@ final class MeetingStartPlannerTests: XCTestCase {
             remoteASRConfiguration: .init(
                 providerID: RemoteASRProvider.doubaoASR.rawValue,
                 model: DoubaoASRConfiguration.modelV2,
-                meetingModel: DoubaoASRConfiguration.meetingModelTurbo,
                 endpoint: "",
                 apiKey: "",
                 appID: "app-id",

@@ -390,7 +390,7 @@ struct RemoteProviderConfigurationSheet: View {
 
     private var showsMeetingASRSection: Bool {
         guard meetingNotesBetaEnabled, let provider = asrProviderForSheet else { return false }
-        return RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider)
+        return RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration)
     }
 
     private var meetingModelOptions: [RemoteModelOption] {

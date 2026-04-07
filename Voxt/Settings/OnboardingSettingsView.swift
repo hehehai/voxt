@@ -614,7 +614,7 @@ struct OnboardingSettingsView: View {
 
         var lines = [AppLocalization.format("Configured model: %@", configuration.model)]
         if meetingNotesBetaEnabled,
-           RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider) {
+           RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration) {
             if configuration.hasUsableMeetingModel {
                 lines.append(RemoteASRMeetingConfiguration.configuredMeetingModelStatus(configuration.meetingModel))
             } else {

@@ -67,15 +67,17 @@ enum MeetingASRSupport {
                 needsModelInitialization: !mlxIsCurrentModelLoaded && modelStateNeedsInitialization(mlxModelState)
             )
         case .remote:
-            let meetingConfiguration = RemoteASRMeetingConfiguration.resolvedMeetingConfiguration(
+            let resolvedMode = resolveRemoteMode(
                 provider: remoteProvider,
                 configuration: remoteConfiguration
             )
-            let model = meetingConfiguration.hasUsableModel ? meetingConfiguration.model : remoteProvider.suggestedModel
-            let resolvedMode = resolveRemoteMode(
-                provider: remoteProvider,
-                configuration: meetingConfiguration
-            )
+            let modelConfiguration = resolvedMode.usesLiveSessions
+                ? remoteConfiguration
+                : RemoteASRMeetingConfiguration.resolvedMeetingConfiguration(
+                    provider: remoteProvider,
+                    configuration: remoteConfiguration
+                )
+            let model = modelConfiguration.hasUsableModel ? modelConfiguration.model : remoteProvider.suggestedModel
             return MeetingASREngineContext(
                 engine: .remote,
                 historyModelDescription: "\(remoteProvider.title) (\(model))",
@@ -96,6 +98,13 @@ enum MeetingASRSupport {
         provider: RemoteASRProvider,
         configuration: RemoteProviderConfiguration
     ) -> MeetingASRResolvedMode {
+        if RemoteASRRealtimeSupport.usesRealtimeMeetingProfile(
+            provider: provider,
+            configuration: configuration
+        ) {
+            return .liveRemote(provider: provider)
+        }
+
         switch provider {
         case .doubaoASR:
             return .chunk(profile: .quality)
@@ -137,13 +146,13 @@ enum RemoteASRRealtimeSupport {
     ) -> Bool {
         switch provider {
         case .openAIWhisper:
-            return configuration.openAIChunkPseudoRealtimeEnabled
-        case .doubaoASR:
             return false
+        case .doubaoASR:
+            return true
         case .glmASR:
             return false
         case .aliyunBailianASR:
-            return false
+            return isAliyunRealtimeModel(configuration.model)
         }
     }
 

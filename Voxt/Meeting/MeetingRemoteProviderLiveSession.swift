@@ -76,6 +76,7 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
     private var lastSpeechAudioEndSeconds: TimeInterval?
     private var lastTranscriptEventAt: Date?
     private var transcriptState = MeetingLiveTranscriptState()
+    private var lastFinalizedSegmentEndSeconds: TimeInterval?
     private let timelineOffsetSeconds: TimeInterval
     private var hasLoggedFirstAudioPacket = false
     private var hasLoggedFirstServerPacket = false
@@ -241,7 +242,7 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
 
     func emitProviderPacket(_ packet: MeetingLiveProviderPacket) {
         if !packet.units.isEmpty {
-            if let activeUnit = packet.units.last {
+            if let activeUnit = latestDisplayableUnit(from: packet.units) {
                 emitProviderUnit(activeUnit, forceFinal: false)
             }
             if packet.isFinal {
@@ -393,9 +394,38 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
             text: text,
             preventsAdjacentMerge: true
         )
+        lastFinalizedSegmentEndSeconds = segment.endSeconds ?? currentSegmentStartSeconds
         transcriptState.freezeCurrentItem(text: text)
         eventHandler?(.final(segment))
         resetCurrentSegment()
+    }
+
+    private func latestDisplayableUnit(
+        from units: [MeetingLiveProviderTranscriptUnit]
+    ) -> MeetingLiveProviderTranscriptUnit? {
+        guard currentTranscriptText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false else {
+            return units.last
+        }
+        if let lastUnit = units.last,
+           shouldSuppressAsStaleLeadingUnit(lastUnit) {
+            let unitStart = resolvedProviderSegmentStartSeconds(for: lastUnit)
+            let unitEnd = resolvedProviderSegmentEndSeconds(for: lastUnit, startSeconds: unitStart)
+            let finalizedEndDescription = lastFinalizedSegmentEndSeconds.map { String($0) } ?? "nil"
+            VoxtLog.info(
+                "Meeting live stale leading unit suppressed. speaker=\(speaker.rawValue), unitStart=\(unitStart), unitEnd=\(unitEnd), lastFinalizedEnd=\(finalizedEndDescription)",
+                verbose: true
+            )
+        }
+        return units.last(where: { !shouldSuppressAsStaleLeadingUnit($0) })
+    }
+
+    private func shouldSuppressAsStaleLeadingUnit(
+        _ unit: MeetingLiveProviderTranscriptUnit
+    ) -> Bool {
+        guard let lastFinalizedSegmentEndSeconds else { return false }
+        let unitStart = resolvedProviderSegmentStartSeconds(for: unit)
+        let unitEnd = resolvedProviderSegmentEndSeconds(for: unit, startSeconds: unitStart)
+        return unitEnd <= lastFinalizedSegmentEndSeconds + 0.05
     }
 
     private func shouldSplitCurrentSegmentForSilence(at currentAudioSeconds: TimeInterval) -> Bool {
@@ -525,6 +555,7 @@ private final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession
     private let endpoint: String
     private let appID: String
     private let accessToken: String
+    private var bufferedPCMData = Data()
 
     init(
         speaker: MeetingSpeaker,
@@ -578,26 +609,15 @@ private final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession
     }
 
     override func sendAudioPacket(_ pcmData: Data, isLast: Bool) async {
-        guard let ws = socketTask() else { return }
         do {
-            let (audioCompression, audioPayload) = try MeetingRemoteAudioSupport.encodeDoubaoPayload(pcmData)
-            let packet = MeetingRemoteAudioSupport.buildDoubaoPacket(
-                messageType: MeetingRemoteAudioSupport.DoubaoProtocol.messageTypeAudioOnlyClientRequest,
-                messageFlags: isLast
-                    ? MeetingRemoteAudioSupport.DoubaoProtocol.flagLastAudioPacket
-                    : MeetingRemoteAudioSupport.DoubaoProtocol.flagNoSequence,
-                serialization: MeetingRemoteAudioSupport.DoubaoProtocol.serializationNone,
-                compression: audioCompression,
-                sequence: 0,
-                payload: audioPayload
-            )
-            try await ws.send(.data(packet))
-            if !isLast {
-                logOutgoingAudioPacketIfNeeded(kind: "doubao", sequence: 0, payloadBytes: audioPayload.count)
+            guard !isLast else {
+                try await flushBufferedAudioIfNeeded(includeTrailingPartial: true)
+                try await transmitAudioPayload(Data(), isLast: true)
+                return
             }
-            if !isLast, consumeShouldLogNextSpeechAudioPacket() {
-                logFirstAudioPacketIfNeeded(kind: "doubao")
-            }
+
+            bufferedPCMData.append(pcmData)
+            try await flushBufferedAudioIfNeeded(includeTrailingPartial: false)
         } catch {
             emitFailure(error)
             await cancel()
@@ -620,9 +640,42 @@ private final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession
             reqID: reqID,
             sequence: 1,
             hintPayload: streamingHintPayload,
-            audioFormat: DoubaoASRConfiguration.streamingAudioFormat
+            audioFormat: DoubaoASRConfiguration.streamingAudioFormat,
+            enableNonstream: true
         )
         try await ws.send(.data(packet))
+        await handleReadyForAudio()
+    }
+
+    private func flushBufferedAudioIfNeeded(includeTrailingPartial: Bool) async throws {
+        while let payload = DoubaoASRConfiguration.popRecommendedStreamingChunk(
+            from: &bufferedPCMData,
+            includeTrailingPartial: includeTrailingPartial
+        ) {
+            try await transmitAudioPayload(payload, isLast: false)
+        }
+    }
+
+    private func transmitAudioPayload(_ pcmData: Data, isLast: Bool) async throws {
+        guard let ws = socketTask() else { return }
+        let (audioCompression, audioPayload) = try MeetingRemoteAudioSupport.encodeDoubaoPayload(pcmData)
+        let packet = MeetingRemoteAudioSupport.buildDoubaoPacket(
+            messageType: MeetingRemoteAudioSupport.DoubaoProtocol.messageTypeAudioOnlyClientRequest,
+            messageFlags: isLast
+                ? MeetingRemoteAudioSupport.DoubaoProtocol.flagLastAudioPacket
+                : MeetingRemoteAudioSupport.DoubaoProtocol.flagNoSequence,
+            serialization: MeetingRemoteAudioSupport.DoubaoProtocol.serializationNone,
+            compression: audioCompression,
+            sequence: 0,
+            payload: audioPayload
+        )
+        try await ws.send(.data(packet))
+        if !isLast {
+            logOutgoingAudioPacketIfNeeded(kind: "doubao", sequence: 0, payloadBytes: audioPayload.count)
+            if consumeShouldLogNextSpeechAudioPacket() {
+                logFirstAudioPacketIfNeeded(kind: "doubao")
+            }
+        }
     }
 
     private func startReceiveLoop() {
@@ -1224,14 +1277,16 @@ private enum MeetingRemoteAudioSupport {
         reqID: String,
         sequence: Int32,
         hintPayload: ResolvedASRHintPayload,
-        audioFormat: String
+        audioFormat: String,
+        enableNonstream: Bool = false
     ) throws -> Data {
         let payloadObject = DoubaoASRConfiguration.fullRequestPayload(
             requestID: reqID,
             userID: "voxt-meeting",
             language: hintPayload.language,
             chineseOutputVariant: hintPayload.chineseOutputVariant,
-            audioFormat: audioFormat
+            audioFormat: audioFormat,
+            enableNonstream: enableNonstream
         )
         let rawPayload = try JSONSerialization.data(withJSONObject: payloadObject)
         let (compression, payload) = try encodeDoubaoPayload(rawPayload)
@@ -1348,8 +1403,10 @@ private enum MeetingRemoteAudioSupport {
             return MeetingLiveProviderPacket(units: [], fallbackText: nil, isFinal: isFinal, sequence: headerSequence)
         }
         guard let object = try? JSONSerialization.jsonObject(with: payload) else {
-            let raw = String(data: payload, encoding: .utf8)
-            return MeetingLiveProviderPacket(units: [], fallbackText: raw, isFinal: false, sequence: headerSequence)
+            let raw = String(data: payload, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallbackText = raw.flatMap { RemoteASRTextSanitizer.isLikelyIdentifierText($0) ? nil : $0 }
+            return MeetingLiveProviderPacket(units: [], fallbackText: fallbackText, isFinal: false, sequence: headerSequence)
         }
         let sequenceFromJSON = extractSequence(in: object)
         let isFinal = (messageFlags & DoubaoProtocol.flagLastAudioPacket) != 0
@@ -1513,7 +1570,7 @@ private enum MeetingRemoteAudioSupport {
            let result = dict["result"] as? [String: Any],
            let text = result["text"] as? String {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty, !isLikelyIdentifierText(trimmed) {
+            if !trimmed.isEmpty, !RemoteASRTextSanitizer.isLikelyIdentifierText(trimmed) {
                 return trimmed
             }
         }
@@ -1521,7 +1578,7 @@ private enum MeetingRemoteAudioSupport {
         var candidates: [String] = []
         func appendCandidate(_ value: String) {
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !isLikelyIdentifierText(trimmed) else { return }
+            guard !trimmed.isEmpty, !RemoteASRTextSanitizer.isLikelyIdentifierText(trimmed) else { return }
             candidates.append(trimmed)
         }
 
@@ -1625,7 +1682,7 @@ private enum MeetingRemoteAudioSupport {
         defaultIsFinal: Bool
     ) -> MeetingLiveProviderTranscriptUnit? {
         let text = extractDoubaoText(in: utterance)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !text.isEmpty, !isLikelyIdentifierText(text) else { return nil }
+        guard !text.isEmpty, !RemoteASRTextSanitizer.isLikelyIdentifierText(text) else { return nil }
 
         let startMs = extractTimeMilliseconds(
             in: utterance,
@@ -1774,21 +1831,6 @@ private enum MeetingRemoteAudioSupport {
         return nil
     }
 
-    private static func isLikelyIdentifierText(_ value: String) -> Bool {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        let uuidPattern = #"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"#
-        if trimmed.range(of: uuidPattern, options: .regularExpression) != nil {
-            return true
-        }
-        let compactIDPattern = #"^[0-9a-fA-F_-]{16,}$"#
-        if trimmed.range(of: compactIDPattern, options: .regularExpression) != nil,
-           trimmed.rangeOfCharacter(from: .letters) != nil,
-           trimmed.rangeOfCharacter(from: .decimalDigits) != nil {
-            return true
-        }
-        return false
-    }
 }
 
 private extension UInt32 {

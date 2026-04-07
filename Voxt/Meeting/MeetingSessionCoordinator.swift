@@ -725,15 +725,7 @@ final class MeetingSessionCoordinator {
 
     private func resolvedEngineContext() -> MeetingASREngineContext {
         let transcriptionEngine = resolvedTranscriptionEngine()
-        let remoteProvider = RemoteASRProvider(
-            rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? ""
-        ) ?? .openAIWhisper
-        let remoteConfiguration = RemoteModelConfigurationStore.resolvedASRConfiguration(
-            provider: remoteProvider,
-            stored: RemoteModelConfigurationStore.loadConfigurations(
-                from: UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-            )
-        )
+        let remoteSelection = resolvedRemoteASRSelection()
         let whisperRealtimeEnabled = UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true
 
         return MeetingASRSupport.resolveContext(
@@ -747,8 +739,8 @@ final class MeetingSessionCoordinator {
             mlxCurrentModelRepo: mlxModelManager.currentModelRepo,
             mlxIsCurrentModelLoaded: mlxModelManager.isCurrentModelLoaded,
             mlxDisplayTitle: mlxModelManager.displayTitle(for:),
-            remoteProvider: remoteProvider,
-            remoteConfiguration: remoteConfiguration
+            remoteProvider: remoteSelection.provider,
+            remoteConfiguration: remoteSelection.configuration
         )
     }
 
@@ -776,6 +768,18 @@ final class MeetingSessionCoordinator {
             activeLocalEngine = .mlxAudio
             return MeetingMLXSegmentTranscriber(modelManager: mlxModelManager)
         case .remote:
+            if context.resolvedMode.usesLiveSessions {
+                let remoteSelection = resolvedRemoteASRSelection()
+                let hintSettings = ASRHintSettingsStore.resolvedSettings(
+                    for: .whisperKit,
+                    rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.asrHintSettings)
+                )
+                liveSessionFactory = MeetingRemoteLiveSessionFactory(
+                    provider: remoteSelection.provider,
+                    configuration: remoteSelection.configuration,
+                    hintPayload: resolvedMeetingHintPayload(settings: hintSettings)
+                )
+            }
             return MeetingRemoteASRSegmentTranscriber()
         case .dictation:
             throw NSError(
@@ -855,6 +859,19 @@ final class MeetingSessionCoordinator {
             settings: settings,
             userLanguageCodes: userLanguageCodes
         )
+    }
+
+    private func resolvedRemoteASRSelection() -> (provider: RemoteASRProvider, configuration: RemoteProviderConfiguration) {
+        let provider = RemoteASRProvider(
+            rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? ""
+        ) ?? .openAIWhisper
+        let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(
+            provider: provider,
+            stored: RemoteModelConfigurationStore.loadConfigurations(
+                from: UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
+            )
+        )
+        return (provider, configuration)
     }
 
     private static func extractMonoSamples(from buffer: AVAudioPCMBuffer) -> [Float]? {

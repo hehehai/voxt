@@ -17,6 +17,20 @@ final class MeetingASRSupportTests: XCTestCase {
         }
     }
 
+    private func assertLiveMode(
+        _ context: MeetingASREngineContext,
+        provider expectedProvider: RemoteASRProvider,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        switch context.resolvedMode {
+        case .liveRemote(let provider):
+            XCTAssertEqual(provider, expectedProvider, file: file, line: line)
+        case .chunk(let profile):
+            XCTFail("Expected live remote mode, got chunk mode \(profile)", file: file, line: line)
+        }
+    }
+
     func testWhisperRealtimeUsesRealtimeProfile() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .whisperKit,
@@ -111,7 +125,7 @@ final class MeetingASRSupportTests: XCTestCase {
         assertChunkMode(context, profile: .quality)
     }
 
-    func testAliyunMeetingUsesChunkProfile() {
+    func testAliyunRealtimeMeetingUsesLiveRemoteMode() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .remote,
             whisperModelState: .notDownloaded,
@@ -133,10 +147,11 @@ final class MeetingASRSupportTests: XCTestCase {
             )
         )
 
-        assertChunkMode(context, profile: .quality)
+        XCTAssertEqual(context.historyModelDescription, "\(RemoteASRProvider.aliyunBailianASR.title) (fun-asr-realtime)")
+        assertLiveMode(context, provider: .aliyunBailianASR)
     }
 
-    func testDoubaoMeetingUsesDedicatedMeetingModel() {
+    func testDoubaoMeetingUsesLiveRemoteModel() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .remote,
             whisperModelState: .notDownloaded,
@@ -160,7 +175,7 @@ final class MeetingASRSupportTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(context.historyModelDescription, "\(RemoteASRProvider.doubaoASR.title) (\(DoubaoASRConfiguration.meetingModelTurbo))")
-        assertChunkMode(context, profile: .quality)
+        XCTAssertEqual(context.historyModelDescription, "\(RemoteASRProvider.doubaoASR.title) (\(DoubaoASRConfiguration.modelV2))")
+        assertLiveMode(context, provider: .doubaoASR)
     }
 }

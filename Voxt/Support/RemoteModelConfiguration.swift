@@ -5,6 +5,33 @@ struct RemoteModelOption: Hashable, Identifiable {
     let title: String
 }
 
+enum RemoteASRTextSanitizer {
+    nonisolated static func isLikelyIdentifierText(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let uuidPattern = #"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"#
+        if trimmed.range(of: uuidPattern, options: .regularExpression) != nil {
+            return true
+        }
+
+        let compactIDPattern = #"^[0-9a-fA-F_-]{16,}$"#
+        if trimmed.range(of: compactIDPattern, options: .regularExpression) != nil,
+           trimmed.rangeOfCharacter(from: .letters) != nil,
+           trimmed.rangeOfCharacter(from: .decimalDigits) != nil {
+            return true
+        }
+
+        let compact = trimmed.replacingOccurrences(of: "-", with: "")
+        if compact.count >= 24,
+           compact.allSatisfy({ $0.isHexDigit }) {
+            return true
+        }
+
+        return false
+    }
+}
+
 enum DoubaoASRConfiguration {
     static let modelV2 = "volc.seedasr.sauc.duration"
     static let modelV1 = "volc.bigasr.sauc.duration"
@@ -18,6 +45,25 @@ enum DoubaoASRConfiguration {
     static let requestAudioFormat = "wav"
     static let streamingAudioFormat = "pcm"
     static let requestAudioCodec = "raw"
+    static let streamingSampleRate = 16_000
+    static let streamingBitsPerSample = 16
+    static let streamingChannelCount = 1
+    static let recommendedStreamingPacketBytes =
+        (streamingSampleRate * streamingBitsPerSample * streamingChannelCount / 8) / 5
+
+    static func popRecommendedStreamingChunk(
+        from buffer: inout Data,
+        includeTrailingPartial: Bool
+    ) -> Data? {
+        guard buffer.count >= recommendedStreamingPacketBytes || (includeTrailingPartial && !buffer.isEmpty) else {
+            return nil
+        }
+
+        let chunkSize = min(buffer.count, recommendedStreamingPacketBytes)
+        let payload = Data(buffer.prefix(chunkSize))
+        buffer.removeSubrange(0..<chunkSize)
+        return payload
+    }
 
     static func resolvedEndpoint(_ endpoint: String, model: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -113,7 +159,8 @@ enum DoubaoASRConfiguration {
         userID: String,
         language: String?,
         chineseOutputVariant: String?,
-        audioFormat: String = requestAudioFormat
+        audioFormat: String = requestAudioFormat,
+        enableNonstream: Bool = false
     ) -> [String: Any] {
         var requestObject: [String: Any] = [
             "reqid": requestID,
@@ -122,7 +169,7 @@ enum DoubaoASRConfiguration {
             "enable_punc": true,
             "enable_ddc": true,
             "show_utterances": true,
-            "enable_nonstream": false
+            "enable_nonstream": enableNonstream
         ]
         if let chineseOutputVariant {
             requestObject["output_zh_variant"] = chineseOutputVariant
@@ -131,9 +178,9 @@ enum DoubaoASRConfiguration {
         var audioObject: [String: Any] = [
             "format": audioFormat,
             "codec": requestAudioCodec,
-            "rate": 16000,
-            "bits": 16,
-            "channel": 1
+            "rate": streamingSampleRate,
+            "bits": streamingBitsPerSample,
+            "channel": streamingChannelCount
         ]
         if let language,
            !language.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

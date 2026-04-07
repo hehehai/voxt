@@ -39,6 +39,22 @@ final class MeetingLiveSessionSupportTests: XCTestCase {
         XCTAssertEqual(policy.prebufferDuration, 1.0, accuracy: 0.001)
     }
 
+    func testAliyunRealtimePolicyEnablesKeepaliveAndReconnect() {
+        let policy = MeetingLiveSessionPolicy.resolved(
+            provider: .aliyunBailianASR,
+            configuration: .init(
+                providerID: RemoteASRProvider.aliyunBailianASR.rawValue,
+                model: "fun-asr-realtime",
+                endpoint: "",
+                apiKey: "token"
+            )
+        )
+
+        XCTAssertTrue(policy.idleKeepaliveEnabled)
+        XCTAssertTrue(policy.autoReconnectOnUnexpectedClose)
+        XCTAssertEqual(policy.segmentSilenceSplitThreshold, 1.2, accuracy: 0.001)
+    }
+
     func testOpenAIPolicyDisablesLiveSessionMaintenance() {
         let policy = MeetingLiveSessionPolicy.resolved(
             provider: .openAIWhisper,

@@ -60,7 +60,7 @@ extension ModelSettingsView {
             let needsMeetingSetup =
                 isSelected &&
                 meetingNotesBetaEnabled &&
-                RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider) &&
+                RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: config) &&
                 config.isConfigured &&
                 !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: provider, configuration: config)
             return ModelTableRow(
@@ -448,7 +448,7 @@ extension ModelSettingsView {
         var lines = [AppLocalization.format("Configured model: %@", configuration.model)]
         if showMeetingSetupDetails,
            meetingNotesBetaEnabled,
-           RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider) {
+           RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration) {
             if configuration.hasUsableMeetingModel {
                 lines.append(RemoteASRMeetingConfiguration.configuredMeetingModelStatus(configuration.meetingModel))
             } else {

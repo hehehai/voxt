@@ -219,9 +219,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private func stopDoubaoStreaming(_ context: DoubaoStreamingContext) {
         isRecording = false
         stopDoubaoAudioCapture()
+        flushBufferedDoubaoAudioIfNeeded(context: context, includeTrailingPartial: true)
         VoxtLog.info("Doubao streaming stop requested. sentAudioPackets=\(context.audioPacketCount)", verbose: true)
 
-        let finalSequence = context.audioPacketCount == 0 ? Int32(-1) : -context.nextAudioSequence
+        let finalSequence = context.lastAudioSequence == 0 ? -context.nextAudioSequence : -context.lastAudioSequence
         VoxtLog.info(
             "Doubao streaming final packet. lastSequence=\(context.lastAudioSequence), nextSequence=\(context.nextAudioSequence), finalSequence=\(finalSequence)",
             verbose: true
@@ -1302,7 +1303,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             reqID: reqID,
             sequence: 1,
             hintPayload: streamingHintPayload,
-            audioFormat: DoubaoASRConfiguration.streamingAudioFormat
+            audioFormat: DoubaoASRConfiguration.streamingAudioFormat,
+            enableNonstream: true
         ) { error, isBenign in
             Task { [responseState = context.responseState] in
                 if isBenign {
@@ -1313,6 +1315,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 }
             }
         }
+        try ensureDoubaoAudioCaptureStarted(context, reason: "request-sent")
     }
 
     private func sendDoubaoPacket(
@@ -1344,30 +1347,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                       let context = self.doubaoStreamingContext,
                       !context.isClosed
                 else { return }
-                context.audioPacketCount += 1
-                let sequence = context.nextAudioSequence
-                context.nextAudioSequence += 1
-                context.lastAudioSequence = sequence
                 self.audioLevel = self.audioLevelFromPCM16(pcmData)
-                let (audioCompression, audioPayload) = self.encodeDoubaoPacketPayload(pcmData, preferGzip: true)
-                let packet = self.buildDoubaoPacket(
-                    messageType: DoubaoProtocol.messageTypeAudioOnlyClientRequest,
-                    messageFlags: DoubaoProtocol.flagPositiveSequence,
-                    serialization: DoubaoProtocol.serializationNone,
-                    compression: audioCompression,
-                    sequence: sequence,
-                    payload: audioPayload
-                )
-                self.sendDoubaoPacket(packet, through: context.ws) { error, isBenign in
-                    Task { [responseState = context.responseState] in
-                        if isBenign {
-                            context.isClosed = true
-                            await responseState.markSocketClosed()
-                        } else {
-                            await responseState.markCompletedWithError(error)
-                        }
-                    }
-                }
+                self.queueDoubaoAudioData(pcmData, context: context)
             }
         }
 
@@ -1380,6 +1361,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         audioLevel = 0
+    }
+
+    private func ensureDoubaoAudioCaptureStarted(
+        _ context: DoubaoStreamingContext,
+        reason: String
+    ) throws {
+        guard !context.didStartAudioStream else { return }
+        guard !stopRequested else {
+            VoxtLog.info("Doubao audio capture start skipped because stop was already requested. reason=\(reason)", verbose: true)
+            return
+        }
+        try startDoubaoAudioCapture()
+        context.didStartAudioStream = true
+        VoxtLog.info("Doubao audio capture started. reason=\(reason)", verbose: true)
     }
 
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
@@ -1416,13 +1411,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                         if case .data(let payloadData) = message,
                            let parsed = try self.parseDoubaoServerPacket(payloadData) {
                             if !context.didStartAudioStream {
-                                guard !self.stopRequested else {
-                                    VoxtLog.info("Doubao handshake completion ignored because stop was already requested.", verbose: true)
-                                    return
-                                }
                                 do {
-                                    try self.startDoubaoAudioCapture()
-                                    context.didStartAudioStream = true
+                                    try self.ensureDoubaoAudioCaptureStarted(context, reason: "server-packet")
                                 } catch {
                                     await context.responseState.markCompletedWithError(error)
                                     self.cleanupDoubaoStreamingState()
@@ -1594,6 +1584,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         sequence: Int32,
         hintPayload: ResolvedASRHintPayload,
         audioFormat: String,
+        enableNonstream: Bool = false,
         onError: @escaping (Error, Bool) -> Void
     ) {
         do {
@@ -1601,7 +1592,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 reqID: reqID,
                 sequence: sequence,
                 hintPayload: hintPayload,
-                audioFormat: audioFormat
+                audioFormat: audioFormat,
+                enableNonstream: enableNonstream
             )
             sendDoubaoPacket(packet, through: ws, onError: onError)
         } catch {
@@ -1613,14 +1605,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         reqID: String,
         sequence: Int32,
         hintPayload: ResolvedASRHintPayload,
-        audioFormat: String
+        audioFormat: String,
+        enableNonstream: Bool = false
     ) throws -> Data {
         let payloadObject = DoubaoASRConfiguration.fullRequestPayload(
             requestID: reqID,
             userID: "voxt",
             language: hintPayload.language,
             chineseOutputVariant: hintPayload.chineseOutputVariant,
-            audioFormat: audioFormat
+            audioFormat: audioFormat,
+            enableNonstream: enableNonstream
         )
         let rawPayload = try JSONSerialization.data(withJSONObject: payloadObject)
         let (payloadCompression, payload) = encodeDoubaoPacketPayload(rawPayload, preferGzip: true)
@@ -1632,6 +1626,50 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             sequence: sequence,
             payload: payload
         )
+    }
+
+    private func queueDoubaoAudioData(_ pcmData: Data, context: DoubaoStreamingContext) {
+        context.pendingPCMData.append(pcmData)
+        flushBufferedDoubaoAudioIfNeeded(context: context, includeTrailingPartial: false)
+    }
+
+    private func flushBufferedDoubaoAudioIfNeeded(
+        context: DoubaoStreamingContext,
+        includeTrailingPartial: Bool
+    ) {
+        while let payload = DoubaoASRConfiguration.popRecommendedStreamingChunk(
+            from: &context.pendingPCMData,
+            includeTrailingPartial: includeTrailingPartial
+        ) {
+            sendBufferedDoubaoAudioPacket(payload, context: context)
+        }
+    }
+
+    private func sendBufferedDoubaoAudioPacket(_ pcmData: Data, context: DoubaoStreamingContext) {
+        guard !pcmData.isEmpty, !context.isClosed else { return }
+        context.audioPacketCount += 1
+        let sequence = context.nextAudioSequence
+        context.nextAudioSequence += 1
+        context.lastAudioSequence = sequence
+        let (audioCompression, audioPayload) = encodeDoubaoPacketPayload(pcmData, preferGzip: true)
+        let packet = buildDoubaoPacket(
+            messageType: DoubaoProtocol.messageTypeAudioOnlyClientRequest,
+            messageFlags: DoubaoProtocol.flagPositiveSequence,
+            serialization: DoubaoProtocol.serializationNone,
+            compression: audioCompression,
+            sequence: sequence,
+            payload: audioPayload
+        )
+        sendDoubaoPacket(packet, through: context.ws) { error, isBenign in
+            Task { [responseState = context.responseState] in
+                if isBenign {
+                    context.isClosed = true
+                    await responseState.markSocketClosed()
+                } else {
+                    await responseState.markCompletedWithError(error)
+                }
+            }
+        }
     }
 
     private func sendDoubaoAudioPacket(
@@ -1886,8 +1924,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
 
         guard let object = try? JSONSerialization.jsonObject(with: payload) else {
-            let raw = String(data: payload, encoding: .utf8)
-            return (raw, false)
+            let raw = String(data: payload, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let visibleText = raw.flatMap { RemoteASRTextSanitizer.isLikelyIdentifierText($0) ? nil : $0 }
+            return (visibleText, false)
         }
 
         let sequenceFromJSON = extractSequence(in: object)
@@ -2156,7 +2196,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
            let result = dict["result"] as? [String: Any],
            let text = result["text"] as? String {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
+            if !trimmed.isEmpty, !RemoteASRTextSanitizer.isLikelyIdentifierText(trimmed) {
                 return trimmed
             }
         }
@@ -2165,7 +2205,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         func appendCandidate(_ value: String) {
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
+            guard !trimmed.isEmpty, !RemoteASRTextSanitizer.isLikelyIdentifierText(trimmed) else { return }
             candidates.append(trimmed)
         }
 
@@ -2789,6 +2829,7 @@ private final class DoubaoStreamingContext {
     var serverPacketCount = 0
     var nextAudioSequence: Int32 = 2
     var lastAudioSequence: Int32 = 0
+    var pendingPCMData = Data()
 
     init(session: URLSession, ws: URLSessionWebSocketTask, responseState: DoubaoResponseState) {
         self.session = session

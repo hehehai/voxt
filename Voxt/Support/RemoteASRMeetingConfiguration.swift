@@ -3,10 +3,17 @@ import Foundation
 enum RemoteASRMeetingConfiguration {
     static let setupPath = "Settings > Model > Remote ASR"
 
-    static func requiresDedicatedMeetingModel(_ provider: RemoteASRProvider) -> Bool {
+    static func requiresDedicatedMeetingModel(
+        _ provider: RemoteASRProvider,
+        configuration: RemoteProviderConfiguration? = nil
+    ) -> Bool {
         switch provider {
         case .doubaoASR, .aliyunBailianASR:
-            return true
+            guard let configuration else { return true }
+            return !RemoteASRRealtimeSupport.usesRealtimeMeetingProfile(
+                provider: provider,
+                configuration: configuration
+            )
         case .openAIWhisper, .glmASR:
             return false
         }
@@ -40,7 +47,7 @@ enum RemoteASRMeetingConfiguration {
         provider: RemoteASRProvider,
         configuration: RemoteProviderConfiguration
     ) -> Bool {
-        guard requiresDedicatedMeetingModel(provider) else { return true }
+        guard requiresDedicatedMeetingModel(provider, configuration: configuration) else { return true }
         guard configuration.hasUsableMeetingModel else { return false }
         switch provider {
         case .aliyunBailianASR:
@@ -57,7 +64,7 @@ enum RemoteASRMeetingConfiguration {
         provider: RemoteASRProvider,
         configuration: RemoteProviderConfiguration
     ) -> RemoteProviderConfiguration {
-        guard requiresDedicatedMeetingModel(provider) else { return configuration }
+        guard requiresDedicatedMeetingModel(provider, configuration: configuration) else { return configuration }
         var resolved = configuration
         let trimmedModel = configuration.meetingModel.trimmingCharacters(in: .whitespacesAndNewlines)
         switch provider {
