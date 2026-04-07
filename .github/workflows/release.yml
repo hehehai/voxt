@@ -864,9 +864,65 @@ jobs:
           fi
 
           RELEASE_BODY="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
-          RELEASE_NOTES="$(printf '%s' "$RELEASE_BODY")"
+          RELEASE_NOTES_HTML="$(
+            printf '%s\n' "$RELEASE_BODY" | awk '
+              function escape_html(value, escaped) {
+                escaped = value
+                gsub(/&/, "\\&amp;", escaped)
+                gsub(/</, "\\&lt;", escaped)
+                gsub(/>/, "\\&gt;", escaped)
+                return escaped
+              }
+
+              function close_list() {
+                if (in_list) {
+                  print "</ul>"
+                  in_list = 0
+                }
+              }
+
+              BEGIN {
+                in_list = 0
+              }
+
+              /^## \[/ {
+                next
+              }
+
+              /^### / {
+                close_list()
+                printf "<h3>%s</h3>\n", escape_html(substr($0, 5))
+                next
+              }
+
+              /^- / {
+                if (!in_list) {
+                  print "<ul>"
+                  in_list = 1
+                }
+                printf "<li>%s</li>\n", escape_html(substr($0, 3))
+                next
+              }
+
+              /^[[:space:]]*$/ {
+                close_list()
+                next
+              }
+
+              {
+                close_list()
+                printf "<p>%s</p>\n", escape_html($0)
+              }
+
+              END {
+                close_list()
+              }
+            '
+          )"
+
+          RELEASE_NOTES="$(printf '%s' "$RELEASE_NOTES_HTML")"
           if [ -z "$RELEASE_NOTES" ]; then
-            RELEASE_NOTES="Release ${VERSION}."
+            RELEASE_NOTES="<p>Release ${VERSION}.</p>"
           fi
 
           PUBLISHED_AT="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt // ""' 2>/dev/null || true)"
