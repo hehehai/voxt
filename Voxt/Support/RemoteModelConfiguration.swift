@@ -65,6 +65,10 @@ enum DoubaoASRConfiguration {
         return payload
     }
 
+    static func finalStreamingSequence(nextAudioSequence: Int32) -> Int32 {
+        -max(2, nextAudioSequence)
+    }
+
     static func resolvedEndpoint(_ endpoint: String, model: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {

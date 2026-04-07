@@ -230,7 +230,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         flushBufferedDoubaoAudioIfNeeded(context: context, includeTrailingPartial: true)
         VoxtLog.info("Doubao streaming stop requested. sentAudioPackets=\(context.audioPacketCount)", verbose: true)
 
-        let finalSequence = context.lastAudioSequence == 0 ? -context.nextAudioSequence : -context.lastAudioSequence
+        let finalSequence = DoubaoASRConfiguration.finalStreamingSequence(
+            nextAudioSequence: context.nextAudioSequence
+        )
         VoxtLog.info(
             "Doubao streaming final packet. lastSequence=\(context.lastAudioSequence), nextSequence=\(context.nextAudioSequence), finalSequence=\(finalSequence)",
             verbose: true

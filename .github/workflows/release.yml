@@ -948,7 +948,7 @@ jobs:
             -F "sha256=${SHA256}" \
             -F "size=${SPARKLE_ED_LENGTH}" \
             -F "edSignature=${SPARKLE_ED_SIGNATURE}" \
-            -F "releaseNotes=${RELEASE_NOTES}" \
+            --form-string "releaseNotes=${RELEASE_NOTES}" \
             -F "releaseURL=${RELEASE_URL}" \
             -F "publishedAt=${PUBLISHED_AT}" \
             -F "file=@${PKG_PATH};type=application/octet-stream"

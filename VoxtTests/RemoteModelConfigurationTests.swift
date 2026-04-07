@@ -56,6 +56,11 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertTrue(buffer.isEmpty)
     }
 
+    func testDoubaoFinalStreamingSequenceUsesNextSequence() {
+        XCTAssertEqual(DoubaoASRConfiguration.finalStreamingSequence(nextAudioSequence: 2), -2)
+        XCTAssertEqual(DoubaoASRConfiguration.finalStreamingSequence(nextAudioSequence: 16), -16)
+    }
+
     func testLoadSaveRoundTripPreservesConfigurations() {
         let stored: [String: RemoteProviderConfiguration] = [
             RemoteASRProvider.openAIWhisper.rawValue: TestFactories.makeRemoteConfiguration(
