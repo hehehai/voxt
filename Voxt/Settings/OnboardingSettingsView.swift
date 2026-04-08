@@ -5,6 +5,10 @@ import Speech
 import ApplicationServices
 import UniformTypeIdentifiers
 
+private func localized(_ key: String) -> String {
+    AppLocalization.localizedString(key)
+}
+
 struct OnboardingSettingsView: View {
     @Binding var currentStep: OnboardingStep
 
@@ -19,13 +23,14 @@ struct OnboardingSettingsView: View {
     @AppStorage(AppPreferenceKey.interactionSoundsEnabled) var interactionSoundsEnabled = true
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) var muteSystemAudioWhileRecording = false
     @AppStorage(AppPreferenceKey.interfaceLanguage) var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
+    @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
     @AppStorage(AppPreferenceKey.translationTargetLanguage) var translationTargetLanguageRaw = TranslationTargetLanguage.english.rawValue
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) var translateSelectedTextOnTranslationHotkey = true
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) var autoCopyWhenNoFocusedInput = false
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) var appEnhancementEnabled = false
-    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.modelStorageRootPath) var modelStorageRootPath = ""
+    @AppStorage(AppPreferenceKey.useHfMirror) var useHfMirror = false
     @AppStorage(AppPreferenceKey.transcriptionEngine) var engineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.enhancementMode) var enhancementModeRaw = EnhancementMode.off.rawValue
     @AppStorage(AppPreferenceKey.mlxModelRepo) var mlxModelRepo = MLXModelManager.defaultModelRepo
@@ -62,6 +67,10 @@ struct OnboardingSettingsView: View {
     @State var rewriteTestSourceText = OnboardingRewriteTest.defaultSourceText
     @State var appEnhancementDemoPlayer: AVPlayer?
     @State var meetingDemoPlayer: AVPlayer?
+    @State var featureSettings = FeatureSettingsStore.load(defaults: .standard)
+    @State private var permissionRefreshRevision = 0
+    @State var permissionMonitoringKinds: Set<OnboardingContextualPermission> = []
+    @State private var permissionMonitorTasks: [OnboardingContextualPermission: Task<Void, Never>] = [:]
 
     var interfaceLanguage: AppInterfaceLanguage {
         AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
@@ -114,6 +123,13 @@ struct OnboardingSettingsView: View {
         return String(format: format, primaryOption.title(), codes.count - 1)
     }
 
+    var appleIntelligenceAvailable: Bool {
+        if #available(macOS 26.0, *) {
+            return TextEnhancer.isAvailable
+        }
+        return false
+    }
+
     var modelPathChoice: Binding<OnboardingModelPathChoice> {
         Binding(
             get: {
@@ -147,6 +163,24 @@ struct OnboardingSettingsView: View {
                 case .dictation:
                     engineRaw = TranscriptionEngine.dictation.rawValue
                 }
+            }
+        )
+    }
+
+    var llmPathChoice: Binding<OnboardingTextModelPathChoice> {
+        Binding(
+            get: {
+                switch featureSettings.transcription.llmSelectionID.textSelection {
+                case .remoteLLM:
+                    return .remote
+                case .appleIntelligence:
+                    return .system
+                case .localLLM, .none:
+                    return .local
+                }
+            },
+            set: { newValue in
+                applyLLMPathChoice(newValue)
             }
         )
     }
@@ -227,8 +261,6 @@ struct OnboardingSettingsView: View {
     }
 
     var meetingBlockingMessages: [String] {
-        guard meetingNotesBetaEnabled else { return [] }
-
         var messages: [String] = []
         let remoteConfiguration = RemoteModelConfigurationStore.resolvedASRConfiguration(
             provider: selectedRemoteASRProvider,
@@ -246,7 +278,7 @@ struct OnboardingSettingsView: View {
         }
 
         if SystemAudioCapturePermission.authorizationStatus() != .authorized {
-            messages.append(String(localized: "System audio recording permission is required for Meeting Notes. Enable it in Settings > Permissions."))
+            messages.append(String(localized: "System audio recording permission is required for Meeting. Enable it in Settings > Permissions."))
         }
 
         return Array(Set(messages))
@@ -259,7 +291,7 @@ struct OnboardingSettingsView: View {
             hasRecordingPermissions: recordingPermissionsSatisfied,
             hasRewriteIssues: !rewriteIssues.isEmpty,
             appEnhancementEnabled: appEnhancementEnabled,
-            meetingNotesEnabled: meetingNotesBetaEnabled,
+            meetingNotesEnabled: true,
             hasMeetingIssues: !meetingBlockingMessages.isEmpty
         )
     }
@@ -268,7 +300,7 @@ struct OnboardingSettingsView: View {
         OnboardingPermissionRequirementContext(
             selectedEngine: selectedEngine,
             muteSystemAudioWhileRecording: muteSystemAudioWhileRecording,
-            meetingNotesEnabled: meetingNotesBetaEnabled
+            meetingNotesEnabled: true
         )
     }
 
@@ -280,106 +312,118 @@ struct OnboardingSettingsView: View {
         .filter { !OnboardingPermissionGrantResolver.isGranted($0) }
     }
 
+    var currentStepRequiredPermissions: [OnboardingContextualPermission] {
+        OnboardingPermissionRequirementResolver.requiredPermissions(
+            for: currentStep,
+            context: currentPermissionContext
+        )
+    }
+
     var shouldShowPermissionBadge: Bool {
         !currentStepMissingPermissions.isEmpty
     }
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            onboardingSidebar
-                .frame(width: 184)
-                .frame(maxHeight: .infinity, alignment: .top)
+    private var onboardingBodyContent: AnyView {
+        AnyView(
+            HStack(alignment: .top, spacing: 8) {
+                onboardingSidebar
+                    .frame(width: 184)
+                    .frame(maxHeight: .infinity, alignment: .top)
 
-            VStack(alignment: .leading, spacing: 12) {
-                onboardingHeader
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        stepContent
+                VStack(alignment: .leading, spacing: 12) {
+                    onboardingHeader
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            stepContent
+                            currentStepPermissionSection
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.top, 2)
+                        .padding(.bottom, 8)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.top, 2)
-                    .padding(.bottom, 8)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .environment(\.locale, interfaceLanguage.locale)
-        .onAppear {
-            refreshInputDevices()
-            refreshModelStorageDisplayPath()
-            syncOnboardingModelManagers()
-            prepareDemoPlayerIfNeeded(for: currentStep)
-        }
-        .onChange(of: muteSystemAudioWhileRecording) { _, newValue in
-            guard newValue else {
-                systemAudioPermissionMessage = nil
-                return
-            }
+        )
+    }
 
-            let status = SystemAudioCapturePermission.authorizationStatus()
-            if status == .authorized {
-                systemAudioPermissionMessage = nil
-                return
-            }
+    private var onboardingObservedContent: AnyView {
+        let localized = AnyView(onboardingBodyContent.environment(\.locale, interfaceLanguage.locale))
+        let appeared = AnyView(localized.onAppear {
+                refreshInputDevices()
+                refreshModelStorageDisplayPath()
+                syncOnboardingModelManagers()
+                syncOnboardingFeatureSelections()
+                prepareDemoPlayerIfNeeded(for: currentStep)
+            })
+        let muteObserved = AnyView(appeared.onChange(of: muteSystemAudioWhileRecording) { _, newValue in
+                handleMuteSystemAudioChange(newValue)
+            })
+        let languageObserved = AnyView(muteObserved.onChange(of: interfaceLanguageRaw) { _, _ in
+                NotificationCenter.default.post(name: .voxtInterfaceLanguageDidChange, object: nil)
+            })
+        let featureObserved = AnyView(languageObserved.onChange(of: featureSettingsRaw) { _, _ in
+                featureSettings = FeatureSettingsStore.load(defaults: .standard)
+            })
+        let storageObserved = AnyView(featureObserved.onChange(of: modelStorageRootPath) { _, _ in
+                refreshModelStorageDisplayPath()
+            })
+        let mlxObserved = AnyView(storageObserved.onChange(of: mlxModelRepo) { _, newValue in
+                handleMLXRepoChange(newValue)
+            })
+        let whisperObserved = AnyView(mlxObserved.onChange(of: whisperModelID) { _, newValue in
+                handleWhisperModelChange(newValue)
+            })
+        let llmRepoObserved = AnyView(whisperObserved.onChange(of: customLLMRepo) { _, newValue in
+                handleCustomLLMRepoChange(newValue)
+            })
+        let engineObserved = AnyView(llmRepoObserved.onChange(of: engineRaw) { _, _ in
+                syncOnboardingFeatureSelections()
+            })
+        let enhancementObserved = AnyView(engineObserved.onChange(of: enhancementModeRaw) { _, _ in
+                syncOnboardingFeatureSelections()
+            })
+        let remoteASRObserved = AnyView(enhancementObserved.onChange(of: remoteASRSelectedProviderRaw) { _, _ in
+                syncOnboardingFeatureSelections()
+            })
+        let remoteLLMObserved = AnyView(remoteASRObserved.onChange(of: remoteLLMSelectedProviderRaw) { _, _ in
+                syncOnboardingFeatureSelections()
+            })
+        let targetLanguageObserved = AnyView(remoteLLMObserved.onChange(of: translationTargetLanguageRaw) { _, _ in
+                syncOnboardingFeatureSelections()
+            })
+        let translationSelectionObserved = AnyView(targetLanguageObserved.onChange(of: translateSelectedTextOnTranslationHotkey) { _, _ in
+                syncOnboardingFeatureSelections()
+            })
+        let appEnhancementObserved = AnyView(translationSelectionObserved.onChange(of: appEnhancementEnabled) { _, _ in
+                syncOnboardingFeatureSelections()
+            })
+        let stepObserved = AnyView(appEnhancementObserved.onChange(of: currentStep) { _, newValue in
+                OnboardingPreferenceManager.saveLastStep(newValue)
+                prepareDemoPlayerIfNeeded(for: newValue)
+            })
+        let audioDevicesObserved = AnyView(stepObserved.onReceive(NotificationCenter.default.publisher(for: .voxtAudioInputDevicesDidChange)) { _ in
+                refreshInputDevices()
+            })
+        let selectedInputObserved = AnyView(audioDevicesObserved.onReceive(NotificationCenter.default.publisher(for: .voxtSelectedInputDeviceDidChange)) { _ in
+                refreshInputDevices()
+            })
+        return AnyView(selectedInputObserved.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                permissionRefreshRevision += 1
+            })
+    }
 
-            SystemAudioCapturePermission.requestAccess { granted in
-                systemAudioPermissionMessage = granted
-                    ? AppLocalization.localizedString("System audio recording permission granted.")
-                    : AppLocalization.localizedString("System audio recording permission is required for this feature. You can grant it in Settings > Permissions.")
-            }
-        }
-        .onChange(of: interfaceLanguageRaw) { _, _ in
-            NotificationCenter.default.post(name: .voxtInterfaceLanguageDidChange, object: nil)
-        }
-        .onChange(of: modelStorageRootPath) { _, _ in
-            refreshModelStorageDisplayPath()
-        }
-        .onChange(of: mlxModelRepo) { _, newValue in
-            let canonicalRepo = MLXModelManager.canonicalModelRepo(newValue)
-            if canonicalRepo != newValue {
-                mlxModelRepo = canonicalRepo
-                return
-            }
-            mlxModelManager.updateModel(repo: canonicalRepo)
-        }
-        .onChange(of: whisperModelID) { _, newValue in
-            let canonicalModelID = WhisperKitModelManager.canonicalModelID(newValue)
-            if canonicalModelID != newValue {
-                whisperModelID = canonicalModelID
-                return
-            }
-            whisperModelManager.updateModel(id: canonicalModelID)
-        }
-        .onChange(of: customLLMRepo) { _, newValue in
-            let sanitizedRepo = CustomLLMModelManager.isSupportedModelRepo(newValue)
-                ? newValue
-                : CustomLLMModelManager.defaultModelRepo
-            if sanitizedRepo != newValue {
-                customLLMRepo = sanitizedRepo
-                return
-            }
-            customLLMManager.updateModel(repo: sanitizedRepo)
-        }
-        .onChange(of: currentStep) { _, newValue in
-            OnboardingPreferenceManager.saveLastStep(newValue)
-            prepareDemoPlayerIfNeeded(for: newValue)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .voxtAudioInputDevicesDidChange)) { _ in
-            refreshInputDevices()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .voxtSelectedInputDeviceDidChange)) { _ in
-            refreshInputDevices()
-        }
-        .sheet(isPresented: $isUserMainLanguageSheetPresented) {
+    private var onboardingSheetContent: AnyView {
+        let languageSheet = AnyView(onboardingObservedContent.sheet(isPresented: $isUserMainLanguageSheetPresented) {
             UserMainLanguageSelectionSheet(
                 selectedCodes: selectedUserMainLanguageCodes,
                 localeIdentifier: interfaceLanguage.localeIdentifier
             ) { updatedCodes in
                 userMainLanguageCodesRaw = UserMainLanguageOption.storageValue(for: updatedCodes)
             }
-        }
-        .sheet(isPresented: $isMicrophonePriorityDialogPresented) {
+        })
+        let microphoneSheet = AnyView(languageSheet.sheet(isPresented: $isMicrophonePriorityDialogPresented) {
             MicrophonePriorityDialog(
                 state: microphoneState,
                 onUseNow: { uid in
@@ -392,15 +436,15 @@ struct OnboardingSettingsView: View {
                     applyMicrophonePriorityOrder(orderedUIDs)
                 }
             )
-        }
-        .sheet(isPresented: $isPermissionsDialogPresented) {
+        })
+        let permissionsSheet = AnyView(microphoneSheet.sheet(isPresented: $isPermissionsDialogPresented) {
             ScrollView {
                 PermissionsSettingsView(navigationRequest: nil)
                     .padding(16)
             }
             .frame(minWidth: 720, minHeight: 520)
-        }
-        .sheet(item: $editingASRProvider) { provider in
+        })
+        let asrSheet = AnyView(permissionsSheet.sheet(item: $editingASRProvider) { provider in
             RemoteProviderConfigurationSheet(
                 providerTitle: provider.title,
                 credentialHint: asrCredentialHint(for: provider),
@@ -413,8 +457,8 @@ struct OnboardingSettingsView: View {
             ) { configuration in
                 saveRemoteASRConfiguration(configuration)
             }
-        }
-        .sheet(item: $editingLLMProvider) { provider in
+        })
+        return AnyView(asrSheet.sheet(item: $editingLLMProvider) { provider in
             RemoteProviderConfigurationSheet(
                 providerTitle: provider.title,
                 credentialHint: nil,
@@ -427,7 +471,17 @@ struct OnboardingSettingsView: View {
             ) { configuration in
                 saveRemoteLLMConfiguration(configuration)
             }
-        }
+        }.onDisappear {
+            for task in permissionMonitorTasks.values {
+                task.cancel()
+            }
+            permissionMonitorTasks.removeAll()
+            permissionMonitoringKinds.removeAll()
+        })
+    }
+
+    var body: some View {
+        onboardingSheetContent
     }
 
     var onboardingSidebar: some View {
@@ -493,7 +547,7 @@ struct OnboardingSettingsView: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "chevron.left")
                                     .font(.system(size: 11, weight: .semibold))
-                                Text("Previous")
+                                Text(localized("Previous"))
                             }
                             .frame(maxWidth: .infinity)
                         }
@@ -506,7 +560,7 @@ struct OnboardingSettingsView: View {
                             currentStep = nextStep
                         } label: {
                             HStack(spacing: 4) {
-                                Text("Next")
+                                Text(localized("Next"))
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 11, weight: .semibold))
                             }
@@ -520,13 +574,13 @@ struct OnboardingSettingsView: View {
                 Group {
                     if currentStep == .finish {
                         Button(action: onFinish) {
-                            Label("Start Voxt", systemImage: "checkmark.circle")
+                            Label(localized("Start Voxt"), systemImage: "checkmark.circle")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(SettingsPrimaryButtonStyle())
                     } else {
                         Button(action: onExit) {
-                            Label("Exit Guide", systemImage: "xmark.circle")
+                            Label(localized("Exit Guide"), systemImage: "xmark.circle")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(SettingsPillButtonStyle())
@@ -556,6 +610,143 @@ struct OnboardingSettingsView: View {
 
     func stepStatus(for step: OnboardingStep) -> OnboardingStepStatus {
         OnboardingStepStatusResolver.resolve(step: step, snapshot: onboardingStatusSnapshot)
+    }
+
+    func isPermissionGranted(_ permission: OnboardingContextualPermission) -> Bool {
+        _ = permissionRefreshRevision
+        return OnboardingPermissionGrantResolver.isGranted(permission)
+    }
+
+    func requestPermission(_ permission: OnboardingContextualPermission) {
+        let initialState = isPermissionGranted(permission)
+        permissionRefreshRevision += 1
+        startPermissionMonitoring(permission, initialState: initialState)
+
+        switch permission {
+        case .microphone:
+            Task {
+                _ = await AVCaptureDevice.requestAccess(for: .audio)
+                await MainActor.run { permissionRefreshRevision += 1 }
+            }
+        case .speechRecognition:
+            SFSpeechRecognizer.requestAuthorization { _ in
+                Task { @MainActor in
+                    self.permissionRefreshRevision += 1
+                }
+            }
+        case .accessibility:
+            _ = AccessibilityPermissionManager.request(prompt: true)
+        case .inputMonitoring:
+            if #available(macOS 10.15, *) {
+                _ = CGRequestListenEventAccess()
+            }
+        case .systemAudioCapture:
+            SystemAudioCapturePermission.requestAccess { _ in
+                Task { @MainActor in
+                    self.permissionRefreshRevision += 1
+                }
+            }
+        }
+    }
+
+    func openSettings(for permission: OnboardingContextualPermission) {
+        let urlString: String
+        switch permission {
+        case .microphone:
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        case .speechRecognition:
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+        case .accessibility:
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        case .inputMonitoring:
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+        case .systemAudioCapture:
+            SystemAudioCapturePermission.openSystemSettings()
+            return
+        }
+
+        if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func startPermissionMonitoring(
+        _ permission: OnboardingContextualPermission,
+        initialState: Bool
+    ) {
+        permissionMonitorTasks[permission]?.cancel()
+        permissionMonitoringKinds.insert(permission)
+
+        let task = Task { @MainActor in
+            defer {
+                permissionMonitorTasks[permission] = nil
+                permissionMonitoringKinds.remove(permission)
+            }
+
+            for _ in 0..<60 {
+                try? await Task.sleep(for: .milliseconds(500))
+                if Task.isCancelled { return }
+
+                let latestState = OnboardingPermissionGrantResolver.isGranted(permission)
+                permissionRefreshRevision += 1
+                if latestState != initialState {
+                    return
+                }
+            }
+        }
+
+        permissionMonitorTasks[permission] = task
+    }
+
+    private func handleMuteSystemAudioChange(_ newValue: Bool) {
+        guard newValue else {
+            systemAudioPermissionMessage = nil
+            return
+        }
+
+        let status = SystemAudioCapturePermission.authorizationStatus()
+        if status == .authorized {
+            systemAudioPermissionMessage = nil
+            return
+        }
+
+        SystemAudioCapturePermission.requestAccess { granted in
+            systemAudioPermissionMessage = granted
+                ? AppLocalization.localizedString("System audio recording permission granted.")
+                : AppLocalization.localizedString("System audio recording permission is required for this feature. You can grant it in Settings > Permissions.")
+        }
+    }
+
+    private func handleMLXRepoChange(_ newValue: String) {
+        let canonicalRepo = MLXModelManager.canonicalModelRepo(newValue)
+        if canonicalRepo != newValue {
+            mlxModelRepo = canonicalRepo
+            return
+        }
+        mlxModelManager.updateModel(repo: canonicalRepo)
+        syncOnboardingFeatureSelections()
+    }
+
+    private func handleWhisperModelChange(_ newValue: String) {
+        let canonicalModelID = WhisperKitModelManager.canonicalModelID(newValue)
+        if canonicalModelID != newValue {
+            whisperModelID = canonicalModelID
+            return
+        }
+        whisperModelManager.updateModel(id: canonicalModelID)
+        syncOnboardingFeatureSelections()
+    }
+
+    private func handleCustomLLMRepoChange(_ newValue: String) {
+        let sanitizedRepo = CustomLLMModelManager.isSupportedModelRepo(newValue)
+            ? newValue
+            : CustomLLMModelManager.defaultModelRepo
+        if sanitizedRepo != newValue {
+            customLLMRepo = sanitizedRepo
+            return
+        }
+        customLLMManager.updateModel(repo: sanitizedRepo)
+        syncOnboardingFeatureSelections()
     }
 
     private func syncOnboardingModelManagers() {
@@ -618,7 +809,7 @@ struct OnboardingSettingsView: View {
             messages.append(String(localized: "Accessibility permission is required to insert text into other apps."))
         }
         if !OnboardingPermissionGrantResolver.isGranted(.inputMonitoring) {
-            messages.append(String(localized: "Input Monitoring permission improves global shortcut capture, especially for fn combinations."))
+            messages.append(String(localized: "Input Monitoring permission improves global shortcut capture. If fn shortcuts still conflict, change the macOS input source shortcut in Keyboard settings."))
         }
         if muteSystemAudioWhileRecording,
            !OnboardingPermissionGrantResolver.isGranted(.systemAudioCapture) {
@@ -628,45 +819,179 @@ struct OnboardingSettingsView: View {
     }
 
     var enhancementModeTitle: String {
-        EnhancementMode(rawValue: enhancementModeRaw)?.title ?? EnhancementMode.off.title
+        featureSettings.transcription.llmEnabled
+            ? llmSelectionSummary(featureSettings.transcription.llmSelectionID)
+            : AppLocalization.localizedString("Disabled")
     }
 
     var translationProviderSummary: String {
-        let provider = TranslationModelProvider(rawValue: translationModelProviderRaw) ?? .customLLM
-        switch provider {
-        case .customLLM:
-            return customLLMManager.displayTitle(for: translationCustomLLMRepo)
-        case .remoteLLM:
-            let providerID = translationRemoteLLMProviderRaw.isEmpty ? selectedRemoteLLMProvider.rawValue : translationRemoteLLMProviderRaw
-            let remoteProvider = RemoteLLMProvider(rawValue: providerID) ?? selectedRemoteLLMProvider
-            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: remoteProvider, stored: remoteLLMConfigurations)
-            if configuration.hasUsableModel {
-                return "\(remoteProvider.title) · \(configuration.model)"
-            }
-            return "\(remoteProvider.title) · \(String(localized: "Needs Setup"))"
-        case .whisperKit:
-            return whisperModelManager.displayTitle(for: whisperModelID)
-        }
+        translationSelectionSummary(featureSettings.translation.modelSelectionID)
     }
 
     var rewriteProviderSummary: String {
-        switch selectedRewriteProvider {
-        case .customLLM:
-            return customLLMManager.displayTitle(for: rewriteCustomLLMRepo)
-        case .remoteLLM:
-            let providerID = rewriteRemoteLLMProviderRaw.isEmpty ? selectedRemoteLLMProvider.rawValue : rewriteRemoteLLMProviderRaw
-            let remoteProvider = RemoteLLMProvider(rawValue: providerID) ?? selectedRemoteLLMProvider
-            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: remoteProvider, stored: remoteLLMConfigurations)
-            if configuration.hasUsableModel {
-                return "\(remoteProvider.title) · \(configuration.model)"
-            }
-            return "\(remoteProvider.title) · \(String(localized: "Needs Setup"))"
-        }
+        llmSelectionSummary(featureSettings.rewrite.llmSelectionID)
+    }
+
+    var onboardingASRSummary: String {
+        asrSelectionSummary(featureSettings.transcription.asrSelectionID)
+    }
+
+    var onboardingLLMSummary: String {
+        llmSelectionSummary(featureSettings.transcription.llmSelectionID)
     }
 
     var formattedMeetingHotkey: String {
         let hotkey = HotkeyPreference.loadMeeting()
         return HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: hotkeyDistinguishModifierSides)
+    }
+
+    private var onboardingASRSelectionID: FeatureModelSelectionID {
+        switch selectedEngine {
+        case .dictation:
+            return .dictation
+        case .mlxAudio:
+            return .mlx(mlxModelRepo)
+        case .whisperKit:
+            return .whisper(whisperModelID)
+        case .remote:
+            return .remoteASR(selectedRemoteASRProvider)
+        }
+    }
+
+    private var onboardingLLMSelectionID: FeatureModelSelectionID {
+        switch llmPathChoice.wrappedValue {
+        case .local:
+            return .localLLM(customLLMRepo)
+        case .remote:
+            return .remoteLLM(selectedRemoteLLMProvider)
+        case .system:
+            return .appleIntelligence
+        }
+    }
+
+    private func applyLLMPathChoice(_ choice: OnboardingTextModelPathChoice) {
+        switch choice {
+        case .local:
+            enhancementModeRaw = EnhancementMode.customLLM.rawValue
+        case .remote:
+            enhancementModeRaw = EnhancementMode.remoteLLM.rawValue
+        case .system:
+            enhancementModeRaw = EnhancementMode.appleIntelligence.rawValue
+        }
+        syncOnboardingFeatureSelections(usingLLMChoice: choice)
+    }
+
+    private func syncOnboardingFeatureSelections(usingLLMChoice choice: OnboardingTextModelPathChoice? = nil) {
+        let asrSelection = onboardingASRSelectionID
+        let llmSelection = llmSelectionID(for: choice ?? llmPathChoice.wrappedValue)
+
+        FeatureSettingsStore.update(defaults: .standard) { settings in
+            settings.transcription.asrSelectionID = asrSelection
+            settings.transcription.llmEnabled = true
+            settings.transcription.llmSelectionID = llmSelection
+
+            settings.translation.asrSelectionID = asrSelection
+            settings.translation.modelSelectionID = translationSelectionID(
+                from: llmSelection,
+                asrSelection: asrSelection,
+                existingSelection: settings.translation.modelSelectionID
+            )
+            settings.translation.targetLanguageRawValue = translationTargetLanguageRaw
+            settings.translation.replaceSelectedText = translateSelectedTextOnTranslationHotkey
+
+            settings.rewrite.asrSelectionID = asrSelection
+            settings.rewrite.llmSelectionID = llmSelection
+            settings.rewrite.appEnhancementEnabled = appEnhancementEnabled
+
+            settings.meeting.enabled = true
+            settings.meeting.asrSelectionID = asrSelection
+            settings.meeting.summaryModelSelectionID = llmSelection
+        }
+
+        featureSettings = FeatureSettingsStore.load(defaults: .standard)
+    }
+
+    private func llmSelectionID(for choice: OnboardingTextModelPathChoice) -> FeatureModelSelectionID {
+        switch choice {
+        case .local:
+            return .localLLM(customLLMRepo)
+        case .remote:
+            return .remoteLLM(selectedRemoteLLMProvider)
+        case .system:
+            return .appleIntelligence
+        }
+    }
+
+    private func translationSelectionID(
+        from llmSelection: FeatureModelSelectionID,
+        asrSelection: FeatureModelSelectionID,
+        existingSelection: FeatureModelSelectionID
+    ) -> FeatureModelSelectionID {
+        switch llmSelection.textSelection {
+        case .localLLM(let repo):
+            return .localLLM(repo)
+        case .remoteLLM(let provider):
+            return .remoteLLM(provider)
+        case .appleIntelligence:
+            if case .whisper = asrSelection.asrSelection {
+                return .whisperDirectTranslate
+            }
+            switch existingSelection.translationSelection {
+            case .localLLM, .remoteLLM, .whisperDirectTranslate:
+                return existingSelection
+            case .none:
+                return .localLLM(customLLMRepo)
+            }
+        case .none:
+            return .localLLM(customLLMRepo)
+        }
+    }
+
+    func asrSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.asrSelection {
+        case .dictation:
+            return AppLocalization.localizedString("Direct Dictation")
+        case .mlx(let repo):
+            return mlxModelManager.displayTitle(for: repo)
+        case .whisper(let modelID):
+            return whisperModelManager.displayTitle(for: modelID)
+        case .remote(let provider):
+            let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: remoteASRConfigurations)
+            if configuration.hasUsableModel {
+                return "\(provider.title) · \(configuration.model)"
+            }
+            return "\(provider.title) · \(AppLocalization.localizedString("Needs Setup"))"
+        case .none:
+            return AppLocalization.localizedString("Not selected")
+        }
+    }
+
+    func llmSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.textSelection {
+        case .appleIntelligence:
+            return AppLocalization.localizedString("Apple Intelligence")
+        case .localLLM(let repo):
+            return customLLMManager.displayTitle(for: repo)
+        case .remoteLLM(let provider):
+            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLMConfigurations)
+            if configuration.hasUsableModel {
+                return "\(provider.title) · \(configuration.model)"
+            }
+            return "\(provider.title) · \(AppLocalization.localizedString("Needs Setup"))"
+        case .none:
+            return AppLocalization.localizedString("Not selected")
+        }
+    }
+
+    private func translationSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.translationSelection {
+        case .whisperDirectTranslate:
+            return AppLocalization.localizedString("Whisper Direct Translate")
+        case .localLLM, .remoteLLM:
+            return llmSelectionSummary(selectionID)
+        case .none:
+            return AppLocalization.localizedString("Not selected")
+        }
     }
 
     func remoteASRStatusText(for provider: RemoteASRProvider) -> String {
@@ -679,8 +1004,7 @@ struct OnboardingSettingsView: View {
         }
 
         var lines = [AppLocalization.format("Configured model: %@", configuration.model)]
-        if meetingNotesBetaEnabled,
-           RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration) {
+        if RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration) {
             if configuration.hasUsableMeetingModel {
                 lines.append(RemoteASRMeetingConfiguration.configuredMeetingModelStatus(configuration.meetingModel))
             } else {

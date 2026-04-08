@@ -1,6 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+private func localized(_ key: String) -> String {
+    AppLocalization.localizedString(key)
+}
+
 struct MicrophonePriorityDialog: View {
     let state: MicrophoneResolvedState
     let onUseNow: (String) -> Void
@@ -29,7 +33,7 @@ struct MicrophonePriorityDialog: View {
             header
 
             if orderedEntries.isEmpty {
-                Text("No available microphone devices")
+                Text(localized("No available microphone devices"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
@@ -61,7 +65,7 @@ struct MicrophonePriorityDialog: View {
             }
 
             SettingsDialogActionRow {
-                Button("Done") {
+                Button(localized("Done")) {
                     dismiss()
                 }
                 .buttonStyle(SettingsPrimaryButtonStyle())
@@ -79,7 +83,7 @@ struct MicrophonePriorityDialog: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Microphone Priority")
+                    Text(localized("Microphone Priority"))
                         .font(.headline)
                     Text(state.activeDevice?.name ?? String(localized: "No available microphone devices"))
                         .font(.subheadline)
@@ -88,15 +92,15 @@ struct MicrophonePriorityDialog: View {
 
                 Spacer()
 
-                Toggle("Auto Switch", isOn: autoSwitchBinding)
+                Toggle(localized("Auto Switch"), isOn: autoSwitchBinding)
                     .toggleStyle(.switch)
                     .controlSize(.small)
             }
 
             Text(
                 state.autoSwitchEnabled
-                    ? "Drag to reorder. Higher-priority microphones can take over when they reconnect."
-                    : "Drag to reorder. With Auto Switch off, microphone changes will not switch focus automatically."
+                    ? localized("Drag to reorder. Higher-priority microphones can take over when they reconnect.")
+                    : localized("Drag to reorder. With Auto Switch off, microphone changes will not switch focus automatically.")
             )
             .font(.caption)
             .foregroundStyle(.secondary)

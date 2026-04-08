@@ -15,7 +15,7 @@ extension ModelSettingsView {
             } else if isDownloaded {
                 actions = [
                     ModelTableAction(
-                        title: LocalizedStringKey(isCurrentWhisperModel(model.id) ? "Using" : "Use"),
+                        title: isCurrentWhisperModel(model.id) ? "Using" : "Use",
                         isEnabled: !isCurrentWhisperModel(model.id)
                     ) {
                         useWhisperModel(model.id)
@@ -59,7 +59,6 @@ extension ModelSettingsView {
             )
             let needsMeetingSetup =
                 isSelected &&
-                meetingNotesBetaEnabled &&
                 RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: config) &&
                 config.isConfigured &&
                 !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: provider, configuration: config)
@@ -71,7 +70,7 @@ extension ModelSettingsView {
                 badgeText: (hasIssue(for: .remoteASRProvider(provider)) || needsMeetingSetup) ? String(localized: "Needs Setup") : nil,
                 actions: [
                     ModelTableAction(
-                        title: LocalizedStringKey(isSelected ? "Using" : "Use"),
+                        title: isSelected ? "Using" : "Use",
                         isEnabled: !isSelected
                     ) {
                         useRemoteASRProvider(provider)
@@ -101,7 +100,7 @@ extension ModelSettingsView {
                 badgeText: remoteLLMBadgeText(for: provider),
                 actions: [
                     ModelTableAction(
-                        title: LocalizedStringKey(selectedRemoteLLMProvider == provider ? "Using" : "Use"),
+                        title: selectedRemoteLLMProvider == provider ? "Using" : "Use",
                         isEnabled: selectedRemoteLLMProvider != provider
                     ) {
                         useRemoteLLMProvider(provider)
@@ -127,7 +126,7 @@ extension ModelSettingsView {
             } else if isDownloaded {
                 actions = [
                     ModelTableAction(
-                        title: LocalizedStringKey(isCurrentModel(model.id) ? "Using" : "Use"),
+                        title: isCurrentModel(model.id) ? "Using" : "Use",
                         isEnabled: !isCurrentModel(model.id)
                     ) {
                         useModel(model.id)
@@ -170,7 +169,7 @@ extension ModelSettingsView {
             } else if isDownloaded {
                 actions = [
                     ModelTableAction(
-                        title: LocalizedStringKey(isCurrentCustomLLM(model.id) ? "Using" : "Use"),
+                        title: isCurrentCustomLLM(model.id) ? "Using" : "Use",
                         isEnabled: !isCurrentCustomLLM(model.id)
                     ) {
                         useCustomLLM(model.id)
@@ -304,16 +303,7 @@ extension ModelSettingsView {
             return "Error: \(message)"
         }
 
-        let installedSize = mlxModelManager.modelSizeOnDisk(repo: repo)
-        if mlxModelManager.isModelDownloaded(repo: repo) {
-            if installedSize.isEmpty {
-                return AppLocalization.localizedString("Installed")
-            }
-            return AppLocalization.format("Installed (%@)", installedSize)
-        }
-
-        let remoteSize = mlxModelManager.remoteSizeText(repo: repo)
-        return AppLocalization.format("Not installed (%@)", remoteSize)
+        return ""
     }
 
     func whisperModelStatusText(for modelID: String) -> String {
@@ -348,16 +338,7 @@ extension ModelSettingsView {
             return "Error: \(message)"
         }
 
-        let installedSize = whisperModelManager.modelSizeOnDisk(id: modelID)
-        if whisperModelManager.isModelDownloaded(id: modelID) {
-            if installedSize.isEmpty {
-                return AppLocalization.localizedString("Installed")
-            }
-            return AppLocalization.format("Installed (%@)", installedSize)
-        }
-
-        let remoteSize = whisperModelManager.remoteSizeText(id: modelID)
-        return AppLocalization.format("Not installed (%@)", remoteSize)
+        return ""
     }
 
     func useCustomLLM(_ repo: String) {
@@ -409,16 +390,7 @@ extension ModelSettingsView {
             return "Error: \(message)"
         }
 
-        let installedSize = customLLMManager.modelSizeOnDisk(repo: repo)
-        if customLLMManager.isModelDownloaded(repo: repo) {
-            if installedSize.isEmpty {
-                return AppLocalization.localizedString("Installed")
-            }
-            return AppLocalization.format("Installed (%@)", installedSize)
-        }
-
-        let remoteSize = customLLMManager.remoteSizeText(repo: repo)
-        return AppLocalization.format("Not installed (%@)", remoteSize)
+        return ""
     }
 
     func useRemoteASRProvider(_ provider: RemoteASRProvider) {
@@ -445,13 +417,10 @@ extension ModelSettingsView {
             return AppLocalization.localizedString("Not configured")
         }
 
-        var lines = [AppLocalization.format("Configured model: %@", configuration.model)]
+        var lines = [String]()
         if showMeetingSetupDetails,
-           meetingNotesBetaEnabled,
            RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration) {
-            if configuration.hasUsableMeetingModel {
-                lines.append(RemoteASRMeetingConfiguration.configuredMeetingModelStatus(configuration.meetingModel))
-            } else {
+            if !configuration.hasUsableMeetingModel {
                 lines.append(RemoteASRMeetingConfiguration.missingMeetingModelStatus(provider: provider))
             }
         }

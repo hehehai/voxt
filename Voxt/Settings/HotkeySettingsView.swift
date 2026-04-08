@@ -40,7 +40,6 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.meetingHotkeyKeyCode) private var meetingHotkeyKeyCode = Int(HotkeyPreference.defaultMeetingKeyCode)
     @AppStorage(AppPreferenceKey.meetingHotkeyModifiers) private var meetingHotkeyModifiers = Int(HotkeyPreference.defaultMeetingModifiers.rawValue)
     @AppStorage(AppPreferenceKey.meetingHotkeySidedModifiers) private var meetingHotkeySidedModifiers = 0
-    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.hotkeyTriggerMode) private var hotkeyTriggerMode = HotkeyPreference.defaultTriggerMode.rawValue
     @AppStorage(AppPreferenceKey.hotkeyDistinguishModifierSides) private var distinguishModifierSides = HotkeyPreference.defaultDistinguishModifierSides
     @AppStorage(AppPreferenceKey.hotkeyPreset) private var hotkeyPreset = HotkeyPreference.defaultPreset.rawValue
@@ -310,23 +309,21 @@ struct HotkeySettingsView: View {
                         onConfirmPending: confirmPendingCapture
                     )
 
-                    if meetingNotesBetaEnabled {
-                        shortcutInput(
-                            titleKey: "Meeting Notes",
-                            hotkey: displayedHotkey(for: .meeting, current: currentMeetingHotkey),
-                            isRecording: recordingField == .meeting,
-                            isPendingConfirmation: isPendingConfirmation(for: .meeting),
-                            onFocus: { beginRecording(.meeting) },
-                            onReset: {
-                                meetingHotkeyBinding.wrappedValue = HotkeyPreference.defaultMeetingKeyCode
-                                meetingModifierBinding.wrappedValue = HotkeyPreference.defaultMeetingModifiers
-                                meetingSidedModifierBinding.wrappedValue = []
-                                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                            },
-                            onCancelPending: discardPendingCapture,
-                            onConfirmPending: confirmPendingCapture
-                        )
-                    }
+                    shortcutInput(
+                        titleKey: "Meeting",
+                        hotkey: displayedHotkey(for: .meeting, current: currentMeetingHotkey),
+                        isRecording: recordingField == .meeting,
+                        isPendingConfirmation: isPendingConfirmation(for: .meeting),
+                        onFocus: { beginRecording(.meeting) },
+                        onReset: {
+                            meetingHotkeyBinding.wrappedValue = HotkeyPreference.defaultMeetingKeyCode
+                            meetingModifierBinding.wrappedValue = HotkeyPreference.defaultMeetingModifiers
+                            meetingSidedModifierBinding.wrappedValue = []
+                            hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+                        },
+                        onCancelPending: discardPendingCapture,
+                        onConfirmPending: confirmPendingCapture
+                    )
 
                     if recordingField != nil, pendingCapturedField != recordingField {
                         Text("Type your shortcut now. Press Esc to cancel recording.")
@@ -362,8 +359,7 @@ struct HotkeySettingsView: View {
                             .foregroundStyle(.red)
                     }
 
-                    if meetingNotesBetaEnabled,
-                       let conflict = hotkeyConflictMessage(for: currentMeetingHotkey) {
+                    if let conflict = hotkeyConflictMessage(for: currentMeetingHotkey) {
                         Text(localizedString("Meeting notes shortcut: %@", conflict))
                             .font(.caption)
                             .foregroundStyle(.red)
@@ -387,19 +383,19 @@ struct HotkeySettingsView: View {
                             .foregroundStyle(.red)
                     }
 
-                    if meetingNotesBetaEnabled, currentHotkey == currentMeetingHotkey {
+                    if currentHotkey == currentMeetingHotkey {
                         Text("Transcription and meeting notes shortcuts should be different.")
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
 
-                    if meetingNotesBetaEnabled, currentTranslationHotkey == currentMeetingHotkey {
+                    if currentTranslationHotkey == currentMeetingHotkey {
                         Text("Translation and meeting notes shortcuts should be different.")
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
 
-                    if meetingNotesBetaEnabled, currentRewriteHotkey == currentMeetingHotkey {
+                    if currentRewriteHotkey == currentMeetingHotkey {
                         Text("Content rewrite and meeting notes shortcuts should be different.")
                             .font(.caption)
                             .foregroundStyle(.red)
@@ -471,29 +467,18 @@ struct HotkeySettingsView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Tips")
+                    Text(String(localized: "Hotkey Tips"))
                         .font(.headline)
-                    Text("Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination.")
+                    Text(String(localized: "Use a single key such as fn, or combine it with modifier keys."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Enable left/right modifier distinction only if you want shortcuts such as Right Command and Right Shift to behave differently from their left-side counterparts.")
+                    Text(String(localized: "Long Press runs while held. Tap starts and stops with a tap. Meeting also starts and stops with a tap."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Long Press: Hold a hotkey to start its session and release it to stop. This works for transcription, translation, and content rewrite.")
+                    Text(String(localized: "If text is selected, the translation shortcut translates and replaces the selection directly."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Tap: Tap transcription hotkey to start and tap transcription hotkey again to stop. Translation and content rewrite hotkeys start their own sessions.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if meetingNotesBetaEnabled {
-                        Text("Meeting notes: Tap the meeting shortcut to start the dedicated meeting overlay. Tap it again to stop the meeting session.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("Selected text shortcut behavior: If text is selected in a focused input, pressing the translation shortcut translates and replaces the selection directly. Tap and long press behave the same.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut.")
+                    Text(String(localized: "On macOS, fn shortcuts may conflict with Globe or input source switching. If needed, change that shortcut in System Settings > Keyboard > Keyboard Shortcuts > Input Sources."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

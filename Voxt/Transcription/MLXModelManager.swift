@@ -202,6 +202,8 @@ class MLXModelManager: ObservableObject {
     @Published private(set) var sizeState: ModelSizeState = .unknown
     @Published private(set) var remoteSizeTextByRepo: [String: String] = [:]
 
+    private var downloadedStateByRepo: [String: Bool] = [:]
+    private var localSizeTextByRepo: [String: String] = [:]
     private var modelRepo: String
     private var hubBaseURL: URL
     private var loadedModel: (any STTGenerationModel)?
@@ -210,6 +212,7 @@ class MLXModelManager: ObservableObject {
     private var loadingRepo: String?
     private var downloadTask: Task<Void, Never>?
     private var sizeTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
     private var downloadTempDir: URL?
     private let downloadSizeTolerance: Double = 0.9
@@ -220,6 +223,7 @@ class MLXModelManager: ObservableObject {
     init(modelRepo: String, hubBaseURL: URL = URL(string: "https://huggingface.co")!) {
         self.modelRepo = Self.canonicalModelRepo(modelRepo)
         self.hubBaseURL = hubBaseURL
+        self.remoteSizeTextByRepo = Self.loadPersistedRemoteSizeCache()
         checkExistingModel()
     }
 
@@ -236,19 +240,29 @@ class MLXModelManager: ObservableObject {
 
     func isModelDownloaded(repo: String) -> Bool {
         let canonicalRepo = Self.canonicalModelRepo(repo)
+        if let cached = downloadedStateByRepo[canonicalRepo] {
+            return cached
+        }
         guard let modelDir = cacheDirectory(for: canonicalRepo) else { return false }
-        return MLXModelDownloadSupport.isModelDirectoryValid(modelDir, fileManager: .default)
+        let isDownloaded = MLXModelDownloadSupport.isModelDirectoryValid(modelDir, fileManager: .default)
+        downloadedStateByRepo[canonicalRepo] = isDownloaded
+        return isDownloaded
     }
 
     func modelSizeOnDisk(repo: String) -> String {
         let canonicalRepo = Self.canonicalModelRepo(repo)
+        if let cached = localSizeTextByRepo[canonicalRepo] {
+            return cached
+        }
         guard let modelDir = cacheDirectory(for: canonicalRepo),
               let size = try? FileManager.default.allocatedSizeOfDirectory(at: modelDir),
               size > 0
         else {
             return ""
         }
-        return Self.byteFormatter.string(fromByteCount: Int64(size))
+        let text = Self.byteFormatter.string(fromByteCount: Int64(size))
+        localSizeTextByRepo[canonicalRepo] = text
+        return text
     }
 
     func modelDirectoryURL(repo: String) -> URL? {
@@ -272,6 +286,7 @@ class MLXModelManager: ObservableObject {
         if let modelDir = cacheDirectory(for: canonicalRepo) {
             try? FileManager.default.removeItem(at: modelDir)
         }
+        invalidateLocalCache(for: canonicalRepo)
     }
 
     func downloadModel(repo: String) async {
@@ -328,21 +343,23 @@ class MLXModelManager: ObservableObject {
         guard url != hubBaseURL else { return }
         hubBaseURL = url
         fetchRemoteSize()
-        prefetchAllModelSizes()
     }
 
     func checkExistingModel() {
         guard let modelDir = cacheDirectory(for: modelRepo) else {
             state = .error("Invalid model identifier")
+            downloadedStateByRepo[modelRepo] = false
             return
         }
 
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
             state = .notDownloaded
+            downloadedStateByRepo[modelRepo] = false
             return
         }
 
         if MLXModelDownloadSupport.isModelDirectoryValid(modelDir, fileManager: .default) {
+            downloadedStateByRepo[modelRepo] = true
             if loadedModel != nil, loadedRepo == modelRepo {
                 state = .ready
             } else {
@@ -350,6 +367,7 @@ class MLXModelManager: ObservableObject {
             }
         } else {
             state = .notDownloaded
+            downloadedStateByRepo[modelRepo] = false
         }
     }
 
@@ -480,9 +498,11 @@ class MLXModelManager: ObservableObject {
 
         guard let modelDir = cacheDirectory(for: modelRepo) else {
             state = .notDownloaded
+            invalidateLocalCache(for: modelRepo)
             return
         }
         try? FileManager.default.removeItem(at: modelDir)
+        invalidateLocalCache(for: modelRepo)
         state = .notDownloaded
     }
 
@@ -498,12 +518,12 @@ class MLXModelManager: ObservableObject {
     }
 
     var modelSizeOnDisk: String {
-        guard let modelDir = cacheDirectory(for: modelRepo),
-              let size = try? FileManager.default.allocatedSizeOfDirectory(at: modelDir), size > 0
-        else {
-            return ""
-        }
-        return Self.byteFormatter.string(fromByteCount: Int64(size))
+        modelSizeOnDisk(repo: modelRepo)
+    }
+
+    private func invalidateLocalCache(for repo: String) {
+        downloadedStateByRepo.removeValue(forKey: repo)
+        localSizeTextByRepo.removeValue(forKey: repo)
     }
 
     private func readyModel(for repo: String) throws -> any STTGenerationModel {
@@ -588,12 +608,12 @@ class MLXModelManager: ObservableObject {
                 )
                 if Task.isCancelled { return }
                 sizeState = .ready(bytes: sizeInfo.bytes, text: sizeInfo.text)
-                remoteSizeTextByRepo[repo] = sizeInfo.text
+                updateRemoteSizeCache(repo: repo, text: sizeInfo.text)
             } catch is CancellationError {
                 return
             } catch {
                 sizeState = .error("Size unavailable")
-                remoteSizeTextByRepo[repo] = "Unknown"
+                updateRemoteSizeCache(repo: repo, text: "Unknown")
             }
         }
     }
@@ -618,29 +638,81 @@ class MLXModelManager: ObservableObject {
         return "Unknown"
     }
 
+    func ensureRemoteSizeLoaded(repo: String) {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        guard remoteSizeTextByRepo[canonicalRepo] == nil else { return }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let info = try await MLXModelDownloadSupport.fetchModelSizeInfo(
+                    repo: canonicalRepo,
+                    baseURL: hubBaseURL,
+                    userAgent: Self.hubUserAgent,
+                    byteFormatter: Self.byteFormatter
+                )
+                await MainActor.run {
+                    self.updateRemoteSizeCache(repo: canonicalRepo, text: info.text)
+                }
+            } catch {
+                await MainActor.run {
+                    self.updateRemoteSizeCache(repo: canonicalRepo, text: "Unknown")
+                }
+            }
+        }
+    }
+
     func prefetchAllModelSizes() {
-        for model in Self.availableModels {
-            let repo = Self.canonicalModelRepo(model.id)
-            if remoteSizeTextByRepo[repo] != nil { continue }
-            Task { [weak self] in
+        guard prefetchTask == nil else { return }
+        let repos = Self.availableModels
+            .map { Self.canonicalModelRepo($0.id) }
+            .filter { remoteSizeTextByRepo[$0] == nil }
+        guard !repos.isEmpty else { return }
+
+        let baseURL = hubBaseURL
+        prefetchTask = Task(priority: .utility) { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.prefetchTask = nil
+                }
+            }
+            for repo in repos {
                 guard let self else { return }
                 do {
                     let info = try await MLXModelDownloadSupport.fetchModelSizeInfo(
                         repo: repo,
-                        baseURL: hubBaseURL,
+                        baseURL: baseURL,
                         userAgent: Self.hubUserAgent,
                         byteFormatter: Self.byteFormatter
                     )
                     await MainActor.run {
-                        self.remoteSizeTextByRepo[repo] = info.text
+                        self.updateRemoteSizeCache(repo: repo, text: info.text)
                     }
                 } catch {
                     await MainActor.run {
-                        self.remoteSizeTextByRepo[repo] = "Unknown"
+                        self.updateRemoteSizeCache(repo: repo, text: "Unknown")
                     }
                 }
             }
         }
+    }
+
+    private static func loadPersistedRemoteSizeCache() -> [String: String] {
+        guard let data = UserDefaults.standard.data(forKey: AppPreferenceKey.mlxRemoteSizeCache),
+              let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    private static func savePersistedRemoteSizeCache(_ cache: [String: String]) {
+        guard let data = try? JSONEncoder().encode(cache) else { return }
+        UserDefaults.standard.set(data, forKey: AppPreferenceKey.mlxRemoteSizeCache)
+    }
+
+    private func updateRemoteSizeCache(repo: String, text: String) {
+        remoteSizeTextByRepo[repo] = text
+        Self.savePersistedRemoteSizeCache(remoteSizeTextByRepo)
     }
 
     private func resolveOrDownloadModelUsingLFS(

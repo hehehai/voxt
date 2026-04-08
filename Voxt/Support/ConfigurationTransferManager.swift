@@ -43,6 +43,7 @@ enum ConfigurationTransferManager {
         var exportedAt: String
         var general: GeneralSettings
         var model: ModelSettings
+        var feature: FeatureSettings?
         var dictionary: DictionarySettings?
         var appBranch: AppBranchSettings
         var hotkey: HotkeySettings
@@ -780,114 +781,69 @@ enum ConfigurationTransferManager {
     ) -> [MissingConfigurationIssue] {
         var issues: [MissingConfigurationIssue] = []
 
-        let engine = TranscriptionEngine(rawValue: defaults.string(forKey: AppPreferenceKey.transcriptionEngine) ?? "") ?? .mlxAudio
-        let enhancementMode = EnhancementMode(rawValue: defaults.string(forKey: AppPreferenceKey.enhancementMode) ?? "") ?? .off
-        let selectedRemoteASR = RemoteASRProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? "") ?? .openAIWhisper
-        let selectedRemoteLLM = RemoteLLMProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteLLMSelectedProvider) ?? "") ?? .openAI
+        let featureSettings = FeatureSettingsStore.load(defaults: defaults)
         let remoteASR = RemoteModelConfigurationStore.loadConfigurations(from: defaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? "")
         let remoteLLM = RemoteModelConfigurationStore.loadConfigurations(from: defaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? "")
 
-        if engine == .mlxAudio {
-            let repo = MLXModelManager.canonicalModelRepo(
-                defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
-            )
-            if !mlxModelManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .mlxModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        } else if engine == .whisperKit {
-            let modelID = defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID
-            if !whisperModelManager.isModelDownloaded(id: modelID) {
-                issues.append(.init(scope: .whisperModel(modelID), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        }
-
-        if engine == .remote {
-            let config = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: selectedRemoteASR, stored: remoteASR)
-            if !config.isConfigured {
-                issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Configuration required.")))
-            } else if defaults.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled),
-                      RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(selectedRemoteASR, configuration: config),
-                      !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: selectedRemoteASR, configuration: config) {
-                issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Meeting ASR configuration required.")))
-            }
-        }
-
-        switch enhancementMode {
-        case .customLLM:
-            let repo = defaults.string(forKey: AppPreferenceKey.customLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-            if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .customLLMModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        case .remoteLLM:
-            let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: selectedRemoteLLM, stored: remoteLLM)
-            if !config.isConfigured {
-                issues.append(.init(scope: .remoteLLMProvider(selectedRemoteLLM), message: AppLocalization.localizedString("Configuration required.")))
-            }
-        default:
-            break
-        }
-
-        let translationProvider = TranslationModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationModelProvider) ?? "") ?? .customLLM
-        let translationFallbackProvider = TranslationProviderResolver.sanitizedFallbackProvider(
-            TranslationModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider) ?? "") ?? .customLLM
+        appendASRIssues(
+            for: featureSettings.transcription.asrSelectionID,
+            issues: &issues,
+            remoteASR: remoteASR,
+            mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager
         )
-        switch translationProvider {
-        case .remoteLLM:
-            let raw = defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? ""
-            if let provider = RemoteLLMProvider(rawValue: raw.isEmpty ? selectedRemoteLLM.rawValue : raw) {
-                let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
-                if !config.isConfigured {
-                    issues.append(.init(scope: .translationRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
-                }
-            }
-        case .customLLM:
-            let repo = defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-            if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        case .whisperKit:
-            let resolution = TranslationProviderResolver.resolve(
-                selectedProvider: .whisperKit,
-                fallbackProvider: translationFallbackProvider,
-                transcriptionEngine: engine,
-                targetLanguage: TranslationTargetLanguage(rawValue: defaults.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? "") ?? .english,
-                isSelectedTextTranslation: false,
-                whisperModelState: whisperModelManager.state
+        if featureSettings.transcription.llmEnabled {
+            appendTextModelIssues(
+                for: featureSettings.transcription.llmSelectionID,
+                issues: &issues,
+                remoteLLM: remoteLLM,
+                customLLMManager: customLLMManager
             )
-            switch resolution.provider {
-            case .customLLM:
-                let repo = defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-                if !customLLMManager.isModelDownloaded(repo: repo) {
-                    issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-                }
-            case .remoteLLM:
-                let raw = defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? ""
-                if let provider = RemoteLLMProvider(rawValue: raw.isEmpty ? selectedRemoteLLM.rawValue : raw) {
-                    let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
-                    if !config.isConfigured {
-                        issues.append(.init(scope: .translationRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
-                    }
-                }
-            case .whisperKit:
-                break
-            }
         }
 
-        let rewriteProvider = RewriteModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.rewriteModelProvider) ?? "") ?? .customLLM
-        switch rewriteProvider {
-        case .remoteLLM:
-            let raw = defaults.string(forKey: AppPreferenceKey.rewriteRemoteLLMProvider) ?? ""
-            if let provider = RemoteLLMProvider(rawValue: raw.isEmpty ? selectedRemoteLLM.rawValue : raw) {
-                let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
-                if !config.isConfigured {
-                    issues.append(.init(scope: .rewriteRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
-                }
-            }
-        case .customLLM:
-            let repo = defaults.string(forKey: AppPreferenceKey.rewriteCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-            if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .rewriteCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
+        appendASRIssues(
+            for: featureSettings.translation.asrSelectionID,
+            issues: &issues,
+            remoteASR: remoteASR,
+            mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager
+        )
+        appendTranslationModelIssues(
+            for: featureSettings.translation,
+            issues: &issues,
+            remoteLLM: remoteLLM,
+            customLLMManager: customLLMManager
+        )
+
+        appendASRIssues(
+            for: featureSettings.rewrite.asrSelectionID,
+            issues: &issues,
+            remoteASR: remoteASR,
+            mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager
+        )
+        appendTextModelIssues(
+            for: featureSettings.rewrite.llmSelectionID,
+            issues: &issues,
+            remoteLLM: remoteLLM,
+            customLLMManager: customLLMManager
+        )
+
+        if featureSettings.meeting.enabled {
+            appendASRIssues(
+                for: featureSettings.meeting.asrSelectionID,
+                requiresMeetingConfiguration: true,
+                issues: &issues,
+                remoteASR: remoteASR,
+                mlxModelManager: mlxModelManager,
+                whisperModelManager: whisperModelManager
+            )
+            appendTextModelIssues(
+                for: featureSettings.meeting.summaryModelSelectionID,
+                issues: &issues,
+                remoteLLM: remoteLLM,
+                customLLMManager: customLLMManager
+            )
         }
 
         return Array(Set(issues)).sorted { $0.id < $1.id }
@@ -946,7 +902,7 @@ enum ConfigurationTransferManager {
         )
 
         return ExportPayload(
-            version: 17,
+            version: 18,
             exportedAt: ISO8601DateFormatter().string(from: Date()),
             general: general,
             model: .init(
@@ -979,6 +935,7 @@ enum ConfigurationTransferManager {
                 remoteASRProviderConfigurations: sanitizeRemoteConfigurations(defaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""),
                 remoteLLMProviderConfigurations: sanitizeRemoteConfigurations(defaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? "")
             ),
+            feature: FeatureSettingsStore.load(defaults: defaults),
             dictionary: .init(
                 recognitionEnabled: defaults.object(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) as? Bool ?? true,
                 autoLearningEnabled: defaults.object(forKey: AppPreferenceKey.dictionaryAutoLearningEnabled) as? Bool ?? true,
@@ -1162,6 +1119,84 @@ enum ConfigurationTransferManager {
         defaults.set(hotkey.hotkeyDistinguishModifierSides, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
         defaults.set(hotkey.hotkeyPreset, forKey: AppPreferenceKey.hotkeyPreset)
         defaults.set(hotkey.escapeKeyCancelsOverlaySession, forKey: AppPreferenceKey.escapeKeyCancelsOverlaySession)
+
+        let featureSettings = payload.feature ?? FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+        FeatureSettingsStore.save(featureSettings, defaults: defaults)
+    }
+
+    private static func appendASRIssues(
+        for selectionID: FeatureModelSelectionID,
+        requiresMeetingConfiguration: Bool = false,
+        issues: inout [MissingConfigurationIssue],
+        remoteASR: [String: RemoteProviderConfiguration],
+        mlxModelManager: MLXModelManager,
+        whisperModelManager: WhisperKitModelManager
+    ) {
+        switch selectionID.asrSelection {
+        case .dictation, .none:
+            return
+        case .mlx(let repo):
+            let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
+            if !mlxModelManager.isModelDownloaded(repo: canonicalRepo) {
+                issues.append(.init(scope: .mlxModel(canonicalRepo), message: AppLocalization.localizedString("Model needs to be installed.")))
+            }
+        case .whisper(let modelID):
+            let canonicalModelID = WhisperKitModelManager.canonicalModelID(modelID)
+            if !whisperModelManager.isModelDownloaded(id: canonicalModelID) {
+                issues.append(.init(scope: .whisperModel(canonicalModelID), message: AppLocalization.localizedString("Model needs to be installed.")))
+            }
+        case .remote(let provider):
+            let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: remoteASR)
+            if !configuration.isConfigured {
+                issues.append(.init(scope: .remoteASRProvider(provider), message: AppLocalization.localizedString("Configuration required.")))
+            } else if requiresMeetingConfiguration,
+                      RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration),
+                      !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: provider, configuration: configuration) {
+                issues.append(.init(scope: .remoteASRProvider(provider), message: AppLocalization.localizedString("Meeting ASR configuration required.")))
+            }
+        }
+    }
+
+    private static func appendTextModelIssues(
+        for selectionID: FeatureModelSelectionID,
+        issues: inout [MissingConfigurationIssue],
+        remoteLLM: [String: RemoteProviderConfiguration],
+        customLLMManager: CustomLLMModelManager
+    ) {
+        switch selectionID.textSelection {
+        case .appleIntelligence, .none:
+            return
+        case .localLLM(let repo):
+            if !customLLMManager.isModelDownloaded(repo: repo) {
+                issues.append(.init(scope: .customLLMModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
+            }
+        case .remoteLLM(let provider):
+            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
+            if !configuration.isConfigured || !configuration.hasUsableModel {
+                issues.append(.init(scope: .remoteLLMProvider(provider), message: AppLocalization.localizedString("Configuration required.")))
+            }
+        }
+    }
+
+    private static func appendTranslationModelIssues(
+        for settings: TranslationFeatureSettings,
+        issues: inout [MissingConfigurationIssue],
+        remoteLLM: [String: RemoteProviderConfiguration],
+        customLLMManager: CustomLLMModelManager
+    ) {
+        switch settings.modelSelectionID.translationSelection {
+        case .whisperDirectTranslate, .none:
+            return
+        case .localLLM(let repo):
+            if !customLLMManager.isModelDownloaded(repo: repo) {
+                issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
+            }
+        case .remoteLLM(let provider):
+            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
+            if !configuration.isConfigured || !configuration.hasUsableModel {
+                issues.append(.init(scope: .translationRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
+            }
+        }
     }
 
     private static func sanitizeRemoteConfigurations(_ raw: String) -> [SanitizedRemoteProviderConfiguration] {

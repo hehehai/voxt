@@ -102,11 +102,15 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.whisperVADEnabled))
         XCTAssertTrue(targetDefaults.bool(forKey: AppPreferenceKey.whisperTimestampsEnabled))
         XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.whisperRealtimeEnabled))
-        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider), TranslationModelProvider.remoteLLM.rawValue)
+        XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider), TranslationModelProvider.customLLM.rawValue)
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage), TranslationTargetLanguage.japanese.rawValue)
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.customProxyUsername) ?? "", "")
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.customProxyPassword) ?? "", "")
         XCTAssertEqual(VoxtNetworkSession.proxyCredentials(defaults: targetDefaults).password, "")
+
+        let importedFeatureSettings = FeatureSettingsStore.load(defaults: targetDefaults)
+        XCTAssertEqual(importedFeatureSettings.translation.modelSelectionID, .localLLM(CustomLLMModelManager.defaultModelRepo))
+        XCTAssertEqual(importedFeatureSettings.translation.targetLanguage, .english)
 
         let importedRemote = RemoteModelConfigurationStore.loadConfigurations(
             from: targetDefaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? ""
@@ -174,6 +178,106 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertFalse(decoded.hideMeetingOverlayFromScreenSharing)
         XCTAssertEqual(decoded.meetingRealtimeTranslationTargetLanguage, "")
         XCTAssertFalse(decoded.alwaysShowRewriteAnswerCard)
+    }
+
+    func testExportImportRoundTripPreservesFeatureSettings() throws {
+        let sourceDefaults = TestDoubles.makeUserDefaults()
+        FeatureSettingsStore.save(
+            FeatureSettings(
+                transcription: .init(
+                    asrSelectionID: .whisper("large-v3"),
+                    llmEnabled: true,
+                    llmSelectionID: .remoteLLM(.deepseek),
+                    prompt: "clean transcript"
+                ),
+                translation: .init(
+                    asrSelectionID: .remoteASR(.doubaoASR),
+                    modelSelectionID: .remoteLLM(.openAI),
+                    targetLanguageRawValue: TranslationTargetLanguage.japanese.rawValue,
+                    prompt: "translate carefully",
+                    replaceSelectedText: false
+                ),
+                rewrite: .init(
+                    asrSelectionID: .mlx("mlx-community/parakeet-tdt-0.6b-v3"),
+                    llmSelectionID: .localLLM("Qwen/Qwen3-8B-4bit"),
+                    prompt: "rewrite politely",
+                    appEnhancementEnabled: true
+                ),
+                meeting: .init(
+                    enabled: true,
+                    asrSelectionID: .remoteASR(.aliyunBailianASR),
+                    summaryModelSelectionID: .remoteLLM(.deepseek),
+                    summaryPrompt: "meeting summary",
+                    summaryAutoGenerate: false,
+                    realtimeTranslateEnabled: true,
+                    realtimeTargetLanguageRawValue: TranslationTargetLanguage.japanese.rawValue,
+                    showOverlayInScreenShare: true
+                )
+            ),
+            defaults: sourceDefaults
+        )
+
+        let sourceDirectory = try TemporaryDirectory()
+        let exported = try ConfigurationTransferManager.exportJSONString(
+            defaults: sourceDefaults,
+            environment: TestEnvironmentFactory.configurationTransferEnvironment(in: sourceDirectory)
+        )
+
+        let targetDefaults = TestDoubles.makeUserDefaults()
+        let targetDirectory = try TemporaryDirectory()
+        try ConfigurationTransferManager.importConfiguration(
+            from: exported,
+            defaults: targetDefaults,
+            environment: TestEnvironmentFactory.configurationTransferEnvironment(in: targetDirectory)
+        )
+
+        let imported = FeatureSettingsStore.load(defaults: targetDefaults)
+        XCTAssertEqual(imported.transcription.asrSelectionID, .whisper("large-v3"))
+        XCTAssertEqual(imported.transcription.llmSelectionID, .remoteLLM(.deepseek))
+        XCTAssertEqual(imported.translation.asrSelectionID, .remoteASR(.doubaoASR))
+        XCTAssertEqual(imported.translation.modelSelectionID, .remoteLLM(.openAI))
+        XCTAssertEqual(imported.rewrite.llmSelectionID, .localLLM("Qwen/Qwen3-8B-4bit"))
+        XCTAssertTrue(imported.rewrite.appEnhancementEnabled)
+        XCTAssertEqual(imported.meeting.asrSelectionID, .remoteASR(.aliyunBailianASR))
+        XCTAssertEqual(imported.meeting.summaryModelSelectionID, .remoteLLM(.deepseek))
+        XCTAssertTrue(imported.meeting.showOverlayInScreenShare)
+    }
+
+    func testImportLegacyPayloadWithoutFeatureSectionDerivesFeatureSettings() throws {
+        let defaults = TestDoubles.makeUserDefaults()
+        let sourceDirectory = try TemporaryDirectory()
+        let environment = TestEnvironmentFactory.configurationTransferEnvironment(in: sourceDirectory)
+
+        defaults.set(TranscriptionEngine.remote.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
+        defaults.set(RemoteASRProvider.doubaoASR.rawValue, forKey: AppPreferenceKey.remoteASRSelectedProvider)
+        defaults.set(EnhancementMode.remoteLLM.rawValue, forKey: AppPreferenceKey.enhancementMode)
+        defaults.set(RemoteLLMProvider.deepseek.rawValue, forKey: AppPreferenceKey.remoteLLMSelectedProvider)
+        defaults.set(TranslationModelProvider.customLLM.rawValue, forKey: AppPreferenceKey.translationModelProvider)
+        defaults.set("Qwen/Qwen3-8B-4bit", forKey: AppPreferenceKey.translationCustomLLMModelRepo)
+        defaults.set(RewriteModelProvider.remoteLLM.rawValue, forKey: AppPreferenceKey.rewriteModelProvider)
+        defaults.set(RemoteLLMProvider.openAI.rawValue, forKey: AppPreferenceKey.rewriteRemoteLLMProvider)
+
+        let exported = try ConfigurationTransferManager.exportJSONString(defaults: defaults, environment: environment)
+        let data = try XCTUnwrap(exported.data(using: .utf8))
+        let rawObject = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var legacyObject = rawObject
+        legacyObject.removeValue(forKey: "feature")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject, options: [.sortedKeys])
+        let legacyJSON = try XCTUnwrap(String(data: legacyData, encoding: .utf8))
+
+        let importedDefaults = TestDoubles.makeUserDefaults()
+        let targetDirectory = try TemporaryDirectory()
+        try ConfigurationTransferManager.importConfiguration(
+            from: legacyJSON,
+            defaults: importedDefaults,
+            environment: TestEnvironmentFactory.configurationTransferEnvironment(in: targetDirectory)
+        )
+
+        let settings = FeatureSettingsStore.load(defaults: importedDefaults)
+        XCTAssertEqual(settings.transcription.asrSelectionID, .remoteASR(.doubaoASR))
+        XCTAssertEqual(settings.transcription.llmSelectionID, .remoteLLM(.deepseek))
+        XCTAssertEqual(settings.translation.modelSelectionID, .localLLM("Qwen/Qwen3-8B-4bit"))
+        XCTAssertEqual(settings.rewrite.llmSelectionID, .remoteLLM(.openAI))
     }
 
     func testDictionarySettingsDecoderBackfillsOptionalFields() throws {

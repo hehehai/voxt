@@ -49,20 +49,21 @@ struct ResettablePromptSection: View {
     @Binding var text: String
     let defaultText: String
     let variables: [PromptTemplateVariableDescriptor]
+    var promptHeight: CGFloat = 100
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(title)
                 .font(.subheadline.weight(.medium))
             Spacer()
-            Button("Reset to Default") {
+            Button(AppLocalization.localizedString("Reset to Default")) {
                 text = defaultText
             }
             .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10))
             .disabled(text == defaultText)
         }
 
-        PromptEditorView(text: $text)
+        PromptEditorView(text: $text, height: promptHeight)
         PromptTemplateVariablesView(variables: variables)
     }
 }
@@ -117,7 +118,7 @@ struct ModelTaskSettingsCard: View {
                                     .strokeBorder(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
                             )
                     } else if modelOptions.isEmpty {
-                        Text("Not available")
+                        Text(AppLocalization.localizedString("Not available"))
                             .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12)

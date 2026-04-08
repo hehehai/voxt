@@ -18,6 +18,14 @@ extension AppDelegate {
         generalItem.target = self
         menu.addItem(generalItem)
 
+        let featureItem = NSMenuItem(
+            title: AppLocalization.localizedString("Feature"),
+            action: #selector(openFeatureFromMenu),
+            keyEquivalent: ""
+        )
+        featureItem.target = self
+        menu.addItem(featureItem)
+
         let dictionaryItem = NSMenuItem(
             title: AppLocalization.localizedString("Dictionary"),
             action: #selector(openDictionarySettings),
@@ -50,7 +58,7 @@ extension AppDelegate {
 
         if appUpdateManager.hasUpdate, let latestVersion = appUpdateManager.latestVersion {
             let updateInfoItem = NSMenuItem(
-                title: "New version: \(latestVersion)",
+                title: AppLocalization.format("New version: %@", latestVersion),
                 action: nil,
                 keyEquivalent: ""
             )
@@ -194,6 +202,12 @@ extension AppDelegate {
     @objc private func openDictionarySettings() {
         performAfterStatusMenuDismissal {
             self.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary))
+        }
+    }
+
+    @objc private func openFeatureFromMenu() {
+        performAfterStatusMenuDismissal {
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
         }
     }
 
@@ -477,10 +491,10 @@ extension AppDelegate {
 
     func showPermissionAlert() {
         let alert = NSAlert()
-        alert.messageText = String(localized: "Permissions Required")
-        alert.informativeText = String(localized: "Voxt needs Microphone access. If you use Direct Dictation, enable Speech Recognition in System Settings → Privacy & Security.")
-        alert.addButton(withTitle: String(localized: "Open System Settings"))
-        alert.addButton(withTitle: String(localized: "Quit"))
+        alert.messageText = AppLocalization.localizedString("Permissions Required")
+        alert.informativeText = AppLocalization.localizedString("Voxt needs Microphone access. If you use Direct Dictation, enable Speech Recognition in System Settings → Privacy & Security.")
+        alert.addButton(withTitle: AppLocalization.localizedString("Open System Settings"))
+        alert.addButton(withTitle: AppLocalization.localizedString("Quit"))
         if alert.runModal() == .alertFirstButtonReturn {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
         }

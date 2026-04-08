@@ -1,5 +1,9 @@
 import SwiftUI
 
+private func localized(_ key: String) -> String {
+    AppLocalization.localizedString(key)
+}
+
 struct MicrophonePriorityListRow: View {
     let entry: MicrophoneDisplayEntry
     let index: Int
@@ -46,7 +50,7 @@ struct MicrophonePriorityListRow: View {
             }
 
             if entry.isAvailable && !entry.isActive {
-                Button("Use", action: onUse)
+                Button(localized("Use"), action: onUse)
                     .controlSize(.small)
             }
         }

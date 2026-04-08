@@ -15,13 +15,11 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.overlayCardCornerRadius) private var overlayCardCornerRadius = 24
     @AppStorage(AppPreferenceKey.overlayScreenEdgeInset) private var overlayScreenEdgeInset = 30
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
-    @AppStorage(AppPreferenceKey.translationTargetLanguage) private var translationTargetLanguageRaw = TranslationTargetLanguage.english.rawValue
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) private var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) private var translateSelectedTextOnTranslationHotkey = true
     @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.hideMeetingOverlayFromScreenSharing) private var hideMeetingOverlayFromScreenSharing = false
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
-    @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.launchAtLogin) private var launchAtLogin = false
     @AppStorage(AppPreferenceKey.showInDock) private var showInDock = false
     @AppStorage(AppPreferenceKey.autoCheckForUpdates) private var autoCheckForUpdates = true
@@ -31,15 +29,11 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.customProxyScheme) private var customProxySchemeRaw = VoxtNetworkSession.ProxyScheme.http.rawValue
     @AppStorage(AppPreferenceKey.customProxyHost) private var customProxyHost = ""
     @AppStorage(AppPreferenceKey.customProxyPort) private var customProxyPort = ""
-    @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
-
     @State private var inputDevices: [AudioInputDevice] = []
     @State private var microphoneState = MicrophoneResolvedState.empty
     @State private var launchAtLoginError: String?
     @State private var isSyncingLaunchAtLoginState = false
     @State private var interactionSoundPlayer = InteractionSoundPlayer()
-    @State private var modelStorageDisplayPath = ""
-    @State private var modelStorageSelectionError: String?
     @State private var configurationTransferMessage: String?
     @State private var isUserMainLanguageSheetPresented = false
     @State private var isMicrophonePriorityDialogPresented = false
@@ -65,13 +59,6 @@ struct GeneralSettingsView: View {
         Binding(
             get: { AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system },
             set: { interfaceLanguageRaw = $0.rawValue }
-        )
-    }
-
-    private var translationTargetLanguage: Binding<TranslationTargetLanguage> {
-        Binding(
-            get: { TranslationTargetLanguage(rawValue: translationTargetLanguageRaw) ?? .english },
-            set: { translationTargetLanguageRaw = $0.rawValue }
         )
     }
 
@@ -143,29 +130,14 @@ struct GeneralSettingsView: View {
 
             GeneralLanguagesCard(
                 interfaceLanguage: interfaceLanguageSelection,
-                translationTargetLanguage: translationTargetLanguage,
                 userMainLanguageSummary: userMainLanguageSummary,
                 onEditUserMainLanguage: { isUserMainLanguageSheetPresented = true }
             )
             .settingsNavigationAnchor(.generalLanguages)
 
-            GeneralModelStorageCard(
-                displayPath: modelStorageDisplayPath.isEmpty ? ModelStorageDirectoryManager.defaultRootURL.path : modelStorageDisplayPath,
-                errorMessage: modelStorageSelectionError,
-                onOpenFinder: {
-                    Task { @MainActor in
-                        ModelStorageDirectoryManager.openRootInFinder()
-                    }
-                },
-                onChoose: chooseModelStorageDirectory
-            )
-            .settingsNavigationAnchor(.generalModelStorage)
-
             GeneralOutputCard(
                 autoCopyWhenNoFocusedInput: $autoCopyWhenNoFocusedInput,
-                translateSelectedTextOnTranslationHotkey: $translateSelectedTextOnTranslationHotkey,
-                meetingNotesBetaEnabled: $meetingNotesBetaEnabled,
-                appEnhancementEnabled: $appEnhancementEnabled
+                translateSelectedTextOnTranslationHotkey: $translateSelectedTextOnTranslationHotkey
             )
             .settingsNavigationAnchor(.generalOutput)
 
@@ -206,7 +178,6 @@ struct GeneralSettingsView: View {
                 autoCheckForUpdates = appUpdateManager.automaticallyChecksForUpdates
             }
             AppBehaviorController.applyDockVisibility(showInDock: showInDock)
-            refreshModelStorageDisplayPath()
             refreshProxyCredentials()
         }
         .onChange(of: launchAtLogin) { _, newValue in
@@ -266,9 +237,6 @@ struct GeneralSettingsView: View {
             overlayScreenEdgeInset = min(max(newValue, 0), 120)
             postOverlayAppearanceDidChange()
         }
-        .onChange(of: modelStorageRootPath) { _, _ in
-            refreshModelStorageDisplayPath()
-        }
         .onChange(of: customProxyUsername) { _, _ in
             persistProxyCredentials()
         }
@@ -322,34 +290,6 @@ struct GeneralSettingsView: View {
         AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
     }
 
-    private func chooseModelStorageDirectory() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = ModelStorageDirectoryManager.resolvedRootURL()
-        panel.prompt = String(localized: "Choose")
-
-        guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
-        do {
-            try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
-            modelStorageSelectionError = nil
-            refreshModelStorageDisplayPath()
-        } catch {
-            let format = NSLocalizedString("Failed to update model storage path: %@", comment: "")
-            modelStorageSelectionError = String(format: format, error.localizedDescription)
-        }
-    }
-
-    private func refreshModelStorageDisplayPath() {
-        let resolved = ModelStorageDirectoryManager.resolvedRootURL().path
-        modelStorageDisplayPath = resolved
-        if modelStorageRootPath != resolved {
-            modelStorageRootPath = resolved
-        }
-    }
-
     private func refreshProxyCredentials() {
         let credentials = VoxtNetworkSession.currentProxyCredentials()
         customProxyUsername = credentials.username
@@ -399,7 +339,6 @@ struct GeneralSettingsView: View {
             NotificationCenter.default.post(name: .voxtSelectedInputDeviceDidChange, object: nil)
             NotificationCenter.default.post(name: .voxtOverlayAppearanceDidChange, object: nil)
             refreshInputDevices()
-            refreshModelStorageDisplayPath()
             refreshProxyCredentials()
             configurationTransferMessage = String(localized: "Configuration imported successfully. Included dictionary data was restored, and sensitive fields need to be filled in again if required.")
         } catch {

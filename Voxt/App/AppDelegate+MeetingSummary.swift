@@ -107,14 +107,18 @@ extension AppDelegate {
         promptTemplate: String? = nil,
         modelSelectionID: String? = nil
     ) {
-        if let autoGenerate {
-            UserDefaults.standard.set(autoGenerate, forKey: AppPreferenceKey.meetingSummaryAutoGenerate)
-        }
-        if let promptTemplate {
-            UserDefaults.standard.set(promptTemplate, forKey: AppPreferenceKey.meetingSummaryPromptTemplate)
-        }
-        if let modelSelectionID {
-            UserDefaults.standard.set(modelSelectionID, forKey: AppPreferenceKey.meetingSummaryModelSelection)
+        FeatureSettingsStore.update(defaults: .standard) { settings in
+            if let autoGenerate {
+                settings.meeting.summaryAutoGenerate = autoGenerate
+            }
+            if let promptTemplate {
+                settings.meeting.summaryPrompt = promptTemplate
+            }
+            if let modelSelectionID {
+                settings.meeting.summaryModelSelectionID =
+                    FeatureModelSelectionID.fromLegacyMeetingSummarySelection(modelSelectionID)
+                    ?? FeatureModelSelectionID(rawValue: modelSelectionID)
+            }
         }
     }
 

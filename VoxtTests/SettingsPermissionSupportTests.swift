@@ -7,7 +7,8 @@ final class SettingsPermissionSupportTests: XCTestCase {
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .mlxAudio,
                 muteSystemAudioWhileRecording: false,
-                meetingNotesEnabled: false
+                meetingNotesEnabled: false,
+                featureSettings: nil
             )
         )
 
@@ -22,7 +23,8 @@ final class SettingsPermissionSupportTests: XCTestCase {
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .dictation,
                 muteSystemAudioWhileRecording: false,
-                meetingNotesEnabled: false
+                meetingNotesEnabled: false,
+                featureSettings: nil
             )
         )
 
@@ -37,7 +39,8 @@ final class SettingsPermissionSupportTests: XCTestCase {
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .remote,
                 muteSystemAudioWhileRecording: false,
-                meetingNotesEnabled: true
+                meetingNotesEnabled: true,
+                featureSettings: nil
             )
         )
 

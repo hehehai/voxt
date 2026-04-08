@@ -3,7 +3,6 @@ import Foundation
 
 struct RemoteProviderConfigurationSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.remoteASRSelectedProvider) private var selectedRemoteASRProviderRaw = RemoteASRProvider.openAIWhisper.rawValue
 
     let providerTitle: String
@@ -389,7 +388,7 @@ struct RemoteProviderConfigurationSheet: View {
     }
 
     private var showsMeetingASRSection: Bool {
-        guard meetingNotesBetaEnabled, let provider = asrProviderForSheet else { return false }
+        guard let provider = asrProviderForSheet else { return false }
         return RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(provider, configuration: configuration)
     }
 
