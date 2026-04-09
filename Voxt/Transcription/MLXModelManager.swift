@@ -41,7 +41,7 @@ class MLXModelManager: ObservableObject {
 
     private static let realtimeCapableModelRepos: Set<String> = [
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
-        "mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit",
+        "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
     ]
 
@@ -94,7 +94,7 @@ class MLXModelManager: ObservableObject {
             description: "Realtime-oriented multilingual model with reduced memory use."
         ),
         ModelOption(
-            id: "mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit",
+            id: "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
             title: "Voxtral Realtime Mini 4B (6bit)",
             description: "Realtime multilingual model with a balanced quality-to-memory tradeoff."
         ),
@@ -173,6 +173,7 @@ class MLXModelManager: ObservableObject {
         "mlx-community/Parakeet-0.6B": "mlx-community/parakeet-tdt-0.6b-v3",
         "mlx-community/GLM-ASR-Nano-4bit": "mlx-community/GLM-ASR-Nano-2512-4bit",
         "mlx-community/Voxtral-Mini-4B-Realtime-2602": "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
+        "mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit": "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
         "mlx-community/FireRedASR2": "mlx-community/FireRedASR2-AED-mlx",
     ]
 

@@ -1151,3 +1151,14 @@
 "Back" = "Back";
 "Clear" = "Clear";
 "Confirm" = "Confirm";
+"Current active dictionary terms are sent with each Doubao ASR request." = "Current active dictionary terms are sent with each Doubao ASR request.";
+"Dictionary Boosting" = "Dictionary Boosting";
+"Do not send Voxt dictionary terms to Doubao." = "Do not send Voxt dictionary terms to Doubao.";
+"Off" = "Off";
+"Request Scoped" = "Request Scoped";
+"Send corrections with request" = "Send corrections with request";
+"Send hotwords with request" = "Send hotwords with request";
+"Sync Now" = "Sync Now";
+"Syncing..." = "Syncing...";
+"e.g. voxt-corrections" = "e.g. voxt-corrections";
+"e.g. voxt-hotwords" = "e.g. voxt-hotwords";

@@ -1055,6 +1055,13 @@ final class DictionaryStore: ObservableObject {
         )
     }
 
+    func matchContext(for text: String, activeGroupID: UUID?) -> DictionaryCorrectionResult? {
+        guard let matcher = makeMatcherIfEnabled(activeGroupID: activeGroupID) else { return nil }
+        let candidates = matcher.recallCandidates(in: text)
+        guard !candidates.isEmpty else { return nil }
+        return DictionaryCorrectionResult(text: text, candidates: candidates, correctedTerms: [])
+    }
+
     func glossaryContext(for text: String, activeGroupID: UUID?) -> DictionaryPromptContext? {
         guard let matcher = makeMatcherIfEnabled(activeGroupID: activeGroupID) else { return nil }
         let context = matcher.promptContext(for: text)
@@ -1069,6 +1076,16 @@ final class DictionaryStore: ObservableObject {
         return configuration.entries.contains { entry in
             entry.visibleMatchKeys(blockedKeys: configuration.blockedGlobalMatchKeys).contains(normalized)
         }
+    }
+
+    func activeEntriesForRemoteRequest(activeGroupID: UUID?) -> [DictionaryEntry] {
+        guard defaults.bool(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) else { return [] }
+        return matcherConfiguration(for: activeGroupID).entries.filter { $0.status == .active }
+    }
+
+    func activeEntriesAcrossAllScopesForRemoteSync() -> [DictionaryEntry] {
+        guard defaults.bool(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) else { return [] }
+        return entries.filter { $0.status == .active }
     }
 
     func recordMatches(_ candidates: [DictionaryMatchCandidate]) {

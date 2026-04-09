@@ -94,6 +94,20 @@ extension AppDelegate {
         return result
     }
 
+    func resolveDictionaryMatches(for text: String) -> DictionaryCorrectionResult {
+        guard let result = dictionaryStore.matchContext(
+            for: text,
+            activeGroupID: activeDictionaryGroupID()
+        ) else {
+            return DictionaryCorrectionResult(text: text, candidates: [], correctedTerms: [])
+        }
+
+        if !result.candidates.isEmpty {
+            VoxtLog.info("Dictionary matches recorded without local replacement. matches=\(result.candidates.count)")
+        }
+        return result
+    }
+
     func previewDictionarySuggestions(
         for text: String,
         candidates: [DictionaryMatchCandidate],

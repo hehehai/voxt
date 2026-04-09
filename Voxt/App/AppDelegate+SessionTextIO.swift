@@ -134,8 +134,13 @@ extension AppDelegate {
                     self?.extractRewriteAnswerPayload(from: value)
                 }),
                 DictionaryCorrectionStage(correct: { [weak self] value in
-                    self?.resolveDictionaryCorrection(for: value)
-                        ?? DictionaryCorrectionResult(text: value, candidates: [], correctedTerms: [])
+                    guard let self else {
+                        return DictionaryCorrectionResult(text: value, candidates: [], correctedTerms: [])
+                    }
+                    if self.shouldUseConservativeDictionaryEvidenceForCurrentSession() {
+                        return self.resolveDictionaryMatches(for: value)
+                    }
+                    return self.resolveDictionaryCorrection(for: value)
                 }),
                 DictionarySuggestionStage(suggest: { [weak self] value, candidates, correctedTerms in
                     self?.previewDictionarySuggestions(
@@ -176,6 +181,36 @@ extension AppDelegate {
                 rewriteAnswerPayload: nil
             )
         )
+    }
+
+    private func shouldUseConservativeDictionaryEvidenceForCurrentSession() -> Bool {
+        let featureSettings = FeatureSettingsStore.load(defaults: .standard)
+        let selectionID: FeatureModelSelectionID
+        switch sessionOutputMode {
+        case .translation:
+            selectionID = featureSettings.translation.asrSelectionID
+        case .rewrite:
+            selectionID = featureSettings.rewrite.asrSelectionID
+        case .transcription:
+            selectionID = featureSettings.transcription.asrSelectionID
+        }
+
+        guard case .remote(let provider)? = selectionID.asrSelection,
+              provider == .doubaoASR
+        else {
+            return false
+        }
+
+        let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
+        let stored = RemoteModelConfigurationStore.loadConfigurations(from: raw)
+        let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: stored)
+
+        switch configuration.doubaoDictionaryModeValue {
+        case .off:
+            return false
+        case .requestScoped:
+            return configuration.doubaoEnableRequestCorrections
+        }
     }
 
     func selectedTextFromSystemSelection() -> String? {

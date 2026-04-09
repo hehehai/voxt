@@ -6,24 +6,6 @@ import zlib
 
 @MainActor
 class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
-    private enum DoubaoProtocol {
-        static let version: UInt8 = 0x1
-        static let headerSize: UInt8 = 0x1
-        static let messageTypeFullClientRequest: UInt8 = 0x1
-        static let messageTypeAudioOnlyClientRequest: UInt8 = 0x2
-        static let messageTypeFullServerResponse: UInt8 = 0x9
-        static let messageTypeServerAck: UInt8 = 0xB
-        static let messageTypeServerErrorResponse: UInt8 = 0xF
-        static let flagPositiveSequence: UInt8 = 0x1
-        static let flagLastAudioPacket: UInt8 = 0x2
-        static let flagNegativeAudioPacket: UInt8 = flagPositiveSequence | flagLastAudioPacket
-        static let flagEvent: UInt8 = 0x4
-        static let serializationNone: UInt8 = 0x0
-        static let serializationJSON: UInt8 = 0x1
-        static let compressionNone: UInt8 = 0x0
-        static let compressionGzip: UInt8 = 0x1
-    }
-
     @Published var isRecording = false
     @Published var audioLevel: Float = 0.0
     @Published var transcribedText = ""
@@ -33,6 +15,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     var onTranscriptionFinished: ((String) -> Void)?
     var onStartFailure: ((String) -> Void)?
     var onRuntimeFailure: ((String) -> Void)?
+    var doubaoDictionaryEntryProvider: (() -> [DictionaryEntry])?
 
     private var recorder: AVAudioRecorder?
     private let audioEngine = AVAudioEngine()
@@ -448,6 +431,30 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
     }
 
+    private func doubaoRequestPayload(
+        configuration: RemoteProviderConfiguration,
+        hintPayload: ResolvedASRHintPayload,
+        requestID: String,
+        userID: String,
+        audioFormat: String,
+        enableNonstream: Bool = false
+    ) -> [String: Any] {
+        let dictionaryPayload = DoubaoDictionaryRequestPayloadBuilder.build(
+            configuration: configuration,
+            entries: doubaoDictionaryEntryProvider?() ?? [],
+            dictionaryEnabled: UserDefaults.standard.object(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) as? Bool ?? true
+        )
+        return DoubaoASRConfiguration.fullRequestPayload(
+            requestID: requestID,
+            userID: userID,
+            language: hintPayload.language,
+            chineseOutputVariant: hintPayload.chineseOutputVariant,
+            audioFormat: audioFormat,
+            enableNonstream: enableNonstream,
+            dictionaryPayload: dictionaryPayload
+        )
+    }
+
     private func transcribeOpenAI(
         fileURL: URL,
         configuration: RemoteProviderConfiguration,
@@ -577,7 +584,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 appID: appID,
                 accessToken: accessToken,
                 resourceID: resourceID,
-                endpoint: DoubaoASRConfiguration.resolvedMeetingFlashEndpoint(configuration.endpoint)
+                endpoint: DoubaoASRConfiguration.resolvedMeetingFlashEndpoint(configuration.endpoint),
+                hintPayload: hintPayload,
+                configuration: configuration
             )
         }
         return try await transcribeDoubaoWebSocket(
@@ -586,7 +595,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             accessToken: accessToken,
             resourceID: resourceID,
             endpoint: endpoint,
-            hintPayload: hintPayload
+            hintPayload: hintPayload,
+            configuration: configuration
         )
     }
 
@@ -595,23 +605,23 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         appID: String,
         accessToken: String,
         resourceID: String,
-        endpoint: String
+        endpoint: String,
+        hintPayload: ResolvedASRHintPayload,
+        configuration: RemoteProviderConfiguration
     ) async throws -> String {
         guard let url = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.RemoteASR", code: -34, userInfo: [NSLocalizedDescriptionKey: "Invalid Doubao meeting endpoint URL."])
         }
 
         let audioData = try Data(contentsOf: fileURL)
-        let body: [String: Any] = [
-            "user": ["uid": "voxt-meeting"],
-            "audio": ["data": audioData.base64EncodedString()],
-            "request": [
-                "enable_itn": true,
-                "enable_punc": true,
-                "enable_ddc": true,
-                "show_utterances": true
-            ]
-        ]
+        var body = doubaoRequestPayload(
+            configuration: configuration,
+            hintPayload: hintPayload,
+            requestID: UUID().uuidString.lowercased(),
+            userID: "voxt-meeting",
+            audioFormat: DoubaoASRConfiguration.requestAudioFormat
+        )
+        body["audio"] = ["data": audioData.base64EncodedString()]
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -1171,7 +1181,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         accessToken: String,
         resourceID: String,
         endpoint: String,
-        hintPayload: ResolvedASRHintPayload
+        hintPayload: ResolvedASRHintPayload,
+        configuration: RemoteProviderConfiguration
     ) async throws -> String {
         guard let wsURL = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.RemoteASR", code: -5, userInfo: [NSLocalizedDescriptionKey: "Invalid Doubao endpoint URL."])
@@ -1198,13 +1209,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
 
         let reqID = UUID().uuidString.lowercased()
-            try await sendDoubaoFullRequest(
-                ws: ws,
-                reqID: reqID,
-                sequence: 1,
-                hintPayload: hintPayload,
-                audioFormat: DoubaoASRConfiguration.requestAudioFormat
-            )
+        try await sendDoubaoFullRequest(
+            ws: ws,
+            reqID: reqID,
+            sequence: 1,
+            hintPayload: hintPayload,
+            audioFormat: DoubaoASRConfiguration.requestAudioFormat,
+            configuration: configuration
+        )
 
         let responseState = DoubaoResponseState { [weak self] error in
             Task { @MainActor [weak self] in
@@ -1331,6 +1343,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             sequence: 1,
             hintPayload: streamingHintPayload,
             audioFormat: DoubaoASRConfiguration.streamingAudioFormat,
+            configuration: configuration,
             enableNonstream: true
         ) { error, isBenign in
             Task { [responseState = context.responseState] in
@@ -1594,13 +1607,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         reqID: String,
         sequence: Int32,
         hintPayload: ResolvedASRHintPayload,
-        audioFormat: String
+        audioFormat: String,
+        configuration: RemoteProviderConfiguration
     ) async throws {
         let packet = try buildDoubaoFullRequestPacket(
             reqID: reqID,
             sequence: sequence,
             hintPayload: hintPayload,
-            audioFormat: audioFormat
+            audioFormat: audioFormat,
+            configuration: configuration
         )
         try await ws.send(.data(packet))
     }
@@ -1611,6 +1626,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         sequence: Int32,
         hintPayload: ResolvedASRHintPayload,
         audioFormat: String,
+        configuration: RemoteProviderConfiguration,
         enableNonstream: Bool = false,
         onError: @escaping (Error, Bool) -> Void
     ) {
@@ -1620,6 +1636,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 sequence: sequence,
                 hintPayload: hintPayload,
                 audioFormat: audioFormat,
+                configuration: configuration,
                 enableNonstream: enableNonstream
             )
             sendDoubaoPacket(packet, through: ws, onError: onError)
@@ -1633,13 +1650,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         sequence: Int32,
         hintPayload: ResolvedASRHintPayload,
         audioFormat: String,
+        configuration: RemoteProviderConfiguration,
         enableNonstream: Bool = false
     ) throws -> Data {
-        let payloadObject = DoubaoASRConfiguration.fullRequestPayload(
+        let payloadObject = doubaoRequestPayload(
+            configuration: configuration,
+            hintPayload: hintPayload,
             requestID: reqID,
             userID: "voxt",
-            language: hintPayload.language,
-            chineseOutputVariant: hintPayload.chineseOutputVariant,
             audioFormat: audioFormat,
             enableNonstream: enableNonstream
         )
@@ -2938,82 +2956,7 @@ private actor AliyunFunResponseState {
     }
 }
 
-@MainActor
-private final class DoubaoStreamingContext {
-    let session: URLSession
-    let ws: URLSessionWebSocketTask
-    let responseState: DoubaoResponseState
-    var isClosed = false
-    var didStartAudioStream = false
-    var audioPacketCount = 0
-    var serverPacketCount = 0
-    var nextAudioSequence: Int32 = 2
-    var lastAudioSequence: Int32 = 0
-    var pendingPCMData = Data()
-
-    init(session: URLSession, ws: URLSessionWebSocketTask, responseState: DoubaoResponseState) {
-        self.session = session
-        self.ws = ws
-        self.responseState = responseState
-    }
-}
-
-private actor DoubaoResponseState {
-    private var text = ""
-    private var isFinal = false
-    private var completionError: Error?
-    private var isSocketClosed = false
-    private let onError: @Sendable (Error) -> Void
-
-    init(onError: @escaping @Sendable (Error) -> Void = { _ in }) {
-        self.onError = onError
-    }
-
-    func replace(text newText: String, isFinal: Bool) -> String {
-        text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if isFinal {
-            self.isFinal = true
-        }
-        return text
-    }
-
-    func markFinal() {
-        isFinal = true
-    }
-
-    func markCompletedWithError(_ error: Error) {
-        if completionError == nil {
-            completionError = error
-            onError(error)
-        }
-    }
-
-    func markSocketClosed() {
-        isSocketClosed = true
-        if completionError == nil {
-            // WebSocket close is expected after server final package; keep existing text and exit wait loop.
-            completionError = nil
-        }
-    }
-
-    func waitForFinalResult(timeoutSeconds: TimeInterval) async throws -> String {
-        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
-        while !isFinal, !isSocketClosed, completionError == nil, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(120))
-        }
-        if let completionError {
-            throw completionError
-        }
-        return text
-    }
-
-    func currentText() -> String {
-        text
-    }
-
-}
-
-    private extension UInt32 {
+private extension UInt32 {
     var bigEndianData: Data {
         withUnsafeBytes(of: self.bigEndian) { Data($0) }
     }

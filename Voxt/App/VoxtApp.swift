@@ -505,6 +505,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         VoxtLog.info("Voxt launching.")
         VoxtLog.info("Runtime system version: \(currentSystemVersionLogDescription)")
         migrateLegacyPreferences()
+        remoteASRTranscriber.doubaoDictionaryEntryProvider = { [weak self] in
+            guard let self else { return [] }
+            return self.dictionaryStore.activeEntriesForRemoteRequest(
+                activeGroupID: self.activeDictionaryGroupID()
+            )
+        }
 
         if isRunningUnitTests {
             VoxtLog.info("Voxt launch running under XCTest; skipping app startup services.")

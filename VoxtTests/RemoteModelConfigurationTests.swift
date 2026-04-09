@@ -40,6 +40,28 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertEqual(request?["enable_nonstream"] as? Bool, true)
     }
 
+    func testDoubaoFullRequestPayloadIncludesDictionaryContextAndCorpus() throws {
+        let payload = DoubaoASRConfiguration.fullRequestPayload(
+            requestID: "req-1",
+            userID: "user-1",
+            language: "zh-CN",
+            chineseOutputVariant: "zh-Hans",
+            dictionaryPayload: DoubaoDictionaryRequestPayload(
+                hotwords: ["OpenAI"],
+                correctWords: ["open ai": "OpenAI"]
+            )
+        )
+
+        let request = try XCTUnwrap(payload["request"] as? [String: Any])
+        let corpus = try XCTUnwrap(request["corpus"] as? [String: Any])
+
+        let contextString = try XCTUnwrap(corpus["context"] as? String)
+        let contextData = try XCTUnwrap(contextString.data(using: .utf8))
+        let context = try XCTUnwrap(try JSONSerialization.jsonObject(with: contextData) as? [String: Any])
+        XCTAssertEqual((context["hotwords"] as? [[String: String]])?.first?["word"], "OpenAI")
+        XCTAssertEqual((context["correct_words"] as? [String: String])?["open ai"], "OpenAI")
+    }
+
     func testDoubaoRecommendedStreamingChunkSplitsAndFlushesTrailingPartial() {
         let packetBytes = DoubaoASRConfiguration.recommendedStreamingPacketBytes
         var buffer = Data(repeating: 1, count: packetBytes * 2 + 123)
@@ -75,7 +97,10 @@ final class RemoteModelConfigurationTests: XCTestCase {
                 model: DoubaoASRConfiguration.modelV2,
                 meetingModel: DoubaoASRConfiguration.meetingModelTurbo,
                 appID: "app-id",
-                accessToken: "token"
+                accessToken: "token",
+                doubaoDictionaryMode: DoubaoDictionaryMode.off.rawValue,
+                doubaoEnableRequestHotwords: false,
+                doubaoEnableRequestCorrections: false
             ),
             RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteLLMProvider.openAI.rawValue,

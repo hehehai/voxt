@@ -40,6 +40,20 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         sourceDefaults.set("secret-password", forKey: AppPreferenceKey.customProxyPassword)
         sourceDefaults.set(
             RemoteModelConfigurationStore.saveConfigurations([
+                RemoteASRProvider.doubaoASR.rawValue: TestFactories.makeRemoteConfiguration(
+                    providerID: RemoteASRProvider.doubaoASR.rawValue,
+                    model: DoubaoASRConfiguration.modelV2,
+                    appID: "doubao-app",
+                    accessToken: "doubao-token",
+                    doubaoDictionaryMode: DoubaoDictionaryMode.requestScoped.rawValue,
+                    doubaoEnableRequestHotwords: false,
+                    doubaoEnableRequestCorrections: true
+                )
+            ]),
+            forKey: AppPreferenceKey.remoteASRProviderConfigurations
+        )
+        sourceDefaults.set(
+            RemoteModelConfigurationStore.saveConfigurations([
                 RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                     providerID: RemoteLLMProvider.openAI.rawValue,
                     model: "gpt-5.2",
@@ -67,6 +81,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertContains(exported, ConfigurationTransferManager.sensitivePlaceholder)
         XCTAssertFalse(exported.contains("secret-password"))
         XCTAssertFalse(exported.contains("super-secret"))
+        XCTAssertFalse(exported.contains("doubao-token"))
 
         let targetDefaults = TestDoubles.makeUserDefaults()
         let targetDirectory = try TemporaryDirectory()
@@ -116,6 +131,14 @@ final class ConfigurationTransferManagerTests: XCTestCase {
             from: targetDefaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? ""
         )
         XCTAssertEqual(importedRemote[RemoteLLMProvider.openAI.rawValue]?.apiKey, "")
+        let importedRemoteASR = RemoteModelConfigurationStore.loadConfigurations(
+            from: targetDefaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
+        )
+        let doubao = try XCTUnwrap(importedRemoteASR[RemoteASRProvider.doubaoASR.rawValue])
+        XCTAssertEqual(doubao.accessToken, "")
+        XCTAssertEqual(doubao.doubaoDictionaryMode, DoubaoDictionaryMode.requestScoped.rawValue)
+        XCTAssertFalse(doubao.doubaoEnableRequestHotwords)
+        XCTAssertTrue(doubao.doubaoEnableRequestCorrections)
 
         let importedEntries = try JSONDecoder().decode(
             [DictionaryEntry].self,

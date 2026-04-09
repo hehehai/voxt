@@ -1071,3 +1071,14 @@
 "Back" = "戻る";
 "Clear" = "クリア";
 "Confirm" = "確認";
+"Current active dictionary terms are sent with each Doubao ASR request." = "現在有効な辞書語は、各 Doubao ASR リクエストと一緒に送信されます。";
+"Dictionary Boosting" = "辞書ブースト";
+"Do not send Voxt dictionary terms to Doubao." = "Voxt の辞書語を Doubao に送信しません。";
+"Off" = "オフ";
+"Request Scoped" = "リクエスト単位";
+"Send corrections with request" = "リクエストに置換語を含める";
+"Send hotwords with request" = "リクエストにホットワードを含める";
+"Sync Now" = "今すぐ同期";
+"Syncing..." = "同期中...";
+"e.g. voxt-corrections" = "例: voxt-corrections";
+"e.g. voxt-hotwords" = "例: voxt-hotwords";

@@ -1151,3 +1151,14 @@
 "Back" = "返回";
 "Clear" = "清空";
 "Confirm" = "确认";
+"Current active dictionary terms are sent with each Doubao ASR request." = "当前生效的词典词条会随每次 Doubao ASR 请求一起发送。";
+"Dictionary Boosting" = "词典增强";
+"Do not send Voxt dictionary terms to Doubao." = "不向 Doubao 发送 Voxt 词典词条。";
+"Off" = "关闭";
+"Request Scoped" = "请求级";
+"Send corrections with request" = "随请求发送纠错词";
+"Send hotwords with request" = "随请求发送热词";
+"Sync Now" = "立即同步";
+"Syncing..." = "同步中...";
+"e.g. voxt-corrections" = "例如 voxt-corrections";
+"e.g. voxt-hotwords" = "例如 voxt-hotwords";
