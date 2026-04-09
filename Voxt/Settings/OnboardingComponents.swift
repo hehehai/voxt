@@ -1,6 +1,10 @@
 import SwiftUI
 import AVKit
 
+private func localized(_ key: String) -> String {
+    AppLocalization.localizedString(key)
+}
+
 struct OnboardingVideoPlayerView: NSViewRepresentable {
     let player: AVPlayer
 
@@ -62,6 +66,51 @@ struct OnboardingSummaryCard: View {
     }
 }
 
+struct OnboardingPermissionStatusBadge: View {
+    let isGranted: Bool
+
+    var body: some View {
+        Text(isGranted ? LocalizedStringKey("Enabled") : LocalizedStringKey("Disabled"))
+            .font(.system(size: 11, weight: .semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill((isGranted ? Color.green : Color.orange).opacity(0.16))
+            )
+            .foregroundStyle(isGranted ? Color.green : Color.orange)
+    }
+}
+
+struct OnboardingTabItem<Value: Hashable & Sendable>: Identifiable {
+    let value: Value
+    let title: LocalizedStringKey
+
+    var id: String { String(describing: value) }
+}
+
+struct OnboardingSegmentedTabs<Value: Hashable & Sendable>: View {
+    @Binding var selection: Value
+    let items: [OnboardingTabItem<Value>]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(items) { item in
+                Button {
+                    selection = item.value
+                } label: {
+                    Text(item.title)
+                        .padding(.horizontal, 8)
+                }
+                .buttonStyle(SettingsSegmentedButtonStyle(isSelected: selection == item.value))
+            }
+        }
+        .padding(2)
+        .fixedSize(horizontal: true, vertical: false)
+        .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
+    }
+}
+
 struct OnboardingExampleRow: View {
     let title: LocalizedStringKey
     let detail: LocalizedStringKey
@@ -82,6 +131,7 @@ struct LocalModelPickerCard<PickerContent: View>: View {
     let selectionTitle: String
     let selectionDescription: String
     let isInstalled: Bool
+    var showsCardSurface: Bool = true
     var isInstalling: Bool = false
     let installLabel: LocalizedStringKey
     let openLabel: LocalizedStringKey
@@ -113,15 +163,15 @@ struct LocalModelPickerCard<PickerContent: View>: View {
                     Button(openLabel, action: onOpen)
                         .buttonStyle(SettingsPillButtonStyle())
                 } else if isInstalling {
-                    Text("Downloading")
+                    Text(localized("Downloading"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.accentColor)
                     if let onCancel {
-                        Button("Cancel", action: onCancel)
+                        Button(localized("Cancel"), action: onCancel)
                             .buttonStyle(SettingsPillButtonStyle())
                     }
                 } else {
-                    Text("Not installed")
+                    Text(localized("Not installed"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
                     Button(installLabel, action: onInstall)
@@ -140,8 +190,21 @@ struct LocalModelPickerCard<PickerContent: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
-        .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
+        .modifier(LocalModelPickerCardSurfaceModifier(isEnabled: showsCardSurface))
+    }
+}
+
+private struct LocalModelPickerCardSurfaceModifier: ViewModifier {
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .padding(12)
+                .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
+        } else {
+            content
+        }
     }
 }
 
@@ -156,7 +219,7 @@ struct ProviderStatusRow: View {
                 Text(title)
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Button("Configure", action: onConfigure)
+                Button(localized("Configure"), action: onConfigure)
                     .buttonStyle(SettingsPillButtonStyle())
             }
 

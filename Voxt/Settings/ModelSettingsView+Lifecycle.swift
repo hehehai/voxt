@@ -7,13 +7,11 @@ extension ModelSettingsView {
             modelRepo = canonicalRepo
         }
         mlxModelManager.updateModel(repo: canonicalRepo)
-        mlxModelManager.prefetchAllModelSizes()
         let canonicalWhisperModelID = WhisperKitModelManager.canonicalModelID(whisperModelID)
         if canonicalWhisperModelID != whisperModelID {
             whisperModelID = canonicalWhisperModelID
         }
         whisperModelManager.updateModel(id: canonicalWhisperModelID)
-        whisperModelManager.prefetchAllModelSizes()
         if UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) == nil {
             whisperRealtimeEnabled = true
         }
@@ -55,7 +53,6 @@ extension ModelSettingsView {
             rewriteCustomLLMRepo = customLLMRepo
         }
         customLLMManager.updateModel(repo: customLLMRepo)
-        customLLMManager.prefetchAllModelSizes()
         if !RemoteASRProvider.allCases.contains(where: { $0.rawValue == remoteASRSelectedProviderRaw }) {
             remoteASRSelectedProviderRaw = RemoteASRProvider.openAIWhisper.rawValue
         }
@@ -67,7 +64,15 @@ extension ModelSettingsView {
         ensureRewriteModelSelectionConsistency()
         updateMirrorSetting()
         whisperModelManager.refreshResidencyPolicy()
-        refreshModelInstallStateIfNeeded()
+        DispatchQueue.main.async {
+            refreshModelInstallStateIfNeeded()
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            mlxModelManager.prefetchAllModelSizes()
+            whisperModelManager.prefetchAllModelSizes()
+            customLLMManager.prefetchAllModelSizes()
+        }
     }
 
     func syncTranslationFallbackProvider() {

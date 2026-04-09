@@ -17,6 +17,10 @@ final class MLXModelManagerTests: XCTestCase {
             "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"
         )
         XCTAssertEqual(
+            MLXModelManager.canonicalModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit"),
+            "mlx-community/Voxtral-Mini-4B-Realtime-6bit"
+        )
+        XCTAssertEqual(
             MLXModelManager.canonicalModelRepo("mlx-community/FireRedASR2"),
             "mlx-community/FireRedASR2-AED-mlx"
         )
@@ -26,6 +30,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit"))
+        XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"))
         XCTAssertFalse(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Qwen3-ASR-0.6B-4bit"))
     }
@@ -117,6 +122,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertTrue(modelIDs.contains("mlx-community/SenseVoiceSmall"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
     }
 
     func testCustomLLMBehaviorDisablesThinkingForQwen3Family() {

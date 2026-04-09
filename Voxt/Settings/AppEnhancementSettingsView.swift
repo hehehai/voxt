@@ -54,7 +54,8 @@ struct AppEnhancementSettingsView: View {
 
     private func scrollToNavigationTargetIfNeeded(using proxy: ScrollViewProxy) {
         guard let navigationRequest,
-              navigationRequest.target.tab == .appEnhancement,
+              navigationRequest.target.featureTab == .appEnhancement ||
+                navigationRequest.target.tab == .appEnhancement,
               let section = navigationRequest.target.section
         else {
             return

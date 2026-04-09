@@ -121,11 +121,14 @@ class CustomLLMModelManager: ObservableObject {
     @Published private(set) var sizeState: ModelSizeState = .unknown
     @Published private(set) var remoteSizeTextByRepo: [String: String] = [:]
 
+    private var downloadedStateByRepo: [String: Bool] = [:]
+    private var localSizeTextByRepo: [String: String] = [:]
     private var modelRepo: String
     private var hubBaseURL: URL
     private var downloadTask: Task<Void, Never>?
     private var downloadProgressTask: Task<Void, Never>?
     private var sizeTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
     private var inferenceContainer: ModelContainer?
     private var inferenceModelRepo: String?
@@ -372,22 +375,31 @@ class CustomLLMModelManager: ObservableObject {
         VoxtLog.info("Custom LLM hub base URL changed: \(hubBaseURL.absoluteString) -> \(url.absoluteString)")
         hubBaseURL = url
         fetchRemoteSize()
-        prefetchAllModelSizes()
     }
 
     func isModelDownloaded(repo: String) -> Bool {
+        if let cached = downloadedStateByRepo[repo] {
+            return cached
+        }
         guard let modelDir = cacheDirectory(for: repo) else { return false }
-        return Self.isModelDirectoryValid(modelDir)
+        let isDownloaded = Self.isModelDirectoryValid(modelDir)
+        downloadedStateByRepo[repo] = isDownloaded
+        return isDownloaded
     }
 
     func modelSizeOnDisk(repo: String) -> String {
+        if let cached = localSizeTextByRepo[repo] {
+            return cached
+        }
         guard let modelDir = cacheDirectory(for: repo),
               let size = try? FileManager.default.allocatedSizeOfDirectory(at: modelDir),
               size > 0
         else {
             return ""
         }
-        return Self.byteFormatter.string(fromByteCount: Int64(size))
+        let text = Self.byteFormatter.string(fromByteCount: Int64(size))
+        localSizeTextByRepo[repo] = text
+        return text
     }
 
     func modelDirectoryURL(repo: String) -> URL? {
@@ -414,9 +426,19 @@ class CustomLLMModelManager: ObservableObject {
         }
     }
 
+    func ensureRemoteSizeLoaded(repo: String) {
+        guard CustomLLMRemoteSizeCache.shouldPrefetch(repo: repo, cache: remoteSizeTextByRepo) else { return }
+
+        Task { [weak self] in
+            guard let self else { return }
+            await self.loadRemoteSize(for: repo, updatesVisibleState: false)
+        }
+    }
+
     func checkExistingModel() {
         guard let modelDir = cacheDirectory(for: modelRepo) else {
             state = .error("Invalid model identifier")
+            downloadedStateByRepo[modelRepo] = false
             if lastInvalidRepoLogged != modelRepo {
                 VoxtLog.error("Invalid custom LLM repo identifier: \(modelRepo)")
                 lastInvalidRepoLogged = modelRepo
@@ -424,7 +446,9 @@ class CustomLLMModelManager: ObservableObject {
             return
         }
         lastInvalidRepoLogged = nil
-        state = Self.isModelDirectoryValid(modelDir) ? .downloaded : .notDownloaded
+        let isDownloaded = Self.isModelDirectoryValid(modelDir)
+        downloadedStateByRepo[modelRepo] = isDownloaded
+        state = isDownloaded ? .downloaded : .notDownloaded
         let downloaded = (state == .downloaded)
         if lastLoggedModelPresence?.repo != modelRepo || lastLoggedModelPresence?.downloaded != downloaded {
             VoxtLog.info("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(downloaded)")
@@ -600,12 +624,18 @@ class CustomLLMModelManager: ObservableObject {
         if let modelDir = cacheDirectory(for: repo) {
             try? FileManager.default.removeItem(at: modelDir)
         }
+        invalidateLocalCache(for: repo)
         if repo == inferenceModelRepo {
             releaseInferenceResources(resetActiveInferenceCount: true)
         }
         if repo == modelRepo {
             state = .notDownloaded
         }
+    }
+
+    private func invalidateLocalCache(for repo: String) {
+        downloadedStateByRepo.removeValue(forKey: repo)
+        localSizeTextByRepo.removeValue(forKey: repo)
     }
 
     private func fetchRemoteSize() {
@@ -624,11 +654,21 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func prefetchAllModelSizes() {
-        for model in Self.availableModels {
-            if !CustomLLMRemoteSizeCache.shouldPrefetch(repo: model.id, cache: remoteSizeTextByRepo) { continue }
-            Task { [weak self] in
+        guard prefetchTask == nil else { return }
+        let repos = Self.availableModels
+            .map(\.id)
+            .filter { CustomLLMRemoteSizeCache.shouldPrefetch(repo: $0, cache: remoteSizeTextByRepo) }
+        guard !repos.isEmpty else { return }
+
+        prefetchTask = Task(priority: .utility) { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.prefetchTask = nil
+                }
+            }
+            for repo in repos {
                 guard let self else { return }
-                await self.loadRemoteSize(for: model.id, updatesVisibleState: false)
+                await self.loadRemoteSize(for: repo, updatesVisibleState: false)
             }
         }
     }

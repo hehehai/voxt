@@ -12,10 +12,20 @@ enum AppLocalization {
 
     static func localizedString(_ key: String) -> String {
         let identifier = language.localeIdentifier
-        if let localized = localizedString(key, localeIdentifier: identifier) {
+        if let localized = resolvedLocalizedString(key, localeIdentifier: identifier) {
             return localized
         }
-        if let english = localizedString(key, localeIdentifier: "en") {
+        if let english = resolvedLocalizedString(key, localeIdentifier: "en") {
+            return english
+        }
+        return Bundle.main.localizedString(forKey: key, value: key, table: nil)
+    }
+
+    static func localizedString(_ key: String, localeIdentifier: String) -> String {
+        if let localized = resolvedLocalizedString(key, localeIdentifier: localeIdentifier) {
+            return localized
+        }
+        if let english = resolvedLocalizedString(key, localeIdentifier: "en") {
             return english
         }
         return Bundle.main.localizedString(forKey: key, value: key, table: nil)
@@ -25,7 +35,7 @@ enum AppLocalization {
         String(format: localizedString(key), locale: locale, arguments: arguments)
     }
 
-    private static func localizedString(_ key: String, localeIdentifier: String) -> String? {
+    private static func resolvedLocalizedString(_ key: String, localeIdentifier: String) -> String? {
         guard let path = Bundle.main.path(forResource: localeIdentifier, ofType: "lproj"),
               let bundle = Bundle(path: path)
         else {

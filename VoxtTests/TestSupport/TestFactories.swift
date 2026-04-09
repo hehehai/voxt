@@ -39,7 +39,10 @@ enum TestFactories {
         apiKey: String = "",
         appID: String = "",
         accessToken: String = "",
-        openAIChunkPseudoRealtimeEnabled: Bool = false
+        openAIChunkPseudoRealtimeEnabled: Bool = false,
+        doubaoDictionaryMode: String = DoubaoDictionaryMode.requestScoped.rawValue,
+        doubaoEnableRequestHotwords: Bool = true,
+        doubaoEnableRequestCorrections: Bool = true
     ) -> RemoteProviderConfiguration {
         RemoteProviderConfiguration(
             providerID: providerID,
@@ -49,7 +52,10 @@ enum TestFactories {
             apiKey: apiKey,
             appID: appID,
             accessToken: accessToken,
-            openAIChunkPseudoRealtimeEnabled: openAIChunkPseudoRealtimeEnabled
+            openAIChunkPseudoRealtimeEnabled: openAIChunkPseudoRealtimeEnabled,
+            doubaoDictionaryMode: doubaoDictionaryMode,
+            doubaoEnableRequestHotwords: doubaoEnableRequestHotwords,
+            doubaoEnableRequestCorrections: doubaoEnableRequestCorrections
         )
     }
 

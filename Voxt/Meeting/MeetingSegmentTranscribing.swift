@@ -183,7 +183,16 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
 @MainActor
 final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
     private let transcriptionGate = MeetingRemoteTranscriptionGate()
-    private let remoteTranscriber = RemoteASRTranscriber()
+    private let remoteTranscriber: RemoteASRTranscriber = {
+        let transcriber = RemoteASRTranscriber()
+        transcriber.doubaoDictionaryEntryProvider = {
+            guard let appDelegate = AppDelegate.shared else { return [] }
+            return appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
+                activeGroupID: appDelegate.activeDictionaryGroupID()
+            )
+        }
+        return transcriber
+    }()
     private var isCancelled = false
 
     func cancelPendingWork() async {

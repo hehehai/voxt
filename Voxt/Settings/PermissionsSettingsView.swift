@@ -6,6 +6,10 @@ import ApplicationServices
 import Carbon
 import UniformTypeIdentifiers
 
+private func permissionsLocalized(_ key: String) -> String {
+    AppLocalization.localizedString(key)
+}
+
 struct PermissionsSettingsView: View {
     let navigationRequest: SettingsNavigationRequest?
 
@@ -63,18 +67,27 @@ struct PermissionsSettingsView: View {
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.appBranchCustomBrowsers) private var appBranchCustomBrowsersJSON = "[]"
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
-    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.transcriptionEngine) private var transcriptionEngineRaw = TranscriptionEngine.mlxAudio.rawValue
+    @AppStorage(AppPreferenceKey.featureSettings) private var featureSettingsRaw = ""
 
     private var transcriptionEngine: TranscriptionEngine {
         TranscriptionEngine(rawValue: transcriptionEngineRaw) ?? .mlxAudio
+    }
+
+    private var featureSettings: FeatureSettings {
+        FeatureSettingsStore.load(defaults: .standard)
+    }
+
+    private var meetingEnabled: Bool {
+        featureSettings.meeting.enabled
     }
 
     private var permissionRequirementContext: SettingsPermissionRequirementContext {
         SettingsPermissionRequirementContext(
             selectedEngine: transcriptionEngine,
             muteSystemAudioWhileRecording: muteSystemAudioWhileRecording,
-            meetingNotesEnabled: meetingNotesBetaEnabled
+            meetingNotesEnabled: meetingEnabled,
+            featureSettings: featureSettings
         )
     }
 
@@ -86,10 +99,10 @@ struct PermissionsSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Permissions")
+                    Text(permissionsLocalized("Permissions"))
                         .font(.headline)
 
-                    Text("Voxt needs the following permissions to support hotkeys, recording, and text insertion.")
+                    Text(permissionsLocalized("Voxt needs the following permissions to support hotkeys, recording, and text insertion."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -106,20 +119,20 @@ struct PermissionsSettingsView: View {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("App Branch URL Authorization")
+                            Text(permissionsLocalized("App Branch URL Authorization"))
                                 .font(.headline)
                             Spacer()
-                            Button("Add Browser") {
+                            Button(permissionsLocalized("Add Browser")) {
                                 chooseBrowserApplication()
                             }
                             .buttonStyle(SettingsPillButtonStyle())
-                            Button("Open Settings") {
+                            Button(permissionsLocalized("Open Settings")) {
                                 openBrowserAutomationSettings()
                             }
                             .buttonStyle(SettingsPillButtonStyle())
                         }
 
-                        Text("Grant browser automation permission so Voxt can read active-tab URLs for App Branch matching.")
+                        Text(permissionsLocalized("Grant browser automation permission so Voxt can read active-tab URLs for App Branch matching."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -148,10 +161,10 @@ struct PermissionsSettingsView: View {
         .onChange(of: muteSystemAudioWhileRecording) { _, _ in
             refreshStates()
         }
-        .onChange(of: meetingNotesBetaEnabled) { _, _ in
+        .onChange(of: transcriptionEngineRaw) { _, _ in
             refreshStates()
         }
-        .onChange(of: transcriptionEngineRaw) { _, _ in
+        .onChange(of: featureSettingsRaw) { _, _ in
             refreshStates()
         }
         .onDisappear {
@@ -180,12 +193,12 @@ struct PermissionsSettingsView: View {
 
             statusBadge(for: states[kind] ?? .disabled)
 
-            Button("Request") {
+            Button(permissionsLocalized("Request")) {
                 requestPermission(kind)
             }
             .buttonStyle(SettingsCompactActionButtonStyle())
 
-            Button("Open Settings") {
+            Button(permissionsLocalized("Open Settings")) {
                 openSettings(for: kind)
             }
             .buttonStyle(SettingsCompactActionButtonStyle())
@@ -219,18 +232,18 @@ struct PermissionsSettingsView: View {
 
             statusBadge(for: browserAutomationStates[target.bundleID] ?? .disabled)
 
-            Button("Request") {
+            Button(permissionsLocalized("Request")) {
                 requestBrowserAutomationPermission(target)
             }
             .buttonStyle(SettingsCompactActionButtonStyle())
 
-            Button("Test") {
+            Button(permissionsLocalized("Test")) {
                 testBrowserURLRead(target)
             }
             .buttonStyle(SettingsCompactActionButtonStyle())
 
             if target.isCustom {
-                Button("Delete", role: .destructive) {
+                Button(permissionsLocalized("Delete"), role: .destructive) {
                     removeCustomBrowser(target)
                 }
                 .buttonStyle(SettingsCompactActionButtonStyle(tone: .destructive))
@@ -411,7 +424,7 @@ struct PermissionsSettingsView: View {
         } else {
             panel.allowedFileTypes = ["app"]
         }
-        panel.prompt = String(localized: "Choose")
+        panel.prompt = permissionsLocalized("Choose")
 
         guard panel.runModal() == .OK, let appURL = panel.url else { return }
         guard let bundle = Bundle(url: appURL),

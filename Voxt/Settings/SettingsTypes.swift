@@ -42,7 +42,7 @@ enum OnboardingStep: String, CaseIterable, Identifiable {
         case .appEnhancement:
             return "App Enhancement"
         case .meeting:
-            return "Meeting Notes"
+            return "Meeting"
         case .finish:
             return "Finish"
         }
@@ -51,9 +51,9 @@ enum OnboardingStep: String, CaseIterable, Identifiable {
     var subtitleKey: LocalizedStringKey {
         switch self {
         case .language:
-            return "Choose interface language, main language, and translation target."
+            return "Choose interface language and main language."
         case .model:
-            return "Pick a simple local, remote, or direct dictation setup path."
+            return "Choose one ASR model path and one LLM path for the rest of onboarding."
         case .transcription:
             return "Confirm microphone behavior, shortcut preset, and transcription basics."
         case .translation:
@@ -88,7 +88,7 @@ enum OnboardingStep: String, CaseIterable, Identifiable {
         case .appEnhancement:
             return "App Enhancement"
         case .meeting:
-            return "Meeting Notes"
+            return "Meeting"
         case .finish:
             return "Finish"
         }
@@ -190,7 +190,6 @@ enum SettingsNavigationSection: String, Hashable {
     case generalAudio
     case generalTranscriptionUI
     case generalLanguages
-    case generalModelStorage
     case generalOutput
     case generalLogging
     case generalAppBehavior
@@ -219,7 +218,6 @@ enum SettingsNavigationSection: String, Hashable {
              .generalAudio,
              .generalTranscriptionUI,
              .generalLanguages,
-             .generalModelStorage,
              .generalOutput,
              .generalLogging,
              .generalAppBehavior:
@@ -235,7 +233,7 @@ enum SettingsNavigationSection: String, Hashable {
             return .dictionary
         case .appBranchSources,
              .appBranchGroups:
-            return .appEnhancement
+            return .feature
         case .historySettings,
              .historyEntries:
             return .history
@@ -257,7 +255,6 @@ enum SettingsNavigationSection: String, Hashable {
         case .generalAudio: return "Audio"
         case .generalTranscriptionUI: return "Transcription UI"
         case .generalLanguages: return "Languages"
-        case .generalModelStorage: return "Model Storage"
         case .generalOutput: return "Output"
         case .generalLogging: return "Logging"
         case .generalAppBehavior: return "App Behavior"
@@ -290,10 +287,12 @@ enum SettingsNavigationSection: String, Hashable {
 struct SettingsNavigationTarget: Hashable {
     let tab: SettingsTab
     let section: SettingsNavigationSection?
+    let featureTab: FeatureSettingsTab?
 
-    init(tab: SettingsTab, section: SettingsNavigationSection? = nil) {
+    init(tab: SettingsTab, section: SettingsNavigationSection? = nil, featureTab: FeatureSettingsTab? = nil) {
         self.tab = tab
         self.section = section
+        self.featureTab = featureTab ?? Self.defaultFeatureTab(for: tab, section: section)
     }
 
     init?(notification: Notification) {
@@ -311,14 +310,41 @@ struct SettingsNavigationTarget: Hashable {
             section = nil
         }
 
-        self.init(tab: tab, section: section)
+        let featureTab: FeatureSettingsTab?
+        if let rawFeatureTab = notification.userInfo?["featureTab"] as? String,
+           !rawFeatureTab.isEmpty {
+            featureTab = FeatureSettingsTab(rawValue: rawFeatureTab)
+        } else {
+            featureTab = Self.defaultFeatureTab(for: tab, section: section)
+        }
+
+        self.init(tab: tab == .appEnhancement ? .feature : tab, section: section, featureTab: featureTab)
     }
 
     var userInfo: [String: String] {
         [
             "tab": tab.rawValue,
-            "section": section?.rawValue ?? ""
+            "section": section?.rawValue ?? "",
+            "featureTab": featureTab?.rawValue ?? ""
         ]
+    }
+
+    static func defaultFeatureTab(
+        for tab: SettingsTab,
+        section: SettingsNavigationSection?
+    ) -> FeatureSettingsTab? {
+        if tab == .appEnhancement {
+            return .appEnhancement
+        }
+        guard tab == .feature || section?.tab == .feature else { return nil }
+        switch section {
+        case .appBranchSources, .appBranchGroups:
+            return .appEnhancement
+        case .none:
+            return .transcription
+        default:
+            return .transcription
+        }
     }
 }
 
@@ -342,6 +368,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case report
     case general
     case model
+    case feature
     case dictionary
     case appEnhancement
     case history
@@ -358,6 +385,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .history: return "History"
         case .report: return "Dashboard"
         case .model: return "Model"
+        case .feature: return "Feature"
         case .dictionary: return "Dictionary"
         case .appEnhancement: return "App Branch"
         case .hotkey: return "Hotkey"
@@ -374,6 +402,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .history: return "History"
         case .report: return "Dashboard"
         case .model: return "Model"
+        case .feature: return "Feature"
         case .dictionary: return "Dictionary"
         case .appEnhancement: return "App Branch"
         case .hotkey: return "Hotkey"
@@ -388,6 +417,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .history: return "clock.arrow.circlepath"
         case .report: return "chart.bar"
         case .model: return "waveform"
+        case .feature: return "square.grid.2x2"
         case .dictionary: return "book.closed"
         case .appEnhancement: return "sparkles.rectangle.stack"
         case .hotkey: return "keyboard"
@@ -397,7 +427,74 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     static func visibleTabs(appEnhancementEnabled: Bool) -> [SettingsTab] {
         allCases.filter { tab in
-            appEnhancementEnabled || tab != .appEnhancement
+            switch tab {
+            case .appEnhancement:
+                return false
+            default:
+                return true
+            }
+        }
+    }
+}
+
+enum SettingsSidebarMode: Equatable {
+    case root
+    case feature
+}
+
+enum FeatureSettingsTab: String, CaseIterable, Identifiable {
+    case transcription
+    case translation
+    case rewrite
+    case appEnhancement
+    case meeting
+
+    var id: String { rawValue }
+
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .transcription: return "Transcription"
+        case .translation: return "Translation"
+        case .rewrite: return "Rewrite"
+        case .appEnhancement: return "App Enhancement"
+        case .meeting: return "Meeting"
+        }
+    }
+
+    var title: String {
+        AppLocalization.localizedString(rawTitleKey)
+    }
+
+    private var rawTitleKey: String {
+        switch self {
+        case .transcription: return "Transcription"
+        case .translation: return "Translation"
+        case .rewrite: return "Rewrite"
+        case .appEnhancement: return "App Enhancement"
+        case .meeting: return "Meeting"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .transcription: return "waveform.and.mic"
+        case .translation: return "globe"
+        case .rewrite: return "text.badge.star"
+        case .appEnhancement: return "sparkles.rectangle.stack"
+        case .meeting: return "person.2.crop.square.stack"
+        }
+    }
+
+    static func visibleTabs(appEnhancementEnabled: Bool, meetingEnabled: Bool) -> [FeatureSettingsTab] {
+        allCases.filter { tab in
+            switch tab {
+            case .appEnhancement:
+                return appEnhancementEnabled
+            case .meeting:
+                return meetingEnabled
+            default:
+                return true
+            }
         }
     }
 }

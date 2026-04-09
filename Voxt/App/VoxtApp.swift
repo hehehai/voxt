@@ -73,9 +73,6 @@ struct MainWindowNavigationCommands: Commands {
                 Button(AppLocalization.localizedString("Languages")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalLanguages))
                 }
-                Button(AppLocalization.localizedString("Model Storage")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalModelStorage))
-                }
                 Button(AppLocalization.localizedString("Output")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .general, section: .generalOutput))
                 }
@@ -87,25 +84,31 @@ struct MainWindowNavigationCommands: Commands {
                 }
             }
 
-            Menu(AppLocalization.localizedString("Model")) {
-                Button(AppLocalization.localizedString("Model")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model))
+            Button(AppLocalization.localizedString("Model")) {
+                appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model))
+            }
+
+            Menu(AppLocalization.localizedString("Feature")) {
+                Button(AppLocalization.localizedString("Feature")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
                 }
                 Divider()
-                Button(AppLocalization.localizedString("Engine")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelEngine))
-                }
-                Button(AppLocalization.localizedString("Text Enhancement")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelTextEnhancement))
+                Button(AppLocalization.localizedString("Transcription")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
                 }
                 Button(AppLocalization.localizedString("Translation")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelTranslation))
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .translation))
                 }
-                Button(AppLocalization.localizedString("Content Rewrite")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelContentRewrite))
+                Button(AppLocalization.localizedString("Rewrite")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .rewrite))
                 }
-                Button(AppLocalization.localizedString("Transcription Test")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .model, section: .modelTranscriptionTest))
+                if appEnhancementEnabled {
+                    Button(AppLocalization.localizedString("App Enhancement")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .appEnhancement))
+                    }
+                }
+                Button(AppLocalization.localizedString("Meeting")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .meeting))
                 }
             }
 
@@ -119,21 +122,6 @@ struct MainWindowNavigationCommands: Commands {
                 }
                 Button(AppLocalization.localizedString("Dictionary Entries")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary, section: .dictionaryEntries))
-                }
-            }
-
-            if appEnhancementEnabled {
-                Menu(AppLocalization.localizedString("App Branch")) {
-                    Button(AppLocalization.localizedString("App Branch")) {
-                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .appEnhancement))
-                    }
-                    Divider()
-                    Button(AppLocalization.localizedString("Sources")) {
-                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .appEnhancement, section: .appBranchSources))
-                    }
-                    Button(AppLocalization.localizedString("Groups")) {
-                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .appEnhancement, section: .appBranchGroups))
-                    }
                 }
             }
 
@@ -440,6 +428,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.customProxyUsername: "",
             AppPreferenceKey.customProxyPassword: "",
         ])
+        FeatureSettingsStore.migrateIfNeeded(defaults: .standard)
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
         Self.migrateLegacyNetworkProxyPreferenceIfNeeded()
@@ -516,6 +505,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         VoxtLog.info("Voxt launching.")
         VoxtLog.info("Runtime system version: \(currentSystemVersionLogDescription)")
         migrateLegacyPreferences()
+        remoteASRTranscriber.doubaoDictionaryEntryProvider = { [weak self] in
+            guard let self else { return [] }
+            return self.dictionaryStore.activeEntriesForRemoteRequest(
+                activeGroupID: self.activeDictionaryGroupID()
+            )
+        }
 
         if isRunningUnitTests {
             VoxtLog.info("Voxt launch running under XCTest; skipping app startup services.")

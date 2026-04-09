@@ -14,6 +14,7 @@ extension AppDelegate {
             return
         }
         guard !isSessionActive else { return }
+        prepareLegacySettingsForSession(outputMode: outputMode)
         let startDecision = RecordingStartPlanner.resolve(
             selectedEngine: transcriptionEngine,
             mlxModelState: mlxModelManager.state,

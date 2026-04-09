@@ -5,13 +5,8 @@ import AVFoundation
 extension AppDelegate {
     func handleMeetingHotkeyDown() {
         VoxtLog.hotkey(
-            "Hotkey callback meetingDown. betaEnabled=\(meetingNotesBetaEnabled), isMeetingActive=\(meetingSessionCoordinator.isActive), isSessionActive=\(isSessionActive)"
+            "Hotkey callback meetingDown. isMeetingActive=\(meetingSessionCoordinator.isActive), isSessionActive=\(isSessionActive)"
         )
-
-        guard meetingNotesBetaEnabled else {
-            VoxtLog.hotkey("Meeting hotkey ignored: beta feature is disabled.")
-            return
-        }
 
         cancelPendingTranscriptionStart()
 
@@ -235,7 +230,7 @@ extension AppDelegate {
     }
 
     private func preflightPermissionsForMeeting() -> Bool {
-        guard meetingNotesBetaEnabled else { return false }
+        prepareLegacySettingsForMeeting()
 
         if isSessionActive {
             showOverlayStatus(

@@ -43,6 +43,7 @@ enum ConfigurationTransferManager {
         var exportedAt: String
         var general: GeneralSettings
         var model: ModelSettings
+        var feature: FeatureSettings?
         var dictionary: DictionarySettings?
         var appBranch: AppBranchSettings
         var hotkey: HotkeySettings
@@ -638,60 +639,6 @@ enum ConfigurationTransferManager {
         }
     }
 
-    struct SanitizedRemoteProviderConfiguration: Codable {
-        var providerID: String
-        var model: String
-        var meetingModel: String
-        var endpoint: String
-        var apiKey: String
-        var appID: String
-        var accessToken: String
-        var openAIChunkPseudoRealtimeEnabled: Bool
-
-        enum CodingKeys: String, CodingKey {
-            case providerID
-            case model
-            case meetingModel
-            case endpoint
-            case apiKey
-            case appID
-            case accessToken
-            case openAIChunkPseudoRealtimeEnabled
-        }
-
-        init(
-            providerID: String,
-            model: String,
-            meetingModel: String,
-            endpoint: String,
-            apiKey: String,
-            appID: String,
-            accessToken: String,
-            openAIChunkPseudoRealtimeEnabled: Bool
-        ) {
-            self.providerID = providerID
-            self.model = model
-            self.meetingModel = meetingModel
-            self.endpoint = endpoint
-            self.apiKey = apiKey
-            self.appID = appID
-            self.accessToken = accessToken
-            self.openAIChunkPseudoRealtimeEnabled = openAIChunkPseudoRealtimeEnabled
-        }
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            providerID = try container.decode(String.self, forKey: .providerID)
-            model = try container.decodeIfPresent(String.self, forKey: .model) ?? ""
-            meetingModel = try container.decodeIfPresent(String.self, forKey: .meetingModel) ?? ""
-            endpoint = try container.decodeIfPresent(String.self, forKey: .endpoint) ?? ""
-            apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
-            appID = try container.decodeIfPresent(String.self, forKey: .appID) ?? ""
-            accessToken = try container.decodeIfPresent(String.self, forKey: .accessToken) ?? ""
-            openAIChunkPseudoRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .openAIChunkPseudoRealtimeEnabled) ?? false
-        }
-    }
-
     struct ExportedAppBranchGroup: Codable {
         var id: UUID
         var name: String
@@ -780,114 +727,69 @@ enum ConfigurationTransferManager {
     ) -> [MissingConfigurationIssue] {
         var issues: [MissingConfigurationIssue] = []
 
-        let engine = TranscriptionEngine(rawValue: defaults.string(forKey: AppPreferenceKey.transcriptionEngine) ?? "") ?? .mlxAudio
-        let enhancementMode = EnhancementMode(rawValue: defaults.string(forKey: AppPreferenceKey.enhancementMode) ?? "") ?? .off
-        let selectedRemoteASR = RemoteASRProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? "") ?? .openAIWhisper
-        let selectedRemoteLLM = RemoteLLMProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteLLMSelectedProvider) ?? "") ?? .openAI
+        let featureSettings = FeatureSettingsStore.load(defaults: defaults)
         let remoteASR = RemoteModelConfigurationStore.loadConfigurations(from: defaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? "")
         let remoteLLM = RemoteModelConfigurationStore.loadConfigurations(from: defaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? "")
 
-        if engine == .mlxAudio {
-            let repo = MLXModelManager.canonicalModelRepo(
-                defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
-            )
-            if !mlxModelManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .mlxModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        } else if engine == .whisperKit {
-            let modelID = defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID
-            if !whisperModelManager.isModelDownloaded(id: modelID) {
-                issues.append(.init(scope: .whisperModel(modelID), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        }
-
-        if engine == .remote {
-            let config = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: selectedRemoteASR, stored: remoteASR)
-            if !config.isConfigured {
-                issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Configuration required.")))
-            } else if defaults.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled),
-                      RemoteASRMeetingConfiguration.requiresDedicatedMeetingModel(selectedRemoteASR, configuration: config),
-                      !RemoteASRMeetingConfiguration.hasValidMeetingModel(provider: selectedRemoteASR, configuration: config) {
-                issues.append(.init(scope: .remoteASRProvider(selectedRemoteASR), message: AppLocalization.localizedString("Meeting ASR configuration required.")))
-            }
-        }
-
-        switch enhancementMode {
-        case .customLLM:
-            let repo = defaults.string(forKey: AppPreferenceKey.customLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-            if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .customLLMModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        case .remoteLLM:
-            let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: selectedRemoteLLM, stored: remoteLLM)
-            if !config.isConfigured {
-                issues.append(.init(scope: .remoteLLMProvider(selectedRemoteLLM), message: AppLocalization.localizedString("Configuration required.")))
-            }
-        default:
-            break
-        }
-
-        let translationProvider = TranslationModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationModelProvider) ?? "") ?? .customLLM
-        let translationFallbackProvider = TranslationProviderResolver.sanitizedFallbackProvider(
-            TranslationModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationFallbackModelProvider) ?? "") ?? .customLLM
+        appendASRIssues(
+            for: featureSettings.transcription.asrSelectionID,
+            issues: &issues,
+            remoteASR: remoteASR,
+            mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager
         )
-        switch translationProvider {
-        case .remoteLLM:
-            let raw = defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? ""
-            if let provider = RemoteLLMProvider(rawValue: raw.isEmpty ? selectedRemoteLLM.rawValue : raw) {
-                let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
-                if !config.isConfigured {
-                    issues.append(.init(scope: .translationRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
-                }
-            }
-        case .customLLM:
-            let repo = defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-            if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
-        case .whisperKit:
-            let resolution = TranslationProviderResolver.resolve(
-                selectedProvider: .whisperKit,
-                fallbackProvider: translationFallbackProvider,
-                transcriptionEngine: engine,
-                targetLanguage: TranslationTargetLanguage(rawValue: defaults.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? "") ?? .english,
-                isSelectedTextTranslation: false,
-                whisperModelState: whisperModelManager.state
+        if featureSettings.transcription.llmEnabled {
+            appendTextModelIssues(
+                for: featureSettings.transcription.llmSelectionID,
+                issues: &issues,
+                remoteLLM: remoteLLM,
+                customLLMManager: customLLMManager
             )
-            switch resolution.provider {
-            case .customLLM:
-                let repo = defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-                if !customLLMManager.isModelDownloaded(repo: repo) {
-                    issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-                }
-            case .remoteLLM:
-                let raw = defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? ""
-                if let provider = RemoteLLMProvider(rawValue: raw.isEmpty ? selectedRemoteLLM.rawValue : raw) {
-                    let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
-                    if !config.isConfigured {
-                        issues.append(.init(scope: .translationRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
-                    }
-                }
-            case .whisperKit:
-                break
-            }
         }
 
-        let rewriteProvider = RewriteModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.rewriteModelProvider) ?? "") ?? .customLLM
-        switch rewriteProvider {
-        case .remoteLLM:
-            let raw = defaults.string(forKey: AppPreferenceKey.rewriteRemoteLLMProvider) ?? ""
-            if let provider = RemoteLLMProvider(rawValue: raw.isEmpty ? selectedRemoteLLM.rawValue : raw) {
-                let config = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLM)
-                if !config.isConfigured {
-                    issues.append(.init(scope: .rewriteRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
-                }
-            }
-        case .customLLM:
-            let repo = defaults.string(forKey: AppPreferenceKey.rewriteCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo
-            if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .rewriteCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
-            }
+        appendASRIssues(
+            for: featureSettings.translation.asrSelectionID,
+            issues: &issues,
+            remoteASR: remoteASR,
+            mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager
+        )
+        appendTranslationModelIssues(
+            for: featureSettings.translation,
+            issues: &issues,
+            remoteLLM: remoteLLM,
+            customLLMManager: customLLMManager
+        )
+
+        appendASRIssues(
+            for: featureSettings.rewrite.asrSelectionID,
+            issues: &issues,
+            remoteASR: remoteASR,
+            mlxModelManager: mlxModelManager,
+            whisperModelManager: whisperModelManager
+        )
+        appendTextModelIssues(
+            for: featureSettings.rewrite.llmSelectionID,
+            issues: &issues,
+            remoteLLM: remoteLLM,
+            customLLMManager: customLLMManager
+        )
+
+        if featureSettings.meeting.enabled {
+            appendASRIssues(
+                for: featureSettings.meeting.asrSelectionID,
+                requiresMeetingConfiguration: true,
+                issues: &issues,
+                remoteASR: remoteASR,
+                mlxModelManager: mlxModelManager,
+                whisperModelManager: whisperModelManager
+            )
+            appendTextModelIssues(
+                for: featureSettings.meeting.summaryModelSelectionID,
+                issues: &issues,
+                remoteLLM: remoteLLM,
+                customLLMManager: customLLMManager
+            )
         }
 
         return Array(Set(issues)).sorted { $0.id < $1.id }
@@ -946,7 +848,7 @@ enum ConfigurationTransferManager {
         )
 
         return ExportPayload(
-            version: 17,
+            version: 18,
             exportedAt: ISO8601DateFormatter().string(from: Date()),
             general: general,
             model: .init(
@@ -979,6 +881,7 @@ enum ConfigurationTransferManager {
                 remoteASRProviderConfigurations: sanitizeRemoteConfigurations(defaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""),
                 remoteLLMProviderConfigurations: sanitizeRemoteConfigurations(defaults.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? "")
             ),
+            feature: FeatureSettingsStore.load(defaults: defaults),
             dictionary: .init(
                 recognitionEnabled: defaults.object(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) as? Bool ?? true,
                 autoLearningEnabled: defaults.object(forKey: AppPreferenceKey.dictionaryAutoLearningEnabled) as? Bool ?? true,
@@ -1162,187 +1065,16 @@ enum ConfigurationTransferManager {
         defaults.set(hotkey.hotkeyDistinguishModifierSides, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
         defaults.set(hotkey.hotkeyPreset, forKey: AppPreferenceKey.hotkeyPreset)
         defaults.set(hotkey.escapeKeyCancelsOverlaySession, forKey: AppPreferenceKey.escapeKeyCancelsOverlaySession)
+
+        let featureSettings = payload.feature ?? FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+        FeatureSettingsStore.save(featureSettings, defaults: defaults)
     }
 
-    private static func sanitizeRemoteConfigurations(_ raw: String) -> [SanitizedRemoteProviderConfiguration] {
-        let stored = RemoteModelConfigurationStore.loadConfigurations(from: raw)
-        return stored.values.sorted(by: { $0.providerID < $1.providerID }).map {
-            SanitizedRemoteProviderConfiguration(
-                providerID: $0.providerID,
-                model: $0.model,
-                meetingModel: $0.meetingModel,
-                endpoint: $0.endpoint,
-                apiKey: sanitizeSensitive($0.apiKey),
-                appID: sanitizeSensitive($0.appID),
-                accessToken: sanitizeSensitive($0.accessToken),
-                openAIChunkPseudoRealtimeEnabled: $0.openAIChunkPseudoRealtimeEnabled
-            )
-        }
-    }
-
-    private static func restoreRemoteConfigurations(_ values: [SanitizedRemoteProviderConfiguration]) -> String {
-        let mapped = Dictionary(uniqueKeysWithValues: values.map { item in
-            (
-                item.providerID,
-                RemoteProviderConfiguration(
-                    providerID: item.providerID,
-                    model: item.model,
-                    meetingModel: item.meetingModel,
-                    endpoint: item.endpoint,
-                    apiKey: resolveImportedSensitive(item.apiKey),
-                    appID: resolveImportedSensitive(item.appID),
-                    accessToken: resolveImportedSensitive(item.accessToken),
-                    openAIChunkPseudoRealtimeEnabled: item.openAIChunkPseudoRealtimeEnabled
-                )
-            )
-        })
-        return RemoteModelConfigurationStore.saveConfigurations(mapped)
-    }
-
-    private static func persistTrackedMicrophoneRecords(
-        _ records: [TrackedMicrophoneRecord],
-        defaults: UserDefaults
-    ) {
-        guard let data = try? JSONEncoder().encode(records),
-              let raw = String(data: data, encoding: .utf8)
-        else {
-            defaults.removeObject(forKey: AppPreferenceKey.trackedMicrophoneRecords)
-            return
-        }
-
-        defaults.set(raw, forKey: AppPreferenceKey.trackedMicrophoneRecords)
-    }
-
-    private static func loadAppBranchGroups(defaults: UserDefaults) -> [ExportedAppBranchGroup] {
-        guard let data = defaults.data(forKey: AppPreferenceKey.appBranchGroups),
-              let groups = try? JSONDecoder().decode([AppBranchGroup].self, from: data)
-        else {
-            return []
-        }
-        return groups.map {
-            ExportedAppBranchGroup(
-                id: $0.id,
-                name: $0.name,
-                prompt: $0.prompt,
-                appBundleIDs: $0.appBundleIDs,
-                appRefs: $0.appRefs,
-                urlPatternIDs: $0.urlPatternIDs,
-                isExpanded: $0.isExpanded,
-                iconPlaceholder: "app-icon-placeholder"
-            )
-        }
-    }
-
-    private static func loadBranchURLs(defaults: UserDefaults) -> [ExportedBranchURLItem] {
-        guard let data = defaults.data(forKey: AppPreferenceKey.appBranchURLs),
-              let urls = try? JSONDecoder().decode([BranchURLItem].self, from: data)
-        else {
-            return []
-        }
-        return urls.map { ExportedBranchURLItem(id: $0.id, pattern: $0.pattern, iconPlaceholder: "url-icon-placeholder") }
-    }
-
-    private static func loadDictionaryEntries(environment: FileEnvironment) -> [DictionaryEntry] {
-        guard let url = try? environment.dictionaryEntriesURL(),
-              let data = try? Data(contentsOf: url),
-              let entries = try? JSONDecoder().decode([DictionaryEntry].self, from: data)
-        else {
-            return []
-        }
-        return entries
-    }
-
-    private static func loadDictionarySuggestionFilterSettings(
-        defaults: UserDefaults
-    ) -> DictionarySuggestionFilterSettings {
-        guard
-            let data = defaults.data(forKey: AppPreferenceKey.dictionarySuggestionFilterSettings),
-            let settings = try? JSONDecoder().decode(DictionarySuggestionFilterSettings.self, from: data)
-        else {
-            return .defaultValue
-        }
-        return settings.sanitized()
-    }
-
-    private static func loadDictionaryHistoryScanCheckpoint(
-        defaults: UserDefaults
-    ) -> DictionaryHistoryScanCheckpoint? {
-        guard
-            let data = defaults.data(forKey: AppPreferenceKey.dictionarySuggestionHistoryScanCheckpoint),
-            let checkpoint = try? JSONDecoder().decode(DictionaryHistoryScanCheckpoint.self, from: data)
-        else {
-            return nil
-        }
-        return checkpoint
-    }
-
-    private static func persistDictionaryHistoryScanCheckpoint(
-        _ checkpoint: DictionaryHistoryScanCheckpoint?,
-        defaults: UserDefaults
-    ) {
-        guard let checkpoint else {
-            defaults.removeObject(forKey: AppPreferenceKey.dictionarySuggestionHistoryScanCheckpoint)
-            return
-        }
-
-        guard let data = try? JSONEncoder().encode(checkpoint) else {
-            defaults.removeObject(forKey: AppPreferenceKey.dictionarySuggestionHistoryScanCheckpoint)
-            return
-        }
-        defaults.set(data, forKey: AppPreferenceKey.dictionarySuggestionHistoryScanCheckpoint)
-    }
-
-    private static func persistDictionaryEntries(
-        _ entries: [DictionaryEntry],
-        environment: FileEnvironment
-    ) {
-        guard let url = try? environment.dictionaryEntriesURL(),
-              let data = try? JSONEncoder().encode(entries)
-        else {
-            return
-        }
-
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: url, options: [.atomic])
-        } catch {
-            // Ignore config import dictionary persistence failures.
-        }
-    }
-
-    private static func loadDictionarySuggestions(environment: FileEnvironment) -> [DictionarySuggestion] {
-        guard let url = try? environment.dictionarySuggestionsURL(),
-              let data = try? Data(contentsOf: url),
-              let suggestions = try? JSONDecoder().decode([DictionarySuggestion].self, from: data)
-        else {
-            return []
-        }
-        return suggestions
-    }
-
-    private static func persistDictionarySuggestions(
-        _ suggestions: [DictionarySuggestion],
-        environment: FileEnvironment
-    ) {
-        guard let url = try? environment.dictionarySuggestionsURL(),
-              let data = try? JSONEncoder().encode(suggestions)
-        else {
-            return
-        }
-
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: url, options: [.atomic])
-        } catch {
-            // Ignore config import dictionary persistence failures.
-        }
-    }
-
-    private static func sanitizeSensitive(_ value: String) -> String {
+    static func sanitizeSensitive(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : sensitivePlaceholder
     }
 
-    private static func resolveImportedSensitive(_ value: String) -> String {
+    static func resolveImportedSensitive(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed == sensitivePlaceholder ? "" : trimmed
     }

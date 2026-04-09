@@ -212,7 +212,7 @@ private final class FrameReportingView: NSView {
 }
 
 struct ModelTableAction {
-    let title: LocalizedStringKey
+    let title: String
     var role: ButtonRole? = nil
     var isEnabled: Bool = true
     let handler: () -> Void
@@ -241,7 +241,7 @@ struct ModelTableView: View {
                 Text(title)
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Text("Actions")
+                Text(AppLocalization.localizedString("Actions"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -7,6 +7,42 @@ extension AppDelegate {
         .standard
     }
 
+    var featureSettings: FeatureSettings {
+        FeatureSettingsStore.load(defaults: defaults)
+    }
+
+    func updateFeatureSettings(_ mutate: (inout FeatureSettings) -> Void) {
+        FeatureSettingsStore.update(defaults: defaults, mutate)
+    }
+
+    var transcriptionFeatureSettings: TranscriptionFeatureSettings {
+        featureSettings.transcription
+    }
+
+    var translationFeatureSettings: TranslationFeatureSettings {
+        featureSettings.translation
+    }
+
+    var rewriteFeatureSettings: RewriteFeatureSettings {
+        featureSettings.rewrite
+    }
+
+    var meetingFeatureSettings: MeetingFeatureSettings {
+        featureSettings.meeting
+    }
+
+    func prepareLegacySettingsForSession(outputMode: SessionOutputMode) {
+        FeatureSettingsStore.prepareLegacySession(
+            from: featureSettings,
+            outputMode: outputMode,
+            defaults: defaults
+        )
+    }
+
+    func prepareLegacySettingsForMeeting() {
+        FeatureSettingsStore.prepareLegacyMeeting(from: featureSettings, defaults: defaults)
+    }
+
     var selectedInputDeviceUID: String? {
         MicrophonePreferenceManager.activeInputDeviceUID(defaults: defaults)
     }

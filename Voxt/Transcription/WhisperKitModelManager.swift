@@ -54,6 +54,11 @@ final class WhisperKitModelManager: ObservableObject {
         let totalFiles: Int
     }
 
+    private struct DirectoryLookupCache {
+        let validURL: URL?
+        let rawURL: URL?
+    }
+
     static let defaultModelID = "base"
 
     static let availableModels: [ModelOption] = [
@@ -93,6 +98,9 @@ final class WhisperKitModelManager: ObservableObject {
     @Published private(set) var remoteSizeTextByID: [String: String] = [:]
     @Published private(set) var activeDownload: ActiveDownload?
 
+    private var downloadedStateByID: [String: Bool] = [:]
+    private var directoryLookupCacheByID: [String: DirectoryLookupCache] = [:]
+    private var localSizeTextByID: [String: String] = [:]
     private var modelID: String
     private var hubBaseURL: URL
     private var loadedWhisper: WhisperKit?
@@ -100,6 +108,7 @@ final class WhisperKitModelManager: ObservableObject {
     private var loadingTask: Task<WhisperKit, Error>?
     private var downloadTask: Task<Void, Never>?
     private var sizeTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
     private let idleUnloadDelay: Duration = .seconds(90)
     private var activeUseCount = 0
@@ -108,6 +117,7 @@ final class WhisperKitModelManager: ObservableObject {
     init(modelID: String, hubBaseURL: URL) {
         self.modelID = Self.canonicalModelID(modelID)
         self.hubBaseURL = hubBaseURL
+        self.remoteSizeTextByID = Self.loadPersistedRemoteSizeCache()
         checkExistingModel()
     }
 
@@ -141,7 +151,6 @@ final class WhisperKitModelManager: ObservableObject {
         guard url != hubBaseURL else { return }
         hubBaseURL = url
         fetchRemoteSize(for: modelID)
-        prefetchAllModelSizes()
     }
 
     func refreshResidencyPolicy() {
@@ -310,9 +319,11 @@ final class WhisperKitModelManager: ObservableObject {
     func checkExistingModel() {
         guard modelDirectoryURL(id: modelID) != nil else {
             state = .notDownloaded
+            downloadedStateByID[modelID] = false
             return
         }
 
+        downloadedStateByID[modelID] = true
         if loadedWhisper != nil, loadedModelID == modelID {
             state = .ready
         } else {
@@ -321,7 +332,13 @@ final class WhisperKitModelManager: ObservableObject {
     }
 
     func isModelDownloaded(id: String) -> Bool {
-        modelDirectoryURL(id: id) != nil
+        let canonicalModelID = Self.canonicalModelID(id)
+        if let cached = downloadedStateByID[canonicalModelID] {
+            return cached
+        }
+        let isDownloaded = modelDirectoryURL(id: canonicalModelID) != nil
+        downloadedStateByID[canonicalModelID] = isDownloaded
+        return isDownloaded
     }
 
     func modelDirectoryURL(id: String) -> URL? {
@@ -334,6 +351,9 @@ final class WhisperKitModelManager: ObservableObject {
 
     private func firstModelDirectoryURL(id: String, requireValid: Bool) -> URL? {
         let canonicalModelID = Self.canonicalModelID(id)
+        if let cached = directoryLookupCacheByID[canonicalModelID] {
+            return requireValid ? cached.validURL : (cached.rawURL ?? cached.validURL)
+        }
         let expectedFolderName = "openai_whisper-\(canonicalModelID)"
         guard let enumerator = FileManager.default.enumerator(
             at: downloadRootURL(),
@@ -346,11 +366,17 @@ final class WhisperKitModelManager: ObservableObject {
         for case let fileURL as URL in enumerator {
             guard fileURL.lastPathComponent == expectedFolderName else { continue }
             if requireValid && !WhisperModelArtifacts.isValidModelDirectory(fileURL) {
+                directoryLookupCacheByID[canonicalModelID] = DirectoryLookupCache(validURL: nil, rawURL: fileURL)
+                downloadedStateByID[canonicalModelID] = false
                 continue
             }
+            directoryLookupCacheByID[canonicalModelID] = DirectoryLookupCache(validURL: fileURL, rawURL: fileURL)
+            downloadedStateByID[canonicalModelID] = true
             return fileURL
         }
 
+        directoryLookupCacheByID[canonicalModelID] = DirectoryLookupCache(validURL: nil, rawURL: nil)
+        downloadedStateByID[canonicalModelID] = false
         return nil
     }
 
@@ -358,6 +384,7 @@ final class WhisperKitModelManager: ObservableObject {
         if let directoryURL = rawModelDirectoryURL(id: id) {
             try? FileManager.default.removeItem(at: directoryURL)
         }
+        invalidateLocalCache(id: id)
     }
 
     func deleteModel(id: String) {
@@ -373,21 +400,34 @@ final class WhisperKitModelManager: ObservableObject {
         if canonicalModelID == modelID {
             state = .notDownloaded
         }
+        invalidateLocalCache(id: canonicalModelID)
     }
 
     func modelSizeOnDisk(id: String) -> String {
-        guard let folderURL = modelDirectoryURL(id: id),
+        let canonicalModelID = Self.canonicalModelID(id)
+        if let cached = localSizeTextByID[canonicalModelID] {
+            return cached
+        }
+        guard let folderURL = modelDirectoryURL(id: canonicalModelID),
               let size = try? FileManager.default.allocatedSizeOfDirectory(at: folderURL),
               size > 0
         else {
             return ""
         }
-        return Self.byteFormatter.string(fromByteCount: Int64(size))
+        let text = Self.byteFormatter.string(fromByteCount: Int64(size))
+        localSizeTextByID[canonicalModelID] = text
+        return text
     }
 
     func remoteSizeText(id: String) -> String {
         let canonicalModelID = Self.canonicalModelID(id)
         return remoteSizeTextByID[canonicalModelID] ?? AppLocalization.localizedString("Unknown")
+    }
+
+    func ensureRemoteSizeLoaded(id: String) {
+        let canonicalModelID = Self.canonicalModelID(id)
+        guard shouldFetchRemoteSize(for: canonicalModelID) else { return }
+        fetchRemoteSize(for: canonicalModelID)
     }
 
     func displayTitle(for id: String) -> String {
@@ -399,9 +439,55 @@ final class WhisperKitModelManager: ObservableObject {
     }
 
     func prefetchAllModelSizes() {
-        for model in Self.availableModels where shouldFetchRemoteSize(for: model.id) {
-            fetchRemoteSize(for: model.id)
+        guard prefetchTask == nil else { return }
+        let modelIDs = Self.availableModels
+            .map(\.id)
+            .filter { shouldFetchRemoteSize(for: $0) }
+        guard !modelIDs.isEmpty else { return }
+
+        let baseURL = hubBaseURL
+        prefetchTask = Task(priority: .utility) { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.prefetchTask = nil
+                }
+            }
+            for modelID in modelIDs {
+                guard let self else { return }
+                do {
+                    let bytes = try await Self.fetchRemoteModelBytes(
+                        modelID: modelID,
+                        baseURL: baseURL
+                    )
+                    guard !Task.isCancelled else { return }
+                    let text = bytes > 0
+                        ? Self.byteFormatter.string(fromByteCount: bytes)
+                        : AppLocalization.localizedString("Unknown")
+                    await MainActor.run {
+                        self.updateRemoteSizeCache(id: modelID, text: text)
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    await MainActor.run {
+                        self.updateRemoteSizeCache(id: modelID, text: AppLocalization.localizedString("Unknown"))
+                    }
+                }
+            }
         }
+    }
+
+    private static func loadPersistedRemoteSizeCache() -> [String: String] {
+        guard let data = UserDefaults.standard.data(forKey: AppPreferenceKey.whisperRemoteSizeCache),
+              let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    private static func savePersistedRemoteSizeCache(_ cache: [String: String]) {
+        guard let data = try? JSONEncoder().encode(cache) else { return }
+        UserDefaults.standard.set(data, forKey: AppPreferenceKey.whisperRemoteSizeCache)
     }
 
     private func fetchRemoteSize(for id: String) {
@@ -427,13 +513,13 @@ final class WhisperKitModelManager: ObservableObject {
                     ? Self.byteFormatter.string(fromByteCount: bytes)
                     : AppLocalization.localizedString("Unknown")
                 await MainActor.run {
-                    self.remoteSizeTextByID[canonicalModelID] = text
+                    self.updateRemoteSizeCache(id: canonicalModelID, text: text)
                 }
             } catch is CancellationError {
                 return
             } catch {
                 await MainActor.run {
-                    self.remoteSizeTextByID[canonicalModelID] = AppLocalization.localizedString("Unknown")
+                    self.updateRemoteSizeCache(id: canonicalModelID, text: AppLocalization.localizedString("Unknown"))
                 }
                 VoxtLog.warning(
                     "Failed to fetch Whisper remote size: model=\(canonicalModelID), error=\(error.localizedDescription)"
@@ -444,6 +530,11 @@ final class WhisperKitModelManager: ObservableObject {
         if canonicalModelID == modelID {
             sizeTask = task
         }
+    }
+
+    private func updateRemoteSizeCache(id: String, text: String) {
+        remoteSizeTextByID[id] = text
+        Self.savePersistedRemoteSizeCache(remoteSizeTextByID)
     }
 
     private static func fetchRemoteModelBytes(modelID: String, baseURL: URL) async throws -> Int64 {
@@ -691,9 +782,17 @@ final class WhisperKitModelManager: ObservableObject {
 
     private func finalizeDownloadState(for targetID: String) {
         activeDownload = nil
+        invalidateLocalCache(id: targetID)
         if targetID == modelID {
             checkExistingModel()
         }
+    }
+
+    private func invalidateLocalCache(id: String) {
+        let canonicalModelID = Self.canonicalModelID(id)
+        downloadedStateByID.removeValue(forKey: canonicalModelID)
+        directoryLookupCacheByID.removeValue(forKey: canonicalModelID)
+        localSizeTextByID.removeValue(forKey: canonicalModelID)
     }
 
     private func clearRepositoryMetadataCache() {

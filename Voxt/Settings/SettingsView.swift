@@ -5,6 +5,10 @@ import Speech
 import ApplicationServices
 import Combine
 
+private func settingsLocalized(_ key: String) -> String {
+    AppLocalization.localizedString(key)
+}
+
 struct SettingsView: View {
     let availableDictionaryHistoryScanModels: () -> [DictionaryHistoryScanModelOption]
     let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
@@ -18,9 +22,11 @@ struct SettingsView: View {
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = false
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
-    @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.transcriptionEngine) private var transcriptionEngineRaw = TranscriptionEngine.mlxAudio.rawValue
+    @AppStorage(AppPreferenceKey.featureSettings) private var featureSettingsRaw = ""
     @State private var selectedTab: SettingsTab
+    @State private var selectedFeatureTab: FeatureSettingsTab
+    @State private var sidebarMode: SettingsSidebarMode
     @State private var navigationRequest: SettingsNavigationRequest?
     @State private var hasMissingPermissions = false
     @State private var hasNoAvailableMicrophones = false
@@ -52,6 +58,8 @@ struct SettingsView: View {
         self.dictionarySuggestionStore = dictionarySuggestionStore
         self.appUpdateManager = appUpdateManager
         _selectedTab = State(initialValue: initialNavigationTarget.tab)
+        _selectedFeatureTab = State(initialValue: initialNavigationTarget.featureTab ?? .transcription)
+        _sidebarMode = State(initialValue: initialNavigationTarget.tab == .feature ? .feature : .root)
         _navigationRequest = State(initialValue: SettingsNavigationRequest(target: initialNavigationTarget))
         _displayMode = State(initialValue: initialDisplayMode)
     }
@@ -102,14 +110,12 @@ struct SettingsView: View {
             else {
                 return
             }
-            selectedTab = target.tab
-            navigationRequest = SettingsNavigationRequest(target: target)
+            applyNavigationTarget(target)
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtSettingsNavigate)) { notification in
             guard case .normal = displayMode else { return }
             guard let target = SettingsNavigationTarget(notification: notification) else { return }
-            selectedTab = target.tab
-            navigationRequest = SettingsNavigationRequest(target: target)
+            applyNavigationTarget(target)
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtInterfaceLanguageDidChange)) { _ in
             languageRefreshToken = UUID()
@@ -124,31 +130,50 @@ struct SettingsView: View {
             refreshModelConfigurationBadge()
         }
         .onChange(of: appEnhancementEnabled) { _, isEnabled in
-            if !isEnabled, selectedTab == .appEnhancement {
+            if !isEnabled, selectedTab == .feature, selectedFeatureTab == .appEnhancement {
                 navigationRequest = nil
-                selectedTab = .model
+                selectedFeatureTab = .rewrite
             }
         }
         .onChange(of: muteSystemAudioWhileRecording) { _, _ in
             refreshPermissionBadge()
         }
-        .onChange(of: meetingNotesBetaEnabled) { _, _ in
-            refreshPermissionBadge()
-        }
         .onChange(of: transcriptionEngineRaw) { _, _ in
             refreshPermissionBadge()
+        }
+        .onChange(of: featureSettingsRaw) { _, _ in
+            refreshPermissionBadge()
+            refreshModelConfigurationBadge()
+            if !meetingEnabled, selectedTab == .feature, selectedFeatureTab == .meeting {
+                navigationRequest = nil
+                selectedFeatureTab = .transcription
+            }
         }
     }
 
     private var normalSettingsContent: some View {
         HStack(alignment: .top, spacing: 8) {
             SettingsSidebar(
+                sidebarMode: $sidebarMode,
                 selectedTab: $selectedTab,
+                selectedFeatureTab: $selectedFeatureTab,
                 onSelectTab: { tab in
                     navigationRequest = nil
-                    selectedTab = tab
+                    switchToRootTab(tab)
+                },
+                onSelectFeatureTab: { tab in
+                    navigationRequest = nil
+                    switchToFeatureTab(tab)
+                },
+                onReturnToRoot: {
+                    navigationRequest = nil
+                    sidebarMode = .root
+                    if selectedTab == .feature {
+                        selectedTab = .report
+                    }
                 },
                 appEnhancementEnabled: appEnhancementEnabled,
+                meetingEnabled: meetingEnabled,
                 hasMissingPermissions: hasMissingPermissions,
                 hasNoAvailableMicrophones: hasNoAvailableMicrophones,
                 hasMissingModelConfigurationIssues: !missingModelConfigurationIssues.isEmpty,
@@ -176,13 +201,13 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
-                    Text(selectedTab.titleKey)
+                    Text(currentTitle)
                         .font(.title3.weight(.semibold))
 
                     Spacer(minLength: 0)
 
-                    if selectedTab == .report {
-                        Button("Guide") {
+                    if sidebarMode == .root, selectedTab == .report {
+                        Button(settingsLocalized("Guide")) {
                             enterOnboarding(step: .language)
                         }
                         .buttonStyle(SettingsPillButtonStyle())
@@ -212,6 +237,14 @@ struct SettingsView: View {
         AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
     }
 
+    private var featureSettings: FeatureSettings {
+        FeatureSettingsStore.load(defaults: .standard)
+    }
+
+    private var meetingEnabled: Bool {
+        featureSettings.meeting.enabled
+    }
+
     private var onboardingStepBinding: Binding<OnboardingStep> {
         Binding(
             get: {
@@ -239,7 +272,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var tabContent: some View {
-        if selectedTab == .history || selectedTab == .report || selectedTab == .appEnhancement || selectedTab == .dictionary {
+        if selectedTab == .history || selectedTab == .report || selectedTab == .feature || selectedTab == .dictionary || selectedTab == .model {
             staticTabContent
         } else {
             scrollableTabContent
@@ -265,8 +298,22 @@ struct SettingsView: View {
                     onIngestSuggestionsFromHistory: onIngestDictionarySuggestionsFromHistory,
                     navigationRequest: navigationRequest
                 )
-            } else if selectedTab == .appEnhancement {
-                AppEnhancementSettingsView(navigationRequest: navigationRequest)
+            } else if selectedTab == .feature {
+                FeatureSettingsView(
+                    selectedTab: selectedFeatureTab,
+                    navigationRequest: navigationRequest,
+                    mlxModelManager: mlxModelManager,
+                    whisperModelManager: whisperModelManager,
+                    customLLMManager: customLLMManager
+                )
+            } else if selectedTab == .model {
+                ModelSettingsView(
+                    mlxModelManager: mlxModelManager,
+                    whisperModelManager: whisperModelManager,
+                    customLLMManager: customLLMManager,
+                    missingConfigurationIssues: missingModelConfigurationIssues,
+                    navigationRequest: navigationRequest
+                )
             } else {
                 ReportSettingsView(historyStore: historyStore)
             }
@@ -302,6 +349,8 @@ struct SettingsView: View {
                             navigationRequest: navigationRequest
                         )
                     case .dictionary:
+                        EmptyView()
+                    case .feature:
                         EmptyView()
                     case .appEnhancement:
                         EmptyView()
@@ -350,7 +399,8 @@ struct SettingsView: View {
         let context = SettingsPermissionRequirementContext(
             selectedEngine: engine,
             muteSystemAudioWhileRecording: muteSystemAudioWhileRecording,
-            meetingNotesEnabled: meetingNotesBetaEnabled
+            meetingNotesEnabled: true,
+            featureSettings: FeatureSettingsStore.load(defaults: .standard)
         )
 
         hasMissingPermissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
@@ -388,12 +438,58 @@ struct SettingsView: View {
         displayMode = .normal
     }
 
+    private var currentTitle: LocalizedStringKey {
+        sidebarMode == .feature ? selectedFeatureTab.titleKey : selectedTab.titleKey
+    }
+
+    private func applyNavigationTarget(_ target: SettingsNavigationTarget) {
+        navigationRequest = SettingsNavigationRequest(target: target)
+        if let featureTab = target.featureTab {
+            if FeatureSettingsTab.visibleTabs(appEnhancementEnabled: appEnhancementEnabled, meetingEnabled: meetingEnabled).contains(featureTab) {
+                selectedFeatureTab = featureTab
+            } else {
+                selectedFeatureTab = .transcription
+            }
+        }
+        if target.tab == .feature {
+            sidebarMode = .feature
+            selectedTab = .feature
+        } else {
+            sidebarMode = .root
+            selectedTab = target.tab
+        }
+    }
+
+    private func switchToRootTab(_ tab: SettingsTab) {
+        if tab == .feature {
+            selectedTab = .feature
+            sidebarMode = .feature
+            if !FeatureSettingsTab.visibleTabs(appEnhancementEnabled: appEnhancementEnabled, meetingEnabled: meetingEnabled).contains(selectedFeatureTab) {
+                selectedFeatureTab = .transcription
+            }
+            return
+        }
+        sidebarMode = .root
+        selectedTab = tab
+    }
+
+    private func switchToFeatureTab(_ tab: FeatureSettingsTab) {
+        selectedTab = .feature
+        sidebarMode = .feature
+        selectedFeatureTab = tab
+    }
+
 }
 
 private struct SettingsSidebar: View {
+    @Binding var sidebarMode: SettingsSidebarMode
     @Binding var selectedTab: SettingsTab
+    @Binding var selectedFeatureTab: FeatureSettingsTab
     let onSelectTab: (SettingsTab) -> Void
+    let onSelectFeatureTab: (FeatureSettingsTab) -> Void
+    let onReturnToRoot: () -> Void
     let appEnhancementEnabled: Bool
+    let meetingEnabled: Bool
     let hasMissingPermissions: Bool
     let hasNoAvailableMicrophones: Bool
     let hasMissingModelConfigurationIssues: Bool
@@ -405,32 +501,51 @@ private struct SettingsSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(visibleTabs) { tab in
-                Button {
-                    onSelectTab(tab)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: tab.iconName)
-                            .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 16)
-                        Text(tab.titleKey)
-                            .font(.system(size: 13, weight: .medium))
-                        Spacer(minLength: 0)
+            if sidebarMode == .root {
+                ForEach(visibleTabs) { tab in
+                    Button {
+                        onSelectTab(tab)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: tab.iconName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 16)
+                            Text(tab.titleKey)
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(SettingsSidebarItemButtonStyle(isActive: tab == selectedTab))
                 }
-                .buttonStyle(SettingsSidebarItemButtonStyle(isActive: tab == selectedTab))
+            } else {
+                ForEach(visibleFeatureTabs) { tab in
+                    Button {
+                        onSelectFeatureTab(tab)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: tab.iconName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 16)
+                            Text(tab.titleKey)
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SettingsSidebarItemButtonStyle(isActive: tab == selectedFeatureTab))
+                }
             }
 
             Spacer(minLength: 8)
 
-            if hasMissingPermissions {
+            if sidebarMode == .root, hasMissingPermissions {
                 Button(action: onTapPermissionBadge) {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.red)
-                        Text(String(localized: "Permissions Disabled"))
+                        Text(settingsLocalized("Permissions Disabled"))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.red)
                         Spacer(minLength: 0)
@@ -439,13 +554,13 @@ private struct SettingsSidebar: View {
                 .buttonStyle(SettingsStatusButtonStyle(tint: .red))
             }
 
-            if hasNoAvailableMicrophones {
+            if sidebarMode == .root, hasNoAvailableMicrophones {
                 Button(action: onTapMicrophoneBadge) {
                     HStack(spacing: 8) {
                         Image(systemName: "mic.slash.fill")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.red)
-                        Text(String(localized: "No Microphone Available"))
+                        Text(settingsLocalized("No Microphone Available"))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.red)
                         Spacer(minLength: 0)
@@ -454,13 +569,13 @@ private struct SettingsSidebar: View {
                 .buttonStyle(SettingsStatusButtonStyle(tint: .red))
             }
 
-            if hasMissingModelConfigurationIssues {
+            if sidebarMode == .root, hasMissingModelConfigurationIssues {
                 Button(action: onTapModelBadge) {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.orange)
-                        Text(String(localized: "Model Setup Required"))
+                        Text(settingsLocalized("Model Setup Required"))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.orange)
                         Spacer(minLength: 0)
@@ -469,19 +584,27 @@ private struct SettingsSidebar: View {
                 .buttonStyle(SettingsStatusButtonStyle(tint: .orange))
             }
 
-            if updateBadgeState != .none {
+            if sidebarMode == .root, updateBadgeState != .none {
                 Button(action: onTapUpdateBadge) {
                     HStack(spacing: 8) {
                         Image(systemName: updateBadgeState.iconName)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(updateBadgeState.tintColor)
-                        Text(updateBadgeState.titleKey)
+                        Text(updateBadgeState.title)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(updateBadgeState.tintColor)
                         Spacer(minLength: 0)
                     }
                 }
                 .buttonStyle(SettingsStatusButtonStyle(tint: updateBadgeState.tintColor))
+            }
+
+            if sidebarMode == .feature {
+                Button(action: onReturnToRoot) {
+                    Label(settingsLocalized("Back"), systemImage: "chevron.left")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SettingsPillButtonStyle())
             }
 
         }
@@ -494,6 +617,10 @@ private struct SettingsSidebar: View {
 
     private var visibleTabs: [SettingsTab] {
         SettingsTab.visibleTabs(appEnhancementEnabled: appEnhancementEnabled)
+    }
+
+    private var visibleFeatureTabs: [FeatureSettingsTab] {
+        FeatureSettingsTab.visibleTabs(appEnhancementEnabled: appEnhancementEnabled, meetingEnabled: meetingEnabled)
     }
 }
 
@@ -524,14 +651,14 @@ private enum UpdateBadgeState: Equatable {
         }
     }
 
-    var titleKey: LocalizedStringKey {
+    var title: String {
         switch self {
         case .none:
-            return "New Version Available"
+            return settingsLocalized("New Version Available")
         case .checkFailed:
-            return "Update Check Failed"
+            return settingsLocalized("Update Check Failed")
         case .newVersion:
-            return "New Version Available"
+            return settingsLocalized("New Version Available")
         }
     }
 }

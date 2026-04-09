@@ -69,11 +69,95 @@ final class SettingsTypesTests: XCTestCase {
         XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .meeting, snapshot: blockedSnapshot), .needsSetup)
         XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .finish, snapshot: blockedSnapshot), .done)
         XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .meeting, snapshot: readySnapshot), .ready)
+
+        let meetingDisabledSnapshot = OnboardingStepStatusSnapshot(
+            hasModelIssues: false,
+            hasRecordingMicrophone: true,
+            hasRecordingPermissions: true,
+            hasRewriteIssues: false,
+            appEnhancementEnabled: false,
+            meetingNotesEnabled: false,
+            hasMeetingIssues: true
+        )
+        XCTAssertEqual(OnboardingStepStatusResolver.resolve(step: .meeting, snapshot: meetingDisabledSnapshot), .optional)
     }
 
     func testVisibleTabsHideAppEnhancementWhenFeatureDisabled() {
         XCTAssertFalse(SettingsTab.visibleTabs(appEnhancementEnabled: false).contains(.appEnhancement))
-        XCTAssertTrue(SettingsTab.visibleTabs(appEnhancementEnabled: true).contains(.appEnhancement))
+        XCTAssertFalse(SettingsTab.visibleTabs(appEnhancementEnabled: true).contains(.appEnhancement))
+        XCTAssertTrue(SettingsTab.visibleTabs(appEnhancementEnabled: true).contains(.feature))
+    }
+
+    func testFeatureVisibleTabsHideAppEnhancementWhenDisabled() {
+        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, meetingEnabled: true).contains(.appEnhancement))
+        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: true).contains(.appEnhancement))
+    }
+
+    func testFeatureVisibleTabsHideMeetingWhenDisabled() {
+        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: false).contains(.meeting))
+        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: true).contains(.meeting))
+    }
+
+    func testHotkeyShortcutVisibilityHidesMeetingWhenDisabled() {
+        XCTAssertEqual(
+            HotkeyShortcutVisibility.visibleKinds(meetingEnabled: false),
+            [.transcription, .translation, .rewrite]
+        )
+        XCTAssertEqual(
+            HotkeyShortcutVisibility.visibleKinds(meetingEnabled: true),
+            [.transcription, .translation, .rewrite, .meeting]
+        )
+    }
+
+    func testFeatureNavigationTargetMapsAppBranchSectionToFeatureMode() {
+        let target = SettingsNavigationTarget(tab: .feature, section: .appBranchGroups)
+
+        XCTAssertEqual(target.tab, .feature)
+        XCTAssertEqual(target.featureTab, .appEnhancement)
+    }
+
+    func testPermissionRequirementResolverAggregatesFeatureSelections() {
+        let context = SettingsPermissionRequirementContext(
+            selectedEngine: .mlxAudio,
+            muteSystemAudioWhileRecording: false,
+            meetingNotesEnabled: false,
+            featureSettings: FeatureSettings(
+                transcription: .init(
+                    asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                    llmEnabled: false,
+                    llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                    prompt: AppPreferenceKey.defaultEnhancementPrompt
+                ),
+                translation: .init(
+                    asrSelectionID: .dictation,
+                    modelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                    targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
+                    prompt: AppPreferenceKey.defaultTranslationPrompt,
+                    replaceSelectedText: true
+                ),
+                rewrite: .init(
+                    asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                    llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                    prompt: AppPreferenceKey.defaultRewritePrompt,
+                    appEnhancementEnabled: false
+                ),
+                meeting: .init(
+                    enabled: true,
+                    asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                    summaryModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                    summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
+                    summaryAutoGenerate: true,
+                    realtimeTranslateEnabled: false,
+                    realtimeTargetLanguageRawValue: "",
+                    showOverlayInScreenShare: false
+                )
+            )
+        )
+
+        let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
+
+        XCTAssertTrue(permissions.contains(.speechRecognition))
+        XCTAssertTrue(permissions.contains(.systemAudioCapture))
     }
 
     func testVoiceEndCommandPresetResolvesBuiltInCommands() {
