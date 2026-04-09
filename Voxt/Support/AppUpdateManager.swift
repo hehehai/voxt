@@ -27,6 +27,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     @Published private(set) var hasUpdate = false
     @Published private(set) var latestVersion: String?
     @Published private(set) var updateCheckIssueMessage: String?
+    @Published private(set) var isPreparingInteractiveUpdateUI = false
     private var latestDownloadedUpdateURL: URL?
     var onUpdatePresentationWillBegin: (() -> Void)?
     var onUpdatePresentationDidEnd: (() -> Void)?
@@ -74,6 +75,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         }
 
         logInstallerServiceAvailability()
+        setPreparingInteractiveUpdateUI(true)
         NSApp.activate(ignoringOtherApps: true)
         VoxtLog.info("Manual update check triggered via Sparkle user interface.")
         updaterController.updater.checkForUpdates()
@@ -117,6 +119,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
         let nsError = error as NSError
         if isNoUpdateFoundError(nsError) {
+            setPreparingInteractiveUpdateUI(false)
             setUpdateState(hasUpdate: false, latestVersion: nil, issue: nil, downloadedURL: nil)
             VoxtLog.info(
                 """
@@ -163,6 +166,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
+        setPreparingInteractiveUpdateUI(false)
         setUpdateState(hasUpdate: false, latestVersion: nil, issue: nil, downloadedURL: nil)
         let nsError = error as NSError
         VoxtLog.info(
@@ -240,24 +244,33 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     }
 
     private var selectedFeedURLString: String {
+        let baseFeedURLString: String
         // Prefer stable feed by default. Beta feed should be explicitly opted in
         // because local/dev beta channels may contain test-only appcast entries.
         if let channel = ProcessInfo.processInfo.environment["VOXT_UPDATE_CHANNEL"]?.lowercased() {
             switch channel {
             case "beta":
                 if canUseBetaFeed {
-                    return betaFeedURLString
+                    baseFeedURLString = betaFeedURLString
+                    break
                 }
 
                 VoxtLog.info("VOXT_UPDATE_CHANNEL=beta ignored; using stable appcast unless beta is explicitly enabled.")
-                return stableFeedURLString
-            case "stable":
-                return stableFeedURLString
-            default:
+                baseFeedURLString = stableFeedURLString
                 break
+            case "stable":
+                baseFeedURLString = stableFeedURLString
+                break
+            default:
+                baseFeedURLString = stableFeedURLString
             }
+        } else {
+            baseFeedURLString = stableFeedURLString
         }
-        return stableFeedURLString
+        return Self.localizedFeedURLString(
+            baseURLString: baseFeedURLString,
+            interfaceLanguage: AppLocalization.language
+        )
     }
 
     private var canUseBetaFeed: Bool {
@@ -344,11 +357,18 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         NotificationCenter.default.post(name: .voxtUpdateAvailabilityDidChange, object: nil)
     }
 
+    private func setPreparingInteractiveUpdateUI(_ isPreparing: Bool) {
+        guard isPreparingInteractiveUpdateUI != isPreparing else { return }
+        isPreparingInteractiveUpdateUI = isPreparing
+        NotificationCenter.default.post(name: .voxtUpdateAvailabilityDidChange, object: nil)
+    }
+
     private func isNoUpdateFoundError(_ error: NSError) -> Bool {
         error.domain == SUSparkleErrorDomain && error.code == 1001
     }
 
     private func beginUpdatePresentationIfNeeded(reason: String) {
+        setPreparingInteractiveUpdateUI(false)
         guard !isPresentingUpdateUI else { return }
         isPresentingUpdateUI = true
         VoxtLog.info("Sparkle update UI became active. reason=\(reason), source=\(lastCheckSource.description)")
@@ -356,10 +376,25 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     }
 
     private func finishUpdatePresentationIfNeeded() {
+        setPreparingInteractiveUpdateUI(false)
         guard isPresentingUpdateUI else { return }
         isPresentingUpdateUI = false
         VoxtLog.info("Sparkle update UI finished. source=\(lastCheckSource.description)")
         onUpdatePresentationDidEnd?()
+    }
+
+    static func localizedFeedURLString(baseURLString: String, interfaceLanguage: AppInterfaceLanguage) -> String {
+        guard var components = URLComponents(string: baseURLString) else {
+            return baseURLString
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { $0.name == "lang" }
+        queryItems.append(
+            URLQueryItem(name: "lang", value: interfaceLanguage.localeIdentifier)
+        )
+        components.queryItems = queryItems
+        return components.url?.absoluteString ?? baseURLString
     }
 }
 

@@ -270,6 +270,7 @@
 "Latest version: %@" = "Latest version: %@";
 "Checking for updates…" = "Checking for updates…";
 "No update information yet." = "No update information yet.";
+"Opening update window…" = "Opening update window…";
 "Check Now" = "Check Now";
 "Skip This Version" = "Skip This Version";
 "Close" = "Close";

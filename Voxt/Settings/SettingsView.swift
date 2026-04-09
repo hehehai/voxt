@@ -260,6 +260,9 @@ struct SettingsView: View {
     }
 
     private var updateBadgeState: UpdateBadgeState {
+        if appUpdateManager.isPreparingInteractiveUpdateUI {
+            return .openingWindow(appUpdateManager.latestVersion)
+        }
         if let issue = appUpdateManager.updateCheckIssueMessage,
            !issue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .checkFailed(issue)
@@ -587,9 +590,16 @@ private struct SettingsSidebar: View {
             if sidebarMode == .root, updateBadgeState != .none {
                 Button(action: onTapUpdateBadge) {
                     HStack(spacing: 8) {
-                        Image(systemName: updateBadgeState.iconName)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(updateBadgeState.tintColor)
+                        if updateBadgeState.showsSpinner {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(updateBadgeState.tintColor)
+                                .frame(width: 13, height: 13)
+                        } else {
+                            Image(systemName: updateBadgeState.iconName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(updateBadgeState.tintColor)
+                        }
                         Text(updateBadgeState.title)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(updateBadgeState.tintColor)
@@ -628,6 +638,7 @@ private enum UpdateBadgeState: Equatable {
     case none
     case checkFailed(String)
     case newVersion(String?)
+    case openingWindow(String?)
 
     var iconName: String {
         switch self {
@@ -636,6 +647,8 @@ private enum UpdateBadgeState: Equatable {
         case .checkFailed:
             return "exclamationmark.triangle.fill"
         case .newVersion:
+            return "arrow.down.circle.fill"
+        case .openingWindow:
             return "arrow.down.circle.fill"
         }
     }
@@ -648,6 +661,17 @@ private enum UpdateBadgeState: Equatable {
             return .orange
         case .newVersion:
             return .green
+        case .openingWindow:
+            return .green
+        }
+    }
+
+    var showsSpinner: Bool {
+        switch self {
+        case .openingWindow:
+            return true
+        case .none, .checkFailed, .newVersion:
+            return false
         }
     }
 
@@ -659,6 +683,8 @@ private enum UpdateBadgeState: Equatable {
             return settingsLocalized("Update Check Failed")
         case .newVersion:
             return settingsLocalized("New Version Available")
+        case .openingWindow:
+            return settingsLocalized("Opening update window…")
         }
     }
 }

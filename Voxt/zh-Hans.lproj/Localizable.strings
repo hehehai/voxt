@@ -270,6 +270,7 @@
 "Latest version: %@" = "最新版本：%@";
 "Checking for updates…" = "正在检查更新…";
 "No update information yet." = "暂无更新信息。";
+"Opening update window…" = "正在打开更新窗口…";
 "Check Now" = "立即检查";
 "Skip This Version" = "跳过此版本";
 "Close" = "关闭";

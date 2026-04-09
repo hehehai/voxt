@@ -75,4 +75,12 @@ final class LocalizationResourcesTests: XCTestCase {
             XCTAssertNotEqual(japanese, key, "Expected ja translation for \(key)")
         }
     }
+
+    func testOpeningUpdateWindowLabelIsLocalizedInSupportedLanguages() {
+        let key = "Opening update window…"
+
+        XCTAssertEqual(AppLocalization.localizedString(key, localeIdentifier: "en"), key)
+        XCTAssertEqual(AppLocalization.localizedString(key, localeIdentifier: "zh-Hans"), "正在打开更新窗口…")
+        XCTAssertEqual(AppLocalization.localizedString(key, localeIdentifier: "ja"), "更新ウィンドウを開いています…")
+    }
 }
