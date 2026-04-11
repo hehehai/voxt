@@ -6,6 +6,19 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-04-11
+
+### Added
+- Added a dedicated transcription detail window with chat-style history, timestamps, copy actions, and follow-up questions.
+
+### Changed
+- Reworked rewrite follow-up interactions so continue mode keeps the action available, streams updates more clearly, and follows new content more reliably.
+- Improved remote LLM provider handling and streaming parsing for rewrite conversations, including better compatibility with Aliyun chat-completions style responses.
+
+### Fixed
+- Fixed feature-specific model routing so transcription, translation, rewrite, and meeting workflows use their own configured models more consistently in runtime and history.
+- Fixed ASR runtime switching so changing the selected speech model no longer leaves the first recording attempt unresponsive.
+
 ## [1.9.1] - 2026-04-10
 
 ### Fixed
