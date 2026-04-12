@@ -124,14 +124,17 @@ enum RewriteAnswerPayloadParser {
                 }
             }
 
+            let streamingLikeLine = matchedChunkLine || looksLikeStreamingEnvelopeFragment(line)
+
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) else {
-                if let recovered = recoveredStreamingChunkContent(fromRawLine: line) {
+                if streamingLikeLine,
+                   let recovered = recoveredStreamingChunkContent(fromRawLine: line) {
                     aggregated.append(recovered)
                     matchedChunkLine = true
                     continue
                 }
-                if looksLikeStreamingEnvelopeFragment(line) {
+                if streamingLikeLine {
                     matchedChunkLine = true
                     continue
                 }
@@ -246,18 +249,64 @@ enum RewriteAnswerPayloadParser {
     }
 
     private static func decodeStreamingJSONStringFragment(_ value: String) -> String {
-        let wrapped = "\"\(value)\""
+        let repairedValue = repairedMalformedStreamingFragment(value)
+        let wrapped = "\"\(repairedValue)\""
         if let data = wrapped.data(using: .utf8),
            let decoded = try? JSONDecoder().decode(String.self, from: data) {
             return decoded
         }
 
-        return value
+        return repairedValue
             .replacingOccurrences(of: #"\\n"#, with: "\n", options: .regularExpression)
             .replacingOccurrences(of: #"\\r"#, with: "\r", options: .regularExpression)
             .replacingOccurrences(of: #"\\t"#, with: "\t", options: .regularExpression)
             .replacingOccurrences(of: #"\\\""#, with: "\"", options: .regularExpression)
             .replacingOccurrences(of: #"\\\\"#, with: "\\", options: .regularExpression)
+    }
+
+    private static func repairedMalformedStreamingFragment(_ value: String) -> String {
+        var repaired = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !repaired.isEmpty else { return "" }
+
+        let metadataMarkers = [
+            "},\"finish_reason\"",
+            "},\"index\"",
+            "},\"object\"",
+            "},\"usage\"",
+            "},\"created\"",
+            "},\"system_fingerprint\"",
+            "},\"model\"",
+            "},\"id\"",
+            "},\"logprobs\"",
+            "}],\"object\""
+        ]
+
+        if let markerRange = metadataMarkers
+            .compactMap({ repaired.range(of: $0) })
+            .min(by: { $0.lowerBound < $1.lowerBound }) {
+            repaired = String(repaired[..<markerRange.lowerBound])
+        }
+
+        repaired = repaired.trimmingCharacters(in: .whitespacesAndNewlines)
+        repaired = repaired.replacingOccurrences(
+            of: #"",\s*""$"#,
+            with: "",
+            options: .regularExpression
+        )
+
+        if repaired.hasSuffix("\"}\"") {
+            repaired.removeLast(3)
+        } else if repaired.hasSuffix("\"}") || repaired.hasSuffix("}\"") {
+            repaired.removeLast(2)
+        }
+
+        repaired = repaired.replacingOccurrences(
+            of: #"(:\s*)""$"#,
+            with: #"$1""#,
+            options: .regularExpression
+        )
+
+        return repaired.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func hasOddUnescapedQuoteCount(_ text: String) -> Bool {
@@ -323,6 +372,18 @@ enum RewriteAnswerPayloadParser {
             let prefix = cleaned[..<openingBrace].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if prefix.contains("reasoning") || prefix.contains("thought") || prefix.contains("思考") {
                 cleaned = String(cleaned[openingBrace...])
+            }
+        }
+
+        if let keyRange = cleaned.range(
+            of: #"(?:["']?(?:title|heading|summary|content|answer|body|text)["']?\s*[:：])"#,
+            options: .regularExpression
+        ) {
+            let prefix = cleaned[..<keyRange.lowerBound]
+            let shellCharacters = CharacterSet(charactersIn: " \t\r\n{}[]\"',")
+            if !prefix.isEmpty,
+               prefix.unicodeScalars.allSatisfy({ shellCharacters.contains($0) }) {
+                cleaned = String(cleaned[keyRange.lowerBound...])
             }
         }
 
@@ -527,6 +588,16 @@ enum RewriteAnswerPayloadParser {
             .replacingOccurrences(of: "\\t", with: "\t")
             .replacingOccurrences(of: "\\\"", with: "\"")
             .replacingOccurrences(of: "\\\\", with: "\\")
+
+        if hasOddUnescapedQuoteCount(normalized), normalized.hasPrefix("\"") {
+            normalized.removeFirst()
+        }
+
+        normalized = normalized.replacingOccurrences(
+            of: #"(?<=[\p{Han}A-Za-z0-9])"(?=[\p{Han}A-Za-z0-9])"#,
+            with: "",
+            options: .regularExpression
+        )
 
         return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
     }
