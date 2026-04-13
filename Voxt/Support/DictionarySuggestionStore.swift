@@ -7,6 +7,17 @@ enum DictionarySuggestionSourceContext: String, Codable {
     case repeatObservation
 }
 
+enum DictionaryHistoryScanPromptLanguageSupport {
+    static let noneValue = "None"
+
+    static func otherLanguagesPromptValue(from codes: [String]) -> String {
+        let options = Array(codes.dropFirst())
+            .compactMap(UserMainLanguageOption.option(for:))
+        guard !options.isEmpty else { return noneValue }
+        return options.map(\.promptName).joined(separator: ", ")
+    }
+}
+
 enum DictionarySuggestionStatus: String, Codable {
     case pending
     case dismissed
@@ -96,6 +107,7 @@ struct DictionaryHistoryScanCheckpoint: Codable, Equatable {
 
 struct DictionaryHistoryScanProgress: Equatable {
     var isRunning = false
+    var isCancellationRequested = false
     var processedCount = 0
     var totalCount = 0
     var newSuggestionCount = 0
@@ -139,39 +151,77 @@ struct DictionarySuggestionFilterSettings: Codable, Equatable, Hashable {
     static let maximumMaxCandidates = 50
 
     static let defaultPrompt = """
-    You're building a user dictionary for a speech-to-text app. Review history records to extract only terms worthy of recommendation. Ensure the dictionary is accurate, relevant, and aligned with user needs.
+    You are building a personal dictionary for a speech-to-text app. Be conservative. Only output high-confidence terms that are genuinely worth storing in a custom dictionary.
 
-    ### Task Scope & Inclusion/Exclusion Rules
-    Include only these verified terms:
-    1. Personal names (specific individuals)
-    2. Organization/brand/product/app/project names (companies, product models, app titles, project codes)
-    3. Technical acronyms (domain-specific abbreviations with clear meanings)
-    4. Uncommon domain jargon or consistent user-specific spellings
+    ### Keep Only These Kinds of Terms
+    1. Person names
+    2. Place names, venue names, region names, or landmarks that are specific and uncommon
+    3. Company, brand, product, app, project, team, or feature names
+    4. Acronyms or abbreviations with clear domain meaning
+    5. Distinctive industry terminology or stable user-specific spellings
 
-    Exclude:
-    1. Common English words (e.g., "hello", "run", "happy")
-    2. Generic verbs/adjectives/adverbs (e.g., "walk", "quick", "very")
-    3. Ordinary capitalized words at sentence starts (e.g., "The")
-    4. Filler words (e.g., "um", "like", "you know")
-    5. Terms in `dictionaryHitTerms`/`dictionaryCorrectedTerms` unless records have a new, recommendable spelling (note the new spelling)
-    6. Obviously incorrect words
-    7. For Asian languages (Chinese, Korean, Japanese): Avoid common character combinations; only include proper nouns, domain jargon, or unique user spellings
+    ### Hard Exclusions
+    1. Common everyday words in the user's primary spoken language or any other frequently used language
+    2. Generic nouns, verbs, adjectives, adverbs, fillers, or discourse words
+    3. ASR mistakes, malformed fragments, partial words, repeated fragments, or words that are obviously mis-transcribed in context
+    4. Long phrases, clauses, commands, sentence fragments, or anything that looks like a chunk of the transcript instead of a dictionary term
+    5. Common words from a secondary language that appear inside mixed-language speech unless they are clearly a proper noun, acronym, or technical term
+    6. Terms already listed in `dictionaryHitTerms` or `dictionaryCorrectedTerms`, unless the history clearly shows a new exact spelling that should replace the previous form
+    7. Pure numbers, dates, times, IDs, email addresses, URLs, file paths, or punctuation-heavy strings
+    8. High-frequency function words or general-purpose vocabulary in any declared user language, even if they appear repeatedly
+    9. Generic travel, logistics, office, and UI vocabulary such as 航班, 车次, 地铁, 高铁, 酒店, 会议, 邮件, 文件, token, prompt, model, button, setting, unless the transcript clearly indicates a specific proper noun, product name, or stable domain phrase that is uncommon for general users
+    10. Generic reference phrases such as 我们的规则, 这个问题, 那个功能, our rule, this issue, that feature
 
-    ### Priority & Validation Rules
-    - Prioritize terms with >=2 occurrences
-    - Analyze based on the user's main language
-    - Single-record terms are included only if:
-      - Clearly a proper noun (distinctive name/company)
-      - Domain-specific technical term with clear context (e.g., rare medical jargon defined in the record)
-    - For Asian languages: Ensure terms aren't common everyday expressions; check contextual relevance
+    ### Length Rules
+    - Prefer single words or very short noun phrases
+    - English or Latin-script terms should usually be 1 to 4 words, and must not exceed 6 words
+    - English or Latin-script terms should not exceed 32 letters total unless they are a well-known acronym or product name
+    - Chinese, Japanese, or Korean terms should usually be short and must not exceed 6 characters unless they are a clearly established proper noun
 
-    ### Input/Output Specifications
-    - User's main language: {{USER_MAIN_LANGUAGE}}
-    - Input: {{HISTORY_RECORDS}} (XML-wrapped speech-to-text history)
-    - Output: Structured list of recommended terms
-      - One term per line
-      - Prefer short terms
-      - Return null if no worthy terms
+    ### Decision Rules
+    - Prioritize terms that appear at least 2 times
+    - Single-occurrence terms are allowed only when they are unmistakably a person name, place name, organization name, product name, acronym, or domain term
+    - Analyze using the user's main language and the surrounding transcript context
+    - Treat the primary spoken language and the other frequently used languages as ordinary daily vocabulary for this user
+    - Repetition alone is not enough. A repeated common word must still be excluded
+    - In mixed-language speech, do not extract a term just because it is from a secondary language; keep it only when it is clearly a proper noun, acronym, brand, product name, or technical term
+    - If a word would be familiar to most ordinary speakers of that language, exclude it
+    - If a candidate is a broad category label instead of a unique named entity or distinctive term, exclude it
+    - Well-known cities, countries, and everyday location names should usually be excluded unless the transcript shows they are genuinely user-specific dictionary targets
+    - If you are unsure whether a term is common, generic, or an ASR error, exclude it
+    - Preserve the exact casing and spelling for accepted names and acronyms
+
+    ### Three Filtering Principles
+    1. Common vocabulary never belongs in the dictionary, even if it appears often
+    2. Context-only items do not belong in the dictionary, such as route endpoints, transport numbers, UI labels, or one-off workflow words that are only needed for the current sentence
+    3. Keep only stable correction targets: names, brands, acronyms, product names, technical terms, or durable user-specific terminology
+
+    ### Cross-Language Guidance
+    - Apply the same exclusion standard to every language listed for the user, including Chinese, English, Japanese, Korean, Thai, and any other declared language
+    - Do not rely on a fixed Chinese-only or English-only stopword list; generalize the same "exclude high-frequency common vocabulary" rule to all declared languages
+    - A secondary-language word inside mixed-language speech is usually not dictionary-worthy if it is still a common word in that language
+
+    ### Quick Examples
+    - Exclude: 航班, 车次, 地铁, 酒店, 会议, 邮件, 文件
+    - Exclude: flight, train, station, schedule, email, file, token, prompt, model, button, setting, company
+    - Exclude when they are only route endpoints or transport identifiers in a travel query: origin city, destination city, train number, flight number such as K130, MU5735, G1234
+    - Keep: OpenAI, Claude, Bangkok Bank, TensorRT, Kubernetes, 清迈大学
+    - Keep only when clearly specific and uncommon in context: product names, acronyms, person names, place names, brand names, technical terms, stable internal project names
+
+    ### Output Rules
+    - User's primary spoken language: {{USER_MAIN_LANGUAGE}}
+    - Other frequently used languages: {{USER_OTHER_LANGUAGES}}
+    - Input: {{HISTORY_RECORDS}}
+    - Output must be a JSON array
+    - Each array item must be an object with exactly one field: {"term": "accepted term"}
+    - Return [] if there are no worthy terms
+    - Do not return prose, markdown, code fences, explanations, or any extra fields
+
+    Example:
+    [
+      { "term": "OpenAI" },
+      { "term": "MCP" }
+    ]
     """
 
     static let defaultValue = DictionarySuggestionFilterSettings(
@@ -190,6 +240,285 @@ struct DictionarySuggestionFilterSettings: Codable, Equatable, Hashable {
                 Self.maximumMaxCandidates
             )
         )
+    }
+}
+
+enum DictionaryHistoryScanCandidateValidator {
+    static func shouldAccept(term: String) -> Bool {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isStructurallyReasonable(trimmed) && !isClearlyGenericVocabulary(trimmed)
+    }
+
+    static func shouldAccept(term: String, evidenceSample: String) -> Bool {
+        guard shouldAccept(term: term) else { return false }
+        let sample = evidenceSample.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sample.isEmpty else { return true }
+        return !isContextSpecificArtifact(term: term, in: sample)
+    }
+
+    private static let sentencePunctuation: Set<Character> = [
+        ".", ",", ":", ";", "!", "?", "，", "。", "：", "；", "！", "？", "、"
+    ]
+
+    private static let genericEnglishTerms: Set<String> = [
+        "button",
+        "company",
+        "email",
+        "file",
+        "flight",
+        "message",
+        "model",
+        "neither",
+        "office",
+        "prompt",
+        "schedule",
+        "setting",
+        "station",
+        "token",
+        "train"
+    ]
+
+    private static let genericEnglishReferenceStarters: Set<String> = [
+        "my", "our", "your", "their", "this", "that", "these", "those"
+    ]
+
+    private static let genericEnglishReferenceEndings: Set<String> = [
+        "company",
+        "content",
+        "data",
+        "feature",
+        "file",
+        "function",
+        "issue",
+        "message",
+        "model",
+        "problem",
+        "prompt",
+        "result",
+        "rule",
+        "setting",
+        "term",
+        "text"
+    ]
+
+    private static let genericCJKTerms: Set<String> = [
+        "会议",
+        "公司",
+        "地铁",
+        "文件",
+        "机场",
+        "航班",
+        "订单",
+        "提示词",
+        "模型",
+        "火车",
+        "邮件",
+        "设置",
+        "车次",
+        "酒店",
+        "高铁"
+    ]
+
+    private static let genericChineseReferencePrefixes: [String] = [
+        "这个",
+        "那个",
+        "这些",
+        "那些",
+        "这种",
+        "那种",
+        "我们",
+        "你们",
+        "他们",
+        "她们",
+        "它们",
+        "我的",
+        "你的",
+        "他的",
+        "她的",
+        "它的",
+        "我们的",
+        "你们的",
+        "他们的",
+        "她们的",
+        "它们的"
+    ]
+
+    private static let genericChineseReferenceSuffixes: [String] = [
+        "规则",
+        "问题",
+        "功能",
+        "内容",
+        "结果",
+        "消息",
+        "词汇",
+        "词语",
+        "文本",
+        "数据",
+        "文件",
+        "设置",
+        "模型",
+        "提示词",
+        "方案",
+        "接口",
+        "公司",
+        "事情",
+        "情况"
+    ]
+
+    private static let travelKeywords: [String] = [
+        "flight",
+        "flights",
+        "train",
+        "trains",
+        "station",
+        "route",
+        "航班",
+        "车次",
+        "列车",
+        "火车",
+        "高铁",
+        "机票",
+        "动车"
+    ]
+
+    private static func isStructurallyReasonable(_ term: String) -> Bool {
+        guard !term.isEmpty else { return false }
+        guard term.count <= 48 else { return false }
+        guard !term.contains(where: \.isNewline) else { return false }
+        guard !term.contains(where: { sentencePunctuation.contains($0) }) else { return false }
+        guard term.range(of: #"^\d+$"#, options: .regularExpression) == nil else { return false }
+
+        let latinWordCount = latinWords(in: term).count
+        if containsLatinLetters(in: term) {
+            guard latinWordCount <= 6 else { return false }
+            guard latinLetterCount(in: term) <= 32 else { return false }
+        }
+
+        let cjkCount = cjkCharacterCount(in: term)
+        if cjkCount > 0, !containsLatinLetters(in: term) {
+            guard cjkCount <= 6 else { return false }
+        }
+
+        return true
+    }
+
+    private static func isClearlyGenericVocabulary(_ term: String) -> Bool {
+        let lowercased = term.lowercased()
+        if genericEnglishTerms.contains(lowercased) {
+            return true
+        }
+        if genericCJKTerms.contains(term) {
+            return true
+        }
+        if isGenericReferencePhrase(term, lowercased: lowercased) {
+            return true
+        }
+        return false
+    }
+
+    private static func isGenericReferencePhrase(_ term: String, lowercased: String) -> Bool {
+        if isGenericChineseReferencePhrase(term) {
+            return true
+        }
+        if isGenericEnglishReferencePhrase(lowercased) {
+            return true
+        }
+        return false
+    }
+
+    private static func isGenericChineseReferencePhrase(_ term: String) -> Bool {
+        guard term.count >= 3, term.count <= 8 else { return false }
+        guard let prefix = genericChineseReferencePrefixes.first(where: term.hasPrefix) else {
+            return false
+        }
+        let remainder = String(term.dropFirst(prefix.count))
+        guard !remainder.isEmpty else { return false }
+        return genericChineseReferenceSuffixes.contains(where: remainder.hasSuffix)
+    }
+
+    private static func isGenericEnglishReferencePhrase(_ lowercased: String) -> Bool {
+        let words = lowercased.split(whereSeparator: \.isWhitespace)
+        guard words.count >= 2, words.count <= 4 else { return false }
+        guard let first = words.first, genericEnglishReferenceStarters.contains(String(first)) else {
+            return false
+        }
+        guard let last = words.last else { return false }
+        return genericEnglishReferenceEndings.contains(String(last))
+    }
+
+    private static func isContextSpecificArtifact(term: String, in sample: String) -> Bool {
+        looksLikeTravelRouteEndpoint(term: term, in: sample)
+            || looksLikeTransportIdentifier(term: term, in: sample)
+    }
+
+    private static func looksLikeTravelRouteEndpoint(term: String, in sample: String) -> Bool {
+        let normalizedSample = sample.lowercased()
+        guard travelKeywords.contains(where: normalizedSample.contains) else { return false }
+
+        if sample.contains("\(term)到") || sample.contains("到\(term)") {
+            return true
+        }
+
+        if normalizedSample.contains("from \(term.lowercased())")
+            || normalizedSample.contains("to \(term.lowercased())")
+            || normalizedSample.contains("\(term.lowercased()) to ")
+        {
+            return true
+        }
+
+        return false
+    }
+
+    private static func looksLikeTransportIdentifier(term: String, in sample: String) -> Bool {
+        let normalizedSample = sample.lowercased()
+        guard travelKeywords.contains(where: normalizedSample.contains) else { return false }
+        return term.range(of: #"^[A-Za-z]{1,3}\d{2,4}$"#, options: .regularExpression) != nil
+    }
+
+    private static func latinWords(in text: String) -> [Substring] {
+        text.split(whereSeparator: \.isWhitespace).filter { token in
+            token.contains(where: isLatinLetter)
+        }
+    }
+
+    private static func containsLatinLetters(in text: String) -> Bool {
+        text.contains(where: isLatinLetter)
+    }
+
+    private static func latinLetterCount(in text: String) -> Int {
+        text.reduce(into: 0) { count, character in
+            if isLatinLetter(character) {
+                count += 1
+            }
+        }
+    }
+
+    private static func cjkCharacterCount(in text: String) -> Int {
+        text.unicodeScalars.reduce(into: 0) { count, scalar in
+            if isCJKScalar(scalar) {
+                count += 1
+            }
+        }
+    }
+
+    private static func isLatinLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { scalar in
+            (65...90).contains(scalar.value) || (97...122).contains(scalar.value)
+        }
+    }
+
+    private static func isCJKScalar(_ scalar: UnicodeScalar) -> Bool {
+        switch scalar.value {
+        case 0x3400...0x4DBF,
+             0x4E00...0x9FFF,
+             0x3040...0x309F,
+             0x30A0...0x30FF,
+             0x31F0...0x31FF,
+             0xAC00...0xD7AF:
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -305,6 +634,7 @@ final class DictionarySuggestionStore: ObservableObject {
     func beginHistoryScan(totalCount: Int) {
         historyScanProgress = DictionaryHistoryScanProgress(
             isRunning: true,
+            isCancellationRequested: false,
             processedCount: 0,
             totalCount: totalCount,
             newSuggestionCount: 0,
@@ -321,6 +651,11 @@ final class DictionarySuggestionStore: ObservableObject {
         historyScanProgress.processedCount = processedCount
         historyScanProgress.newSuggestionCount = newSuggestionCount
         historyScanProgress.duplicateCount = duplicateCount
+    }
+
+    func requestHistoryScanCancellation() {
+        guard historyScanProgress.isRunning else { return }
+        historyScanProgress.isCancellationRequested = true
     }
 
     func finishHistoryScan(
@@ -340,6 +675,7 @@ final class DictionarySuggestionStore: ObservableObject {
 
         historyScanProgress = DictionaryHistoryScanProgress(
             isRunning: false,
+            isCancellationRequested: false,
             processedCount: processedCount,
             totalCount: processedCount,
             newSuggestionCount: newSuggestionCount,
@@ -370,6 +706,7 @@ final class DictionarySuggestionStore: ObservableObject {
     ) {
         historyScanProgress = DictionaryHistoryScanProgress(
             isRunning: false,
+            isCancellationRequested: false,
             processedCount: processedCount,
             totalCount: totalCount,
             newSuggestionCount: newSuggestionCount,
@@ -379,6 +716,28 @@ final class DictionarySuggestionStore: ObservableObject {
             lastDuplicateCount: historyScanProgress.lastDuplicateCount,
             lastRunAt: historyScanProgress.lastRunAt,
             errorMessage: errorMessage
+        )
+    }
+
+    func cancelHistoryScan(
+        processedCount: Int,
+        totalCount: Int,
+        newSuggestionCount: Int,
+        duplicateCount: Int,
+        message: String
+    ) {
+        historyScanProgress = DictionaryHistoryScanProgress(
+            isRunning: false,
+            isCancellationRequested: false,
+            processedCount: processedCount,
+            totalCount: totalCount,
+            newSuggestionCount: newSuggestionCount,
+            duplicateCount: duplicateCount,
+            lastProcessedCount: processedCount,
+            lastNewSuggestionCount: newSuggestionCount,
+            lastDuplicateCount: duplicateCount,
+            lastRunAt: Date(),
+            errorMessage: message
         )
     }
 

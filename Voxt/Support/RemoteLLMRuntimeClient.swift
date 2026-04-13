@@ -122,6 +122,39 @@ struct RemoteLLMRuntimeClient {
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    func dictionaryHistoryScanTerms(
+        userPrompt: String,
+        provider: RemoteLLMProvider,
+        configuration: RemoteProviderConfiguration
+    ) async throws -> [String] {
+        let input = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return [] }
+        if provider.usesResponsesAPI {
+            let result = try await completeResponses(
+                systemPrompt: "",
+                debugInput: input,
+                requestContentForLog: input,
+                inputPayload: input,
+                inputTextLength: input.count,
+                intent: .enhancement,
+                provider: provider,
+                configuration: configuration,
+                textFormat: DictionaryHistoryScanResponseParser.responsesTextFormatPayload()
+            )
+            return try DictionaryHistoryScanResponseParser.parseTerms(from: result.text)
+        }
+        let output = try await complete(
+            systemPrompt: "",
+            debugInput: input,
+            userPrompt: input,
+            inputTextLength: input.count,
+            intent: .enhancement,
+            provider: provider,
+            configuration: configuration
+        )
+        return try DictionaryHistoryScanResponseParser.parseTerms(from: output)
+    }
+
     func translate(
         text: String,
         systemPrompt: String,
@@ -269,6 +302,7 @@ struct RemoteLLMRuntimeClient {
         provider: RemoteLLMProvider,
         configuration: RemoteProviderConfiguration,
         previousResponseID: String? = nil,
+        textFormat: [String: Any]? = nil,
         onPartialText: (@Sendable (String) -> Void)? = nil,
         onResponseID: ((String) -> Void)? = nil
     ) async throws -> ResponsesStreamingResult {
@@ -296,6 +330,7 @@ struct RemoteLLMRuntimeClient {
                     configuration: configuration,
                     previousResponseID: previousResponseID,
                     tuning: tuning,
+                    textFormat: textFormat,
                     streamingEnabled: true
                 )
                 let requestStartedAt = Date()
@@ -334,6 +369,7 @@ struct RemoteLLMRuntimeClient {
             configuration: configuration,
             previousResponseID: previousResponseID,
             tuning: tuning,
+            textFormat: textFormat,
             streamingEnabled: false
         )
         let requestStartedAt = Date()

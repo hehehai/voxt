@@ -570,7 +570,11 @@
 "No pending dictionary suggestions." = "No pending dictionary suggestions.";
 "Seen %d times" = "Seen %d times";
 "One-Click Ingest" = "One-Click Ingest";
+"Cancel Ingest" = "Cancel Ingest";
+"Canceling..." = "Canceling...";
 "Auto Ingest" = "Auto Ingest";
+"Choose the model and prompt used by one-click ingest." = "Choose the model and prompt used by one-click ingest.";
+"One-click ingest scans new history records and writes accepted terms directly into the dictionary." = "One-click ingest scans new history records and writes accepted terms directly into the dictionary.";
 "When enabled, new history records are scanned automatically for candidate dictionary terms, but suggestions are not added to the dictionary automatically." = "When enabled, new history records are scanned automatically for candidate dictionary terms, but suggestions are not added to the dictionary automatically.";
 "When enabled, new history records are scanned automatically and the extracted terms are written directly into the dictionary." = "When enabled, new history records are scanned automatically and the extracted terms are written directly into the dictionary.";
 "Voxt will scan the new history records with the selected model and write the extracted terms directly into the dictionary." = "Voxt will scan the new history records with the selected model and write the extracted terms directly into the dictionary.";
@@ -586,8 +590,12 @@
 "Restore Default" = "Restore Default";
 "Saved candidate filter settings." = "Saved candidate filter settings.";
 "Scanned %d of %d history records. Added %d suggestions, skipped %d duplicates." = "Scanned %d of %d history records. Added %d suggestions, skipped %d duplicates.";
+"Scanned %d of %d history records. Added %d dictionary terms, skipped %d duplicates." = "Scanned %d of %d history records. Added %d dictionary terms, skipped %d duplicates.";
 "Last scan %@ processed %d history records and added %d suggestions. %d new history records are waiting." = "Last scan %@ processed %d history records and added %d suggestions. %d new history records are waiting.";
 "Last scan %@ processed %d history records and added %d suggestions." = "Last scan %@ processed %d history records and added %d suggestions.";
+"Last scan %@ processed %d history records and added %d dictionary terms. %d new history records are waiting." = "Last scan %@ processed %d history records and added %d dictionary terms. %d new history records are waiting.";
+"Last scan %@ processed %d history records and added %d dictionary terms." = "Last scan %@ processed %d history records and added %d dictionary terms.";
+"Cancel requested. Stopping after the current batch." = "Cancel requested. Stopping after the current batch.";
 "Use LLM to ingest candidate terms?" = "Use LLM to ingest candidate terms?";
 "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms." = "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms.";
 "%d new history records will be parsed in batches to extract candidate dictionary terms." = "%d new history records will be parsed in batches to extract candidate dictionary terms.";
@@ -609,6 +617,7 @@
 "Apple Intelligence requires macOS 26 or later." = "Apple Intelligence requires macOS 26 or later.";
 "No usable LLM is available for dictionary ingestion. Configure Apple Intelligence, a local custom LLM, or a remote LLM first." = "No usable LLM is available for dictionary ingestion. Configure Apple Intelligence, a local custom LLM, or a remote LLM first.";
 "Dictionary ingestion returned invalid text." = "Dictionary ingestion returned invalid text.";
+"Dictionary ingestion canceled." = "Dictionary ingestion canceled.";
 "Dictionary %d" = "Dictionary %d";
 "Corrected %d" = "Corrected %d";
 "Suggestions %d" = "Suggestions %d";

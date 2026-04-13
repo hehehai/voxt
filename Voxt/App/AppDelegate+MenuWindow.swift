@@ -330,6 +330,9 @@ extension AppDelegate {
                     persistSettings: persistSettings
                 )
             },
+            onCancelDictionarySuggestionsFromHistory: {
+                self.cancelDictionaryHistorySuggestionScan()
+            },
             mlxModelManager: mlxModelManager,
             whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,

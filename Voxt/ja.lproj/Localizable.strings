@@ -593,7 +593,11 @@
 "Dictionary Advanced Settings" = "辞書の詳細設定";
 "When enabled, the final output can replace very high-confidence near matches with exact dictionary terms before the text is inserted." = "有効にすると、最終出力の挿入前に、非常に高い信頼度の近似一致を辞書の正確な用語へ置き換えます。";
 "One-Click Ingest" = "ワンクリック取り込み";
+"Cancel Ingest" = "取り込みを中止";
+"Canceling..." = "中止しています...";
 "Auto Ingest" = "自動取り込み";
+"Choose the model and prompt used by one-click ingest." = "ワンクリック取り込みで使うモデルとプロンプトを設定します。";
+"One-click ingest scans new history records and writes accepted terms directly into the dictionary." = "ワンクリック取り込みは新しい履歴を走査し、採用された語句をそのまま辞書へ書き込みます。";
 "When enabled, new history records are scanned automatically for candidate dictionary terms, but suggestions are not added to the dictionary automatically." = "有効にすると、新しい履歴レコードは候補となる辞書語を自動的にスキャンしますが、候補は自動で辞書に追加されません。";
 "When enabled, new history records are scanned automatically and the extracted terms are written directly into the dictionary." = "有効にすると、新しい履歴レコードは自動的にスキャンされ、抽出された語句がそのまま辞書に追加されます。";
 "Voxt will scan the new history records with the selected model and write the extracted terms directly into the dictionary." = "Voxt は選択したモデルで新しい履歴レコードをスキャンし、抽出した語句をそのまま辞書に書き込みます。";
@@ -609,8 +613,12 @@
 "Restore Default" = "デフォルトに戻す";
 "Saved candidate filter settings." = "候補語フィルター設定を保存しました。";
 "Scanned %d of %d history records. Added %d suggestions, skipped %d duplicates." = "履歴 %d / %d 件をスキャンし、%d 件の候補を追加、%d 件の重複をスキップしました。";
+"Scanned %d of %d history records. Added %d dictionary terms, skipped %d duplicates." = "履歴 %d / %d 件をスキャンし、%d 件の辞書語を追加、%d 件の重複をスキップしました。";
 "Last scan %@ processed %d history records and added %d suggestions. %d new history records are waiting." = "前回のスキャン（%@）では履歴 %d 件を処理し、%d 件の候補を追加しました。新しい履歴が %d 件待機しています。";
 "Last scan %@ processed %d history records and added %d suggestions." = "前回のスキャン（%@）では履歴 %d 件を処理し、%d 件の候補を追加しました。";
+"Last scan %@ processed %d history records and added %d dictionary terms. %d new history records are waiting." = "前回のスキャン（%@）では履歴 %d 件を処理し、%d 件の辞書語を追加しました。新しい履歴が %d 件待機しています。";
+"Last scan %@ processed %d history records and added %d dictionary terms." = "前回のスキャン（%@）では履歴 %d 件を処理し、%d 件の辞書語を追加しました。";
+"Cancel requested. Stopping after the current batch." = "中止を受け付けました。現在のバッチが終わり次第停止します。";
 "Use LLM to ingest candidate terms?" = "LLM で候補語を取り込みますか？";
 "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms." = "設定済みの LLM を使って %d 件の新しい履歴をバッチ解析し、辞書候補語を抽出します。";
 "%d new history records will be parsed in batches to extract candidate dictionary terms." = "%d 件の新しい履歴をバッチ解析して、辞書候補語を抽出します。";
@@ -632,6 +640,7 @@
 "Apple Intelligence requires macOS 26 or later." = "Apple Intelligence には macOS 26 以降が必要です。";
 "No usable LLM is available for dictionary ingestion. Configure Apple Intelligence, a local custom LLM, or a remote LLM first." = "辞書取り込みに使用できる LLM がありません。先に Apple Intelligence、ローカルのカスタム LLM、またはリモート LLM を設定してください。";
 "Dictionary ingestion returned invalid text." = "辞書取り込みで無効なテキストが返されました。";
+"Dictionary ingestion canceled." = "辞書取り込みを中止しました。";
 "Done" = "完了";
 "Dictionary…" = "辞書…";
 "Import" = "インポート";

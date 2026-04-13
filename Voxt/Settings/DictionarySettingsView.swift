@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 
 struct DictionarySettingsView: View {
     @AppStorage(AppPreferenceKey.dictionaryRecognitionEnabled) private var dictionaryRecognitionEnabled = true
-    @AppStorage(AppPreferenceKey.dictionaryAutoLearningEnabled) private var dictionaryAutoLearningEnabled = true
     @AppStorage(AppPreferenceKey.dictionaryHighConfidenceCorrectionEnabled) private var dictionaryHighConfidenceCorrectionEnabled = true
     @AppStorage(AppPreferenceKey.dictionarySuggestionIngestModelOptionID) private var preferredHistoryScanModelID = ""
 
@@ -14,6 +13,7 @@ struct DictionarySettingsView: View {
     @ObservedObject var dictionarySuggestionStore: DictionarySuggestionStore
     let availableHistoryScanModels: () -> [DictionaryHistoryScanModelOption]
     let onIngestSuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
+    let onCancelIngestSuggestionsFromHistory: () -> Void
     let navigationRequest: SettingsNavigationRequest?
 
     @State private var selectedFilter: DictionaryFilter = .all
@@ -26,7 +26,6 @@ struct DictionarySettingsView: View {
     @State private var availableGroups: [AppBranchGroup] = []
     @State private var showDictionaryInfo = false
     @State private var showDictionaryAdvancedSettings = false
-    @State private var showSuggestionIngestDialog = false
     @State private var suggestionFilterDraft = DictionarySuggestionFilterSettings.defaultValue
     @State private var historyScanModelOptions: [DictionaryHistoryScanModelOption] = []
     @State private var selectedHistoryScanModelID = ""
@@ -51,6 +50,26 @@ struct DictionarySettingsView: View {
 
     private var selectedHistoryScanModelOption: DictionaryHistoryScanModelOption? {
         historyScanModelOptions.first(where: { $0.id == selectedHistoryScanModelID })
+    }
+
+    private var historyScanProgress: DictionaryHistoryScanProgress {
+        dictionarySuggestionStore.historyScanProgress
+    }
+
+    private var oneClickIngestButtonTitle: String {
+        if historyScanProgress.isRunning {
+            return historyScanProgress.isCancellationRequested
+                ? String(localized: "Canceling...")
+                : String(localized: "Cancel Ingest")
+        }
+        return String(localized: "One-Click Ingest")
+    }
+
+    private var oneClickIngestButtonDisabled: Bool {
+        if historyScanProgress.isRunning {
+            return historyScanProgress.isCancellationRequested
+        }
+        return pendingHistoryScanCount == 0
     }
 
     var body: some View {
@@ -78,19 +97,15 @@ struct DictionarySettingsView: View {
             DictionaryAdvancedSettingsDialog(
                 dictionaryHighConfidenceCorrectionEnabled: $dictionaryHighConfidenceCorrectionEnabled,
                 isPresented: $showDictionaryAdvancedSettings,
-                dictionaryRecognitionEnabled: dictionaryRecognitionEnabled
-            )
-        }
-        .sheet(isPresented: $showSuggestionIngestDialog) {
-            DictionarySuggestionIngestDialog(
+                dictionaryRecognitionEnabled: dictionaryRecognitionEnabled,
                 pendingHistoryScanCount: pendingHistoryScanCount,
                 localModelOptions: localHistoryScanModelOptions,
                 remoteModelOptions: remoteHistoryScanModelOptions,
                 selectedModelOption: selectedHistoryScanModelOption,
                 selectedModelID: $selectedHistoryScanModelID,
                 draftPrompt: $suggestionFilterDraft.prompt,
-                isPresented: $showSuggestionIngestDialog,
-                onIngest: runSuggestionIngest
+                onRestoreDefaultPrompt: restoreSuggestionIngestPromptToDefault,
+                onSave: saveSuggestionIngestSettings
             )
         }
         .onAppear(perform: reloadContent)
@@ -122,7 +137,7 @@ struct DictionarySettingsView: View {
                         .controlSize(.small)
 
                     Button {
-                        showDictionaryAdvancedSettings = true
+                        openDictionaryAdvancedSettings()
                     } label: {
                         Image(systemName: "slider.horizontal.3")
                             .foregroundStyle(.secondary)
@@ -147,16 +162,11 @@ struct DictionarySettingsView: View {
 
                     Spacer(minLength: 12)
 
-                    Spacer(minLength: 12)
-
-                    Toggle("Auto Ingest", isOn: $dictionaryAutoLearningEnabled)
-                        .controlSize(.small)
-
-                    Button(dictionarySuggestionStore.historyScanProgress.isRunning ? String(localized: "Scanning...") : String(localized: "One-Click Ingest")) {
-                        presentSuggestionIngestDialog()
+                    Button(oneClickIngestButtonTitle) {
+                        handleOneClickIngestButton()
                     }
                     .buttonStyle(SettingsPillButtonStyle())
-                    .disabled(dictionarySuggestionStore.historyScanProgress.isRunning || pendingHistoryScanCount == 0)
+                    .disabled(oneClickIngestButtonDisabled)
 
                     Divider()
                         .frame(height: 16)
@@ -172,26 +182,22 @@ struct DictionarySettingsView: View {
                     .buttonStyle(SettingsPillButtonStyle())
                 }
 
-                Text("When enabled, new history records are scanned automatically and the extracted terms are written directly into the dictionary.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if dictionarySuggestionStore.historyScanProgress.isRunning {
+                if historyScanProgress.isRunning {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView(
-                            value: Double(dictionarySuggestionStore.historyScanProgress.processedCount),
-                            total: Double(max(dictionarySuggestionStore.historyScanProgress.totalCount, 1))
+                            value: Double(historyScanProgress.processedCount),
+                            total: Double(max(historyScanProgress.totalCount, 1))
                         )
-                        Text(historyScanStatusText)
+                        Text(historyScanProgress.isCancellationRequested ? historyScanCancellationText : historyScanStatusText)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                } else if let errorMessage = dictionarySuggestionStore.historyScanProgress.errorMessage,
+                } else if let errorMessage = historyScanProgress.errorMessage,
                           !errorMessage.isEmpty {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
-                } else if let lastRunAt = dictionarySuggestionStore.historyScanProgress.lastRunAt {
+                } else if let lastRunAt = historyScanProgress.lastRunAt {
                     Text(historyScanSummaryText(lastRunAt: lastRunAt))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -444,10 +450,32 @@ struct DictionarySettingsView: View {
         dictionarySuggestionStore.reload()
         reloadGroups()
         historyScanModelOptions = availableHistoryScanModels()
+        suggestionFilterDraft = dictionarySuggestionStore.filterSettings
         selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: historyScanModelOptions)
     }
 
-    private func presentSuggestionIngestDialog() {
+    private func openDictionaryAdvancedSettings() {
+        let options = availableHistoryScanModels()
+        historyScanModelOptions = options
+        suggestionFilterDraft = dictionarySuggestionStore.filterSettings
+        selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: options)
+        showDictionaryAdvancedSettings = true
+    }
+
+    private func handleOneClickIngestButton() {
+        if historyScanProgress.isRunning {
+            requestSuggestionIngestCancellation()
+        } else {
+            runSuggestionIngest()
+        }
+    }
+
+    private func requestSuggestionIngestCancellation() {
+        suggestionActionMessage = nil
+        onCancelIngestSuggestionsFromHistory()
+    }
+
+    private func runSuggestionIngest() {
         let options = availableHistoryScanModels()
         guard !options.isEmpty else {
             suggestionActionMessage = AppLocalization.localizedString(
@@ -457,16 +485,13 @@ struct DictionarySettingsView: View {
         }
 
         historyScanModelOptions = options
-        suggestionFilterDraft = dictionarySuggestionStore.filterSettings
-        selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: options)
-        suggestionActionMessage = nil
-        showSuggestionIngestDialog = true
-    }
-
-    private func runSuggestionIngest() {
+        if !options.contains(where: { $0.id == selectedHistoryScanModelID }) {
+            selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: options)
+        }
         guard !selectedHistoryScanModelID.isEmpty else { return }
+
         suggestionActionMessage = nil
-        preferredHistoryScanModelID = selectedHistoryScanModelID
+        saveSuggestionIngestSettings()
         onIngestSuggestionsFromHistory(
             DictionaryHistoryScanRequest(
                 modelOptionID: selectedHistoryScanModelID,
@@ -478,7 +503,24 @@ struct DictionarySettingsView: View {
             ),
             true
         )
-        showSuggestionIngestDialog = false
+    }
+
+    private func saveSuggestionIngestSettings() {
+        let sanitized = DictionarySuggestionFilterSettings(
+            prompt: suggestionFilterDraft.prompt,
+            batchSize: dictionarySuggestionStore.filterSettings.batchSize,
+            maxCandidatesPerBatch: dictionarySuggestionStore.filterSettings.maxCandidatesPerBatch
+        ).sanitized()
+        suggestionFilterDraft = sanitized
+        dictionarySuggestionStore.saveFilterSettings(sanitized)
+
+        if historyScanModelOptions.contains(where: { $0.id == selectedHistoryScanModelID }) {
+            preferredHistoryScanModelID = selectedHistoryScanModelID
+        }
+    }
+
+    private func restoreSuggestionIngestPromptToDefault() {
+        suggestionFilterDraft.prompt = DictionarySuggestionFilterSettings.defaultPrompt
     }
 
     private func resolvedDefaultHistoryScanModelID(from options: [DictionaryHistoryScanModelOption]) -> String {
@@ -574,18 +616,22 @@ struct DictionarySettingsView: View {
     private var historyScanStatusText: String {
         AppLocalization.format(
             "Scanned %d of %d history records. Added %d dictionary terms, skipped %d duplicates.",
-            dictionarySuggestionStore.historyScanProgress.processedCount,
-            dictionarySuggestionStore.historyScanProgress.totalCount,
-            dictionarySuggestionStore.historyScanProgress.newSuggestionCount,
-            dictionarySuggestionStore.historyScanProgress.duplicateCount
+            historyScanProgress.processedCount,
+            historyScanProgress.totalCount,
+            historyScanProgress.newSuggestionCount,
+            historyScanProgress.duplicateCount
         )
+    }
+
+    private var historyScanCancellationText: String {
+        AppLocalization.localizedString("Cancel requested. Stopping after the current batch.")
     }
 
     private func historyScanSummaryText(lastRunAt: Date) -> String {
         let relative = RelativeDateTimeFormatter()
         relative.unitsStyle = .short
         let timeText = relative.localizedString(for: lastRunAt, relativeTo: Date())
-        let progress = dictionarySuggestionStore.historyScanProgress
+        let progress = historyScanProgress
         if pendingHistoryScanCount > 0 {
             return AppLocalization.format(
                 "Last scan %@ processed %d history records and added %d dictionary terms. %d new history records are waiting.",

@@ -256,6 +256,7 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
             ),
             previousResponseID: nil,
             tuning: .init(maxTokens: 512, temperature: 0.2, topP: 0.9),
+            textFormat: nil,
             streamingEnabled: true
         )
 
@@ -285,6 +286,7 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
             ),
             previousResponseID: "resp_123",
             tuning: .init(maxTokens: 256, temperature: 0.1, topP: 0.8),
+            textFormat: nil,
             streamingEnabled: false
         )
 

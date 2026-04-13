@@ -182,6 +182,18 @@ class CustomLLMModelManager: ObservableObject {
         return try await runLocalPromptRequest(request)
     }
 
+    func dictionaryHistoryScanTerms(userPrompt: String, repo: String) async throws -> [String] {
+        let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return [] }
+        let request = CustomLLMRequestPlanBuilder.dictionaryHistoryScan(
+            prompt: prompt,
+            repo: repo,
+            structuredOutputPrompt: dictionaryHistoryScanStructuredOutputPrompt(_:)
+        )
+        let rawOutput = try await runLocalPromptRequest(request)
+        return try DictionaryHistoryScanResponseParser.parseTerms(from: rawOutput)
+    }
+
     func translate(
         _ text: String,
         targetLanguage: TranslationTargetLanguage,
@@ -304,7 +316,13 @@ class CustomLLMModelManager: ObservableObject {
                 response = try await session.respond(to: request.prompt)
             }
             let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            let cleaned = extractResultText(response)
+            let cleaned: String
+            switch request.responseExtractionMode {
+            case .textResultPayloadOrNormalizedText:
+                cleaned = extractResultText(response)
+            case .normalizedRawText:
+                cleaned = sanitizeModelOutput(response)
+            }
 
             VoxtLog.llm(
                 "Custom LLM \(request.kind.logLabel) completed. repo=\(request.repo), outputChars=\(cleaned.count), elapsedMs=\(elapsedMs)"
@@ -786,6 +804,23 @@ class CustomLLMModelManager: ObservableObject {
         """
     }
 
+    private func dictionaryHistoryScanStructuredOutputPrompt(_ prompt: String) -> String {
+        """
+        Analyze the following task and return only valid JSON.
+
+        Final answer requirements:
+        - Return only a JSON array.
+        - Every item must be an object with exactly one key: "term".
+        - Example: [{"term":"OpenAI"},{"term":"MCP"}]
+        - If no term qualifies, return [].
+        - Do not wrap the array in another object.
+        - Do not return prose, markdown, code fences, or explanations.
+
+        Task:
+        \(prompt)
+        """
+    }
+
     private func extractResultText(_ output: String) -> String {
         let normalized = sanitizeModelOutput(output)
         if let parsed = decodeStructuredResultText(from: normalized) {
@@ -1118,6 +1153,12 @@ struct CustomLLMRequestPlan: Equatable {
     let logMode: String?
     let contentLogSections: [CustomLLMLogSection]
     let resultFallback: String
+    let responseExtractionMode: CustomLLMResponseExtractionMode
+}
+
+enum CustomLLMResponseExtractionMode: Equatable {
+    case textResultPayloadOrNormalizedText
+    case normalizedRawText
 }
 
 enum CustomLLMRequestPlanBuilder {
@@ -1144,7 +1185,8 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "input", content: input),
                 CustomLLMLogSection(label: "request_content", content: prompt)
             ],
-            resultFallback: resultFallback
+            resultFallback: resultFallback,
+            responseExtractionMode: .textResultPayloadOrNormalizedText
         )
     }
 
@@ -1163,7 +1205,8 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
                 CustomLLMLogSection(label: "input", content: prompt)
             ],
-            resultFallback: ""
+            resultFallback: "",
+            responseExtractionMode: .textResultPayloadOrNormalizedText
         )
     }
 
@@ -1189,7 +1232,8 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "input", content: text),
                 CustomLLMLogSection(label: "request_content", content: prompt)
             ],
-            resultFallback: ""
+            resultFallback: "",
+            responseExtractionMode: .textResultPayloadOrNormalizedText
         )
     }
 
@@ -1223,7 +1267,31 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "input", content: combinedInput),
                 CustomLLMLogSection(label: "request_content", content: prompt)
             ],
-            resultFallback: ""
+            resultFallback: "",
+            responseExtractionMode: .textResultPayloadOrNormalizedText
+        )
+    }
+
+    static func dictionaryHistoryScan(
+        prompt: String,
+        repo: String,
+        structuredOutputPrompt: (String) -> String
+    ) -> CustomLLMRequestPlan {
+        let requestPrompt = structuredOutputPrompt(prompt)
+        return CustomLLMRequestPlan(
+            kind: .enhancement,
+            repo: repo,
+            instructions: "",
+            prompt: requestPrompt,
+            inputCharacterCount: prompt.count,
+            logMode: "dictionaryHistoryScan",
+            contentLogSections: [
+                CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
+                CustomLLMLogSection(label: "input", content: prompt),
+                CustomLLMLogSection(label: "request_content", content: requestPrompt)
+            ],
+            resultFallback: "[]",
+            responseExtractionMode: .normalizedRawText
         )
     }
 }

@@ -120,6 +120,12 @@ extension AppDelegate {
         userMainLanguage.promptName
     }
 
+    var userOtherMainLanguagesPromptValue: String {
+        DictionaryHistoryScanPromptLanguageSupport.otherLanguagesPromptValue(
+            from: userMainLanguageCodes
+        )
+    }
+
     var translateSelectedTextOnTranslationHotkey: Bool {
         defaults.bool(forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
     }
@@ -244,7 +250,7 @@ extension AppDelegate {
     }
 
     var dictionaryAutoLearningEnabled: Bool {
-        defaults.object(forKey: AppPreferenceKey.dictionaryAutoLearningEnabled) as? Bool ?? true
+        false
     }
 
     var autoCheckForUpdates: Bool {

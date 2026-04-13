@@ -321,6 +321,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pauseLLMTask: Task<Void, Never>?
     var pendingWhisperStartupTask: Task<Void, Never>?
     var pendingMeetingStartupTask: Task<Void, Never>?
+    var pendingDictionaryHistoryScanTask: Task<Void, Never>?
     var whisperWarmupTask: Task<Void, Never>?
     var overlayReminderTask: Task<Void, Never>?
     var overlayStatusClearTask: Task<Void, Never>?
@@ -425,7 +426,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.historyEnabled: false,
             AppPreferenceKey.historyRetentionPeriod: HistoryRetentionPeriod.thirtyDays.rawValue,
             AppPreferenceKey.dictionaryRecognitionEnabled: true,
-            AppPreferenceKey.dictionaryAutoLearningEnabled: true,
+            AppPreferenceKey.dictionaryAutoLearningEnabled: false,
             AppPreferenceKey.dictionaryHighConfidenceCorrectionEnabled: true,
             AppPreferenceKey.autoCheckForUpdates: true,
             AppPreferenceKey.hotkeyDebugLoggingEnabled: false,

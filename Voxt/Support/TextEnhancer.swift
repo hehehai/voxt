@@ -5,6 +5,7 @@ import FoundationModels
 protocol TextEnhancing: AnyObject {
     func enhance(_ rawText: String, systemPrompt: String) async throws -> String
     func enhance(userPrompt: String) async throws -> String
+    func dictionaryHistoryScanTerms(userPrompt: String) async throws -> [String]
     func translate(
         _ text: String,
         targetLanguage: TranslationTargetLanguage,
@@ -20,6 +21,16 @@ class TextEnhancer: TextEnhancing {
     @Generable
     struct EnhancementOutput {
         var resultText: String
+    }
+
+    @Generable
+    struct DictionaryHistoryScanGeneratedItem {
+        var term: String
+    }
+
+    @Generable
+    struct DictionaryHistoryScanGeneratedOutput {
+        var terms: [DictionaryHistoryScanGeneratedItem]
     }
 
     /// Whether Apple Intelligence is available on this device.
@@ -69,6 +80,22 @@ class TextEnhancer: TextEnhancing {
 
         let enhanced = Self.normalizeResultText(response.content.resultText)
         return enhanced.isEmpty ? input : enhanced
+    }
+
+    func dictionaryHistoryScanTerms(userPrompt: String) async throws -> [String] {
+        let input = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return [] }
+        guard TextEnhancer.isAvailable else { return [] }
+
+        let session = LanguageModelSession(instructions: "")
+        let response = try await session.respond(
+            to: input,
+            generating: DictionaryHistoryScanGeneratedOutput.self
+        )
+
+        return DictionaryHistoryScanResponseParser.normalizeAcceptedTerms(
+            from: response.content.terms.map(\.term)
+        )
     }
 
     /// Translates text to the requested target language.

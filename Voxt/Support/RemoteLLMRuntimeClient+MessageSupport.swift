@@ -84,6 +84,7 @@ extension RemoteLLMRuntimeClient {
         configuration: RemoteProviderConfiguration,
         previousResponseID: String?,
         tuning: RemoteLLMRuntimeClient.GenerationTuning,
+        textFormat: [String: Any]?,
         streamingEnabled: Bool
     ) throws -> URLRequest {
         guard let url = URL(string: endpointValue) else {
@@ -124,6 +125,10 @@ extension RemoteLLMRuntimeClient {
             payload["input"] = inputPayload
         } else {
             payload["input"] = inputPayload
+        }
+
+        if let textFormat {
+            payload["text"] = textFormat
         }
 
         if configuration.searchEnabled && provider.supportsHostedSearch {

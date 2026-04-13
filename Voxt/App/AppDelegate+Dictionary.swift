@@ -17,6 +17,167 @@ struct DictionaryHistoryScanRequest: Hashable {
     let filterSettings: DictionarySuggestionFilterSettings
 }
 
+private enum DictionaryHistoryScanParseError {
+    static let domain = "Voxt.DictionaryHistoryScan"
+
+    static func invalidText(code: Int) -> NSError {
+        NSError(
+            domain: domain,
+            code: code,
+            userInfo: [
+                NSLocalizedDescriptionKey: AppLocalization.localizedString("Dictionary ingestion returned invalid text.")
+            ]
+        )
+    }
+}
+
+enum DictionaryHistoryScanResponseParser {
+    static func parseTerms(from rawResponse: String) throws -> [String] {
+        let normalizedResponse = CustomLLMOutputSanitizer.normalizeResultText(rawResponse)
+        guard !normalizedResponse.isEmpty else {
+            throw DictionaryHistoryScanParseError.invalidText(code: -11)
+        }
+
+        if let terms = try parseExactJSONArrayTerms(from: normalizedResponse) {
+            return normalizeAcceptedTerms(from: terms)
+        }
+
+        if let extractedJSONArray = extractJSONArrayString(from: normalizedResponse),
+           let terms = try parseExactJSONArrayTerms(from: extractedJSONArray) {
+            return normalizeAcceptedTerms(from: terms)
+        }
+
+        VoxtLog.warning(
+            "Dictionary history scan returned invalid JSON array. preview=\(responsePreview(normalizedResponse))"
+        )
+        throw DictionaryHistoryScanParseError.invalidText(code: -13)
+    }
+
+    static func normalizeAcceptedTerms(from terms: [String]) -> [String] {
+        normalizedAcceptedTermsImpl(from: terms)
+    }
+
+    static func responsesTextFormatPayload() -> [String: Any] {
+        [
+            "format": [
+                "type": "json_schema",
+                "name": "dictionary_history_terms",
+                "strict": true,
+                "schema": [
+                    "type": "array",
+                    "items": [
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": [
+                            "term": [
+                                "type": "string"
+                            ]
+                        ],
+                        "required": ["term"]
+                    ]
+                ]
+            ]
+        ]
+    }
+
+    static func extractJSONArrayString(from text: String) -> String? {
+        let characters = Array(text)
+        var startIndex: Int?
+        var bracketDepth = 0
+        var isInsideString = false
+        var isEscaping = false
+
+        for (index, character) in characters.enumerated() {
+            if isInsideString {
+                if isEscaping {
+                    isEscaping = false
+                    continue
+                }
+                if character == "\\" {
+                    isEscaping = true
+                } else if character == "\"" {
+                    isInsideString = false
+                }
+                continue
+            }
+
+            if character == "\"" {
+                isInsideString = true
+                continue
+            }
+
+            if character == "[" {
+                if bracketDepth == 0 {
+                    startIndex = index
+                }
+                bracketDepth += 1
+                continue
+            }
+
+            if character == "]", bracketDepth > 0 {
+                bracketDepth -= 1
+                if bracketDepth == 0, let startIndex {
+                    return String(characters[startIndex...index])
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private static func parseExactJSONArrayTerms(from text: String) throws -> [String]? {
+        guard let data = text.data(using: .utf8) else {
+            throw DictionaryHistoryScanParseError.invalidText(code: -12)
+        }
+        do {
+            guard let rawItems = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return nil
+            }
+
+            var parsedTerms: [String] = []
+            parsedTerms.reserveCapacity(rawItems.count)
+
+            for item in rawItems {
+                guard item.count == 1, let rawTerm = item["term"] as? String else {
+                    return nil
+                }
+                let trimmed = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
+                    throw DictionaryHistoryScanParseError.invalidText(code: -10)
+                }
+                parsedTerms.append(trimmed)
+            }
+
+            return parsedTerms
+        } catch {
+            return nil
+        }
+    }
+
+    private static func normalizedAcceptedTermsImpl(from terms: [String]) -> [String] {
+        var seen = Set<String>()
+        var orderedTerms: [String] = []
+
+        for term in terms {
+            let normalized = DictionaryStore.normalizeTerm(term)
+            guard !normalized.isEmpty else { continue }
+            guard DictionaryHistoryScanCandidateValidator.shouldAccept(term: term) else { continue }
+            guard seen.insert(normalized).inserted else { continue }
+            orderedTerms.append(term)
+        }
+
+        return orderedTerms
+    }
+
+    private static func responsePreview(_ text: String) -> String {
+        let collapsedWhitespace = text
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+        return String(collapsedWhitespace.prefix(300))
+    }
+}
+
 extension AppDelegate {
     private enum DictionaryHistoryScanModel {
         case appleIntelligence
@@ -140,10 +301,7 @@ extension AppDelegate {
     }
 
     func scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded() {
-        guard dictionaryAutoLearningEnabled else { return }
-        guard !dictionarySuggestionStore.historyScanProgress.isRunning else { return }
-        guard !dictionarySuggestionStore.pendingHistoryEntries(in: historyStore).isEmpty else { return }
-        startDictionaryHistorySuggestionScan(request: nil, persistSettings: false)
+        // Automatic dictionary ingestion has been removed in favor of explicit one-click ingestion.
     }
 
     func availableDictionaryHistoryScanModelOptions() -> [DictionaryHistoryScanModelOption] {
@@ -209,9 +367,18 @@ extension AppDelegate {
         }
 
         dictionarySuggestionStore.beginHistoryScan(totalCount: pendingEntries.count)
-        Task {
-            await runDictionaryHistorySuggestionScan(entries: pendingEntries, request: request)
+        pendingDictionaryHistoryScanTask?.cancel()
+        pendingDictionaryHistoryScanTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.pendingDictionaryHistoryScanTask = nil }
+            await self.runDictionaryHistorySuggestionScan(entries: pendingEntries, request: request)
         }
+    }
+
+    func cancelDictionaryHistorySuggestionScan() {
+        guard dictionarySuggestionStore.historyScanProgress.isRunning else { return }
+        dictionarySuggestionStore.requestHistoryScanCancellation()
+        pendingDictionaryHistoryScanTask?.cancel()
     }
 
     private func runDictionaryHistorySuggestionScan(
@@ -234,6 +401,7 @@ extension AppDelegate {
         do {
             let model = try resolvedDictionaryHistoryScanModel(for: request)
             for start in stride(from: 0, to: entries.count, by: batchSize) {
+                try Task.checkCancellation()
                 let batch = Array(entries[start..<min(start + batchSize, entries.count)])
                 let prompt = try dictionaryHistoryScanPrompt(
                     for: batch,
@@ -241,18 +409,21 @@ extension AppDelegate {
                     groupsByID: groupsByID,
                     groupsByLowercasedName: groupsByLowercasedName
                 )
-                let rawResponse = try await runDictionaryHistoryScanPrompt(prompt, model: model)
+                let scannedTerms = try await runDictionaryHistoryScanPrompt(prompt, model: model)
+                try Task.checkCancellation()
                 let parsedCandidates = try parseDictionaryHistoryScanCandidates(
-                    from: rawResponse,
+                    terms: scannedTerms,
                     batch: batch,
                     groupsByID: groupsByID,
                     groupsByLowercasedName: groupsByLowercasedName
                 )
+                try Task.checkCancellation()
 
                 let applyResult = dictionarySuggestionStore.applyHistoryScanCandidates(
                     parsedCandidates,
                     dictionaryStore: dictionaryStore
                 )
+                try Task.checkCancellation()
 
                 processedCount += batch.count
                 newSuggestionCount += applyResult.newSuggestionCount
@@ -269,6 +440,7 @@ extension AppDelegate {
                 )
             }
 
+            try Task.checkCancellation()
             dictionarySuggestionStore.finishHistoryScan(
                 processedCount: processedCount,
                 newSuggestionCount: newSuggestionCount,
@@ -276,6 +448,15 @@ extension AppDelegate {
                 checkpointEntry: lastProcessedEntry
             )
             scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded()
+        } catch is CancellationError {
+            VoxtLog.info("Dictionary history scan cancelled.")
+            dictionarySuggestionStore.cancelHistoryScan(
+                processedCount: processedCount,
+                totalCount: entries.count,
+                newSuggestionCount: newSuggestionCount,
+                duplicateCount: duplicateCount,
+                message: AppLocalization.localizedString("Dictionary ingestion canceled.")
+            )
         } catch {
             VoxtLog.warning("Dictionary history scan failed: \(error)")
             dictionarySuggestionStore.failHistoryScan(
@@ -291,7 +472,7 @@ extension AppDelegate {
     private func runDictionaryHistoryScanPrompt(
         _ prompt: String,
         model: DictionaryHistoryScanModel
-    ) async throws -> String {
+    ) async throws -> [String] {
         switch model {
         case .appleIntelligence:
             guard let enhancer else {
@@ -302,7 +483,7 @@ extension AppDelegate {
                 )
             }
             if #available(macOS 26.0, *) {
-                return try await enhancer.enhance(userPrompt: prompt)
+                return try await enhancer.dictionaryHistoryScanTerms(userPrompt: prompt)
             }
             throw NSError(
                 domain: "Voxt.DictionaryHistoryScan",
@@ -310,9 +491,9 @@ extension AppDelegate {
                 userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Apple Intelligence requires macOS 26 or later.")]
             )
         case .customLLM(let repo):
-            return try await customLLMManager.enhance(userPrompt: prompt, repo: repo)
+            return try await customLLMManager.dictionaryHistoryScanTerms(userPrompt: prompt, repo: repo)
         case .remoteLLM(let provider, let configuration):
-            return try await RemoteLLMRuntimeClient().enhance(
+            return try await RemoteLLMRuntimeClient().dictionaryHistoryScanTerms(
                 userPrompt: prompt,
                 provider: provider,
                 configuration: configuration
@@ -469,17 +650,17 @@ extension AppDelegate {
         return resolvedDictionaryHistoryScanPrompt(
             template: settings.prompt,
             userMainLanguage: userMainLanguagePromptValue,
+            userOtherLanguages: userOtherMainLanguagesPromptValue,
             historyRecordsXML: recordsXML
         )
     }
 
     private func parseDictionaryHistoryScanCandidates(
-        from rawResponse: String,
+        terms: [String],
         batch: [TranscriptionHistoryEntry],
         groupsByID: [UUID: AppBranchGroup],
         groupsByLowercasedName: [String: AppBranchGroup]
     ) throws -> [DictionaryHistoryScanCandidate] {
-        let terms = parsedDictionaryHistoryScanTerms(from: rawResponse)
         guard !terms.isEmpty else { return [] }
         var candidatesByKey: [String: DictionaryHistoryScanCandidate] = [:]
 
@@ -497,6 +678,12 @@ extension AppDelegate {
                 term: term,
                 sourceEntries: scopedEntries
             )
+            guard DictionaryHistoryScanCandidateValidator.shouldAccept(
+                term: term,
+                evidenceSample: evidenceSample
+            ) else {
+                continue
+            }
             let key = "\(DictionaryStore.normalizeTerm(term))|\(scope.groupID?.uuidString ?? "global")"
             let historyEntryIDs = scopedEntries.map(\.id)
 
@@ -530,6 +717,7 @@ extension AppDelegate {
     private func resolvedDictionaryHistoryScanPrompt(
         template: String,
         userMainLanguage: String,
+        userOtherLanguages: String,
         historyRecordsXML: String
     ) -> String {
         var prompt = template.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -538,6 +726,12 @@ extension AppDelegate {
             prompt = prompt.replacingOccurrences(of: "{{USER_MAIN_LANGUAGE}}", with: userMainLanguage)
         } else {
             prompt += "\n\nUser’s main language: \(userMainLanguage)"
+        }
+
+        if prompt.contains("{{USER_OTHER_LANGUAGES}}") {
+            prompt = prompt.replacingOccurrences(of: "{{USER_OTHER_LANGUAGES}}", with: userOtherLanguages)
+        } else {
+            prompt += "\n\nOther frequently used languages: \(userOtherLanguages)"
         }
 
         if prompt.contains("{{HISTORY_RECORDS}}") {
@@ -573,59 +767,6 @@ extension AppDelegate {
 
         return "<historyRecords>\n\(body)\n</historyRecords>"
     }
-
-    private func parsedDictionaryHistoryScanTerms(from rawResponse: String) -> [String] {
-        let unfenced = unwrapCodeFenceIfNeeded(
-            rawResponse.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-        let normalizedResponse = unfenced.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedResponse.compare("null", options: [.caseInsensitive]) == .orderedSame {
-            return []
-        }
-        let lines = normalizedResponse.components(separatedBy: .newlines)
-
-        var seen = Set<String>()
-        var orderedTerms: [String] = []
-
-        for line in lines {
-            let term = normalizedDictionaryHistoryScanTermLine(line)
-            let normalized = DictionaryStore.normalizeTerm(term)
-            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
-            orderedTerms.append(term)
-        }
-
-        return orderedTerms
-    }
-
-    private func normalizedDictionaryHistoryScanTermLine(_ line: String) -> String {
-        var trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-
-        while let first = trimmed.first, first == "-" || first == "*" || first == "•" {
-            trimmed.removeFirst()
-            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if let dotIndex = trimmed.firstIndex(of: "."),
-           trimmed[..<dotIndex].allSatisfy(\.isNumber) {
-            trimmed = String(trimmed[trimmed.index(after: dotIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if let parenIndex = trimmed.firstIndex(of: ")"),
-           trimmed[..<parenIndex].allSatisfy(\.isNumber) {
-            trimmed = String(trimmed[trimmed.index(after: parenIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        for separator in [" - ", " — ", " – ", ": "] {
-            if let range = trimmed.range(of: separator) {
-                trimmed = String(trimmed[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-                break
-            }
-        }
-
-        return trimmed
-    }
-
     private func resolvedSourceEntries(
         for term: String,
         in batch: [TranscriptionHistoryEntry]
@@ -710,17 +851,6 @@ extension AppDelegate {
         guard trimmed.count > 320 else { return trimmed }
         let index = trimmed.index(trimmed.startIndex, offsetBy: 320)
         return String(trimmed[..<index])
-    }
-
-    private func unwrapCodeFenceIfNeeded(_ text: String) -> String {
-        guard text.hasPrefix("```"), text.hasSuffix("```") else { return text }
-        var lines = text.components(separatedBy: .newlines)
-        guard lines.count >= 2 else { return text }
-        lines.removeFirst()
-        if let last = lines.last, last.trimmingCharacters(in: .whitespacesAndNewlines) == "```" {
-            lines.removeLast()
-        }
-        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func xmlEscapedText(_ text: String) -> String {

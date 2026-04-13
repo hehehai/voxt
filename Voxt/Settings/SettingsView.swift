@@ -12,6 +12,7 @@ private func settingsLocalized(_ key: String) -> String {
 struct SettingsView: View {
     let availableDictionaryHistoryScanModels: () -> [DictionaryHistoryScanModelOption]
     let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
+    let onCancelDictionarySuggestionsFromHistory: () -> Void
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
@@ -39,6 +40,7 @@ struct SettingsView: View {
     init(
         availableDictionaryHistoryScanModels: @escaping () -> [DictionaryHistoryScanModelOption],
         onIngestDictionarySuggestionsFromHistory: @escaping (DictionaryHistoryScanRequest, Bool) -> Void,
+        onCancelDictionarySuggestionsFromHistory: @escaping () -> Void,
         mlxModelManager: MLXModelManager,
         whisperModelManager: WhisperKitModelManager,
         customLLMManager: CustomLLMModelManager,
@@ -52,6 +54,7 @@ struct SettingsView: View {
     ) {
         self.availableDictionaryHistoryScanModels = availableDictionaryHistoryScanModels
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
+        self.onCancelDictionarySuggestionsFromHistory = onCancelDictionarySuggestionsFromHistory
         self.mlxModelManager = mlxModelManager
         self.whisperModelManager = whisperModelManager
         self.customLLMManager = customLLMManager
@@ -309,6 +312,7 @@ struct SettingsView: View {
                     dictionarySuggestionStore: dictionarySuggestionStore,
                     availableHistoryScanModels: availableDictionaryHistoryScanModels,
                     onIngestSuggestionsFromHistory: onIngestDictionarySuggestionsFromHistory,
+                    onCancelIngestSuggestionsFromHistory: onCancelDictionarySuggestionsFromHistory,
                     navigationRequest: navigationRequest
                 )
             } else if selectedTab == .feature {

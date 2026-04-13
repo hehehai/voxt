@@ -580,7 +580,11 @@
 "Dictionary Advanced Settings" = "词典高级设置";
 "When enabled, the final output can replace very high-confidence near matches with exact dictionary terms before the text is inserted." = "开启后，最终输出在写入前会将极高置信度的近似词替换为词典中的准确词汇。";
 "One-Click Ingest" = "一键录入";
+"Cancel Ingest" = "取消录入";
+"Canceling..." = "正在取消...";
 "Auto Ingest" = "自动录入";
+"Choose the model and prompt used by one-click ingest." = "配置一键录入使用的模型和提示词。";
+"One-click ingest scans new history records and writes accepted terms directly into the dictionary." = "一键录入会扫描新的历史记录，并将通过筛选的词汇直接写入词典。";
 "When enabled, new history records are scanned automatically for candidate dictionary terms, but suggestions are not added to the dictionary automatically." = "开启后，有新的历史记录时会自动扫描候选词典词，但不会自动加入词典。";
 "When enabled, new history records are scanned automatically and the extracted terms are written directly into the dictionary." = "开启后，有新的历史记录时会自动扫描，并将提取出的词汇直接写入词典。";
 "Voxt will scan the new history records with the selected model and write the extracted terms directly into the dictionary." = "Voxt 会使用所选模型扫描新的历史记录，并将提取出的词汇直接写入词典。";
@@ -596,8 +600,12 @@
 "Restore Default" = "恢复默认";
 "Saved candidate filter settings." = "候选词筛选设置已保存。";
 "Scanned %d of %d history records. Added %d suggestions, skipped %d duplicates." = "已扫描 %d / %d 条历史记录，新增 %d 个候选词，跳过 %d 个重复项。";
+"Scanned %d of %d history records. Added %d dictionary terms, skipped %d duplicates." = "已扫描 %d / %d 条历史记录，新增 %d 个词典词，跳过 %d 个重复项。";
 "Last scan %@ processed %d history records and added %d suggestions. %d new history records are waiting." = "上次扫描（%@）处理了 %d 条历史记录，新增 %d 个候选词。当前还有 %d 条新历史记录待处理。";
 "Last scan %@ processed %d history records and added %d suggestions." = "上次扫描（%@）处理了 %d 条历史记录，新增 %d 个候选词。";
+"Last scan %@ processed %d history records and added %d dictionary terms. %d new history records are waiting." = "上次扫描（%@）处理了 %d 条历史记录，新增 %d 个词典词。当前还有 %d 条新历史记录待处理。";
+"Last scan %@ processed %d history records and added %d dictionary terms." = "上次扫描（%@）处理了 %d 条历史记录，新增 %d 个词典词。";
+"Cancel requested. Stopping after the current batch." = "已请求取消，当前批次完成后会停止。";
 "Use LLM to ingest candidate terms?" = "使用 LLM 录入候选词？";
 "%d new history records will be parsed in batches with the configured LLM to extract candidate dictionary terms." = "将使用已配置的 LLM 对 %d 条新历史记录进行分批解析，并提取候选词典词。";
 "%d new history records will be parsed in batches to extract candidate dictionary terms." = "将对 %d 条新历史记录进行分批解析，并提取候选词典词。";
@@ -619,6 +627,7 @@
 "Apple Intelligence requires macOS 26 or later." = "Apple Intelligence 需要 macOS 26 或更高版本。";
 "No usable LLM is available for dictionary ingestion. Configure Apple Intelligence, a local custom LLM, or a remote LLM first." = "当前没有可用于词典录入的 LLM。请先配置 Apple Intelligence、本地自定义 LLM 或远程 LLM。";
 "Dictionary ingestion returned invalid text." = "词典录入返回了无效文本。";
+"Dictionary ingestion canceled." = "词典录入已取消。";
 "Done" = "完成";
 "Dictionary…" = "词典…";
 "Import" = "导入";
