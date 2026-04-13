@@ -12,18 +12,22 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
     private lazy var updaterController: SPUStandardUpdaterController? = {
         guard sparkleIsAvailable else { return nil }
-        return SPUStandardUpdaterController(
+        let controller = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: self,
             userDriverDelegate: self
         )
+        configureUpdaterRequestContext(controller.updater, shouldClearLegacyFeedURL: true)
+        return controller
     }()
 
     private let stableFeedURLString = "https://voxt.actnow.dev/updates/stable/appcast.xml"
     private let betaFeedURLString = "https://voxt.actnow.dev/updates/beta/appcast.xml"
     private let betaFeedEnableEnvKey = "VOXT_ENABLE_BETA_UPDATES"
+    private let interactiveUIPresentationTimeout: Duration = .seconds(4)
     private var lastCheckSource: CheckSource = .automatic
     private var isPresentingUpdateUI = false
+    private var interactiveUIPresentationWatchdogTask: Task<Void, Never>?
     @Published private(set) var hasUpdate = false
     @Published private(set) var latestVersion: String?
     @Published private(set) var updateCheckIssueMessage: String?
@@ -68,6 +72,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
             return
         }
+        configureUpdaterRequestContext(updaterController.updater)
         guard isInstallerServiceAvailable() else {
             VoxtLog.error("Sparkle installer services unavailable. Unable to present interactive update flow.")
             reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
@@ -76,6 +81,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
         logInstallerServiceAvailability()
         setPreparingInteractiveUpdateUI(true)
+        startInteractiveUpdatePresentationWatchdog()
         NSApp.activate(ignoringOtherApps: true)
         VoxtLog.info("Manual update check triggered via Sparkle user interface.")
         updaterController.updater.checkForUpdates()
@@ -88,6 +94,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
             return
         }
+        configureUpdaterRequestContext(updaterController.updater)
         if source == .manual {
             if !isInstallerServiceAvailable() {
                 VoxtLog.error("Sparkle installer services unavailable. Opening manual update page instead of Sparkle installer flow.")
@@ -117,6 +124,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
+        cancelInteractiveUpdatePresentationWatchdog()
         let nsError = error as NSError
         if isNoUpdateFoundError(nsError) {
             setPreparingInteractiveUpdateUI(false)
@@ -166,6 +174,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
+        cancelInteractiveUpdatePresentationWatchdog()
         setPreparingInteractiveUpdateUI(false)
         setUpdateState(hasUpdate: false, latestVersion: nil, issue: nil, downloadedURL: nil)
         let nsError = error as NSError
@@ -199,6 +208,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
+        cancelInteractiveUpdatePresentationWatchdog()
         if let error {
             let nsError = error as NSError
             if isNoUpdateFoundError(nsError) {
@@ -232,6 +242,24 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     func standardUserDriverWillShowModalAlert() {
         beginUpdatePresentationIfNeeded(reason: "modal alert")
         VoxtLog.info("Sparkle will show modal alert.")
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        if handleShowingUpdate {
+            beginUpdatePresentationIfNeeded(reason: "will handle showing update")
+        } else {
+            setPreparingInteractiveUpdateUI(false)
+        }
+        VoxtLog.info(
+            """
+            Sparkle will handle showing update. handleShowingUpdate=\(handleShowingUpdate), \
+            version=\(update.displayVersionString), build=\(update.versionString)
+            """
+        )
     }
 
     func standardUserDriverDidShowModalAlert() {
@@ -363,11 +391,61 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         NotificationCenter.default.post(name: .voxtUpdateAvailabilityDidChange, object: nil)
     }
 
+    private func configureUpdaterRequestContext(_ updater: SPUUpdater, shouldClearLegacyFeedURL: Bool = false) {
+        if shouldClearLegacyFeedURL, let legacyFeedURL = updater.clearFeedURLFromUserDefaults() {
+            VoxtLog.info("Sparkle cleared legacy persisted feed URL. url=\(legacyFeedURL.absoluteString)")
+        }
+
+        let headers = Self.updateRequestHeaders(interfaceLanguage: AppLocalization.language)
+        if updater.httpHeaders != headers {
+            updater.httpHeaders = headers
+        }
+
+        VoxtLog.info(
+            """
+            Sparkle request context refreshed. feedURL=\(selectedFeedURLString), \
+            acceptLanguage=\(headers["Accept-Language"] ?? "nil")
+            """
+        )
+    }
+
+    private func startInteractiveUpdatePresentationWatchdog() {
+        cancelInteractiveUpdatePresentationWatchdog()
+        interactiveUIPresentationWatchdogTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: self?.interactiveUIPresentationTimeout ?? .seconds(4))
+            } catch {
+                return
+            }
+
+            guard let self,
+                  self.isPreparingInteractiveUpdateUI,
+                  !self.isPresentingUpdateUI
+            else {
+                return
+            }
+
+            VoxtLog.warning(
+                """
+                Sparkle interactive update UI did not become active before timeout. \
+                source=\(self.lastCheckSource.description)
+                """
+            )
+            self.setPreparingInteractiveUpdateUI(false)
+        }
+    }
+
+    private func cancelInteractiveUpdatePresentationWatchdog() {
+        interactiveUIPresentationWatchdogTask?.cancel()
+        interactiveUIPresentationWatchdogTask = nil
+    }
+
     private func isNoUpdateFoundError(_ error: NSError) -> Bool {
         error.domain == SUSparkleErrorDomain && error.code == 1001
     }
 
     private func beginUpdatePresentationIfNeeded(reason: String) {
+        cancelInteractiveUpdatePresentationWatchdog()
         setPreparingInteractiveUpdateUI(false)
         guard !isPresentingUpdateUI else { return }
         isPresentingUpdateUI = true
@@ -376,6 +454,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
     }
 
     private func finishUpdatePresentationIfNeeded() {
+        cancelInteractiveUpdatePresentationWatchdog()
         setPreparingInteractiveUpdateUI(false)
         guard isPresentingUpdateUI else { return }
         isPresentingUpdateUI = false
@@ -395,6 +474,23 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         )
         components.queryItems = queryItems
         return components.url?.absoluteString ?? baseURLString
+    }
+
+    static func updateRequestHeaders(interfaceLanguage: AppInterfaceLanguage) -> [String: String] {
+        let localeIdentifier = interfaceLanguage.localeIdentifier
+        let baseLanguage = localeIdentifier.split(separator: "-").first.map(String.init) ?? localeIdentifier
+
+        var languagePreferences: [String] = [localeIdentifier]
+        if baseLanguage != localeIdentifier {
+            languagePreferences.append("\(baseLanguage);q=0.9")
+        }
+        if baseLanguage != "en" {
+            languagePreferences.append("en;q=0.8")
+        }
+
+        return [
+            "Accept-Language": languagePreferences.joined(separator: ", ")
+        ]
     }
 }
 

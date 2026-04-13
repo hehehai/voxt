@@ -24,4 +24,18 @@ final class AppUpdateManagerTests: XCTestCase {
         XCTAssertEqual(components?.queryItems?.first(where: { $0.name == "channel" })?.value, "stable")
         XCTAssertEqual(components?.queryItems?.first(where: { $0.name == "lang" })?.value, "ja")
     }
+
+    @MainActor
+    func testUpdateRequestHeadersIncludeAcceptLanguageWithFallbacks() {
+        let headers = AppUpdateManager.updateRequestHeaders(interfaceLanguage: .chineseSimplified)
+
+        XCTAssertEqual(headers["Accept-Language"], "zh-Hans, zh;q=0.9, en;q=0.8")
+    }
+
+    @MainActor
+    func testUpdateRequestHeadersDoNotDuplicateEnglishFallback() {
+        let headers = AppUpdateManager.updateRequestHeaders(interfaceLanguage: .english)
+
+        XCTAssertEqual(headers["Accept-Language"], "en")
+    }
 }

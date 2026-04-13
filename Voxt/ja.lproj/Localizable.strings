@@ -269,6 +269,7 @@
 "Checking for updates…" = "更新を確認中…";
 "No update information yet." = "更新情報はまだありません。";
 "Opening update window…" = "更新ウィンドウを開いています…";
+"Opening…" = "開いています…";
 "Check Now" = "今すぐ確認";
 "Skip This Version" = "このバージョンをスキップ";
 "Close" = "閉じる";

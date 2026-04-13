@@ -603,6 +603,9 @@ private struct SettingsSidebar: View {
                         Text(updateBadgeState.title)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(updateBadgeState.tintColor)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .allowsTightening(true)
                         Spacer(minLength: 0)
                     }
                 }
@@ -678,13 +681,13 @@ private enum UpdateBadgeState: Equatable {
     var title: String {
         switch self {
         case .none:
-            return settingsLocalized("New Version Available")
+            return settingsLocalized("New Update")
         case .checkFailed:
             return settingsLocalized("Update Check Failed")
         case .newVersion:
-            return settingsLocalized("New Version Available")
+            return settingsLocalized("New Update")
         case .openingWindow:
-            return settingsLocalized("Opening update window…")
+            return settingsLocalized("Opening…")
         }
     }
 }
