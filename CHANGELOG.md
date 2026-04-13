@@ -6,6 +6,24 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.9.4] - 2026-04-13
+
+### Changed
+- EN: Moved one-click dictionary ingest model and prompt controls into Dictionary Advanced Settings and added cancel support while a scan is running.
+- 简体中文：将一键录入使用的模型和提示词移至词典高级设置，并支持在扫描过程中取消录入。
+- 日本語：ワンクリック取り込みのモデルとプロンプト設定を辞書の詳細設定へ移し、走査中のキャンセルにも対応しました。
+- EN: Tightened dictionary ingest term selection so common words, mixed-language filler, route details, and obvious transcript fragments are filtered out more aggressively.
+- 简体中文：进一步收紧了词典录入的筛词规则，更积极地排除常见词、混合语言口语填充、路线信息和明显的转写片段。
+- 日本語：辞書取り込みの語句選別をさらに厳しくし、一般語、混在言語のつなぎ語、経路情報、明らかな書き起こし断片をより強く除外するようにしました。
+
+### Fixed
+- EN: Fixed dictionary ingest parsing by requiring validated structured array output from supported language models before terms are written into the dictionary.
+- 简体中文：修复了词典录入解析流程，要求受支持的大模型先返回经过校验的结构化数组结果后才写入词典。
+- 日本語：辞書取り込みの解析を修正し、対応する言語モデルが検証済みの構造化配列を返した場合にのみ辞書へ書き込むようにしました。
+- EN: Reduced idle memory in Settings and fixed transcription finalization work that could hit newer Swift concurrency isolation checks.
+- 简体中文：降低了设置页的空闲内存占用，并修复了转写收尾流程在新版 Swift 并发隔离检查下可能出现的问题。
+- 日本語：設定画面の待機時メモリ使用量を抑え、新しい Swift の並行性分離チェックで転写確定処理が不安定になる問題を修正しました。
+
 ## [1.9.3] - 2026-04-12
 
 ### Fixed
