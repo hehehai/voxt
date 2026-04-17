@@ -781,7 +781,7 @@ class CustomLLMModelManager: ObservableObject {
         completedFiles: Int,
         totalFiles: Int
     ) {
-        state = .downloading(
+        let nextState = ModelState.downloading(
             progress: progress,
             completed: completed,
             total: total,
@@ -789,6 +789,9 @@ class CustomLLMModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
+        if state != nextState {
+            state = nextState
+        }
     }
 
     private func destinationFileURL(for entryPath: String, under directory: URL) throws -> URL {

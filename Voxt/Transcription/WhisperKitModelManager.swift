@@ -18,6 +18,87 @@ final class WhisperKitModelManager: ObservableObject {
         formatter.countStyle = .file
         return formatter
     }()
+    private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
+        private let progress: Progress
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
+        private var temporaryDownloadURL: URL?
+
+        init(progress: Progress) {
+            self.progress = progress
+        }
+
+        func attach(
+            _ continuation: CheckedContinuation<(URL, URLResponse), Error>
+        ) {
+            lock.lock()
+            self.continuation = continuation
+            lock.unlock()
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            downloadTask: URLSessionDownloadTask,
+            didWriteData bytesWritten: Int64,
+            totalBytesWritten: Int64,
+            totalBytesExpectedToWrite: Int64
+        ) {
+            if totalBytesExpectedToWrite > 0 {
+                progress.totalUnitCount = totalBytesExpectedToWrite
+            }
+            progress.completedUnitCount = max(totalBytesWritten, 0)
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            downloadTask: URLSessionDownloadTask,
+            didFinishDownloadingTo location: URL
+        ) {
+            lock.lock()
+            temporaryDownloadURL = location
+            lock.unlock()
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            didCompleteWithError error: Error?
+        ) {
+            if let error {
+                resume(with: .failure(error))
+                return
+            }
+
+            lock.lock()
+            let temporaryDownloadURL = self.temporaryDownloadURL
+            lock.unlock()
+
+            guard let response = task.response,
+                  let temporaryDownloadURL else {
+                resume(with: .failure(URLError(.badServerResponse)))
+                return
+            }
+
+            resume(with: .success((temporaryDownloadURL, response)))
+        }
+
+        private func resume(with result: Result<(URL, URLResponse), Error>) {
+            lock.lock()
+            guard let continuation else {
+                lock.unlock()
+                return
+            }
+            self.continuation = nil
+            lock.unlock()
+
+            switch result {
+            case .success(let value):
+                continuation.resume(returning: value)
+            case .failure(let error):
+                continuation.resume(throwing: error)
+            }
+        }
+    }
 
     enum ModelState: Equatable {
         case notDownloaded
@@ -677,7 +758,7 @@ final class WhisperKitModelManager: ObservableObject {
         completedFiles: Int = 0,
         totalFiles: Int = 0
     ) {
-        activeDownload = ActiveDownload(
+        let nextActiveDownload = ActiveDownload(
             modelID: targetID,
             progress: progress,
             completed: completed,
@@ -688,8 +769,11 @@ final class WhisperKitModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
+        if activeDownload != nextActiveDownload {
+            activeDownload = nextActiveDownload
+        }
         guard targetID == modelID else { return }
-        state = .downloading(
+        let nextState = ModelState.downloading(
             progress: progress,
             completed: completed,
             total: total,
@@ -697,6 +781,9 @@ final class WhisperKitModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
+        if state != nextState {
+            state = nextState
+        }
     }
 
     private func downloadRootURL() -> URL {
@@ -955,8 +1042,9 @@ final class WhisperKitModelManager: ObservableObject {
                 kCFNetworkProxiesSOCKSEnable as String: false,
             ]
         }
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
+        let delegate = DownloadDelegate(progress: progress)
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
 
         var request = URLRequest(url: remoteURL)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
@@ -967,7 +1055,11 @@ final class WhisperKitModelManager: ObservableObject {
             withIntermediateDirectories: true
         )
 
-        let (byteStream, response) = try await session.bytes(for: request)
+        let (downloadedURL, response) = try await withCheckedThrowingContinuation { continuation in
+            delegate.attach(continuation)
+            let task = session.downloadTask(with: request)
+            task.resume()
+        }
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
@@ -977,40 +1069,12 @@ final class WhisperKitModelManager: ObservableObject {
             progress.totalUnitCount = response.expectedContentLength
         }
 
-        FileManager.default.createFile(atPath: temporaryURL.path, contents: nil)
-        let fileHandle = try FileHandle(forWritingTo: temporaryURL)
-        do {
-            var totalWritten: Int64 = 0
-            var buffer = [UInt8]()
-            buffer.reserveCapacity(64 * 1024)
-
-            for try await byte in byteStream {
-                buffer.append(byte)
-                if buffer.count >= 64 * 1024 {
-                    let data = Data(buffer)
-                    try fileHandle.write(contentsOf: data)
-                    totalWritten += Int64(data.count)
-                    progress.completedUnitCount = totalWritten
-                    buffer.removeAll(keepingCapacity: true)
-                }
-            }
-
-            if !buffer.isEmpty {
-                let data = Data(buffer)
-                try fileHandle.write(contentsOf: data)
-                totalWritten += Int64(data.count)
-                progress.completedUnitCount = totalWritten
-            }
-
-            try fileHandle.close()
-        } catch {
-            try? fileHandle.close()
-            try? FileManager.default.removeItem(at: temporaryURL)
-            throw error
-        }
-
         try? FileManager.default.removeItem(at: destinationURL)
+        try FileManager.default.moveItem(at: downloadedURL, to: temporaryURL)
         try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
+        if let finalSize = try? destinationURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+            progress.completedUnitCount = Int64(finalSize)
+        }
     }
 
     private static func inFlightBytes(

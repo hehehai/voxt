@@ -986,7 +986,7 @@ class MLXModelManager: ObservableObject {
         completedFiles: Int,
         totalFiles: Int
     ) {
-        state = .downloading(
+        let nextState = ModelState.downloading(
             progress: progress,
             completed: completed,
             total: total,
@@ -994,6 +994,9 @@ class MLXModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
+        if state != nextState {
+            state = nextState
+        }
     }
 
     private static func inFlightBytes(
