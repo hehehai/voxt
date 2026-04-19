@@ -5,8 +5,8 @@ Voxt uses `mlx-audio-swift` through the mirror fork at `https://github.com/heheh
 The current Xcode package reference is:
 
 - URL: `https://github.com/hehehai/mlx-audio-swift.git`
-- Requirement: `exactVersion`
-- Version: `0.1.2-voxt.1`
+- Requirement: `revision`
+- Revision: `c96fe7b8577fb1db5a9987a6582e706acb388a8e`
 
 ## Version rules
 
@@ -28,6 +28,8 @@ The current Xcode package reference is:
 4. Point `Voxt.xcodeproj` at the fork URL and `exactVersion`.
 5. Build Voxt and verify STT model loading, legacy repo migration, and downloaded-model detection before shipping.
 
+If Voxt needs to consume a synced fork commit before a new tag exists, pin the project to that exact `revision` temporarily, then switch back to a release tag once the fork tag is cut.
+
 ## Practical rules for Voxt maintainers
 
 - Use upstream releases directly when they already include the models or fixes Voxt needs.
@@ -39,6 +41,6 @@ The current Xcode package reference is:
 ## Current pin
 
 - Fork: `hehehai/mlx-audio-swift`
-- Tag: `v0.1.2-voxt.1`
-- Commit: `da935116eb83b033104e6135aaa7db87320d17d4`
-- Upstream base release: `v0.1.2`
+- Requirement: `revision`
+- Commit: `c96fe7b8577fb1db5a9987a6582e706acb388a8e`
+- Notes: includes `Cohere Transcribe` support from fork `main`; replace with a new Voxt tag once one is cut

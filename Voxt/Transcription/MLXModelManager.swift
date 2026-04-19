@@ -104,6 +104,11 @@ class MLXModelManager: ObservableObject {
             description: "Realtime-oriented model with larger memory footprint."
         ),
         ModelOption(
+            id: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16",
+            title: "Cohere Transcribe 03-2026 (fp16)",
+            description: "High-accuracy multilingual encoder-decoder model with punctuation enabled."
+        ),
+        ModelOption(
             id: "mlx-community/parakeet-tdt_ctc-110m",
             title: "Parakeet TDT CTC 110M",
             description: "Smallest Parakeet option for fast English transcription."
@@ -188,6 +193,7 @@ class MLXModelManager: ObservableObject {
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit": 3_148_833_321,
         "mlx-community/Voxtral-Mini-4B-Realtime-6bit": 3_624_337_564,
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16": 8_885_525_001,
+        "beshkenadze/cohere-transcribe-03-2026-mlx-fp16": 4_132_564_062,
         "mlx-community/parakeet-tdt_ctc-110m": 458_961_098,
         "mlx-community/parakeet-tdt-0.6b-v2": 2_471_865_399,
         "mlx-community/parakeet-tdt-0.6b-v3": 2_509_044_141,
@@ -575,6 +581,9 @@ class MLXModelManager: ObservableObject {
         }
         if lower.contains("voxtral") {
             return try await VoxtralRealtimeModel.fromPretrained(repo)
+        }
+        if lower.contains("cohere") {
+            return try await CohereTranscribeModel.fromPretrained(repo)
         }
         if lower.contains("parakeet") {
             return try await ParakeetModel.fromPretrained(repo)

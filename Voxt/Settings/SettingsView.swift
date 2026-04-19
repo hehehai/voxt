@@ -189,6 +189,7 @@ struct SettingsView: View {
                 meetingEnabled: meetingEnabled,
                 hasMissingPermissions: hasMissingPermissions,
                 hasNoAvailableMicrophones: hasNoAvailableMicrophones,
+                activeModelDownloadCount: activeModelDownloadCount,
                 hasMissingModelConfigurationIssues: !missingModelConfigurationIssues.isEmpty,
                 updateBadgeState: updateBadgeState,
                 onTapPermissionBadge: {
@@ -284,6 +285,20 @@ struct SettingsView: View {
             return .newVersion(appUpdateManager.latestVersion)
         }
         return .none
+    }
+
+    private var activeModelDownloadCount: Int {
+        var count = 0
+        if case .downloading = mlxModelManager.state {
+            count += 1
+        }
+        if whisperModelManager.activeDownload != nil {
+            count += 1
+        }
+        if case .downloading = customLLMManager.state {
+            count += 1
+        }
+        return count
     }
 
     @ViewBuilder
@@ -511,6 +526,7 @@ private struct SettingsSidebar: View {
     let meetingEnabled: Bool
     let hasMissingPermissions: Bool
     let hasNoAvailableMicrophones: Bool
+    let activeModelDownloadCount: Int
     let hasMissingModelConfigurationIssues: Bool
     let updateBadgeState: UpdateBadgeState
     let onTapPermissionBadge: () -> Void
@@ -586,6 +602,32 @@ private struct SettingsSidebar: View {
                     }
                 }
                 .buttonStyle(SettingsStatusButtonStyle(tint: .red))
+            }
+
+            if sidebarMode == .root, activeModelDownloadCount > 0 {
+                Button(action: onTapModelBadge) {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.accentColor)
+                            .frame(width: 13, height: 13)
+                        Text(settingsLocalized("Downloading"))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text("\(activeModelDownloadCount)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 7)
+                            .frame(minWidth: 22, minHeight: 20)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.accentColor.opacity(0.14))
+                            )
+                    }
+                }
+                .buttonStyle(SettingsStatusButtonStyle(tint: .accentColor))
             }
 
             if sidebarMode == .root, hasMissingModelConfigurationIssues {

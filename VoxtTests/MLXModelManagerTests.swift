@@ -118,6 +118,7 @@ final class MLXModelManagerTests: XCTestCase {
     func testAvailableModelsIncludeLatestSupportedSTTRepos() {
         let modelIDs = Set(MLXModelManager.availableModels.map(\.id))
 
+        XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
         XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
         XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
@@ -130,6 +131,7 @@ final class MLXModelManagerTests: XCTestCase {
             MLXModelManager.fallbackRemoteSizeText(repo: "mlx-community/FireRedASR2"),
             MLXModelManager.fallbackRemoteSizeText(repo: "mlx-community/FireRedASR2-AED-mlx")
         )
+        XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
         XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-ASR-0.6B-4bit"))
         XCTAssertNotNil(CustomLLMModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-4B-4bit"))
         XCTAssertNotNil(WhisperKitModelManager.fallbackRemoteSizeText(id: "base"))

@@ -96,7 +96,7 @@ struct FeatureModelCatalogBuilder {
                 title: model.title,
                 engine: localized("MLX Audio"),
                 sizeText: isInstalled ? mlxModelManager.modelSizeOnDisk(repo: model.id) : mlxModelManager.remoteSizeText(repo: model.id),
-                ratingText: model.id.contains("1.7B") || model.id.contains("FireRed") ? "4.8" : "4.3",
+                ratingText: model.id.contains("1.7B") || model.id.contains("FireRed") || model.id.localizedCaseInsensitiveContains("cohere") ? "4.8" : "4.3",
                 filterTags: featureFilterTags(
                     base: [localized("Local")] + mlxSpeedTags(for: model.id),
                     installed: isInstalled,
@@ -393,7 +393,7 @@ struct FeatureModelCatalogBuilder {
         if repo.contains("0.6B") || repo.contains("Nano") {
             tags.append(localized("Fast"))
         }
-        if repo.contains("1.7B") || repo.contains("FireRed") {
+        if repo.contains("1.7B") || repo.contains("FireRed") || repo.localizedCaseInsensitiveContains("cohere") {
             tags.append(localized("Accurate"))
         }
         return deduplicatedFeatureTags(tags)
@@ -460,6 +460,7 @@ struct FeatureModelCatalogBuilder {
         }
         if key.contains("qwen3-asr")
             || key.contains("voxtral")
+            || key.contains("cohere")
             || key.contains("sensevoice")
             || key.contains("granite")
             || key.contains("glm-asr")

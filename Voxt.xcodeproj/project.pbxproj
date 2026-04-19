@@ -860,14 +860,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		A1B2C3D4E5F607890123456B /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/hehehai/mlx-audio-swift.git";
-			requirement = {
-				kind = exactVersion;
-				version = "0.1.2-voxt.1";
+			A1B2C3D4E5F607890123456B /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
+				isa = XCRemoteSwiftPackageReference;
+				repositoryURL = "https://github.com/hehehai/mlx-audio-swift.git";
+				requirement = {
+					kind = revision;
+					revision = c96fe7b8577fb1db5a9987a6582e706acb388a8e;
+				};
 			};
-		};
 		B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";

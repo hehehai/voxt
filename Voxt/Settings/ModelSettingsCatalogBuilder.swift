@@ -107,7 +107,7 @@ struct ModelCatalogBuilder {
                 title: mlxModelManager.displayTitle(for: repo),
                 engine: localized("MLX Audio"),
                 sizeText: isInstalled ? mlxModelManager.modelSizeOnDisk(repo: repo) : mlxModelManager.remoteSizeText(repo: repo),
-                ratingText: repo.contains("1.7B") || repo.contains("FireRed") ? "4.8" : "4.3",
+                ratingText: repo.contains("1.7B") || repo.contains("FireRed") || repo.localizedCaseInsensitiveContains("cohere") ? "4.8" : "4.3",
                 filterTags: catalogFilterTags(
                     base: [localized("Local")] + mlxCatalogTags(for: repo),
                     installed: isInstalled,
@@ -410,7 +410,7 @@ struct ModelCatalogBuilder {
         if repo.contains("0.6B") || repo.contains("Nano") {
             tags.append(localized("Fast"))
         }
-        if repo.contains("1.7B") || repo.contains("FireRed") {
+        if repo.contains("1.7B") || repo.contains("FireRed") || repo.localizedCaseInsensitiveContains("cohere") {
             tags.append(localized("Accurate"))
         }
         return deduplicatedTags(tags)
@@ -477,6 +477,7 @@ struct ModelCatalogBuilder {
         }
         if key.contains("qwen3-asr")
             || key.contains("voxtral")
+            || key.contains("cohere")
             || key.contains("sensevoice")
             || key.contains("granite")
             || key.contains("glm-asr")

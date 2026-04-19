@@ -20,12 +20,14 @@ final class WhisperKitModelManager: ObservableObject {
     }()
     private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         private let progress: Progress
+        private let stagedDownloadURL: URL
         private let lock = NSLock()
         private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
-        private var temporaryDownloadURL: URL?
+        private var downloadedFileResult: Result<URL, Error>?
 
-        init(progress: Progress) {
+        init(progress: Progress, stagedDownloadURL: URL) {
             self.progress = progress
+            self.stagedDownloadURL = stagedDownloadURL
         }
 
         func attach(
@@ -54,8 +56,29 @@ final class WhisperKitModelManager: ObservableObject {
             downloadTask: URLSessionDownloadTask,
             didFinishDownloadingTo location: URL
         ) {
+            let result: Result<URL, Error>
+            do {
+                try? FileManager.default.removeItem(at: stagedDownloadURL)
+                try FileManager.default.moveItem(at: location, to: stagedDownloadURL)
+                result = .success(stagedDownloadURL)
+            } catch {
+                let nsError = error as NSError
+                let failureReason = nsError.localizedFailureReason ?? "no failure reason"
+                result = .failure(
+                    NSError(
+                        domain: "WhisperKitModelManager",
+                        code: 1005,
+                        userInfo: [
+                            NSLocalizedDescriptionKey: "Failed to stage downloaded Whisper file.",
+                            NSLocalizedFailureReasonErrorKey: "move \(location.path) -> \(stagedDownloadURL.path) failed: \(failureReason)",
+                            NSUnderlyingErrorKey: error,
+                        ]
+                    )
+                )
+            }
+
             lock.lock()
-            temporaryDownloadURL = location
+            downloadedFileResult = result
             lock.unlock()
         }
 
@@ -70,16 +93,21 @@ final class WhisperKitModelManager: ObservableObject {
             }
 
             lock.lock()
-            let temporaryDownloadURL = self.temporaryDownloadURL
+            let downloadedFileResult = self.downloadedFileResult
             lock.unlock()
 
             guard let response = task.response,
-                  let temporaryDownloadURL else {
+                  let downloadedFileResult else {
                 resume(with: .failure(URLError(.badServerResponse)))
                 return
             }
 
-            resume(with: .success((temporaryDownloadURL, response)))
+            switch downloadedFileResult {
+            case .success(let stagedDownloadURL):
+                resume(with: .success((stagedDownloadURL, response)))
+            case .failure(let error):
+                resume(with: .failure(error))
+            }
         }
 
         private func resume(with result: Result<(URL, URLResponse), Error>) {
@@ -380,6 +408,9 @@ final class WhisperKitModelManager: ObservableObject {
                 finalizeDownloadState(for: targetID)
             } catch {
                 let message = error.localizedDescription
+                VoxtLog.error(
+                    "Whisper download failed. model=\(targetID), error=\(Self.describeError(error))"
+                )
                 downloadErrorByID[targetID] = message
                 if targetID == modelID {
                     state = .error(message)
@@ -1042,18 +1073,18 @@ final class WhisperKitModelManager: ObservableObject {
                 kCFNetworkProxiesSOCKSEnable as String: false,
             ]
         }
-        let delegate = DownloadDelegate(progress: progress)
-        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
-
-        var request = URLRequest(url: remoteURL)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         let temporaryURL = destinationURL.appendingPathExtension("download")
         try? FileManager.default.removeItem(at: temporaryURL)
         try FileManager.default.createDirectory(
             at: destinationURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        let delegate = DownloadDelegate(progress: progress, stagedDownloadURL: temporaryURL)
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+
+        var request = URLRequest(url: remoteURL)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let (downloadedURL, response) = try await withCheckedThrowingContinuation { continuation in
             delegate.attach(continuation)
@@ -1070,11 +1101,20 @@ final class WhisperKitModelManager: ObservableObject {
         }
 
         try? FileManager.default.removeItem(at: destinationURL)
-        try FileManager.default.moveItem(at: downloadedURL, to: temporaryURL)
-        try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
+        try FileManager.default.moveItem(at: downloadedURL, to: destinationURL)
         if let finalSize = try? destinationURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
             progress.completedUnitCount = Int64(finalSize)
         }
+    }
+
+    private static func describeError(_ error: Error) -> String {
+        let nsError = error as NSError
+        let failureReason = nsError.localizedFailureReason ?? "nil"
+        let recoverySuggestion = nsError.localizedRecoverySuggestion ?? "nil"
+        let underlying = (nsError.userInfo[NSUnderlyingErrorKey] as? NSError)
+            .map { "underlyingDomain=\($0.domain), underlyingCode=\($0.code), underlyingDesc=\($0.localizedDescription)" }
+            ?? "underlying=nil"
+        return "domain=\(nsError.domain), code=\(nsError.code), desc=\(nsError.localizedDescription), failureReason=\(failureReason), recovery=\(recoverySuggestion), \(underlying)"
     }
 
     private static func inFlightBytes(
