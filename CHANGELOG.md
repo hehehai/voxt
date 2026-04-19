@@ -6,6 +6,29 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.9.6] - 2026-04-19
+
+### Added
+- EN: Added the local Cohere Transcribe model to the MLX speech model library, so you can install another multilingual on-device ASR option directly from Settings.
+- 简体中文：在 MLX 语音模型库中新增了本地 Cohere Transcribe 模型，现在你可以直接在设置里安装这一多语言本地 ASR 选项。
+- 日本語：MLX 音声モデルライブラリにローカル版 Cohere Transcribe を追加し、Settings から多言語対応のオンデバイス ASR を新たに導入できるようにしました。
+
+### Changed
+- EN: Expanded local ASR settings with per-model tuning dialogs, including recognition presets, main-language following, and model-specific context or prompt controls where supported.
+- 简体中文：扩展了本地 ASR 设置，支持按模型分别调整识别预设、跟随主语言，以及模型支持时的上下文或提示词控制。
+- 日本語：ローカル ASR 設定を拡張し、モデルごとのチューニングダイアログから認識プリセット、主言語追随、対応モデルでの context / prompt 制御を調整できるようにしました。
+- EN: Improved the model catalog so local ASR entries show whether they support your current primary language, making it easier to choose the right model before installing.
+- 简体中文：改进了模型目录，本地 ASR 条目现在会显示是否支持你当前的主语言，安装前更容易选对模型。
+- 日本語：モデルカタログを改善し、ローカル ASR エントリに現在の主言語への対応状況を表示するようにしたため、インストール前に適切なモデルを選びやすくなりました。
+
+### Fixed
+- EN: Reduced CPU usage during local model downloads and added an in-progress download badge in Settings so active installs stay visible and can jump back to the model list quickly.
+- 简体中文：降低了本地模型下载过程中的 CPU 占用，并在设置中新增下载中的提示徽标，让正在安装的模型始终可见并能快速跳回模型列表。
+- 日本語：ローカルモデルのダウンロード中に発生していた CPU 使用率を抑え、Settings に進行中ダウンロードのバッジを追加して、インストール状況の確認とモデル一覧への復帰をしやすくしました。
+- EN: Fixed local ASR configuration sheets so Whisper and other tuning controls follow the app language more consistently across labels, presets, and helper text.
+- 简体中文：修复了本地 ASR 配置弹窗的多语言显示，现在 Whisper 等调参项的标签、预设和说明文案会更一致地跟随界面语言。
+- 日本語：ローカル ASR 設定シートの多言語表示を修正し、Whisper などのチューニング項目でラベル、プリセット、補助テキストがより一貫してアプリ言語に追随するようにしました。
+
 ## [1.9.5] - 2026-04-16
 
 ### Fixed
