@@ -11,7 +11,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
     case glmASR
     case aliyunBailianASR
 
-    var id: String { rawValue }
+    nonisolated var id: String { rawValue }
 
     var title: String {
         switch self {
@@ -94,7 +94,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var usesResponsesAPI: Bool {
+    nonisolated var usesResponsesAPI: Bool {
         switch self {
         case .volcengine, .aliyunBailian:
             return true
@@ -103,7 +103,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
         }
     }
 
-    var supportsHostedSearch: Bool {
+    nonisolated var supportsHostedSearch: Bool {
         switch self {
         case .anthropic, .google, .zai, .volcengine, .aliyunBailian:
             return true
@@ -112,7 +112,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
         }
     }
 
-    var defaultSearchEnabled: Bool {
+    nonisolated var defaultSearchEnabled: Bool {
         self == .aliyunBailian
     }
 
@@ -162,7 +162,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
         }
     }
 
-    var suggestedModel: String {
+    nonisolated var suggestedModel: String {
         switch self {
         case .anthropic:
             return "claude-sonnet-4-6"

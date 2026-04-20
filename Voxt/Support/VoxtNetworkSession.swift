@@ -54,7 +54,7 @@ enum VoxtNetworkSession {
         let username: String
         let password: String
 
-        var hasValidCustomEndpoint: Bool {
+        nonisolated var hasValidCustomEndpoint: Bool {
             !host.isEmpty && port != nil
         }
 

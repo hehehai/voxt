@@ -577,10 +577,9 @@ final class DictionarySuggestionStore: ObservableObject {
             return
         }
 
-        let fileManager = self.fileManager
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        DispatchQueue.global(qos: .utility).async { [weak self, url] in
             let decodedSuggestions: [DictionarySuggestion]
-            if let url, fileManager.fileExists(atPath: url.path) {
+            if let url, FileManager.default.fileExists(atPath: url.path) {
                 do {
                     let data = try Data(contentsOf: url)
                     decodedSuggestions = try JSONDecoder().decode([DictionarySuggestion].self, from: data)

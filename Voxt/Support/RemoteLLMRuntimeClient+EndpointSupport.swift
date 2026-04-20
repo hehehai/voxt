@@ -2,7 +2,7 @@ import Foundation
 import CFNetwork
 
 extension RemoteLLMRuntimeClient {
-    func providerDefaultEndpoint(_ provider: RemoteLLMProvider) -> String {
+    nonisolated func providerDefaultEndpoint(_ provider: RemoteLLMProvider) -> String {
         switch provider {
         case .anthropic:
             return "https://api.anthropic.com/v1/messages"
@@ -33,12 +33,12 @@ extension RemoteLLMRuntimeClient {
         }
     }
 
-    func usesNativeOllamaChatEndpoint(_ url: URL) -> Bool {
+    nonisolated func usesNativeOllamaChatEndpoint(_ url: URL) -> Bool {
         let path = url.path.lowercased()
         return path.hasSuffix("/api/chat")
     }
 
-    func resolvedLLMEndpoint(provider: RemoteLLMProvider, endpoint: String, model: String) -> String {
+    nonisolated func resolvedLLMEndpoint(provider: RemoteLLMProvider, endpoint: String, model: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = trimmed.isEmpty ? providerDefaultEndpoint(provider) : trimmed
         guard let url = URL(string: base) else { return base }
@@ -120,7 +120,7 @@ extension RemoteLLMRuntimeClient {
         }
     }
 
-    func streamingEndpointValue(
+    nonisolated func streamingEndpointValue(
         provider: RemoteLLMProvider,
         endpoint: String,
         model: String,
@@ -140,7 +140,7 @@ extension RemoteLLMRuntimeClient {
         }
     }
 
-    func responsesEndpointValue(
+    nonisolated func responsesEndpointValue(
         provider: RemoteLLMProvider,
         endpoint: String,
         model: String
@@ -171,7 +171,7 @@ extension RemoteLLMRuntimeClient {
         return appendingPath(resolved, suffix: "/responses")
     }
 
-    private func normalizedResponsesEndpoint(_ value: String, defaultPath: String) -> String {
+    nonisolated private func normalizedResponsesEndpoint(_ value: String, defaultPath: String) -> String {
         guard let url = URL(string: value) else { return value }
         let normalizedPath = url.path.lowercased()
 
@@ -199,7 +199,7 @@ extension RemoteLLMRuntimeClient {
         return value
     }
 
-    func resolvedProxyRoute(for url: URL, settings: VoxtNetworkSession.ProxySettings) -> String {
+    nonisolated func resolvedProxyRoute(for url: URL, settings: VoxtNetworkSession.ProxySettings) -> String {
         let detected = resolvedSystemProxyRoute(for: url)
         switch settings.mode {
         case .system:
@@ -214,7 +214,7 @@ extension RemoteLLMRuntimeClient {
         }
     }
 
-    func resolvedSystemProxyRoute(for url: URL) -> String {
+    nonisolated func resolvedSystemProxyRoute(for url: URL) -> String {
         guard
             let settingsRef = CFNetworkCopySystemProxySettings(),
             let settings = settingsRef.takeRetainedValue() as? [String: Any]
@@ -251,18 +251,18 @@ extension RemoteLLMRuntimeClient {
         return "\(type)@\(address),\(auth)"
     }
 
-    func networkErrorDetail(error: NSError) -> String {
+    nonisolated func networkErrorDetail(error: NSError) -> String {
         let streamDomain = error.userInfo["_kCFStreamErrorDomainKey"] ?? "nil"
         let streamCode = error.userInfo["_kCFStreamErrorCodeKey"] ?? "nil"
         return "domain=\(error.domain), code=\(error.code), streamDomain=\(streamDomain), streamCode=\(streamCode), desc=\(error.localizedDescription)"
     }
 
-    func replacingPathSuffix(in value: String, oldSuffix: String, newSuffix: String) -> String {
+    nonisolated func replacingPathSuffix(in value: String, oldSuffix: String, newSuffix: String) -> String {
         guard value.lowercased().hasSuffix(oldSuffix) else { return value }
         return String(value.dropLast(oldSuffix.count)) + newSuffix
     }
 
-    func appendingPath(_ value: String, suffix: String) -> String {
+    nonisolated func appendingPath(_ value: String, suffix: String) -> String {
         if value.hasSuffix("/") {
             return value + suffix.dropFirst()
         }

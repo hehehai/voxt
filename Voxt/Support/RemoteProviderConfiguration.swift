@@ -245,7 +245,7 @@ enum RemoteModelConfigurationStore {
         }
     }
 
-    private static func decodedConfigurations(from raw: String) -> [RemoteProviderConfiguration] {
+    nonisolated private static func decodedConfigurations(from raw: String) -> [RemoteProviderConfiguration] {
         guard let data = raw.data(using: .utf8), !data.isEmpty else {
             return []
         }
@@ -256,7 +256,7 @@ enum RemoteModelConfigurationStore {
         }
     }
 
-    private static func encodeConfigurations(_ items: [RemoteProviderConfiguration]) -> String {
+    nonisolated private static func encodeConfigurations(_ items: [RemoteProviderConfiguration]) -> String {
         guard let data = try? JSONEncoder().encode(items),
               let text = String(data: data, encoding: .utf8)
         else {
@@ -265,7 +265,7 @@ enum RemoteModelConfigurationStore {
         return text
     }
 
-    private static func normalizedCompatibilityValues(
+    nonisolated private static func normalizedCompatibilityValues(
         for configuration: RemoteProviderConfiguration
     ) -> RemoteProviderConfiguration {
         guard let provider = RemoteLLMProvider(rawValue: configuration.providerID) else {
@@ -291,7 +291,7 @@ enum RemoteModelConfigurationStore {
         return normalized
     }
 
-    private static func resolvedSensitiveValues(for configuration: RemoteProviderConfiguration) -> RemoteProviderConfiguration {
+    nonisolated private static func resolvedSensitiveValues(for configuration: RemoteProviderConfiguration) -> RemoteProviderConfiguration {
         var resolved = configuration
         for field in SensitiveField.allCases {
             let keychainValue = VoxtSecureStorage.string(for: keychainAccount(providerID: configuration.providerID, field: field))
@@ -305,14 +305,14 @@ enum RemoteModelConfigurationStore {
         return resolved
     }
 
-    private static func persistSensitiveValues(for configuration: RemoteProviderConfiguration) {
+    nonisolated private static func persistSensitiveValues(for configuration: RemoteProviderConfiguration) {
         for field in SensitiveField.allCases {
             let value = sensitiveValue(for: field, in: configuration)
             VoxtSecureStorage.set(value, for: keychainAccount(providerID: configuration.providerID, field: field))
         }
     }
 
-    private static func hasInlineSensitiveValues(_ configuration: RemoteProviderConfiguration) -> Bool {
+    nonisolated private static func hasInlineSensitiveValues(_ configuration: RemoteProviderConfiguration) -> Bool {
         SensitiveField.allCases.contains { field in
             !sensitiveValue(for: field, in: configuration)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -320,11 +320,11 @@ enum RemoteModelConfigurationStore {
         }
     }
 
-    private static func keychainAccount(providerID: String, field: SensitiveField) -> String {
+    nonisolated private static func keychainAccount(providerID: String, field: SensitiveField) -> String {
         "remote-provider.\(providerID).\(field.rawValue)"
     }
 
-    private static func sensitiveValue(
+    nonisolated private static func sensitiveValue(
         for field: SensitiveField,
         in configuration: RemoteProviderConfiguration
     ) -> String {
@@ -338,7 +338,7 @@ enum RemoteModelConfigurationStore {
         }
     }
 
-    private static func setSensitiveValue(
+    nonisolated private static func setSensitiveValue(
         _ value: String,
         for field: SensitiveField,
         in configuration: inout RemoteProviderConfiguration

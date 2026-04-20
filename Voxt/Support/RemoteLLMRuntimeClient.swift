@@ -2,6 +2,8 @@ import Foundation
 import CFNetwork
 
 struct RemoteLLMRuntimeClient {
+    nonisolated init() {}
+
     struct StreamingFailure: Error {
         let underlying: Error
         let partialText: String

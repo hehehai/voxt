@@ -2,16 +2,16 @@ import Foundation
 import Security
 
 enum VoxtSecureStorage {
-    private static let defaultServiceName: String = {
+    nonisolated private static let defaultServiceName: String = {
         let bundleID = Bundle.main.bundleIdentifier ?? "com.voxt.Voxt"
         return "\(bundleID).secure-storage"
     }()
 
-    private static var serviceName: String {
+    nonisolated private static var serviceName: String {
         defaultServiceName
     }
 
-    static func string(for account: String) -> String? {
+    nonisolated static func string(for account: String) -> String? {
         var query = baseQuery(for: account)
         query[kSecReturnData as String] = kCFBooleanTrue
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -25,12 +25,12 @@ enum VoxtSecureStorage {
         case errSecItemNotFound:
             return nil
         default:
-            VoxtLog.warning("Keychain read failed. account=\(account), status=\(status)")
+            print("[Voxt] [WARN] Keychain read failed. account=\(account), status=\(status)")
             return nil
         }
     }
 
-    static func set(_ value: String, for account: String) {
+    nonisolated static func set(_ value: String, for account: String) {
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             removeValue(for: account)
             return
@@ -48,41 +48,41 @@ enum VoxtSecureStorage {
         case errSecSuccess:
             let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
             if updateStatus != errSecSuccess {
-                VoxtLog.warning("Keychain update failed. account=\(account), status=\(updateStatus)")
+                print("[Voxt] [WARN] Keychain update failed. account=\(account), status=\(updateStatus)")
             }
         case errSecItemNotFound:
             var item = query
             attributes.forEach { item[$0.key] = $0.value }
             let addStatus = SecItemAdd(item as CFDictionary, nil)
             if addStatus != errSecSuccess {
-                VoxtLog.warning("Keychain add failed. account=\(account), status=\(addStatus)")
+                print("[Voxt] [WARN] Keychain add failed. account=\(account), status=\(addStatus)")
             }
         default:
-            VoxtLog.warning("Keychain lookup before write failed. account=\(account), status=\(status)")
+            print("[Voxt] [WARN] Keychain lookup before write failed. account=\(account), status=\(status)")
         }
     }
 
-    static func removeValue(for account: String) {
+    nonisolated static func removeValue(for account: String) {
         let status = SecItemDelete(baseQuery(for: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            VoxtLog.warning("Keychain delete failed. account=\(account), status=\(status)")
+            print("[Voxt] [WARN] Keychain delete failed. account=\(account), status=\(status)")
             return
         }
     }
 
-    static func clearAllForTesting() {
+    nonisolated static func clearAllForTesting() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            VoxtLog.warning("Keychain reset failed. status=\(status)")
+            print("[Voxt] [WARN] Keychain reset failed. status=\(status)")
             return
         }
     }
 
-    private static func baseQuery(for account: String) -> [String: Any] {
+    nonisolated private static func baseQuery(for account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,

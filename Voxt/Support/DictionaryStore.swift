@@ -938,10 +938,9 @@ final class DictionaryStore: ObservableObject {
             return
         }
 
-        let fileManager = self.fileManager
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        DispatchQueue.global(qos: .utility).async { [weak self, url] in
             let decodedEntries: [DictionaryEntry]
-            if let url, fileManager.fileExists(atPath: url.path) {
+            if let url, FileManager.default.fileExists(atPath: url.path) {
                 do {
                     let data = try Data(contentsOf: url)
                     decodedEntries = try JSONDecoder().decode([DictionaryEntry].self, from: data)
