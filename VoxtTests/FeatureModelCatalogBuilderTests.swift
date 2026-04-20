@@ -95,6 +95,22 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(builder.asrSelectionSummary(.remoteASR(.aliyunBailianASR)), "Aliyun Bailian ASR · fun-asr-realtime")
     }
 
+    func testUnconfiguredRemoteLLMEntryRemainsNotConfiguredInSelector() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(translationModel: .remoteLLM(.openAI))
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .translationModel)
+                .first(where: { $0.selectionID == .remoteLLM(.openAI) })
+        )
+
+        XCTAssertFalse(entry.isSelectable)
+        XCTAssertEqual(entry.statusText, AppLocalization.localizedString("Not configured"))
+        XCTAssertFalse(entry.filterTags.contains(AppLocalization.localizedString("Configured")))
+        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Configured")))
+    }
+
     func testASRSelectorEntryDisplaysSupportsPrimaryLanguageTag() throws {
         let repo = "mlx-community/Qwen3-ASR-0.6B-4bit"
         let builder = makeBuilder(

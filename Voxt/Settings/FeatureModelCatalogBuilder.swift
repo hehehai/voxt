@@ -282,7 +282,7 @@ struct FeatureModelCatalogBuilder {
                     configured: isConfigured,
                     selectionID: selectionID
                 ),
-                statusText: configuration.hasUsableModel ? localized("Configured") : localized("Not configured"),
+                statusText: isConfigured ? localized("Configured") : localized("Not configured"),
                 usageLocations: usageLabels(for: selectionID),
                 isSelectable: isConfigured,
                 disabledReason: isConfigured ? nil : localized("Configure this provider in Model settings first.")

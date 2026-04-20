@@ -95,7 +95,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         doubaoEnableRequestCorrections = try container.decodeIfPresent(Bool.self, forKey: .doubaoEnableRequestCorrections) ?? true
     }
 
-    var withoutSensitiveValues: RemoteProviderConfiguration {
+    nonisolated var withoutSensitiveValues: RemoteProviderConfiguration {
         var sanitized = self
         sanitized.apiKey = ""
         sanitized.appID = ""
@@ -109,6 +109,8 @@ enum RemoteModelConfigurationStore {
         case metadataOnly
         case includeStoredValues
     }
+
+    nonisolated private static let redactedSensitiveValuePlaceholder = "__stored__"
 
     private enum SensitiveField: String, CaseIterable {
         case apiKey
@@ -124,7 +126,7 @@ enum RemoteModelConfigurationStore {
         return Dictionary(uniqueKeysWithValues: items.map { item in
             let resolved = switch sensitiveValueLoading {
             case .metadataOnly:
-                item.withoutSensitiveValues
+                resolvedSensitiveValuePresence(for: item)
             case .includeStoredValues:
                 resolvedSensitiveValues(for: item)
             }
@@ -301,6 +303,19 @@ enum RemoteModelConfigurationStore {
                 VoxtSecureStorage.set(currentValue, for: keychainAccount(providerID: configuration.providerID, field: field))
             }
             setSensitiveValue(finalValue, for: field, in: &resolved)
+        }
+        return resolved
+    }
+
+    nonisolated private static func resolvedSensitiveValuePresence(for configuration: RemoteProviderConfiguration) -> RemoteProviderConfiguration {
+        var resolved = configuration.withoutSensitiveValues
+        for field in SensitiveField.allCases {
+            let keychainValue = VoxtSecureStorage.string(for: keychainAccount(providerID: configuration.providerID, field: field))
+            let currentValue = sensitiveValue(for: field, in: configuration)
+            let hasValue = !(keychainValue ?? currentValue)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+            setSensitiveValue(hasValue ? redactedSensitiveValuePlaceholder : "", for: field, in: &resolved)
         }
         return resolved
     }

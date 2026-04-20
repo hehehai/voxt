@@ -196,8 +196,9 @@ final class RemoteModelConfigurationTests: XCTestCase {
 
         XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.model, "gpt-5.2")
         XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.endpoint, "https://example.com/llm")
-        XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey, "")
-        XCTAssertFalse(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.isConfigured ?? true)
+        XCTAssertFalse(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey.isEmpty ?? true)
+        XCTAssertNotEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey, "secret")
+        XCTAssertTrue(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.isConfigured ?? false)
     }
 
     func testResolvedASRConfigurationFallsBackToSuggestedModelAndClearsRealtimeFlag() {
