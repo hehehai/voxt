@@ -389,200 +389,6 @@ jobs:
 
           codesign --verify --strict --verbose=2 "$APP_PATH"
 
-      - name: Notarize and staple app bundle
-        run: |
-          set -euo pipefail
-          APP_PATH="build/DerivedData/Build/Products/Release/Voxt.app"
-          TARGET_PATH=""
-          TARGET_KIND=""
-          NOTARY_LOG_FILE=""
-          SUBMIT_JSON=""
-          SUBMIT_ERR=""
-          INFO_JSON=""
-          INFO_ERR=""
-
-          if [ ! -d "$APP_PATH" ]; then
-            echo "::error::Voxt.app not found at $APP_PATH"
-            exit 1
-          fi
-
-          classify_retryable() {
-            local err_file="$1"
-            if grep -Eq "HTTP status code: 5[0-9][0-9]|statusCode: 500|UNEXPECTED_ERROR|Internal Server Error" "$err_file"; then
-              return 0
-            fi
-            return 1
-          }
-
-          run_notarytool_submit() {
-            if [ "${NOTARY_AUTH_MODE:-apple-id}" = "profile" ]; then
-              xcrun notarytool submit "$TARGET_PATH" \
-                --keychain-profile "$NOTARY_PROFILE_NAME" \
-                --output-format json \
-                >"$SUBMIT_JSON" 2>"$SUBMIT_ERR"
-            else
-              xcrun notarytool submit "$TARGET_PATH" \
-                --apple-id "$APPLE_ID" \
-                --team-id "$APPLE_TEAM_ID" \
-                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-                --output-format json \
-                >"$SUBMIT_JSON" 2>"$SUBMIT_ERR"
-            fi
-          }
-
-          run_notarytool_info() {
-            local submission_id="$1"
-            if [ "${NOTARY_AUTH_MODE:-apple-id}" = "profile" ]; then
-              xcrun notarytool info "$submission_id" \
-                --keychain-profile "$NOTARY_PROFILE_NAME" \
-                --output-format json \
-                >"$INFO_JSON" 2>"$INFO_ERR"
-            else
-              xcrun notarytool info "$submission_id" \
-                --apple-id "$APPLE_ID" \
-                --team-id "$APPLE_TEAM_ID" \
-                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-                --output-format json \
-                >"$INFO_JSON" 2>"$INFO_ERR"
-            fi
-          }
-
-          fetch_notary_log() {
-            local submission_id="$1"
-            if [ "${NOTARY_AUTH_MODE:-apple-id}" = "profile" ]; then
-              xcrun notarytool log "$submission_id" \
-                --keychain-profile "$NOTARY_PROFILE_NAME" \
-                >"$NOTARY_LOG_FILE" 2>&1 || true
-            else
-              xcrun notarytool log "$submission_id" \
-                --apple-id "$APPLE_ID" \
-                --team-id "$APPLE_TEAM_ID" \
-                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-                >"$NOTARY_LOG_FILE" 2>&1 || true
-            fi
-          }
-
-          notarize_file() {
-            local target_path="$1"
-            local target_kind="$2"
-            local assess_mode="$3"
-
-            TARGET_PATH="$target_path"
-            TARGET_KIND="$target_kind"
-            NOTARY_LOG_FILE="build/notary-log-${target_kind}-${VERSION}.json"
-            SUBMIT_JSON="build/notary-submit-${target_kind}.json"
-            SUBMIT_ERR="build/notary-submit-${target_kind}.err.log"
-            INFO_JSON="build/notary-info-${target_kind}.json"
-            INFO_ERR="build/notary-info-${target_kind}.err.log"
-
-            if [ ! -e "$TARGET_PATH" ]; then
-              echo "::error::Missing artifact for notarization: $TARGET_PATH"
-              exit 1
-            fi
-
-            SUBMISSION_ID=""
-            MAX_SUBMIT_ATTEMPTS=8
-            for attempt in $(seq 1 "$MAX_SUBMIT_ATTEMPTS"); do
-              echo "Notarization submit attempt $attempt for ${TARGET_KIND}..."
-              if run_notarytool_submit; then
-                SUBMISSION_ID="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], "r", encoding="utf-8")).get("id", ""))' "$SUBMIT_JSON")"
-                if [ -z "$SUBMISSION_ID" ]; then
-                  echo "::error::notarytool submit succeeded but no submission id was returned for ${TARGET_KIND}"
-                  exit 1
-                fi
-                echo "Notary submission id for ${TARGET_KIND}: $SUBMISSION_ID"
-                break
-              fi
-
-              if classify_retryable "$SUBMIT_ERR"; then
-                if [ "$attempt" -eq "$MAX_SUBMIT_ATTEMPTS" ]; then
-                  echo "::error::Notarization submit failed after ${MAX_SUBMIT_ATTEMPTS} attempts for ${TARGET_KIND} (retryable server errors)"
-                  cat "$SUBMIT_ERR"
-                  exit 1
-                fi
-                BACKOFF=$((attempt * 30))
-                REQUEST_ID="$(grep -Eo "Request ID: [A-Z0-9.]+" "$SUBMIT_ERR" | head -n 1 || true)"
-                if [ -n "$REQUEST_ID" ]; then
-                  echo "Retryable Apple notary error for ${TARGET_KIND} ($REQUEST_ID). Retrying in ${BACKOFF}s..."
-                else
-                  echo "Retryable Apple notary error for ${TARGET_KIND}. Retrying in ${BACKOFF}s..."
-                fi
-                sleep "$BACKOFF"
-                continue
-              fi
-
-              echo "::error::Notarization submit failed with non-retryable error for ${TARGET_KIND}"
-              cat "$SUBMIT_ERR"
-              exit 1
-            done
-
-            if [ -z "$SUBMISSION_ID" ]; then
-              echo "::error::No notary submission id available for ${TARGET_KIND}"
-              exit 1
-            fi
-
-            POLL_INTERVAL=25
-            MAX_POLL_SECONDS=$((30 * 60))
-            START_TS="$(date +%s)"
-            ACCEPTED=0
-
-            while true; do
-              NOW_TS="$(date +%s)"
-              ELAPSED=$((NOW_TS - START_TS))
-              if [ "$ELAPSED" -ge "$MAX_POLL_SECONDS" ]; then
-                echo "::error::Notary polling timed out after ${MAX_POLL_SECONDS}s for ${TARGET_KIND} submission $SUBMISSION_ID"
-                fetch_notary_log "$SUBMISSION_ID"
-                exit 1
-              fi
-
-              if ! run_notarytool_info "$SUBMISSION_ID"; then
-                if classify_retryable "$INFO_ERR"; then
-                  echo "Retryable error while checking ${TARGET_KIND} notary status, continuing..."
-                  sleep "$POLL_INTERVAL"
-                  continue
-                fi
-                echo "::error::Failed to fetch notary status for ${TARGET_KIND} (non-retryable)"
-                cat "$INFO_ERR"
-                fetch_notary_log "$SUBMISSION_ID"
-                exit 1
-              fi
-
-              STATUS="$(python3 -c 'import json, sys; print((json.load(open(sys.argv[1], "r", encoding="utf-8")).get("status") or "").strip())' "$INFO_JSON")"
-              echo "Notary status for ${TARGET_KIND}: ${STATUS:-<empty>}"
-
-              if [ "$STATUS" = "Accepted" ]; then
-                ACCEPTED=1
-                break
-              fi
-
-              if [ "$STATUS" = "Invalid" ] || [ "$STATUS" = "Rejected" ]; then
-                echo "::error::Notary status is $STATUS for ${TARGET_KIND} submission $SUBMISSION_ID"
-                fetch_notary_log "$SUBMISSION_ID"
-                [ -f "$NOTARY_LOG_FILE" ] && tail -n 120 "$NOTARY_LOG_FILE" || true
-                exit 1
-              fi
-
-              sleep "$POLL_INTERVAL"
-            done
-
-            if [ "$ACCEPTED" -ne 1 ]; then
-              echo "::error::Notary status did not reach Accepted for ${TARGET_KIND}"
-              fetch_notary_log "$SUBMISSION_ID"
-              exit 1
-            fi
-
-            xcrun stapler staple "$TARGET_PATH"
-            xcrun stapler validate "$TARGET_PATH"
-
-            if [ "$assess_mode" = "install" ]; then
-              spctl -a -vv -t install "$TARGET_PATH"
-            elif [ "$assess_mode" = "execute" ]; then
-              spctl -a -vv "$TARGET_PATH"
-            fi
-          }
-
-          notarize_file "$APP_PATH" "app" "execute"
-
       - name: Build zip, dmg, and pkg artifacts
         run: |
           set -euo pipefail
@@ -616,6 +422,7 @@ jobs:
       - name: Notarize and staple release artifacts
         run: |
           set -euo pipefail
+          ZIP_PATH="build/Voxt-${VERSION}-macOS.zip"
           DMG_PATH="build/Voxt-${VERSION}.dmg"
           PKG_PATH="build/Voxt-${VERSION}.pkg"
           TARGET_PATH=""
@@ -686,6 +493,7 @@ jobs:
             local target_path="$1"
             local target_kind="$2"
             local assess_mode="$3"
+            local should_staple="$4"
 
             TARGET_PATH="$target_path"
             TARGET_KIND="$target_kind"
@@ -791,8 +599,10 @@ jobs:
               exit 1
             fi
 
-            xcrun stapler staple "$TARGET_PATH"
-            xcrun stapler validate "$TARGET_PATH"
+            if [ "$should_staple" = "true" ]; then
+              xcrun stapler staple "$TARGET_PATH"
+              xcrun stapler validate "$TARGET_PATH"
+            fi
 
             if [ "$assess_mode" = "install" ]; then
               spctl -a -vv -t install "$TARGET_PATH"
@@ -801,8 +611,11 @@ jobs:
             fi
           }
 
-          notarize_file "$PKG_PATH" "pkg" "install"
-          notarize_file "$DMG_PATH" "dmg" "none"
+          # Apple notarytool accepts release containers like ZIP, PKG, and DMG.
+          # ZIP archives cannot be stapled directly, so we notarize them without stapling.
+          notarize_file "$ZIP_PATH" "zip" "none" "false"
+          notarize_file "$PKG_PATH" "pkg" "install" "true"
+          notarize_file "$DMG_PATH" "dmg" "none" "true"
 
       - name: Upload notarization diagnostics
         if: failure()
