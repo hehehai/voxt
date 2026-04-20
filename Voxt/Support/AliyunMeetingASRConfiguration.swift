@@ -25,6 +25,75 @@ enum AliyunMeetingASRConfiguration {
     static let defaultCompatibleEndpointUS = "https://dashscope-us.aliyuncs.com/compatible-mode/v1/chat/completions"
     static let defaultMeetingModel = "qwen3-asr-flash-filetrans"
 
+    static func makeRealtimeTaskID() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
+    static func realtimeSocketEvent(from object: [String: Any]) -> String {
+        if let header = object["header"] as? [String: Any],
+           let event = header["event"] as? String {
+            let normalized = event.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !normalized.isEmpty {
+                return normalized
+            }
+        }
+        return (object["event"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    static func realtimeSocketErrorMessage(from object: [String: Any]) -> String? {
+        let payload = object["payload"] as? [String: Any] ?? [:]
+        let header = object["header"] as? [String: Any] ?? [:]
+        let candidates: [Any?] = [
+            payload["message"],
+            payload["error_message"],
+            header["error_message"],
+            header["errorMessage"],
+            object["message"],
+            object["error_message"]
+        ]
+        for candidate in candidates {
+            if let value = candidate as? String {
+                let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !normalized.isEmpty {
+                    return normalized
+                }
+            }
+        }
+        return nil
+    }
+
+    static func funRealtimeControlPayload(
+        action: String,
+        taskID: String,
+        model: String? = nil,
+        parameters: [String: Any]? = nil
+    ) -> [String: Any] {
+        var object: [String: Any] = [
+            "header": [
+                "action": action,
+                "task_id": taskID,
+                "streaming": "duplex"
+            ]
+        ]
+        if let model {
+            object["payload"] = [
+                "task_group": "audio",
+                "task": "asr",
+                "function": "recognition",
+                "model": model,
+                "parameters": parameters ?? [:],
+                "input": [:]
+            ]
+        } else {
+            object["payload"] = [
+                "input": [:]
+            ]
+        }
+        return object
+    }
+
     static func normalizedMeetingModel(_ model: String) -> String {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? defaultMeetingModel : trimmed

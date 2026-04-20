@@ -444,6 +444,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Self.migrateLegacyNetworkProxyPreferenceIfNeeded()
         RemoteModelConfigurationStore.migrateLegacyLLMEndpoints()
         VoxtNetworkSession.migrateLegacyProxyCredentials()
+        VoxtNetworkSession.clearProcessProxyEnvironmentOverridesIfNeeded(log: true)
+        if VoxtNetworkSession.currentProxySettings.mode == .disabled,
+           let systemProxy = VoxtNetworkSession.currentSystemProxyStatus.preferredSummary {
+            VoxtLog.warning("Voxt direct proxy mode is enabled while macOS system proxy remains active. systemProxy=\(systemProxy)")
+        }
         super.init()
         AppDelegate.shared = self
     }

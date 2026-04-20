@@ -86,4 +86,37 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
             ]
         )
     }
+
+    func testAliyunASREndpointRemapsRegionWhenSwitchingModelFamilies() {
+        let endpoint = RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+            target: .asr(.aliyunBailianASR),
+            previousModel: "qwen3-asr-flash-realtime",
+            newModel: "fun-asr-realtime",
+            currentEndpoint: "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
+        )
+
+        XCTAssertEqual(endpoint, "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference")
+    }
+
+    func testAliyunASREndpointLeavesCustomHostUntouchedWhenSwitchingModels() {
+        let endpoint = RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+            target: .asr(.aliyunBailianASR),
+            previousModel: "qwen3-asr-flash-realtime",
+            newModel: "fun-asr-realtime",
+            currentEndpoint: "wss://example.com/custom-realtime"
+        )
+
+        XCTAssertEqual(endpoint, "wss://example.com/custom-realtime")
+    }
+
+    func testAliyunASREndpointFillsDefaultPresetWhenEmptyAndModelChanges() {
+        let endpoint = RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+            target: .asr(.aliyunBailianASR),
+            previousModel: "qwen3-asr-flash-realtime",
+            newModel: "fun-asr-realtime",
+            currentEndpoint: ""
+        )
+
+        XCTAssertEqual(endpoint, "wss://dashscope.aliyuncs.com/api-ws/v1/inference")
+    }
 }

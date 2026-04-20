@@ -143,9 +143,52 @@ enum RemoteProviderConfigurationPolicy {
         }
     }
 
+    static func remappedEndpointOnModelChange(
+        target: RemoteProviderTestTarget,
+        previousModel: String,
+        newModel: String,
+        currentEndpoint: String
+    ) -> String {
+        let trimmedEndpoint = currentEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let oldPresets = endpointPresets(target: target, resolvedModel: previousModel)
+        let newPresets = endpointPresets(target: target, resolvedModel: newModel)
+
+        guard !newPresets.isEmpty else { return currentEndpoint }
+        if trimmedEndpoint.isEmpty {
+            return newPresets.first?.url ?? currentEndpoint
+        }
+
+        let oldPresetURLs = Set(oldPresets.map(\.url))
+        let newPresetURLs = Set(newPresets.map(\.url))
+        if newPresetURLs.contains(trimmedEndpoint) {
+            return trimmedEndpoint
+        }
+        guard oldPresetURLs.contains(trimmedEndpoint) || hostMatchesAnyPreset(trimmedEndpoint, presets: oldPresets) else {
+            return currentEndpoint
+        }
+
+        if let remapped = newPresets.first(where: { preset in
+            presetHost(preset.url) == presetHost(trimmedEndpoint)
+        }) {
+            return remapped.url
+        }
+        return newPresets.first?.url ?? currentEndpoint
+    }
+
     private static func isAliyunQwenRealtimeModel(_ model: String) -> Bool {
         model.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .hasPrefix("qwen3-asr-flash-realtime")
+    }
+
+    private static func hostMatchesAnyPreset(_ endpoint: String, presets: [RemoteEndpointPreset]) -> Bool {
+        let host = presetHost(endpoint)
+        return presets.contains { preset in
+            presetHost(preset.url) == host
+        }
+    }
+
+    private static func presetHost(_ value: String) -> String? {
+        URL(string: value)?.host?.lowercased()
     }
 }

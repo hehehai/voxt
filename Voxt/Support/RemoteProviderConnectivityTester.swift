@@ -257,37 +257,28 @@ struct RemoteProviderConnectivityTester {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         logHTTPRequest(context: "Aliyun ASR realtime WebSocket test", request: request, bodyPreview: "run-task + finish-task")
 
-        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
         ws.resume()
         defer {
             ws.cancel(with: .goingAway, reason: nil)
         }
 
-        let taskID = UUID().uuidString.lowercased()
-        let runPayload: [String: Any] = [
-            "header": [
-                "action": "run-task",
-                "task_id": taskID
-            ],
-            "payload": [
-                "task_group": "audio",
-                "task": "asr",
-                "function": "recognition",
-                "model": model,
-                "parameters": [
-                    "sample_rate": 16000,
-                    "format": "pcm",
-                    "language_hints": ["zh", "en"]
-                ],
-                "input": [:]
+        let taskID = AliyunMeetingASRConfiguration.makeRealtimeTaskID()
+        let runPayload = AliyunMeetingASRConfiguration.funRealtimeControlPayload(
+            action: "run-task",
+            taskID: taskID,
+            model: model,
+            parameters: [
+                "sample_rate": 16000,
+                "format": "pcm",
+                "language_hints": ["zh", "en"]
             ]
-        ]
-        let finishPayload: [String: Any] = [
-            "header": [
-                "action": "finish-task",
-                "task_id": taskID
-            ]
-        ]
+        )
+        let finishPayload = AliyunMeetingASRConfiguration.funRealtimeControlPayload(
+            action: "finish-task",
+            taskID: taskID
+        )
         let runData = try JSONSerialization.data(withJSONObject: runPayload)
         let finishData = try JSONSerialization.data(withJSONObject: finishPayload)
         guard let runText = String(data: runData, encoding: .utf8),
@@ -305,13 +296,12 @@ struct RemoteProviderConnectivityTester {
                   let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 continue
             }
-            let event = (object["event"] as? String ?? "").lowercased()
+            let event = AliyunMeetingASRConfiguration.realtimeSocketEvent(from: object)
             if event == "task-started" || event == "task-finished" || event == "result-generated" {
                 return AppLocalization.localizedString("Connection test succeeded (Aliyun ASR WebSocket reachable).")
             }
             if event == "task-failed" || event == "error" {
-                let payload = object["payload"] as? [String: Any]
-                let detail = (payload?["message"] as? String) ?? (object["message"] as? String) ?? ""
+                let detail = AliyunMeetingASRConfiguration.realtimeSocketErrorMessage(from: object) ?? ""
                 throw NSError(
                     domain: "Voxt.Settings",
                     code: 403,
@@ -341,7 +331,8 @@ struct RemoteProviderConnectivityTester {
         request.setValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
         logHTTPRequest(context: "Aliyun ASR Qwen realtime WebSocket test", request: request, bodyPreview: "session.update + session.finish")
 
-        let ws = VoxtNetworkSession.active.webSocketTask(with: request)
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
         ws.resume()
         defer {
             ws.cancel(with: .goingAway, reason: nil)
@@ -597,10 +588,15 @@ struct RemoteProviderConnectivityTester {
     private func resolvedAliyunASRRealtimeWebSocketEndpoint(endpoint: String, defaultValue: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return defaultValue }
-        guard let url = URL(string: trimmed) else { return trimmed }
-        let normalizedPath = url.path.lowercased()
+        guard var components = URLComponents(string: trimmed) else { return trimmed }
+        let normalizedPath = components.path.lowercased()
         if normalizedPath.hasSuffix("/api-ws/v1/inference") {
             return trimmed
+        }
+        if normalizedPath.hasSuffix("/api-ws/v1/realtime") {
+            components.path = components.path.replacingOccurrences(of: "/api-ws/v1/realtime", with: "/api-ws/v1/inference")
+            components.queryItems = nil
+            return components.string ?? trimmed
         }
         if normalizedPath.hasSuffix("/chat/completions") {
             return replacingPathSuffix(in: trimmed, oldSuffix: "/chat/completions", newSuffix: "/api-ws/v1/inference")
@@ -917,7 +913,8 @@ struct RemoteProviderConnectivityTester {
             request.setValue(value, forHTTPHeaderField: key)
         }
         logHTTPRequest(context: "WebSocket reachability test", request: request, bodyPreview: "<websocket ping>")
-        let task = VoxtNetworkSession.active.webSocketTask(with: request)
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let task = managedSocket.task
         task.resume()
         defer {
             task.cancel(with: .goingAway, reason: nil)
@@ -967,7 +964,8 @@ struct RemoteProviderConnectivityTester {
         )
 
         do {
-            let ws = VoxtNetworkSession.active.webSocketTask(with: request)
+            let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+            let ws = managedSocket.task
             ws.resume()
             defer {
                 ws.cancel(with: .goingAway, reason: nil)

@@ -1,6 +1,7 @@
 import Foundation
 import CFNetwork
 import Network
+import Darwin
 
 enum VoxtNetworkSession {
     private enum SecureField: String {
@@ -34,6 +35,17 @@ enum VoxtNetworkSession {
         var id: String { rawValue }
     }
 
+    private static let processProxyEnvironmentKeys = [
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY"
+    ]
+
     struct ProxySettings {
         let mode: ProxyMode
         let scheme: ProxyScheme
@@ -48,6 +60,40 @@ enum VoxtNetworkSession {
 
         var hasCredentials: Bool {
             !username.isEmpty && !password.isEmpty
+        }
+    }
+
+    struct SystemProxyStatus {
+        let httpHost: String
+        let httpPort: Int?
+        let httpsHost: String
+        let httpsPort: Int?
+        let socksHost: String
+        let socksPort: Int?
+
+        var hasEnabledProxy: Bool {
+            !httpHost.isEmpty || !httpsHost.isEmpty || !socksHost.isEmpty
+        }
+
+        var preferredSummary: String? {
+            if let value = endpointSummary(host: socksHost, port: socksPort, scheme: "SOCKS") {
+                return value
+            }
+            if let value = endpointSummary(host: httpsHost, port: httpsPort, scheme: "HTTPS") {
+                return value
+            }
+            if let value = endpointSummary(host: httpHost, port: httpPort, scheme: "HTTP") {
+                return value
+            }
+            return nil
+        }
+
+        private func endpointSummary(host: String, port: Int?, scheme: String) -> String? {
+            guard !host.isEmpty else { return nil }
+            if let port {
+                return "\(scheme) \(host):\(port)"
+            }
+            return "\(scheme) \(host)"
         }
     }
 
@@ -108,6 +154,52 @@ enum VoxtNetworkSession {
     static let system: URLSession = {
         URLSession(configuration: .default)
     }()
+
+    static func clearProcessProxyEnvironmentOverridesIfNeeded(log: Bool = false) {
+        var clearedKeys: [String] = []
+        for key in processProxyEnvironmentKeys {
+            guard getenv(key) != nil else { continue }
+            unsetenv(key)
+            clearedKeys.append(key)
+        }
+        if log, !clearedKeys.isEmpty {
+            VoxtLog.info("Cleared process proxy environment overrides. keys=\(clearedKeys.joined(separator: ","))")
+        }
+    }
+
+    static var currentSystemProxyStatus: SystemProxyStatus {
+        let settings = CFNetworkCopySystemProxySettings()?.takeRetainedValue() as? [String: Any] ?? [:]
+        return SystemProxyStatus(
+            httpHost: proxyHost(settings, enabledKey: kCFNetworkProxiesHTTPEnable, hostKey: kCFNetworkProxiesHTTPProxy),
+            httpPort: proxyPort(settings, enabledKey: kCFNetworkProxiesHTTPEnable, portKey: kCFNetworkProxiesHTTPPort),
+            httpsHost: proxyHost(settings, enabledKey: kCFNetworkProxiesHTTPSEnable, hostKey: kCFNetworkProxiesHTTPSProxy),
+            httpsPort: proxyPort(settings, enabledKey: kCFNetworkProxiesHTTPSEnable, portKey: kCFNetworkProxiesHTTPSPort),
+            socksHost: proxyHost(settings, enabledKey: kCFNetworkProxiesSOCKSEnable, hostKey: kCFNetworkProxiesSOCKSProxy),
+            socksPort: proxyPort(settings, enabledKey: kCFNetworkProxiesSOCKSEnable, portKey: kCFNetworkProxiesSOCKSPort)
+        )
+    }
+
+    static func directModeConflictMessage(for error: Error) -> String? {
+        guard currentProxySettings.mode == .disabled else { return nil }
+        let status = currentSystemProxyStatus
+        guard status.hasEnabledProxy, let proxySummary = status.preferredSummary else { return nil }
+
+        let nsError = error as NSError
+        let description = nsError.localizedDescription.lowercased()
+        let socketNotConnected = description.contains("socket is not connected")
+            || description.contains("socket未连接")
+        let likelyProxyConflict =
+            socketNotConnected
+            || nsError.code == NSURLErrorCannotConnectToHost
+            || nsError.code == NSURLErrorNetworkConnectionLost
+            || nsError.code == NSURLErrorCannotFindHost
+
+        guard likelyProxyConflict else { return nil }
+        return AppLocalization.format(
+            "Voxt is set to direct connection, but macOS system proxy is still enabled (%@). This WebSocket request was still routed to that proxy. Disable the system proxy or TUN mode in Clash/your proxy app, or switch Voxt to System Proxy mode.",
+            proxySummary
+        )
+    }
 
     static var currentProxySettings: ProxySettings {
         let credentials = currentProxyCredentials()
@@ -184,6 +276,7 @@ enum VoxtNetworkSession {
     }
 
     static var active: URLSession {
+        clearProcessProxyEnvironmentOverridesIfNeeded()
         let settings = currentProxySettings
         switch settings.mode {
         case .system:
@@ -199,6 +292,7 @@ enum VoxtNetworkSession {
     }
 
     static func makeWebSocketTask(with request: URLRequest) -> ManagedWebSocketTask {
+        clearProcessProxyEnvironmentOverridesIfNeeded()
         let settings = currentProxySettings
         let session = makeSession(for: settings)
         let task = session.webSocketTask(with: request)
@@ -252,6 +346,40 @@ enum VoxtNetworkSession {
             kCFNetworkProxiesExcludeSimpleHostnames as String: false
         ]
         configuration.proxyConfigurations = []
+    }
+
+    private static func proxyEnabled(_ settings: [String: Any], key: CFString) -> Bool {
+        if let value = settings[key as String] as? NSNumber {
+            return value.boolValue
+        }
+        if let value = settings[key as String] as? Bool {
+            return value
+        }
+        return false
+    }
+
+    private static func proxyHost(
+        _ settings: [String: Any],
+        enabledKey: CFString,
+        hostKey: CFString
+    ) -> String {
+        guard proxyEnabled(settings, key: enabledKey) else { return "" }
+        return (settings[hostKey as String] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func proxyPort(
+        _ settings: [String: Any],
+        enabledKey: CFString,
+        portKey: CFString
+    ) -> Int? {
+        guard proxyEnabled(settings, key: enabledKey) else { return nil }
+        if let value = settings[portKey as String] as? NSNumber {
+            return value.intValue
+        }
+        if let value = settings[portKey as String] as? Int {
+            return value
+        }
+        return nil
     }
 
     private static func secureValue(

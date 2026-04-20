@@ -312,7 +312,10 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
         }
         state = .failed
         let nsError = error as NSError
-        let message = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = (
+            VoxtNetworkSession.directModeConflictMessage(for: error)
+            ?? nsError.localizedDescription
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
         eventHandler?(.failed(speaker: speaker, message: message.isEmpty ? "Unknown live meeting ASR error." : message))
         signalFinished()
     }
@@ -733,7 +736,7 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
     private let endpoint: String
     private let token: String
     private let model: String
-    private let taskID = UUID().uuidString.lowercased()
+    private let taskID = AliyunMeetingASRConfiguration.makeRealtimeTaskID()
 
     init(
         speaker: MeetingSpeaker,
@@ -768,7 +771,6 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
         VoxtLog.info(
             "Meeting Aliyun Fun live connect. endpoint=\(endpoint), model=\(model), speaker=\(speaker.rawValue), proxyMode=\(VoxtNetworkSession.modeDescription)"
         )
@@ -811,20 +813,12 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
         if !hintPayload.languageHints.isEmpty {
             parameters["language_hints"] = hintPayload.languageHints
         }
-        let payload: [String: Any] = [
-            "header": [
-                "action": "run-task",
-                "task_id": taskID
-            ],
-            "payload": [
-                "task_group": "audio",
-                "task": "asr",
-                "function": "recognition",
-                "model": model,
-                "parameters": parameters,
-                "input": [:]
-            ]
-        ]
+        let payload = AliyunMeetingASRConfiguration.funRealtimeControlPayload(
+            action: "run-task",
+            taskID: taskID,
+            model: model,
+            parameters: parameters
+        )
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let text = String(data: data, encoding: .utf8) else {
             throw NSError(domain: "Voxt.Meeting", code: -22, userInfo: [NSLocalizedDescriptionKey: "Failed to encode Aliyun run-task payload."])
@@ -833,12 +827,10 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
     }
 
     private func sendControl(action: String, on ws: URLSessionWebSocketTask) async throws {
-        let payload: [String: Any] = [
-            "header": [
-                "action": action,
-                "task_id": taskID
-            ]
-        ]
+        let payload = AliyunMeetingASRConfiguration.funRealtimeControlPayload(
+            action: action,
+            taskID: taskID
+        )
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let text = String(data: data, encoding: .utf8) else {
             throw NSError(domain: "Voxt.Meeting", code: -23, userInfo: [NSLocalizedDescriptionKey: "Failed to encode Aliyun control payload."])
@@ -869,7 +861,7 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
                         else {
                             continue
                         }
-                        let event = (object["event"] as? String ?? "").lowercased()
+                        let event = AliyunMeetingASRConfiguration.realtimeSocketEvent(from: object)
                         let payload = object["payload"] as? [String: Any] ?? [:]
 
                         if event == "task-started" {
@@ -882,8 +874,7 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
                             break
                         }
                         if event == "task-failed" || event == "error" {
-                            let detail = (payload["message"] as? String)
-                                ?? (object["message"] as? String)
+                            let detail = AliyunMeetingASRConfiguration.realtimeSocketErrorMessage(from: object)
                                 ?? "Aliyun fun ASR task failed."
                             self.emitFailure(NSError(domain: "Voxt.Meeting", code: -24, userInfo: [NSLocalizedDescriptionKey: detail]))
                             break
@@ -1172,10 +1163,15 @@ private enum MeetingAliyunRemoteSupport {
         if trimmed.isEmpty {
             return "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
         }
-        if let url = URL(string: trimmed) {
-            let normalizedPath = url.path.lowercased()
+        if var components = URLComponents(string: trimmed) {
+            let normalizedPath = components.path.lowercased()
             if normalizedPath.hasSuffix("/api-ws/v1/inference") {
                 return trimmed
+            }
+            if normalizedPath.hasSuffix("/api-ws/v1/realtime") {
+                components.path = components.path.replacingOccurrences(of: "/api-ws/v1/realtime", with: "/api-ws/v1/inference")
+                components.queryItems = nil
+                return components.string ?? trimmed
             }
             if normalizedPath.hasSuffix("/models") {
                 return replacingPathSuffix(in: trimmed, oldSuffix: "/models", newSuffix: "/api-ws/v1/inference")

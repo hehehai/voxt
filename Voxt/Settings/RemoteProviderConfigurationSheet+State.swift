@@ -109,12 +109,19 @@ extension RemoteProviderConfigurationSheet {
         Binding(
             get: { resolvedSelectionForPicker },
             set: {
+                let previousModel = resolvedModelValue()
                 selectedProviderModel = $0
                 if llmProviderForPicker != nil,
                    $0 != customModelOptionID,
                    customModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     customModelID = $0
                 }
+                endpoint = RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+                    target: testTarget,
+                    previousModel: previousModel,
+                    newModel: resolvedModelValue(),
+                    currentEndpoint: endpoint
+                )
             }
         )
     }
@@ -237,7 +244,7 @@ extension RemoteProviderConfigurationSheet {
         testResultMessage = nil
         testResultIsSuccess = false
         VoxtLog.info(
-            "Remote provider test started. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), meetingModel=\(snapshot.meetingModel), endpoint=\(sanitizedEndpointForLog(snapshot.endpoint)), hasAPIKey=\(!snapshot.apiKey.isEmpty), hasAppID=\(!snapshot.appID.isEmpty), hasAccessToken=\(!snapshot.accessToken.isEmpty)"
+            "Remote provider test started. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), meetingModel=\(snapshot.meetingModel), endpoint=\(sanitizedEndpointForLog(snapshot.endpoint)), proxyMode=\(VoxtNetworkSession.modeDescription), hasAPIKey=\(!snapshot.apiKey.isEmpty), hasAppID=\(!snapshot.appID.isEmpty), hasAccessToken=\(!snapshot.accessToken.isEmpty)"
         )
 
         Task {
@@ -256,9 +263,10 @@ extension RemoteProviderConfigurationSheet {
                 await MainActor.run {
                     isTestingConnection = false
                     testResultIsSuccess = false
-                    testResultMessage = error.localizedDescription
+                    let message = VoxtNetworkSession.directModeConflictMessage(for: error) ?? error.localizedDescription
+                    testResultMessage = message
                     VoxtLog.warning(
-                        "Remote provider test failed. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), error=\(error.localizedDescription)"
+                        "Remote provider test failed. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), error=\(message)"
                     )
                 }
             }

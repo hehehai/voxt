@@ -767,12 +767,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
         let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
         let ws = managedSocket.task
         ws.resume()
 
-        let taskID = UUID().uuidString.lowercased()
+        let taskID = AliyunMeetingASRConfiguration.makeRealtimeTaskID()
         let responseState = AliyunFunResponseState { [weak self] error in
             Task { @MainActor [weak self] in
                 self?.notifyRuntimeFailure(error)
@@ -854,12 +853,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
               let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return
         }
-        let event = (object["event"] as? String ?? "").lowercased()
+        let event = AliyunMeetingASRConfiguration.realtimeSocketEvent(from: object)
         let payload = object["payload"] as? [String: Any] ?? [:]
 
         if event == "task-failed" || event == "error" {
-            let errorText = (payload["message"] as? String)
-                ?? (object["message"] as? String)
+            let errorText = AliyunMeetingASRConfiguration.realtimeSocketErrorMessage(from: object)
                 ?? "Aliyun fun ASR task failed."
             throw NSError(domain: "Voxt.RemoteASR", code: -42, userInfo: [NSLocalizedDescriptionKey: errorText])
         }
@@ -941,22 +939,12 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         parameters: [String: Any]? = nil,
         onError: @escaping (Error?) -> Void
     ) {
-        var payload: [String: Any] = [
-            "header": [
-                "action": action,
-                "task_id": taskID
-            ]
-        ]
-        if let model {
-            payload["payload"] = [
-                "task_group": "audio",
-                "task": "asr",
-                "function": "recognition",
-                "model": model,
-                "parameters": parameters ?? [:],
-                "input": [:]
-            ]
-        }
+        let payload = AliyunMeetingASRConfiguration.funRealtimeControlPayload(
+            action: action,
+            taskID: taskID,
+            model: model,
+            parameters: parameters
+        )
         do {
             let data = try JSONSerialization.data(withJSONObject: payload)
             guard let text = String(data: data, encoding: .utf8) else {
@@ -2438,10 +2426,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         if trimmed.isEmpty {
             return "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
         }
-        if let url = URL(string: trimmed) {
-            let normalizedPath = url.path.lowercased()
+        if var components = URLComponents(string: trimmed) {
+            let normalizedPath = components.path.lowercased()
             if normalizedPath.hasSuffix("/api-ws/v1/inference") {
                 return trimmed
+            }
+            if normalizedPath.hasSuffix("/api-ws/v1/realtime") {
+                components.path = components.path.replacingOccurrences(of: "/api-ws/v1/realtime", with: "/api-ws/v1/inference")
+                components.queryItems = nil
+                return components.string ?? trimmed
             }
             if normalizedPath.hasSuffix("/models") {
                 return replacingPathSuffix(in: trimmed, oldSuffix: "/models", newSuffix: "/api-ws/v1/inference")
@@ -2762,6 +2755,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func userVisibleRemoteErrorMessage(for error: Error) -> String {
+        if let conflictMessage = VoxtNetworkSession.directModeConflictMessage(for: error) {
+            return conflictMessage
+        }
         let nsError = error as NSError
         let description = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedDescription = description.lowercased()

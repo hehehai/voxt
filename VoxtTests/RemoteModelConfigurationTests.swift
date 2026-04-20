@@ -83,6 +83,65 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertEqual(DoubaoASRConfiguration.finalStreamingSequence(nextAudioSequence: 16), -16)
     }
 
+    func testAliyunFunRealtimeControlPayloadUsesDocumentedDuplexEnvelope() throws {
+        let payload = AliyunMeetingASRConfiguration.funRealtimeControlPayload(
+            action: "run-task",
+            taskID: "task123",
+            model: "fun-asr-realtime",
+            parameters: [
+                "sample_rate": 16000,
+                "format": "pcm"
+            ]
+        )
+
+        let header = try XCTUnwrap(payload["header"] as? [String: Any])
+        let body = try XCTUnwrap(payload["payload"] as? [String: Any])
+        XCTAssertEqual(header["action"] as? String, "run-task")
+        XCTAssertEqual(header["task_id"] as? String, "task123")
+        XCTAssertEqual(header["streaming"] as? String, "duplex")
+        XCTAssertEqual(body["model"] as? String, "fun-asr-realtime")
+        XCTAssertEqual((body["input"] as? [String: Any])?.isEmpty, true)
+    }
+
+    func testAliyunFunRealtimeFinishPayloadKeepsEmptyInputObject() throws {
+        let payload = AliyunMeetingASRConfiguration.funRealtimeControlPayload(
+            action: "finish-task",
+            taskID: "task123"
+        )
+
+        let header = try XCTUnwrap(payload["header"] as? [String: Any])
+        let body = try XCTUnwrap(payload["payload"] as? [String: Any])
+        XCTAssertEqual(header["streaming"] as? String, "duplex")
+        XCTAssertEqual((body["input"] as? [String: Any])?.isEmpty, true)
+    }
+
+    func testAliyunRealtimeSocketEventPrefersHeaderEvent() {
+        let object: [String: Any] = [
+            "header": [
+                "event": "task-started"
+            ],
+            "event": "ignored-top-level"
+        ]
+
+        XCTAssertEqual(
+            AliyunMeetingASRConfiguration.realtimeSocketEvent(from: object),
+            "task-started"
+        )
+    }
+
+    func testAliyunRealtimeSocketErrorMessageReadsHeaderFallback() {
+        let object: [String: Any] = [
+            "header": [
+                "error_message": "task failed from header"
+            ]
+        ]
+
+        XCTAssertEqual(
+            AliyunMeetingASRConfiguration.realtimeSocketErrorMessage(from: object),
+            "task failed from header"
+        )
+    }
+
     func testLoadSaveRoundTripPreservesConfigurations() {
         let stored: [String: RemoteProviderConfiguration] = [
             RemoteASRProvider.openAIWhisper.rawValue: TestFactories.makeRemoteConfiguration(
