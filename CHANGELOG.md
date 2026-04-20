@@ -6,6 +6,19 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.9.7] - 2026-04-20
+
+### Fixed
+- EN: Improved Settings responsiveness by keeping sidebar sections warm, moving dictionary and history reload work off the main thread, and paginating large dictionary lists so switching between sections stays smoother.
+- 简体中文：优化了设置页响应速度，通过保留侧边栏分区状态、将字典与历史记录的重载移出主线程，并为大词典列表加入分页，让分区切换更加顺滑。
+- 日本語：Settings の応答性を改善し、サイドバー各セクションの状態を保持したまま、辞書と履歴の再読み込みをメインスレッド外へ移し、大きな辞書一覧にはページングを追加したことで、セクション切り替えがより滑らかになりました。
+- EN: Fixed Settings sidebar rows so clicking anywhere across the highlighted row switches sections more reliably, and kept the Dictionary `Clear All` button at a stable width.
+- 简体中文：修复了设置页侧边栏条目的点击区域，现在点击高亮整行内的任意位置都能更稳定地切换分区，并让词典里的 `清空全部` 按钮保持稳定宽度。
+- 日本語：Settings サイドバーの行クリック領域を修正し、ハイライトされた行のどこをクリックしてもより確実にセクションを切り替えられるようにし、辞書内の `Clear All` ボタン幅も安定させました。
+- EN: Fixed sided modifier shortcut detection so hotkeys that distinguish left and right Command, Option, Control, or Shift keys trigger more consistently.
+- 简体中文：修复了区分左右修饰键的快捷键识别，现在区分左右 Command、Option、Control 或 Shift 的热键触发会更加稳定。
+- 日本語：左右の修飾キーを区別するショートカット検出を修正し、左右の Command、Option、Control、Shift を区別するホットキーがより安定して発火するようにしました。
+
 ## [1.9.6] - 2026-04-19
 
 ### Added
