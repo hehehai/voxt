@@ -6,6 +6,27 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.9.8] - 2026-04-20
+
+### Changed
+- EN: Improved transcription and meeting history details so they keep the full ongoing conversation in a single record, making follow-up context easier to review and continue.
+- 简体中文：优化了转写和会议历史详情，现在同一轮持续对话会保存在同一条记录中，后续查看和继续追问时上下文更完整。
+- 日本語：転写と会議の履歴詳細を改善し、継続中の対話全体を 1 件の履歴に保持するようにしたことで、見返しや続きを行う際の文脈がより完整になりました。
+- EN: Expanded configuration import and export so more general settings and model setup can move between devices with fewer manual reconfiguration steps.
+- 简体中文：扩展了配置导入导出范围，更多通用设置和模型配置现在都能一起迁移，减少了手动重新设置的步骤。
+- 日本語：設定のインポートとエクスポート対象を拡張し、より多くの一般設定とモデル構成をまとめて移行できるようにして、手動での再設定を減らしました。
+
+### Fixed
+- EN: Fixed remote provider credential storage so saving one provider no longer clears the saved keys, tokens, or IDs from another provider.
+- 简体中文：修复了远程服务商凭据保存逻辑，现在保存某一个服务商时，不会再清空其他服务商已保存的密钥、令牌或 ID。
+- 日本語：リモートプロバイダの資格情報保存を修正し、あるプロバイダを保存した際に別のプロバイダのキー、トークン、ID が消えないようにしました。
+- EN: Fixed Aliyun realtime ASR endpoint handling and model switching, so FunASR and Qwen realtime models use the correct WebSocket route more reliably.
+- 简体中文：修复了阿里云实时 ASR 的端点处理和模型切换逻辑，FunASR 与 Qwen 实时模型现在会更可靠地使用正确的 WebSocket 地址。
+- 日本語：Aliyun リアルタイム ASR のエンドポイント処理とモデル切り替えを修正し、FunASR と Qwen のリアルタイムモデルがより確実に正しい WebSocket ルートを使うようにしました。
+- EN: Fixed the remote model selector so already configured models are recognized correctly in filters and setup prompts, reducing false "not configured" states.
+- 简体中文：修复了远程模型选择器的状态判断，已配置完成的模型现在会在筛选和提示中被正确识别，减少误报“未配置”的情况。
+- 日本語：リモートモデルセレクタの状態判定を修正し、設定済みモデルがフィルタや案内で正しく認識されるようにして、誤った「未設定」表示を減らしました。
+
 ## [1.9.7] - 2026-04-20
 
 ### Fixed
