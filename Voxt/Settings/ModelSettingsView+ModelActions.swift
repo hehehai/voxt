@@ -397,15 +397,16 @@ extension ModelSettingsView {
         remoteASRSelectedProviderRaw = provider.rawValue
         let resolved = RemoteModelConfigurationStore.resolvedASRConfiguration(
             provider: provider,
-            stored: remoteASRConfigurations
+            stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteASRProviderConfigurationsRaw)
         )
         saveRemoteASRConfiguration(resolved)
     }
 
     func saveRemoteASRConfiguration(_ configuration: RemoteProviderConfiguration) {
-        var updated = remoteASRConfigurations
-        updated[configuration.providerID] = configuration
-        remoteASRProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfigurations(updated)
+        remoteASRProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+            configuration,
+            updating: remoteASRProviderConfigurationsRaw
+        )
     }
 
     func remoteASRStatusText(
@@ -485,15 +486,16 @@ extension ModelSettingsView {
         remoteLLMSelectedProviderRaw = provider.rawValue
         let resolved = RemoteModelConfigurationStore.resolvedLLMConfiguration(
             provider: provider,
-            stored: remoteLLMConfigurations
+            stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteLLMProviderConfigurationsRaw)
         )
         saveRemoteLLMConfiguration(resolved)
     }
 
     func saveRemoteLLMConfiguration(_ configuration: RemoteProviderConfiguration) {
-        var updated = remoteLLMConfigurations
-        updated[configuration.providerID] = configuration
-        remoteLLMProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfigurations(updated)
+        remoteLLMProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+            configuration,
+            updating: remoteLLMProviderConfigurationsRaw
+        )
     }
 
     func updateMirrorSetting() {

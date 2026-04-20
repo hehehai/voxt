@@ -367,6 +367,44 @@ final class RemoteModelConfigurationTests: XCTestCase {
         )
     }
 
+    func testSavingOneRemoteASRProviderPreservesOtherProviderSecrets() {
+        let initial: [String: RemoteProviderConfiguration] = [
+            RemoteASRProvider.doubaoASR.rawValue: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteASRProvider.doubaoASR.rawValue,
+                model: DoubaoASRConfiguration.modelV2,
+                meetingModel: DoubaoASRConfiguration.meetingModelTurbo,
+                appID: "doubao-app",
+                accessToken: "doubao-token"
+            ),
+            RemoteASRProvider.aliyunBailianASR.rawValue: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteASRProvider.aliyunBailianASR.rawValue,
+                model: "fun-asr-realtime",
+                meetingModel: "qwen3-asr-flash-filetrans",
+                endpoint: "wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
+                apiKey: "aliyun-key"
+            )
+        ]
+
+        let raw = RemoteModelConfigurationStore.saveConfigurations(initial)
+        let updatedAliyun = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.aliyunBailianASR.rawValue,
+            model: "qwen3-asr-flash-realtime",
+            meetingModel: "qwen3-asr-flash-filetrans",
+            endpoint: "wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
+            apiKey: "aliyun-key-updated"
+        )
+
+        let mergedRaw = RemoteModelConfigurationStore.saveConfiguration(
+            updatedAliyun,
+            updating: raw
+        )
+        let loaded = RemoteModelConfigurationStore.loadConfigurations(from: mergedRaw)
+
+        XCTAssertEqual(loaded[RemoteASRProvider.aliyunBailianASR.rawValue]?.apiKey, "aliyun-key-updated")
+        XCTAssertEqual(loaded[RemoteASRProvider.doubaoASR.rawValue]?.appID, "doubao-app")
+        XCTAssertEqual(loaded[RemoteASRProvider.doubaoASR.rawValue]?.accessToken, "doubao-token")
+    }
+
     func testAliyunMeetingFileTranscriptionUsesAsyncEndpoints() {
         XCTAssertEqual(
             AliyunMeetingASRConfiguration.resolvedTranscriptionEndpoint(

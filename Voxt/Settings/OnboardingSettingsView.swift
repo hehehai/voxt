@@ -1172,15 +1172,17 @@ struct OnboardingSettingsView: View {
     }
 
     func saveRemoteASRConfiguration(_ configuration: RemoteProviderConfiguration) {
-        var updated = remoteASRConfigurations
-        updated[configuration.providerID] = configuration
-        remoteASRProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfigurations(updated)
+        remoteASRProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+            configuration,
+            updating: remoteASRProviderConfigurationsRaw
+        )
     }
 
     func saveRemoteLLMConfiguration(_ configuration: RemoteProviderConfiguration) {
-        var updated = remoteLLMConfigurations
-        updated[configuration.providerID] = configuration
-        remoteLLMProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfigurations(updated)
+        remoteLLMProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+            configuration,
+            updating: remoteLLMProviderConfigurationsRaw
+        )
     }
 
     func exportConfiguration() {

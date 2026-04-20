@@ -140,6 +140,23 @@ enum RemoteModelConfigurationStore {
         return encodeConfigurations(items.map(\.withoutSensitiveValues))
     }
 
+    static func saveConfiguration(
+        _ configuration: RemoteProviderConfiguration,
+        updating raw: String
+    ) -> String {
+        var items = decodedConfigurations(from: raw).map(normalizedCompatibilityValues(for:))
+        let sanitized = configuration.withoutSensitiveValues
+
+        if let existingIndex = items.firstIndex(where: { $0.providerID == configuration.providerID }) {
+            items[existingIndex] = sanitized
+        } else {
+            items.append(sanitized)
+        }
+
+        persistSensitiveValues(for: configuration)
+        return encodeConfigurations(items.sorted(by: { $0.providerID < $1.providerID }))
+    }
+
     static func migrateLegacyStoredSecrets(defaults: UserDefaults = .standard) {
         migrateLegacyStoredSecrets(
             defaultsKey: AppPreferenceKey.remoteASRProviderConfigurations,
