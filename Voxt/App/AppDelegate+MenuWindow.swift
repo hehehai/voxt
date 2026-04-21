@@ -23,11 +23,6 @@ extension AppDelegate {
         VoxtLog.info("Main window activation policy updated. visible=\(isVisible), policy=\(targetPolicy.rawValue)")
     }
 
-    private func describeWindowFrame(_ window: NSWindow) -> String {
-        let frame = window.frame
-        return "x=\(Int(frame.origin.x)), y=\(Int(frame.origin.y)), w=\(Int(frame.width)), h=\(Int(frame.height))"
-    }
-
     private func repairedMainWindowFrame(for window: NSWindow) -> NSRect {
         let contentRect = NSRect(origin: .zero, size: mainWindowContentSize)
         let frameSize = window.frameRect(forContentRect: contentRect).size
@@ -42,7 +37,24 @@ extension AppDelegate {
 
         guard needsRepair else { return }
         window.setFrame(repairedFrame, display: false)
-        VoxtLog.info("Main window frame repaired before positioning. frame=\(describeWindowFrame(window))")
+    }
+
+    private func recenterMainWindowIfNeeded(_ window: NSWindow) {
+        repairMainWindowFrameIfNeeded(window)
+
+        let candidateScreen = window.screen ?? NSScreen.main ?? NSScreen.screens.first
+        guard let visibleFrame = candidateScreen?.visibleFrame else { return }
+
+        let needsPositionRepair =
+            !visibleFrame.intersects(window.frame) ||
+            window.frame.maxX <= visibleFrame.minX ||
+            window.frame.maxY <= visibleFrame.minY ||
+            window.frame.minX >= visibleFrame.maxX ||
+            window.frame.minY >= visibleFrame.maxY
+
+        guard needsPositionRepair else { return }
+
+        centerMainWindow(window, on: candidateScreen)
     }
 
     private var feedbackURL: URL {
@@ -350,8 +362,7 @@ extension AppDelegate {
                 userInfo: navigationRequest.target.userInfo
             )
             if !window.isVisible {
-                repairMainWindowFrameIfNeeded(window)
-                centerMainWindow(window, on: window.screen ?? NSScreen.main)
+                recenterMainWindowIfNeeded(window)
             }
             setMainWindowVisibility(true)
             bringWindowToFront(window)
@@ -411,7 +422,6 @@ extension AppDelegate {
         mainWindowController = controller
         repairMainWindowFrameIfNeeded(window)
         centerMainWindow(window, on: NSScreen.main)
-        VoxtLog.info("Main window prepared before first show. frame=\(describeWindowFrame(window))")
         setMainWindowVisibility(true)
         bringWindowToFront(window)
         scheduleTrafficLightButtonPositionUpdate(for: window)
@@ -436,7 +446,6 @@ extension AppDelegate {
         }
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-        VoxtLog.info("Main window brought to front. frame=\(describeWindowFrame(window))")
         positionWindowTrafficLightButtons(window)
         scheduleTrafficLightButtonPositionUpdate(for: window)
     }
@@ -454,11 +463,6 @@ extension AppDelegate {
             y: round(visibleFrame.midY - (windowFrame.height / 2))
         )
         window.setFrameOrigin(origin)
-        VoxtLog.info(
-            """
-            Main window centered. targetScreen=\(screen.localizedName), visibleFrame=\(NSStringFromRect(visibleFrame)), resultFrame=\(describeWindowFrame(window))
-            """
-        )
     }
 
     private func performAfterStatusMenuDismissal(_ action: @escaping @MainActor () -> Void) {
