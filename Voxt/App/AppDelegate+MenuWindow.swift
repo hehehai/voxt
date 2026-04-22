@@ -546,7 +546,7 @@ extension AppDelegate {
         alert.addButton(withTitle: AppLocalization.localizedString("Open System Settings"))
         alert.addButton(withTitle: AppLocalization.localizedString("Quit"))
         if alert.runModal() == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
+            PermissionGuidance.openSettings(for: SettingsPermissionKind.speechRecognition)
         }
         NSApp.terminate(nil)
     }

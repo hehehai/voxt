@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SystemSettingsKit
 
 enum SystemAudioCaptureAuthorizationStatus: String {
     case unknown
@@ -35,10 +36,7 @@ enum SystemAudioCapturePermission {
     }
 
     static func openSystemSettings() {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.systempreferences") else {
-            return
-        }
-        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        _ = SystemSettings.open(.privacy(anchor: .privacyAudioCapture))
     }
 
     private typealias PreflightFuncType = @convention(c) (CFString, CFDictionary?) -> Int

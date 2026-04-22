@@ -291,13 +291,26 @@ struct PermissionsSettingsView: View {
         case .speechRecognition:
             SFSpeechRecognizer.requestAuthorization { _ in }
         case .accessibility:
-            _ = AccessibilityPermissionManager.request(prompt: true)
+            let granted = AccessibilityPermissionManager.request(prompt: true)
+            if !granted {
+                Task { @MainActor in
+                    PermissionGuidance.openSettings(for: kind)
+                }
+            }
         case .inputMonitoring:
-            if #available(macOS 10.15, *) {
-                _ = CGRequestListenEventAccess()
+            let granted = EventListeningPermissionManager.requestInputMonitoring(prompt: true)
+            if !granted {
+                Task { @MainActor in
+                    PermissionGuidance.openSettings(for: kind)
+                }
             }
         case .systemAudioCapture:
-            SystemAudioCapturePermission.requestAccess()
+            SystemAudioCapturePermission.requestAccess { granted in
+                guard !granted else { return }
+                Task { @MainActor in
+                    PermissionGuidance.openSettings(for: kind)
+                }
+            }
         }
     }
 
@@ -575,30 +588,11 @@ struct PermissionsSettingsView: View {
     }
 
     private func openSettings(for kind: SettingsPermissionKind) {
-        let urlString: String
-        switch kind {
-        case .microphone:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        case .speechRecognition:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
-        case .accessibility:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        case .inputMonitoring:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
-        case .systemAudioCapture:
-            SystemAudioCapturePermission.openSystemSettings()
-            return
-        }
-
-        if let url = URL(string: urlString) {
-            NSWorkspace.shared.open(url)
-        }
+        PermissionGuidance.openSettings(for: kind)
     }
 
     private func openBrowserAutomationSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
-            NSWorkspace.shared.open(url)
-        }
+        PermissionGuidance.openBrowserAutomationSettings()
     }
 
     private func permissionSnapshotText(_ snapshot: [SettingsPermissionKind: PermissionState]) -> String {

@@ -657,39 +657,33 @@ struct OnboardingSettingsView: View {
                 }
             }
         case .accessibility:
-            _ = AccessibilityPermissionManager.request(prompt: true)
+            let granted = AccessibilityPermissionManager.request(prompt: true)
+            if !granted {
+                Task { @MainActor in
+                    PermissionGuidance.openSettings(for: permission)
+                }
+            }
         case .inputMonitoring:
-            if #available(macOS 10.15, *) {
-                _ = CGRequestListenEventAccess()
+            let granted = EventListeningPermissionManager.requestInputMonitoring(prompt: true)
+            if !granted {
+                Task { @MainActor in
+                    PermissionGuidance.openSettings(for: permission)
+                }
             }
         case .systemAudioCapture:
-            SystemAudioCapturePermission.requestAccess { _ in
+            SystemAudioCapturePermission.requestAccess { granted in
                 Task { @MainActor in
                     self.permissionRefreshRevision += 1
+                    if !granted {
+                        PermissionGuidance.openSettings(for: permission)
+                    }
                 }
             }
         }
     }
 
     func openSettings(for permission: OnboardingContextualPermission) {
-        let urlString: String
-        switch permission {
-        case .microphone:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        case .speechRecognition:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
-        case .accessibility:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        case .inputMonitoring:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
-        case .systemAudioCapture:
-            SystemAudioCapturePermission.openSystemSettings()
-            return
-        }
-
-        if let url = URL(string: urlString) {
-            NSWorkspace.shared.open(url)
-        }
+        PermissionGuidance.openSettings(for: permission)
     }
 
     private func startPermissionMonitoring(
