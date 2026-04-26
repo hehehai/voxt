@@ -199,6 +199,7 @@ extension AppDelegate {
         silenceMonitorTask = nil
         pauseLLMTask?.cancel()
         pauseLLMTask = nil
+        releaseResidualRecordingResources(reason: "selected-text-translation-begin")
         resetSessionTranslationState()
         overlayState.reset()
         let frontmostApplication = NSWorkspace.shared.frontmostApplication

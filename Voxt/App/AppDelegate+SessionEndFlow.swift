@@ -75,6 +75,14 @@ extension AppDelegate {
         }
     }
 
+    private struct ReleaseResidualCaptureStage: SessionEndStage {
+        var name: String { "releaseResidualCapture" }
+
+        func run(delegate: AppDelegate) {
+            delegate.releaseResidualRecordingResources(reason: "session-end-pipeline")
+        }
+    }
+
     nonisolated static func sessionEndExecutionDecision(
         requestedSessionID: UUID,
         currentEndingSessionID: UUID?,
@@ -133,7 +141,8 @@ extension AppDelegate {
             HideOverlayStage(),
             RestoreSystemAudioStage(),
             PlayEndSoundStage(),
-            ResetSessionStateStage()
+            ResetSessionStateStage(),
+            ReleaseResidualCaptureStage()
         ]
         for stage in stages {
             stage.run(delegate: self)

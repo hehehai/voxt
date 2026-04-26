@@ -11,6 +11,39 @@ extension AppDelegate {
         beginRecording(outputMode: .rewrite)
     }
 
+    func releaseResidualRecordingResources(reason: String) {
+        let speechWasRecording = speechTranscriber.isRecording
+        let mlxWasRecording = mlxTranscriber?.isRecording == true
+        let whisperWasRecording = whisperTranscriber?.isRecording == true
+        let remoteWasRecording = remoteASRTranscriber.isRecording
+        let hadPendingWhisperStartup = pendingWhisperStartupTask != nil
+
+        if speechWasRecording || mlxWasRecording || whisperWasRecording || remoteWasRecording || hadPendingWhisperStartup {
+            VoxtLog.warning(
+                """
+                Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), whisper=\(whisperWasRecording), remote=\(remoteWasRecording), pendingWhisperStartup=\(hadPendingWhisperStartup)
+                """
+            )
+        }
+
+        pendingWhisperStartupTask?.cancel()
+        pendingWhisperStartupTask = nil
+        silenceMonitorTask?.cancel()
+        silenceMonitorTask = nil
+        pauseLLMTask?.cancel()
+        pauseLLMTask = nil
+        stopRecordingFallbackTask?.cancel()
+        stopRecordingFallbackTask = nil
+
+        speechTranscriber.stopRecording()
+        mlxTranscriber?.stopRecording()
+        whisperTranscriber?.stopRecording()
+        remoteASRTranscriber.discardPendingSessionOutput()
+
+        overlayState.isRecording = false
+        overlayState.audioLevel = 0
+    }
+
     func toggleRewriteConversationRecording() {
         guard overlayState.isRewriteConversationActive else { return }
         if isSessionActive {
@@ -40,6 +73,7 @@ extension AppDelegate {
             )
             return
         }
+        releaseResidualRecordingResources(reason: "begin-recording")
         prepareLegacySettingsForSession(outputMode: outputMode)
         synchronizeRuntimeASRStateForSession(outputMode: outputMode)
         let startDecision = RecordingStartPlanner.resolve(

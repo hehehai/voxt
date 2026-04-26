@@ -672,6 +672,7 @@ extension AppDelegate {
 
     func dismissAnswerOverlay() {
         guard overlayState.displayMode == .answer else { return }
+        releaseResidualRecordingResources(reason: "dismiss-answer-overlay")
         overlayWindow.hide { [weak self] in
             guard let self else { return }
             self.overlayWindow.onRequestInject = nil
