@@ -6,6 +6,32 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.9.12] - 2026-04-27
+
+### Added
+- EN: Added support for custom OpenAI-compatible ASR model IDs in Remote ASR settings, so you can test or switch to newer transcription models without waiting for a built-in preset.
+- 简体中文：在 Remote ASR 设置中新增了自定义 OpenAI 兼容 ASR 模型 ID 支持，现在无需等待内置预设更新，也能直接测试或切换到新的转录模型。
+- 日本語：Remote ASR 設定で OpenAI 互換 ASR のカスタムモデル ID を指定できるようにし、内蔵プリセットを待たずに新しい文字起こしモデルを試したり切り替えたりできるようにしました。
+
+### Changed
+- EN: Improved transcription enhancement so language cleanup now follows your primary and secondary language preferences without unexpectedly translating bilingual or non-primary-language speech into the primary language.
+- 简体中文：优化了转录增强逻辑，现在会按照你的第一语言和副语言偏好进行清理优化，不会再把双语内容或非第一语言内容意外翻译成第一语言。
+- 日本語：文字起こしの強化処理を改善し、第一言語と副言語の設定に沿って整形を行うようにして、バイリンガル入力や第一言語以外の発話が勝手に第一言語へ翻訳されないようにしました。
+
+### Fixed
+- EN: Fixed the General settings section so opening it no longer causes the app window to lose focus or jump behind other apps.
+- 简体中文：修复了 General 设置分区的聚焦问题，现在打开该分区时应用窗口不会再失焦或突然跑到其他应用后面。
+- 日本語：General 設定セクションを開いたときにアプリウィンドウがフォーカスを失ったり他のアプリの背後へ回ったりする問題を修正しました。
+- EN: Fixed selected-text translation so the translation result overlay stays available for follow-up actions, avoids duplicate session-end sounds, and cleans up any residual microphone capture after the result appears or the overlay is dismissed.
+- 简体中文：修复了选中文本翻译流程，现在翻译结果浮层会保留以便继续操作，并避免重复结束提示音，同时会在结果出现或关闭浮层后正确清理残留的麦克风采集。
+- 日本語：選択テキスト翻訳のフローを修正し、翻訳結果オーバーレイを後続操作に使えるよう維持したうえで、終了音の重複を防ぎ、結果表示後やオーバーレイを閉じた後に残留したマイク収集も正しく解放するようにしました。
+- EN: Fixed meeting hotkey gating so the dedicated meeting shortcut is ignored when Meeting Notes is disabled, and `fn+option` no longer falls back to the plain `fn` transcription hotkey.
+- 简体中文：修复了会议快捷键的开关控制，现在未开启 Meeting Notes 时不会再响应专用会议快捷键，同时 `fn+option` 也不会再回退触发普通 `fn` 转录。
+- 日本語：Meeting Notes が無効なときは専用会議ショートカットに反応しないよう修正し、`fn+option` が通常の `fn` 文字起こしショートカットへフォールバックしてしまう問題も解消しました。
+- EN: Fixed custom remote model selection so custom ASR and meeting model IDs are preserved correctly instead of snapping back to built-in defaults.
+- 简体中文：修复了远程模型自定义选择逻辑，现在自定义 ASR 和会议模型 ID 会被正确保留，不会再错误回退到内置默认值。
+- 日本語：リモートモデルのカスタム選択処理を修正し、ASR と会議モデルのカスタム ID が正しく保持され、内蔵デフォルトへ勝手に戻らないようにしました。
+
 ## [1.9.11] - 2026-04-22
 
 ### Changed
