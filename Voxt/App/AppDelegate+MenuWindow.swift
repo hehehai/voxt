@@ -197,10 +197,16 @@ extension AppDelegate {
         let previousSelectedUID = selectedInputDeviceUID
         let previousResolvedState = microphoneResolvedState
         inputDevicesSnapshot = devices
+        let lockedActiveUID = lockedActiveInputDeviceUID(
+            previousResolvedState: previousResolvedState,
+            availableDevices: devices,
+            reason: reason
+        )
         let resolvedState = MicrophonePreferenceManager.syncState(
             defaults: .standard,
             availableDevices: devices,
-            previousAvailableUIDs: previousDevices.isEmpty ? nil : Set(previousDevices.map(\.uid))
+            previousAvailableUIDs: previousDevices.isEmpty ? nil : Set(previousDevices.map(\.uid)),
+            lockedActiveUID: lockedActiveUID
         )
         microphoneResolvedState = resolvedState
 
@@ -250,6 +256,27 @@ extension AppDelegate {
     private func describeDevices(_ devices: [AudioInputDevice]) -> String {
         guard !devices.isEmpty else { return "[]" }
         return "[" + devices.map { "\($0.name){uid=\($0.uid),id=\($0.id)}" }.joined(separator: ", ") + "]"
+    }
+
+    private func lockedActiveInputDeviceUID(
+        previousResolvedState: MicrophoneResolvedState,
+        availableDevices: [AudioInputDevice],
+        reason: String
+    ) -> String? {
+        guard reason == "hardware change" else { return nil }
+        guard let currentUID = previousResolvedState.activeUID else { return nil }
+        guard availableDevices.contains(where: { $0.uid == currentUID }) else { return nil }
+
+        if meetingSessionCoordinator.isActive {
+            VoxtLog.info("Preserving active microphone during meeting hardware change. uid=\(currentUID)")
+            return currentUID
+        }
+
+        guard isSessionActive, recordingStoppedAt == nil else { return nil }
+        VoxtLog.info(
+            "Preserving active microphone during recording hardware change. uid=\(currentUID), output=\(sessionOutputMode)"
+        )
+        return currentUID
     }
 
     @objc private func checkForUpdates() {

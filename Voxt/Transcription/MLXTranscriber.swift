@@ -65,6 +65,24 @@ enum MLXTranscriptionPlanning {
             quickPassSampleCount: quickPassSampleCount
         )
     }
+
+    static func automaticBiases(
+        for family: MLXModelFamily,
+        multilingualContext: String?
+    ) -> (qwenContextBias: String?, granitePromptBias: String?) {
+        guard let multilingualContext, !multilingualContext.isEmpty else {
+            return (nil, nil)
+        }
+
+        switch family {
+        case .qwen3ASR, .graniteSpeech:
+            // Local streaming MLX models may echo prompt/context guidance back into the
+            // partial transcript UI, so multilingual guidance stays in the language hint only.
+            return (nil, nil)
+        case .senseVoice, .cohereTranscribe, .generic:
+            return (nil, nil)
+        }
+    }
 }
 
 @MainActor
@@ -164,6 +182,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var captureWatchdogTask: Task<Void, Never>?
     private var inferenceBusy = false
     private var didRetryCaptureStartup = false
+    private var activeCaptureUsesPreferredInputDevice = false
     private var loggedSampleExtractionFailure = false
     private var activeSessionBehavior = MLXModelManager.transcriptionBehavior(
         for: MLXModelManager.defaultModelRepo
@@ -194,6 +213,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         sessionRevision += 1
         let revision = sessionRevision
         activeSessionBehavior = modelManager.currentTranscriptionBehavior
+        activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         isModelInitializing = modelManager.state != .ready
         VoxtLog.info(
             "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), modelState=\(String(describing: modelManager.state))",
@@ -276,7 +296,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     func restartCaptureForPreferredInputDevice() throws {
         guard isRecording else { return }
-        try startAudioCaptureGraph()
+        activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
+        try startAudioCaptureGraph(usePreferredInputDevice: activeCaptureUsesPreferredInputDevice)
     }
 
     private func runIntermediateCorrectionLoop(revision: Int) async {
@@ -441,6 +462,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         audioLevel = 0
         isModelInitializing = false
         isFinalizingTranscription = false
+        didRetryCaptureStartup = false
+        activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         stableCommittedText = ""
         lastCandidateText = ""
         nextCorrectionAtSeconds = correctionIntervalSeconds
@@ -453,7 +476,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func startAudioCaptureGraph() throws {
+    private func startAudioCaptureGraph(usePreferredInputDevice: Bool? = nil) throws {
         if audioEngine.isRunning {
             audioEngine.stop()
         }
@@ -462,11 +485,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let inputNode = audioEngine.inputNode
         inputNode.removeTap(onBus: 0)
 
-        applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        let shouldUsePreferredInputDevice = usePreferredInputDevice ?? activeCaptureUsesPreferredInputDevice
+        activeCaptureUsesPreferredInputDevice = shouldUsePreferredInputDevice
+        if shouldUsePreferredInputDevice {
+            applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        }
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputSampleRate = recordingFormat.sampleRate
         let sampleStore = self.sampleStore
-        didRetryCaptureStartup = false
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             guard let self else { return }
@@ -494,7 +520,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         audioEngine.prepare()
         try audioEngine.start()
         VoxtLog.info(
-            "MLX audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")",
+            "MLX audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
     }
@@ -579,10 +605,17 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         guard !didRetryCaptureStartup else { return }
 
         didRetryCaptureStartup = true
-        VoxtLog.warning("MLX audio capture produced no initial callbacks. Restarting input graph once.")
+        let shouldFallbackToSystemDefault = preferredInputDeviceID != nil && activeCaptureUsesPreferredInputDevice
+        if shouldFallbackToSystemDefault {
+            VoxtLog.warning(
+                "MLX audio capture produced no initial callbacks. Retrying once with system default input instead of the preferred device."
+            )
+        } else {
+            VoxtLog.warning("MLX audio capture produced no initial callbacks. Restarting input graph once.")
+        }
 
         do {
-            try startAudioCaptureGraph()
+            try startAudioCaptureGraph(usePreferredInputDevice: shouldFallbackToSystemDefault ? false : activeCaptureUsesPreferredInputDevice)
             scheduleCaptureStartupWatchdog(revision: revision)
         } catch {
             VoxtLog.error("MLX audio capture recovery failed: \(error)")
@@ -661,6 +694,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
         )
         let family = MLXModelFamily.family(for: modelManager.currentModelRepo)
+        let automaticBiases = MLXTranscriptionPlanning.automaticBiases(
+            for: family,
+            multilingualContext: hintPayload.multilingualContext
+        )
         let chunkDuration: Float
         let minChunkDuration: Float
         switch tuningSettings.preset {
@@ -697,11 +734,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             languageHint: languageHint,
             qwenContextBias: mergedBiasText(
                 resolvedBiasTemplate(tuningSettings.qwenContextBias, userLanguageCodes: userLanguageCodes),
-                autoBias: family == .qwen3ASR ? hintPayload.multilingualContext : nil
+                autoBias: automaticBiases.qwenContextBias
             ),
             granitePromptBias: mergedOptionalBiasText(
                 resolvedBiasTemplate(tuningSettings.granitePromptBias, userLanguageCodes: userLanguageCodes),
-                autoBias: family == .graniteSpeech ? hintPayload.multilingualContext : nil
+                autoBias: automaticBiases.granitePromptBias
             ),
             senseVoiceUseITN: tuningSettings.senseVoiceUseITN
         )

@@ -94,6 +94,24 @@ final class MicrophonePreferenceManagerTests: XCTestCase {
         XCTAssertEqual(state.activeUID, "usb-high")
     }
 
+    func testLockedActiveUIDPreservesCurrentDeviceDuringHardwareRefresh() {
+        let defaults = TestDoubles.makeUserDefaults()
+        defaults.set(["usb-high", "builtin"], forKey: AppPreferenceKey.microphonePriorityUIDs)
+        defaults.set("builtin", forKey: AppPreferenceKey.activeInputDeviceUID)
+
+        let state = MicrophonePreferenceManager.syncState(
+            defaults: defaults,
+            availableDevices: [
+                device(id: 1, uid: "builtin", name: "Built-in Mic"),
+                device(id: 2, uid: "usb-high", name: "USB Mic")
+            ],
+            previousAvailableUIDs: ["builtin"],
+            lockedActiveUID: "builtin"
+        )
+
+        XCTAssertEqual(state.activeUID, "builtin")
+    }
+
     func testReorderPriorityDeduplicatesAndPersistsTrackedOrder() {
         let defaults = TestDoubles.makeUserDefaults()
 

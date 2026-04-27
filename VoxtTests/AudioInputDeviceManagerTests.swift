@@ -2,6 +2,24 @@ import XCTest
 @testable import Voxt
 
 final class AudioInputDeviceManagerTests: XCTestCase {
+    func testSnapshotFilteringExcludesCoreAudioAggregateDevices() {
+        XCTAssertFalse(
+            AudioInputDeviceManager.shouldIncludeInSnapshot(
+                uid: "CADefaultDeviceAggregate-72904-0",
+                name: "CADefaultDeviceAggregate-72904-0"
+            )
+        )
+    }
+
+    func testSnapshotFilteringKeepsRegularMicrophones() {
+        XCTAssertTrue(
+            AudioInputDeviceManager.shouldIncludeInSnapshot(
+                uid: "BuiltInMicrophoneDevice",
+                name: "MacBook Pro Mic"
+            )
+        )
+    }
+
     func testPreferredDeviceWinsWhenAvailable() {
         let devices = [
             AudioInputDevice(id: 10, uid: "mic-a", name: "Mic A"),

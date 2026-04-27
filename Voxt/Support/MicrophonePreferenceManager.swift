@@ -5,7 +5,8 @@ enum MicrophonePreferenceManager {
     static func syncState(
         defaults: UserDefaults = .standard,
         availableDevices: [AudioInputDevice],
-        previousAvailableUIDs: Set<String>? = nil
+        previousAvailableUIDs: Set<String>? = nil,
+        lockedActiveUID: String? = nil
     ) -> MicrophoneResolvedState {
         migrateLegacySelectionIfNeeded(defaults: defaults, availableDevices: availableDevices)
 
@@ -20,7 +21,8 @@ enum MicrophonePreferenceManager {
             autoSwitchEnabled: autoSwitchEnabled,
             availableDevices: availableDevices,
             previousAvailableUIDs: previousAvailableUIDs,
-            defaultUID: defaultUID
+            defaultUID: defaultUID,
+            lockedActiveUID: lockedActiveUID
         )
         let activeDevice = activeUID.flatMap { availableByUID[$0] }
 
@@ -274,9 +276,20 @@ enum MicrophonePreferenceManager {
         autoSwitchEnabled: Bool,
         availableDevices: [AudioInputDevice],
         previousAvailableUIDs: Set<String>?,
-        defaultUID: String?
+        defaultUID: String?,
+        lockedActiveUID: String?
     ) -> String? {
         let availableByUID = Dictionary(uniqueKeysWithValues: availableDevices.map { ($0.uid, $0) })
+
+        if let lockedActiveUID,
+           availableByUID[lockedActiveUID] != nil {
+            if currentActiveUID != lockedActiveUID {
+                VoxtLog.info(
+                    "Microphone selection preserved during active session. previous=\(currentActiveUID ?? "none"), locked=\(lockedActiveUID)"
+                )
+            }
+            return lockedActiveUID
+        }
 
         if let currentActiveUID,
            availableByUID[currentActiveUID] != nil {

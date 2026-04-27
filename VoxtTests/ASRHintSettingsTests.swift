@@ -109,6 +109,28 @@ final class ASRHintSettingsTests: XCTestCase {
         )
     }
 
+    func testMLXAutomaticBiasesDoNotInjectMultilingualContextIntoLocalStreamingModels() {
+        let multilingualContext = """
+        Primary language: Chinese
+        Other frequently used languages: English
+        Mixed-language speech may appear. Preserve names, brands, URLs, and code-like text exactly as spoken.
+        """
+
+        let qwenBiases = MLXTranscriptionPlanning.automaticBiases(
+            for: .qwen3ASR,
+            multilingualContext: multilingualContext
+        )
+        XCTAssertNil(qwenBiases.qwenContextBias)
+        XCTAssertNil(qwenBiases.granitePromptBias)
+
+        let graniteBiases = MLXTranscriptionPlanning.automaticBiases(
+            for: .graniteSpeech,
+            multilingualContext: multilingualContext
+        )
+        XCTAssertNil(graniteBiases.qwenContextBias)
+        XCTAssertNil(graniteBiases.granitePromptBias)
+    }
+
     func testResolveDictationSettingsUsesMainLanguageAndContextualPhrases() {
         let settings = ASRHintSettings(
             followsUserMainLanguage: true,
