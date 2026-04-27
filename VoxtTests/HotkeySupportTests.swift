@@ -142,4 +142,30 @@ final class HotkeySupportTests: XCTestCase {
             [.rightCommand, .rightShift]
         )
     }
+
+    func testDisplayStringShowsRightShiftWhenSideIsAvailable() {
+        let hotkey = HotkeyPreference.Hotkey(
+            keyCode: HotkeyPreference.modifierOnlyKeyCode,
+            modifiers: [.shift],
+            sidedModifiers: [.rightShift]
+        )
+
+        XCTAssertEqual(
+            HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: true),
+            "Right Shift"
+        )
+    }
+
+    func testDisplayStringFallsBackToGenericShiftWhenBothSidesArePresent() {
+        let hotkey = HotkeyPreference.Hotkey(
+            keyCode: HotkeyPreference.modifierOnlyKeyCode,
+            modifiers: [.shift],
+            sidedModifiers: [.leftShift, .rightShift]
+        )
+
+        XCTAssertEqual(
+            HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: true),
+            "Shift"
+        )
+    }
 }

@@ -25,6 +25,12 @@
 "Glass" = "Glass";
 "Funk" = "Funk";
 "Submarine" = "Submarine";
+"Basso" = "Basso";
+"Bottle" = "Bottle";
+"Frog" = "Frog";
+"Hero" = "Hero";
+"Purr" = "Purr";
+"Sosumi" = "Sosumi";
 "Transcription UI" = "文字起こし UI";
 "Position" = "位置";
 "Bottom" = "下";
@@ -1169,6 +1175,8 @@
 "Translation Mode" = "翻訳モード";
 "Notes" = "メモ";
 "Enable Notes" = "メモを有効にする";
+"Continue Shortcut" = "続きショートカット";
+"Use this key in rewrite continue mode to start the next follow-up recording from the OverLazy answer view." = "リライトの継続モード中に、このキーで OverLazy の回答ビューから次の追加入力録音を開始します。";
 "Add segmented notes during transcription. Once enabled, Notes appears in the Feature menu and supports a dedicated trigger key." = "文字起こし中に区切り付きメモを追加します。有効にすると、Feature メニューに「メモ」が表示され、専用のトリガーキーを設定できます。";
 "Notes configuration moved here after transcription-level enablement." = "メモを有効にすると、関連設定はここに表示されます。";
 "Notes Workflow" = "メモワークフロー";

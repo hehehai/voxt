@@ -25,6 +25,12 @@
 "Glass" = "玻璃";
 "Funk" = "Funk";
 "Submarine" = "Submarine";
+"Basso" = "Basso";
+"Bottle" = "Bottle";
+"Frog" = "Frog";
+"Hero" = "Hero";
+"Purr" = "Purr";
+"Sosumi" = "Sosumi";
 "Transcription UI" = "转录界面";
 "Position" = "位置";
 "Bottom" = "底部";
@@ -1244,6 +1250,8 @@
 "Aliyun Bailian ASR" = "阿里云百炼";
 "Notes" = "笔记";
 "Enable Notes" = "启用笔记";
+"Continue Shortcut" = "继续快捷键";
+"Use this key in rewrite continue mode to start the next follow-up recording from the OverLazy answer view." = "在改写继续模式下，使用这个按键从 OverLazy 结果视图直接开始下一轮追问录音。";
 "Add segmented notes during transcription. Once enabled, Notes appears in the Feature menu and supports a dedicated trigger key." = "在转录中启用分段笔记。开启后，功能菜单里会出现“笔记”，并支持独立触发键。";
 "Notes configuration moved here after transcription-level enablement." = "启用后，笔记相关配置会集中显示在这里。";
 "Notes Workflow" = "笔记流程";

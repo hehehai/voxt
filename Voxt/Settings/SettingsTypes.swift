@@ -968,6 +968,12 @@ enum InteractionSoundPreset: String, CaseIterable, Identifiable, Codable, Sendab
     case glass
     case funk
     case submarine
+    case basso
+    case bottle
+    case frog
+    case hero
+    case purr
+    case sosumi
 
     var id: String { rawValue }
 
@@ -977,6 +983,12 @@ enum InteractionSoundPreset: String, CaseIterable, Identifiable, Codable, Sendab
         case .glass: return "Ping"
         case .funk: return "Morse"
         case .submarine: return "Submarine"
+        case .basso: return "Basso"
+        case .bottle: return "Bottle"
+        case .frog: return "Frog"
+        case .hero: return "Hero"
+        case .purr: return "Purr"
+        case .sosumi: return "Sosumi"
         }
     }
 
@@ -988,6 +1000,12 @@ enum InteractionSoundPreset: String, CaseIterable, Identifiable, Codable, Sendab
         case .glass: return "Ping"
         case .funk: return "Morse"
         case .submarine: return "Submarine"
+        case .basso: return "Basso"
+        case .bottle: return "Bottle"
+        case .frog: return "Frog"
+        case .hero: return "Hero"
+        case .purr: return "Purr"
+        case .sosumi: return "Sosumi"
         }
     }
 }

@@ -1,4 +1,5 @@
 import XCTest
+import Carbon
 @testable import Voxt
 
 final class FeatureSettingsStoreTests: XCTestCase {
@@ -9,6 +10,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
 
         XCTAssertFalse(settings.meeting.enabled)
         XCTAssertFalse(settings.transcription.notes.enabled)
+        XCTAssertEqual(settings.rewrite.continueShortcut.keyCode, TranscriptionContinueShortcutSettings.defaultShortcut.keyCode)
         XCTAssertEqual(settings.transcription.notes.triggerShortcut.keyCode, TranscriptionNoteTriggerSettings.defaultShortcut.keyCode)
     }
 
@@ -203,6 +205,75 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: AppPreferenceKey.meetingNotesBetaEnabled))
     }
 
+    func testSavePreservesRewriteContinueShortcut() {
+        let defaults = TestDoubles.makeUserDefaults()
+        let settings = FeatureSettings(
+            transcription: .init(
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                llmEnabled: false,
+                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                prompt: AppPreferenceKey.defaultEnhancementPrompt
+            ),
+            translation: .init(
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                modelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
+                prompt: AppPreferenceKey.defaultTranslationPrompt,
+                replaceSelectedText: true
+            ),
+            rewrite: .init(
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                prompt: AppPreferenceKey.defaultRewritePrompt,
+                appEnhancementEnabled: false,
+                continueShortcut: .init(keyCode: UInt16(kVK_Return))
+            ),
+            meeting: .init(
+                enabled: false,
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                summaryModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
+                summaryAutoGenerate: true,
+                realtimeTranslateEnabled: false,
+                realtimeTargetLanguageRawValue: "",
+                showOverlayInScreenShare: false
+            )
+        )
+
+        FeatureSettingsStore.save(settings, defaults: defaults)
+
+        let reloaded = FeatureSettingsStore.load(defaults: defaults)
+        XCTAssertEqual(reloaded.rewrite.continueShortcut.keyCode, UInt16(kVK_Return))
+    }
+
+    func testLoadSanitizesModifierOnlyRewriteContinueShortcut() {
+        let defaults = TestDoubles.makeUserDefaults()
+        defaults.set(
+            """
+            {"transcription":{"asrSelectionID":"dictation","llmEnabled":false,"llmSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","prompt":"prompt","notes":{"enabled":false,"triggerShortcut":{"keyCode":49,"modifiersRawValue":0,"sidedModifiersRawValue":0},"titleModelSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","soundEnabled":false,"soundPreset":"soft"}},"translation":{"asrSelectionID":"dictation","modelSelectionID":"remote-llm:openai","targetLanguageRawValue":"english","prompt":"translation","replaceSelectedText":true},"rewrite":{"asrSelectionID":"dictation","llmSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","prompt":"rewrite","appEnhancementEnabled":false,"continueShortcut":{"keyCode":65535,"modifiersRawValue":0,"sidedModifiersRawValue":0}},"meeting":{"enabled":false,"asrSelectionID":"dictation","summaryModelSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","summaryPrompt":"meeting","summaryAutoGenerate":true,"realtimeTranslateEnabled":false,"realtimeTargetLanguageRawValue":"","showOverlayInScreenShare":false}}
+            """,
+            forKey: AppPreferenceKey.featureSettings
+        )
+
+        let settings = FeatureSettingsStore.load(defaults: defaults)
+
+        XCTAssertEqual(settings.rewrite.continueShortcut.keyCode, TranscriptionContinueShortcutSettings.defaultShortcut.keyCode)
+    }
+
+    func testLoadSanitizesModifierOnlyNoteTriggerShortcut() {
+        let defaults = TestDoubles.makeUserDefaults()
+        defaults.set(
+            """
+            {"transcription":{"asrSelectionID":"dictation","llmEnabled":false,"llmSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","prompt":"prompt","notes":{"enabled":true,"triggerShortcut":{"keyCode":65535,"modifiersRawValue":0,"sidedModifiersRawValue":0},"titleModelSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","soundEnabled":false,"soundPreset":"soft"}},"translation":{"asrSelectionID":"dictation","modelSelectionID":"remote-llm:openai","targetLanguageRawValue":"english","prompt":"translation","replaceSelectedText":true},"rewrite":{"asrSelectionID":"dictation","llmSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","prompt":"rewrite","appEnhancementEnabled":false,"continueShortcut":{"keyCode":49,"modifiersRawValue":0,"sidedModifiersRawValue":0}},"meeting":{"enabled":false,"asrSelectionID":"dictation","summaryModelSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","summaryPrompt":"meeting","summaryAutoGenerate":true,"realtimeTranslateEnabled":false,"realtimeTargetLanguageRawValue":"","showOverlayInScreenShare":false}}
+            """,
+            forKey: AppPreferenceKey.featureSettings
+        )
+
+        let settings = FeatureSettingsStore.load(defaults: defaults)
+
+        XCTAssertEqual(settings.transcription.notes.triggerShortcut.keyCode, TranscriptionNoteTriggerSettings.defaultShortcut.keyCode)
+    }
+
     func testLoadDefaultsMissingNoteSoundFieldsSafely() {
         let defaults = TestDoubles.makeUserDefaults()
         defaults.set(
@@ -215,6 +286,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
         let settings = FeatureSettingsStore.load(defaults: defaults)
 
         XCTAssertTrue(settings.transcription.notes.enabled)
+        XCTAssertEqual(settings.rewrite.continueShortcut.keyCode, TranscriptionContinueShortcutSettings.defaultShortcut.keyCode)
         XCTAssertFalse(settings.transcription.notes.soundEnabled)
         XCTAssertEqual(settings.transcription.notes.soundPreset, .soft)
     }

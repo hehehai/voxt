@@ -42,6 +42,18 @@ final class InteractionSoundPlayer {
             return ("Morse", "Morse")
         case .submarine:
             return ("Submarine", "Submarine")
+        case .basso:
+            return ("Basso", "Basso")
+        case .bottle:
+            return ("Bottle", "Bottle")
+        case .frog:
+            return ("Frog", "Frog")
+        case .hero:
+            return ("Hero", "Hero")
+        case .purr:
+            return ("Purr", "Purr")
+        case .sosumi:
+            return ("Sosumi", "Sosumi")
         }
     }
 

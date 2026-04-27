@@ -35,6 +35,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private let streamingFinalWaitTimeout: TimeInterval = 20
     private var lastPresentedRuntimeErrorMessage = ""
     private var recordingGenerationID = UUID()
+    private var doubaoCaptureStartupWatchdogTask: Task<Void, Never>?
+    private var didRetryDoubaoCaptureStartup = false
+    private var doubaoCaptureUsesPreferredInputDevice = false
+    private let doubaoCaptureStartupWatchdogDelay: Duration = .seconds(1.2)
 
     func setPreferredInputDevice(_ deviceID: AudioDeviceID?) {
         preferredInputDeviceID = deviceID
@@ -204,14 +208,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             VoxtLog.warning(
                 "Doubao audio capture restart requested. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
             )
-            stopDoubaoAudioCapture()
-            try startDoubaoAudioCapture()
-            context.audioCaptureStartCount += 1
-            context.lastAudioCaptureStartReason = "preferred-input-change"
-            VoxtLog.warning(
-                "Doubao audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
-            )
-            return
+        stopDoubaoAudioCapture()
+        didRetryDoubaoCaptureStartup = false
+        try startDoubaoAudioCapture(usePreferredInputDevice: preferredInputDeviceID != nil)
+        context.audioCaptureStartCount += 1
+        context.lastAudioCaptureStartReason = "preferred-input-change"
+        scheduleDoubaoCaptureStartupWatchdog(context)
+        VoxtLog.warning(
+            "Doubao audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
+        )
+        return
         }
 
         if let context = aliyunStreamingContext {
@@ -1407,9 +1413,18 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func startDoubaoAudioCapture() throws {
+    private func startDoubaoAudioCapture(usePreferredInputDevice: Bool? = nil) throws {
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.reset()
+
         let inputNode = audioEngine.inputNode
-        applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        let shouldUsePreferredInputDevice = usePreferredInputDevice ?? (preferredInputDeviceID != nil)
+        doubaoCaptureUsesPreferredInputDevice = shouldUsePreferredInputDevice
+        if shouldUsePreferredInputDevice {
+            applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        }
         let inputFormat = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
@@ -1429,12 +1444,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         try audioEngine.start()
         isRecording = true
         VoxtLog.info(
-            "Doubao audio capture engine started. sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")",
+            "Doubao audio capture engine started. sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
     }
 
     private func stopDoubaoAudioCapture() {
+        doubaoCaptureStartupWatchdogTask?.cancel()
+        doubaoCaptureStartupWatchdogTask = nil
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         audioLevel = 0
@@ -1449,11 +1466,55 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             VoxtLog.info("Doubao audio capture start skipped because stop was already requested. reason=\(reason)", verbose: true)
             return
         }
-        try startDoubaoAudioCapture()
+        didRetryDoubaoCaptureStartup = false
+        try startDoubaoAudioCapture(usePreferredInputDevice: preferredInputDeviceID != nil)
         context.didStartAudioStream = true
         context.audioCaptureStartCount += 1
         context.lastAudioCaptureStartReason = reason
+        scheduleDoubaoCaptureStartupWatchdog(context)
         VoxtLog.info("Doubao audio capture started. reason=\(reason), state=\(context.debugSummary())", verbose: true)
+    }
+
+    private func scheduleDoubaoCaptureStartupWatchdog(_ context: DoubaoStreamingContext) {
+        doubaoCaptureStartupWatchdogTask?.cancel()
+        doubaoCaptureStartupWatchdogTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: self?.doubaoCaptureStartupWatchdogDelay ?? .seconds(1.2))
+            } catch {
+                return
+            }
+            await self?.recoverDoubaoCaptureIfNeeded(context)
+        }
+    }
+
+    private func recoverDoubaoCaptureIfNeeded(_ context: DoubaoStreamingContext) async {
+        guard doubaoStreamingContext === context else { return }
+        guard isCurrentGeneration(context.generationID), isRecording, !context.isClosed else { return }
+        guard context.pcmCallbackCount == 0 else { return }
+        guard !didRetryDoubaoCaptureStartup else { return }
+
+        didRetryDoubaoCaptureStartup = true
+        let shouldFallbackToSystemDefault = preferredInputDeviceID != nil && doubaoCaptureUsesPreferredInputDevice
+        if shouldFallbackToSystemDefault {
+            VoxtLog.warning(
+                "Doubao audio capture produced no initial callbacks. Retrying once with system default input instead of the preferred device. state=\(context.debugSummary())"
+            )
+        } else {
+            VoxtLog.warning(
+                "Doubao audio capture produced no initial callbacks. Restarting input graph once. state=\(context.debugSummary())"
+            )
+        }
+
+        do {
+            try startDoubaoAudioCapture(
+                usePreferredInputDevice: shouldFallbackToSystemDefault ? false : doubaoCaptureUsesPreferredInputDevice
+            )
+            context.audioCaptureStartCount += 1
+            context.lastAudioCaptureStartReason = "startup-watchdog"
+            scheduleDoubaoCaptureStartupWatchdog(context)
+        } catch {
+            VoxtLog.error("Doubao audio capture recovery failed: \(error.localizedDescription)")
+        }
     }
 
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
@@ -1731,6 +1792,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let now = Date()
         context.pcmCallbackCount += 1
         if context.firstPCMCallbackAt == nil {
+            doubaoCaptureStartupWatchdogTask?.cancel()
+            doubaoCaptureStartupWatchdogTask = nil
             context.firstPCMCallbackAt = now
             VoxtLog.info("Doubao first PCM callback received. bytes=\(pcmData.count), state=\(context.debugSummary(now: now))", verbose: true)
         }
@@ -2642,6 +2705,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func cleanupDoubaoStreamingState() {
+        doubaoCaptureStartupWatchdogTask?.cancel()
+        doubaoCaptureStartupWatchdogTask = nil
+        didRetryDoubaoCaptureStartup = false
+        doubaoCaptureUsesPreferredInputDevice = false
         if let context = doubaoStreamingContext {
             context.isClosed = true
             context.ws.cancel(with: .normalClosure, reason: nil)

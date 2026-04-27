@@ -25,6 +25,12 @@
 "Glass" = "Glass";
 "Funk" = "Funk";
 "Submarine" = "Submarine";
+"Basso" = "Basso";
+"Bottle" = "Bottle";
+"Frog" = "Frog";
+"Hero" = "Hero";
+"Purr" = "Purr";
+"Sosumi" = "Sosumi";
 "Transcription UI" = "Transcription UI";
 "Position" = "Position";
 "Bottom" = "Bottom";
@@ -1242,6 +1248,8 @@
 "Translation Mode" = "Translation Mode";
 "Notes" = "Notes";
 "Enable Notes" = "Enable Notes";
+"Continue Shortcut" = "Continue Shortcut";
+"Use this key in rewrite continue mode to start the next follow-up recording from the OverLazy answer view." = "Use this key in rewrite continue mode to start the next follow-up recording from the OverLazy answer view.";
 "Add segmented notes during transcription. Once enabled, Notes appears in the Feature menu and supports a dedicated trigger key." = "Add segmented notes during transcription. Once enabled, Notes appears in the Feature menu and supports a dedicated trigger key.";
 "Notes configuration moved here after transcription-level enablement." = "Notes configuration moved here after transcription-level enablement.";
 "Notes Workflow" = "Notes Workflow";

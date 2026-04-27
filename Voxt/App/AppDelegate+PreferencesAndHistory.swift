@@ -27,6 +27,10 @@ extension AppDelegate {
         featureSettings.transcription
     }
 
+    var rewriteContinueShortcutSettings: TranscriptionContinueShortcutSettings {
+        featureSettings.rewrite.continueShortcut
+    }
+
     var noteFeatureSettings: TranscriptionNoteFeatureSettings {
         featureSettings.transcription.notes
     }

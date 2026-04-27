@@ -124,6 +124,29 @@ struct SidedModifierFlags: OptionSet, Equatable {
 
         return sided
     }
+
+    static func snapshotFromCurrentKeyState(filteredBy modifiers: NSEvent.ModifierFlags) -> SidedModifierFlags {
+        var sided: SidedModifierFlags = []
+
+        let keyCodes: [(UInt16, SidedModifierFlags)] = [
+            (UInt16(kVK_Shift), .leftShift),
+            (UInt16(kVK_RightShift), .rightShift),
+            (UInt16(kVK_Control), .leftControl),
+            (UInt16(kVK_RightControl), .rightControl),
+            (UInt16(kVK_Option), .leftOption),
+            (UInt16(kVK_RightOption), .rightOption),
+            (UInt16(kVK_Command), .leftCommand),
+            (UInt16(kVK_RightCommand), .rightCommand)
+        ]
+
+        for (keyCode, flag) in keyCodes {
+            if CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keyCode)) {
+                sided.insert(flag)
+            }
+        }
+
+        return sided.filtered(by: modifiers)
+    }
 }
 
 struct HotkeyPreference {
@@ -432,6 +455,9 @@ struct HotkeyPreference {
         sidedModifiers: SidedModifierFlags,
         fallback: String
     ) -> String {
+        if sidedModifiers.contains(primary), sidedModifiers.contains(secondary) {
+            return localizedModifierName(fallback)
+        }
         if sidedModifiers.contains(primary) { return AppLocalization.format("Left %@", localizedModifierName(fallback)) }
         if sidedModifiers.contains(secondary) { return AppLocalization.format("Right %@", localizedModifierName(fallback)) }
         return localizedModifierName(fallback)

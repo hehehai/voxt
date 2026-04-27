@@ -49,7 +49,6 @@ enum AudioInputDeviceManager {
             guard hasInputStream(deviceID: id) else { return nil }
             guard let uid = deviceUID(deviceID: id), !uid.isEmpty else { return nil }
             guard let name = deviceName(deviceID: id), !name.isEmpty else { return nil }
-            guard shouldIncludeInSnapshot(uid: uid, name: name) else { return nil }
             return AudioInputDevice(id: id, uid: uid, name: name)
         }
 
@@ -62,16 +61,18 @@ enum AudioInputDeviceManager {
         }
 
         let devices = discoveredDevices
-        .filter { shouldIncludeInSnapshot(uid: $0.uid, name: $0.name) }
-        .sorted { (lhs: AudioInputDevice, rhs: AudioInputDevice) in
-            lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
+            .filter { shouldIncludeInSnapshot(uid: $0.uid, name: $0.name) }
+            .sorted { (lhs: AudioInputDevice, rhs: AudioInputDevice) in
+                lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
         return devices
     }
 
     nonisolated static func shouldIncludeInSnapshot(uid: String, name: String) -> Bool {
         let trimmedUID = uid.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedUID.isEmpty, !trimmedName.isEmpty else { return false }
 
         if trimmedUID.hasPrefix("voxt-process-tap-") || trimmedName == "VoxtProcessTap" {
             return false
@@ -165,23 +166,6 @@ enum AudioInputDeviceManager {
         default:
             return String(selector)
         }
-    }
-
-    nonisolated static func shouldIncludeInSnapshot(uid: String, name: String) -> Bool {
-        let normalizedUID = uid.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !normalizedUID.isEmpty, !normalizedName.isEmpty else { return false }
-
-        let blockedPrefixes = [
-            "CADefaultDeviceAggregate-"
-        ]
-
-        if blockedPrefixes.contains(where: { normalizedUID.hasPrefix($0) || normalizedName.hasPrefix($0) }) {
-            return false
-        }
-
-        return true
     }
 
     nonisolated private static func hasInputStream(deviceID: AudioDeviceID) -> Bool {

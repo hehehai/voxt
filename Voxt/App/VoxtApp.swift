@@ -933,7 +933,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleOverlayShortcutEvent(_ event: NSEvent, shouldConsume: Bool = false) -> NSEvent? {
-        if shouldHandleAnswerOverlaySpaceShortcut(event),
+        if shouldHandleAnswerOverlayContinueShortcut(event),
            overlayWindow.handleAnswerSpaceShortcut() {
             return shouldConsume ? nil : event
         }
@@ -966,12 +966,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return shouldConsume ? nil : event
     }
 
-    private func shouldHandleAnswerOverlaySpaceShortcut(_ event: NSEvent) -> Bool {
+    private func shouldHandleAnswerOverlayContinueShortcut(_ event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return false }
-        guard event.keyCode == UInt16(kVK_Space) else { return false }
         guard !event.isARepeat else { return false }
+        let shortcut = rewriteContinueShortcutSettings.hotkey
+        guard event.keyCode == shortcut.keyCode else { return false }
         let modifiers = event.modifierFlags.intersection(.hotkeyRelevant)
-        guard modifiers.isEmpty else { return false }
+        guard modifiers == shortcut.modifiers else { return false }
         return overlayState.answerSpaceShortcutAction != nil
     }
 

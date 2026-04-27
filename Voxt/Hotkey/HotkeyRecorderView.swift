@@ -111,11 +111,11 @@ final class KeyCaptureView: NSView {
     override func flagsChanged(with event: NSEvent) {
         guard isRecording else { return }
 
-        updateSidedModifiers(for: event.keyCode)
         let modifiers = updateModifierFlags(
             keyCode: event.keyCode,
             rawModifiers: event.modifierFlags.intersection(.hotkeyRelevant)
         )
+        updateSidedModifiers(for: event.keyCode)
         VoxtLog.hotkey("Hotkey recorder flagsChanged(local). keyCode=\(event.keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: modifiers))")
         scheduleModifierOnlyCaptureIfNeeded(keyCode: event.keyCode, modifiers: modifiers)
     }
@@ -124,6 +124,7 @@ final class KeyCaptureView: NSView {
         stopLocalEventMonitor()
         hasCapturedChordDuringCurrentRecording = false
         lastModifierOnlyCaptureCount = 0
+        currentSidedModifiers = []
         currentModifierFlags = []
         pendingModifierCapture = nil
         startHIDMonitor()
@@ -151,6 +152,7 @@ final class KeyCaptureView: NSView {
         pendingModifierCaptureTask = nil
         hasCapturedChordDuringCurrentRecording = false
         lastModifierOnlyCaptureCount = 0
+        currentSidedModifiers = []
         currentModifierFlags = []
         pendingModifierCapture = nil
         stopHIDMonitor()
@@ -278,11 +280,11 @@ final class KeyCaptureView: NSView {
                 sidedModifiers: currentSidedModifiers
             )
         case .flagsChanged:
-            updateSidedModifiers(for: keyCode)
             let modifiers = updateModifierFlags(
                 keyCode: keyCode,
                 rawModifiers: modifierFlags(from: event.flags).intersection(.hotkeyRelevant)
             )
+            currentSidedModifiers = SidedModifierFlags.from(eventFlags: event.flags).filtered(by: modifiers)
             VoxtLog.hotkey("Hotkey recorder flagsChanged(tap). keyCode=\(keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: modifiers))")
             scheduleModifierOnlyCaptureIfNeeded(keyCode: keyCode, modifiers: modifiers)
         default:
@@ -302,10 +304,8 @@ final class KeyCaptureView: NSView {
 
     private func updateSidedModifiers(for keyCode: UInt16) {
         guard SidedModifierFlags.sidedFlag(for: keyCode) != nil else { return }
-        currentSidedModifiers = SidedModifierFlags.updating(
-            from: currentSidedModifiers,
-            keyCode: keyCode,
-            isPressed: CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keyCode))
+        currentSidedModifiers = SidedModifierFlags.snapshotFromCurrentKeyState(
+            filteredBy: currentModifierFlags.intersection(.hotkeyRelevant)
         )
     }
 
