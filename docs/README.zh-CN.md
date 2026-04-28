@@ -215,12 +215,21 @@ https://raw.githubusercontent.com/hehehai/voxt/refs/heads/main/docs/RemoteModel.
 
 | 服务商 | 项目内置模型选项 | 支持语言 | 实时支持 | 速度 | 推荐度 | 当前接入方式 |
 | --- | --- | --- | --- | --- | --- | --- |
-| OpenAI Whisper / Transcribe | `whisper-1`、`gpt-4o-mini-transcribe`、`gpt-4o-transcribe` | 多语言 | 部分支持，Voxt 当前是文件转写；可开启分片伪实时预览 | 中 | 高 | `v1/audio/transcriptions` |
+| OpenAI Whisper / Transcribe | `whisper-1`、`gpt-4o-mini-transcribe`、`gpt-4o-transcribe`，以及自定义 OpenAI-compatible 模型 ID | 多语言 | 部分支持，Voxt 当前是文件转写；可开启分片伪实时预览 | 中 | 高 | OpenAI-compatible `audio/transcriptions` |
 | Doubao ASR | `volc.seedasr.sauc.duration`、`volc.bigasr.sauc.duration`，会议：`volc.bigasr.auc_turbo` | 中文优先，适合中英混说 | 普通转录支持实时，会议走分段 / 文件模式 | 快 | 高 | 普通转录走 WebSocket，会议走 HTTP flash/file ASR |
 | GLM ASR | `glm-asr-2512`、`glm-asr-1` | 官方定位覆盖多场景、多口音；Voxt 当前按普通转写接入 | 否（当前实现为上传转写） | 中 | 中高 | HTTP transcription endpoint |
 | Aliyun Bailian ASR | `qwen3-asr-flash-realtime`、`fun-asr-realtime`、`paraformer-realtime-*`，会议：`qwen3-asr-flash-filetrans`、`fun-asr`、`paraformer-v2` | 取决于模型：Qwen3 ASR 为多语言，Fun/Paraformer 覆盖中英或多语 | 普通转录支持实时，会议走分段 / 文件模式 | 快 | 高 | 普通转录走 WebSocket，会议走异步 / 文件 ASR |
 
 对 `Doubao ASR` 和 `Aliyun Bailian ASR`，会议模式有独立的 `Meeting ASR` 模型配置：
+
+Voxt 里的 `OpenAI Whisper / Transcribe` 也可以当作通用的 OpenAI-compatible 转写入口，只要目标服务接受 `Bearer` 鉴权，并通过 `audio/transcriptions` 接口处理 multipart 文件上传。
+
+- 目前只有 `OpenAI Whisper / Transcribe` 这一档支持自定义 ASR endpoint 和自定义模型 ID。
+- endpoint 需要填写完整的转写地址，不能只填 API 根地址。
+- 兼容示例：
+  - MOSI Studio：endpoint `https://studio.mosi.cn/api/v1/audio/transcriptions`；模型 `moss-transcribe` 或 `moss-transcribe-diarize`
+  - Groq Speech-to-Text：endpoint `https://api.groq.com/openai/v1/audio/transcriptions`；模型 `whisper-large-v3-turbo` 或 `whisper-large-v3`
+- Voxt 当前会按文件上传方式请求，并读取返回中的转写文本。像 diarization segment 这类服务自带的结构化字段，暂时不会作为独立 UI 能力展示。
 
 - 只有在开启 `Meeting Notes (Beta)` 后，主窗口里的 `模型 > Remote ASR > [服务商]` 中才会显示这一段
 - 会议不会复用普通实时 ASR 模型，而是只使用单独配置的会议模型

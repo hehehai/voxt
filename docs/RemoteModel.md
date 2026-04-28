@@ -9,6 +9,7 @@ Voxt lets you choose separate remote providers for `Remote ASR` and `Remote LLM`
 - Suggested default: `whisper-1`
 - Built-in models: `whisper-1`, `gpt-4o-mini-transcribe`, `gpt-4o-transcribe`
 - Overview: Best for general-purpose multilingual audio transcription. Voxt currently integrates it as file-based transcription, which makes it a good fit for users who want compatibility and a stable experience.
+- Voxt note: this provider also supports custom model IDs and custom OpenAI-compatible transcription endpoints.
 
 - [Website](https://openai.com/)
 - [API Docs](https://developers.openai.com/api/reference/resources/audio)
@@ -16,6 +17,22 @@ Voxt lets you choose separate remote providers for `Remote ASR` and `Remote LLM`
 
 Endpoint: `https://api.openai.com/v1/audio/transcriptions`  
 Key: `$OPENAI_API_KEY`
+
+Compatible custom endpoint examples:
+
+- [MOSI Studio MOSS Transcribe](https://studio.mosi.cn/docs/moss-transcribe)
+  - Endpoint: `https://studio.mosi.cn/api/v1/audio/transcriptions`
+  - Models: `moss-transcribe`, `moss-transcribe-diarize`
+- [Groq Speech-to-Text](https://console.groq.com/docs/speech-to-text)
+  - Endpoint: `https://api.groq.com/openai/v1/audio/transcriptions`
+  - Models: `whisper-large-v3-turbo`, `whisper-large-v3`
+
+Important notes:
+
+- In Voxt, custom ASR model IDs are supported only through the `OpenAI Whisper` provider.
+- Enter the full transcription endpoint, not just the API root.
+- Voxt uses file upload transcription for this provider path. If a compatible service also supports URL or Base64 inputs, Voxt still uses file upload.
+- If a compatible service returns extra structured metadata such as diarization segments, Voxt currently reads the transcript text but does not surface that metadata as a dedicated UI feature.
 
 <img width="923" height="676" alt="image" src="https://github.com/user-attachments/assets/62be17c8-78f5-418e-a4ba-873d18d58f18" />
 

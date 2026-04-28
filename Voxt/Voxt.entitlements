@@ -15,6 +15,10 @@
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 
+	<!-- EventKit access (required for Reminders in sandboxed macOS apps) -->
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
+
 	<!-- Outgoing network connections (for downloading MLX Audio models from HuggingFace) -->
 	<key>com.apple.security.network.client</key>
 	<true/>

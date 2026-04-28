@@ -459,6 +459,7 @@
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Voxt needs automation access to read the active browser tab URL for app branch enhancement.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Voxt needs reminders access to sync notes into Apple Reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -502,6 +503,7 @@
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Voxt needs automation access to read the active browser tab URL for app branch enhancement.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Voxt needs reminders access to sync notes into Apple Reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -545,6 +547,7 @@
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Voxt needs automation access to read the active browser tab URL for app branch enhancement.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Voxt needs reminders access to sync notes into Apple Reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

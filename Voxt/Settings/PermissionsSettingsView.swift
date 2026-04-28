@@ -311,6 +311,16 @@ struct PermissionsSettingsView: View {
                     PermissionGuidance.openSettings(for: kind)
                 }
             }
+        case .reminders:
+            RemindersPermissionManager.requestAccess { _ in
+                Task { @MainActor in
+                    refreshStates()
+                    let authorizationState = RemindersPermissionManager.authorizationState()
+                    if authorizationState == .denied || authorizationState == .restricted {
+                        PermissionGuidance.openSettings(for: kind)
+                    }
+                }
+            }
         }
     }
 

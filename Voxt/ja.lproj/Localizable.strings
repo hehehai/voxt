@@ -584,6 +584,7 @@
 "System audio recording permission granted." = "システム音声録音の権限が許可されました。";
 "System audio recording permission is required for this feature. You can grant it in Settings > Permissions." = "この機能にはシステム音声録音の権限が必要です。Settings > Permissions から許可できます。";
 "System Audio Recording Permission" = "システム音声録音の権限";
+"Reminders Permission" = "Reminders の権限";
 "Required only when muting other apps' media audio during recording is enabled." = "録音中に他アプリのメディア音声をミュートする機能を有効にした場合にのみ必要です。";
 "Feedback" = "フィードバック";
 "Dictionary" = "辞書";
@@ -776,6 +777,7 @@
 "Me" = "自分";
 "Them" = "相手";
 "Required for Meeting Notes and for muting other apps' media audio during recording." = "会議記録機能および録音中に他アプリのメディア音声をミュートするために必要です。";
+"Required to sync Voxt notes into Apple Reminders." = "Voxt のメモを Apple Reminders に同期するために必要です。";
 "System output device unavailable (%d)." = "システム出力デバイスを利用できません（%d）。";
 "System audio tap creation failed (%d)." = "システム音声 tap の作成に失敗しました（%d）。";
 "System audio aggregate device failed (%d)." = "システム音声 aggregate device の作成に失敗しました（%d）。";
@@ -1190,6 +1192,13 @@
 "Play a short reminder sound each time the note trigger is pressed during a live transcription session." = "リアルタイム文字起こし中にメモトリガーを押すたび、短い通知音を再生します。";
 "Note Sound Preset" = "メモ通知音プリセット";
 "Choose the reminder sound used when a note is captured, and preview it here." = "メモ記録時に使う通知音を選び、ここで試聴できます。";
+"Enable Reminders Sync" = "Reminders 同期を有効にする";
+"Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list." = "選択したリスト内で対応するリマインダーを作成・更新し、Voxt のメモを Apple Reminders に同期します。";
+"Reminders Sync" = "Reminders 同期";
+"Target List" = "対象リスト";
+"Choose the Reminders list that should receive synced Voxt notes." = "Voxt の同期メモを受け取る Reminders のリストを選択します。";
+"Choose Reminder List" = "Reminders リストを選択";
+"No writable reminder lists available." = "書き込み可能な Reminders リストがありません。";
 "Enable Obsidian Sync" = "Obsidian 同期を有効にする";
 "Export Voxt notes into an Obsidian vault by writing Markdown files directly into the selected folder." = "選択したフォルダに Markdown ファイルを書き込み、Voxt のメモを Obsidian vault に書き出します。";
 "Vault Folder" = "Vault フォルダ";

@@ -16,6 +16,8 @@ struct FeatureSettingsView: View {
 
     @State var featureSettings = FeatureSettingsStore.load()
     @State var selectorSheet: FeatureModelSelectorSheet?
+    @State var remindersListDescriptors: [RemindersListDescriptor] = []
+    @State var isRemindersListSheetPresented = false
     @State var interactionSoundPlayer = InteractionSoundPlayer()
 
     var body: some View {
@@ -45,9 +47,24 @@ struct FeatureSettingsView: View {
                 }
             )
         }
-        .onAppear(perform: reloadFeatureSettings)
+        .sheet(isPresented: $isRemindersListSheetPresented) {
+            RemindersListSelectorDialog(
+                title: AppLocalization.localizedString("Choose Reminder List"),
+                entries: remindersListDescriptors,
+                selectedIdentifier: featureSettings.transcription.notes.remindersSync.selectedListIdentifier,
+                onSelect: applyRemindersListSelection
+            )
+        }
+        .onAppear {
+            reloadFeatureSettings()
+            refreshRemindersLists()
+        }
         .onChange(of: featureSettingsRaw) { _, _ in
             reloadFeatureSettings()
+            refreshRemindersLists()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
+            refreshRemindersLists()
         }
         .id(interfaceLanguageRaw)
     }
@@ -96,6 +113,34 @@ struct FeatureSettingsView: View {
         } catch {
             VoxtLog.warning("Failed to store Obsidian vault bookmark: \(error.localizedDescription)")
         }
+    }
+
+    func presentRemindersListSelector() {
+        refreshRemindersLists()
+        isRemindersListSheetPresented = true
+    }
+
+    func applyRemindersListSelection(_ descriptor: RemindersListDescriptor) {
+        featureSettings.transcription.notes.remindersSync.selectedListIdentifier = descriptor.identifier
+        featureSettings.transcription.notes.remindersSync.selectedListTitle = descriptor.displayTitle
+        saveFeatureSettings()
+    }
+
+    func refreshRemindersLists() {
+        guard RemindersPermissionManager.isAuthorized() else {
+            remindersListDescriptors = []
+            return
+        }
+        remindersListDescriptors = RemindersPermissionManager.writableLists()
+    }
+
+    var selectedRemindersListTitle: String {
+        let storedSettings = featureSettings.transcription.notes.remindersSync
+        if let descriptor = remindersListDescriptors.first(where: { $0.identifier == storedSettings.selectedListIdentifier }) {
+            return descriptor.displayTitle
+        }
+        let trimmedTitle = storedSettings.selectedListTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? AppLocalization.localizedString("Not configured") : trimmedTitle
     }
 
     var selectorBuilder: FeatureModelCatalogBuilder {

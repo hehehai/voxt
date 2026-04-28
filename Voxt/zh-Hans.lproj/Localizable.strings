@@ -724,6 +724,7 @@
 "System audio recording permission granted." = "系统音频录制权限已授予。";
 "System audio recording permission is required for this feature. You can grant it in Settings > Permissions." = "此功能需要系统音频录制权限。你可以在 设置 > 权限 中授予。";
 "System Audio Recording Permission" = "系统音频录制权限";
+"Reminders Permission" = "提醒事项权限";
 "Required only when muting other apps' media audio during recording is enabled." = "仅当开启“录制时静音其他应用媒体音频”时才需要。";
 "Always show rewrite answer card" = "始终显示转写答案卡片";
 "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "仅适用于转写。关闭时，只有在未聚焦可写输入框时才显示答案卡片；开启后，转写无论是否聚焦输入框都会显示答案卡片。";
@@ -824,6 +825,7 @@
 "Me" = "我";
 "Them" = "对方";
 "Required for Meeting Notes and for muting other apps' media audio during recording." = "会议记录功能和录音时静音其他应用媒体音频都需要此权限。";
+"Required to sync Voxt notes into Apple Reminders." = "将 Voxt 笔记同步到 Apple 提醒事项需要此权限。";
 "System output device unavailable (%d)." = "系统输出设备不可用（%d）。";
 "System audio tap creation failed (%d)." = "系统音频 tap 创建失败（%d）。";
 "System audio aggregate device failed (%d)." = "系统音频聚合设备创建失败（%d）。";
@@ -1265,6 +1267,13 @@
 "Play a short reminder sound each time the note trigger is pressed during a live transcription session." = "在实时转录过程中每次按下笔记触发键时，播放一个短提示音。";
 "Note Sound Preset" = "笔记提示音预设";
 "Choose the reminder sound used when a note is captured, and preview it here." = "选择记录笔记时使用的提示音，并可在这里试听。";
+"Enable Reminders Sync" = "启用提醒事项同步";
+"Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list." = "把 Voxt 笔记同步到 Apple 提醒事项，并在所选列表中创建和更新对应提醒。";
+"Reminders Sync" = "提醒事项同步";
+"Target List" = "目标列表";
+"Choose the Reminders list that should receive synced Voxt notes." = "选择用于接收 Voxt 同步笔记的提醒事项列表。";
+"Choose Reminder List" = "选择提醒事项列表";
+"No writable reminder lists available." = "当前没有可写的提醒事项列表。";
 "Enable Obsidian Sync" = "启用 Obsidian 同步";
 "Export Voxt notes into an Obsidian vault by writing Markdown files directly into the selected folder." = "通过直接写入 Markdown 文件，把 Voxt 笔记导出到选定的 Obsidian vault 文件夹。";
 "Vault Folder" = "Vault 文件夹";

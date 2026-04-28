@@ -48,6 +48,8 @@ enum PermissionGuidance {
             return .pane(.inputMonitoring)
         case .systemAudioCapture:
             return .destination(.privacy(anchor: .privacyAudioCapture))
+        case .reminders:
+            return .destination(.privacy(anchor: .privacyReminders))
         }
     }
 

@@ -8,6 +8,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
     case accessibility
     case inputMonitoring
     case systemAudioCapture
+    case reminders
 
     var id: String { rawValue }
 
@@ -18,6 +19,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
         case .accessibility: return "accessibility"
         case .inputMonitoring: return "inputMonitoring"
         case .systemAudioCapture: return "systemAudioCapture"
+        case .reminders: return "reminders"
         }
     }
 
@@ -28,6 +30,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
         case .accessibility: return "Accessibility Permission"
         case .inputMonitoring: return "Input Monitoring Permission"
         case .systemAudioCapture: return "System Audio Recording Permission"
+        case .reminders: return "Reminders Permission"
         }
     }
 
@@ -43,6 +46,8 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
             return "Required for reliable global modifier hotkeys (such as fn)."
         case .systemAudioCapture:
             return "Required for Meeting Notes and for muting other apps' media audio during recording."
+        case .reminders:
+            return "Required to sync Voxt notes into Apple Reminders."
         }
     }
 }
@@ -111,6 +116,10 @@ enum SettingsPermissionRequirementResolver {
             permissions.append(.systemAudioCapture)
         }
 
+        if context.featureSettings?.transcription.notes.remindersSync.enabled == true {
+            permissions.append(.reminders)
+        }
+
         return permissions
     }
 
@@ -135,6 +144,8 @@ enum SettingsPermissionGrantResolver {
             return EventListeningPermissionManager.isInputMonitoringGranted()
         case .systemAudioCapture:
             return SystemAudioCapturePermission.authorizationStatus() == .authorized
+        case .reminders:
+            return RemindersPermissionManager.isAuthorized()
         }
     }
 }

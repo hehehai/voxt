@@ -18,10 +18,12 @@
     <string>Voxt needs system audio access to temporarily mute other apps while recording.</string>
     <key>NSHumanReadableCopyright</key>
     <string></string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Voxt needs microphone access to transcribe your speech.</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Voxt uses speech recognition for direct dictation.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Voxt needs microphone access to transcribe your speech.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Voxt needs reminders access to sync notes into Apple Reminders.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Voxt uses speech recognition for direct dictation.</string>
     <key>SUEnableInstallerLauncherService</key>
     <true/>
 	<key>SUFeedURL</key>

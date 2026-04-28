@@ -54,7 +54,8 @@ enum FeatureSettingsStore {
                     enabled: false,
                     triggerShortcut: .defaultShortcut,
                     titleModelSelectionID: transcriptionText,
-                    obsidianSync: .init()
+                    obsidianSync: .init(),
+                    remindersSync: .init()
                 )
             ),
             translation: TranslationFeatureSettings(
@@ -280,7 +281,8 @@ enum FeatureSettingsStore {
             titleModelSelectionID: resolvedSelectionID,
             soundEnabled: settings.soundEnabled,
             soundPreset: settings.soundPreset,
-            obsidianSync: sanitizedObsidianSyncSettings(settings.obsidianSync)
+            obsidianSync: sanitizedObsidianSyncSettings(settings.obsidianSync),
+            remindersSync: sanitizedRemindersSyncSettings(settings.remindersSync)
         )
     }
 
@@ -298,6 +300,21 @@ enum FeatureSettingsStore {
             vaultBookmarkData: settings.vaultBookmarkData,
             relativeFolder: trimmedFolder.isEmpty ? "Voxt" : trimmedFolder,
             groupingMode: settings.groupingMode
+        )
+    }
+
+    private static func sanitizedRemindersSyncSettings(
+        _ settings: RemindersNoteSyncSettings
+    ) -> RemindersNoteSyncSettings {
+        let trimmedIdentifier = settings.selectedListIdentifier
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = settings.selectedListTitle
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return RemindersNoteSyncSettings(
+            enabled: settings.enabled,
+            selectedListIdentifier: trimmedIdentifier,
+            selectedListTitle: trimmedIdentifier.isEmpty ? "" : trimmedTitle
         )
     }
 

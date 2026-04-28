@@ -14,6 +14,9 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.transcription.notes.triggerShortcut.keyCode, TranscriptionNoteTriggerSettings.defaultShortcut.keyCode)
         XCTAssertEqual(settings.transcription.notes.obsidianSync.relativeFolder, "Voxt")
         XCTAssertEqual(settings.transcription.notes.obsidianSync.groupingMode, .file)
+        XCTAssertFalse(settings.transcription.notes.remindersSync.enabled)
+        XCTAssertEqual(settings.transcription.notes.remindersSync.selectedListIdentifier, "")
+        XCTAssertEqual(settings.transcription.notes.remindersSync.selectedListTitle, "")
     }
 
     func testDeriveFromLegacyBuildsFeatureSettings() {
@@ -353,6 +356,9 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertFalse(settings.transcription.notes.obsidianSync.enabled)
         XCTAssertEqual(settings.transcription.notes.obsidianSync.relativeFolder, "Voxt")
         XCTAssertEqual(settings.transcription.notes.obsidianSync.groupingMode, .file)
+        XCTAssertFalse(settings.transcription.notes.remindersSync.enabled)
+        XCTAssertEqual(settings.transcription.notes.remindersSync.selectedListIdentifier, "")
+        XCTAssertEqual(settings.transcription.notes.remindersSync.selectedListTitle, "")
     }
 
     func testSavePreservesObsidianSyncSettings() {
@@ -374,5 +380,22 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.transcription.notes.obsidianSync.vaultBookmarkData, Data([1, 2, 3]))
         XCTAssertEqual(reloaded.transcription.notes.obsidianSync.relativeFolder, "Voxt Inbox")
         XCTAssertEqual(reloaded.transcription.notes.obsidianSync.groupingMode, .daily)
+    }
+
+    func testSavePreservesRemindersSyncSettings() {
+        let defaults = TestDoubles.makeUserDefaults()
+        var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+        settings.transcription.notes.remindersSync = RemindersNoteSyncSettings(
+            enabled: true,
+            selectedListIdentifier: "list-123",
+            selectedListTitle: "Voxt Inbox"
+        )
+
+        FeatureSettingsStore.save(settings, defaults: defaults)
+
+        let reloaded = FeatureSettingsStore.load(defaults: defaults)
+        XCTAssertTrue(reloaded.transcription.notes.remindersSync.enabled)
+        XCTAssertEqual(reloaded.transcription.notes.remindersSync.selectedListIdentifier, "list-123")
+        XCTAssertEqual(reloaded.transcription.notes.remindersSync.selectedListTitle, "Voxt Inbox")
     }
 }

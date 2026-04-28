@@ -724,6 +724,7 @@
 "System audio recording permission granted." = "System audio recording permission granted.";
 "System audio recording permission is required for this feature. You can grant it in Settings > Permissions." = "System audio recording permission is required for this feature. You can grant it in Settings > Permissions.";
 "System Audio Recording Permission" = "System Audio Recording Permission";
+"Reminders Permission" = "Reminders Permission";
 "Required only when muting other apps' media audio during recording is enabled." = "Required only when muting other apps' media audio during recording is enabled.";
 "Always show rewrite answer card" = "Always show rewrite answer card";
 "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card.";
@@ -824,6 +825,7 @@
 "Me" = "Me";
 "Them" = "Them";
 "Required for Meeting Notes and for muting other apps' media audio during recording." = "Required for Meeting Notes and for muting other apps' media audio during recording.";
+"Required to sync Voxt notes into Apple Reminders." = "Required to sync Voxt notes into Apple Reminders.";
 "System output device unavailable (%d)." = "System output device unavailable (%d).";
 "System audio tap creation failed (%d)." = "System audio tap creation failed (%d).";
 "System audio aggregate device failed (%d)." = "System audio aggregate device failed (%d).";
@@ -1263,6 +1265,13 @@
 "Play a short reminder sound each time the note trigger is pressed during a live transcription session." = "Play a short reminder sound each time the note trigger is pressed during a live transcription session.";
 "Note Sound Preset" = "Note Sound Preset";
 "Choose the reminder sound used when a note is captured, and preview it here." = "Choose the reminder sound used when a note is captured, and preview it here.";
+"Enable Reminders Sync" = "Enable Reminders Sync";
+"Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list." = "Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list.";
+"Reminders Sync" = "Reminders Sync";
+"Target List" = "Target List";
+"Choose the Reminders list that should receive synced Voxt notes." = "Choose the Reminders list that should receive synced Voxt notes.";
+"Choose Reminder List" = "Choose Reminder List";
+"No writable reminder lists available." = "No writable reminder lists available.";
 "Enable Obsidian Sync" = "Enable Obsidian Sync";
 "Export Voxt notes into an Obsidian vault by writing Markdown files directly into the selected folder." = "Export Voxt notes into an Obsidian vault by writing Markdown files directly into the selected folder.";
 "Vault Folder" = "Vault Folder";

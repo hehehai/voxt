@@ -282,6 +282,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let historyStore = TranscriptionHistoryStore()
     let noteStore = VoxtNoteStore()
     let noteObsidianExportStore = VoxtNoteObsidianExportStore()
+    let noteRemindersExportStore = VoxtNoteRemindersExportStore()
     let dictionaryStore = DictionaryStore()
     let dictionarySuggestionStore = DictionarySuggestionStore()
     let appUpdateManager = AppUpdateManager()
@@ -300,6 +301,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.noteFeatureSettings.obsidianSync ?? .init()
         },
         exportStore: noteObsidianExportStore
+    )
+    lazy var noteRemindersSyncCoordinator = VoxtRemindersSyncCoordinator(
+        noteStore: noteStore,
+        settingsProvider: { [weak self] in
+            self?.noteFeatureSettings.remindersSync ?? .init()
+        },
+        exportStore: noteRemindersExportStore
     )
     lazy var meetingSessionCoordinator = MeetingSessionCoordinator(
         whisperModelManager: whisperModelManager,
@@ -544,6 +552,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = noteObsidianSyncCoordinator
+        _ = noteRemindersSyncCoordinator
         VoxtLog.info("Voxt launching.")
         VoxtLog.info("Runtime system version: \(currentSystemVersionLogDescription)")
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")

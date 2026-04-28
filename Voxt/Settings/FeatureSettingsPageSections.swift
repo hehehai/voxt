@@ -130,6 +130,13 @@ extension FeatureSettingsView {
                 ) {
                     noteObsidianSyncSection
                 }
+
+                FeatureSettingSection(
+                    title: featureSettingsLocalized("Reminders Sync"),
+                    detail: ""
+                ) {
+                    noteRemindersSyncSection
+                }
             }
         }
     }
@@ -489,6 +496,35 @@ extension FeatureSettingsView {
                         selectedTitle: featureSettings.transcription.notes.obsidianSync.groupingMode.title,
                         width: 220
                     )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    var noteRemindersSyncSection: some View {
+        FeatureEmbeddedFieldGroup {
+            FeatureToggleRow(
+                title: featureSettingsLocalized("Enable Reminders Sync"),
+                detail: featureSettingsLocalized("Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list."),
+                isOn: binding(
+                    get: { featureSettings.transcription.notes.remindersSync.enabled },
+                    set: { featureSettings.transcription.notes.remindersSync.enabled = $0 }
+                ),
+                isEmbedded: true
+            )
+
+            if featureSettings.transcription.notes.remindersSync.enabled {
+                FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Target List"),
+                    detail: featureSettingsLocalized("Choose the Reminders list that should receive synced Voxt notes."),
+                    isEmbedded: true
+                ) {
+                    SettingsSelectionButton(width: 220, action: presentRemindersListSelector) {
+                        Text(selectedRemindersListTitle)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
             }
         }

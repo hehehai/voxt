@@ -129,6 +129,22 @@ enum ObsidianNoteGroupingMode: String, Codable, CaseIterable, Hashable, Sendable
     case file
 }
 
+struct RemindersNoteSyncSettings: Codable, Hashable, Sendable {
+    var enabled: Bool
+    var selectedListIdentifier: String
+    var selectedListTitle: String
+
+    init(
+        enabled: Bool = false,
+        selectedListIdentifier: String = "",
+        selectedListTitle: String = ""
+    ) {
+        self.enabled = enabled
+        self.selectedListIdentifier = selectedListIdentifier
+        self.selectedListTitle = selectedListTitle
+    }
+}
+
 struct ObsidianNoteSyncSettings: Codable, Hashable, Sendable {
     var enabled: Bool
     var vaultPath: String
@@ -158,6 +174,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
     var soundEnabled: Bool
     var soundPreset: InteractionSoundPreset
     var obsidianSync: ObsidianNoteSyncSettings
+    var remindersSync: RemindersNoteSyncSettings
 
     init(
         enabled: Bool = false,
@@ -165,7 +182,8 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         titleModelSelectionID: FeatureModelSelectionID,
         soundEnabled: Bool = false,
         soundPreset: InteractionSoundPreset = .soft,
-        obsidianSync: ObsidianNoteSyncSettings = .init()
+        obsidianSync: ObsidianNoteSyncSettings = .init(),
+        remindersSync: RemindersNoteSyncSettings = .init()
     ) {
         self.enabled = enabled
         self.triggerShortcut = triggerShortcut
@@ -173,6 +191,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         self.soundEnabled = soundEnabled
         self.soundPreset = soundPreset
         self.obsidianSync = obsidianSync
+        self.remindersSync = remindersSync
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -182,6 +201,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         case soundEnabled
         case soundPreset
         case obsidianSync
+        case remindersSync
     }
 
     init(from decoder: Decoder) throws {
@@ -192,6 +212,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
         soundPreset = try container.decodeIfPresent(InteractionSoundPreset.self, forKey: .soundPreset) ?? .soft
         obsidianSync = try container.decodeIfPresent(ObsidianNoteSyncSettings.self, forKey: .obsidianSync) ?? .init()
+        remindersSync = try container.decodeIfPresent(RemindersNoteSyncSettings.self, forKey: .remindersSync) ?? .init()
     }
 }
 
