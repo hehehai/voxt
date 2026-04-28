@@ -913,14 +913,25 @@ enum TranslationTargetLanguage: String, CaseIterable, Identifiable {
     }
 }
 
-enum HistoryRetentionPeriod: String, CaseIterable, Identifiable {
+enum HistoryRetentionPeriod: String, Identifiable {
     case oneDay
     case sevenDays
     case fifteenDays
     case thirtyDays
     case ninetyDays
     case oneHundredEightyDays
+    case oneYear
     case forever
+
+    static var allCases: [HistoryRetentionPeriod] {
+        [
+            .oneYear,
+            .oneHundredEightyDays,
+            .ninetyDays,
+            .thirtyDays,
+            .sevenDays
+        ]
+    }
 
     var id: String { rawValue }
 
@@ -938,6 +949,8 @@ enum HistoryRetentionPeriod: String, CaseIterable, Identifiable {
             return 90
         case .oneHundredEightyDays:
             return 180
+        case .oneYear:
+            return 365
         case .forever:
             return nil
         }
@@ -948,15 +961,17 @@ enum HistoryRetentionPeriod: String, CaseIterable, Identifiable {
         case .oneDay:
             return AppLocalization.localizedString("1 Day")
         case .sevenDays:
-            return AppLocalization.localizedString("7 Days")
+            return AppLocalization.localizedString("1 Week")
         case .fifteenDays:
             return AppLocalization.localizedString("15 Days")
         case .thirtyDays:
             return AppLocalization.localizedString("30 Days")
         case .ninetyDays:
-            return AppLocalization.localizedString("90 Days")
+            return AppLocalization.localizedString("3 Months")
         case .oneHundredEightyDays:
-            return AppLocalization.localizedString("180 Days")
+            return AppLocalization.localizedString("6 Months")
+        case .oneYear:
+            return AppLocalization.localizedString("1 Year")
         case .forever:
             return AppLocalization.localizedString("Forever")
         }

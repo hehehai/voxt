@@ -3,8 +3,8 @@ import SwiftUI
 struct HistorySettingsView: View {
     private static let pageSize = 40
 
-    @AppStorage(AppPreferenceKey.historyEnabled) private var historyEnabled = false
-    @AppStorage(AppPreferenceKey.historyRetentionPeriod) private var historyRetentionPeriodRaw = HistoryRetentionPeriod.thirtyDays.rawValue
+    @AppStorage(AppPreferenceKey.historyCleanupEnabled) private var historyCleanupEnabled = true
+    @AppStorage(AppPreferenceKey.historyRetentionPeriod) private var historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
 
     @ObservedObject var historyStore: TranscriptionHistoryStore
     @ObservedObject var noteStore: VoxtNoteStore
@@ -13,12 +13,11 @@ struct HistorySettingsView: View {
     let navigationRequest: SettingsNavigationRequest?
     @State private var copiedEntryID: UUID?
     @State private var copiedNoteID: UUID?
-    @State private var showRetentionInfo = false
-    @State private var selectedFilter: HistoryFilterTab = .all
+    @State private var selectedFilter: HistoryFilterTab = .transcription
     @State private var visibleItemLimit = pageSize
 
     private var historyRetentionPeriod: HistoryRetentionPeriod {
-        HistoryRetentionPeriod(rawValue: historyRetentionPeriodRaw) ?? .thirtyDays
+        HistoryRetentionPeriod(rawValue: historyRetentionPeriodRaw) ?? .ninetyDays
     }
 
     private var allEntries: [TranscriptionHistoryEntry] {
@@ -60,41 +59,22 @@ struct HistorySettingsView: View {
                     GroupBox {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(alignment: .center, spacing: 12) {
-                                Toggle(String(localized: "Enable Transcription History"), isOn: $historyEnabled)
+                                Toggle(String(localized: "History Cleanup"), isOn: $historyCleanupEnabled)
                                 Spacer(minLength: 12)
-                                HStack(spacing: 4) {
+                                if historyCleanupEnabled {
                                     Text(String(localized: "Retention"))
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
-                                    Button {
-                                        showRetentionInfo.toggle()
-                                    } label: {
-                                        Image(systemName: "info.circle")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .popover(isPresented: $showRetentionInfo, arrowEdge: .top) {
-                                        Text(AppLocalization.localizedString("History older than the selected retention time is automatically deleted."))
-                                            .font(.caption)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 8)
-                                            .frame(width: 280, alignment: .leading)
-                                    }
+                                    SettingsMenuPicker(
+                                        selection: $historyRetentionPeriodRaw,
+                                        options: HistoryRetentionPeriod.allCases.map { option in
+                                            SettingsMenuOption(value: option.rawValue, title: option.title)
+                                        },
+                                        selectedTitle: historyRetentionPeriod.title,
+                                        width: 160
+                                    )
                                 }
-                                SettingsMenuPicker(
-                                    selection: $historyRetentionPeriodRaw,
-                                    options: HistoryRetentionPeriod.allCases.map { option in
-                                        SettingsMenuOption(value: option.rawValue, title: option.title)
-                                    },
-                                    selectedTitle: historyRetentionPeriod.title,
-                                    width: 160
-                                )
-                                .disabled(!historyEnabled)
                             }
-
-                            Text(String(localized: "When enabled, each completed transcription result will be saved in local history."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
@@ -122,10 +102,6 @@ struct HistorySettingsView: View {
 
                             if isNoteTabSelected && allNotes.isEmpty {
                                 Text(String(localized: "No notes yet."))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else if allEntries.isEmpty && !historyEnabled {
-                                Text(String(localized: "History is currently disabled."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             } else if !isNoteTabSelected && allEntries.isEmpty {
@@ -237,19 +213,19 @@ struct HistorySettingsView: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
-            if HistoryRetentionPeriod(rawValue: historyRetentionPeriodRaw) == nil {
-                historyRetentionPeriodRaw = HistoryRetentionPeriod.thirtyDays.rawValue
+            if !HistoryRetentionPeriod.allCases.contains(where: { $0.rawValue == historyRetentionPeriodRaw }) {
+                historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
             }
             resetVisibleItemLimit()
             historyStore.reloadAsync()
         }
-        .onChange(of: historyEnabled) { _, _ in
+        .onChange(of: historyCleanupEnabled) { _, _ in
             resetVisibleItemLimit()
             historyStore.reloadAsync()
         }
         .onChange(of: historyRetentionPeriodRaw) { _, newValue in
-            if HistoryRetentionPeriod(rawValue: newValue) == nil {
-                historyRetentionPeriodRaw = HistoryRetentionPeriod.thirtyDays.rawValue
+            if !HistoryRetentionPeriod.allCases.contains(where: { $0.rawValue == newValue }) {
+                historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
             }
             resetVisibleItemLimit()
             historyStore.reloadAsync()

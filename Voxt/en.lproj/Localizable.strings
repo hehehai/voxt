@@ -424,7 +424,12 @@
 "Browser URL read test failed: browser is not running." = "Browser URL read test failed: browser is not running.";
 "Browser URL read test failed (error: %@)." = "Browser URL read test failed (error: %@).";
 "Browser URL read test failed." = "Browser URL read test failed.";
+"History Cleanup" = "History Cleanup";
 "Retention" = "Retention";
+"1 Week" = "1 Week";
+"1 Year" = "1 Year";
+"3 Months" = "3 Months";
+"6 Months" = "6 Months";
 "1 Day" = "1 Day";
 "7 Days" = "7 Days";
 "15 Days" = "15 Days";

@@ -499,13 +499,13 @@ final class TranscriptionHistoryStore: ObservableObject {
         }
     }
 
-    private var historyEnabled: Bool {
-        defaults.bool(forKey: AppPreferenceKey.historyEnabled)
+    private var historyCleanupEnabled: Bool {
+        defaults.object(forKey: AppPreferenceKey.historyCleanupEnabled) as? Bool ?? true
     }
 
     private var historyRetentionPeriod: HistoryRetentionPeriod {
         let raw = defaults.string(forKey: AppPreferenceKey.historyRetentionPeriod)
-        return HistoryRetentionPeriod(rawValue: raw ?? "") ?? .thirtyDays
+        return HistoryRetentionPeriod(rawValue: raw ?? "") ?? .ninetyDays
     }
 
     private func applyReloadedEntries(
@@ -531,7 +531,7 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     private func applyRetentionPolicyIfNeeded(referenceDate: Date = Date()) -> Bool {
-        guard historyEnabled else { return false }
+        guard historyCleanupEnabled else { return false }
         guard let days = historyRetentionPeriod.days else { return false }
 
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate

@@ -424,7 +424,12 @@
 "Browser URL read test failed: browser is not running." = "浏览器 URL 读取测试失败：浏览器未运行。";
 "Browser URL read test failed (error: %@)." = "浏览器 URL 读取测试失败（错误：%@）。";
 "Browser URL read test failed." = "浏览器 URL 读取测试失败。";
+"History Cleanup" = "历史记录清理";
 "Retention" = "保留时长";
+"1 Week" = "一周";
+"1 Year" = "一年";
+"3 Months" = "三个月";
+"6 Months" = "六个月";
 "1 Day" = "1 天";
 "7 Days" = "7 天";
 "15 Days" = "15 天";

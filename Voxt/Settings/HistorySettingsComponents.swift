@@ -2,7 +2,6 @@ import SwiftUI
 import AppKit
 
 enum HistoryFilterTab: String, CaseIterable, Identifiable {
-    case all
     case transcription
     case translation
     case rewrite
@@ -13,8 +12,6 @@ enum HistoryFilterTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all:
-            return String(localized: "All")
         case .transcription:
             return String(localized: "Transcription")
         case .translation:
@@ -30,8 +27,6 @@ enum HistoryFilterTab: String, CaseIterable, Identifiable {
 
     func matches(_ entry: TranscriptionHistoryEntry) -> Bool {
         switch self {
-        case .all:
-            return true
         case .transcription:
             return entry.kind == .normal
         case .translation:

@@ -421,7 +421,12 @@
 "Browser URL read test failed: browser is not running." = "ブラウザ URL 読み取りテストに失敗しました：ブラウザが起動していません。";
 "Browser URL read test failed (error: %@)." = "ブラウザ URL 読み取りテストに失敗しました（エラー: %@）。";
 "Browser URL read test failed." = "ブラウザ URL 読み取りテストに失敗しました。";
+"History Cleanup" = "履歴の自動削除";
 "Retention" = "保持期間";
+"1 Week" = "1週間";
+"1 Year" = "1年";
+"3 Months" = "3か月";
+"6 Months" = "6か月";
 "1 Day" = "1日";
 "7 Days" = "7日";
 "15 Days" = "15日";

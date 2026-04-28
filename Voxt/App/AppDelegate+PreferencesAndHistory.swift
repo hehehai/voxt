@@ -254,7 +254,7 @@ extension AppDelegate {
     }
 
     var historyEnabled: Bool {
-        defaults.bool(forKey: AppPreferenceKey.historyEnabled)
+        true
     }
 
     var dictionaryAutoLearningEnabled: Bool {

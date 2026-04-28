@@ -252,6 +252,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertFalse(decoded.hideMeetingOverlayFromScreenSharing)
         XCTAssertEqual(decoded.meetingRealtimeTranslationTargetLanguage, "")
         XCTAssertFalse(decoded.alwaysShowRewriteAnswerCard)
+        XCTAssertTrue(decoded.historyCleanupEnabled)
     }
 
     func testExportImportRoundTripPreservesFeatureSettings() throws {

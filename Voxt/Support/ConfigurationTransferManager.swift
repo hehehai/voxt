@@ -80,6 +80,7 @@ enum ConfigurationTransferManager {
         var launchAtLogin: Bool
         var showInDock: Bool
         var historyEnabled: Bool
+        var historyCleanupEnabled: Bool
         var historyRetentionPeriod: String
         var autoCheckForUpdates: Bool
         var hotkeyDebugLoggingEnabled: Bool
@@ -123,6 +124,7 @@ enum ConfigurationTransferManager {
             case launchAtLogin
             case showInDock
             case historyEnabled
+            case historyCleanupEnabled
             case historyRetentionPeriod
             case autoCheckForUpdates
             case hotkeyDebugLoggingEnabled
@@ -171,6 +173,7 @@ enum ConfigurationTransferManager {
             launchAtLogin: Bool,
             showInDock: Bool,
             historyEnabled: Bool,
+            historyCleanupEnabled: Bool,
             historyRetentionPeriod: String,
             autoCheckForUpdates: Bool,
             hotkeyDebugLoggingEnabled: Bool,
@@ -214,6 +217,7 @@ enum ConfigurationTransferManager {
             self.launchAtLogin = launchAtLogin
             self.showInDock = showInDock
             self.historyEnabled = historyEnabled
+            self.historyCleanupEnabled = historyCleanupEnabled
             self.historyRetentionPeriod = historyRetentionPeriod
             self.autoCheckForUpdates = autoCheckForUpdates
             self.hotkeyDebugLoggingEnabled = hotkeyDebugLoggingEnabled
@@ -266,8 +270,9 @@ enum ConfigurationTransferManager {
             alwaysShowRewriteAnswerCard = try container.decodeIfPresent(Bool.self, forKey: .alwaysShowRewriteAnswerCard) ?? false
             launchAtLogin = try container.decode(Bool.self, forKey: .launchAtLogin)
             showInDock = try container.decode(Bool.self, forKey: .showInDock)
-            historyEnabled = try container.decode(Bool.self, forKey: .historyEnabled)
-            historyRetentionPeriod = try container.decode(String.self, forKey: .historyRetentionPeriod)
+            historyEnabled = try container.decodeIfPresent(Bool.self, forKey: .historyEnabled) ?? true
+            historyCleanupEnabled = try container.decodeIfPresent(Bool.self, forKey: .historyCleanupEnabled) ?? true
+            historyRetentionPeriod = try container.decodeIfPresent(String.self, forKey: .historyRetentionPeriod) ?? HistoryRetentionPeriod.ninetyDays.rawValue
             autoCheckForUpdates = try container.decode(Bool.self, forKey: .autoCheckForUpdates)
             hotkeyDebugLoggingEnabled = try container.decode(Bool.self, forKey: .hotkeyDebugLoggingEnabled)
             llmDebugLoggingEnabled = try container.decode(Bool.self, forKey: .llmDebugLoggingEnabled)
@@ -312,6 +317,7 @@ enum ConfigurationTransferManager {
             try container.encode(launchAtLogin, forKey: .launchAtLogin)
             try container.encode(showInDock, forKey: .showInDock)
             try container.encode(historyEnabled, forKey: .historyEnabled)
+            try container.encode(historyCleanupEnabled, forKey: .historyCleanupEnabled)
             try container.encode(historyRetentionPeriod, forKey: .historyRetentionPeriod)
             try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
             try container.encode(hotkeyDebugLoggingEnabled, forKey: .hotkeyDebugLoggingEnabled)
@@ -851,8 +857,9 @@ enum ConfigurationTransferManager {
             alwaysShowRewriteAnswerCard: defaults.bool(forKey: AppPreferenceKey.alwaysShowRewriteAnswerCard),
             launchAtLogin: defaults.bool(forKey: AppPreferenceKey.launchAtLogin),
             showInDock: defaults.bool(forKey: AppPreferenceKey.showInDock),
-            historyEnabled: defaults.object(forKey: AppPreferenceKey.historyEnabled) as? Bool ?? true,
-            historyRetentionPeriod: defaults.string(forKey: AppPreferenceKey.historyRetentionPeriod) ?? HistoryRetentionPeriod.forever.rawValue,
+            historyEnabled: true,
+            historyCleanupEnabled: defaults.object(forKey: AppPreferenceKey.historyCleanupEnabled) as? Bool ?? true,
+            historyRetentionPeriod: defaults.string(forKey: AppPreferenceKey.historyRetentionPeriod) ?? HistoryRetentionPeriod.ninetyDays.rawValue,
             autoCheckForUpdates: defaults.object(forKey: AppPreferenceKey.autoCheckForUpdates) as? Bool ?? true,
             hotkeyDebugLoggingEnabled: defaults.bool(forKey: AppPreferenceKey.hotkeyDebugLoggingEnabled),
             llmDebugLoggingEnabled: defaults.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled),
@@ -989,7 +996,8 @@ enum ConfigurationTransferManager {
         defaults.set(general.alwaysShowRewriteAnswerCard, forKey: AppPreferenceKey.alwaysShowRewriteAnswerCard)
         defaults.set(general.launchAtLogin, forKey: AppPreferenceKey.launchAtLogin)
         defaults.set(general.showInDock, forKey: AppPreferenceKey.showInDock)
-        defaults.set(general.historyEnabled, forKey: AppPreferenceKey.historyEnabled)
+        defaults.set(true, forKey: AppPreferenceKey.historyEnabled)
+        defaults.set(general.historyCleanupEnabled, forKey: AppPreferenceKey.historyCleanupEnabled)
         defaults.set(general.historyRetentionPeriod, forKey: AppPreferenceKey.historyRetentionPeriod)
         defaults.set(general.autoCheckForUpdates, forKey: AppPreferenceKey.autoCheckForUpdates)
         defaults.set(general.hotkeyDebugLoggingEnabled, forKey: AppPreferenceKey.hotkeyDebugLoggingEnabled)

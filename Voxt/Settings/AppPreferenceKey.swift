@@ -88,6 +88,7 @@ enum AppPreferenceKey {
     static let launchAtLogin = "launchAtLogin"
     static let showInDock = "showInDock"
     static let historyEnabled = "historyEnabled"
+    static let historyCleanupEnabled = "historyCleanupEnabled"
     static let historyRetentionPeriod = "historyRetentionPeriod"
     static let dictionaryRecognitionEnabled = "dictionaryRecognitionEnabled"
     static let dictionaryAutoLearningEnabled = "dictionaryAutoLearningEnabled"
