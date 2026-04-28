@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Reset SwiftPM binary artifact cache
+        run: rm -rf ~/Library/Caches/org.swift.swiftpm/artifacts
+
       - name: Resolve Swift packages
         run: xcodebuild -resolvePackageDependencies -project Voxt.xcodeproj
 
