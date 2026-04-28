@@ -6,6 +6,35 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-04-28
+
+### Added
+- EN: Added Voxt Notes so you can split a live transcription into separate floating notes with short AI titles without stopping the current recording session.
+- 简体中文：新增 Voxt 笔记功能，现在可以在不中断当前录音的情况下，把实时转录拆分成多条独立悬浮笔记，并为每条生成简短的 AI 标题。
+- 日本語：Voxt メモ機能を追加し、現在の録音セッションを止めずにリアルタイム文字起こしを複数のフローティングメモへ分割し、それぞれに短い AI タイトルを付けられるようにしました。
+- EN: Added Obsidian sync for Voxt Notes so selected notes can export directly into your chosen vault folder as Markdown files.
+- 简体中文：为 Voxt 笔记新增 Obsidian 同步，所选笔记现在可以直接以 Markdown 文件导出到你指定的 vault 文件夹。
+- 日本語：Voxt メモ向けに Obsidian 同期を追加し、選択したメモを指定した vault フォルダへ Markdown ファイルとして直接書き出せるようにしました。
+- EN: Added Apple Reminders sync for Voxt Notes so synced notes can create and update reminders in the list you choose.
+- 简体中文：为 Voxt 笔记新增 Apple 提醒事项同步，现在同步后的笔记可以在你选择的列表中创建和更新提醒。
+- 日本語：Voxt メモ向けに Apple Reminders 同期を追加し、同期したメモから選択したリスト内のリマインダーを作成・更新できるようにしました。
+
+### Changed
+- EN: Improved local model pickers by grouping variants within each model family, making large model catalogs easier to browse and compare.
+- 简体中文：优化了本地模型选择器，现在会按模型家族分组显示各个变体，大型模型目录更容易浏览和比较。
+- 日本語：ローカルモデルの選択画面を改善し、各モデルファミリー内でバリアントをまとめて表示することで、大きなモデル一覧でも比較しやすくしました。
+- EN: Simplified history cleanup settings so transcription and meeting history retention is easier to review, configure, and carry across devices.
+- 简体中文：简化了历史清理设置，现在转录和会议历史的保留策略更容易查看、配置和随设备迁移。
+- 日本語：履歴クリーンアップ設定を簡素化し、文字起こし履歴と会議履歴の保持ルールを確認・設定・デバイス間移行しやすくしました。
+
+### Fixed
+- EN: Fixed MLX recording stability so microphone switching behaves more reliably and the live transcript no longer shows internal prompt-only guidance text.
+- 简体中文：修复了 MLX 录音稳定性问题，现在切换麦克风时表现更可靠，实时转录里也不会再显示仅供内部提示使用的引导文本。
+- 日本語：MLX 録音の安定性を修正し、マイク切り替えがより確実になり、リアルタイム文字起こしに内部向けのガイダンステキストが表示されないようにしました。
+- EN: Fixed Obsidian note sync so renaming a synced note no longer overwrites the edited Markdown body stored in your vault.
+- 简体中文：修复了 Obsidian 笔记同步问题，现在重命名已同步笔记时，不会再覆盖 vault 中已经编辑过的 Markdown 正文。
+- 日本語：Obsidian メモ同期を修正し、同期済みメモの名前を変更しても vault 内で編集済みの Markdown 本文が上書きされないようにしました。
+
 ## [1.9.12] - 2026-04-27
 
 ### Added
