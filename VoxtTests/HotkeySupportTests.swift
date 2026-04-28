@@ -152,7 +152,7 @@ final class HotkeySupportTests: XCTestCase {
 
         XCTAssertEqual(
             HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: true),
-            "Right Shift"
+            AppLocalization.format("Right %@", AppLocalization.localizedString("Shift"))
         )
     }
 

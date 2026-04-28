@@ -155,9 +155,12 @@ final class VoxtObsidianSyncCoordinatorTests: XCTestCase {
         _ = noteStore.updateCompletion(true, for: item.id)
         try await Task.sleep(for: .milliseconds(700))
 
-        let updatedRecord = try XCTUnwrap(exportStore.recordsByNoteID[item.id])
-        let updatedFileURL = vaultURL.appendingPathComponent(updatedRecord.relativeFilePath)
-        let updatedContent = try String(contentsOf: updatedFileURL, encoding: .utf8)
+        let (updatedFileURL, updatedContent) = try await Self.waitForManagedSingleNoteFileUpdate(
+            exportStore: exportStore,
+            noteID: item.id,
+            vaultURL: vaultURL,
+            originalFileURL: fileURL
+        )
         XCTAssertTrue(updatedContent.contains("# Updated title"))
         XCTAssertTrue(updatedContent.contains("status: \"completed\""))
         XCTAssertTrue(updatedContent.contains(editedBody))
@@ -422,6 +425,34 @@ final class VoxtObsidianSyncCoordinatorTests: XCTestCase {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+
+    private static func waitForManagedSingleNoteFileUpdate(
+        exportStore: VoxtNoteObsidianExportStore,
+        noteID: UUID,
+        vaultURL: URL,
+        originalFileURL: URL,
+        timeout: Duration = .seconds(4)
+    ) async throws -> (URL, String) {
+        let deadline = ContinuousClock.now + timeout
+
+        while ContinuousClock.now < deadline {
+            if let record = exportStore.recordsByNoteID[noteID] {
+                let fileURL = vaultURL.appendingPathComponent(record.relativeFilePath)
+                if let content = try? String(contentsOf: fileURL, encoding: .utf8),
+                   content.contains("status: \"completed\""),
+                   !FileManager.default.fileExists(atPath: originalFileURL.path) {
+                    return (fileURL, content)
+                }
+            }
+
+            try await Task.sleep(for: .milliseconds(100))
+        }
+
+        let record = try XCTUnwrap(exportStore.recordsByNoteID[noteID])
+        let fileURL = vaultURL.appendingPathComponent(record.relativeFilePath)
+        let content = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+        return (fileURL, content)
+    }
 
     private static func renderExistingSessionFile(sessionID: UUID) -> String {
         """
