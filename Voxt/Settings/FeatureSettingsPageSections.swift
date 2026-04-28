@@ -123,6 +123,13 @@ extension FeatureSettingsView {
                         }
                     )
                 }
+
+                FeatureSettingSection(
+                    title: featureSettingsLocalized("Obsidian Sync"),
+                    detail: ""
+                ) {
+                    noteObsidianSyncSection
+                }
             }
         }
     }
@@ -428,56 +435,75 @@ extension FeatureSettingsView {
             set: { featureSettings.transcription.llmEnabled = $0 }
         )
     }
+
+    @ViewBuilder
+    var noteObsidianSyncSection: some View {
+        FeatureEmbeddedFieldGroup {
+            FeatureToggleRow(
+                title: featureSettingsLocalized("Enable Obsidian Sync"),
+                detail: featureSettingsLocalized("Export Voxt notes into an Obsidian vault by writing Markdown files directly into the selected folder."),
+                isOn: binding(
+                    get: { featureSettings.transcription.notes.obsidianSync.enabled },
+                    set: { featureSettings.transcription.notes.obsidianSync.enabled = $0 }
+                ),
+                isEmbedded: true
+            )
+
+            if featureSettings.transcription.notes.obsidianSync.enabled {
+                FeatureDirectorySelectionRow(
+                    title: featureSettingsLocalized("Vault Folder"),
+                    detail: featureSettingsLocalized("Choose the Obsidian vault root folder that should receive exported Voxt notes."),
+                    path: featureSettings.transcription.notes.obsidianSync.vaultPath.isEmpty
+                        ? featureSettingsLocalized("Not configured")
+                        : featureSettings.transcription.notes.obsidianSync.vaultPath,
+                    buttonTitle: featureSettingsLocalized("Choose"),
+                    action: chooseObsidianVaultDirectory,
+                    isEmbedded: true
+                )
+
+                FeatureInlineTextFieldRow(
+                    title: featureSettingsLocalized("Target Folder"),
+                    detail: featureSettingsLocalized("Choose where inside the vault Voxt should write exported notes."),
+                    text: binding(
+                        get: { featureSettings.transcription.notes.obsidianSync.relativeFolder },
+                        set: { featureSettings.transcription.notes.obsidianSync.relativeFolder = $0 }
+                    ),
+                    placeholder: "Voxt",
+                    width: 230,
+                    isEmbedded: true
+                )
+
+                FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Grouping Mode"),
+                    detail: featureSettingsLocalized("Choose how exported notes are organized inside Obsidian."),
+                    isEmbedded: true
+                ) {
+                    SettingsMenuPicker(
+                        selection: binding(
+                            get: { featureSettings.transcription.notes.obsidianSync.groupingMode },
+                            set: { featureSettings.transcription.notes.obsidianSync.groupingMode = $0 }
+                        ),
+                        options: ObsidianNoteGroupingMode.allCases.map {
+                            SettingsMenuOption(value: $0, title: $0.title)
+                        },
+                        selectedTitle: featureSettings.transcription.notes.obsidianSync.groupingMode.title,
+                        width: 220
+                    )
+                }
+            }
+        }
+    }
 }
 
-private struct FeatureNoteSoundPresetRow<PickerContent: View>: View {
-    let title: String
-    let detail: String
-    @ViewBuilder let picker: PickerContent
-    let onTrySound: () -> Void
-
-    init(
-        title: String,
-        detail: String,
-        @ViewBuilder picker: () -> PickerContent,
-        onTrySound: @escaping () -> Void
-    ) {
-        self.title = title
-        self.detail = detail
-        self.picker = picker()
-        self.onTrySound = onTrySound
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 12)
-
-            HStack(alignment: .center, spacing: 8) {
-                picker
-
-                Button(AppLocalization.localizedString("Try Sound"), action: onTrySound)
-                    .buttonStyle(SettingsPillButtonStyle())
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .fixedSize(horizontal: true, vertical: false)
+private extension ObsidianNoteGroupingMode {
+    var title: String {
+        switch self {
+        case .session:
+            return featureSettingsLocalized("Session")
+        case .daily:
+            return featureSettingsLocalized("Daily")
+        case .file:
+            return featureSettingsLocalized("Single Note File")
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
-                .fill(SettingsUIStyle.groupedFillColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
-                .stroke(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
-        )
     }
 }

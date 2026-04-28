@@ -53,7 +53,8 @@ enum FeatureSettingsStore {
                 notes: TranscriptionNoteFeatureSettings(
                     enabled: false,
                     triggerShortcut: .defaultShortcut,
-                    titleModelSelectionID: transcriptionText
+                    titleModelSelectionID: transcriptionText,
+                    obsidianSync: .init()
                 )
             ),
             translation: TranslationFeatureSettings(
@@ -278,7 +279,25 @@ enum FeatureSettingsStore {
             triggerShortcut: resolvedShortcut,
             titleModelSelectionID: resolvedSelectionID,
             soundEnabled: settings.soundEnabled,
-            soundPreset: settings.soundPreset
+            soundPreset: settings.soundPreset,
+            obsidianSync: sanitizedObsidianSyncSettings(settings.obsidianSync)
+        )
+    }
+
+    private static func sanitizedObsidianSyncSettings(
+        _ settings: ObsidianNoteSyncSettings
+    ) -> ObsidianNoteSyncSettings {
+        let trimmedPath = settings.vaultPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedFolder = settings.relativeFolder
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        return ObsidianNoteSyncSettings(
+            enabled: settings.enabled,
+            vaultPath: trimmedPath,
+            vaultBookmarkData: settings.vaultBookmarkData,
+            relativeFolder: trimmedFolder.isEmpty ? "Voxt" : trimmedFolder,
+            groupingMode: settings.groupingMode
         )
     }
 

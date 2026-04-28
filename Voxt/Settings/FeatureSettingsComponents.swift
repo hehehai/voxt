@@ -114,10 +114,12 @@ struct FeatureSettingSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             content
         }
         .padding(14)
@@ -136,71 +138,228 @@ struct FeatureToggleRow: View {
     let title: String
     let detail: String
     @Binding var isOn: Bool
+    var isEmbedded = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-
+        FeatureRowScaffold(
+            title: title,
+            detail: detail,
+            isEmbedded: isEmbedded
+        ) {
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
-                .fill(SettingsUIStyle.groupedFillColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
-                .stroke(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
-        )
     }
 }
 
 struct FeatureInlinePickerRow<PickerContent: View>: View {
     let title: String
     let detail: String
+    var isEmbedded = false
     @ViewBuilder let picker: PickerContent
 
-    init(title: String, detail: String, @ViewBuilder picker: () -> PickerContent) {
+    init(title: String, detail: String, isEmbedded: Bool = false, @ViewBuilder picker: () -> PickerContent) {
         self.title = title
         self.detail = detail
+        self.isEmbedded = isEmbedded
         self.picker = picker()
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-
+        FeatureRowScaffold(
+            title: title,
+            detail: detail,
+            isEmbedded: isEmbedded
+        ) {
             picker
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
-                .fill(SettingsUIStyle.groupedFillColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
-                .stroke(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
-        )
+    }
+}
+
+struct FeatureInlineTextFieldRow: View {
+    let title: String
+    let detail: String
+    @Binding var text: String
+    let placeholder: String
+    let width: CGFloat
+    var isEmbedded = false
+
+    var body: some View {
+        FeatureRowScaffold(
+            title: title,
+            detail: detail,
+            isEmbedded: isEmbedded
+        ) {
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .settingsFieldSurface(width: width)
+                .multilineTextAlignment(.leading)
+        }
+    }
+}
+
+struct FeatureDirectorySelectionRow: View {
+    private let pathFieldWidth: CGFloat = 200
+    private let actionButtonWidth: CGFloat = 26
+
+    let title: String
+    let detail: String
+    let path: String
+    let buttonTitle: String
+    let action: () -> Void
+    var isEmbedded = false
+
+    var body: some View {
+        FeatureRowScaffold(
+            title: title,
+            detail: detail,
+            spacerMinLength: 12,
+            isEmbedded: isEmbedded
+        ) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .frame(width: pathFieldWidth, alignment: .leading)
+                    .settingsFieldSurface(width: pathFieldWidth, minHeight: 32)
+
+                Button(action: action) {
+                    Text(buttonTitle)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: actionButtonWidth)
+                }
+                .buttonStyle(SettingsPillButtonStyle())
+            }
+        }
+    }
+}
+
+struct FeatureEmbeddedFieldGroup<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: Content
+
+    init(
+        spacing: CGFloat = 18,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.spacing = spacing
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            content
+        }
+    }
+}
+
+struct FeatureNoteSoundPresetRow<PickerContent: View>: View {
+    let title: String
+    let detail: String
+    @ViewBuilder let picker: PickerContent
+    let onTrySound: () -> Void
+
+    init(
+        title: String,
+        detail: String,
+        @ViewBuilder picker: () -> PickerContent,
+        onTrySound: @escaping () -> Void
+    ) {
+        self.title = title
+        self.detail = detail
+        self.picker = picker()
+        self.onTrySound = onTrySound
+    }
+
+    var body: some View {
+        FeatureRowScaffold(
+            title: title,
+            detail: detail,
+            spacerMinLength: 12,
+            isEmbedded: false
+        ) {
+            HStack(alignment: .center, spacing: 8) {
+                picker
+
+                Button(localized("Try Sound"), action: onTrySound)
+                    .buttonStyle(SettingsPillButtonStyle())
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+}
+
+private struct FeatureRowChromeModifier: ViewModifier {
+    let isEmbedded: Bool
+
+    func body(content: Content) -> some View {
+        if isEmbedded {
+            content
+        } else {
+            content
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+                        .fill(SettingsUIStyle.groupedFillColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+                        .stroke(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+                )
+        }
+    }
+}
+
+private struct FeatureRowScaffold<TrailingContent: View>: View {
+    let title: String
+    let detail: String
+    var spacerMinLength: CGFloat = 0
+    let isEmbedded: Bool
+    @ViewBuilder let trailingContent: TrailingContent
+
+    init(
+        title: String,
+        detail: String,
+        spacerMinLength: CGFloat = 0,
+        isEmbedded: Bool,
+        @ViewBuilder trailingContent: () -> TrailingContent
+    ) {
+        self.title = title
+        self.detail = detail
+        self.spacerMinLength = spacerMinLength
+        self.isEmbedded = isEmbedded
+        self.trailingContent = trailingContent()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            FeatureRowLabelStack(title: title, detail: detail)
+            Spacer(minLength: spacerMinLength)
+            trailingContent
+        }
+        .modifier(FeatureRowChromeModifier(isEmbedded: isEmbedded))
+    }
+}
+
+private struct FeatureRowLabelStack: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

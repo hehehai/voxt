@@ -281,6 +281,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let customLLMManager: CustomLLMModelManager
     let historyStore = TranscriptionHistoryStore()
     let noteStore = VoxtNoteStore()
+    let noteObsidianExportStore = VoxtNoteObsidianExportStore()
     let dictionaryStore = DictionaryStore()
     let dictionarySuggestionStore = DictionarySuggestionStore()
     let appUpdateManager = AppUpdateManager()
@@ -293,6 +294,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let meetingDetailWindowManager = MeetingDetailWindowManager.shared
     let overlayState = OverlayState()
     lazy var noteWindowManager = VoxtNoteWindowManager(store: noteStore)
+    lazy var noteObsidianSyncCoordinator = VoxtObsidianSyncCoordinator(
+        noteStore: noteStore,
+        settingsProvider: { [weak self] in
+            self?.noteFeatureSettings.obsidianSync ?? .init()
+        },
+        exportStore: noteObsidianExportStore
+    )
     lazy var meetingSessionCoordinator = MeetingSessionCoordinator(
         whisperModelManager: whisperModelManager,
         mlxModelManager: mlxModelManager,
@@ -535,6 +543,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        _ = noteObsidianSyncCoordinator
         VoxtLog.info("Voxt launching.")
         VoxtLog.info("Runtime system version: \(currentSystemVersionLogDescription)")
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")

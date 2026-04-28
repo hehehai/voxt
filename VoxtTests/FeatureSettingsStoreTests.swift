@@ -12,6 +12,8 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertFalse(settings.transcription.notes.enabled)
         XCTAssertEqual(settings.rewrite.continueShortcut.keyCode, TranscriptionContinueShortcutSettings.defaultShortcut.keyCode)
         XCTAssertEqual(settings.transcription.notes.triggerShortcut.keyCode, TranscriptionNoteTriggerSettings.defaultShortcut.keyCode)
+        XCTAssertEqual(settings.transcription.notes.obsidianSync.relativeFolder, "Voxt")
+        XCTAssertEqual(settings.transcription.notes.obsidianSync.groupingMode, .file)
     }
 
     func testDeriveFromLegacyBuildsFeatureSettings() {
@@ -244,6 +246,65 @@ final class FeatureSettingsStoreTests: XCTestCase {
 
         let reloaded = FeatureSettingsStore.load(defaults: defaults)
         XCTAssertEqual(reloaded.rewrite.continueShortcut.keyCode, UInt16(kVK_Return))
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.groupingMode, .file)
+    }
+
+    func testSaveSanitizesObsidianSyncPathAndFolder() {
+        let defaults = TestDoubles.makeUserDefaults()
+        let bookmarkData = Data([0x01, 0x02, 0x03])
+        let settings = FeatureSettings(
+            transcription: .init(
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                llmEnabled: false,
+                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                prompt: AppPreferenceKey.defaultEnhancementPrompt,
+                notes: .init(
+                    enabled: true,
+                    triggerShortcut: .defaultShortcut,
+                    titleModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                    soundEnabled: false,
+                    soundPreset: .soft,
+                    obsidianSync: .init(
+                        enabled: true,
+                        vaultPath: "  /Users/test/Vault  ",
+                        vaultBookmarkData: bookmarkData,
+                        relativeFolder: " /Voxt Inbox/ ",
+                        groupingMode: .daily
+                    )
+                )
+            ),
+            translation: .init(
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                modelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
+                prompt: AppPreferenceKey.defaultTranslationPrompt,
+                replaceSelectedText: true
+            ),
+            rewrite: .init(
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                prompt: AppPreferenceKey.defaultRewritePrompt,
+                appEnhancementEnabled: false
+            ),
+            meeting: .init(
+                enabled: false,
+                asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
+                summaryModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
+                summaryAutoGenerate: true,
+                realtimeTranslateEnabled: false,
+                realtimeTargetLanguageRawValue: "",
+                showOverlayInScreenShare: false
+            )
+        )
+
+        FeatureSettingsStore.save(settings, defaults: defaults)
+
+        let reloaded = FeatureSettingsStore.load(defaults: defaults)
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.vaultPath, "/Users/test/Vault")
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.relativeFolder, "Voxt Inbox")
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.groupingMode, .daily)
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.vaultBookmarkData, bookmarkData)
     }
 
     func testLoadSanitizesModifierOnlyRewriteContinueShortcut() {
@@ -289,5 +350,29 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.rewrite.continueShortcut.keyCode, TranscriptionContinueShortcutSettings.defaultShortcut.keyCode)
         XCTAssertFalse(settings.transcription.notes.soundEnabled)
         XCTAssertEqual(settings.transcription.notes.soundPreset, .soft)
+        XCTAssertFalse(settings.transcription.notes.obsidianSync.enabled)
+        XCTAssertEqual(settings.transcription.notes.obsidianSync.relativeFolder, "Voxt")
+        XCTAssertEqual(settings.transcription.notes.obsidianSync.groupingMode, .file)
+    }
+
+    func testSavePreservesObsidianSyncSettings() {
+        let defaults = TestDoubles.makeUserDefaults()
+        var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+        settings.transcription.notes.obsidianSync = ObsidianNoteSyncSettings(
+            enabled: true,
+            vaultPath: "/Users/test/Obsidian",
+            vaultBookmarkData: Data([1, 2, 3]),
+            relativeFolder: "Voxt Inbox",
+            groupingMode: .daily
+        )
+
+        FeatureSettingsStore.save(settings, defaults: defaults)
+
+        let reloaded = FeatureSettingsStore.load(defaults: defaults)
+        XCTAssertTrue(reloaded.transcription.notes.obsidianSync.enabled)
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.vaultPath, "/Users/test/Obsidian")
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.vaultBookmarkData, Data([1, 2, 3]))
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.relativeFolder, "Voxt Inbox")
+        XCTAssertEqual(reloaded.transcription.notes.obsidianSync.groupingMode, .daily)
     }
 }

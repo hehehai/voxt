@@ -123,25 +123,56 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
     }
 }
 
+enum ObsidianNoteGroupingMode: String, Codable, CaseIterable, Hashable, Sendable {
+    case session
+    case daily
+    case file
+}
+
+struct ObsidianNoteSyncSettings: Codable, Hashable, Sendable {
+    var enabled: Bool
+    var vaultPath: String
+    var vaultBookmarkData: Data?
+    var relativeFolder: String
+    var groupingMode: ObsidianNoteGroupingMode
+
+    init(
+        enabled: Bool = false,
+        vaultPath: String = "",
+        vaultBookmarkData: Data? = nil,
+        relativeFolder: String = "Voxt",
+        groupingMode: ObsidianNoteGroupingMode = .file
+    ) {
+        self.enabled = enabled
+        self.vaultPath = vaultPath
+        self.vaultBookmarkData = vaultBookmarkData
+        self.relativeFolder = relativeFolder
+        self.groupingMode = groupingMode
+    }
+}
+
 struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
     var enabled: Bool
     var triggerShortcut: TranscriptionNoteTriggerSettings
     var titleModelSelectionID: FeatureModelSelectionID
     var soundEnabled: Bool
     var soundPreset: InteractionSoundPreset
+    var obsidianSync: ObsidianNoteSyncSettings
 
     init(
         enabled: Bool = false,
         triggerShortcut: TranscriptionNoteTriggerSettings = .defaultShortcut,
         titleModelSelectionID: FeatureModelSelectionID,
         soundEnabled: Bool = false,
-        soundPreset: InteractionSoundPreset = .soft
+        soundPreset: InteractionSoundPreset = .soft,
+        obsidianSync: ObsidianNoteSyncSettings = .init()
     ) {
         self.enabled = enabled
         self.triggerShortcut = triggerShortcut
         self.titleModelSelectionID = titleModelSelectionID
         self.soundEnabled = soundEnabled
         self.soundPreset = soundPreset
+        self.obsidianSync = obsidianSync
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -150,6 +181,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         case titleModelSelectionID
         case soundEnabled
         case soundPreset
+        case obsidianSync
     }
 
     init(from decoder: Decoder) throws {
@@ -159,6 +191,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         titleModelSelectionID = try container.decode(FeatureModelSelectionID.self, forKey: .titleModelSelectionID)
         soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
         soundPreset = try container.decodeIfPresent(InteractionSoundPreset.self, forKey: .soundPreset) ?? .soft
+        obsidianSync = try container.decodeIfPresent(ObsidianNoteSyncSettings.self, forKey: .obsidianSync) ?? .init()
     }
 }
 

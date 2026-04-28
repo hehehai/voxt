@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct FeatureSettingsView: View {
     let selectedTab: FeatureSettingsTab
@@ -65,8 +66,36 @@ struct FeatureSettingsView: View {
         )
     }
 
+    func saveFeatureSettings() {
+        FeatureSettingsStore.save(featureSettings, defaults: .standard)
+        reloadFeatureSettings()
+    }
+
     func reloadFeatureSettings() {
         featureSettings = FeatureSettingsStore.load(defaults: .standard)
+    }
+
+    func chooseObsidianVaultDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.directoryURL = SecurityScopedBookmarkSupport.resolveDirectoryURL(
+            bookmarkData: featureSettings.transcription.notes.obsidianSync.vaultBookmarkData,
+            fallbackPath: featureSettings.transcription.notes.obsidianSync.vaultPath
+        ) ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        panel.prompt = AppLocalization.localizedString("Choose")
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
+        do {
+            let bookmarkData = try SecurityScopedBookmarkSupport.createBookmark(for: selectedURL)
+            featureSettings.transcription.notes.obsidianSync.vaultPath = selectedURL.standardizedFileURL.path
+            featureSettings.transcription.notes.obsidianSync.vaultBookmarkData = bookmarkData
+            saveFeatureSettings()
+        } catch {
+            VoxtLog.warning("Failed to store Obsidian vault bookmark: \(error.localizedDescription)")
+        }
     }
 
     var selectorBuilder: FeatureModelCatalogBuilder {
