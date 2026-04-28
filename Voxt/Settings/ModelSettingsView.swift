@@ -85,6 +85,8 @@ struct ModelSettingsView: View {
     @State private var isModelDownloadSettingsPresented = false
     @State private var isTestingGlobalDownloadEndpoint = false
     @State private var isTestingChinaDownloadEndpoint = false
+    @State private var expandedModelGroupIDs = Set<String>()
+    @State private var collapsedModelGroupIDs = Set<String>()
     @State private var globalDownloadEndpointResult: DownloadEndpointCheckResult?
     @State private var chinaDownloadEndpointResult: DownloadEndpointCheckResult?
 
@@ -253,6 +255,10 @@ struct ModelSettingsView: View {
         return allEntries.filter { selectedTags.isSubset(of: Set($0.filterTags)) }
     }
 
+    private var displayItems: [ModelCatalogDisplayItem] {
+        LocalModelSeriesGrouping.modelCatalogItems(from: filteredEntries)
+    }
+
     private func prioritizedEntries(_ entries: [ModelCatalogEntry]) -> [ModelCatalogEntry] {
         entries.enumerated()
             .sorted { lhs, rhs in
@@ -302,8 +308,8 @@ struct ModelSettingsView: View {
                 if filteredEntries.isEmpty {
                     ModelEmptyStateView()
                 } else {
-                    ForEach(filteredEntries) { entry in
-                        ModelCatalogRow(entry: entry)
+                    ForEach(displayItems) { item in
+                        modelCatalogItemView(item)
                     }
                 }
             }
@@ -311,6 +317,50 @@ struct ModelSettingsView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 430)
+    }
+
+    @ViewBuilder
+    private func modelCatalogItemView(_ item: ModelCatalogDisplayItem) -> some View {
+        switch item {
+        case .row(let entry):
+            ModelCatalogRow(entry: entry)
+        case .group(let group):
+            ModelCatalogGroupCard(
+                group: group,
+                isExpanded: isModelGroupExpanded(group),
+                onToggle: { toggleModelGroup(group) }
+            )
+        }
+    }
+
+    private func isModelGroupExpanded(_ group: ModelCatalogGroupSection) -> Bool {
+        if expandedModelGroupIDs.contains(group.id) {
+            return true
+        }
+        if collapsedModelGroupIDs.contains(group.id) {
+            return false
+        }
+        return group.defaultExpanded
+    }
+
+    private func toggleModelGroup(_ group: ModelCatalogGroupSection) {
+        let isExpanded = isModelGroupExpanded(group)
+        if group.defaultExpanded {
+            if isExpanded {
+                collapsedModelGroupIDs.insert(group.id)
+            } else {
+                collapsedModelGroupIDs.remove(group.id)
+            }
+            expandedModelGroupIDs.remove(group.id)
+            return
+        }
+
+        if isExpanded {
+            expandedModelGroupIDs.remove(group.id)
+        } else {
+            expandedModelGroupIDs.insert(group.id)
+        }
+        collapsedModelGroupIDs.remove(group.id)
     }
 
     private var mainContent: some View {

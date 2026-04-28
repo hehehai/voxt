@@ -81,6 +81,9 @@ struct ModelCatalogEntry: Identifiable {
 
 struct ModelCatalogRow: View {
     let entry: ModelCatalogEntry
+    let titleOverride: String?
+    let showsEngine: Bool
+    let showsTags: Bool
 
     private var trimmedStatusText: String {
         let trimmed = entry.statusText
@@ -98,22 +101,36 @@ struct ModelCatalogRow: View {
         !entry.usageLocations.isEmpty
     }
 
+    init(
+        entry: ModelCatalogEntry,
+        titleOverride: String? = nil,
+        showsEngine: Bool = true,
+        showsTags: Bool = true
+    ) {
+        self.entry = entry
+        self.titleOverride = titleOverride
+        self.showsEngine = showsEngine
+        self.showsTags = showsTags
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
-                    Text(entry.title)
+                    Text(titleOverride ?? entry.title)
                         .font(.headline)
 
-                    Text(entry.engine)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(SettingsUIStyle.groupedFillColor)
-                        )
+                    if showsEngine {
+                        Text(entry.engine)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(SettingsUIStyle.groupedFillColor)
+                            )
+                    }
 
                     if let badgeText = entry.badgeText {
                         Text(badgeText)
@@ -143,7 +160,9 @@ struct ModelCatalogRow: View {
                     }
                 }
 
-                ModelRowTagStrip(tags: entry.displayTags)
+                if showsTags {
+                    ModelRowTagStrip(tags: entry.displayTags)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -187,6 +206,91 @@ struct ModelCatalogRow: View {
                     : SettingsUIStyle.panelBorderColor,
                     lineWidth: 1
                 )
+        )
+    }
+}
+
+struct ModelCatalogGroupCard: View {
+    let group: ModelCatalogGroupSection
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: onToggle) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14)
+
+                        Text(group.title)
+                            .font(.headline)
+
+                        Text(group.engine)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(SettingsUIStyle.groupedFillColor)
+                            )
+
+                        if let badgeText = group.badgeText {
+                            Text(badgeText)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.orange)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+
+                    HStack(spacing: 12) {
+                        ModelMetaText(title: localized("Models"), value: "\(group.entries.count)")
+                        ModelMetaText(title: localized("Installed"), value: "\(group.installedCount)/\(group.entries.count)")
+                        ModelMetaText(title: localized("Score"), value: group.ratingText)
+                        if !group.usageLocations.isEmpty {
+                            ModelMetaText(
+                                title: localized("Usage"),
+                                value: group.usageLocations.joined(separator: " · ")
+                            )
+                        }
+                    }
+
+                    if !group.tags.isEmpty {
+                        ModelRowTagStrip(tags: group.tags)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 10) {
+                    ForEach(group.entries) { entry in
+                        ModelCatalogRow(
+                            entry: entry,
+                            titleOverride: entry.groupedVariantTitle,
+                            showsEngine: false,
+                            showsTags: false
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(SettingsUIStyle.controlFillColor.opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(SettingsUIStyle.panelBorderColor, lineWidth: 1)
         )
     }
 }

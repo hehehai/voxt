@@ -14,6 +14,8 @@ struct FeatureModelSelectorDialog: View {
     let onSelect: (FeatureModelSelectionID) -> Void
 
     @State private var selectedTags = Set<String>()
+    @State private var expandedGroupIDs = Set<String>()
+    @State private var collapsedGroupIDs = Set<String>()
 
     private var statusFilterTags: Set<String> {
         FeatureModelSelectorFiltering.statusFilterTags
@@ -52,6 +54,10 @@ struct FeatureModelSelectorDialog: View {
 
     private var filteredEntries: [FeatureModelSelectorEntry] {
         FeatureModelSelectorFiltering.filteredEntries(entries: entries, selectedTags: selectedTags)
+    }
+
+    private var displayItems: [FeatureModelSelectorDisplayItem] {
+        LocalModelSeriesGrouping.featureSelectorItems(from: filteredEntries, selectedID: selectedID)
     }
 
     private var selectedEntry: FeatureModelSelectorEntry? {
@@ -128,15 +134,8 @@ struct FeatureModelSelectorDialog: View {
                     if filteredEntries.isEmpty {
                         FeatureSelectorEmptyState()
                     } else {
-                        ForEach(filteredEntries) { entry in
-                            FeatureModelSelectorRow(
-                                entry: entry,
-                                isSelected: entry.selectionID == selectedID,
-                                onSelect: {
-                                    onSelect(entry.selectionID)
-                                    dismiss()
-                                }
-                            )
+                        ForEach(displayItems) { item in
+                            displayItemView(item)
                         }
                     }
                 }
@@ -162,6 +161,62 @@ struct FeatureModelSelectorDialog: View {
     private func initializeDefaultTags() {
         guard selectedTags.isEmpty else { return }
         selectedTags = defaultSelectedTags
+    }
+
+    @ViewBuilder
+    private func displayItemView(_ item: FeatureModelSelectorDisplayItem) -> some View {
+        switch item {
+        case .row(let entry):
+            FeatureModelSelectorRow(
+                entry: entry,
+                isSelected: entry.selectionID == selectedID,
+                onSelect: {
+                    onSelect(entry.selectionID)
+                    dismiss()
+                }
+            )
+        case .group(let group):
+            FeatureModelSelectorGroupCard(
+                group: group,
+                selectedID: selectedID,
+                isExpanded: isGroupExpanded(group),
+                onToggle: { toggleGroup(group) },
+                onSelect: { selectionID in
+                    onSelect(selectionID)
+                    dismiss()
+                }
+            )
+        }
+    }
+
+    private func isGroupExpanded(_ group: FeatureModelSelectorGroupSection) -> Bool {
+        if expandedGroupIDs.contains(group.id) {
+            return true
+        }
+        if collapsedGroupIDs.contains(group.id) {
+            return false
+        }
+        return group.defaultExpanded
+    }
+
+    private func toggleGroup(_ group: FeatureModelSelectorGroupSection) {
+        let isExpanded = isGroupExpanded(group)
+        if group.defaultExpanded {
+            if isExpanded {
+                collapsedGroupIDs.insert(group.id)
+            } else {
+                collapsedGroupIDs.remove(group.id)
+            }
+            expandedGroupIDs.remove(group.id)
+            return
+        }
+
+        if isExpanded {
+            expandedGroupIDs.remove(group.id)
+        } else {
+            expandedGroupIDs.insert(group.id)
+        }
+        collapsedGroupIDs.remove(group.id)
     }
 }
 
@@ -254,6 +309,9 @@ private struct FeatureModelSelectorRow: View {
     let entry: FeatureModelSelectorEntry
     let isSelected: Bool
     let onSelect: () -> Void
+    let titleOverride: String?
+    let showsEngine: Bool
+    let showsTags: Bool
 
     private var hintText: String? {
         if let disabledReason = entry.disabledReason, !entry.isSelectable {
@@ -275,22 +333,40 @@ private struct FeatureModelSelectorRow: View {
         return trimmed
     }
 
+    init(
+        entry: FeatureModelSelectorEntry,
+        isSelected: Bool,
+        onSelect: @escaping () -> Void,
+        titleOverride: String? = nil,
+        showsEngine: Bool = true,
+        showsTags: Bool = true
+    ) {
+        self.entry = entry
+        self.isSelected = isSelected
+        self.onSelect = onSelect
+        self.titleOverride = titleOverride
+        self.showsEngine = showsEngine
+        self.showsTags = showsTags
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
-                    Text(entry.title)
+                    Text(titleOverride ?? entry.title)
                         .font(.headline)
 
-                    Text(entry.engine)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(SettingsUIStyle.groupedFillColor)
-                        )
+                    if showsEngine {
+                        Text(entry.engine)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(SettingsUIStyle.groupedFillColor)
+                            )
+                    }
 
                     if let hintText {
                         Text(hintText)
@@ -314,7 +390,9 @@ private struct FeatureModelSelectorRow: View {
                     }
                 }
 
-                FeatureSelectorTagStrip(tags: entry.displayTags)
+                if showsTags {
+                    FeatureSelectorTagStrip(tags: entry.displayTags)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -355,6 +433,89 @@ private struct FeatureModelSelectorRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(isSelected ? Color.accentColor.opacity(0.45) : SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+        )
+    }
+}
+
+private struct FeatureModelSelectorGroupCard: View {
+    let group: FeatureModelSelectorGroupSection
+    let selectedID: FeatureModelSelectionID
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    let onSelect: (FeatureModelSelectionID) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: onToggle) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14)
+
+                        Text(group.title)
+                            .font(.headline)
+
+                        Text(group.engine)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(SettingsUIStyle.groupedFillColor)
+                            )
+
+                        Spacer(minLength: 0)
+                    }
+
+                    HStack(spacing: 12) {
+                        FeatureSelectorMetaText(title: localized("Models"), value: "\(group.entries.count)")
+                        FeatureSelectorMetaText(title: localized("Installed"), value: "\(group.installedCount)/\(group.entries.count)")
+                        FeatureSelectorMetaText(title: localized("Score"), value: group.ratingText)
+                        if !group.usageLocations.isEmpty {
+                            FeatureSelectorMetaText(
+                                title: localized("Usage"),
+                                value: group.usageLocations.joined(separator: " · ")
+                            )
+                        }
+                    }
+
+                    if !group.tags.isEmpty {
+                        FeatureSelectorTagStrip(tags: group.tags)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 10) {
+                    ForEach(group.entries) { entry in
+                        FeatureModelSelectorRow(
+                            entry: entry,
+                            isSelected: entry.selectionID == selectedID,
+                            onSelect: { onSelect(entry.selectionID) },
+                            titleOverride: entry.groupedVariantTitle,
+                            showsEngine: false,
+                            showsTags: false
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(SettingsUIStyle.controlFillColor.opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
         )
     }
 }
