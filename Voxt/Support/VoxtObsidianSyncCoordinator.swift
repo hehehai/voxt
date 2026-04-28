@@ -184,7 +184,17 @@ final class VoxtObsidianSyncCoordinator {
                 switch record.groupingMode {
                 case .file:
                     guard let note = assignedNotes.first else { continue }
-                    try syncSingleNoteFile(note: note, to: fileURL)
+                    let previousFileURL: URL?
+                    if let previousRecord = previousRecordsByNoteID[note.id],
+                       previousRecord.relativeFilePath != record.relativeFilePath {
+                        previousFileURL = vaultURL.appendingPathComponent(
+                            previousRecord.relativeFilePath,
+                            isDirectory: false
+                        )
+                    } else {
+                        previousFileURL = nil
+                    }
+                    try syncSingleNoteFile(note: note, to: fileURL, previousFileURL: previousFileURL)
                 case .session, .daily:
                     let renderedText = renderGroupedFile(notes: assignedNotes, record: record)
                     try renderedText.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -364,13 +374,23 @@ final class VoxtObsidianSyncCoordinator {
         return String(candidate.prefix(64)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func syncSingleNoteFile(note: VoxtNoteItem, to fileURL: URL) throws {
+    private static func syncSingleNoteFile(
+        note: VoxtNoteItem,
+        to fileURL: URL,
+        previousFileURL: URL? = nil
+    ) throws {
         let existingText = try? String(contentsOf: fileURL, encoding: .utf8)
         let bodyText: String
 
         if let existingText,
            let parsed = parseManagedSingleNoteFile(existingText),
            parsed.noteID == note.id {
+            bodyText = parsed.bodyText
+        } else if let previousFileURL,
+                  previousFileURL != fileURL,
+                  let previousText = try? String(contentsOf: previousFileURL, encoding: .utf8),
+                  let parsed = parseManagedSingleNoteFile(previousText),
+                  parsed.noteID == note.id {
             bodyText = parsed.bodyText
         } else {
             bodyText = note.text
