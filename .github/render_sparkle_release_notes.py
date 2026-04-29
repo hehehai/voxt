@@ -13,6 +13,28 @@ LOCALIZED_HEADING_TITLES = {
     "ja": {"Added": "追加", "Changed": "変更", "Fixed": "修正"},
 }
 
+LOCALE_SECTION_TITLES = {
+    "english": "en",
+    "en": "en",
+    "简体中文": "zh-Hans",
+    "zh-hans": "zh-Hans",
+    "日本語": "ja",
+    "ja": "ja",
+    "japanese": "ja",
+}
+
+CATEGORY_TITLES = {
+    "added": "Added",
+    "changed": "Changed",
+    "fixed": "Fixed",
+    "新增": "Added",
+    "改进": "Changed",
+    "修复": "Fixed",
+    "追加": "Added",
+    "変更": "Changed",
+    "修正": "Fixed",
+}
+
 LANGUAGE_PREFIXES = [
     ("en", "EN:"),
     ("zh-Hans", "简体中文："),
@@ -47,6 +69,11 @@ def markdown_to_html(markdown: str) -> str:
             html_lines.append(f"<h3>{html.escape(stripped[4:])}</h3>")
             continue
 
+        if stripped.startswith("#### "):
+            close_list()
+            html_lines.append(f"<h4>{html.escape(stripped[5:])}</h4>")
+            continue
+
         if stripped.startswith("- "):
             if not in_list:
                 html_lines.append("<ul>")
@@ -65,7 +92,7 @@ def heading_for_locale(locale: str, heading: str | None) -> str | None:
     if not heading:
         return None
 
-    heading_title = heading[4:].strip()
+    heading_title = heading.strip()
     localized_title = LOCALIZED_HEADING_TITLES.get(locale, {}).get(
         heading_title, heading_title
     )
@@ -79,6 +106,7 @@ def build_localized_html(release_body: str) -> dict[str, str]:
         "ja": [],
     }
     current_heading: str | None = None
+    current_locale: str | None = None
 
     for raw_line in release_body.splitlines():
         stripped = raw_line.rstrip().strip()
@@ -90,13 +118,32 @@ def build_localized_html(release_body: str) -> dict[str, str]:
             continue
 
         if stripped.startswith("### "):
-            current_heading = stripped
+            section_title = stripped[4:].strip()
+            current_locale = LOCALE_SECTION_TITLES.get(section_title.lower())
+            if current_locale:
+                current_heading = None
+                continue
+
+            current_heading = CATEGORY_TITLES.get(section_title.lower())
+            continue
+
+        if stripped.startswith("#### "):
+            section_title = stripped[5:].strip()
+            current_heading = CATEGORY_TITLES.get(section_title.lower())
             continue
 
         if not stripped.startswith("- "):
             continue
 
         item_text = stripped[2:].strip()
+        if current_locale:
+            localized_heading = heading_for_locale(current_locale, current_heading)
+            locale_sections = localized_sections[current_locale]
+            if not locale_sections or locale_sections[-1][0] != localized_heading:
+                locale_sections.append([localized_heading, []])
+            locale_sections[-1][1].append(f"- {item_text}")
+            continue
+
         for locale, prefix in LANGUAGE_PREFIXES:
             if item_text.startswith(prefix):
                 localized_heading = heading_for_locale(locale, current_heading)

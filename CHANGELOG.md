@@ -6,6 +6,47 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-04-29
+
+### English
+
+#### Added
+- Added a custom paste shortcut option and configurable hotkey so you can insert the latest Voxt result into the current input field with Control + Command + V.
+
+#### Changed
+- Moved selected-text direct translation settings into the Translation feature menu and unified the related toggles with the app's switch style.
+- Updated release notes formatting so GitHub releases now show separate English, Simplified Chinese, and Japanese sections instead of mixed multilingual bullets.
+
+#### Fixed
+- Fixed the Translation feature settings tab so opening it no longer crashes and the selected-text translation options keep their expected card layout.
+- Fixed Obsidian note sync so renaming a synced note keeps the edited Markdown body stored in your vault.
+
+### 简体中文
+
+#### 新增
+- 新增“自定义粘贴快捷键”开关和可配置热键，现在可以通过 Control + Command + V 将最近一次 Voxt 结果直接注入当前输入框。
+
+#### 改进
+- 将“选中文本直接翻译”相关设置移动到了功能子菜单的“翻译”页，并统一为应用内一致的 Switch 开关样式。
+- 调整了发布说明格式，GitHub Release 现在会按英文、简体中文、日文分区显示，不再混合排列多语言条目。
+
+#### 修复
+- 修复了功能子菜单“翻译”设置页的崩溃问题，同时保持选中文本翻译相关卡片的原有布局样式。
+- 修复了 Obsidian 笔记同步问题，现在重命名已同步笔记时，会保留 vault 中已经编辑过的 Markdown 正文。
+
+### 日本語
+
+#### 追加
+- カスタム貼り付けショートカットの切り替えと設定可能なホットキーを追加し、Control + Command + V で最新の Voxt 結果を現在の入力欄へ直接挿入できるようにしました。
+
+#### 変更
+- 選択テキストの直接翻訳に関する設定を翻訳機能メニューへ移動し、関連トグルをアプリ内で統一された Switch スタイルにそろえました。
+- リリースノートの形式を見直し、GitHub Release では英語・簡体字中国語・日本語の各セクションを分けて表示するようにしました。
+
+#### 修正
+- 翻訳機能設定タブを開いたときに発生していたクラッシュを修正し、選択テキスト翻訳オプションのカードレイアウトも想定どおり維持されるようにしました。
+- Obsidian メモ同期を修正し、同期済みメモの名前を変更しても vault 内で編集済みの Markdown 本文が保持されるようにしました。
+
 ## [1.10.0] - 2026-04-28
 
 ### Added
