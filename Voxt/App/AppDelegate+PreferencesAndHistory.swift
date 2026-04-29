@@ -138,6 +138,10 @@ extension AppDelegate {
         defaults.bool(forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
     }
 
+    var showSelectedTextTranslationResultWindow: Bool {
+        defaults.object(forKey: AppPreferenceKey.showSelectedTextTranslationResultWindow) as? Bool ?? true
+    }
+
     var voiceEndCommandEnabled: Bool {
         defaults.bool(forKey: AppPreferenceKey.voiceEndCommandEnabled)
     }

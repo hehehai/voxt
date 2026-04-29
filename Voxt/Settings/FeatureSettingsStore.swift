@@ -63,7 +63,8 @@ enum FeatureSettingsStore {
                 modelSelectionID: translationText,
                 targetLanguageRawValue: (TranslationTargetLanguage(rawValue: defaults.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? "") ?? .english).rawValue,
                 prompt: defaults.string(forKey: AppPreferenceKey.translationSystemPrompt) ?? AppPreferenceKey.defaultTranslationPrompt,
-                replaceSelectedText: defaults.object(forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey) as? Bool ?? true
+                replaceSelectedText: defaults.object(forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey) as? Bool ?? true,
+                showResultWindow: defaults.object(forKey: AppPreferenceKey.showSelectedTextTranslationResultWindow) as? Bool ?? true
             ),
             rewrite: RewriteFeatureSettings(
                 asrSelectionID: transcriptionASR,
@@ -170,6 +171,7 @@ enum FeatureSettingsStore {
         defaults.set(settings.prompt, forKey: AppPreferenceKey.translationSystemPrompt)
         defaults.set(settings.targetLanguage.rawValue, forKey: AppPreferenceKey.translationTargetLanguage)
         defaults.set(settings.replaceSelectedText, forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
+        defaults.set(settings.showResultWindow, forKey: AppPreferenceKey.showSelectedTextTranslationResultWindow)
 
         switch settings.modelSelectionID.translationSelection {
         case .whisperDirectTranslate:
@@ -234,7 +236,8 @@ enum FeatureSettingsStore {
                 modelSelectionID: settings.translation.modelSelectionID.translationSelection == nil ? fallback.translation.modelSelectionID : settings.translation.modelSelectionID,
                 targetLanguageRawValue: settings.translation.targetLanguage.rawValue,
                 prompt: sanitizedPrompt(settings.translation.prompt, fallback: AppPreferenceKey.defaultTranslationPrompt),
-                replaceSelectedText: settings.translation.replaceSelectedText
+                replaceSelectedText: settings.translation.replaceSelectedText,
+                showResultWindow: settings.translation.showResultWindow
             ),
             rewrite: RewriteFeatureSettings(
                 asrSelectionID: settings.rewrite.asrSelectionID.asrSelection == nil ? fallback.rewrite.asrSelectionID : settings.rewrite.asrSelectionID,

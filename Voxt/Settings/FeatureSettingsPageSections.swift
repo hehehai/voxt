@@ -188,6 +188,15 @@ extension FeatureSettingsView {
                     )
                 )
 
+                FeatureToggleRow(
+                    title: featureSettingsLocalized("Show Result Window For Selected Text Translation"),
+                    detail: featureSettingsLocalized("When enabled, selected-text translation opens a result window after completion. When disabled, the translated result is injected back into the current input instead."),
+                    isOn: binding(
+                        get: { featureSettings.translation.showResultWindow },
+                        set: { featureSettings.translation.showResultWindow = $0 }
+                    )
+                )
+
                 if featureSettings.translation.modelSelectionID.translationSelection != .whisperDirectTranslate {
                     FeatureSettingSection(title: featureSettingsLocalized("Prompt"), detail: featureSettingsLocalized("Prompt controls are shown only when the selected translation model supports prompt-based generation.")) {
                         FeaturePromptSection(

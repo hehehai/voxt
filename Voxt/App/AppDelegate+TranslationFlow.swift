@@ -214,6 +214,7 @@ extension AppDelegate {
         sessionTargetApplicationPID = sessionTargetApplicationBundleID == nil ? nil : frontmostApplication?.processIdentifier
         selectedTextTranslationHadWritableFocusedInput = hasWritableFocusedTextInput()
         overlayState.transcribedText = selectedText
+        overlayState.setAnswerTranslationSourceText(selectedText)
         overlayState.statusMessage = ""
         overlayState.presentRecording(iconMode: .translation)
         overlayWindow.show(state: overlayState, position: overlayPosition)
@@ -724,6 +725,7 @@ extension AppDelegate {
     }
 
     func resetSessionTranslationState() {
+        cancelPendingSelectedTextTranslationRefresh()
         sessionTranslationTargetLanguageOverride = nil
         activeSessionTranslationProviderResolution = nil
         sessionUsesWhisperDirectTranslation = false
@@ -751,6 +753,22 @@ extension AppDelegate {
 
     func selectSessionTranslationTargetLanguage(_ language: TranslationTargetLanguage) {
         guard overlayState.allowsSessionTranslationLanguageSwitching else { return }
+        let previousLanguage = overlayState.sessionTranslationTargetLanguage
+        let shouldRefreshDisplayedTranslation = shouldRefreshDisplayedTranslationAnswer(
+            targetLanguage: language,
+            previousLanguage: previousLanguage
+        )
+
+        if shouldRefreshDisplayedTranslation {
+            overlayState.configureSessionTranslationTargetLanguage(language, allowsSwitching: true)
+            overlayState.dismissSessionTranslationTargetPicker()
+            refreshDisplayedTranslationAnswer(
+                targetLanguage: language,
+                previousLanguage: previousLanguage
+            )
+            return
+        }
+
         if isSessionActive {
             sessionTranslationTargetLanguageOverride = language
         } else {
@@ -762,6 +780,95 @@ extension AppDelegate {
 
     func dismissSessionTranslationTargetPicker() {
         overlayState.dismissSessionTranslationTargetPicker()
+    }
+
+    private func shouldRefreshDisplayedTranslationAnswer(
+        targetLanguage: TranslationTargetLanguage,
+        previousLanguage: TranslationTargetLanguage?
+    ) -> Bool {
+        guard overlayState.displayMode == .answer,
+              overlayState.sessionIconMode == .translation,
+              overlayState.answerInteractionMode == .singleResult
+        else {
+            return false
+        }
+        guard targetLanguage != previousLanguage else { return false }
+        return !overlayState.answerTranslationSourceText.isEmpty
+    }
+
+    private func refreshDisplayedTranslationAnswer(
+        targetLanguage: TranslationTargetLanguage,
+        previousLanguage: TranslationTargetLanguage?
+    ) {
+        let sourceText = overlayState.answerTranslationSourceText
+        guard !sourceText.isEmpty else { return }
+
+        cancelPendingSelectedTextTranslationRefresh()
+        overlayState.isRequesting = true
+
+        let refreshID = UUID()
+        selectedTextTranslationRefreshID = refreshID
+        pendingSelectedTextTranslationRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            defer {
+                if self.selectedTextTranslationRefreshID == refreshID {
+                    self.overlayState.isRequesting = false
+                    self.pendingSelectedTextTranslationRefreshTask = nil
+                }
+            }
+
+            do {
+                let translated = try await self.runTranslationPipeline(
+                    text: sourceText,
+                    targetLanguage: targetLanguage,
+                    allowStrictRetry: true
+                )
+                guard !Task.isCancelled,
+                      self.selectedTextTranslationRefreshID == refreshID,
+                      self.overlayState.sessionTranslationTargetLanguage == targetLanguage
+                else {
+                    return
+                }
+
+                self.overlayState.replaceCurrentAnswer(
+                    title: String(localized: "Translation"),
+                    content: translated
+                )
+            } catch {
+                guard !Task.isCancelled,
+                      self.selectedTextTranslationRefreshID == refreshID
+                else {
+                    return
+                }
+
+                VoxtLog.warning(
+                    "Displayed translation refresh failed. sourceChars=\(sourceText.count), targetLanguage=\(targetLanguage.instructionName), error=\(error)"
+                )
+
+                if let previousLanguage {
+                    if self.isSessionActive {
+                        self.sessionTranslationTargetLanguageOverride = previousLanguage
+                    } else {
+                        UserDefaults.standard.set(
+                            previousLanguage.rawValue,
+                            forKey: AppPreferenceKey.translationTargetLanguage
+                        )
+                    }
+                    self.overlayState.configureSessionTranslationTargetLanguage(
+                        previousLanguage,
+                        allowsSwitching: true
+                    )
+                }
+            }
+        }
+    }
+
+    func cancelPendingSelectedTextTranslationRefresh() {
+        selectedTextTranslationRefreshID = UUID()
+        pendingSelectedTextTranslationRefreshTask?.cancel()
+        pendingSelectedTextTranslationRefreshTask = nil
+        overlayState.isRequesting = false
     }
 
     private func resolvedTranslationPrompt(

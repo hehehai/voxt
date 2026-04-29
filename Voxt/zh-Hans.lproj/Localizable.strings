@@ -168,6 +168,8 @@
 "Conflicts with Close (⌘W)." = "与关闭（⌘W）冲突。";
 "Transcription shortcut: %@" = "转录快捷键：%@";
 "Translation shortcut: %@" = "翻译快捷键：%@";
+"Show Result Window For Selected Text Translation" = "显示翻译结果窗口";
+"When enabled, selected-text translation opens a result window after completion. When disabled, the translated result is injected back into the current input instead." = "选中文本翻译后将显示结果创建，可以切换目标语言和输入框注入";
 "Transcription and translation shortcuts should be different." = "转录与翻译快捷键应不同。";
 "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination." = "两种动作都支持自定义快捷键。可使用单键（如 fn）或组合键。";
 "Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop." = "长按：按住转录快捷键开始转录，松开结束；按住翻译快捷键开始翻译，松开结束。";

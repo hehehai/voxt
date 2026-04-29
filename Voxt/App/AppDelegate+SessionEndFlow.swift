@@ -54,10 +54,12 @@ extension AppDelegate {
             delegate.isSessionActive = false
             delegate.sessionOutputMode = .transcription
             delegate.isSelectedTextTranslationFlow = false
-            delegate.sessionTargetApplicationPID = nil
-            delegate.sessionTargetApplicationBundleID = nil
+            if !shouldPreserveTranslationAnswerControls {
+                delegate.sessionTargetApplicationPID = nil
+                delegate.sessionTargetApplicationBundleID = nil
+                delegate.selectedTextTranslationHadWritableFocusedInput = false
+            }
             delegate.enhancementContextSnapshot = nil
-            delegate.selectedTextTranslationHadWritableFocusedInput = false
             delegate.rewriteSessionHasSelectedSourceText = false
             delegate.rewriteSessionHadWritableFocusedInput = false
             delegate.rewriteSessionFallbackInjectBundleID = nil

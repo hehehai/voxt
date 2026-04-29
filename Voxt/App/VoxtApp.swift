@@ -355,6 +355,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayReminderTask: Task<Void, Never>?
     var overlayStatusClearTask: Task<Void, Never>?
     var pendingSystemAudioMuteTask: Task<Void, Never>?
+    var pendingSelectedTextTranslationRefreshTask: Task<Void, Never>?
     var lastSignificantAudioAt = Date()
     var didTriggerPauseTranscription = false
     var didTriggerPauseLLM = false
@@ -385,6 +386,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var liveTranscriptSegmentationState = LiveTranscriptSegmentationState()
     var sessionUsesWhisperDirectTranslation = false
     var sessionTranslationTargetLanguageOverride: TranslationTargetLanguage?
+    var selectedTextTranslationRefreshID = UUID()
     var activeSessionTranslationProviderResolution: TranslationProviderResolution?
     var pendingMeetingSessionCompletionDisposition: MeetingSessionCompletionDisposition = .save
     let tapStopGuardInterval: TimeInterval = 0.35
@@ -422,6 +424,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.rewriteModelProvider: RewriteModelProvider.customLLM.rawValue,
             AppPreferenceKey.escapeKeyCancelsOverlaySession: true,
             AppPreferenceKey.translateSelectedTextOnTranslationHotkey: true,
+            AppPreferenceKey.showSelectedTextTranslationResultWindow: true,
             AppPreferenceKey.meetingNotesBetaEnabled: false,
             AppPreferenceKey.hideMeetingOverlayFromScreenSharing: false,
             AppPreferenceKey.meetingOverlayCollapsed: false,

@@ -43,6 +43,21 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertTrue(settings.meeting.enabled)
         XCTAssertEqual(settings.meeting.summaryModelSelectionID, .localLLM("Qwen/Qwen3-8B-4bit"))
         XCTAssertEqual(settings.transcription.notes.titleModelSelectionID, .remoteLLM(.openAI))
+        XCTAssertTrue(settings.translation.showResultWindow)
+    }
+
+    func testLoadDefaultsSelectedTextTranslationResultWindowToEnabledWhenMissing() {
+        let defaults = TestDoubles.makeUserDefaults()
+        defaults.set(
+            """
+            {"transcription":{"asrSelectionID":"dictation","llmEnabled":false,"llmSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","prompt":"prompt","notes":{"enabled":false,"triggerShortcut":{"keyCode":49,"modifiersRawValue":0,"sidedModifiersRawValue":0},"titleModelSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","soundEnabled":false,"soundPreset":"soft"}},"translation":{"asrSelectionID":"dictation","modelSelectionID":"remote-llm:openai","targetLanguageRawValue":"english","prompt":"translation","replaceSelectedText":true},"rewrite":{"asrSelectionID":"dictation","llmSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","prompt":"rewrite","appEnhancementEnabled":false,"continueShortcut":{"keyCode":49,"modifiersRawValue":0,"sidedModifiersRawValue":0}},"meeting":{"enabled":false,"asrSelectionID":"dictation","summaryModelSelectionID":"local-llm:Qwen/Qwen3-8B-4bit","summaryPrompt":"meeting","summaryAutoGenerate":true,"realtimeTranslateEnabled":false,"realtimeTargetLanguageRawValue":"","showOverlayInScreenShare":false}}
+            """,
+            forKey: AppPreferenceKey.featureSettings
+        )
+
+        let settings = FeatureSettingsStore.load(defaults: defaults)
+
+        XCTAssertTrue(settings.translation.showResultWindow)
     }
 
     func testPrepareLegacySessionUsesFeatureSpecificSelections() {

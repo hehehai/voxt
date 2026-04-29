@@ -8,7 +8,7 @@ extension AppDelegate {
     private enum SessionOutputDelivery {
         case typeText
         case answerOverlay
-        case selectedTextTranslationResult(autoInject: Bool)
+        case selectedTextTranslationResultWindow
     }
 
     private struct DictionaryResolutionPlan {
@@ -367,10 +367,8 @@ extension AppDelegate {
             deliveryLabel = "typeText"
         case .answerOverlay:
             deliveryLabel = "answerOverlay"
-        case .selectedTextTranslationResult(let autoInject):
-            deliveryLabel = autoInject
-                ? "selectedTextTranslationResult(autoInject)"
-                : "selectedTextTranslationResult(overlayOnly)"
+        case .selectedTextTranslationResultWindow:
+            deliveryLabel = "selectedTextTranslationResultWindow"
         }
         VoxtLog.info(
             "Deliver committed output started. delivery=\(deliveryLabel), characters=\(context.outputText.count)"
@@ -379,7 +377,7 @@ extension AppDelegate {
         switch delivery {
         case .typeText:
             beginOverlayOutputDelivery()
-            typeText(context.outputText) { [weak self] in
+            typeText(context.outputText) { [weak self] _ in
                 self?.endOverlayOutputDelivery()
                 completion?()
             }
@@ -391,16 +389,9 @@ extension AppDelegate {
                 presentRewriteAnswerOverlay(title: payload.title, content: payload.content)
             }
             completion?()
-        case .selectedTextTranslationResult(let autoInject):
-            presentSelectedTextTranslationAnswerOverlay(
-                content: context.outputText,
-                canInject: autoInject
-            )
-            if autoInject {
-                typeText(context.outputText, completion: completion)
-            } else {
-                completion?()
-            }
+        case .selectedTextTranslationResultWindow:
+            presentSelectedTextTranslationAnswerOverlay(content: context.outputText)
+            completion?()
         }
     }
 
@@ -477,9 +468,11 @@ extension AppDelegate {
 
     private func resolvedOutputDelivery(for context: SessionFinalizeContext) -> SessionOutputDelivery {
         if shouldPresentSelectedTextTranslationAnswerOverlay() {
-            return .selectedTextTranslationResult(
-                autoInject: shouldAutoInjectSelectedTextTranslationResult()
-            )
+            return .selectedTextTranslationResultWindow
+        }
+
+        if shouldAutoInjectSelectedTextTranslationResult() {
+            return .typeText
         }
 
         return shouldPresentRewriteAnswerOverlay(hasSelectedSourceText: rewriteSessionHasSelectedSourceText)
@@ -489,34 +482,37 @@ extension AppDelegate {
 
     static func shouldPresentSelectedTextTranslationAnswerOverlay(
         sessionOutputMode: SessionOutputMode,
-        isSelectedTextTranslationFlow: Bool
+        isSelectedTextTranslationFlow: Bool,
+        showResultWindow: Bool
     ) -> Bool {
-        sessionOutputMode == .translation && isSelectedTextTranslationFlow
+        sessionOutputMode == .translation &&
+            isSelectedTextTranslationFlow &&
+            showResultWindow
     }
 
     func shouldPresentSelectedTextTranslationAnswerOverlay() -> Bool {
         Self.shouldPresentSelectedTextTranslationAnswerOverlay(
             sessionOutputMode: sessionOutputMode,
-            isSelectedTextTranslationFlow: isSelectedTextTranslationFlow
+            isSelectedTextTranslationFlow: isSelectedTextTranslationFlow,
+            showResultWindow: showSelectedTextTranslationResultWindow
         )
     }
 
     static func shouldAutoInjectSelectedTextTranslationResult(
         sessionOutputMode: SessionOutputMode,
         isSelectedTextTranslationFlow: Bool,
-        hadWritableFocusedInput: Bool
+        showResultWindow: Bool
     ) -> Bool {
-        shouldPresentSelectedTextTranslationAnswerOverlay(
-            sessionOutputMode: sessionOutputMode,
-            isSelectedTextTranslationFlow: isSelectedTextTranslationFlow
-        ) && hadWritableFocusedInput
+        sessionOutputMode == .translation &&
+            isSelectedTextTranslationFlow &&
+            !showResultWindow
     }
 
     func shouldAutoInjectSelectedTextTranslationResult() -> Bool {
         Self.shouldAutoInjectSelectedTextTranslationResult(
             sessionOutputMode: sessionOutputMode,
             isSelectedTextTranslationFlow: isSelectedTextTranslationFlow,
-            hadWritableFocusedInput: selectedTextTranslationHadWritableFocusedInput
+            showResultWindow: showSelectedTextTranslationResultWindow
         )
     }
 
@@ -579,7 +575,7 @@ extension AppDelegate {
             writeTextToPasteboard(trimmedContent)
         }
 
-        configureRewriteAnswerOverlayInjectionHandler()
+        configureAnswerOverlayInjectionHandler()
         let canInjectIntoFocusedInput = resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: true)
         overlayState.presentAnswer(
             title: resolvedPayload.trimmedTitle.isEmpty
@@ -591,13 +587,15 @@ extension AppDelegate {
         overlayWindow.show(state: overlayState, position: overlayPosition)
     }
 
-    private func presentSelectedTextTranslationAnswerOverlay(content: String, canInject: Bool) {
+    private func presentSelectedTextTranslationAnswerOverlay(content: String) {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return }
 
-        if !canInject && autoCopyWhenNoFocusedInput {
+        if autoCopyWhenNoFocusedInput {
             writeTextToPasteboard(trimmedContent)
         }
+
+        configureAnswerOverlayInjectionHandler()
 
         overlayState.configureSessionTranslationTargetLanguage(
             translationTargetLanguage,
@@ -606,7 +604,7 @@ extension AppDelegate {
         overlayState.presentAnswer(
             title: String(localized: "Translation"),
             content: trimmedContent,
-            canInject: canInject
+            canInject: true
         )
         overlayWindow.show(state: overlayState, position: overlayPosition)
     }
@@ -619,7 +617,7 @@ extension AppDelegate {
             writeTextToPasteboard(trimmedContent)
         }
 
-        configureRewriteAnswerOverlayInjectionHandler()
+        configureAnswerOverlayInjectionHandler()
         let canInjectIntoFocusedInput = resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: true)
         overlayState.presentConversationAnswer(
             content: trimmedContent,
@@ -635,7 +633,7 @@ extension AppDelegate {
         )
         guard !previewPayload.trimmedTitle.isEmpty || !previewPayload.trimmedContent.isEmpty else { return }
 
-        configureRewriteAnswerOverlayInjectionHandler()
+        configureAnswerOverlayInjectionHandler()
         let canInjectIntoFocusedInput =
             overlayState.latestCompletedAnswerPayload != nil
                 ? resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: false)
@@ -653,7 +651,7 @@ extension AppDelegate {
         let normalizedContent = RewriteAnswerContentNormalizer.normalizePlainTextStreamingPreview(content)
         guard !normalizedContent.isEmpty else { return }
 
-        configureRewriteAnswerOverlayInjectionHandler()
+        configureAnswerOverlayInjectionHandler()
         let canInjectIntoFocusedInput =
             overlayState.latestCompletedAnswerPayload != nil
                 ? resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: false)
@@ -672,11 +670,15 @@ extension AppDelegate {
 
     func dismissAnswerOverlay() {
         guard overlayState.displayMode == .answer else { return }
+        cancelPendingSelectedTextTranslationRefresh()
         releaseResidualRecordingResources(reason: "dismiss-answer-overlay")
         overlayWindow.hide { [weak self] in
             guard let self else { return }
             self.overlayWindow.onRequestInject = nil
             self.overlayState.reset()
+            self.sessionTargetApplicationPID = nil
+            self.sessionTargetApplicationBundleID = nil
+            self.selectedTextTranslationHadWritableFocusedInput = false
         }
     }
 
@@ -684,8 +686,11 @@ extension AppDelegate {
         let trimmed = overlayState.latestCompletedAnswerPayload?.trimmedContent ?? ""
         guard !trimmed.isEmpty else { return }
         guard overlayState.canInjectAnswer else { return }
-        VoxtLog.info("Rewrite answer inject requested. chars=\(trimmed.count), canInject=\(overlayState.canInjectAnswer)")
-        typeText(trimmed)
+        VoxtLog.info("Answer overlay inject requested. chars=\(trimmed.count), canInject=\(overlayState.canInjectAnswer)")
+        typeText(trimmed) { [weak self] didInject in
+            guard let self, didInject else { return }
+            self.dismissAnswerOverlay()
+        }
     }
 
     func showCurrentTranscriptionDetailWindow() {
@@ -696,7 +701,7 @@ extension AppDelegate {
         showTranscriptionDetailWindow(for: historyEntryID)
     }
 
-    private func configureRewriteAnswerOverlayInjectionHandler() {
+    private func configureAnswerOverlayInjectionHandler() {
         overlayWindow.onRequestInject = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.injectAnswerOverlayContent()
@@ -988,9 +993,9 @@ extension AppDelegate {
         return false
     }
 
-    private func typeText(_ text: String, completion: (() -> Void)? = nil) {
+    private func typeText(_ text: String, completion: ((Bool) -> Void)? = nil) {
         guard !text.isEmpty else {
-            completion?()
+            completion?(false)
             return
         }
 
@@ -1004,7 +1009,7 @@ extension AppDelegate {
             writeTextToPasteboard(text)
             promptForAccessibilityPermission()
             VoxtLog.warning("Accessibility permission missing. Transcription copied; paste manually after granting permission.")
-            completion?()
+            completion?(false)
             return
         }
 
@@ -1015,7 +1020,7 @@ extension AppDelegate {
         )
         DispatchQueue.main.asyncAfter(deadline: .now() + activationDelay) { [weak self] in
             guard let self else {
-                completion?()
+                completion?(false)
                 return
             }
 
@@ -1023,10 +1028,12 @@ extension AppDelegate {
                 text,
                 previousClipboardValue: previous,
                 keepResultInClipboard: keepResultInClipboard,
-                completion: {
+                completion: { didInject in
                     let elapsedMs = Int(Date().timeIntervalSince(injectionStartedAt) * 1000)
-                    VoxtLog.info("Text injection completed via paste fallback. characters=\(text.count), elapsedMs=\(elapsedMs)")
-                    completion?()
+                    VoxtLog.info(
+                        "Text injection completed via paste fallback. characters=\(text.count), elapsedMs=\(elapsedMs), didInject=\(didInject)"
+                    )
+                    completion?(didInject)
                 }
             )
         }
@@ -1054,13 +1061,13 @@ extension AppDelegate {
         _ text: String,
         previousClipboardValue: String,
         keepResultInClipboard: Bool,
-        completion: (() -> Void)?
+        completion: ((Bool) -> Void)?
     ) {
         writeTextToPasteboard(text)
 
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             VoxtLog.error("typeText fallback failed: unable to create CGEventSource")
-            completion?()
+            completion?(false)
             return
         }
 
@@ -1072,13 +1079,13 @@ extension AppDelegate {
 
         guard cmdDown != nil, cmdUp != nil else {
             VoxtLog.error("typeText fallback failed: unable to create key events")
-            completion?()
+            completion?(false)
             return
         }
 
         cmdDown?.post(tap: .cgAnnotatedSessionEventTap)
         cmdUp?.post(tap: .cgAnnotatedSessionEventTap)
-        completion?()
+        completion?(true)
 
         guard !keepResultInClipboard else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {

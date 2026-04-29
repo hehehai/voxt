@@ -118,6 +118,13 @@ struct WaveformView: View {
     private var selectedSessionTranslationLanguage: TranslationTargetLanguage? {
         sessionTranslationDraftLanguage ?? sessionTranslationTargetLanguage
     }
+    private var showsAnswerTranslationSelector: Bool {
+        isAnswerMode &&
+            answerInteractionMode == .singleResult &&
+            sessionIconMode == .translation &&
+            allowsSessionTranslationLanguageSwitching &&
+            sessionTranslationTargetLanguage != nil
+    }
     private var waveformVisualWidth: CGFloat {
         Self.waveformVisualWidth(
             barCount: barCount,
@@ -146,7 +153,7 @@ struct WaveformView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if isSessionTranslationTargetPickerPresented {
+            if !isAnswerMode && isSessionTranslationTargetPickerPresented {
                 HStack(spacing: 0) {
                     Spacer(minLength: 0)
 
@@ -154,18 +161,6 @@ struct WaveformView: View {
                         .transition(
                             .opacity.combined(with: .scale(scale: 0.92, anchor: .bottom))
                         )
-
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-
-            if isAnswerMode && (showsSessionTranslationLanguagePill || isSessionTranslationTargetPickerPresented) {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-
-                    sessionTranslationLanguagePill
-                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
 
                     Spacer(minLength: 0)
                 }
@@ -224,7 +219,7 @@ struct WaveformView: View {
         .frame(maxWidth: .infinity, alignment: .top)
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .onTapGesture {
-            guard isSessionTranslationTargetPickerPresented else { return }
+            guard isSessionTranslationTargetPickerPresented, !showsAnswerTranslationSelector else { return }
             onDismissSessionTranslationTargetPicker()
         }
     }
@@ -407,7 +402,7 @@ struct WaveformView: View {
             canInjectAnswer: canInjectAnswer,
             canCopyAnswer: canCopyAnswer,
             canContinueAnswer: canContinueAnswer,
-            canShowHistoryDetail: canShowHistoryDetail,
+            canShowHistoryDetail: showsAnswerTranslationSelector ? false : canShowHistoryDetail,
             didCopyAnswer: didCopyAnswer,
             isRecording: isRecording,
             isProcessing: isEnhancing || isRequesting || isFinalizingTranscription,
@@ -416,12 +411,19 @@ struct WaveformView: View {
             streamingDraftPayload: answerInteractionMode == .conversation && isStreamingAnswer
                 ? displayedAnswerPayload
                 : nil,
+            showsSessionTranslationSelector: showsAnswerTranslationSelector,
+            sessionTranslationTargetLanguage: sessionTranslationTargetLanguage,
+            sessionTranslationDraftLanguage: sessionTranslationDraftLanguage,
+            isSessionTranslationTargetPickerPresented: isSessionTranslationTargetPickerPresented,
             onInject: onInject,
             onContinue: onContinue,
             onToggleConversationRecording: onToggleConversationRecording,
             onShowDetail: onShowHistoryDetail,
             onCopy: copyAnswerToPasteboard,
-            onClose: onClose
+            onClose: onClose,
+            onToggleSessionTranslationTargetPicker: onToggleSessionTranslationTargetPicker,
+            onSelectSessionTranslationTargetLanguage: onSelectSessionTranslationTargetLanguage,
+            onDismissSessionTranslationTargetPicker: onDismissSessionTranslationTargetPicker
         )
     }
 

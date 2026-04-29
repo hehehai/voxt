@@ -1,6 +1,17 @@
 import SwiftUI
 
+private struct SessionTranslationSelectorBoundsPreferenceKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>?
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 struct WaveformAnswerCard: View {
+    private let sessionTranslationPickerWidth: CGFloat = 198
+    private let sessionTranslationPickerRowHeight: CGFloat = 30
+
     let title: String
     let content: String
     let answerInteractionMode: AnswerInteractionMode
@@ -16,12 +27,19 @@ struct WaveformAnswerCard: View {
     let audioLevel: Float
     let shouldAnimateWave: Bool
     let streamingDraftPayload: RewriteAnswerPayload?
+    let showsSessionTranslationSelector: Bool
+    let sessionTranslationTargetLanguage: TranslationTargetLanguage?
+    let sessionTranslationDraftLanguage: TranslationTargetLanguage?
+    let isSessionTranslationTargetPickerPresented: Bool
     let onInject: () -> Void
     let onContinue: () -> Void
     let onToggleConversationRecording: () -> Void
     let onShowDetail: () -> Void
     let onCopy: () -> Void
     let onClose: () -> Void
+    let onToggleSessionTranslationTargetPicker: () -> Void
+    let onSelectSessionTranslationTargetLanguage: (TranslationTargetLanguage) -> Void
+    let onDismissSessionTranslationTargetPicker: () -> Void
 
     @State private var isScrolledToConversationBottom = true
     @State private var wasScrolledToConversationBottom = true
@@ -35,12 +53,20 @@ struct WaveformAnswerCard: View {
         return trimmed.isEmpty ? String(localized: "AI Answer") : trimmed
     }
 
+    private var showsTranslationLoadingIndicator: Bool {
+        showsSessionTranslationSelector && isProcessing
+    }
+
     private var isConversationMode: Bool {
         answerInteractionMode == .conversation
     }
 
     private var continueAction: () -> Void {
         isConversationMode ? onToggleConversationRecording : onContinue
+    }
+
+    private var selectedSessionTranslationLanguage: TranslationTargetLanguage? {
+        sessionTranslationDraftLanguage ?? sessionTranslationTargetLanguage
     }
 
     var body: some View {
@@ -54,6 +80,21 @@ struct WaveformAnswerCard: View {
                 .padding(.bottom, 10)
 
             bodyContent
+        }
+        .overlayPreferenceValue(SessionTranslationSelectorBoundsPreferenceKey.self) { anchor in
+            GeometryReader { proxy in
+                if showsSessionTranslationSelector,
+                   isSessionTranslationTargetPickerPresented,
+                   let anchor {
+                    let buttonFrame = proxy[anchor]
+                    sessionTranslationLanguagePicker
+                        .offset(
+                            x: buttonFrame.midX - (sessionTranslationPickerWidth / 2),
+                            y: buttonFrame.maxY + 8
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .topLeading)))
+                }
+            }
         }
     }
 
@@ -89,6 +130,12 @@ struct WaveformAnswerCard: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
 
+                if showsTranslationLoadingIndicator {
+                    LoadingSpinnerIconView(isAnimating: true)
+                        .frame(width: 12, height: 12)
+                        .opacity(0.88)
+                }
+
                 Spacer(minLength: 12)
 
                 headerActions(showsContinue: canContinueAnswer)
@@ -99,6 +146,10 @@ struct WaveformAnswerCard: View {
 
     @ViewBuilder
     private func headerActions(showsContinue: Bool) -> some View {
+        if showsSessionTranslationSelector {
+            sessionTranslationSelector
+        }
+
         if showsContinue {
             AnswerContinueButton(action: continueAction)
         }
@@ -109,13 +160,13 @@ struct WaveformAnswerCard: View {
                 action: onInject,
                 isEnabled: true
             ) {
-                Image(systemName: "arrow.down.to.line.compact")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                InjectAnswerIconView()
+                    .frame(width: 15, height: 15)
+                    .opacity(0.92)
             }
         }
 
-        if canShowHistoryDetail {
+        if canShowHistoryDetail && !showsSessionTranslationSelector {
             AnswerHeaderActionButton(
                 accessibilityLabel: String(localized: "Detail"),
                 action: onShowDetail,
@@ -150,6 +201,104 @@ struct WaveformAnswerCard: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.9))
         }
+    }
+
+    private var sessionTranslationSelector: some View {
+        Button(action: onToggleSessionTranslationTargetPicker) {
+            HStack(spacing: 6) {
+                Text(selectedSessionTranslationLanguage?.title ?? "")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Image(systemName: isSessionTranslationTargetPickerPresented ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(
+                Capsule()
+                    .fill(.white.opacity(0.08))
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(
+                        isSessionTranslationTargetPickerPresented ? Color.accentColor.opacity(0.28) : .white.opacity(0.12),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(String(localized: "Target Language")))
+        .fixedSize(horizontal: true, vertical: false)
+        .anchorPreference(
+            key: SessionTranslationSelectorBoundsPreferenceKey.self,
+            value: .bounds
+        ) { anchor in
+            isSessionTranslationTargetPickerPresented ? anchor : nil
+        }
+        .zIndex(isSessionTranslationTargetPickerPresented ? 1 : 0)
+    }
+
+    private var sessionTranslationLanguagePicker: some View {
+        ScrollView {
+            VStack(spacing: 3) {
+                ForEach(TranslationTargetLanguage.allCases) { language in
+                    Button {
+                        onSelectSessionTranslationTargetLanguage(language)
+                    } label: {
+                        sessionTranslationLanguageRow(for: language)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(5)
+        }
+        .frame(width: sessionTranslationPickerWidth, alignment: .top)
+        .frame(maxHeight: 156, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.black.opacity(0.96))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.22), radius: 16, y: 10)
+        .accessibilityLabel(Text(String(localized: "Translation Language")))
+    }
+
+    private func sessionTranslationLanguageRow(for language: TranslationTargetLanguage) -> some View {
+        let isSelected = selectedSessionTranslationLanguage == language
+        let backgroundColor: Color = isSelected ? Color.accentColor.opacity(0.20) : .white.opacity(0.05)
+        let borderColor: Color = isSelected ? Color.accentColor.opacity(0.36) : .white.opacity(0.08)
+
+        return HStack(spacing: 10) {
+            Text(language.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.92))
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.accentColor.opacity(0.95))
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: sessionTranslationPickerRowHeight)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(backgroundColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(borderColor, lineWidth: 1)
+        )
     }
 
     @ViewBuilder

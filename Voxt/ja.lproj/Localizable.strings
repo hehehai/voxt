@@ -166,6 +166,8 @@
 "Conflicts with Close (⌘W)." = "閉じる（⌘W）と競合します。";
 "Transcription shortcut: %@" = "文字起こしショートカット: %@";
 "Translation shortcut: %@" = "翻訳ショートカット: %@";
+"Show Result Window For Selected Text Translation" = "翻訳結果ウィンドウを表示";
+"When enabled, selected-text translation opens a result window after completion. When disabled, the translated result is injected back into the current input instead." = "オンで結果ウィンドウを表示、オフで現在の入力欄に直接挿入します。";
 "Transcription and translation shortcuts should be different." = "文字起こしと翻訳のショートカットは別にしてください。";
 "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination." = "両方の操作でカスタムショートカットが使えます。単一キー（fn など）またはキー組み合わせを設定できます。";
 "Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop." = "長押し: 文字起こしショートカットを押し続けると開始し、離すと終了します。翻訳ショートカットも同様です。";

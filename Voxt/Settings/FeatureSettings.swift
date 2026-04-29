@@ -274,23 +274,47 @@ struct TranslationFeatureSettings: Codable, Hashable, Sendable {
     var targetLanguageRawValue: String
     var prompt: String
     var replaceSelectedText: Bool
+    var showResultWindow: Bool
 
     init(
         asrSelectionID: FeatureModelSelectionID,
         modelSelectionID: FeatureModelSelectionID,
         targetLanguageRawValue: String,
         prompt: String,
-        replaceSelectedText: Bool
+        replaceSelectedText: Bool,
+        showResultWindow: Bool = true
     ) {
         self.asrSelectionID = asrSelectionID
         self.modelSelectionID = modelSelectionID
         self.targetLanguageRawValue = targetLanguageRawValue
         self.prompt = prompt
         self.replaceSelectedText = replaceSelectedText
+        self.showResultWindow = showResultWindow
     }
 
     var targetLanguage: TranslationTargetLanguage {
         TranslationTargetLanguage(rawValue: targetLanguageRawValue) ?? .english
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case asrSelectionID
+        case modelSelectionID
+        case targetLanguageRawValue
+        case prompt
+        case replaceSelectedText
+        case showResultWindow
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            asrSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .asrSelectionID),
+            modelSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .modelSelectionID),
+            targetLanguageRawValue: try container.decode(String.self, forKey: .targetLanguageRawValue),
+            prompt: try container.decode(String.self, forKey: .prompt),
+            replaceSelectedText: try container.decode(Bool.self, forKey: .replaceSelectedText),
+            showResultWindow: try container.decodeIfPresent(Bool.self, forKey: .showResultWindow) ?? true
+        )
     }
 }
 

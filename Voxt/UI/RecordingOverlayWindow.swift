@@ -56,6 +56,7 @@ class OverlayState: ObservableObject {
     @Published var isSessionTranslationTargetPickerPresented = false
     @Published var isSessionTranslationLanguageHovering = false
     @Published var allowsSessionTranslationLanguageSwitching = false
+    var answerTranslationSourceText = ""
 
     private var cancellables = Set<AnyCancellable>()
     private var latestSourceTranscribedText = ""
@@ -153,6 +154,7 @@ class OverlayState: ObservableObject {
         isSessionTranslationTargetPickerPresented = false
         isSessionTranslationLanguageHovering = false
         allowsSessionTranslationLanguageSwitching = false
+        answerTranslationSourceText = ""
         latestSourceTranscribedText = ""
         transcribedTextTransformer = nil
         cancellables.removeAll()
@@ -429,6 +431,24 @@ class OverlayState: ObservableObject {
 
     func setSessionTranslationLanguageHovering(_ isHovering: Bool) {
         isSessionTranslationLanguageHovering = isHovering
+    }
+
+    func setAnswerTranslationSourceText(_ text: String) {
+        answerTranslationSourceText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func replaceCurrentAnswer(title: String, content: String) {
+        let payload = RewriteAnswerPayloadParser.normalize(
+            RewriteAnswerPayload(title: title, content: content)
+        )
+        answerTitle = payload.title
+        answerContent = payload.content
+        latestRewriteResult = payload
+        latestHistoryEntryID = nil
+        isStreamingAnswer = false
+        isEnhancing = false
+        isRequesting = false
+        isFinalizingTranscription = false
     }
 
     private func appendConversationResult(_ payload: RewriteAnswerPayload) {

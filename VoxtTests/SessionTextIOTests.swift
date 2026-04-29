@@ -61,47 +61,57 @@ final class SessionTextIOTests: XCTestCase {
         )
     }
 
-    func testSelectedTextTranslationAlwaysUsesAnswerOverlayAfterTranslation() {
+    func testSelectedTextTranslationShowsAnswerOverlayOnlyWhenConfigured() {
         XCTAssertTrue(
             AppDelegate.shouldPresentSelectedTextTranslationAnswerOverlay(
                 sessionOutputMode: .translation,
-                isSelectedTextTranslationFlow: true
+                isSelectedTextTranslationFlow: true,
+                showResultWindow: true
             )
         )
         XCTAssertFalse(
             AppDelegate.shouldPresentSelectedTextTranslationAnswerOverlay(
                 sessionOutputMode: .translation,
-                isSelectedTextTranslationFlow: false
+                isSelectedTextTranslationFlow: true,
+                showResultWindow: false
+            )
+        )
+        XCTAssertFalse(
+            AppDelegate.shouldPresentSelectedTextTranslationAnswerOverlay(
+                sessionOutputMode: .translation,
+                isSelectedTextTranslationFlow: false,
+                showResultWindow: true
             )
         )
         XCTAssertFalse(
             AppDelegate.shouldPresentSelectedTextTranslationAnswerOverlay(
                 sessionOutputMode: .transcription,
-                isSelectedTextTranslationFlow: true
+                isSelectedTextTranslationFlow: true,
+                showResultWindow: true
             )
         )
     }
 
-    func testSelectedTextTranslationAutoInjectRequiresFocusedInput() {
+    func testSelectedTextTranslationAutoInjectFollowsResultWindowToggle() {
         XCTAssertTrue(
             AppDelegate.shouldAutoInjectSelectedTextTranslationResult(
                 sessionOutputMode: .translation,
                 isSelectedTextTranslationFlow: true,
-                hadWritableFocusedInput: true
+                showResultWindow: false
             )
         )
         XCTAssertFalse(
             AppDelegate.shouldAutoInjectSelectedTextTranslationResult(
                 sessionOutputMode: .translation,
                 isSelectedTextTranslationFlow: true,
-                hadWritableFocusedInput: false
+                showResultWindow: true
             )
         )
         XCTAssertFalse(
             AppDelegate.shouldAutoInjectSelectedTextTranslationResult(
                 sessionOutputMode: .translation,
                 isSelectedTextTranslationFlow: false,
-                hadWritableFocusedInput: true
+                showResultWindow: false
             )
         )
     }

@@ -168,6 +168,8 @@
 "Conflicts with Close (⌘W)." = "Conflicts with Close (⌘W).";
 "Transcription shortcut: %@" = "Transcription shortcut: %@";
 "Translation shortcut: %@" = "Translation shortcut: %@";
+"Show Result Window For Selected Text Translation" = "Show translation result window";
+"When enabled, selected-text translation opens a result window after completion. When disabled, the translated result is injected back into the current input instead." = "On: show result window. Off: inject into current input.";
 "Transcription and translation shortcuts should be different." = "Transcription and translation shortcuts should be different.";
 "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination." = "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination.";
 "Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop." = "Long Press: Hold transcription hotkey to start transcription and release it to stop; hold translation hotkey to start translation and release it to stop.";
