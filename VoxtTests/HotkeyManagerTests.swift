@@ -126,10 +126,12 @@ final class HotkeyManagerTests: XCTestCase {
                 isTranslationKeyDown: false,
                 isRewriteKeyDown: false,
                 isMeetingKeyDown: false,
+                isCustomPasteKeyDown: false,
                 hasTranscriptionModifierTapCandidate: false,
                 hasTranslationModifierTapCandidate: false,
                 hasRewriteModifierTapCandidate: false,
                 hasMeetingModifierTapCandidate: false,
+                hasCustomPasteModifierTapCandidate: false,
                 sawNonModifierKeyDuringFunctionChord: false,
                 currentSidedModifiers: []
             )

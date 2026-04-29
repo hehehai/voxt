@@ -150,9 +150,11 @@ final class VoxtObsidianSyncCoordinator {
             nextRecordsByNoteID[note.id]?.relativeFilePath ?? ""
         }
         let staleRelativePaths = retiredRelativePaths.union(Set(removedRecords.map(\.relativeFilePath)))
-        let managedRelativePaths = Set(notesByRelativeFilePath.keys).union(staleRelativePaths)
+        let activeRelativePaths = Set(notesByRelativeFilePath.keys).subtracting([""])
 
-        for relativePath in managedRelativePaths where !relativePath.isEmpty {
+        // Write current files before pruning retired paths so renamed single-note files
+        // can still read the previous managed body and preserve user edits.
+        for relativePath in activeRelativePaths {
             let fileURL = vaultURL.appendingPathComponent(relativePath, isDirectory: false)
             let assignedNotes = (notesByRelativeFilePath[relativePath] ?? []).sorted { lhs, rhs in
                 if lhs.createdAt == rhs.createdAt {
@@ -202,6 +204,16 @@ final class VoxtObsidianSyncCoordinator {
             } catch {
                 VoxtLog.warning("Obsidian sync write failed. file=\(relativePath), error=\(error.localizedDescription)")
             }
+        }
+
+        for relativePath in staleRelativePaths where !relativePath.isEmpty {
+            let fileURL = vaultURL.appendingPathComponent(relativePath, isDirectory: false)
+            try? fileManager.removeItem(at: fileURL)
+            pruneEmptyDirectories(
+                startingAt: fileURL.deletingLastPathComponent(),
+                stopAt: vaultURL,
+                fileManager: fileManager
+            )
         }
     }
 

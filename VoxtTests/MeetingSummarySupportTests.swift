@@ -110,7 +110,7 @@ final class MeetingSummarySupportTests: XCTestCase {
     func testResolvedPromptTemplateFallsBackToDefault() {
         let resolved = MeetingSummarySupport.resolvedPromptTemplate("   ")
 
-        XCTAssertEqual(resolved, MeetingSummarySupport.defaultPromptTemplate())
+        XCTAssertEqual(resolved, AppPromptDefaults.text(for: .meetingSummary, resolvedFrom: .standard))
     }
 
     func testDefaultPromptTemplateIncludesJSONLineBreakConstraint() {
