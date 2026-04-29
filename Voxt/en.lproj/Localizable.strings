@@ -126,7 +126,7 @@
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste.";
 "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste.";
 "When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "When enabled, Voxt auto-pastes result text and also keeps it in clipboard.";
-"Translate selected text with translation shortcut" = "Translate selected text with translation shortcut";
+"Translate selected text with translation shortcut" = "Directly translate selected text";
 "When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it." = "When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it.";
 "Automatically start Voxt when your Mac starts." = "Automatically start Voxt when your Mac starts.";
 "Show Voxt in your Mac Dock for quick access." = "Show Voxt in your Mac Dock for quick access.";
@@ -1015,7 +1015,7 @@
 "Focus the textarea below, then press %@ to test transcription directly." = "Focus the textarea below, then press %@ to test transcription directly.";
 "Use the textarea below to test the translation shortcut directly." = "Use the textarea below to test the translation shortcut directly.";
 "Select text in the textarea below, then press %@ to translate the selection directly." = "Select text in the textarea below, then press %@ to translate the selection directly.";
-"Enable “Translate selected text with translation shortcut” above if you want the shortcut to act on selected text in this textarea." = "Enable “Translate selected text with translation shortcut” above if you want the shortcut to act on selected text in this textarea.";
+"Enable “Translate selected text with translation shortcut” above if you want the shortcut to act on selected text in this textarea." = "Enable “Directly translate selected text” above if you want the shortcut to act on selected text in this textarea.";
 "Use the textarea below to test the rewrite shortcut directly." = "Use the textarea below to test the rewrite shortcut directly.";
 "Rewrite shortcut: %@" = "Rewrite shortcut: %@";
 "Rewrite turns spoken instructions into generated or transformed text. If text is selected, Voxt rewrites that selection. If nothing is selected, Voxt treats your voice as the full prompt." = "Rewrite turns spoken instructions into generated or transformed text. If text is selected, Voxt rewrites that selection. If nothing is selected, Voxt treats your voice as the full prompt.";
@@ -1159,7 +1159,8 @@
 "Ready when Whisper ASR is selected" = "Ready when Whisper ASR is selected";
 "Realtime Target" = "Realtime Target";
 "Recommended default: fn for transcription, fn+shift for translation, fn+control for rewrite, and fn+option for meeting." = "Recommended default: fn for transcription, fn+shift for translation, fn+control for rewrite, and fn+option for meeting.";
-"Replace Selected Text" = "Replace Selected Text";
+"Replace Selected Text" = "Show selected-text translation result in a window";
+"When enabled, selected-text translation replaces the current selection directly. When disabled, Voxt opens a result window after completion instead." = "After selected-text translation, a result window is shown so you can switch the target language or inject the result into the input field.";
 "Rewrite Flow" = "Rewrite Flow";
 "Rewrite Model" = "Rewrite Model";
 "Rewrite Prompt" = "Rewrite Prompt";

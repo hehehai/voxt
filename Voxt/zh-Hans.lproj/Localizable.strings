@@ -126,7 +126,7 @@
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "开启后，当没有可输入的焦点时，Voxt 会将结果写入剪贴板，而不是尝试粘贴。";
 "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "开启后，Voxt 会始终将转录结果写入剪贴板，不再自动粘贴。";
 "When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "开启后，Voxt 会自动粘贴结果文本，同时保留到剪贴板。";
-"Translate selected text with translation shortcut" = "使用翻译快捷键翻译选中文本";
+"Translate selected text with translation shortcut" = "选中文本直接翻译";
 "When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it." = "开启后，当存在选中文本时按下翻译快捷键，会直接翻译并替换选中内容。";
 "Automatically start Voxt when your Mac starts." = "Mac 启动时自动启动 Voxt。";
 "Show Voxt in your Mac Dock for quick access." = "在 Mac Dock 中显示 Voxt 以便快速访问。";
@@ -1015,7 +1015,7 @@
 "Focus the textarea below, then press %@ to test transcription directly." = "聚焦下方 textarea，然后按 %@ 直接测试转录。";
 "Use the textarea below to test the translation shortcut directly." = "使用下方 textarea 直接测试翻译快捷键。";
 "Select text in the textarea below, then press %@ to translate the selection directly." = "先选中下方 textarea 里的文本，再按 %@ 直接翻译选区。";
-"Enable “Translate selected text with translation shortcut” above if you want the shortcut to act on selected text in this textarea." = "如果你希望快捷键直接作用于这个 textarea 中的选中文本，请先开启上方的“使用翻译快捷键翻译选中文本”。";
+"Enable “Translate selected text with translation shortcut” above if you want the shortcut to act on selected text in this textarea." = "如果你希望快捷键直接作用于这个 textarea 中的选中文本，请先开启上方的“选中文本直接翻译”。";
 "Use the textarea below to test the rewrite shortcut directly." = "使用下方 textarea 直接测试转写快捷键。";
 "Rewrite shortcut: %@" = "转写快捷键：%@";
 "Rewrite turns spoken instructions into generated or transformed text. If text is selected, Voxt rewrites that selection. If nothing is selected, Voxt treats your voice as the full prompt." = "转写会把语音指令转成生成后的文本或改写后的文本。如果已有选中文本，Voxt 会改写该选区；如果没有选中文本，Voxt 会把你的语音当作完整提示词。";
@@ -1159,7 +1159,8 @@
 "Ready when Whisper ASR is selected" = "选择 Whisper ASR 后可用";
 "Realtime Target" = "实时目标语言";
 "Recommended default: fn for transcription, fn+shift for translation, fn+control for rewrite, and fn+option for meeting." = "推荐默认值：fn 用于转录，fn+shift 用于翻译，fn+control 用于转写，fn+option 用于会议。";
-"Replace Selected Text" = "替换选中文本";
+"Replace Selected Text" = "选中文本翻译结果用窗口显示";
+"When enabled, selected-text translation replaces the current selection directly. When disabled, Voxt opens a result window after completion instead." = "选中文本翻译后将显示结果创建，可以切换目标语言和输入框注入";
 "Rewrite Flow" = "转写流程";
 "Rewrite Model" = "转写模型";
 "Rewrite Prompt" = "转写提示词";

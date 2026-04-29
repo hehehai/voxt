@@ -16,7 +16,6 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.overlayScreenEdgeInset) private var overlayScreenEdgeInset = 30
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) private var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
-    @AppStorage(AppPreferenceKey.translateSelectedTextOnTranslationHotkey) private var translateSelectedTextOnTranslationHotkey = true
     @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.hideMeetingOverlayFromScreenSharing) private var hideMeetingOverlayFromScreenSharing = false
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
@@ -136,8 +135,7 @@ struct GeneralSettingsView: View {
             .settingsNavigationAnchor(.generalLanguages)
 
             GeneralOutputCard(
-                autoCopyWhenNoFocusedInput: $autoCopyWhenNoFocusedInput,
-                translateSelectedTextOnTranslationHotkey: $translateSelectedTextOnTranslationHotkey
+                autoCopyWhenNoFocusedInput: $autoCopyWhenNoFocusedInput
             )
             .settingsNavigationAnchor(.generalOutput)
 

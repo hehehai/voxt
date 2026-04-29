@@ -196,8 +196,8 @@ extension FeatureSettingsView {
                 }
 
                 FeatureToggleRow(
-                    title: featureSettingsLocalized("Replace Selected Text"),
-                    detail: featureSettingsLocalized("Run translation directly against the current selected text when the translation shortcut is triggered."),
+                    title: featureSettingsLocalized("Translate selected text with translation shortcut"),
+                    detail: featureSettingsLocalized("If text is selected, the translation shortcut translates the selection directly instead of starting a recording."),
                     isOn: binding(
                         get: { featureSettings.translation.replaceSelectedText },
                         set: { featureSettings.translation.replaceSelectedText = $0 }
@@ -205,11 +205,11 @@ extension FeatureSettingsView {
                 )
 
                 FeatureToggleRow(
-                    title: featureSettingsLocalized("Show Result Window For Selected Text Translation"),
-                    detail: featureSettingsLocalized("When enabled, selected-text translation opens a result window after completion. When disabled, the translated result is injected back into the current input instead."),
+                    title: featureSettingsLocalized("Replace Selected Text"),
+                    detail: featureSettingsLocalized("When enabled, selected-text translation replaces the current selection directly. When disabled, Voxt opens a result window after completion instead."),
                     isOn: binding(
-                        get: { featureSettings.translation.showResultWindow },
-                        set: { featureSettings.translation.showResultWindow = $0 }
+                        get: { !featureSettings.translation.showResultWindow },
+                        set: { featureSettings.translation.showResultWindow = !$0 }
                     )
                 )
 

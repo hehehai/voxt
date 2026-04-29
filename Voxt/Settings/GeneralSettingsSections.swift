@@ -351,17 +351,11 @@ struct GeneralModelStorageCard: View {
 
 struct GeneralOutputCard: View {
     @Binding var autoCopyWhenNoFocusedInput: Bool
-    @Binding var translateSelectedTextOnTranslationHotkey: Bool
 
     var body: some View {
         GeneralSettingsCard(title: "Output") {
             Toggle("Also copy result to clipboard", isOn: $autoCopyWhenNoFocusedInput)
             Text("When enabled, Voxt auto-pastes result text and also keeps it in clipboard.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Toggle("Translate selected text with translation shortcut", isOn: $translateSelectedTextOnTranslationHotkey)
-            Text("When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

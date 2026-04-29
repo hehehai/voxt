@@ -124,7 +124,7 @@
 "When enabled, if no writable text input is focused, Voxt writes the result to clipboard instead of trying to paste." = "有効時、入力可能なフォーカスがない場合は貼り付けの代わりに結果をクリップボードへ保存します。";
 "When enabled, Voxt always writes transcription results to clipboard and does not auto-paste." = "有効時、Voxt は常に文字起こし結果をクリップボードに保存し、自動貼り付けは行いません。";
 "When enabled, Voxt auto-pastes result text and also keeps it in clipboard." = "有効時、Voxt は結果を自動貼り付けし、同時にクリップボードにも保持します。";
-"Translate selected text with translation shortcut" = "翻訳ショートカットで選択テキストを翻訳";
+"Translate selected text with translation shortcut" = "選択テキストを直接翻訳";
 "When enabled, pressing the translation shortcut with selected text translates the selection directly and replaces it." = "有効時、テキスト選択中に翻訳ショートカットを押すと、選択範囲を直接翻訳して置き換えます。";
 "Automatically start Voxt when your Mac starts." = "Mac 起動時に Voxt を自動起動します。";
 "Show Voxt in your Mac Dock for quick access." = "すばやくアクセスできるよう Mac の Dock に Voxt を表示します。";
@@ -967,7 +967,7 @@
 "Focus the textarea below, then press %@ to test transcription directly." = "下の textarea にフォーカスしてから %@ を押すと、文字起こしを直接試せます。";
 "Use the textarea below to test the translation shortcut directly." = "下の textarea を使って、翻訳ショートカットを直接試せます。";
 "Select text in the textarea below, then press %@ to translate the selection directly." = "下の textarea でテキストを選択し、%@ を押すと選択範囲を直接翻訳できます。";
-"Enable “Translate selected text with translation shortcut” above if you want the shortcut to act on selected text in this textarea." = "この textarea の選択テキストにショートカットを作用させたい場合は、上の「翻訳ショートカットで選択テキストを翻訳」を有効にしてください。";
+"Enable “Translate selected text with translation shortcut” above if you want the shortcut to act on selected text in this textarea." = "この textarea の選択テキストにショートカットを作用させたい場合は、上の「選択テキストを直接翻訳」を有効にしてください。";
 "Use the textarea below to test the rewrite shortcut directly." = "下の textarea を使って、書き換えショートカットを直接試せます。";
 "Rewrite shortcut: %@" = "書き換えショートカット: %@";
 "Rewrite turns spoken instructions into generated or transformed text. If text is selected, Voxt rewrites that selection. If nothing is selected, Voxt treats your voice as the full prompt." = "書き換えは、音声の指示を生成済みまたは変換済みのテキストにします。テキストが選択されている場合、Voxt はその選択範囲を書き換えます。何も選択されていない場合は、音声全体を完全なプロンプトとして扱います。";
@@ -1066,7 +1066,8 @@
 "Ready when Whisper ASR is selected" = "Whisper ASR を選択すると利用可能";
 "Realtime Target" = "リアルタイム翻訳先";
 "Recommended default: fn for transcription, fn+shift for translation, fn+control for rewrite, and fn+option for meeting." = "推奨デフォルト: 文字起こしは fn、翻訳は fn+shift、書き換えは fn+control、会議は fn+option。";
-"Replace Selected Text" = "選択テキストを置換";
+"Replace Selected Text" = "選択テキスト翻訳結果をウィンドウで表示";
+"When enabled, selected-text translation replaces the current selection directly. When disabled, Voxt opens a result window after completion instead." = "選択テキスト翻訳の後に結果ウィンドウを表示し、翻訳先の切り替えや入力欄への挿入ができます。";
 "Rewrite Flow" = "書き換えフロー";
 "Rewrite Model" = "書き換えモデル";
 "Rewrite Prompt" = "書き換えプロンプト";
