@@ -662,6 +662,11 @@ class HotkeyManager {
         !currentSidedModifiers.isEmpty
     }
 
+    private struct ModifierOnlyTapTransitionResult {
+        let handled: Bool
+        let shouldEmitConfirmedTap: Bool
+    }
+
     private func handleModifierOnlyTapTransition(
         triggerDown: Bool,
         comboIsDown: Bool,
@@ -670,9 +675,10 @@ class HotkeyManager {
         tapCandidate: inout Bool,
         downLog: String,
         upLog: String,
-        confirmLog: String,
-        emitConfirmedTap: () -> Void
-    ) -> Bool {
+        confirmLog: String
+    ) -> ModifierOnlyTapTransitionResult {
+        var shouldEmitConfirmedTap = false
+
         if triggerDown && !keyIsDown {
             VoxtLog.hotkey(downLog)
             cancelPendingTranscriptionTap(resetKeyState: true)
@@ -685,14 +691,17 @@ class HotkeyManager {
             VoxtLog.hotkey(upLog)
             if tapCandidate {
                 VoxtLog.hotkey(confirmLog)
-                emitConfirmedTap()
+                shouldEmitConfirmedTap = true
             }
             tapCandidate = false
             keyIsDown = false
             suppressTranscriptionTapUntil = Date().addingTimeInterval(0.20)
         }
 
-        return wasKeyDown != keyIsDown || comboIsDown
+        return ModifierOnlyTapTransitionResult(
+            handled: wasKeyDown != keyIsDown || comboIsDown,
+            shouldEmitConfirmedTap: shouldEmitConfirmedTap
+        )
     }
 
     private func handleModifierOnlyTranslationEvent(
@@ -727,7 +736,7 @@ class HotkeyManager {
             // - It triggers only when modifiers are released without any other key intervening.
             // - Stop action is centralized to transcription hotkey tap (fn) in AppDelegate.
             // - We still track combo-up to enter a short suppression window for fn stray events.
-            let handled = handleModifierOnlyTapTransition(
+            let transition = handleModifierOnlyTapTransition(
                 triggerDown: translationTriggerDown,
                 comboIsDown: comboIsDown,
                 wasKeyDown: wasTranslationKeyDown,
@@ -736,12 +745,13 @@ class HotkeyManager {
                 downLog: "Hotkey detect translation modifier combo down (tap).",
                 upLog: "Hotkey detect translation modifier combo up (tap).",
                 confirmLog: "Hotkey translation modifier tap confirmed on release."
-            ) {
+            )
+            if transition.shouldEmitConfirmedTap {
                 emitTranslationKeyDown()
             }
             // Consume translation combo transitions to avoid falling through
             // into transcription fn-only handling during release sequence.
-            return handled
+            return transition.handled
         }
 
         if comboIsDown {
@@ -793,7 +803,7 @@ class HotkeyManager {
         )
 
         if triggerMode == .tap {
-            return handleModifierOnlyTapTransition(
+            let transition = handleModifierOnlyTapTransition(
                 triggerDown: rewriteTriggerDown,
                 comboIsDown: comboIsDown,
                 wasKeyDown: wasRewriteKeyDown,
@@ -802,9 +812,11 @@ class HotkeyManager {
                 downLog: "Hotkey detect rewrite modifier combo down (tap).",
                 upLog: "Hotkey detect rewrite modifier combo up (tap).",
                 confirmLog: "Hotkey rewrite modifier tap confirmed on release."
-            ) {
+            )
+            if transition.shouldEmitConfirmedTap {
                 emitRewriteKeyDown()
             }
+            return transition.handled
         }
 
         if comboIsDown {
@@ -856,7 +868,7 @@ class HotkeyManager {
         )
 
         if triggerMode == .tap {
-            return handleModifierOnlyTapTransition(
+            let transition = handleModifierOnlyTapTransition(
                 triggerDown: meetingTriggerDown,
                 comboIsDown: comboIsDown,
                 wasKeyDown: wasMeetingKeyDown,
@@ -865,9 +877,11 @@ class HotkeyManager {
                 downLog: "Hotkey detect meeting modifier combo down (tap).",
                 upLog: "Hotkey detect meeting modifier combo up (tap).",
                 confirmLog: "Hotkey meeting modifier tap confirmed on release."
-            ) {
+            )
+            if transition.shouldEmitConfirmedTap {
                 emitMeetingKeyDown()
             }
+            return transition.handled
         }
 
         if comboIsDown {
@@ -926,7 +940,7 @@ class HotkeyManager {
             return true
         }
 
-        return handleModifierOnlyTapTransition(
+        let transition = handleModifierOnlyTapTransition(
             triggerDown: customPasteTriggerDown,
             comboIsDown: comboIsDown,
             wasKeyDown: wasCustomPasteKeyDown,
@@ -935,9 +949,11 @@ class HotkeyManager {
             downLog: "Hotkey detect custom paste modifier combo down.",
             upLog: "Hotkey detect custom paste modifier combo up.",
             confirmLog: "Hotkey custom paste modifier combo confirmed on release."
-        ) {
+        )
+        if transition.shouldEmitConfirmedTap {
             emitCustomPasteKeyDown()
         }
+        return transition.handled
     }
 
     private func handleModifierOnlyTranscriptionEvent(

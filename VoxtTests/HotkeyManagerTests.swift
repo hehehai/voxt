@@ -224,6 +224,45 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(translationDownCount, 1)
     }
 
+    func testTranslationTapCallbackCanReenterEventHandlingWithoutExclusivityViolation() async {
+        let manager = makeManager()
+        var translationDownCount = 0
+        let callbackExpectation = expectation(description: "translation callback")
+        manager.onTranslationKeyDown = {
+            translationDownCount += 1
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_ANSI_V),
+                flags: self.combinedFlags(.maskShift, .maskSecondaryFn)
+            )
+            callbackExpectation.fulfill()
+        }
+
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Shift),
+            flags: .maskShift
+        )
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Function),
+            flags: combinedFlags(.maskShift, .maskSecondaryFn)
+        )
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Function),
+            flags: .maskShift
+        )
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Shift),
+            flags: []
+        )
+
+        await fulfillment(of: [callbackExpectation], timeout: 1.0)
+        XCTAssertEqual(translationDownCount, 1)
+    }
+
     func testDefaultRewriteModifierTapEmitsDedicatedCallback() async {
         let manager = makeManager()
         var transcriptionDownCount = 0
