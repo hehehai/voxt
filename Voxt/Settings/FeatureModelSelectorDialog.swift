@@ -356,6 +356,18 @@ private struct FeatureModelSelectorRow: View {
                     Text(titleOverride ?? entry.title)
                         .font(.headline)
 
+                    if let badgeText = entry.badgeText {
+                        Text(badgeText)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.orange.opacity(0.14))
+                            )
+                    }
+
                     if showsEngine {
                         Text(entry.engine)
                             .font(.caption.weight(.medium))
@@ -456,6 +468,18 @@ private struct FeatureModelSelectorGroupCard: View {
 
                         Text(group.title)
                             .font(.headline)
+
+                        if let badgeText = group.badgeText {
+                            Text(badgeText)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.orange)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.orange.opacity(0.14))
+                                )
+                        }
 
                         Text(group.engine)
                             .font(.caption.weight(.medium))
@@ -637,7 +661,7 @@ private enum FeatureSelectorTagPriority {
     static var groups: [[String]] {
         [
             [localized("Local"), localized("Remote")],
-            [localized("Fast"), localized("Accurate"), localized("Realtime")],
+            [localized("Fast"), localized("Balanced"), localized("Accurate"), localized("Realtime")],
             [localized("Installed"), localized("Configured"), localized("In Use")]
         ]
     }

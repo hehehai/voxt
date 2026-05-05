@@ -96,6 +96,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: localized("Works immediately with no model download."),
                 usageLocations: usageLabels(for: .dictation),
+                badgeText: nil,
                 isSelectable: true,
                 disabledReason: nil
             )
@@ -108,8 +109,10 @@ struct FeatureModelCatalogBuilder {
                 selectionID: selectionID,
                 title: model.title,
                 engine: localized("MLX Audio"),
-                sizeText: isInstalled ? mlxModelManager.modelSizeOnDisk(repo: model.id) : mlxModelManager.remoteSizeText(repo: model.id),
-                ratingText: model.id.contains("1.7B") || model.id.contains("FireRed") || model.id.localizedCaseInsensitiveContains("cohere") ? "4.8" : "4.3",
+                sizeText: isInstalled
+                    ? (mlxModelManager.cachedModelSizeText(repo: model.id) ?? mlxModelManager.remoteSizeText(repo: model.id))
+                    : mlxModelManager.remoteSizeText(repo: model.id),
+                ratingText: MLXModelManager.ratingText(for: model.id),
                 filterTags: featureFilterTags(
                     base: [localized("Local")] + mlxSpeedTags(for: model.id),
                     installed: isInstalled,
@@ -125,6 +128,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
+                badgeText: nil,
                 isSelectable: isInstalled,
                 disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
             )
@@ -137,8 +141,10 @@ struct FeatureModelCatalogBuilder {
                 selectionID: selectionID,
                 title: model.title,
                 engine: localized("Whisper"),
-                sizeText: isInstalled ? whisperModelManager.modelSizeOnDisk(id: model.id) : whisperModelManager.remoteSizeText(id: model.id),
-                ratingText: model.id == "large-v3" ? "4.9" : (model.id == "medium" ? "4.7" : "4.1"),
+                sizeText: isInstalled
+                    ? (whisperModelManager.cachedModelSizeText(id: model.id) ?? whisperModelManager.remoteSizeText(id: model.id))
+                    : whisperModelManager.remoteSizeText(id: model.id),
+                ratingText: WhisperKitModelManager.ratingText(for: model.id),
                 filterTags: featureFilterTags(
                     base: [localized("Local")] + whisperSpeedTags(for: model.id),
                     installed: isInstalled,
@@ -154,6 +160,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
+                badgeText: nil,
                 isSelectable: isInstalled,
                 disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
             )
@@ -190,6 +197,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: configuration.isConfigured ? localized("Configured") : localized("Not configured"),
                 usageLocations: usageLabels(for: selectionID),
+                badgeText: nil,
                 isSelectable: configuration.isConfigured,
                 disabledReason: configuration.isConfigured ? nil : localized("Configure this provider in Model settings first.")
             )
@@ -217,6 +225,7 @@ struct FeatureModelCatalogBuilder {
                     ),
                     statusText: localized("Available on this Mac"),
                     usageLocations: usageLabels(for: .appleIntelligence),
+                    badgeText: nil,
                     isSelectable: true,
                     disabledReason: nil
                 )
@@ -230,8 +239,10 @@ struct FeatureModelCatalogBuilder {
                 selectionID: selectionID,
                 title: model.title,
                 engine: localized("Local LLM"),
-                sizeText: isInstalled ? customLLMManager.modelSizeOnDisk(repo: model.id) : customLLMManager.remoteSizeText(repo: model.id),
-                ratingText: model.id.contains("8B") || model.id.contains("9B") ? "4.8" : "4.3",
+                sizeText: isInstalled
+                    ? (customLLMManager.cachedModelSizeText(repo: model.id) ?? customLLMManager.remoteSizeText(repo: model.id))
+                    : customLLMManager.remoteSizeText(repo: model.id),
+                ratingText: CustomLLMModelManager.ratingText(for: model.id),
                 filterTags: featureFilterTags(
                     base: [localized("Local")] + llmSpeedTags(for: model.id),
                     installed: isInstalled,
@@ -247,6 +258,16 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
+                badgeText: {
+                    switch CustomLLMModelManager.releaseStatus(for: model.id) {
+                    case .deprecatedSoon:
+                        return localized("即将下线")
+                    case .new:
+                        return localized("New")
+                    case .standard:
+                        return nil
+                    }
+                }(),
                 isSelectable: isInstalled,
                 disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
             )
@@ -284,6 +305,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: isConfigured ? localized("Configured") : localized("Not configured"),
                 usageLocations: usageLabels(for: selectionID),
+                badgeText: nil,
                 isSelectable: isConfigured,
                 disabledReason: isConfigured ? nil : localized("Configure this provider in Model settings first.")
             )
@@ -336,6 +358,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: whisperSelectable ? localized("Ready when Whisper ASR is selected") : localized("Unavailable"),
                 usageLocations: usageLabels(for: .whisperDirectTranslate),
+                badgeText: nil,
                 isSelectable: whisperSelectable,
                 disabledReason: whisperDisabledReason
             ),
@@ -413,45 +436,15 @@ struct FeatureModelCatalogBuilder {
     }
 
     private func mlxSpeedTags(for repo: String) -> [String] {
-        var tags = [String]()
-        if mlxSupportsMultilingual(repo) {
-            tags.append(localized("Multilingual"))
-        }
-        if MLXModelManager.isRealtimeCapableModelRepo(repo) {
-            tags.append(contentsOf: [localized("Realtime"), localized("Fast")])
-            return deduplicatedFeatureTags(tags)
-        }
-        if repo.contains("0.6B") || repo.contains("Nano") {
-            tags.append(localized("Fast"))
-        }
-        if repo.contains("1.7B") || repo.contains("FireRed") || repo.localizedCaseInsensitiveContains("cohere") {
-            tags.append(localized("Accurate"))
-        }
-        return deduplicatedFeatureTags(tags)
+        deduplicatedFeatureTags(MLXModelManager.catalogTagKeys(for: repo).map(localized))
     }
 
     private func whisperSpeedTags(for modelID: String) -> [String] {
-        var tags = [localized("Multilingual")]
-        switch modelID {
-        case "tiny", "base":
-            tags.append(localized("Fast"))
-        case "medium", "large-v3":
-            tags.append(localized("Accurate"))
-        default:
-            break
-        }
-        return deduplicatedFeatureTags(tags)
+        deduplicatedFeatureTags(WhisperKitModelManager.catalogTagKeys(for: modelID).map(localized))
     }
 
     private func llmSpeedTags(for repo: String) -> [String] {
-        var tags = [String]()
-        if repo.contains("1B") || repo.contains("1.5B") || repo.contains("2B") {
-            tags.append(localized("Fast"))
-        }
-        if repo.contains("8B") || repo.contains("9B") {
-            tags.append(localized("Accurate"))
-        }
-        return deduplicatedFeatureTags(tags)
+        deduplicatedFeatureTags(CustomLLMModelManager.catalogTagKeys(for: repo).map(localized))
     }
 
     private func remoteASRTags(
@@ -485,23 +478,7 @@ struct FeatureModelCatalogBuilder {
     }
 
     private func mlxSupportsMultilingual(_ repo: String) -> Bool {
-        let key = repo.lowercased()
-        if key.contains("parakeet") {
-            return false
-        }
-        if key.contains("qwen3-asr")
-            || key.contains("voxtral")
-            || key.contains("cohere")
-            || key.contains("sensevoice")
-            || key.contains("granite")
-            || key.contains("glm-asr")
-            || key.contains("firered") {
-            return true
-        }
-        guard let option = MLXModelManager.availableModels.first(where: { $0.id == repo }) else {
-            return false
-        }
-        return option.description.localizedCaseInsensitiveContains("multilingual")
+        MLXModelManager.isMultilingualModelRepo(repo)
     }
 
     private func primaryLanguageSupportTag(for selectionID: FeatureModelSelectionID) -> String? {

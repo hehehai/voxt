@@ -120,6 +120,7 @@ final class FeatureModelSelectorFilteringTests: XCTestCase {
             displayTags: filterTags,
             statusText: "",
             usageLocations: usageLocations,
+            badgeText: nil,
             isSelectable: true,
             disabledReason: nil
         )

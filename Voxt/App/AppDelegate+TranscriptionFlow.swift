@@ -17,12 +17,12 @@ extension AppDelegate {
 
     func processStandardTranscription(_ text: String, sessionID: UUID) {
         guard shouldHandleCallbacks(for: sessionID) else { return }
-        VoxtLog.info("Standard transcription flow entered. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)")
+        VoxtLog.info("Standard transcription flow entered. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
         switch enhancementMode {
         case .off:
             setEnhancingState(false)
             overlayState.transcribedText = text
-            VoxtLog.info("Standard transcription committing raw text immediately. characters=\(text.count)")
+            VoxtLog.info("Standard transcription committing raw text immediately. characters=\(text.count)", verbose: true)
             commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
                 self?.finishSession(after: 0)
             }
@@ -36,7 +36,7 @@ extension AppDelegate {
                 )
                 setEnhancingState(false)
                 overlayState.transcribedText = text
-                VoxtLog.info("Standard transcription falling back to raw text because custom model is unavailable. characters=\(text.count)")
+                VoxtLog.info("Standard transcription falling back to raw text because custom model is unavailable. characters=\(text.count)", verbose: true)
                 commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
                     self?.finishSession(after: 0)
                 }
@@ -59,9 +59,9 @@ extension AppDelegate {
             let llmStartedAt = Date()
             if let asrAt = self.transcriptionResultReceivedAt {
                 let handoffMs = Int(llmStartedAt.timeIntervalSince(asrAt) * 1000)
-                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=\(max(handoffMs, 0)), inputChars=\(text.count)")
+                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=\(max(handoffMs, 0)), inputChars=\(text.count)", verbose: true)
             } else {
-                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=unknown, inputChars=\(text.count)")
+                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=unknown, inputChars=\(text.count)", verbose: true)
             }
             do {
                 let enhanced = try await self.runStandardTranscriptionPipeline(text: text)

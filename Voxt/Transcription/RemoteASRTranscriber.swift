@@ -1349,7 +1349,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let requestID = UUID().uuidString.lowercased()
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
-        VoxtLog.info(
+        VoxtLog.model(
             "Doubao stream connect. endpoint=\(endpoint), resource=\(resourceID)"
         )
 

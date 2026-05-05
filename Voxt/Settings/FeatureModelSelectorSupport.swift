@@ -42,6 +42,7 @@ struct FeatureModelSelectorEntry: Identifiable {
     let displayTags: [String]
     let statusText: String
     let usageLocations: [String]
+    let badgeText: String?
     let isSelectable: Bool
     let disabledReason: String?
 

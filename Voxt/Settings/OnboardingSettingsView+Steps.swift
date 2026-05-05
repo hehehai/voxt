@@ -293,7 +293,7 @@ extension OnboardingSettingsView {
                                 rewriteCustomLLMRepo = newValue
                             }
                         ),
-                        options: CustomLLMModelManager.availableModels.map { model in
+                        options: CustomLLMModelManager.displayModels(including: customLLMRepo).map { model in
                             SettingsMenuOption(value: model.id, title: model.title)
                         },
                         selectedTitle: customLLMManager.displayTitle(for: customLLMRepo),
@@ -845,7 +845,7 @@ extension OnboardingSettingsView {
     }
 
     func customLLMDescription(for repo: String) -> String {
-        guard let description = CustomLLMModelManager.availableModels.first(where: { $0.id == repo })?.description else {
+        guard let description = customLLMManager.description(for: repo) else {
             return ""
         }
         return AppLocalization.localizedString(description)

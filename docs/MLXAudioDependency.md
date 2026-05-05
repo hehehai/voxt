@@ -6,7 +6,7 @@ The current Xcode package reference is:
 
 - URL: `https://github.com/hehehai/mlx-audio-swift.git`
 - Requirement: `revision`
-- Revision: `c96fe7b8577fb1db5a9987a6582e706acb388a8e`
+- Revision: `8ae0c745360b32c128c0ba6d4e46b27ee3214529`
 
 ## Version rules
 
@@ -42,5 +42,5 @@ If Voxt needs to consume a synced fork commit before a new tag exists, pin the p
 
 - Fork: `hehehai/mlx-audio-swift`
 - Requirement: `revision`
-- Commit: `c96fe7b8577fb1db5a9987a6582e706acb388a8e`
-- Notes: includes `Cohere Transcribe` support from fork `main`; replace with a new Voxt tag once one is cut
+- Commit: `8ae0c745360b32c128c0ba6d4e46b27ee3214529`
+- Notes: pinned to the current fork `main` tip while Voxt tracks upstream 3.x-compatible STT updates; replace with a new Voxt tag once one is cut

@@ -49,7 +49,7 @@ extension AppDelegate {
             )
         }
 
-        let downloadedCustomOptions: [MeetingSummaryModelOption] = CustomLLMModelManager.availableModels.compactMap { model -> MeetingSummaryModelOption? in
+        let downloadedCustomOptions: [MeetingSummaryModelOption] = CustomLLMModelManager.displayModels(including: customLLMManager.currentModelRepo).compactMap { model -> MeetingSummaryModelOption? in
             guard customLLMManager.isModelDownloaded(repo: model.id) else {
                 return nil
             }

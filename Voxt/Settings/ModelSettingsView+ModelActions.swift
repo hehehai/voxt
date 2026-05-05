@@ -118,7 +118,7 @@ extension ModelSettingsView {
     }
 
     var customLLMRows: [ModelTableRow] {
-        CustomLLMModelManager.availableModels.map { model in
+        CustomLLMModelManager.displayModels(including: customLLMRepo).map { model in
             let isDownloaded = customLLMManager.isModelDownloaded(repo: model.id)
             let actions = customLLMActions(for: model.id, isDownloaded: isDownloaded)
 
@@ -154,7 +154,18 @@ extension ModelSettingsView {
             .translationCustomLLM(repo),
             .rewriteCustomLLM(repo)
         ]
-        return missingConfigurationIssues.contains(where: { scopes.contains($0.scope) }) ? AppLocalization.localizedString("Needs Setup") : nil
+        if missingConfigurationIssues.contains(where: { scopes.contains($0.scope) }) {
+            return AppLocalization.localizedString("Needs Setup")
+        }
+
+        switch CustomLLMModelManager.releaseStatus(for: repo) {
+        case .deprecatedSoon:
+            return AppLocalization.localizedString("即将下线")
+        case .new:
+            return AppLocalization.localizedString("New")
+        case .standard:
+            return nil
+        }
     }
 
     private func whisperActions(for modelID: String, isDownloaded: Bool) -> [ModelTableAction] {
@@ -404,7 +415,7 @@ extension ModelSettingsView {
     }
 
     func isCurrentCustomLLM(_ repo: String) -> Bool {
-        repo == customLLMRepo
+        CustomLLMModelManager.canonicalModelRepo(repo) == CustomLLMModelManager.canonicalModelRepo(customLLMRepo)
     }
 
     func isDownloadingCustomLLM(_ repo: String) -> Bool {

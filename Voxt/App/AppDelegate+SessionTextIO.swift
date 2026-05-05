@@ -197,11 +197,12 @@ extension AppDelegate {
         let rewriteAnswerPayload = extractedRewriteAnswerPayload.map {
             RewriteAnswerPayload(title: $0.title, content: dictionaryCorrection.text)
         }
+        let uniqueDictionaryMatches = orderedUniqueDictionaryMatches(dictionaryCorrection.candidates)
 
         return SessionFinalizeContext(
             outputText: dictionaryCorrection.text,
             llmDurationSeconds: llmDurationSeconds,
-            dictionaryMatches: dictionaryCorrection.candidates,
+            dictionaryMatches: uniqueDictionaryMatches,
             dictionaryCorrectedTerms: dictionaryCorrection.correctedTerms,
             dictionarySuggestions: [],
             historyEntryID: nil,
@@ -216,6 +217,19 @@ extension AppDelegate {
             let normalized = DictionaryStore.normalizeTerm(value)
             guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
             ordered.append(value)
+        }
+        return ordered
+    }
+
+    nonisolated private static func orderedUniqueDictionaryMatches(
+        _ candidates: [DictionaryMatchCandidate]
+    ) -> [DictionaryMatchCandidate] {
+        var seen = Set<String>()
+        var ordered: [DictionaryMatchCandidate] = []
+        for candidate in candidates {
+            let normalized = DictionaryStore.normalizeTerm(candidate.term)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
+            ordered.append(candidate)
         }
         return ordered
     }

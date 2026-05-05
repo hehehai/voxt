@@ -29,7 +29,7 @@ enum ModelCatalogTag {
     static var groups: [[String]] {
         [
             [localized("Local"), localized("Remote")],
-            [localized("Fast"), localized("Accurate"), localized("Realtime")],
+            [localized("Fast"), localized("Balanced"), localized("Accurate"), localized("Realtime")],
             [localized("Installed"), localized("Configured"), localized("In Use")]
         ]
     }

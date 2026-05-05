@@ -46,6 +46,7 @@ struct FeatureModelSelectorGroupSection: Identifiable {
     let usageLocations: [String]
     let installedCount: Int
     let ratingText: String
+    let badgeText: String?
     let entries: [FeatureModelSelectorEntry]
     let defaultExpanded: Bool
 }
@@ -133,6 +134,7 @@ enum LocalModelSeriesGrouping {
                         usageLocations: orderedUsageLocations(from: groupEntries.flatMap { $0.usageLocations }),
                         installedCount: groupEntries.filter { $0.filterTags.contains(localized("Installed")) }.count,
                         ratingText: averageRatingText(from: groupEntries.map { $0.ratingText }),
+                        badgeText: groupEntries.compactMap { $0.badgeText }.first,
                         entries: groupEntries,
                         defaultExpanded: groupEntries.contains(where: {
                             $0.selectionID == selectedID || !$0.usageLocations.isEmpty
@@ -152,6 +154,7 @@ enum LocalModelSeriesGrouping {
             localized("Remote"),
             localized("Built-in"),
             localized("Fast"),
+            localized("Balanced"),
             localized("Accurate"),
             localized("Realtime"),
             localized("Supports Primary Language"),

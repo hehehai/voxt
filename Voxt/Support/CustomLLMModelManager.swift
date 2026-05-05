@@ -2,7 +2,60 @@ import Foundation
 import HuggingFace
 import Combine
 import MLX
+import MLXLLM
 import MLXLMCommon
+import Tokenizers
+
+private struct LocalTokenizerBridge: MLXLMCommon.Tokenizer {
+    private let upstream: any Tokenizers.Tokenizer
+
+    init(_ upstream: any Tokenizers.Tokenizer) {
+        self.upstream = upstream
+    }
+
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+    }
+
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+
+    func convertTokenToId(_ token: String) -> Int? {
+        upstream.convertTokenToId(token)
+    }
+
+    func convertIdToToken(_ id: Int) -> String? {
+        upstream.convertIdToToken(id)
+    }
+
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        do {
+            return try upstream.applyChatTemplate(
+                messages: messages,
+                tools: tools,
+                additionalContext: additionalContext
+            )
+        } catch Tokenizers.TokenizerError.missingChatTemplate {
+            throw MLXLMCommon.TokenizerError.missingChatTemplate
+        }
+    }
+}
+
+private struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let tokenizer = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
+        return LocalTokenizerBridge(tokenizer)
+    }
+}
 
 @MainActor
 class CustomLLMModelManager: ObservableObject {
@@ -52,6 +105,7 @@ class CustomLLMModelManager: ObservableObject {
 
     nonisolated static let defaultModelRepo = CustomLLMModelCatalog.defaultModelRepo
     nonisolated static let availableModels = CustomLLMModelCatalog.availableModels
+    nonisolated static let supportedModels = CustomLLMModelCatalog.supportedModels
 
     @Published private(set) var state: ModelState = .notDownloaded
     @Published private(set) var sizeState: ModelSizeState = .unknown
@@ -59,6 +113,7 @@ class CustomLLMModelManager: ObservableObject {
     @Published private(set) var pausedStatusMessage: String?
 
     private var downloadedStateByRepo: [String: Bool] = [:]
+    private var downloadedStateCachePrimed = false
     private var localSizeTextByRepo: [String: String] = [:]
     private var modelRepo: String
     private var hubBaseURL: URL
@@ -76,18 +131,17 @@ class CustomLLMModelManager: ObservableObject {
     private var activeInferenceCount = 0
 
     init(modelRepo: String, hubBaseURL: URL = URL(string: "https://huggingface.co")!) {
-        let repoSelection = CustomLLMRepoSelection.resolve(
-            requestedRepo: modelRepo,
-            supportedRepos: Self.availableModels.map(\.id),
-            fallbackRepo: Self.defaultModelRepo
-        )
+        let repoSelection = Self.resolveModelRepo(modelRepo)
+        let repoWasSupported = Self.isSupportedModelRepo(modelRepo)
         self.modelRepo = repoSelection.effectiveRepo
         self.hubBaseURL = hubBaseURL
         self.remoteSizeTextByRepo = CustomLLMModelStorageSupport.loadPersistedRemoteSizeCache()
-        if repoSelection.didFallback {
+        if !repoWasSupported {
             VoxtLog.warning("Unsupported custom LLM repo '\(modelRepo)' found in settings. Falling back to \(repoSelection.effectiveRepo).")
+        } else if repoSelection.effectiveRepo != modelRepo {
+            VoxtLog.info("Canonicalized custom LLM repo '\(modelRepo)' -> '\(repoSelection.effectiveRepo)'")
         }
-        VoxtLog.info("Custom LLM manager initialized. repo=\(repoSelection.effectiveRepo), hub=\(hubBaseURL.absoluteString)")
+        VoxtLog.model("Custom LLM manager initialized. repo=\(repoSelection.effectiveRepo), hub=\(hubBaseURL.absoluteString)")
         checkExistingModel()
     }
 
@@ -315,7 +369,20 @@ class CustomLLMModelManager: ObservableObject {
                 userInfo: [NSLocalizedDescriptionKey: "Invalid local model path."]
             )
         }
-        let container = try await loadModelContainer(directory: directory)
+        let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
+            ?? Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String
+        await CustomLLMModelDownloadSupport.repairMissingChatTemplateIfNeeded(
+            repo: repo,
+            directory: directory,
+            preferredBaseURL: hubBaseURL,
+            mirrorBaseURL: Self.mirrorHubBaseURL,
+            userAgent: Self.hubUserAgent,
+            token: token
+        )
+        let container = try await loadModelContainer(
+            from: directory,
+            using: LocalTokenizerLoader()
+        )
         inferenceContainer = container
         inferenceModelRepo = repo
         return container
@@ -325,21 +392,44 @@ class CustomLLMModelManager: ObservableObject {
         CustomLLMModelCatalog.displayTitle(for: repo)
     }
 
+    func description(for repo: String) -> String? {
+        CustomLLMModelCatalog.description(for: repo)
+    }
+
+    nonisolated static func ratingText(for repo: String) -> String {
+        CustomLLMModelCatalog.ratingText(for: repo)
+    }
+
+    nonisolated static func catalogTagKeys(for repo: String) -> [String] {
+        CustomLLMModelCatalog.catalogTagKeys(for: repo)
+    }
+
     nonisolated static func fallbackRemoteSizeText(repo: String) -> String? {
         CustomLLMModelCatalog.fallbackRemoteSizeText(repo: repo)
     }
 
+    nonisolated static func canonicalModelRepo(_ repo: String) -> String {
+        CustomLLMModelCatalog.canonicalModelRepo(repo)
+    }
+
+    nonisolated static func displayModels(including repo: String? = nil) -> [ModelOption] {
+        CustomLLMModelCatalog.displayModels(including: repo)
+    }
+
+    nonisolated static func releaseStatus(for repo: String) -> CustomLLMModelCatalog.ReleaseStatus {
+        CustomLLMModelCatalog.releaseStatus(for: repo)
+    }
+
     func updateModel(repo: String) {
-        let repoSelection = CustomLLMRepoSelection.resolve(
-            requestedRepo: repo,
-            supportedRepos: Self.availableModels.map(\.id),
-            fallbackRepo: Self.defaultModelRepo
-        )
+        let repoSelection = Self.resolveModelRepo(repo)
+        let repoWasSupported = Self.isSupportedModelRepo(repo)
         guard repoSelection.effectiveRepo != modelRepo else { return }
-        if repoSelection.didFallback {
+        if !repoWasSupported {
             VoxtLog.warning("Unsupported custom LLM repo '\(repo)' requested. Falling back to \(repoSelection.effectiveRepo).")
+        } else if repoSelection.effectiveRepo != repo {
+            VoxtLog.info("Canonicalized custom LLM repo '\(repo)' -> '\(repoSelection.effectiveRepo)'")
         }
-        VoxtLog.info("Custom LLM model changed: \(modelRepo) -> \(repoSelection.effectiveRepo)")
+            VoxtLog.model("Custom LLM model changed: \(modelRepo) -> \(repoSelection.effectiveRepo)")
         modelRepo = repoSelection.effectiveRepo
         releaseInferenceResources(resetActiveInferenceCount: true)
         lastLoggedModelPresence = nil
@@ -352,14 +442,28 @@ class CustomLLMModelManager: ObservableObject {
         CustomLLMModelCatalog.isSupportedModelRepo(repo)
     }
 
+    private nonisolated static func resolveModelRepo(_ requestedRepo: String) -> CustomLLMRepoSelection {
+        guard CustomLLMModelCatalog.isSupportedModelRepo(requestedRepo) else {
+            return CustomLLMRepoSelection(
+                requestedRepo: requestedRepo,
+                effectiveRepo: defaultModelRepo
+            )
+        }
+        return CustomLLMRepoSelection(
+            requestedRepo: requestedRepo,
+            effectiveRepo: CustomLLMModelCatalog.canonicalModelRepo(requestedRepo)
+        )
+    }
+
     func updateHubBaseURL(_ url: URL) {
         guard url != hubBaseURL else { return }
-        VoxtLog.info("Custom LLM hub base URL changed: \(hubBaseURL.absoluteString) -> \(url.absoluteString)")
+        VoxtLog.model("Custom LLM hub base URL changed: \(hubBaseURL.absoluteString) -> \(url.absoluteString)")
         hubBaseURL = url
         fetchRemoteSize()
     }
 
     func isModelDownloaded(repo: String) -> Bool {
+        primeDownloadedStateCacheIfNeeded()
         if let cached = downloadedStateByRepo[repo] {
             return cached
         }
@@ -382,6 +486,10 @@ class CustomLLMModelManager: ObservableObject {
         let text = CustomLLMModelStorageSupport.formatByteCount(Int64(size))
         localSizeTextByRepo[repo] = text
         return text
+    }
+
+    func cachedModelSizeText(repo: String) -> String? {
+        localSizeTextByRepo[repo]
     }
 
     func modelDirectoryURL(repo: String) -> URL? {
@@ -433,7 +541,7 @@ class CustomLLMModelManager: ObservableObject {
         state = isDownloaded ? .downloaded : .notDownloaded
         let downloaded = (state == .downloaded)
         if lastLoggedModelPresence?.repo != modelRepo || lastLoggedModelPresence?.downloaded != downloaded {
-            VoxtLog.info("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(downloaded)")
+            VoxtLog.model("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(downloaded)")
             lastLoggedModelPresence = (modelRepo, downloaded)
         }
     }
@@ -477,14 +585,15 @@ class CustomLLMModelManager: ObservableObject {
                     VoxtLog.error("Custom LLM download produced incomplete files: \(modelRepo)")
                     return
                 }
-                state = .downloaded
-                VoxtLog.info("Custom LLM download completed: \(modelRepo)")
+                invalidateLocalCache(for: modelRepo)
+                checkExistingModel()
+                VoxtLog.model("Custom LLM download completed: \(modelRepo)")
             } catch is CancellationError {
                 cancelDownloadProgressTask()
                 switch downloadStopAction {
                 case .pause:
                     pausedStatusMessage = nil
-                    VoxtLog.info("Custom LLM download paused: \(modelRepo)")
+                    VoxtLog.model("Custom LLM download paused: \(modelRepo)")
                 case .cancel, .none:
                     pausedStatusMessage = nil
                     if let modelDir = cacheDirectory(for: modelRepo) {
@@ -530,7 +639,7 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func cancelDownload() {
-        VoxtLog.info("Custom LLM download cancellation requested: \(modelRepo)")
+        VoxtLog.model("Custom LLM download cancellation requested: \(modelRepo)")
         if downloadTask != nil {
             downloadStopAction = .cancel
             pausedStatusMessage = nil
@@ -547,7 +656,7 @@ class CustomLLMModelManager: ObservableObject {
         }
         invalidateLocalCache(for: modelRepo)
         state = .notDownloaded
-        VoxtLog.info("Custom LLM download cancelled from paused state: \(modelRepo)")
+        VoxtLog.model("Custom LLM download cancelled from paused state: \(modelRepo)")
     }
 
     private func cancelDownloadProgressTask() {
@@ -586,7 +695,7 @@ class CustomLLMModelManager: ObservableObject {
             userAgent: Self.hubUserAgent,
             token: token
         )
-        VoxtLog.info("Custom LLM download started: repo=\(context.repoID.description), files=\(context.entries.count), baseURL=\(baseURL.absoluteString)")
+        VoxtLog.model("Custom LLM download started: repo=\(context.repoID.description), files=\(context.entries.count), baseURL=\(baseURL.absoluteString)")
 
         let totalBytes = context.totalBytes
         let totalFiles = context.entries.count
@@ -755,6 +864,22 @@ class CustomLLMModelManager: ObservableObject {
     private func invalidateLocalCache(for repo: String) {
         downloadedStateByRepo.removeValue(forKey: repo)
         localSizeTextByRepo.removeValue(forKey: repo)
+    }
+
+    private func primeDownloadedStateCacheIfNeeded() {
+        guard !downloadedStateCachePrimed else { return }
+        downloadedStateCachePrimed = true
+
+        for model in Self.supportedModels {
+            let canonicalRepo = Self.canonicalModelRepo(model.id)
+            guard downloadedStateByRepo[canonicalRepo] == nil else { continue }
+            guard let modelDir = cacheDirectory(for: canonicalRepo),
+                  FileManager.default.fileExists(atPath: modelDir.path) else {
+                downloadedStateByRepo[canonicalRepo] = false
+                continue
+            }
+            downloadedStateByRepo[canonicalRepo] = CustomLLMModelStorageSupport.isModelDirectoryValid(modelDir)
+        }
     }
 
     private func fetchRemoteSize() {

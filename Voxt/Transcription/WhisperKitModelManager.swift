@@ -68,6 +68,7 @@ final class WhisperKitModelManager: ObservableObject {
 
     private var downloadedStateByID: [String: Bool] = [:]
     private var directoryLookupCacheByID: [String: DirectoryLookupCache] = [:]
+    private var directoryLookupCachePrimed = false
     private var localSizeTextByID: [String: String] = [:]
     private var modelID: String
     private var hubBaseURL: URL
@@ -105,6 +106,14 @@ final class WhisperKitModelManager: ObservableObject {
 
     nonisolated static func fallbackRemoteSizeText(id: String) -> String? {
         WhisperKitModelCatalog.fallbackRemoteSizeText(id: id)
+    }
+
+    nonisolated static func ratingText(for id: String) -> String {
+        WhisperKitModelCatalog.ratingText(for: id)
+    }
+
+    nonisolated static func catalogTagKeys(for id: String) -> [String] {
+        WhisperKitModelCatalog.catalogTagKeys(for: id)
     }
 
     func updateModel(id: String) {
@@ -389,6 +398,7 @@ final class WhisperKitModelManager: ObservableObject {
 
     func isModelDownloaded(id: String) -> Bool {
         let canonicalModelID = Self.canonicalModelID(id)
+        primeDirectoryLookupCacheIfNeeded()
         if let cached = downloadedStateByID[canonicalModelID] {
             return cached
         }
@@ -407,6 +417,7 @@ final class WhisperKitModelManager: ObservableObject {
 
     private func firstModelDirectoryURL(id: String, requireValid: Bool) -> URL? {
         let canonicalModelID = Self.canonicalModelID(id)
+        primeDirectoryLookupCacheIfNeeded()
         if let cached = directoryLookupCacheByID[canonicalModelID] {
             return requireValid ? cached.validURL : (cached.rawURL ?? cached.validURL)
         }
@@ -434,6 +445,45 @@ final class WhisperKitModelManager: ObservableObject {
         directoryLookupCacheByID[canonicalModelID] = DirectoryLookupCache(validURL: nil, rawURL: nil)
         downloadedStateByID[canonicalModelID] = false
         return nil
+    }
+
+    private func primeDirectoryLookupCacheIfNeeded() {
+        guard !directoryLookupCachePrimed else { return }
+        directoryLookupCachePrimed = true
+
+        let expectedModelIDs = Set(Self.availableModels.map { Self.canonicalModelID($0.id) })
+        guard let enumerator = FileManager.default.enumerator(
+            at: downloadRootURL(),
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            for modelID in expectedModelIDs {
+                downloadedStateByID[modelID] = false
+                directoryLookupCacheByID[modelID] = DirectoryLookupCache(validURL: nil, rawURL: nil)
+            }
+            return
+        }
+
+        for case let fileURL as URL in enumerator {
+            let folderName = fileURL.lastPathComponent
+            guard folderName.hasPrefix("openai_whisper-") else { continue }
+            let rawModelID = String(folderName.dropFirst("openai_whisper-".count))
+            let canonicalModelID = Self.canonicalModelID(rawModelID)
+            guard expectedModelIDs.contains(canonicalModelID) else { continue }
+            guard directoryLookupCacheByID[canonicalModelID] == nil else { continue }
+
+            let isValid = WhisperModelArtifacts.isValidModelDirectory(fileURL)
+            directoryLookupCacheByID[canonicalModelID] = DirectoryLookupCache(
+                validURL: isValid ? fileURL : nil,
+                rawURL: fileURL
+            )
+            downloadedStateByID[canonicalModelID] = isValid
+        }
+
+        for modelID in expectedModelIDs where directoryLookupCacheByID[modelID] == nil {
+            downloadedStateByID[modelID] = false
+            directoryLookupCacheByID[modelID] = DirectoryLookupCache(validURL: nil, rawURL: nil)
+        }
     }
 
     private func removeModelDirectoryIfPresent(id: String) {
@@ -485,6 +535,11 @@ final class WhisperKitModelManager: ObservableObject {
         let text = WhisperKitModelStorageSupport.formatByteCount(Int64(size))
         localSizeTextByID[canonicalModelID] = text
         return text
+    }
+
+    func cachedModelSizeText(id: String) -> String? {
+        let canonicalModelID = Self.canonicalModelID(id)
+        return localSizeTextByID[canonicalModelID]
     }
 
     func remoteSizeText(id: String) -> String {

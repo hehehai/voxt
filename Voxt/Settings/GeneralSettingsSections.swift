@@ -392,8 +392,8 @@ struct GeneralLoggingCard: View {
             )
 
             GeneralToggleRow(
-                title: "Enable LLM debug logs",
-                description: "Records local and remote LLM request details to help inspect model calls and responses.",
+                title: "Enable model debug logs",
+                description: "Records local and remote model details, including LLM, ASR, model downloads, and model routing, for debugging.",
                 isOn: $llmDebugLoggingEnabled
             )
         }

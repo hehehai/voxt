@@ -115,7 +115,7 @@ final class SettingsTypesTests: XCTestCase {
         XCTAssertTrue(prompt.contains("MU5735"))
         XCTAssertNil(
             prompt.range(
-                of: #"[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}]"#,
+                of: #"[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]"#,
                 options: .regularExpression
             )
         )

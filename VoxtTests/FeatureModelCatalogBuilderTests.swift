@@ -148,6 +148,54 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
+    func testLLMSelectorUsesCuratedRatingAndTags() throws {
+        let repo = "mlx-community/MiniCPM4-8B-4bit"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(translationModel: .localLLM(repo))
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .translationModel)
+                .first(where: { $0.selectionID == .localLLM(repo) })
+        )
+
+        XCTAssertEqual(entry.ratingText, "4.8")
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
+        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+    }
+
+    func testMLXSelectorUsesCuratedRatingAndTags() throws {
+        let repo = "mlx-community/GLM-ASR-Nano-2512-4bit"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo))
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .transcriptionASR)
+                .first(where: { $0.selectionID == .mlx(repo) })
+        )
+
+        XCTAssertEqual(entry.ratingText, "4.1")
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
+    }
+
+    func testWhisperSelectorUsesCuratedRatingAndTags() throws {
+        let modelID = "medium"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .whisper(modelID))
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .transcriptionASR)
+                .first(where: { $0.selectionID == .whisper(modelID) })
+        )
+
+        XCTAssertEqual(entry.ratingText, "4.7")
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
+        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+    }
+
     private func makeBuilder(
         featureSettings: FeatureSettings,
         remoteASRConfigurationsRaw: String = "",

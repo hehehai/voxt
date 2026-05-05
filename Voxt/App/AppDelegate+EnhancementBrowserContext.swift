@@ -10,17 +10,22 @@ extension AppDelegate {
 
     func activeBrowserTabURL(frontmostBundleID: String?) -> String? {
         guard let frontmostBundleID else { return nil }
+        if let deniedUntil = browserAutomationDeniedUntilByBundleID[frontmostBundleID],
+           deniedUntil > Date() {
+            return nil
+        }
         guard NSRunningApplication.runningApplications(withBundleIdentifier: frontmostBundleID)
             .contains(where: { !$0.isTerminated }) else {
-            VoxtLog.info("Browser process not running while resolving active tab URL. bundleID=\(frontmostBundleID)")
+            VoxtLog.model("Browser process not running while resolving active tab URL. bundleID=\(frontmostBundleID)")
             return nil
         }
         guard let provider = browserScriptProvider(for: frontmostBundleID) else { return nil }
         if let scriptedURL = runAppleScriptCandidates(provider.scripts, providerName: provider.name) {
+            browserAutomationDeniedUntilByBundleID.removeValue(forKey: frontmostBundleID)
             return scriptedURL
         }
         if let axURL = activeBrowserTabURLFromAccessibility(frontmostBundleID: frontmostBundleID) {
-            VoxtLog.info("Browser active-tab URL read succeeded via AX fallback. provider=\(provider.name)")
+            VoxtLog.model("Browser active-tab URL read succeeded via AX fallback. provider=\(provider.name)")
             return axURL
         }
         return nil
@@ -129,28 +134,35 @@ extension AppDelegate {
                !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
                 if index > 0 {
-                    VoxtLog.info("Browser active-tab URL read succeeded via fallback. provider=\(providerName), candidate=\(index + 1), elapsedMs=\(elapsedMs)")
+                    VoxtLog.model("Browser active-tab URL read succeeded via fallback. provider=\(providerName), candidate=\(index + 1), elapsedMs=\(elapsedMs)")
                 }
                 return output
             }
             if let executionError {
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-                VoxtLog.info(
+                VoxtLog.model(
                     "Browser active-tab URL candidate failed. provider=\(providerName), candidate=\(index + 1), elapsedMs=\(elapsedMs), error=\(executionError)"
                 )
                 lastError = executionError
-                if let errorNumber = executionError["NSAppleScriptErrorNumber"] as? Int, errorNumber == -600 {
-                    break
+                if let errorNumber = executionError["NSAppleScriptErrorNumber"] as? Int {
+                    if errorNumber == -1743 || errorNumber == -10004 {
+                        if let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
+                            browserAutomationDeniedUntilByBundleID[frontmostBundleID] = Date().addingTimeInterval(300)
+                        }
+                    }
+                    if errorNumber == -600 {
+                        break
+                    }
                 }
             } else {
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-                VoxtLog.info(
+                VoxtLog.model(
                     "Browser active-tab URL candidate returned empty/timed out. provider=\(providerName), candidate=\(index + 1), elapsedMs=\(elapsedMs)"
                 )
             }
         }
         if let lastError {
-            VoxtLog.info("Browser active-tab URL read failed. provider=\(providerName), error=\(lastError)")
+            VoxtLog.model("Browser active-tab URL read failed. provider=\(providerName), error=\(lastError)")
         }
         return nil
     }
@@ -176,7 +188,7 @@ extension AppDelegate {
         guard let script = NSAppleScript(source: wrappedSource) else { return nil }
         guard let output = script.executeAndReturnError(&error).stringValue else {
             if logFailure, let error {
-                VoxtLog.info("Browser active-tab URL read failed: \(error)")
+                VoxtLog.model("Browser active-tab URL read failed: \(error)")
             }
             return nil
         }
@@ -185,13 +197,13 @@ extension AppDelegate {
 
     func activeBrowserTabURLFromAccessibility(frontmostBundleID: String) -> String? {
         guard AccessibilityPermissionManager.isTrusted() else {
-            VoxtLog.info("Browser active-tab AX fallback unavailable: accessibility not trusted")
+            VoxtLog.model("Browser active-tab AX fallback unavailable: accessibility not trusted")
             return nil
         }
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.bundleIdentifier == frontmostBundleID
         else {
-            VoxtLog.info("Browser active-tab AX fallback skipped: frontmost app changed")
+            VoxtLog.model("Browser active-tab AX fallback skipped: frontmost app changed")
             return nil
         }
 
@@ -207,7 +219,7 @@ extension AppDelegate {
            let url = axDocumentURL(from: focusedWindow) {
             return url
         } else if focusedStatus != .success {
-            VoxtLog.info("Browser active-tab AX fallback focused window unavailable: status=\(focusedStatus.rawValue)")
+            VoxtLog.model("Browser active-tab AX fallback focused window unavailable: status=\(focusedStatus.rawValue)")
         }
 
         var mainWindowValue: CFTypeRef?
@@ -220,7 +232,7 @@ extension AppDelegate {
            let mainWindow = mainWindowValue {
             return axDocumentURL(from: mainWindow)
         }
-        VoxtLog.info("Browser active-tab AX fallback main window unavailable: status=\(mainStatus.rawValue)")
+        VoxtLog.model("Browser active-tab AX fallback main window unavailable: status=\(mainStatus.rawValue)")
         return nil
     }
 
@@ -234,7 +246,7 @@ extension AppDelegate {
             &documentValue
         )
         guard status == .success, let documentValue else {
-            VoxtLog.info("Browser active-tab AX fallback document attribute unavailable: status=\(status.rawValue)")
+            VoxtLog.model("Browser active-tab AX fallback document attribute unavailable: status=\(status.rawValue)")
             return nil
         }
         return documentValue as? String

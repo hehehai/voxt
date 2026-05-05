@@ -28,6 +28,11 @@ enum VoxtLog {
         log(message(), level: .info)
     }
 
+    static func model(_ message: @autoclosure () -> String) {
+        guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
+        log(message(), level: .info)
+    }
+
     static func llmPreview(_ text: String, limit: Int = 1200) -> String {
         let normalized = text
             .replacingOccurrences(of: "\r\n", with: "\n")

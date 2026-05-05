@@ -324,7 +324,7 @@ extension AppDelegate {
 
         VoxtLog.info("Transcription result received. characters=\(text.count), output=\(sessionOutputMode == .translation ? "translation" : "transcription")")
         VoxtLog.info("Transcription result output mode resolved as \(RecordingSessionSupport.outputLabel(for: sessionOutputMode)).", verbose: true)
-        VoxtLog.info(
+        VoxtLog.model(
             "Session text model routing: \(RecordingSessionSupport.textModelRoutingDescription(outputMode: sessionOutputMode, transcriptionSettings: transcriptionFeatureSettings, translationSettings: translationFeatureSettings, rewriteSettings: rewriteFeatureSettings))"
         )
 
@@ -349,7 +349,7 @@ extension AppDelegate {
             return
         }
 
-        VoxtLog.info("Transcription flow dispatch: standard. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)")
+        VoxtLog.info("Transcription flow dispatch: standard. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
         processStandardTranscription(text, sessionID: sessionID)
     }
 
@@ -362,7 +362,7 @@ extension AppDelegate {
 
         let resolvedDelay = delay ?? sessionFinishDelay
         let finishingSessionID = activeRecordingSessionID
-        VoxtLog.info("Finish session scheduled. delayMs=\(Int(resolvedDelay * 1000)), displayMode=\(overlayState.displayMode), isRecording=\(overlayState.isRecording), isEnhancing=\(overlayState.isEnhancing), isRequesting=\(overlayState.isRequesting)")
+        VoxtLog.info("Finish session scheduled. delayMs=\(Int(resolvedDelay * 1000)), displayMode=\(overlayState.displayMode), isRecording=\(overlayState.isRecording), isEnhancing=\(overlayState.isEnhancing), isRequesting=\(overlayState.isRequesting)", verbose: true)
         overlayState.isCompleting = resolvedDelay > 0
         if overlayState.displayMode != .answer {
             overlayState.isEnhancing = false
@@ -386,7 +386,7 @@ extension AppDelegate {
                 )
                 return
             }
-            VoxtLog.info("Finish session executing now. displayMode=\(self.overlayState.displayMode)")
+            VoxtLog.info("Finish session executing now. displayMode=\(self.overlayState.displayMode)", verbose: true)
             self.executeSessionEndPipeline(for: finishingSessionID, trigger: "finish")
         }
     }

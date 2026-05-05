@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import CFNetwork
 import MLX
+import MLXAudioCore
 import MLXAudioSTT
 import HuggingFace
 
@@ -72,6 +73,7 @@ class MLXModelManager: ObservableObject {
     @Published private(set) var pausedStatusMessage: String?
 
     private var downloadedStateByRepo: [String: Bool] = [:]
+    private var downloadedStateCachePrimed = false
     private var localSizeTextByRepo: [String: String] = [:]
     private var modelRepo: String
     private var hubBaseURL: URL
@@ -107,8 +109,21 @@ class MLXModelManager: ObservableObject {
         MLXModelCatalog.fallbackRemoteSizeText(repo: repo)
     }
 
+    nonisolated static func ratingText(for repo: String) -> String {
+        MLXModelCatalog.ratingText(for: repo)
+    }
+
+    nonisolated static func catalogTagKeys(for repo: String) -> [String] {
+        MLXModelCatalog.catalogTagKeys(for: repo)
+    }
+
+    nonisolated static func isMultilingualModelRepo(_ repo: String) -> Bool {
+        MLXModelCatalog.isMultilingualModelRepo(repo)
+    }
+
     func isModelDownloaded(repo: String) -> Bool {
         let canonicalRepo = Self.canonicalModelRepo(repo)
+        primeDownloadedStateCacheIfNeeded()
         if let cached = downloadedStateByRepo[canonicalRepo] {
             return cached
         }
@@ -134,6 +149,11 @@ class MLXModelManager: ObservableObject {
         return text
     }
 
+    func cachedModelSizeText(repo: String) -> String? {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        return localSizeTextByRepo[canonicalRepo]
+    }
+
     func modelDirectoryURL(repo: String) -> URL? {
         let canonicalRepo = Self.canonicalModelRepo(repo)
         guard let modelDir = cacheDirectory(for: canonicalRepo),
@@ -153,7 +173,10 @@ class MLXModelManager: ObservableObject {
         }
 
         if let repoID = Repo.ID(rawValue: canonicalRepo) {
-            MLXModelStorageSupport.clearHubCache(for: repoID)
+            MLXModelStorageSupport.clearHubCache(
+                for: repoID,
+                rootDirectory: ModelStorageDirectoryManager.resolvedRootURL()
+            )
         }
         if let modelDir = cacheDirectory(for: canonicalRepo) {
             do {
@@ -445,6 +468,25 @@ class MLXModelManager: ObservableObject {
         localSizeTextByRepo.removeValue(forKey: repo)
     }
 
+    private func primeDownloadedStateCacheIfNeeded() {
+        guard !downloadedStateCachePrimed else { return }
+        downloadedStateCachePrimed = true
+
+        for model in Self.availableModels {
+            let canonicalRepo = Self.canonicalModelRepo(model.id)
+            guard downloadedStateByRepo[canonicalRepo] == nil else { continue }
+            guard let modelDir = cacheDirectory(for: canonicalRepo),
+                  FileManager.default.fileExists(atPath: modelDir.path) else {
+                downloadedStateByRepo[canonicalRepo] = false
+                continue
+            }
+            downloadedStateByRepo[canonicalRepo] = MLXModelDownloadSupport.isModelDirectoryValid(
+                modelDir,
+                fileManager: .default
+            )
+        }
+    }
+
     private func readyModel(for repo: String) throws -> any STTGenerationModel {
         guard let model = loadedModel, loadedRepo == repo else {
             throw NSError(
@@ -458,6 +500,7 @@ class MLXModelManager: ObservableObject {
 
     private static func loadSTTModel(for repo: String) async throws -> any STTGenerationModel {
         let lower = repo.lowercased()
+        let cache = activeHubCache()
         if lower.contains("forcedaligner") {
             throw NSError(
                 domain: "MLXModelManager",
@@ -466,31 +509,70 @@ class MLXModelManager: ObservableObject {
             )
         }
         if lower.contains("glmasr") || lower.contains("glm-asr") {
-            return try await GLMASRModel.fromPretrained(repo)
+            return try await GLMASRModel.fromPretrained(repo, cache: cache)
         }
         if lower.contains("firered") {
-            return try await FireRedASR2Model.fromPretrained(repo)
+            return try await FireRedASR2Model.fromPretrained(repo, cache: cache)
         }
         if lower.contains("sensevoice") {
-            return try await SenseVoiceModel.fromPretrained(repo)
+            return try await SenseVoiceModel.fromPretrained(repo, cache: cache)
         }
         if lower.contains("qwen3-asr") || lower.contains("qwen3_asr") {
-            return try await Qwen3ASRModel.fromPretrained(repo)
+            return try await Qwen3ASRModel.fromPretrained(repo, cache: cache)
         }
         if lower.contains("voxtral") {
-            return try await VoxtralRealtimeModel.fromPretrained(repo)
+            return try await loadVoxtralModel(repo: repo, cache: cache)
         }
         if lower.contains("cohere") {
-            return try await CohereTranscribeModel.fromPretrained(repo)
+            return try await loadCohereModel(repo: repo, cache: cache)
         }
         if lower.contains("parakeet") {
-            return try await ParakeetModel.fromPretrained(repo)
+            return try await ParakeetModel.fromPretrained(repo, cache: cache)
         }
         if lower.contains("granite") {
-            return try await GraniteSpeechModel.fromPretrained(repo)
+            return try await GraniteSpeechModel.fromPretrained(repo, cache: cache)
         }
 
-        return try await Qwen3ASRModel.fromPretrained(repo)
+        return try await Qwen3ASRModel.fromPretrained(repo, cache: cache)
+    }
+
+    private static func loadVoxtralModel(repo: String, cache: HubCache) async throws -> VoxtralRealtimeModel {
+        guard let repoID = Repo.ID(rawValue: repo) else {
+            throw NSError(
+                domain: "MLXModelManager",
+                code: 1002,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(repo)"]
+            )
+        }
+
+        let modelDir = try await ModelUtils.resolveOrDownloadModel(
+            repoID: repoID,
+            requiredExtension: "safetensors",
+            cache: cache
+        )
+        return try VoxtralRealtimeModel.fromDirectory(modelDir)
+    }
+
+    private static func loadCohereModel(repo: String, cache: HubCache) async throws -> CohereTranscribeModel {
+        guard let repoID = Repo.ID(rawValue: repo) else {
+            throw NSError(
+                domain: "MLXModelManager",
+                code: 1003,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(repo)"]
+            )
+        }
+
+        let modelDir = try await ModelUtils.resolveOrDownloadModel(
+            repoID: repoID,
+            requiredExtension: "safetensors",
+            additionalMatchingPatterns: ["*.model"],
+            cache: cache
+        )
+        return try CohereTranscribeModel.fromDirectory(modelDir)
+    }
+
+    static func activeHubCache() -> HubCache {
+        MLXModelStorageSupport.hubCache(rootDirectory: ModelStorageDirectoryManager.resolvedRootURL())
     }
 
     private func cacheDirectory(for repo: String) -> URL? {
@@ -1058,7 +1140,10 @@ class MLXModelManager: ObservableObject {
 
     private func clearCurrentRepoHubCache() {
         guard let repoID = Repo.ID(rawValue: modelRepo) else { return }
-        MLXModelStorageSupport.clearHubCache(for: repoID)
+        MLXModelStorageSupport.clearHubCache(
+            for: repoID,
+            rootDirectory: ModelStorageDirectoryManager.resolvedRootURL()
+        )
     }
 }
 

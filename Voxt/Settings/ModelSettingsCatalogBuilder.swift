@@ -129,8 +129,10 @@ struct ModelCatalogBuilder {
                 id: "mlx:\(repo)",
                 title: mlxModelManager.displayTitle(for: repo),
                 engine: localized("MLX Audio"),
-                sizeText: isInstalled ? mlxModelManager.modelSizeOnDisk(repo: repo) : mlxModelManager.remoteSizeText(repo: repo),
-                ratingText: repo.contains("1.7B") || repo.contains("FireRed") || repo.localizedCaseInsensitiveContains("cohere") ? "4.8" : "4.3",
+                sizeText: isInstalled
+                    ? (mlxModelManager.cachedModelSizeText(repo: repo) ?? mlxModelManager.remoteSizeText(repo: repo))
+                    : mlxModelManager.remoteSizeText(repo: repo),
+                ratingText: MLXModelManager.ratingText(for: repo),
                 filterTags: catalogFilterTags(
                     base: [localized("Local")] + mlxCatalogTags(for: repo),
                     installed: isInstalled,
@@ -207,8 +209,10 @@ struct ModelCatalogBuilder {
                 id: "whisper:\(modelID)",
                 title: whisperModelManager.displayTitle(for: modelID),
                 engine: localized("Whisper"),
-                sizeText: isInstalled ? whisperModelManager.modelSizeOnDisk(id: modelID) : whisperModelManager.remoteSizeText(id: modelID),
-                ratingText: modelID == "large-v3" ? "4.9" : (modelID == "medium" ? "4.7" : "4.2"),
+                sizeText: isInstalled
+                    ? (whisperModelManager.cachedModelSizeText(id: modelID) ?? whisperModelManager.remoteSizeText(id: modelID))
+                    : whisperModelManager.remoteSizeText(id: modelID),
+                ratingText: WhisperKitModelManager.ratingText(for: modelID),
                 filterTags: catalogFilterTags(
                     base: [localized("Local")] + whisperCatalogTags(for: modelID),
                     installed: isInstalled,
@@ -330,8 +334,10 @@ struct ModelCatalogBuilder {
                 id: "local-llm:\(repo)",
                 title: customLLMManager.displayTitle(for: repo),
                 engine: localized("Local LLM"),
-                sizeText: isInstalled ? customLLMManager.modelSizeOnDisk(repo: repo) : customLLMManager.remoteSizeText(repo: repo),
-                ratingText: repo.contains("8B") || repo.contains("9B") ? "4.8" : "4.3",
+                sizeText: isInstalled
+                    ? (customLLMManager.cachedModelSizeText(repo: repo) ?? customLLMManager.remoteSizeText(repo: repo))
+                    : customLLMManager.remoteSizeText(repo: repo),
+                ratingText: CustomLLMModelManager.ratingText(for: repo),
                 filterTags: catalogFilterTags(
                     base: [localized("Local")] + llmCatalogTags(for: repo),
                     installed: isInstalled,
@@ -456,45 +462,15 @@ struct ModelCatalogBuilder {
     }
 
     private func mlxCatalogTags(for repo: String) -> [String] {
-        var tags = [String]()
-        if mlxSupportsMultilingual(repo) {
-            tags.append(localized("Multilingual"))
-        }
-        if MLXModelManager.isRealtimeCapableModelRepo(repo) {
-            tags.append(contentsOf: [localized("Realtime"), localized("Fast")])
-            return deduplicatedTags(tags)
-        }
-        if repo.contains("0.6B") || repo.contains("Nano") {
-            tags.append(localized("Fast"))
-        }
-        if repo.contains("1.7B") || repo.contains("FireRed") || repo.localizedCaseInsensitiveContains("cohere") {
-            tags.append(localized("Accurate"))
-        }
-        return deduplicatedTags(tags)
+        deduplicatedTags(MLXModelManager.catalogTagKeys(for: repo).map(localized))
     }
 
     private func whisperCatalogTags(for modelID: String) -> [String] {
-        var tags = [localized("Multilingual")]
-        switch modelID {
-        case "tiny", "base":
-            tags.append(localized("Fast"))
-        case "medium", "large-v3":
-            tags.append(localized("Accurate"))
-        default:
-            break
-        }
-        return deduplicatedTags(tags)
+        deduplicatedTags(WhisperKitModelManager.catalogTagKeys(for: modelID).map(localized))
     }
 
     private func llmCatalogTags(for repo: String) -> [String] {
-        var tags = [String]()
-        if repo.contains("1B") || repo.contains("1.5B") || repo.contains("2B") {
-            tags.append(localized("Fast"))
-        }
-        if repo.contains("8B") || repo.contains("9B") {
-            tags.append(localized("Accurate"))
-        }
-        return deduplicatedTags(tags)
+        deduplicatedTags(CustomLLMModelManager.catalogTagKeys(for: repo).map(localized))
     }
 
     private func remoteASRCatalogTags(
@@ -528,23 +504,7 @@ struct ModelCatalogBuilder {
     }
 
     private func mlxSupportsMultilingual(_ repo: String) -> Bool {
-        let key = repo.lowercased()
-        if key.contains("parakeet") {
-            return false
-        }
-        if key.contains("qwen3-asr")
-            || key.contains("voxtral")
-            || key.contains("cohere")
-            || key.contains("sensevoice")
-            || key.contains("granite")
-            || key.contains("glm-asr")
-            || key.contains("firered") {
-            return true
-        }
-        guard let option = MLXModelManager.availableModels.first(where: { MLXModelManager.canonicalModelRepo($0.id) == repo }) else {
-            return false
-        }
-        return option.description.localizedCaseInsensitiveContains("multilingual")
+        MLXModelManager.isMultilingualModelRepo(repo)
     }
 
     private func primaryLanguageSupportTag(for selectionID: FeatureModelSelectionID) -> String? {

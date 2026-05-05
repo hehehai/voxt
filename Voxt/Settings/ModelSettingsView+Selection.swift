@@ -1,6 +1,15 @@
 import SwiftUI
 
 extension ModelSettingsView {
+    private func installedCustomLLMOptions(including currentRepo: String) -> [TranslationModelOption] {
+        CustomLLMModelManager.displayModels(including: currentRepo).compactMap { model in
+            guard customLLMManager.isModelDownloaded(repo: model.id) else {
+                return nil
+            }
+            return TranslationModelOption(id: model.id, title: model.title)
+        }
+    }
+
     var whisperModelSelectionBinding: Binding<String> {
         Binding(
             get: {
@@ -31,12 +40,7 @@ extension ModelSettingsView {
     }
 
     var installedCustomLLMOptions: [TranslationModelOption] {
-        CustomLLMModelManager.availableModels.compactMap { model in
-            guard customLLMManager.isModelDownloaded(repo: model.id) else {
-                return nil
-            }
-            return TranslationModelOption(id: model.id, title: model.title)
-        }
+        installedCustomLLMOptions(including: customLLMRepo)
     }
 
     var configuredRemoteLLMOptions: [TranslationModelOption] {
@@ -59,7 +63,7 @@ extension ModelSettingsView {
         case .remoteLLM:
             return configuredRemoteLLMOptions
         case .customLLM:
-            return installedCustomLLMOptions
+            return installedCustomLLMOptions(including: translationCustomLLMRepo)
         case .whisperKit:
             return []
         }
@@ -70,7 +74,7 @@ extension ModelSettingsView {
         case .remoteLLM:
             return configuredRemoteLLMOptions
         case .customLLM:
-            return installedCustomLLMOptions
+            return installedCustomLLMOptions(including: rewriteCustomLLMRepo)
         }
     }
 
@@ -92,12 +96,17 @@ extension ModelSettingsView {
 
     var resolvedTranslationSelection: String {
         let options = translationModelOptions
+        let rawSelection = currentTranslationSelectionRaw
+        let canonicalSelection = CustomLLMModelManager.canonicalModelRepo(rawSelection)
         guard !options.isEmpty else {
-            return currentTranslationSelectionRaw
+            return selectedTranslationModelProvider == .customLLM ? canonicalSelection : rawSelection
         }
 
-        if options.contains(where: { $0.id == currentTranslationSelectionRaw }) {
-            return currentTranslationSelectionRaw
+        let selectionToMatch = selectedTranslationModelProvider == .customLLM
+            ? canonicalSelection
+            : rawSelection
+        if options.contains(where: { $0.id == selectionToMatch }) {
+            return selectionToMatch
         }
         return options[0].id
     }
@@ -118,12 +127,17 @@ extension ModelSettingsView {
 
     var resolvedRewriteSelection: String {
         let options = rewriteModelOptions
+        let rawSelection = currentRewriteSelectionRaw
+        let canonicalSelection = CustomLLMModelManager.canonicalModelRepo(rawSelection)
         guard !options.isEmpty else {
-            return currentRewriteSelectionRaw
+            return selectedRewriteModelProvider == .customLLM ? canonicalSelection : rawSelection
         }
 
-        if options.contains(where: { $0.id == currentRewriteSelectionRaw }) {
-            return currentRewriteSelectionRaw
+        let selectionToMatch = selectedRewriteModelProvider == .customLLM
+            ? canonicalSelection
+            : rawSelection
+        if options.contains(where: { $0.id == selectionToMatch }) {
+            return selectionToMatch
         }
         return options[0].id
     }
@@ -227,12 +241,9 @@ extension ModelSettingsView {
                 translationRemoteLLMProviderRaw = first.id
             }
         case .customLLM:
-            let options = installedCustomLLMOptions
-            if let first = options.first {
-                if !options.contains(where: { $0.id == translationCustomLLMRepo }) {
-                    translationCustomLLMRepo = first.id
-                }
-            } else {
+            if translationCustomLLMRepo.isEmpty {
+                translationCustomLLMRepo = customLLMRepo
+            } else if !CustomLLMModelManager.isSupportedModelRepo(translationCustomLLMRepo) {
                 translationCustomLLMRepo = customLLMRepo
             }
         case .whisperKit:
@@ -252,12 +263,9 @@ extension ModelSettingsView {
                 rewriteRemoteLLMProviderRaw = first.id
             }
         case .customLLM:
-            let options = installedCustomLLMOptions
-            if let first = options.first {
-                if !options.contains(where: { $0.id == rewriteCustomLLMRepo }) {
-                    rewriteCustomLLMRepo = first.id
-                }
-            } else {
+            if rewriteCustomLLMRepo.isEmpty {
+                rewriteCustomLLMRepo = customLLMRepo
+            } else if !CustomLLMModelManager.isSupportedModelRepo(rewriteCustomLLMRepo) {
                 rewriteCustomLLMRepo = customLLMRepo
             }
         }

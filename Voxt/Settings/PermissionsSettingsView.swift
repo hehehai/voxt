@@ -498,19 +498,24 @@ struct PermissionsSettingsView: View {
 
     private func requestBrowserAutomationPermission(_ target: BrowserAutomationTarget) {
         browserAutomationRequestsInFlight.insert(target.bundleID)
-        VoxtLog.info("Browser automation permission request triggered: target=\(target.bundleID)")
+        VoxtLog.model("Browser automation permission request triggered: target=\(target.bundleID)")
 
         Task { @MainActor in
             defer { browserAutomationRequestsInFlight.remove(target.bundleID) }
             let status = automationPermissionStatus(for: target.bundleID, askUserIfNeeded: true)
-            let enabled = (status == noErr)
+            let scriptProbe = isApplicationRunning(bundleID: target.bundleID)
+                ? runAppleScriptCandidates(target.scripts)
+                : ScriptProbeResult(success: false, permissionDenied: false, appNotRunning: true, lastErrorCode: nil)
+            let enabled = scriptProbe.success || (status == noErr && !scriptProbe.permissionDenied)
             browserAutomationStates[target.bundleID] = enabled ? .enabled : .disabled
             if enabled {
                 browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Authorization granted.")
+            } else if scriptProbe.appNotRunning {
+                browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Open the browser and try again to complete the authorization check.")
             } else {
                 browserAutomationMessages[target.bundleID] = AppLocalization.localizedString("Authorization not granted.")
             }
-            VoxtLog.info(
+            VoxtLog.model(
                 "Browser automation permission status: target=\(target.bundleID), state=\(enabled ? "enabled" : "disabled"), status=\(status)"
             )
         }
@@ -518,6 +523,15 @@ struct PermissionsSettingsView: View {
 
     private func probeBrowserAutomationState(_ target: BrowserAutomationTarget) -> PermissionState {
         let status = automationPermissionStatus(for: target.bundleID, askUserIfNeeded: false)
+        if isApplicationRunning(bundleID: target.bundleID) {
+            let scriptProbe = runAppleScriptCandidates(target.scripts)
+            if scriptProbe.success {
+                return .enabled
+            }
+            if scriptProbe.permissionDenied {
+                return .disabled
+            }
+        }
         return status == noErr ? .enabled : .disabled
     }
 
@@ -595,6 +609,11 @@ struct PermissionsSettingsView: View {
             appNotRunning: sawAppNotRunning,
             lastErrorCode: lastErrorCode
         )
+    }
+
+    private func isApplicationRunning(bundleID: String) -> Bool {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .contains(where: { !$0.isTerminated })
     }
 
     private func openSettings(for kind: SettingsPermissionKind) {

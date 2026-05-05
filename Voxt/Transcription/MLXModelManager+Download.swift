@@ -3,7 +3,7 @@ import CFNetwork
 import HuggingFace
 
 enum MLXModelDownloadSupport {
-    private static let modelEntryAllowedExtensions: Set<String> = ["safetensors", "json", "txt", "wav"]
+    private static let modelEntryAllowedExtensions: Set<String> = ["safetensors", "json", "txt", "wav", "jinja"]
     private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useMB, .useGB]
@@ -1014,9 +1014,9 @@ enum ResumableModelDownloadSupport {
             if let etag = existingState?.etag, !etag.isEmpty {
                 request.setValue(etag, forHTTPHeaderField: "If-Range")
             }
-            VoxtLog.info("Resumable download resuming: file=\(descriptor.relativePath), offset=\(initialBytes)")
+            VoxtLog.model("Resumable download resuming: file=\(descriptor.relativePath), offset=\(initialBytes)")
         } else {
-            VoxtLog.info("Resumable download starting: file=\(descriptor.relativePath), url=\(descriptor.sourceURL.absoluteString)")
+            VoxtLog.model("Resumable download starting: file=\(descriptor.relativePath), url=\(descriptor.sourceURL.absoluteString)")
         }
 
         let task = session.dataTask(with: request)
@@ -1131,7 +1131,7 @@ enum ResumableModelDownloadSupport {
         }
         try FileManager.default.moveItem(at: partURL, to: descriptor.destinationURL)
         try? FileManager.default.removeItem(at: stateURL)
-        VoxtLog.info("Resumable download completed: file=\(descriptor.relativePath), bytes=\(result.bytesDownloaded), resumedFrom=\(result.resumedFromBytes)")
+        VoxtLog.model("Resumable download completed: file=\(descriptor.relativePath), bytes=\(result.bytesDownloaded), resumedFrom=\(result.resumedFromBytes)")
     }
 
     private static func partialFileURL(for destinationURL: URL) -> URL {

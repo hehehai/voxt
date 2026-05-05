@@ -615,12 +615,10 @@ The format is based on Keep a Changelog.
 
 ### Added
 - App Branch source card now shows an Apps-tab drag hint in the header.
-- Added custom LLM model options:
-  - `mlx-community/Qwen3.5-0.8B-MLX-4bit`
-  - `mlx-community/Qwen3.5-2B-MLX-4bit`
+- Added an experimental custom LLM model path for early `Qwen3.5` evaluation.
 
 ### Changed
-- Upgraded `mlx-swift-lm` to a newer revision with `qwen3_5` model-type support.
+- Upgraded `mlx-swift-lm` to a newer revision for early `Qwen3.5` model-type support.
 - Improved App Branch localization coverage for tab content and related sheets.
 
 ### Fixed

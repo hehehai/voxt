@@ -91,8 +91,8 @@ struct AboutSettingsView: View {
                     Text("Thanks")
                         .font(.headline)
                     Link(
-                        "github.com/Blaizzy/mlx-audio-swift",
-                        destination: URL(string: "https://github.com/Blaizzy/mlx-audio-swift")!
+                        "github.com/hehehai/mlx-audio-swift",
+                        destination: URL(string: "https://github.com/hehehai/mlx-audio-swift")!
                     )
                     .font(.caption)
                     Link(

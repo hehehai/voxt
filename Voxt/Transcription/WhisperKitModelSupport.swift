@@ -8,6 +8,11 @@ struct WhisperKitModelCatalog {
         let remoteSizeText: String
     }
 
+    private struct PresentationMetadata {
+        let ratingText: String
+        let tagKeys: [String]
+    }
+
     nonisolated static let defaultModelID = "base"
 
     nonisolated static let availableModels: [Option] = [
@@ -43,6 +48,14 @@ struct WhisperKitModelCatalog {
         ),
     ]
 
+    nonisolated private static let presentationByID: [String: PresentationMetadata] = [
+        "tiny": PresentationMetadata(ratingText: "4.0", tagKeys: ["Multilingual", "Fast"]),
+        "base": PresentationMetadata(ratingText: "4.3", tagKeys: ["Multilingual", "Balanced"]),
+        "small": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Balanced"]),
+        "medium": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Accurate"]),
+        "large-v3": PresentationMetadata(ratingText: "4.9", tagKeys: ["Multilingual", "Accurate"]),
+    ]
+
     nonisolated private static let knownRemoteSizeBytesByID: [String: Int64] = [
         "tiny": 76_635_397,
         "base": 146_719_453,
@@ -58,6 +71,14 @@ struct WhisperKitModelCatalog {
     nonisolated static func displayTitle(for modelID: String) -> String {
         let canonicalModelID = canonicalModelID(modelID)
         return availableModels.first(where: { $0.id == canonicalModelID })?.title ?? canonicalModelID
+    }
+
+    nonisolated static func ratingText(for modelID: String) -> String {
+        presentationByID[canonicalModelID(modelID)]?.ratingText ?? "4.3"
+    }
+
+    nonisolated static func catalogTagKeys(for modelID: String) -> [String] {
+        presentationByID[canonicalModelID(modelID)]?.tagKeys ?? ["Multilingual"]
     }
 
     nonisolated static func fallbackRemoteSizeText(id: String) -> String? {

@@ -8,6 +8,11 @@ struct MLXModelCatalog {
         let description: String
     }
 
+    private struct PresentationMetadata {
+        let ratingText: String
+        let tagKeys: [String]
+    }
+
     nonisolated static let defaultModelRepo = "mlx-community/Qwen3-ASR-0.6B-4bit"
 
     nonisolated private static let realtimeCapableModelRepos: Set<String> = [
@@ -152,6 +157,34 @@ struct MLXModelCatalog {
         )
     ]
 
+    nonisolated private static let presentationByRepo: [String: PresentationMetadata] = [
+        "mlx-community/Qwen3-ASR-0.6B-4bit": PresentationMetadata(ratingText: "4.4", tagKeys: ["Multilingual", "Fast"]),
+        "mlx-community/Qwen3-ASR-0.6B-6bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Balanced"]),
+        "mlx-community/Qwen3-ASR-0.6B-8bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Balanced"]),
+        "mlx-community/Qwen3-ASR-0.6B-bf16": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/Qwen3-ASR-1.7B-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Balanced"]),
+        "mlx-community/Qwen3-ASR-1.7B-6bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/Qwen3-ASR-1.7B-8bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/Qwen3-ASR-1.7B-bf16": PresentationMetadata(ratingText: "4.9", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Realtime", "Fast"]),
+        "mlx-community/Voxtral-Mini-4B-Realtime-6bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
+        "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
+        "beshkenadze/cohere-transcribe-03-2026-mlx-fp16": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/parakeet-tdt_ctc-110m": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
+        "mlx-community/parakeet-tdt-0.6b-v2": PresentationMetadata(ratingText: "4.2", tagKeys: ["Fast"]),
+        "mlx-community/parakeet-tdt-0.6b-v3": PresentationMetadata(ratingText: "4.3", tagKeys: ["Fast"]),
+        "mlx-community/parakeet-ctc-0.6b": PresentationMetadata(ratingText: "4.2", tagKeys: ["Balanced"]),
+        "mlx-community/parakeet-rnnt-0.6b": PresentationMetadata(ratingText: "4.3", tagKeys: ["Balanced"]),
+        "mlx-community/parakeet-tdt-1.1b": PresentationMetadata(ratingText: "4.6", tagKeys: ["Accurate"]),
+        "mlx-community/parakeet-tdt_ctc-1.1b": PresentationMetadata(ratingText: "4.6", tagKeys: ["Accurate"]),
+        "mlx-community/parakeet-ctc-1.1b": PresentationMetadata(ratingText: "4.5", tagKeys: ["Accurate"]),
+        "mlx-community/parakeet-rnnt-1.1b": PresentationMetadata(ratingText: "4.5", tagKeys: ["Accurate"]),
+        "mlx-community/GLM-ASR-Nano-2512-4bit": PresentationMetadata(ratingText: "4.1", tagKeys: ["Multilingual", "Fast"]),
+        "mlx-community/granite-4.0-1b-speech-5bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Balanced"]),
+        "mlx-community/FireRedASR2-AED-mlx": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/SenseVoiceSmall": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Fast"]),
+    ]
+
     nonisolated private static let knownRemoteSizeBytesByRepo: [String: Int64] = [
         "mlx-community/Qwen3-ASR-0.6B-4bit": 712_781_279,
         "mlx-community/Qwen3-ASR-0.6B-6bit": 861_777_567,
@@ -191,6 +224,18 @@ struct MLXModelCatalog {
 
     nonisolated static func isRealtimeCapableModelRepo(_ repo: String) -> Bool {
         realtimeCapableModelRepos.contains(canonicalModelRepo(repo))
+    }
+
+    nonisolated static func ratingText(for repo: String) -> String {
+        presentationByRepo[canonicalModelRepo(repo)]?.ratingText ?? "4.3"
+    }
+
+    nonisolated static func catalogTagKeys(for repo: String) -> [String] {
+        presentationByRepo[canonicalModelRepo(repo)]?.tagKeys ?? []
+    }
+
+    nonisolated static func isMultilingualModelRepo(_ repo: String) -> Bool {
+        catalogTagKeys(for: repo).contains("Multilingual")
     }
 
     nonisolated static func fallbackRemoteSizeText(repo: String) -> String? {
@@ -235,6 +280,10 @@ enum MLXModelStorageSupport {
             .appendingPathComponent(modelSubdir)
     }
 
+    nonisolated static func hubCache(rootDirectory: URL) -> HubCache {
+        HubCache(cacheDirectory: rootDirectory)
+    }
+
     nonisolated static func destinationFileURL(for entryPath: String, under directory: URL) throws -> URL {
         let base = directory.standardizedFileURL
         let destination = base.appendingPathComponent(entryPath).standardizedFileURL
@@ -253,8 +302,8 @@ enum MLXModelStorageSupport {
         return destination
     }
 
-    nonisolated static func clearHubCache(for repoID: Repo.ID) {
-        let cache = HubCache.default
+    nonisolated static func clearHubCache(for repoID: Repo.ID, rootDirectory: URL = HubCache.default.cacheDirectory) {
+        let cache = hubCache(rootDirectory: rootDirectory)
         let repoDir = cache.repoDirectory(repo: repoID, kind: .model)
         let metadataDir = cache.metadataDirectory(repo: repoID, kind: .model)
         try? FileManager.default.removeItem(at: repoDir)

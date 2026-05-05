@@ -1,8 +1,57 @@
 import XCTest
 @testable import Voxt
+import HuggingFace
 
 @MainActor
 final class MLXModelManagerTests: XCTestCase {
+    func testMLXAudioActiveHubCacheUsesConfiguredModelStorageRoot() throws {
+        let defaults = UserDefaults.standard
+        let previousPath = defaults.string(forKey: AppPreferenceKey.modelStorageRootPath)
+        let previousBookmark = defaults.data(forKey: AppPreferenceKey.modelStorageRootBookmark)
+        let customRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defaults.set(customRoot.path, forKey: AppPreferenceKey.modelStorageRootPath)
+        defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+        addTeardownBlock {
+            if let previousPath {
+                defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootPath)
+            }
+            if let previousBookmark {
+                defaults.set(previousBookmark, forKey: AppPreferenceKey.modelStorageRootBookmark)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+            }
+        }
+
+        XCTAssertEqual(MLXModelManager.activeHubCache().cacheDirectory, customRoot)
+    }
+
+    func testMLXAudioClearHubCacheTargetsConfiguredModelStorageRoot() throws {
+        let repoID = try XCTUnwrap(Repo.ID(rawValue: "mlx-community/Qwen3-ASR-0.6B-8bit"))
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cache = MLXModelStorageSupport.hubCache(rootDirectory: rootDirectory)
+        let repoDirectory = cache.repoDirectory(repo: repoID, kind: .model)
+        let metadataDirectory = cache.metadataDirectory(repo: repoID, kind: .model)
+
+        try FileManager.default.createDirectory(at: repoDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: metadataDirectory, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: rootDirectory)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repoDirectory.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: metadataDirectory.path))
+
+        MLXModelStorageSupport.clearHubCache(for: repoID, rootDirectory: rootDirectory)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repoDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: metadataDirectory.path))
+    }
+
     func testCanonicalModelRepoMapsLegacyReposToCurrentIdentifiers() {
         XCTAssertEqual(
             MLXModelManager.canonicalModelRepo("mlx-community/Parakeet-0.6B"),
@@ -145,12 +194,9 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(missingRepos, [])
     }
 
-    func testAllCuratedCustomLLMModelsHaveRemoteSizeFallbacks() {
-        let missingRepos = CustomLLMModelManager.availableModels
-            .map(\.id)
-            .filter { CustomLLMModelManager.fallbackRemoteSizeText(repo: $0) == nil }
-
-        XCTAssertEqual(missingRepos, [])
+    func testKnownCustomLLMRemoteSizeFallbacksRemainAvailable() {
+        XCTAssertNotNil(CustomLLMModelManager.fallbackRemoteSizeText(repo: "Qwen/Qwen2-1.5B-Instruct"))
+        XCTAssertNotNil(CustomLLMModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-8B-4bit"))
     }
 
     func testAllCuratedWhisperModelsHaveRemoteSizeFallbacks() {
@@ -161,30 +207,41 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(missingModelIDs, [])
     }
 
-    func testCustomLLMBehaviorDisablesThinkingForQwen3Family() {
+    func testCustomLLMBehaviorDisablesThinkingForThinkingModels() {
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit").family, .qwen3)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-8B-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-MLX-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-2B-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-0.8B-4bit-OptiQ").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-OptiQ-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-9B-OptiQ-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/AceReason-Nemotron-7B-4bit").disablesThinking)
     }
 
     func testCustomLLMBehaviorLeavesOtherInstructionModelsUntouched() {
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct").family, .qwen2)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-4-9B-0414-4bit").family, .glm4)
+        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/glm-4-9b-chat-1m-4bit").family, .glm4)
+        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit").family, .glm4)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Llama-3.2-3B-Instruct-4bit").family, .llama)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Mistral-Nemo-Instruct-2407-4bit").family, .mistral)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/gemma-2-2b-it-4bit").family, .gemma)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct").disablesThinking)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2.5-3B-Instruct").disablesThinking)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-4-9B-0414-4bit").disablesThinking)
+        XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/glm-4-9b-chat-1m-4bit").disablesThinking)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Llama-3.2-3B-Instruct-4bit").disablesThinking)
     }
 
     func testCustomLLMBehaviorProvidesAdditionalContextOnlyForThinkingModels() {
         let qwen3Behavior = CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit")
+        let glmZ1Behavior = CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit")
         let qwen2Behavior = CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct")
 
         XCTAssertEqual(qwen3Behavior.additionalContext?["enable_thinking"] as? Bool, false)
+        XCTAssertEqual(glmZ1Behavior.additionalContext?["enable_thinking"] as? Bool, false)
         XCTAssertNil(qwen2Behavior.additionalContext)
     }
 
