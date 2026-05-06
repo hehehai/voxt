@@ -544,6 +544,7 @@ extension OnboardingSettingsView {
             configuration,
             updating: remoteASRProviderConfigurationsRaw
         )
+        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
     }
 
     func saveRemoteLLMConfiguration(_ configuration: RemoteProviderConfiguration) {
@@ -551,6 +552,7 @@ extension OnboardingSettingsView {
             configuration,
             updating: remoteLLMProviderConfigurationsRaw
         )
+        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
     }
 
     func exportConfiguration() {

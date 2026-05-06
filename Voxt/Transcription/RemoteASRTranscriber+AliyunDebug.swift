@@ -80,10 +80,10 @@ extension RemoteASRTranscriber {
             Task {
                 if let error {
                     await responseState.markCompletedWithError(error)
+                    await startSignal.open()
                 } else {
                     await responseState.markRunRequested()
                 }
-                await startSignal.open()
             }
         }
 
@@ -185,8 +185,8 @@ extension RemoteASRTranscriber {
             Task {
                 if let error {
                     await responseState.markCompletedWithError(error)
+                    await startSignal.open()
                 }
-                await startSignal.open()
             }
         }
 

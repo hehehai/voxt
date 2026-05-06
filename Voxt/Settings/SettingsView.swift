@@ -139,6 +139,9 @@ struct SettingsView: View {
             dictionaryStore.reloadAsync()
             dictionarySuggestionStore.reloadAsync()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .voxtRemoteProviderConfigurationsDidChange)) { _ in
+            refreshModelConfigurationBadge()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
             refreshPermissionBadge()
         }

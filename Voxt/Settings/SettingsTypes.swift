@@ -5,6 +5,7 @@ extension Notification.Name {
     static let voxtSettingsNavigate = Notification.Name("voxt.settings.navigate")
     static let voxtInterfaceLanguageDidChange = Notification.Name("voxt.interfaceLanguage.didChange")
     static let voxtConfigurationDidImport = Notification.Name("voxt.configuration.didImport")
+    static let voxtRemoteProviderConfigurationsDidChange = Notification.Name("voxt.remoteProviderConfigurations.didChange")
     static let voxtPermissionsDidChange = Notification.Name("voxt.permissions.didChange")
     static let voxtSelectedInputDeviceDidChange = Notification.Name("voxt.selectedInputDevice.didChange")
     static let voxtAudioInputDevicesDidChange = Notification.Name("voxt.audioInputDevices.didChange")

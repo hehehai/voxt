@@ -488,6 +488,7 @@ extension ModelSettingsView {
             configuration,
             updating: remoteASRProviderConfigurationsRaw
         )
+        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
     }
 
     func remoteASRStatusText(
@@ -577,6 +578,7 @@ extension ModelSettingsView {
             configuration,
             updating: remoteLLMProviderConfigurationsRaw
         )
+        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
     }
 
     func updateMirrorSetting() {
