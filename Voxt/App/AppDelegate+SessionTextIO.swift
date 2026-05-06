@@ -194,10 +194,10 @@ extension AppDelegate {
             usesConservativeEvidence: usesConservativeEvidence,
             automaticReplacementEnabled: automaticReplacementEnabled
         )
+        let uniqueDictionaryMatches = orderedUniqueDictionaryMatches(dictionaryCorrection.candidates)
         let rewriteAnswerPayload = extractedRewriteAnswerPayload.map {
             RewriteAnswerPayload(title: $0.title, content: dictionaryCorrection.text)
         }
-        let uniqueDictionaryMatches = orderedUniqueDictionaryMatches(dictionaryCorrection.candidates)
 
         return SessionFinalizeContext(
             outputText: dictionaryCorrection.text,
@@ -210,17 +210,6 @@ extension AppDelegate {
         )
     }
 
-    nonisolated private static func orderedUniqueDictionaryTerms(from values: [String]) -> [String] {
-        var seen = Set<String>()
-        var ordered: [String] = []
-        for value in values {
-            let normalized = DictionaryStore.normalizeTerm(value)
-            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
-            ordered.append(value)
-        }
-        return ordered
-    }
-
     nonisolated private static func orderedUniqueDictionaryMatches(
         _ candidates: [DictionaryMatchCandidate]
     ) -> [DictionaryMatchCandidate] {
@@ -230,6 +219,17 @@ extension AppDelegate {
             let normalized = DictionaryStore.normalizeTerm(candidate.term)
             guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
             ordered.append(candidate)
+        }
+        return ordered
+    }
+
+    nonisolated private static func orderedUniqueDictionaryTerms(from values: [String]) -> [String] {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for value in values {
+            let normalized = DictionaryStore.normalizeTerm(value)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
+            ordered.append(value)
         }
         return ordered
     }
