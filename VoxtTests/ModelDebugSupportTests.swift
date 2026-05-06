@@ -154,34 +154,6 @@ final class ModelDebugSupportTests: XCTestCase {
     }
 
     func testRemoteDebugModelCatalogFiltersUnavailableProviders() {
-        let defaults = UserDefaults.standard
-        let previousPath = defaults.string(forKey: AppPreferenceKey.modelStorageRootPath)
-        let previousBookmark = defaults.data(forKey: AppPreferenceKey.modelStorageRootBookmark)
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-
-        defaults.set(tempRoot.path, forKey: AppPreferenceKey.modelStorageRootPath)
-        defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
-        addTeardownBlock {
-            if let previousPath {
-                defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)
-            } else {
-                defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootPath)
-            }
-            if let previousBookmark {
-                defaults.set(previousBookmark, forKey: AppPreferenceKey.modelStorageRootBookmark)
-            } else {
-                defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
-            }
-        }
-
-        let mlxModelManager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
-        let whisperModelManager = WhisperKitModelManager(
-            modelID: WhisperKitModelManager.defaultModelID,
-            hubBaseURL: MLXModelManager.defaultHubBaseURL
-        )
-        let customLLMManager = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
-
         let remoteASRConfigurations = [
             RemoteASRProvider.openAIWhisper.rawValue: RemoteProviderConfiguration(
                 providerID: RemoteASRProvider.openAIWhisper.rawValue,
@@ -212,12 +184,13 @@ final class ModelDebugSupportTests: XCTestCase {
         ]
 
         let asrOptions = ModelDebugCatalog.availableASRModels(
-            mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
+            downloadedMLXRepos: [],
+            downloadedWhisperModelIDs: [],
             remoteASRConfigurations: remoteASRConfigurations
         )
         let llmOptions = ModelDebugCatalog.availableLLMModels(
-            customLLMManager: customLLMManager,
+            downloadedLocalRepos: [],
+            currentLocalRepo: CustomLLMModelManager.defaultModelRepo,
             remoteLLMConfigurations: remoteLLMConfigurations
         )
 

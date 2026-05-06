@@ -107,10 +107,33 @@ enum ModelDebugCatalog {
         whisperModelManager: WhisperKitModelManager,
         remoteASRConfigurations: [String: RemoteProviderConfiguration]
     ) -> [ASRDebugModelOption] {
+        let downloadedMLXRepos = Set(
+            MLXModelManager.availableModels.compactMap { model in
+                mlxModelManager.isModelDownloaded(repo: model.id) ? model.id : nil
+            }
+        )
+        let downloadedWhisperModelIDs = Set(
+            WhisperKitModelManager.availableModels.compactMap { model in
+                whisperModelManager.isModelDownloaded(id: model.id) ? model.id : nil
+            }
+        )
+
+        return availableASRModels(
+            downloadedMLXRepos: downloadedMLXRepos,
+            downloadedWhisperModelIDs: downloadedWhisperModelIDs,
+            remoteASRConfigurations: remoteASRConfigurations
+        )
+    }
+
+    static func availableASRModels(
+        downloadedMLXRepos: Set<String>,
+        downloadedWhisperModelIDs: Set<String>,
+        remoteASRConfigurations: [String: RemoteProviderConfiguration]
+    ) -> [ASRDebugModelOption] {
         var options: [ASRDebugModelOption] = []
 
         let localMLX = MLXModelManager.availableModels.compactMap { model -> ASRDebugModelOption? in
-            guard mlxModelManager.isModelDownloaded(repo: model.id) else { return nil }
+            guard downloadedMLXRepos.contains(model.id) else { return nil }
             return ASRDebugModelOption(
                 id: "mlx:\(model.id)",
                 title: MLXModelCatalog.displayTitle(for: model.id),
@@ -121,7 +144,7 @@ enum ModelDebugCatalog {
         options.append(contentsOf: localMLX)
 
         let localWhisper = WhisperKitModelManager.availableModels.compactMap { model -> ASRDebugModelOption? in
-            guard whisperModelManager.isModelDownloaded(id: model.id) else { return nil }
+            guard downloadedWhisperModelIDs.contains(model.id) else { return nil }
             return ASRDebugModelOption(
                 id: "whisper:\(model.id)",
                 title: WhisperKitModelCatalog.displayTitle(for: model.id),
@@ -153,14 +176,33 @@ enum ModelDebugCatalog {
         customLLMManager: CustomLLMModelManager,
         remoteLLMConfigurations: [String: RemoteProviderConfiguration]
     ) -> [LLMDebugModelOption] {
+        let downloadedLocalRepos = Set(
+            CustomLLMModelCatalog.displayModels(including: customLLMManager.currentModelRepo)
+                .compactMap { model in
+                    customLLMManager.isModelDownloaded(repo: model.id) ? model.id : nil
+                }
+        )
+
+        return availableLLMModels(
+            downloadedLocalRepos: downloadedLocalRepos,
+            currentLocalRepo: customLLMManager.currentModelRepo,
+            remoteLLMConfigurations: remoteLLMConfigurations
+        )
+    }
+
+    static func availableLLMModels(
+        downloadedLocalRepos: Set<String>,
+        currentLocalRepo: String?,
+        remoteLLMConfigurations: [String: RemoteProviderConfiguration]
+    ) -> [LLMDebugModelOption] {
         var options: [LLMDebugModelOption] = []
 
-        let local = CustomLLMModelCatalog.displayModels(including: customLLMManager.currentModelRepo)
+        let local = CustomLLMModelCatalog.displayModels(including: currentLocalRepo)
             .compactMap { model -> LLMDebugModelOption? in
-                guard customLLMManager.isModelDownloaded(repo: model.id) else { return nil }
+                guard downloadedLocalRepos.contains(model.id) else { return nil }
                 return LLMDebugModelOption(
                     id: "local-llm:\(model.id)",
-                    title: customLLMManager.displayTitle(for: model.id),
+                    title: CustomLLMModelCatalog.displayTitle(for: model.id),
                     subtitle: AppLocalization.localizedString("Local Custom LLM"),
                     selection: .local(repo: model.id)
                 )
