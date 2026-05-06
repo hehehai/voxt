@@ -98,6 +98,7 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
         )
         let viewModel = TranscriptionDetailViewModel(
             entry: entry,
+            audioURL: nil,
             followUpStatusProvider: { _ in
                 TranscriptionFollowUpProviderStatus(isAvailable: true, message: "")
             },
@@ -119,6 +120,7 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
         )
         let viewModel = TranscriptionDetailViewModel(
             entry: entry,
+            audioURL: nil,
             followUpStatusProvider: { _ in
                 TranscriptionFollowUpProviderStatus(isAvailable: true, message: "")
             },

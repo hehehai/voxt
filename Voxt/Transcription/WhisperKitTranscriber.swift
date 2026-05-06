@@ -110,6 +110,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private let modelManager: WhisperKitModelManager
     private var preferredInputDeviceID: AudioDeviceID?
     private var inputSampleRate: Double = 16000
+    private var completedAudioArchiveURL: URL?
     private var preparedWhisper: WhisperKit?
     private var preparedOutputMode: SessionOutputMode = .transcription
     private var preparedUseBuiltInTranslationTask = false
@@ -138,12 +139,23 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
 
+    func consumeCompletedAudioArchiveURL() -> URL? {
+        let url = completedAudioArchiveURL
+        completedAudioArchiveURL = nil
+        return url
+    }
+
+    func discardCompletedAudioArchive() {
+        removeCompletedAudioArchiveIfNeeded()
+    }
+
     func prepareSession(
         outputMode: SessionOutputMode,
         useBuiltInTranslationTask: Bool = false
     ) async -> String? {
         cancelActiveTasks()
         cleanupPreparedWhisperIfNeeded()
+        removeCompletedAudioArchiveIfNeeded()
         resetTransientState()
         preparedOutputMode = outputMode
         preparedUseBuiltInTranslationTask = useBuiltInTranslationTask
@@ -438,6 +450,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
             let text = normalizeText(results.map(\.text).joined(separator: " "))
             if publishFinalResult {
+                stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = includeWordTimings ? buildWordTimings(from: results) : []
                 transcribedText = text
                 onPartialTranscription?(text)
@@ -449,6 +462,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         } catch {
             VoxtLog.error("Whisper inference failed: \(error)")
             if publishFinalResult {
+                let preparedSamples = prepareInputSamples(samples, sampleRate: sampleRate)
+                stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = []
                 onTranscriptionFinished?(transcribedText.trimmingCharacters(in: .whitespacesAndNewlines))
             }
@@ -557,6 +572,26 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         audioStreamTranscriber = nil
         preparedWhisper?.audioProcessor.stopRecording()
         preparedWhisper?.audioProcessor.purgeAudioSamples(keepingLast: 0)
+    }
+
+    private func stageCompletedAudioArchive(samples: [Float], sampleRate: Double) {
+        removeCompletedAudioArchiveIfNeeded()
+        guard !samples.isEmpty else { return }
+        let tempURL = HistoryAudioArchiveSupport.temporaryArchiveURL(prefix: "voxt-whisper-history")
+        do {
+            if try HistoryAudioArchiveSupport.exportWAV(samples: samples, sampleRate: sampleRate, to: tempURL) {
+                completedAudioArchiveURL = tempURL
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            VoxtLog.warning("Whisper completed audio archive export failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func removeCompletedAudioArchiveIfNeeded() {
+        guard let completedAudioArchiveURL else { return }
+        try? FileManager.default.removeItem(at: completedAudioArchiveURL)
+        self.completedAudioArchiveURL = nil
     }
 
     private func cancelActiveTasks() {

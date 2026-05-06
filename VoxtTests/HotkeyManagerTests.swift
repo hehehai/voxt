@@ -79,6 +79,280 @@ final class HotkeyManagerTests: XCTestCase {
         return manager
     }
 
+    func testTapTranscriptionNonModifierDoesNotConsumeReleaseWithoutMatchingKeyDown() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.save(
+            keyCode: UInt16(kVK_Space),
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let manager = makeManager()
+        var keyUpCount = 0
+        manager.onKeyUp = { keyUpCount += 1 }
+
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_Space),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertEqual(keyUpCount, 0)
+    }
+
+    func testEscapeKeyDownCanBeConsumedViaCallback() {
+        let manager = makeManager()
+        var escapeCallbackCount = 0
+        manager.onEscapeKeyDown = {
+            escapeCallbackCount += 1
+            return true
+        }
+
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_Escape),
+                flags: []
+            )
+        )
+        XCTAssertEqual(escapeCallbackCount, 1)
+    }
+
+    func testEscapeKeyDownPassesThroughWhenCallbackDeclinesConsumption() {
+        let manager = makeManager()
+        var escapeCallbackCount = 0
+        manager.onEscapeKeyDown = {
+            escapeCallbackCount += 1
+            return false
+        }
+
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_Escape),
+                flags: []
+            )
+        )
+        XCTAssertEqual(escapeCallbackCount, 1)
+    }
+
+    func testTapTranscriptionNonModifierConsumesOnlyMatchingRelease() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.save(
+            keyCode: UInt16(kVK_Space),
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let manager = makeManager()
+        var keyUpCount = 0
+        manager.onKeyUp = { keyUpCount += 1 }
+
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_Space),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_A),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertEqual(keyUpCount, 0)
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_Space),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertEqual(keyUpCount, 1)
+    }
+
+    func testTapTranslationNonModifierDoesNotConsumeReleaseWithoutMatchingKeyDown() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.saveTranslation(
+            keyCode: UInt16(kVK_ANSI_Z),
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let manager = makeManager()
+        var translationKeyUpCount = 0
+        manager.onTranslationKeyUp = { translationKeyUpCount += 1 }
+
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_Z),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertEqual(translationKeyUpCount, 0)
+    }
+
+    func testTapRewriteNonModifierDoesNotConsumeReleaseWithoutMatchingKeyDown() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.saveRewrite(
+            keyCode: UInt16(kVK_ANSI_R),
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let manager = makeManager()
+        var rewriteKeyUpCount = 0
+        manager.onRewriteKeyUp = { rewriteKeyUpCount += 1 }
+
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_R),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertEqual(rewriteKeyUpCount, 0)
+    }
+
+    func testTapMeetingNonModifierConsumesOnlyMatchingRelease() {
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.saveMeeting(
+            keyCode: UInt16(kVK_ANSI_M),
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let manager = makeManager()
+
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_M),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_ANSI_M),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_A),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_M),
+                flags: .maskSecondaryFn
+            )
+        )
+    }
+
+    func testResetTransientStateClearsPendingTapReleaseConsumptionForNonModifierHotkey() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.save(
+            keyCode: UInt16(kVK_Space),
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let manager = makeManager()
+        var keyUpCount = 0
+        manager.onKeyUp = { keyUpCount += 1 }
+
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_Space),
+                flags: .maskSecondaryFn
+            )
+        )
+        manager.resetTransientState(reason: "unitTestCancel")
+
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_Space),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertEqual(keyUpCount, 0)
+    }
+
+    func testTapNonModifierHotkeyRespectsRightCommandDistinction() {
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.save(
+            keyCode: UInt16(kVK_ANSI_L),
+            modifiers: [.command],
+            sidedModifiers: [.rightCommand]
+        )
+
+        let manager = makeManager()
+        var transcriptionDownCount = 0
+        var keyUpCount = 0
+        manager.onKeyDown = { transcriptionDownCount += 1 }
+        manager.onKeyUp = { keyUpCount += 1 }
+
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Command),
+            flags: commandFlags(for: .leftCommand)
+        )
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_ANSI_L),
+                flags: commandFlags(for: .leftCommand)
+            )
+        )
+        XCTAssertEqual(transcriptionDownCount, 0)
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Command),
+            flags: []
+        )
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_RightCommand),
+            flags: commandFlags(for: .rightCommand)
+        )
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_ANSI_L),
+                flags: commandFlags(for: .rightCommand)
+            )
+        )
+        XCTAssertEqual(transcriptionDownCount, 1)
+        XCTAssertTrue(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_L),
+                flags: commandFlags(for: .rightCommand)
+            )
+        )
+        XCTAssertEqual(keyUpCount, 1)
+    }
+
     func testStaleFnStateIsResetBeforeFreshTapStartsTranscription() async {
         let manager = makeManager()
         var transcriptionDownCount = 0

@@ -165,6 +165,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private let audioEngine = AVAudioEngine()
     private let sampleStore = AudioSampleStore()
     private var inputSampleRate: Double = 16000
+    private var completedAudioArchiveURL: URL?
     private let modelManager: MLXModelManager
     private var preferredInputDeviceID: AudioDeviceID?
     private let targetSampleRate = 16000
@@ -206,10 +207,21 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         return micStatus
     }
 
+    func consumeCompletedAudioArchiveURL() -> URL? {
+        let url = completedAudioArchiveURL
+        completedAudioArchiveURL = nil
+        return url
+    }
+
+    func discardCompletedAudioArchive() {
+        removeCompletedAudioArchiveIfNeeded()
+    }
+
     func startRecording() {
         guard !isRecording else { return }
 
         cancelActiveTasks()
+        removeCompletedAudioArchiveIfNeeded()
         resetTransientState()
         sessionRevision += 1
         let revision = sessionRevision
@@ -384,6 +396,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         )
 
         guard revision == sessionRevision else { return }
+        stageCompletedAudioArchive(samples: snapshot, sampleRate: sampleRate)
         let resolved = normalizeText(finalText ?? quickText ?? transcribedText)
         transcribedText = resolved
         publishPartial(resolved)
@@ -536,6 +549,26 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         preloadTask = nil
         captureWatchdogTask?.cancel()
         captureWatchdogTask = nil
+    }
+
+    private func stageCompletedAudioArchive(samples: [Float], sampleRate: Double) {
+        removeCompletedAudioArchiveIfNeeded()
+        guard !samples.isEmpty else { return }
+        let tempURL = HistoryAudioArchiveSupport.temporaryArchiveURL(prefix: "voxt-mlx-history")
+        do {
+            if try HistoryAudioArchiveSupport.exportWAV(samples: samples, sampleRate: sampleRate, to: tempURL) {
+                completedAudioArchiveURL = tempURL
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            VoxtLog.warning("MLX completed audio archive export failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func removeCompletedAudioArchiveIfNeeded() {
+        guard let completedAudioArchiveURL else { return }
+        try? FileManager.default.removeItem(at: completedAudioArchiveURL)
+        self.completedAudioArchiveURL = nil
     }
 
     private func safeSampleRate(_ value: Double) -> Double {

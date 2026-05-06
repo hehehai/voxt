@@ -2,7 +2,7 @@ import Foundation
 import WhisperKit
 
 actor MeetingAudioArchive {
-    private let targetSampleRate: Double = Double(WhisperKit.sampleRate)
+    private let targetSampleRate: Double = HistoryAudioArchiveSupport.targetSampleRate
     private var meSamples: [Float] = []
     private var themSamples: [Float] = []
 
@@ -27,12 +27,11 @@ actor MeetingAudioArchive {
 
     func exportWAV(to destinationURL: URL) throws -> Bool {
         let mixed = mixedSamples()
-        guard !mixed.isEmpty else { return false }
-        let data = Self.wavData(for: mixed, sampleRate: Int(targetSampleRate))
-        let directory = destinationURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: destinationURL, options: .atomic)
-        return true
+        return try HistoryAudioArchiveSupport.exportWAV(
+            samples: mixed,
+            sampleRate: targetSampleRate,
+            to: destinationURL
+        )
     }
 
     func reset() {
@@ -52,45 +51,6 @@ actor MeetingAudioArchive {
             output[index] = max(-1, min(1, mixed))
         }
         return output
-    }
-
-    private static func wavData(for samples: [Float], sampleRate: Int) -> Data {
-        let channelCount: UInt16 = 1
-        let bitsPerSample: UInt16 = 16
-        let byteRate = UInt32(sampleRate) * UInt32(channelCount) * UInt32(bitsPerSample / 8)
-        let blockAlign = channelCount * (bitsPerSample / 8)
-
-        var pcmData = Data(capacity: samples.count * 2)
-        for sample in samples {
-            let clamped = max(-1, min(1, sample))
-            var value = Int16((clamped * Float(Int16.max)).rounded())
-            pcmData.append(Data(bytes: &value, count: MemoryLayout<Int16>.size))
-        }
-
-        let riffChunkSize = UInt32(36 + pcmData.count)
-        let dataChunkSize = UInt32(pcmData.count)
-
-        var data = Data()
-        data.append("RIFF".data(using: .ascii)!)
-        data.append(Self.bytes(of: riffChunkSize))
-        data.append("WAVE".data(using: .ascii)!)
-        data.append("fmt ".data(using: .ascii)!)
-        data.append(Self.bytes(of: UInt32(16)))
-        data.append(Self.bytes(of: UInt16(1)))
-        data.append(Self.bytes(of: channelCount))
-        data.append(Self.bytes(of: UInt32(sampleRate)))
-        data.append(Self.bytes(of: byteRate))
-        data.append(Self.bytes(of: blockAlign))
-        data.append(Self.bytes(of: bitsPerSample))
-        data.append("data".data(using: .ascii)!)
-        data.append(Self.bytes(of: dataChunkSize))
-        data.append(pcmData)
-        return data
-    }
-
-    private static func bytes<T>(of value: T) -> Data {
-        var mutableValue = value
-        return withUnsafeBytes(of: &mutableValue) { Data($0) }
     }
 
     private static func write(_ samples: [Float], at startIndex: Int, to track: inout [Float]) {

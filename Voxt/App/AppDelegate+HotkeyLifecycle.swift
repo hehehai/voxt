@@ -39,6 +39,9 @@ extension AppDelegate {
             guard let self else { return }
             self.handleCustomPasteHotkeyDown()
         }
+        hotkeyManager.onEscapeKeyDown = { [weak self] in
+            self?.handleEscapeShortcut() ?? false
+        }
         hotkeyManager.start()
         VoxtLog.hotkey("Hotkey callbacks configured.")
     }
@@ -117,12 +120,17 @@ extension AppDelegate {
         }
 
         guard event.keyCode == UInt16(kVK_Escape) else { return event }
+        guard handleEscapeShortcut() else { return event }
+        return shouldConsume ? nil : event
+    }
+
+    func handleEscapeShortcut() -> Bool {
         guard UserDefaults.standard.object(forKey: AppPreferenceKey.escapeKeyCancelsOverlaySession) as? Bool ?? true else {
-            return event
+            return false
         }
         if overlayState.displayMode == .answer {
             dismissAnswerOverlay()
-            return shouldConsume ? nil : event
+            return true
         }
         if meetingSessionCoordinator.isActive {
             if meetingSessionCoordinator.overlayState.isCloseConfirmationPresented {
@@ -130,13 +138,13 @@ extension AppDelegate {
             } else {
                 requestMeetingSessionCloseConfirmation()
             }
-            return shouldConsume ? nil : event
+            return true
         }
-        guard HotkeyPreference.loadTriggerMode() == .tap else { return event }
-        guard isSessionActive else { return event }
-        guard !isSelectedTextTranslationFlow else { return event }
+        guard HotkeyPreference.loadTriggerMode() == .tap else { return false }
+        guard isSessionActive else { return false }
+        guard !isSelectedTextTranslationFlow else { return false }
         cancelActiveRecordingSession()
-        return shouldConsume ? nil : event
+        return true
     }
 
     func shouldHandleAnswerOverlayContinueShortcut(_ event: NSEvent) -> Bool {

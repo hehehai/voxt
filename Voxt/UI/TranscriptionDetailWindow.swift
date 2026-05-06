@@ -13,6 +13,7 @@ final class TranscriptionDetailWindowManager {
 
     func present(
         entry: TranscriptionHistoryEntry,
+        audioURL: URL?,
         followUpStatusProvider: @escaping FollowUpStatusProvider,
         followUpAnswerer: @escaping FollowUpAnswerer,
         followUpPersistence: @escaping FollowUpPersistence
@@ -20,7 +21,7 @@ final class TranscriptionDetailWindowManager {
         VoxtLog.info("Transcription detail open requested. entryID=\(entry.id), kind=\(entry.kind.rawValue)")
 
         if let controller = historyControllers[entry.id] {
-            controller.refresh(entry: entry)
+            controller.refresh(entry: entry, audioURL: audioURL)
             controller.showWindow(nil)
             controller.window?.makeKeyAndOrderFront(nil)
             controller.window?.orderFrontRegardless()
@@ -36,6 +37,7 @@ final class TranscriptionDetailWindowManager {
 
         let viewModel = TranscriptionDetailViewModel(
             entry: entry,
+            audioURL: audioURL,
             followUpStatusProvider: followUpStatusProvider,
             followUpAnswerer: followUpAnswerer,
             followUpPersistence: followUpPersistence
@@ -109,9 +111,9 @@ private final class TranscriptionDetailWindowController: NSWindowController, NSW
         fatalError("init(coder:) has not been implemented")
     }
 
-    func refresh(entry: TranscriptionHistoryEntry) {
+    func refresh(entry: TranscriptionHistoryEntry, audioURL: URL?) {
         VoxtLog.info("Transcription detail refresh requested. entryID=\(entry.id)")
-        viewModel.refresh(entry: entry)
+        viewModel.refresh(entry: entry, audioURL: audioURL)
         window?.title = viewModel.title
     }
 

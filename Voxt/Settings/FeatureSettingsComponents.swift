@@ -511,21 +511,39 @@ struct FeaturePromptSection: View {
     let defaultText: String
     let variables: [PromptTemplateVariableDescriptor]
     let persistChanges: () -> Void
+    @State private var coordinator: FeaturePromptDraftCoordinator
     @State private var pendingSaveTask: Task<Void, Never>?
-    @State private var lastSavedText = ""
+
+    init(
+        title: String,
+        text: Binding<String>,
+        defaultText: String,
+        variables: [PromptTemplateVariableDescriptor],
+        persistChanges: @escaping () -> Void
+    ) {
+        self.title = title
+        _text = text
+        self.defaultText = defaultText
+        self.variables = variables
+        self.persistChanges = persistChanges
+        _coordinator = State(initialValue: FeaturePromptDraftCoordinator(text: text.wrappedValue))
+    }
 
     var body: some View {
         ResettablePromptSection(
             title: localizedKey(title),
-            text: $text,
+            text: Binding(
+                get: { coordinator.draft },
+                set: { coordinator.updateDraft($0) }
+            ),
             defaultText: defaultText,
             variables: variables,
             promptHeight: 196,
             onTextChange: schedulePersist,
             onFocusChange: handleFocusChange
         )
-        .onAppear {
-            lastSavedText = text
+        .onChange(of: text) { _, newValue in
+            coordinator.syncExternalText(newValue)
         }
         .onDisappear {
             flushPendingChanges()
@@ -552,14 +570,42 @@ struct FeaturePromptSection: View {
         pendingSaveTask?.cancel()
         pendingSaveTask = nil
 
-        let currentText = text
-        guard currentText != lastSavedText else { return }
-        if let expectedText, currentText != expectedText {
-            return
+        if let persistedText = coordinator.takePendingPersist(expectedText: expectedText) {
+            text = persistedText
+            persistChanges()
+        }
+    }
+}
+
+struct FeaturePromptDraftCoordinator: Equatable {
+    private(set) var draft: String
+    private(set) var lastSyncedText: String
+
+    init(text: String) {
+        draft = text
+        lastSyncedText = text
+    }
+
+    mutating func updateDraft(_ newValue: String) {
+        draft = newValue
+    }
+
+    mutating func syncExternalText(_ newValue: String) {
+        // Ignore the round-trip echo of our own write so the active TextEditor
+        // does not receive a redundant string assignment mid-typing.
+        guard newValue != lastSyncedText, newValue != draft else { return }
+        draft = newValue
+        lastSyncedText = newValue
+    }
+
+    mutating func takePendingPersist(expectedText: String? = nil) -> String? {
+        guard draft != lastSyncedText else { return nil }
+        if let expectedText, draft != expectedText {
+            return nil
         }
 
-        lastSavedText = currentText
-        persistChanges()
+        lastSyncedText = draft
+        return draft
     }
 }
 

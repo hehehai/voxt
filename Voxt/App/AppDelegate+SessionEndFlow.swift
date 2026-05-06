@@ -82,7 +82,10 @@ extension AppDelegate {
         var name: String { "releaseResidualCapture" }
 
         func run(delegate: AppDelegate) {
-            delegate.releaseResidualRecordingResources(reason: "session-end-pipeline")
+            delegate.releaseResidualRecordingResources(
+                reason: "session-end-pipeline",
+                preservePendingHistoryAudio: true
+            )
         }
     }
 

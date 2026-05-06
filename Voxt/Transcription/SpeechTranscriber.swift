@@ -6,6 +6,29 @@ import AudioToolbox
 
 @MainActor
 class SpeechTranscriber: ObservableObject, TranscriberProtocol {
+    private final class AudioSampleStore {
+        private let lock = NSLock()
+        private var samples: [Float] = []
+
+        func append(_ newSamples: [Float]) {
+            lock.lock()
+            defer { lock.unlock() }
+            samples.append(contentsOf: newSamples)
+        }
+
+        func snapshot() -> [Float] {
+            lock.lock()
+            defer { lock.unlock() }
+            return samples
+        }
+
+        func clear() {
+            lock.lock()
+            defer { lock.unlock() }
+            samples.removeAll(keepingCapacity: false)
+        }
+    }
+
     @Published var isRecording = false
     @Published var audioLevel: Float = 0.0
     @Published var transcribedText = ""
@@ -16,7 +39,10 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
+    private let sampleStore = AudioSampleStore()
     private var preferredInputDeviceID: AudioDeviceID?
+    private var inputSampleRate: Double = 16000
+    private var completedAudioArchiveURL: URL?
 
     private var finalizeTimeoutTask: Task<Void, Never>?
     private var hasDeliveredFinalResult = false
@@ -44,9 +70,20 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         return micStatus
     }
 
+    func consumeCompletedAudioArchiveURL() -> URL? {
+        let url = completedAudioArchiveURL
+        completedAudioArchiveURL = nil
+        return url
+    }
+
+    func discardCompletedAudioArchive() {
+        removeCompletedAudioArchiveIfNeeded()
+    }
+
     func startRecording() {
         guard !isRecording else { return }
         lastStartFailureMessage = nil
+        removeCompletedAudioArchiveIfNeeded()
 
         let settings = resolvedDictationSettings()
         refreshSpeechRecognizer(localeIdentifier: settings.localeIdentifier)
@@ -73,6 +110,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         cleanupSessionState()
+        sampleStore.clear()
         transcribedText = ""
         audioLevel = 0
         hasDeliveredFinalResult = false
@@ -130,6 +168,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         finalizeTimeoutTask = nil
         isRecording = false
         clearRecognitionPipeline(cancelTask: true)
+        sampleStore.clear()
     }
 
     private func stopAudioCapture() {
@@ -152,6 +191,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         finalizeTimeoutTask?.cancel()
         finalizeTimeoutTask = nil
         clearRecognitionPipeline(cancelTask: true)
+        stageCompletedAudioArchive()
 
         onTranscriptionFinished?(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
@@ -179,9 +219,14 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
 
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        inputSampleRate = inputNode.outputFormat(forBus: 0).sampleRate
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             self.recognitionRequest?.append(buffer)
+
+            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
+                self.sampleStore.append(samples)
+            }
 
             guard let channelData = buffer.floatChannelData?[0] else { return }
             let frameLength = Int(buffer.frameLength)
@@ -280,5 +325,26 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             lastStartFailureMessage = String(localized: "Direct Dictation is unavailable for the current language.")
             VoxtLog.warning("Speech recognizer initialization failed for locale=\(locale.identifier).")
         }
+    }
+
+    private func stageCompletedAudioArchive() {
+        removeCompletedAudioArchiveIfNeeded()
+        let samples = sampleStore.snapshot()
+        guard !samples.isEmpty else { return }
+        let tempURL = HistoryAudioArchiveSupport.temporaryArchiveURL(prefix: "voxt-speech-history")
+        do {
+            if try HistoryAudioArchiveSupport.exportWAV(samples: samples, sampleRate: inputSampleRate, to: tempURL) {
+                completedAudioArchiveURL = tempURL
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            VoxtLog.warning("Speech completed audio archive export failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func removeCompletedAudioArchiveIfNeeded() {
+        guard let completedAudioArchiveURL else { return }
+        try? FileManager.default.removeItem(at: completedAudioArchiveURL)
+        self.completedAudioArchiveURL = nil
     }
 }

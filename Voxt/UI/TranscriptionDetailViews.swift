@@ -7,8 +7,24 @@ enum TranscriptionDetailPresentationStyle {
 
 struct TranscriptionDetailContentView: View {
     let entry: TranscriptionHistoryEntry
+    let audioURL: URL?
     let locale: Locale
     let style: TranscriptionDetailPresentationStyle
+
+    @StateObject private var playbackController: HistoryAudioPlaybackController
+
+    init(
+        entry: TranscriptionHistoryEntry,
+        audioURL: URL?,
+        locale: Locale,
+        style: TranscriptionDetailPresentationStyle
+    ) {
+        self.entry = entry
+        self.audioURL = audioURL
+        self.locale = locale
+        self.style = style
+        _playbackController = StateObject(wrappedValue: HistoryAudioPlaybackController(audioURL: audioURL))
+    }
 
     private var preferredContentWidth: CGFloat? {
         style == .popover ? 360 : nil
@@ -78,6 +94,15 @@ struct TranscriptionDetailContentView: View {
                     optionalDetailLine(label: String(localized: "URL Group"), value: entry.matchedURLGroupName)
                 }
 
+                if playbackController.isAvailable {
+                    detailSection(title: String(localized: "Audio")) {
+                        HistoryAudioPlayerView(
+                            controller: playbackController,
+                            compact: style == .popover
+                        )
+                    }
+                }
+
                 if let whisperWordTimings = entry.whisperWordTimings,
                    !whisperWordTimings.isEmpty {
                     detailSection(title: String(localized: "Whisper Timestamps")) {
@@ -129,6 +154,9 @@ struct TranscriptionDetailContentView: View {
             .padding(.vertical, style == .popover ? 10 : 18)
             .frame(width: preferredContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onChange(of: audioURL?.path) { _, _ in
+            playbackController.loadAudio(audioURL)
         }
     }
 

@@ -41,7 +41,7 @@ extension AppDelegate {
             }
             VoxtLog.info("Meeting history saved. entryID=\(entry.id.uuidString), kind=\(entry.kind.rawValue)")
             meetingDetailWindowManager.closeLiveWindow()
-            let audioURL = historyStore.meetingAudioURL(for: entry)
+            let audioURL = historyStore.audioURL(for: entry)
             meetingOverlayWindow.hide { [weak self] in
                 guard let appDelegate = self else { return }
                 appDelegate.historyStore.reload()
@@ -102,11 +102,15 @@ extension AppDelegate {
             return nil
         }
 
-        let meetingAudioRelativePath: String?
-        if let archivedAudioURL = result.archivedAudioURL {
-            meetingAudioRelativePath = try? historyStore.importMeetingAudioArchive(from: archivedAudioURL)
+        let audioRelativePath: String?
+        if historyAudioStorageEnabled, let archivedAudioURL = result.archivedAudioURL {
+            audioRelativePath = try? historyStore.importAudioArchive(from: archivedAudioURL, kind: .meeting)
         } else {
-            meetingAudioRelativePath = nil
+            if let archivedAudioURL = result.archivedAudioURL,
+               FileManager.default.fileExists(atPath: archivedAudioURL.path) {
+                try? FileManager.default.removeItem(at: archivedAudioURL)
+            }
+            audioRelativePath = nil
         }
 
         guard let entryID = historyStore.append(
@@ -132,9 +136,10 @@ extension AppDelegate {
             remoteLLMProvider: nil,
             remoteLLMModel: nil,
             remoteLLMEndpoint: nil,
+            audioRelativePath: audioRelativePath,
             whisperWordTimings: nil,
             meetingSegments: persistedSegments,
-            meetingAudioRelativePath: meetingAudioRelativePath,
+            meetingAudioRelativePath: audioRelativePath,
             dictionaryHitTerms: [],
             dictionaryCorrectedTerms: [],
             dictionarySuggestedTerms: []

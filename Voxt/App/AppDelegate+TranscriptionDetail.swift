@@ -18,6 +18,7 @@ extension AppDelegate {
     func showTranscriptionDetailWindow(for entry: TranscriptionHistoryEntry) {
         TranscriptionDetailWindowManager.shared.present(
             entry: entry,
+            audioURL: historyStore.audioURL(for: entry),
             followUpStatusProvider: { @MainActor entry in
                 self.transcriptionFollowUpProviderStatus(for: entry)
             },

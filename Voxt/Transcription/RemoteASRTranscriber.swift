@@ -6,6 +6,29 @@ import zlib
 
 @MainActor
 class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
+    private final class AudioSampleStore {
+        private let lock = NSLock()
+        private var samples: [Float] = []
+
+        func append(_ newSamples: [Float]) {
+            lock.lock()
+            defer { lock.unlock() }
+            samples.append(contentsOf: newSamples)
+        }
+
+        func snapshot() -> [Float] {
+            lock.lock()
+            defer { lock.unlock() }
+            return samples
+        }
+
+        func clear() {
+            lock.lock()
+            defer { lock.unlock() }
+            samples.removeAll(keepingCapacity: false)
+        }
+    }
+
     @Published var isRecording = false
     @Published var audioLevel: Float = 0.0
     @Published var transcribedText = ""
@@ -28,6 +51,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private var openAIPreviewInFlight = false
     private var openAIPreviewLastText = ""
     private var recordingFileURL: URL?
+    private var completedAudioArchiveURL: URL?
+    private let sampleStore = AudioSampleStore()
+    private var streamingInputSampleRate: Double = HistoryAudioArchiveSupport.targetSampleRate
     private var transcribeTask: Task<Void, Never>?
     private var stopRequested = false
     private var activeProvider: RemoteASRProvider?
@@ -61,12 +87,25 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
 
+    func consumeCompletedAudioArchiveURL() -> URL? {
+        let url = completedAudioArchiveURL
+        completedAudioArchiveURL = nil
+        return url
+    }
+
+    func discardCompletedAudioArchive() {
+        removeCompletedAudioArchiveIfNeeded()
+    }
+
     func startRecording() {
         guard !isRecording else { return }
         recordingGenerationID = UUID()
+        removeCompletedAudioArchiveIfNeeded()
         cleanupActiveUploadTask()
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
+        sampleStore.clear()
+        streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         transcribedText = ""
         audioLevel = 0
         isRequesting = false
@@ -189,6 +228,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 await MainActor.run {
                     guard self.isCurrentGeneration(generationID) else { return }
                     self.transcribedText = result
+                    self.completedAudioArchiveURL = fileURL
                     self.finish(with: result, generationID: generationID)
                 }
             } catch {
@@ -196,10 +236,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     guard self.isCurrentGeneration(generationID) else { return }
                     VoxtLog.error("Remote ASR transcription failed: \(error.localizedDescription)")
                     self.notifyRuntimeFailure(error)
+                    self.completedAudioArchiveURL = fileURL
                     self.finish(with: self.transcribedText, generationID: generationID)
                 }
             }
-            try? FileManager.default.removeItem(at: fileURL)
         }
     }
 
@@ -320,6 +360,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             let finalText = await result()
             await MainActor.run {
                 guard self.isCurrentGeneration(generationID) else { return }
+                self.stageCompletedStreamingAudioArchive()
                 self.transcribedText = finalText
                 self.finish(with: finalText, generationID: generationID)
             }
@@ -982,10 +1023,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        streamingInputSampleRate = inputFormat.sampleRate
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
             guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
+            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
+                self.sampleStore.append(samples)
+            }
             Task { @MainActor in
                 guard self.isRecording,
                       let ctx = self.aliyunStreamingContext,
@@ -1173,10 +1218,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        streamingInputSampleRate = inputFormat.sampleRate
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
             guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
+            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
+                self.sampleStore.append(samples)
+            }
             Task { @MainActor in
                 guard self.isRecording,
                       let ctx = self.aliyunQwenStreamingContext,
@@ -1611,10 +1660,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         }
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        streamingInputSampleRate = inputFormat.sampleRate
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
             guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
+            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
+                self.sampleStore.append(samples)
+            }
             Task { @MainActor in
                 guard self.isRecording,
                       let context = self.doubaoStreamingContext,
@@ -2550,6 +2603,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         recorder?.stop()
         recorder = nil
         recordingFileURL = nil
+        sampleStore.clear()
+        streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         isRecording = false
         stopRequested = false
         stopOpenAIPreviewLoop()
@@ -2561,6 +2616,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         recorder?.stop()
         recorder = nil
         recordingFileURL = nil
+        sampleStore.clear()
+        streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         isRecording = false
         stopOpenAIPreviewLoop()
         stopMeteringTimer()
@@ -2606,6 +2663,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     func discardPendingSessionOutput() {
         recordingGenerationID = UUID()
+        removeCompletedAudioArchiveIfNeeded()
         cleanupActiveUploadTask()
         cleanupRecorderState()
         cleanupDoubaoStreamingState()
@@ -2636,6 +2694,40 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         openAIPreviewTask?.cancel()
         openAIPreviewTask = nil
         openAIPreviewInFlight = false
+    }
+
+    private func removeCompletedAudioArchiveIfNeeded() {
+        guard let completedAudioArchiveURL else { return }
+        try? FileManager.default.removeItem(at: completedAudioArchiveURL)
+        self.completedAudioArchiveURL = nil
+    }
+
+    private func stageCompletedStreamingAudioArchive() {
+        removeCompletedAudioArchiveIfNeeded()
+        let samples = sampleStore.snapshot()
+        let realtimeSummary = activeRealtimeDebugSummary() ?? "none"
+        guard !samples.isEmpty else {
+            VoxtLog.warning(
+                "Remote streaming audio archive export skipped because no local samples were captured. realtime=\(realtimeSummary)"
+            )
+            return
+        }
+        let tempURL = HistoryAudioArchiveSupport.temporaryArchiveURL(prefix: "voxt-remote-stream-history")
+        do {
+            if try HistoryAudioArchiveSupport.exportWAV(
+                samples: samples,
+                sampleRate: streamingInputSampleRate,
+                to: tempURL
+            ) {
+                completedAudioArchiveURL = tempURL
+                VoxtLog.info(
+                    "Remote streaming audio archive staged. samples=\(samples.count), sampleRate=\(Int(streamingInputSampleRate)), file=\(tempURL.lastPathComponent), realtime=\(realtimeSummary)"
+                )
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            VoxtLog.warning("Remote streaming completed audio archive export failed: \(error.localizedDescription)")
+        }
     }
 
     private func runOpenAIPreviewPass(configuration: RemoteProviderConfiguration) async {

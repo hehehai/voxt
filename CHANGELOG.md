@@ -6,6 +6,56 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.10.4] - 2026-05-05
+
+### English
+
+#### Added
+- Added a save action to prompt sections in settings so custom edits persist immediately when you leave the page. Thanks @zhaochenyang20.
+- Added a direct Settings entry for MLX ASR models in the catalog so recognition context, preset, and ITN options are easier to reach. Thanks @yxs.
+
+#### Changed
+- Made the main window resizable with a safer minimum size and more stable traffic-light placement. Thanks @yxs.
+- Localized the default dictionary ingest prompt to match the current UI language, so the prompt stays fully in one language and is easier for models to follow.
+- Limited the dictionary advanced settings sheet height and added scrolling so long prompts stay manageable.
+
+#### Fixed
+- Fixed dictionary auto-correction so approved replacements apply before text is inserted, and delivered text, history, and rewrite payload stay consistent.
+- Fixed model downloads so the active catalog row updates correctly during download, pause, and resume without switching the selected model automatically.
+- Fixed one-click dictionary ingest so common JSON response formats, legacy line-based output, and truncated term lists are handled more reliably.
+
+### 简体中文
+
+#### 新增
+- 为设置页中的提示词分区新增了保存操作，现在离开页面时，自定义编辑会立即持久化。感谢 @zhaochenyang20。
+- 为 MLX ASR 模型目录新增了直接进入设置的入口，现在可以更方便地调整识别上下文、预设和 ITN 选项。感谢 @yxs。
+
+#### 改进
+- 让主窗口支持自由调整大小，同时设置了更稳妥的最小尺寸，并让左上角控制按钮的位置在布局变化时保持更稳定。感谢 @yxs。
+- 让默认词典录入提示词跟随当前 UI 语言，整段提示词会保持单一语言风格，便于模型更稳定地理解。
+- 为词典高级设置弹窗增加了最大高度限制和滚动支持，长提示词现在也更容易查看和编辑。
+
+#### 修复
+- 修复了词典自动纠偏无效的问题，现在命中的替换会在文本插入前生效，最终投递文本、历史记录和 rewrite payload 也会保持一致。
+- 修复了模型下载状态显示问题，现在下载、暂停和继续时，对应目录行会正确更新，且不会自动切换当前选中模型。
+- 修复了一键词典录入在常见 JSON 返回格式、旧版逐行输出和截断词条列表下的兼容性问题。
+
+### 日本語
+
+#### 追加
+- 設定画面のプロンプト項目に保存操作を追加し、ページを離れたときにカスタム編集内容がすぐ保持されるようにしました。Thanks @zhaochenyang20.
+- MLX ASR モデルのカタログに設定への直接入口を追加し、認識コンテキスト、プリセット、ITN オプションへすばやくアクセスできるようにしました。Thanks @yxs.
+
+#### 変更
+- メインウィンドウをリサイズ可能にし、より安全な最小サイズを設定したうえで、左上のトラフィックライト位置もレイアウト変更時に安定するよう改善しました。Thanks @yxs.
+- 既定の辞書取り込みプロンプトを現在の UI 言語に合わせるようにし、プロンプト全体が単一言語で保たれてモデルが解釈しやすくなりました。
+- 辞書の詳細設定ダイアログに最大高さ制限とスクロール対応を追加し、長いプロンプトでも扱いやすくしました。
+
+#### 修正
+- 辞書の自動補正が効かない問題を修正し、承認済みの置換がテキスト挿入前に適用され、最終出力、履歴、rewrite payload が一致するようにしました。
+- モデルダウンロード時の状態表示を修正し、ダウンロード、一時停止、再開に応じて対象行が正しく更新され、選択中モデルが自動で切り替わらないようにしました。
+- ワンクリック辞書取り込みを修正し、一般的な JSON 応答形式、旧来の行単位出力、途中で切れた候補一覧にもより安定して対応できるようにしました。
+
 ## [1.10.3] - 2026-05-02
 
 ### English

@@ -40,6 +40,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let remoteLLMProvider: String?
     let remoteLLMModel: String?
     let remoteLLMEndpoint: String?
+    let audioRelativePath: String?
     let whisperWordTimings: [WhisperHistoryWordTiming]?
     let meetingSegments: [MeetingTranscriptSegment]?
     let meetingAudioRelativePath: String?
@@ -76,6 +77,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case remoteLLMProvider
         case remoteLLMModel
         case remoteLLMEndpoint
+        case audioRelativePath
         case whisperWordTimings
         case meetingSegments
         case meetingAudioRelativePath
@@ -113,6 +115,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteLLMProvider: String?,
         remoteLLMModel: String?,
         remoteLLMEndpoint: String?,
+        audioRelativePath: String? = nil,
         whisperWordTimings: [WhisperHistoryWordTiming]?,
         meetingSegments: [MeetingTranscriptSegment]? = nil,
         meetingAudioRelativePath: String? = nil,
@@ -148,6 +151,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.remoteLLMProvider = remoteLLMProvider
         self.remoteLLMModel = remoteLLMModel
         self.remoteLLMEndpoint = remoteLLMEndpoint
+        self.audioRelativePath = audioRelativePath ?? meetingAudioRelativePath
         self.whisperWordTimings = whisperWordTimings
         self.meetingSegments = meetingSegments
         self.meetingAudioRelativePath = meetingAudioRelativePath
@@ -192,9 +196,11 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         remoteLLMProvider = try container.decodeIfPresent(String.self, forKey: .remoteLLMProvider)
         remoteLLMModel = try container.decodeIfPresent(String.self, forKey: .remoteLLMModel)
         remoteLLMEndpoint = try container.decodeIfPresent(String.self, forKey: .remoteLLMEndpoint)
+        let decodedAudioRelativePath = try container.decodeIfPresent(String.self, forKey: .audioRelativePath)
         whisperWordTimings = try container.decodeIfPresent([WhisperHistoryWordTiming].self, forKey: .whisperWordTimings)
         meetingSegments = try container.decodeIfPresent([MeetingTranscriptSegment].self, forKey: .meetingSegments)
         meetingAudioRelativePath = try container.decodeIfPresent(String.self, forKey: .meetingAudioRelativePath)
+        audioRelativePath = decodedAudioRelativePath ?? meetingAudioRelativePath
         meetingSummary = try container.decodeIfPresent(MeetingSummarySnapshot.self, forKey: .meetingSummary)
         meetingSummaryChatMessages = try container.decodeIfPresent([MeetingSummaryChatMessage].self, forKey: .meetingSummaryChatMessages)
         displayTitle = try container.decodeIfPresent(String.self, forKey: .displayTitle)
@@ -322,6 +328,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         remoteLLMProvider: String?,
         remoteLLMModel: String?,
         remoteLLMEndpoint: String?,
+        audioRelativePath: String? = nil,
         whisperWordTimings: [WhisperHistoryWordTiming]?,
         meetingSegments: [MeetingTranscriptSegment]? = nil,
         meetingAudioRelativePath: String? = nil,
@@ -360,6 +367,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
             whisperWordTimings: whisperWordTimings,
             meetingSegments: meetingSegments,
             meetingAudioRelativePath: meetingAudioRelativePath,
@@ -388,20 +396,28 @@ final class TranscriptionHistoryStore: ObservableObject {
         allEntries.removeAll { $0.id == id }
         loadedCount = min(loadedCount, allEntries.count)
         entries = Array(allEntries.prefix(loadedCount))
-        removed.forEach(removeMeetingAudioIfNeeded(for:))
+        removed.forEach(removeAudioIfNeeded(for:))
         persist()
     }
 
     func clearAll() {
-        allEntries.forEach(removeMeetingAudioIfNeeded(for:))
+        allEntries.forEach(removeAudioIfNeeded(for:))
         allEntries = []
         entries = []
         loadedCount = 0
         persist()
     }
 
-    func importMeetingAudioArchive(from sourceURL: URL) throws -> String {
-        let relativePath = "meeting/\(UUID().uuidString).wav"
+    func importAudioArchive(
+        from sourceURL: URL,
+        kind: TranscriptionHistoryKind,
+        preferredFileName: String? = nil
+    ) throws -> String {
+        let resolvedFileName = sanitizedAudioFileName(
+            preferredFileName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            fallbackKind: kind
+        )
+        let relativePath = "\(audioFolderName(for: kind))/\(resolvedFileName)"
         let destinationURL = try historyAssetsDirectoryURL().appendingPathComponent(relativePath)
         try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         if fileManager.fileExists(atPath: destinationURL.path) {
@@ -411,8 +427,30 @@ final class TranscriptionHistoryStore: ObservableObject {
         return relativePath
     }
 
-    func meetingAudioURL(for entry: TranscriptionHistoryEntry) -> URL? {
-        guard let relativePath = entry.meetingAudioRelativePath, !relativePath.isEmpty else {
+    func replaceAudioArchive(for entryID: UUID, with sourceURL: URL) throws -> TranscriptionHistoryEntry? {
+        guard let index = allEntries.firstIndex(where: { $0.id == entryID }) else { return nil }
+
+        let existingEntry = allEntries[index]
+        let relativePath = existingEntry.audioRelativePath ?? existingEntry.meetingAudioRelativePath
+        let resolvedRelativePath = relativePath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? relativePath!
+            : "\(audioFolderName(for: existingEntry.kind))/\(sanitizedAudioFileName(nil, fallbackKind: existingEntry.kind))"
+        let destinationURL = try historyAssetsDirectoryURL().appendingPathComponent(resolvedRelativePath)
+        try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            try fileManager.removeItem(at: destinationURL)
+        }
+        try fileManager.moveItem(at: sourceURL, to: destinationURL)
+
+        allEntries[index] = existingEntry.updatingAudioRelativePath(resolvedRelativePath)
+        entries = Array(allEntries.prefix(loadedCount))
+        persist()
+        return allEntries[index]
+    }
+
+    func audioURL(for entry: TranscriptionHistoryEntry) -> URL? {
+        let relativePath = entry.audioRelativePath ?? entry.meetingAudioRelativePath
+        guard let relativePath, !relativePath.isEmpty else {
             return nil
         }
         do {
@@ -420,6 +458,66 @@ final class TranscriptionHistoryStore: ObservableObject {
         } catch {
             return nil
         }
+    }
+
+    func exportAllAudioArchives(to destinationDirectoryURL: URL) throws -> HistoryAudioExportSummary {
+        try fileManager.createDirectory(at: destinationDirectoryURL, withIntermediateDirectories: true)
+
+        var exportedCount = 0
+        var skippedCount = 0
+        var failedCount = 0
+
+        for entry in allEntries {
+            guard let sourceURL = audioURL(for: entry) else {
+                skippedCount += 1
+                continue
+            }
+            guard fileManager.fileExists(atPath: sourceURL.path) else {
+                skippedCount += 1
+                continue
+            }
+
+            do {
+                let folderURL = destinationDirectoryURL.appendingPathComponent(audioFolderName(for: entry.kind), isDirectory: true)
+                try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+                let destinationURL = folderURL.appendingPathComponent(exportFileName(for: entry))
+                if fileManager.fileExists(atPath: destinationURL.path) {
+                    try fileManager.removeItem(at: destinationURL)
+                }
+                try fileManager.copyItem(at: sourceURL, to: destinationURL)
+                exportedCount += 1
+            } catch {
+                failedCount += 1
+            }
+        }
+
+        return HistoryAudioExportSummary(
+            exportedCount: exportedCount,
+            skippedCount: skippedCount,
+            failedCount: failedCount
+        )
+    }
+
+    func currentAudioArchiveStorageStats() -> HistoryAudioStorageStats {
+        var storedFileCount = 0
+        var totalBytes: Int64 = 0
+
+        for entry in allEntries {
+            guard let sourceURL = audioURL(for: entry),
+                  fileManager.fileExists(atPath: sourceURL.path)
+            else {
+                continue
+            }
+
+            storedFileCount += 1
+            let fileSize = (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            totalBytes += Int64(fileSize)
+        }
+
+        return HistoryAudioStorageStats(
+            storedFileCount: storedFileCount,
+            totalBytes: totalBytes
+        )
     }
 
     func applyDictionarySuggestedTerms(_ snapshotsByHistoryID: [UUID: [DictionarySuggestionSnapshot]]) {
@@ -556,7 +654,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         let originalCount = allEntries.count
         let removedEntries = allEntries.filter { $0.createdAt < cutoff }
         allEntries.removeAll { $0.createdAt < cutoff }
-        removedEntries.forEach(removeMeetingAudioIfNeeded(for:))
+        removedEntries.forEach(removeAudioIfNeeded(for:))
         return allEntries.count != originalCount
     }
 
@@ -573,19 +671,12 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     private func historyAssetsDirectoryURL() throws -> URL {
-        let appSupport = try fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        return appSupport
-            .appendingPathComponent("Voxt", isDirectory: true)
-            .appendingPathComponent("transcription-history-assets", isDirectory: true)
+        try HistoryAudioStorageDirectoryManager.ensureRootDirectoryExists()
     }
 
-    private func removeMeetingAudioIfNeeded(for entry: TranscriptionHistoryEntry) {
-        guard let relativePath = entry.meetingAudioRelativePath, !relativePath.isEmpty else { return }
+    private func removeAudioIfNeeded(for entry: TranscriptionHistoryEntry) {
+        let relativePath = entry.audioRelativePath ?? entry.meetingAudioRelativePath
+        guard let relativePath, !relativePath.isEmpty else { return }
         do {
             let url = try historyAssetsDirectoryURL().appendingPathComponent(relativePath)
             if fileManager.fileExists(atPath: url.path) {
@@ -608,6 +699,51 @@ final class TranscriptionHistoryStore: ObservableObject {
         }
         return merged
     }
+
+    private func audioFolderName(for kind: TranscriptionHistoryKind) -> String {
+        switch kind {
+        case .normal:
+            return "transcription"
+        case .translation:
+            return "translation"
+        case .rewrite:
+            return "rewrite"
+        case .meeting:
+            return "meeting"
+        }
+    }
+
+    private func sanitizedAudioFileName(_ preferredFileName: String?, fallbackKind: TranscriptionHistoryKind) -> String {
+        let trimmedPreferred = preferredFileName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let baseName = trimmedPreferred.isEmpty ? "\(audioFolderName(for: fallbackKind))-\(UUID().uuidString)" : trimmedPreferred
+        let filtered = baseName.map { character -> Character in
+            if character.isLetter || character.isNumber || character == "-" || character == "_" {
+                return character
+            }
+            return "-"
+        }
+        let normalized = String(filtered).trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
+        let resolved = normalized.isEmpty ? "\(audioFolderName(for: fallbackKind))-\(UUID().uuidString)" : normalized
+        return resolved.hasSuffix(".wav") ? resolved : "\(resolved).wav"
+    }
+
+    private func exportFileName(for entry: TranscriptionHistoryEntry) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return "\(formatter.string(from: entry.createdAt))-\(audioFolderName(for: entry.kind))-\(entry.id.uuidString).wav"
+    }
+}
+
+struct HistoryAudioExportSummary: Equatable {
+    let exportedCount: Int
+    let skippedCount: Int
+    let failedCount: Int
+}
+
+struct HistoryAudioStorageStats: Equatable {
+    let storedFileCount: Int
+    let totalBytes: Int64
 }
 
 private extension TranscriptionHistoryEntry {
@@ -637,6 +773,7 @@ private extension TranscriptionHistoryEntry {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
             whisperWordTimings: whisperWordTimings,
             meetingSegments: meetingSegments,
             meetingAudioRelativePath: meetingAudioRelativePath,
@@ -676,6 +813,7 @@ private extension TranscriptionHistoryEntry {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
             whisperWordTimings: whisperWordTimings,
             meetingSegments: meetingSegments,
             meetingAudioRelativePath: meetingAudioRelativePath,
@@ -715,6 +853,7 @@ private extension TranscriptionHistoryEntry {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
             whisperWordTimings: whisperWordTimings,
             meetingSegments: meetingSegments,
             meetingAudioRelativePath: meetingAudioRelativePath,
@@ -754,6 +893,7 @@ private extension TranscriptionHistoryEntry {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
             whisperWordTimings: whisperWordTimings,
             meetingSegments: meetingSegments,
             meetingAudioRelativePath: meetingAudioRelativePath,
@@ -804,6 +944,47 @@ private extension TranscriptionHistoryEntry {
             remoteLLMProvider: remoteLLMProvider,
             remoteLLMModel: remoteLLMModel,
             remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
+            whisperWordTimings: whisperWordTimings,
+            meetingSegments: meetingSegments,
+            meetingAudioRelativePath: meetingAudioRelativePath,
+            meetingSummary: meetingSummary,
+            meetingSummaryChatMessages: meetingSummaryChatMessages,
+            displayTitle: displayTitle,
+            transcriptionChatMessages: transcriptionChatMessages,
+            dictionaryHitTerms: dictionaryHitTerms,
+            dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionarySuggestedTerms: dictionarySuggestedTerms
+        )
+    }
+
+    func updatingAudioRelativePath(_ audioRelativePath: String?) -> TranscriptionHistoryEntry {
+        TranscriptionHistoryEntry(
+            id: id,
+            text: text,
+            createdAt: createdAt,
+            transcriptionEngine: transcriptionEngine,
+            transcriptionModel: transcriptionModel,
+            enhancementMode: enhancementMode,
+            enhancementModel: enhancementModel,
+            kind: kind,
+            isTranslation: isTranslation,
+            audioDurationSeconds: audioDurationSeconds,
+            transcriptionProcessingDurationSeconds: transcriptionProcessingDurationSeconds,
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: focusedAppName,
+            focusedAppBundleID: focusedAppBundleID,
+            matchedGroupID: matchedGroupID,
+            matchedGroupName: matchedGroupName,
+            matchedAppGroupName: matchedAppGroupName,
+            matchedURLGroupName: matchedURLGroupName,
+            remoteASRProvider: remoteASRProvider,
+            remoteASRModel: remoteASRModel,
+            remoteASREndpoint: remoteASREndpoint,
+            remoteLLMProvider: remoteLLMProvider,
+            remoteLLMModel: remoteLLMModel,
+            remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
             whisperWordTimings: whisperWordTimings,
             meetingSegments: meetingSegments,
             meetingAudioRelativePath: meetingAudioRelativePath,

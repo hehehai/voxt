@@ -11,7 +11,10 @@ extension AppDelegate {
         beginRecording(outputMode: .rewrite)
     }
 
-    func releaseResidualRecordingResources(reason: String) {
+    func releaseResidualRecordingResources(
+        reason: String,
+        preservePendingHistoryAudio: Bool = false
+    ) {
         let speechWasRecording = speechTranscriber.isRecording
         let mlxWasRecording = mlxTranscriber?.isRecording == true
         let whisperWasRecording = whisperTranscriber?.isRecording == true
@@ -39,6 +42,11 @@ extension AppDelegate {
         mlxTranscriber?.stopRecording()
         whisperTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
+        if preservePendingHistoryAudio {
+            VoxtLog.info("Preserving pending history audio during residual resource release. reason=\(reason)")
+        } else {
+            discardPendingCompletedHistoryAudio()
+        }
 
         overlayState.isRecording = false
         overlayState.audioLevel = 0
@@ -472,6 +480,7 @@ extension AppDelegate {
         mlx.transcribedText = ""
         mlx.setPreferredInputDevice(selectedInputDeviceID)
         mlx.onTranscriptionFinished = { [weak self] text in
+            self?.stashPendingCompletedHistoryAudioArchive(self?.mlxTranscriber?.consumeCompletedAudioArchiveURL())
             self?.processTranscription(text, sessionID: sessionID)
         }
         overlayState.bind(to: mlx)
@@ -503,6 +512,7 @@ extension AppDelegate {
             let sessionID = self.activeRecordingSessionID
             self.speechTranscriber.transcribedText = ""
             self.speechTranscriber.onTranscriptionFinished = { [weak self] text in
+                self?.stashPendingCompletedHistoryAudioArchive(self?.speechTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
             }
             self.speechTranscriber.startRecording()
@@ -540,6 +550,7 @@ extension AppDelegate {
             self.overlayState.transcribedText = text
         }
         whisper.onTranscriptionFinished = { [weak self] text in
+            self?.stashPendingCompletedHistoryAudioArchive(self?.whisperTranscriber?.consumeCompletedAudioArchiveURL())
             self?.processTranscription(text, sessionID: sessionID)
         }
         overlayState.bind(to: whisper)
@@ -612,6 +623,7 @@ extension AppDelegate {
             let sessionID = self.activeRecordingSessionID
             self.remoteASRTranscriber.transcribedText = ""
             self.remoteASRTranscriber.onTranscriptionFinished = { [weak self] text in
+                self?.stashPendingCompletedHistoryAudioArchive(self?.remoteASRTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
             }
             self.remoteASRTranscriber.onStartFailure = { [weak self] message in
@@ -638,6 +650,7 @@ extension AppDelegate {
         if transcriptionEngine == .remote {
             remoteASRTranscriber.discardPendingSessionOutput()
         }
+        discardPendingCompletedHistoryAudio()
         isSessionActive = false
         isSessionCancellationRequested = false
         didCommitSessionOutput = false

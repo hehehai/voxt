@@ -66,7 +66,7 @@ struct HistoryRow: View {
     @Environment(\.locale) private var locale
 
     let entry: TranscriptionHistoryEntry
-    let meetingAudioURL: URL?
+    let audioURL: URL?
     let isCopied: Bool
     let onCopy: () -> Void
     let onDelete: () -> Void
@@ -128,7 +128,7 @@ struct HistoryRow: View {
                     }
                     .buttonStyle(.plain)
                     .popover(isPresented: $showModelInfo, arrowEdge: .trailing) {
-                        HistoryInfoPopover(entry: entry, locale: locale)
+                        HistoryInfoPopover(entry: entry, audioURL: audioURL, locale: locale)
                     }
 
                     if supportsDetail {
@@ -268,7 +268,7 @@ struct HistoryRow: View {
             }
             MeetingDetailWindowManager.shared.presentHistoryMeeting(
                 entry: entry,
-                audioURL: meetingAudioURL,
+                audioURL: audioURL,
                 initialSummarySettings: appDelegate.currentMeetingSummarySettingsSnapshot(),
                 summaryModelOptionsProvider: { @MainActor in
                     appDelegate.meetingSummaryModelOptions()
@@ -314,11 +314,13 @@ struct HistoryRow: View {
 
 private struct HistoryInfoPopover: View {
     let entry: TranscriptionHistoryEntry
+    let audioURL: URL?
     let locale: Locale
 
     var body: some View {
         TranscriptionDetailContentView(
             entry: entry,
+            audioURL: audioURL,
             locale: locale,
             style: .popover
         )

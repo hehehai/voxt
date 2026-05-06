@@ -8,6 +8,7 @@ final class TranscriptionDetailViewModel: ObservableObject {
     typealias FollowUpPersistence = @MainActor (UUID, [MeetingSummaryChatMessage]) -> TranscriptionHistoryEntry?
 
     @Published private(set) var entry: TranscriptionHistoryEntry
+    @Published private(set) var audioURL: URL?
     @Published private(set) var chatMessages: [MeetingSummaryChatMessage]
     @Published private(set) var providerStatus: TranscriptionFollowUpProviderStatus
     @Published private(set) var isLoading = false
@@ -22,11 +23,13 @@ final class TranscriptionDetailViewModel: ObservableObject {
 
     init(
         entry: TranscriptionHistoryEntry,
+        audioURL: URL?,
         followUpStatusProvider: @escaping FollowUpStatusProvider,
         followUpAnswerer: @escaping FollowUpAnswerer,
         followUpPersistence: @escaping FollowUpPersistence
     ) {
         self.entry = entry
+        self.audioURL = audioURL
         self.chatMessages = entry.transcriptionChatMessages ?? []
         self.followUpStatusProvider = followUpStatusProvider
         self.followUpAnswerer = followUpAnswerer
@@ -83,6 +86,13 @@ final class TranscriptionDetailViewModel: ObservableObject {
 
     func refresh(entry: TranscriptionHistoryEntry) {
         self.entry = entry
+        self.chatMessages = entry.transcriptionChatMessages ?? []
+        self.providerStatus = followUpStatusProvider(entry)
+    }
+
+    func refresh(entry: TranscriptionHistoryEntry, audioURL: URL?) {
+        self.entry = entry
+        self.audioURL = audioURL
         self.chatMessages = entry.transcriptionChatMessages ?? []
         self.providerStatus = followUpStatusProvider(entry)
     }

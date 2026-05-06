@@ -11,6 +11,7 @@ private struct TranscriptionDetailBottomVisibilityPreferenceKey: PreferenceKey {
 
 struct TranscriptionDetailConversationView: View {
     @ObservedObject var viewModel: TranscriptionDetailViewModel
+    @StateObject private var playbackController: HistoryAudioPlaybackController
 
     @State private var isScrolledToBottom = true
     @State private var wasScrolledToBottom = true
@@ -19,15 +20,26 @@ struct TranscriptionDetailConversationView: View {
 
     private let bottomAnchorID = "transcription-detail-bottom-anchor"
 
+    init(viewModel: TranscriptionDetailViewModel) {
+        self.viewModel = viewModel
+        _playbackController = StateObject(wrappedValue: HistoryAudioPlaybackController(audioURL: viewModel.audioURL))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
+            if playbackController.isAvailable {
+                audioPlayer
+            }
             Divider()
                 .overlay(MeetingDetailUIStyle.dividerColor)
             conversationBody
             composer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onChange(of: viewModel.audioURL?.path) { _, _ in
+            playbackController.loadAudio(viewModel.audioURL)
+        }
     }
 
     private var header: some View {
@@ -52,6 +64,14 @@ struct TranscriptionDetailConversationView: View {
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 10)
+    }
+
+    private var audioPlayer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HistoryAudioPlayerView(controller: playbackController, compact: false)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
     }
 
     private var conversationBody: some View {
