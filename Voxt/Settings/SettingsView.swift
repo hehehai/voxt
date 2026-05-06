@@ -27,6 +27,8 @@ struct SettingsView: View {
     @AppStorage(AppPreferenceKey.muteSystemAudioWhileRecording) private var muteSystemAudioWhileRecording = false
     @AppStorage(AppPreferenceKey.transcriptionEngine) private var transcriptionEngineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.featureSettings) private var featureSettingsRaw = ""
+    @AppStorage(AppPreferenceKey.remoteASRProviderConfigurations) private var remoteASRProviderConfigurationsRaw = ""
+    @AppStorage(AppPreferenceKey.remoteLLMProviderConfigurations) private var remoteLLMProviderConfigurationsRaw = ""
     @State private var selectedTab: SettingsTab
     @State private var selectedFeatureTab: FeatureSettingsTab
     @State private var sidebarMode: SettingsSidebarMode
@@ -173,6 +175,12 @@ struct SettingsView: View {
                 navigationRequest = nil
                 selectedFeatureTab = .transcription
             }
+        }
+        .onChange(of: remoteASRProviderConfigurationsRaw) { _, _ in
+            refreshModelConfigurationBadge()
+        }
+        .onChange(of: remoteLLMProviderConfigurationsRaw) { _, _ in
+            refreshModelConfigurationBadge()
         }
         .onChange(of: selectedTab) { _, tab in
             if Self.isStaticTab(tab) {

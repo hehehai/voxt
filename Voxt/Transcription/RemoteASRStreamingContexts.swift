@@ -1,5 +1,19 @@
 import Foundation
 
+actor AsyncGate {
+    private var isOpen = false
+
+    func open() {
+        isOpen = true
+    }
+
+    func wait() async {
+        while !isOpen {
+            try? await Task.sleep(for: .milliseconds(30))
+        }
+    }
+}
+
 @MainActor
 final class AliyunQwenStreamingContext {
     let session: URLSession

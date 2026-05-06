@@ -270,6 +270,26 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
+    func transcribeAudioFile(
+        _ fileURL: URL,
+        outputMode: SessionOutputMode = .transcription,
+        useBuiltInTranslationTask: Bool = false
+    ) async throws -> String {
+        let loaded = try DebugAudioClipIO.loadMonoSamples(from: fileURL)
+        preparedOutputMode = outputMode
+        preparedUseBuiltInTranslationTask = useBuiltInTranslationTask
+        let whisper = try await modelManager.loadWhisper()
+        let preparedSamples = prepareInputSamples(loaded.samples, sampleRate: loaded.sampleRate)
+        let results = try await whisper.transcribe(
+            audioArray: preparedSamples,
+            decodeOptions: buildDecodingOptions(
+                whisper: whisper,
+                includeWordTimings: false
+            )
+        )
+        return normalizeText(results.map(\.text).joined(separator: " "))
+    }
+
     func restartCaptureForPreferredInputDevice() throws {
         guard isRecording else { return }
         guard !whisperRealtimeEnabled else {

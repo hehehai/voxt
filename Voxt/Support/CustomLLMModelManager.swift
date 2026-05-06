@@ -147,7 +147,16 @@ class CustomLLMModelManager: ObservableObject {
 
     var currentModelRepo: String { modelRepo }
 
+    func isModelLoaded(repo: String) -> Bool {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        return inferenceContainer != nil && inferenceModelRepo == canonicalRepo
+    }
+
     func enhance(_ rawText: String, systemPrompt: String) async throws -> String {
+        try await enhance(rawText, systemPrompt: systemPrompt, modelRepo: modelRepo)
+    }
+
+    func enhance(_ rawText: String, systemPrompt: String, modelRepo: String) async throws -> String {
         let input = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return rawText }
         let request = CustomLLMRequestPlanBuilder.enhancement(

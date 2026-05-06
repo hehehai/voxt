@@ -30,7 +30,7 @@ struct PromptEditorView: View {
     }
 }
 
-struct PromptTemplateVariableDescriptor: Identifiable {
+struct PromptTemplateVariableDescriptor: Identifiable, Hashable {
     let token: String
     let tipKey: String
 

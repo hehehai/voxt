@@ -104,6 +104,8 @@ enum AppPreferenceKey {
     static let autoCheckForUpdates = "autoCheckForUpdates"
     static let hotkeyDebugLoggingEnabled = "hotkeyDebugLoggingEnabled"
     static let llmDebugLoggingEnabled = "llmDebugLoggingEnabled"
+    static let llmDebugCustomPrompt = "llmDebugCustomPrompt"
+    static let llmDebugPresetPromptOverrides = "llmDebugPresetPromptOverrides"
     static let useSystemProxy = "useSystemProxy"
     static let networkProxyMode = "networkProxyMode"
     static let customProxyScheme = "customProxyScheme"

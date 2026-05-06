@@ -201,6 +201,41 @@ enum VoxtNetworkSession {
         )
     }
 
+    static func activeProxyUnavailableMessage(for error: Error) -> String? {
+        let nsError = error as NSError
+        let description = nsError.localizedDescription.lowercased()
+        let socketNotConnected = description.contains("socket is not connected")
+            || description.contains("socket未连接")
+        let likelyProxyFailure =
+            socketNotConnected
+            || nsError.code == NSURLErrorCannotConnectToHost
+            || nsError.code == NSURLErrorNetworkConnectionLost
+            || nsError.code == NSURLErrorCannotFindHost
+
+        guard likelyProxyFailure else { return nil }
+
+        let settings = currentProxySettings
+        switch settings.mode {
+        case .system:
+            let status = currentSystemProxyStatus
+            guard status.hasEnabledProxy, let proxySummary = status.preferredSummary else { return nil }
+            return AppLocalization.format(
+                "Voxt is using the macOS system proxy (%@), but that proxy is unreachable. Make sure Clash/your proxy app is running, or switch Voxt to Direct Connection if you don't need a proxy.",
+                proxySummary
+            )
+        case .custom:
+            guard settings.hasValidCustomEndpoint, let port = settings.port else { return nil }
+            return AppLocalization.format(
+                "Voxt is using the custom proxy (%@://%@:%d), but that proxy is unreachable. Check the proxy address, port, and whether the proxy app is running.",
+                settings.scheme.rawValue.uppercased(),
+                settings.host,
+                port
+            )
+        case .disabled:
+            return nil
+        }
+    }
+
     static var currentProxySettings: ProxySettings {
         let credentials = currentProxyCredentials()
         let defaults = UserDefaults.standard

@@ -728,28 +728,36 @@ struct ModelSettingsView: View {
             Spacer(minLength: 0)
 
             if !missingConfigurationIssues.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(
-                        missingConfigurationIssues.count == 1
-                        ? localized("1 model needs setup")
-                        : AppLocalization.format("%d models need setup", missingConfigurationIssues.count)
+                Menu {
+                    ForEach(missingConfigurationIssueDescriptions, id: \.self) { description in
+                        Text(description)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(
+                            missingConfigurationIssues.count == 1
+                            ? localized("1 model needs setup")
+                            : AppLocalization.format("%d models need setup", missingConfigurationIssues.count)
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.orange.opacity(0.10))
                     )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+                    )
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color.orange.opacity(0.10))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(Color.orange.opacity(0.18), lineWidth: 1)
-                )
+                .menuStyle(.borderlessButton)
+                .help(missingConfigurationIssueDescriptions.joined(separator: "\n"))
             }
 
             Text(AppLocalization.format("%d items", filteredEntries.count))
@@ -762,6 +770,11 @@ struct ModelSettingsView: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(SettingsCompactIconButtonStyle())
+
+            Button(action: openModelDebugWindow) {
+                Text(localized("Debug"))
+            }
+            .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 12))
         }
     }
 
@@ -941,6 +954,45 @@ struct ModelSettingsView: View {
             return true
         case .notDownloaded, .downloaded, .paused, .error:
             return false
+        }
+    }
+
+    private func openModelDebugWindow() {
+        guard let appDelegate = AppDelegate.shared else { return }
+        switch catalogTab {
+        case .asr:
+            ASRDebugWindowManager.shared.present(appDelegate: appDelegate)
+        case .llm:
+            LLMDebugWindowManager.shared.present(appDelegate: appDelegate)
+        }
+    }
+
+    private var missingConfigurationIssueDescriptions: [String] {
+        missingConfigurationIssues.map(missingConfigurationIssueDescription(for:))
+    }
+
+    private func missingConfigurationIssueDescription(
+        for issue: ConfigurationTransferManager.MissingConfigurationIssue
+    ) -> String {
+        switch issue.scope {
+        case .remoteASRProvider(let provider):
+            return AppLocalization.format("%@ %@: %@", provider.title, localized("ASR"), issue.message)
+        case .remoteLLMProvider(let provider):
+            return AppLocalization.format("%@ %@: %@", provider.title, localized("LLM"), issue.message)
+        case .mlxModel(let repo):
+            return AppLocalization.format("%@ %@: %@", mlxModelManager.displayTitle(for: repo), localized("ASR"), issue.message)
+        case .whisperModel(let modelID):
+            return AppLocalization.format("%@ %@: %@", whisperModelManager.displayTitle(for: modelID), localized("Whisper"), issue.message)
+        case .customLLMModel(let repo):
+            return AppLocalization.format("%@ %@: %@", customLLMManager.displayTitle(for: repo), localized("LLM"), issue.message)
+        case .translationRemoteLLM(let provider):
+            return AppLocalization.format("%@ %@: %@", provider.title, localized("Translation"), issue.message)
+        case .rewriteRemoteLLM(let provider):
+            return AppLocalization.format("%@ %@: %@", provider.title, localized("Rewrite"), issue.message)
+        case .translationCustomLLM(let repo):
+            return AppLocalization.format("%@ %@: %@", customLLMManager.displayTitle(for: repo), localized("Translation"), issue.message)
+        case .rewriteCustomLLM(let repo):
+            return AppLocalization.format("%@ %@: %@", customLLMManager.displayTitle(for: repo), localized("Rewrite"), issue.message)
         }
     }
 }

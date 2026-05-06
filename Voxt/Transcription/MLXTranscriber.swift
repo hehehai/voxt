@@ -929,6 +929,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
+    func transcribeAudioFile(_ fileURL: URL) async throws -> String {
+        let loaded = try DebugAudioClipIO.loadMonoSamples(from: fileURL)
+        return await transcribeMeetingChunk(
+            samples: loaded.samples,
+            sampleRate: loaded.sampleRate
+        ) ?? ""
+    }
+
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
         guard let preferredInputDeviceID else { return }
         guard let audioUnit = inputNode.audioUnit else { return }

@@ -326,7 +326,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func resolveStreamingResult(
+    func resolveStreamingResult(
         warningMessage: String,
         waitForFinal: @escaping @Sendable () async throws -> String,
         fallback: @escaping @Sendable () async -> String
@@ -334,9 +334,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         do {
             return try await waitForFinal()
         } catch {
-            VoxtLog.warning("\(warningMessage): \(error.localizedDescription)")
-            notifyRuntimeFailure(error)
-            return await fallback()
+            let fallbackText = await fallback()
+            if fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                VoxtLog.warning("\(warningMessage): \(error.localizedDescription)")
+                notifyRuntimeFailure(error)
+            } else {
+                VoxtLog.info("\(warningMessage): recovered with partial text fallback.", verbose: true)
+            }
+            return fallbackText
         }
     }
 
@@ -443,6 +448,39 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             configuration: configuration,
             hintPayload: hintPayload
         )
+    }
+
+    func transcribeDebugAudioFile(
+        _ fileURL: URL,
+        provider: RemoteASRProvider,
+        configuration: RemoteProviderConfiguration
+    ) async throws -> String {
+        guard configuration.isConfigured else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -111,
+                userInfo: [NSLocalizedDescriptionKey: "Remote ASR is not configured yet."]
+            )
+        }
+        let hintPayload = resolvedHintPayload(for: provider, configuration: configuration)
+        do {
+            return try await transcribeAudioFile(
+                fileURL: fileURL,
+                provider: provider,
+                configuration: configuration,
+                hintPayload: hintPayload
+            )
+        } catch {
+            let message = userVisibleRemoteErrorMessage(for: error)
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: (error as NSError).code,
+                userInfo: [
+                    NSLocalizedDescriptionKey: message,
+                    NSUnderlyingErrorKey: error,
+                ]
+            )
+        }
     }
 
     private func resolvedHintPayload(
@@ -604,7 +642,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let accessToken = configuration.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
         let appID = configuration.appID.trimmingCharacters(in: .whitespacesAndNewlines)
         let resourceID = RemoteASREndpointSupport.resolvedDoubaoResourceID(from: configuration)
-        let endpoint = RemoteASREndpointSupport.resolvedDoubaoEndpoint(from: configuration)
+        let endpoint = RemoteASREndpointSupport.resolvedDoubaoStreamingEndpoint(from: configuration)
 
         guard !accessToken.isEmpty else {
             throw NSError(domain: "Voxt.RemoteASR", code: -3, userInfo: [NSLocalizedDescriptionKey: "Doubao Access Token is empty."])
@@ -623,7 +661,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 configuration: configuration
             )
         }
-        return try await transcribeDoubaoWebSocket(
+        return try await transcribeDoubaoStreamingFileWebSocket(
             fileURL: fileURL,
             appID: appID,
             accessToken: accessToken,
@@ -710,6 +748,24 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else {
             throw NSError(domain: "Voxt.RemoteASR", code: -30, userInfo: [NSLocalizedDescriptionKey: "Aliyun Bailian API key is empty."])
+        }
+        if RemoteASREndpointSupport.isAliyunQwenRealtimeModel(model) {
+            return try await transcribeAliyunQwenRealtimeFile(
+                fileURL: fileURL,
+                token: token,
+                model: model,
+                endpoint: configuration.endpoint,
+                hintPayload: resolvedHintPayload(for: .aliyunBailianASR, configuration: configuration)
+            )
+        }
+        if RemoteASREndpointSupport.isAliyunFunRealtimeModel(model) {
+            return try await transcribeAliyunFunRealtimeFile(
+                fileURL: fileURL,
+                token: token,
+                model: model,
+                endpoint: configuration.endpoint,
+                hintPayload: resolvedHintPayload(for: .aliyunBailianASR, configuration: configuration)
+            )
         }
         if let validationError = AliyunMeetingASRConfiguration.validationError(model: model, endpoint: configuration.endpoint) {
             throw NSError(domain: "Voxt.RemoteASR", code: -36, userInfo: [NSLocalizedDescriptionKey: validationError])
@@ -957,7 +1013,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         audioLevel = 0
     }
 
-    private func sendAliyunFunControl(
+    func sendAliyunFunControl(
         action: String,
         through ws: URLSessionWebSocketTask,
         taskID: String,
@@ -1141,7 +1197,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         isRecording = true
     }
 
-    private func sendAliyunQwenSessionUpdate(
+    func sendAliyunQwenSessionUpdate(
         through ws: URLSessionWebSocketTask,
         hintPayload: ResolvedASRHintPayload,
         onError: @escaping (Error?) -> Void
@@ -1168,7 +1224,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         sendAliyunQwenEvent(payload: payload, through: ws, onError: onError)
     }
 
-    private func sendAliyunQwenAudioAppend(
+    func sendAliyunQwenAudioAppend(
         _ audio: Data,
         through ws: URLSessionWebSocketTask,
         onError: @escaping (Error?) -> Void
@@ -1181,7 +1237,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         sendAliyunQwenEvent(payload: payload, through: ws, onError: onError)
     }
 
-    private func sendAliyunQwenEvent(
+    func sendAliyunQwenEvent(
         type: String,
         through ws: URLSessionWebSocketTask,
         onError: @escaping (Error?) -> Void
@@ -1193,7 +1249,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         sendAliyunQwenEvent(payload: payload, through: ws, onError: onError)
     }
 
-    private func sendAliyunQwenEvent(
+    func sendAliyunQwenEvent(
         payload: [String: Any],
         through ws: URLSessionWebSocketTask,
         onError: @escaping (Error?) -> Void
@@ -1316,7 +1372,136 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             try? await Task.sleep(for: .milliseconds(24))
         }
 
-        let finalText = try await responseState.waitForFinalResult(timeoutSeconds: 20)
+        let finalText = await resolveStreamingResult(
+            warningMessage: "Doubao non-stream file result wait failed"
+        ) {
+            try await responseState.waitForFinalResult(timeoutSeconds: 20)
+        } fallback: {
+            await responseState.currentText()
+        }
+        receiveTask.cancel()
+        return finalText
+    }
+
+    private func transcribeDoubaoStreamingFileWebSocket(
+        fileURL: URL,
+        appID: String,
+        accessToken: String,
+        resourceID: String,
+        endpoint: String,
+        hintPayload: ResolvedASRHintPayload,
+        configuration: RemoteProviderConfiguration
+    ) async throws -> String {
+        guard let wsURL = URL(string: endpoint) else {
+            throw NSError(domain: "Voxt.RemoteASR", code: -5, userInfo: [NSLocalizedDescriptionKey: "Invalid Doubao endpoint URL."])
+        }
+
+        let (samples, sampleRate) = try DebugAudioClipIO.loadMonoSamples(from: fileURL)
+        guard let pcmData = Self.makePCM16MonoData(from: samples, inputSampleRate: sampleRate),
+              !pcmData.isEmpty else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -52,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to decode audio samples."]
+            )
+        }
+
+        var request = URLRequest(url: wsURL)
+        request.timeoutInterval = 45
+        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
+        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
+        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
+        let requestID = UUID().uuidString.lowercased()
+        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
+        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        VoxtLog.info(
+            "Doubao websocket connect. endpoint=\(endpoint), resource=\(resourceID)"
+        )
+
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
+        ws.resume()
+        defer {
+            ws.cancel(with: .goingAway, reason: nil)
+            managedSocket.session.invalidateAndCancel()
+        }
+
+        let reqID = UUID().uuidString.lowercased()
+        try await sendDoubaoFullRequest(
+            ws: ws,
+            reqID: reqID,
+            sequence: 1,
+            hintPayload: hintPayload,
+            audioFormat: DoubaoASRConfiguration.streamingAudioFormat,
+            configuration: configuration
+        )
+
+        let responseState = DoubaoResponseState { [weak self] error in
+            Task { @MainActor [weak self] in
+                self?.notifyRuntimeFailure(error)
+            }
+        }
+        let receiveTask = Task {
+            do {
+                while !Task.isCancelled {
+                    let message = try await ws.receive()
+                    guard case .data(let payloadData) = message else { continue }
+                    if let parsed = try self.parseDoubaoServerPacket(payloadData) {
+                        if let text = parsed.text, !text.isEmpty {
+                            _ = await responseState.replace(text: text, isFinal: parsed.isFinal)
+                        } else if parsed.isFinal {
+                            await responseState.markFinal()
+                        }
+                    }
+                }
+            } catch {
+                if let detail = await self.fetchDoubaoHandshakeFailureDetail(
+                    error: error,
+                    endpoint: endpoint,
+                    resourceID: resourceID,
+                    appID: appID,
+                    accessToken: accessToken
+                ) {
+                    VoxtLog.warning("Doubao websocket receive failed. detail=\(detail)")
+                    let detailedError = NSError(
+                        domain: "Voxt.RemoteASR",
+                        code: (error as NSError).code,
+                        userInfo: [NSLocalizedDescriptionKey: detail]
+                    )
+                    await responseState.markCompletedWithError(detailedError)
+                } else {
+                    await responseState.markCompletedWithError(error)
+                }
+            }
+        }
+
+        var offset = 0
+        let chunkSize = DoubaoASRConfiguration.recommendedStreamingPacketBytes
+        var sequence: Int32 = 2
+        while offset < pcmData.count {
+            let end = min(offset + chunkSize, pcmData.count)
+            let chunk = pcmData[offset..<end]
+            let isLast = end >= pcmData.count
+            try await sendDoubaoAudioPacket(
+                ws: ws,
+                payload: Data(chunk),
+                isLast: isLast,
+                sequence: sequence
+            )
+            if !isLast {
+                sequence += 1
+            }
+            offset = end
+            try? await Task.sleep(for: .milliseconds(24))
+        }
+
+        let finalText = await resolveStreamingResult(
+            warningMessage: "Doubao async file result wait failed"
+        ) {
+            try await responseState.waitForFinalResult(timeoutSeconds: 20)
+        } fallback: {
+            await responseState.currentText()
+        }
         receiveTask.cancel()
         return finalText
     }
@@ -1995,6 +2180,24 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         return output
     }
 
+    nonisolated static func makePCM16MonoData(from samples: [Float], inputSampleRate: Double) -> Data? {
+        guard !samples.isEmpty, inputSampleRate > 0 else { return nil }
+        let targetRate = 16000.0
+        let ratio = targetRate / inputSampleRate
+        let outputCount = max(Int(Double(samples.count) * ratio), 1)
+        var data = Data(count: outputCount * MemoryLayout<Int16>.size)
+        data.withUnsafeMutableBytes { rawBuffer in
+            let out = rawBuffer.bindMemory(to: Int16.self)
+            for index in 0..<outputCount {
+                let sourcePosition = Double(index) / ratio
+                let sourceIndex = min(Int(sourcePosition.rounded(.down)), samples.count - 1)
+                let clamped = max(-1.0, min(1.0, samples[sourceIndex]))
+                out[index] = Int16(clamped * Float(Int16.max))
+            }
+        }
+        return data
+    }
+
     private func buildDoubaoPacket(
         messageType: UInt8,
         messageFlags: UInt8,
@@ -2534,6 +2737,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private func userVisibleRemoteErrorMessage(for error: Error) -> String {
         if let conflictMessage = VoxtNetworkSession.directModeConflictMessage(for: error) {
             return conflictMessage
+        }
+        if let proxyUnavailableMessage = VoxtNetworkSession.activeProxyUnavailableMessage(for: error) {
+            return proxyUnavailableMessage
         }
         let nsError = error as NSError
         let description = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
