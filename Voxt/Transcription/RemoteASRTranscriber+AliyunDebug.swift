@@ -155,6 +155,7 @@ extension RemoteASRTranscriber {
 
         let responseState = AliyunQwenResponseState()
         let startSignal = AsyncGate()
+        let kind = RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: model) ?? .qwenASR
         let receiveTask = Task {
             do {
                 while !Task.isCancelled {
@@ -181,7 +182,7 @@ extension RemoteASRTranscriber {
             }
         }
 
-        sendAliyunQwenSessionUpdate(through: ws, hintPayload: hintPayload) { error in
+        sendAliyunQwenSessionUpdate(through: ws, hintPayload: hintPayload, kind: kind) { error in
             Task {
                 if let error {
                     await responseState.markCompletedWithError(error)
@@ -290,6 +291,12 @@ extension RemoteASRTranscriber {
 
         if type == "session.updated" {
             await startSignal.open()
+            return
+        }
+
+        if type.hasPrefix("response.")
+            || type.hasPrefix("output_audio.")
+            || (type.hasPrefix("conversation.item.") && !type.hasPrefix("conversation.item.input_audio_transcription.")) {
             return
         }
 

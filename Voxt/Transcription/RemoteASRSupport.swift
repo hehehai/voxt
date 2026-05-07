@@ -1,5 +1,58 @@
 import Foundation
 
+enum AliyunQwenRealtimeSessionKind: Equatable {
+    case qwenASR
+    case omniASR
+
+    var transcriptionModel: String? {
+        switch self {
+        case .qwenASR:
+            return nil
+        case .omniASR:
+            return "qwen3-asr-flash-realtime"
+        }
+    }
+
+    var shouldCommitBeforeFinish: Bool {
+        switch self {
+        case .qwenASR:
+            return false
+        case .omniASR:
+            return false
+        }
+    }
+}
+
+enum AliyunQwenRealtimePayloadSupport {
+    static func sessionUpdatePayload(
+        kind: AliyunQwenRealtimeSessionKind,
+        hintPayload: ResolvedASRHintPayload
+    ) -> [String: Any] {
+        var transcriptionPayload: [String: Any] = [:]
+        if let transcriptionModel = kind.transcriptionModel {
+            transcriptionPayload["model"] = transcriptionModel
+        }
+        if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
+            transcriptionPayload["language"] = language
+        }
+        return [
+            "event_id": UUID().uuidString.lowercased(),
+            "type": "session.update",
+            "session": [
+                "modalities": ["text"],
+                "input_audio_format": "pcm",
+                "sample_rate": 16000,
+                "input_audio_transcription": transcriptionPayload,
+                "turn_detection": [
+                    "type": "server_vad",
+                    "threshold": 0.0,
+                    "silence_duration_ms": 400
+                ]
+            ]
+        ]
+    }
+}
+
 enum RemoteASRTextSupport {
     static func extractTextFragment(fromLine line: String) -> String? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -271,6 +324,23 @@ enum RemoteASREndpointSupport {
     static func isAliyunQwenRealtimeModel(_ model: String) -> Bool {
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalized.hasPrefix("qwen3-asr-flash-realtime")
+    }
+
+    static func isAliyunOmniRealtimeModel(_ model: String) -> Bool {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasPrefix("qwen3.5-omni-flash-realtime")
+            || normalized.hasPrefix("qwen3.5-omni-plus-realtime")
+            || normalized.hasPrefix("qwen-omni-turbo-realtime")
+    }
+
+    static func aliyunQwenRealtimeSessionKind(for model: String) -> AliyunQwenRealtimeSessionKind? {
+        if isAliyunQwenRealtimeModel(model) {
+            return .qwenASR
+        }
+        if isAliyunOmniRealtimeModel(model) {
+            return .omniASR
+        }
+        return nil
     }
 
     static func isAliyunFileTranscriptionModel(_ model: String) -> Bool {

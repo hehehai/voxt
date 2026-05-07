@@ -43,7 +43,7 @@ extension AppDelegate {
         whisperTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
         if preservePendingHistoryAudio {
-            VoxtLog.info("Preserving pending history audio during residual resource release. reason=\(reason)")
+            VoxtLog.info("Preserving pending history audio during residual resource release. reason=\(reason)", verbose: true)
         } else {
             discardPendingCompletedHistoryAudio()
         }

@@ -319,13 +319,15 @@ extension AppDelegate {
 
         let historyKind = resolvedHistoryKind(for: outputMode)
         VoxtLog.info(
-            "History append requested. kind=\(historyKind.rawValue), engine=\(transcriptionEngine.rawValue), historyEnabled=\(historyEnabled), audioStorageEnabled=\(historyAudioStorageEnabled), stashedAudio=\(pendingCompletedHistoryAudioArchiveURL != nil)"
+            "History append requested. kind=\(historyKind.rawValue), engine=\(transcriptionEngine.rawValue), historyEnabled=\(historyEnabled), audioStorageEnabled=\(historyAudioStorageEnabled), stashedAudio=\(pendingCompletedHistoryAudioArchiveURL != nil)",
+            verbose: true
         )
         let pendingAudioArchiveURL = consumePendingCompletedHistoryAudioURL()
         if let pendingAudioArchiveURL {
             let exists = FileManager.default.fileExists(atPath: pendingAudioArchiveURL.path)
             VoxtLog.info(
-                "History append consumed pending audio archive. kind=\(historyKind.rawValue), file=\(pendingAudioArchiveURL.lastPathComponent), exists=\(exists)"
+                "History append consumed pending audio archive. kind=\(historyKind.rawValue), file=\(pendingAudioArchiveURL.lastPathComponent), exists=\(exists)",
+                verbose: true
             )
         } else {
             VoxtLog.warning(
@@ -674,7 +676,8 @@ extension AppDelegate {
             self.pendingCompletedHistoryAudioArchiveURL = nil
             let exists = FileManager.default.fileExists(atPath: pendingCompletedHistoryAudioArchiveURL.path)
             VoxtLog.info(
-                "Consumed stashed history audio archive. file=\(pendingCompletedHistoryAudioArchiveURL.lastPathComponent), exists=\(exists)"
+                "Consumed stashed history audio archive. file=\(pendingCompletedHistoryAudioArchiveURL.lastPathComponent), exists=\(exists)",
+                verbose: true
             )
             return pendingCompletedHistoryAudioArchiveURL
         }
@@ -692,7 +695,8 @@ extension AppDelegate {
         if let consumedURL {
             let exists = FileManager.default.fileExists(atPath: consumedURL.path)
             VoxtLog.info(
-                "Consumed transcriber history audio archive. engine=\(transcriptionEngine.rawValue), file=\(consumedURL.lastPathComponent), exists=\(exists)"
+                "Consumed transcriber history audio archive. engine=\(transcriptionEngine.rawValue), file=\(consumedURL.lastPathComponent), exists=\(exists)",
+                verbose: true
             )
         } else {
             VoxtLog.warning(
@@ -725,9 +729,7 @@ extension AppDelegate {
             try? FileManager.default.removeItem(at: pendingCompletedHistoryAudioArchiveURL)
         }
         pendingCompletedHistoryAudioArchiveURL = url
-        let exists = FileManager.default.fileExists(atPath: url.path)
-        let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        VoxtLog.info("Pending history audio archive stashed. file=\(url.lastPathComponent), exists=\(exists), size=\(fileSize)")
+        VoxtLog.info("Pending history audio archive stashed. file=\(url.lastPathComponent)")
     }
 
     private func importConsumedAudioArchiveIfNeeded(

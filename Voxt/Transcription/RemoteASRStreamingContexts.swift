@@ -20,6 +20,7 @@ final class AliyunQwenStreamingContext {
     let ws: URLSessionWebSocketTask
     let responseState: AliyunQwenResponseState
     let generationID: UUID
+    let kind: AliyunQwenRealtimeSessionKind
     var isClosed = false
     var didStartAudioStream = false
 
@@ -27,12 +28,14 @@ final class AliyunQwenStreamingContext {
         session: URLSession,
         ws: URLSessionWebSocketTask,
         responseState: AliyunQwenResponseState,
-        generationID: UUID
+        generationID: UUID,
+        kind: AliyunQwenRealtimeSessionKind
     ) {
         self.session = session
         self.ws = ws
         self.responseState = responseState
         self.generationID = generationID
+        self.kind = kind
     }
 }
 
@@ -57,6 +60,9 @@ actor AliyunQwenResponseState {
     }
 
     func markCompletedWithError(_ error: Error) {
+        if sessionFinished {
+            return
+        }
         if completionError == nil {
             completionError = error
             onError(error)

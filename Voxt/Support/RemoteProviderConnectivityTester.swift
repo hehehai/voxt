@@ -71,14 +71,15 @@ struct RemoteProviderConnectivityTester {
                 throw NSError(domain: "Voxt.Settings", code: -5, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Aliyun Bailian API Key is required for testing.")])
             }
             let model = configuration.model.isEmpty ? "fun-asr-realtime" : configuration.model
-            if isAliyunQwenRealtimeModel(model) {
+            if let kind = RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: model) {
                 let endpoint = RemoteProviderConnectivityTestEndpoints.resolvedAliyunASRQwenRealtimeWebSocketEndpoint(
                     endpoint: configuration.endpoint,
                     model: model
                 )
                 return try await testAliyunASRQwenRealtimeWebSocketReachability(
                     endpoint: endpoint,
-                    apiKey: configuration.apiKey
+                    apiKey: configuration.apiKey,
+                    kind: kind
                 )
             }
             let endpoint = RemoteProviderConnectivityTestEndpoints.resolvedAliyunASRRealtimeWebSocketEndpoint(
@@ -318,7 +319,8 @@ struct RemoteProviderConnectivityTester {
 
     private func testAliyunASRQwenRealtimeWebSocketReachability(
         endpoint: String,
-        apiKey: String
+        apiKey: String,
+        kind: AliyunQwenRealtimeSessionKind
     ) async throws -> String {
         guard let url = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.Settings", code: -53, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid WebSocket endpoint URL.")])
@@ -337,23 +339,10 @@ struct RemoteProviderConnectivityTester {
             ws.cancel(with: .goingAway, reason: nil)
         }
 
-        let updatePayload: [String: Any] = [
-            "event_id": UUID().uuidString.lowercased(),
-            "type": "session.update",
-            "session": [
-                "modalities": ["text"],
-                "input_audio_format": "pcm",
-                "sample_rate": 16000,
-                "input_audio_transcription": [
-                    "language": "zh"
-                ],
-                "turn_detection": [
-                    "type": "server_vad",
-                    "threshold": 0.0,
-                    "silence_duration_ms": 400
-                ]
-            ]
-        ]
+        let updatePayload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
+            kind: kind,
+            hintPayload: .init(language: "zh", languageHints: ["zh"])
+        )
         let finishPayload: [String: Any] = [
             "event_id": UUID().uuidString.lowercased(),
             "type": "session.finish"
@@ -1164,9 +1153,4 @@ struct RemoteProviderConnectivityTester {
         }
     }
 
-    private func isAliyunQwenRealtimeModel(_ model: String) -> Bool {
-        model.trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .hasPrefix("qwen3-asr-flash-realtime")
-    }
 }

@@ -142,6 +142,71 @@ final class RemoteModelConfigurationTests: XCTestCase {
         )
     }
 
+    func testAliyunASRModelOptionsIncludeOmniRealtimeModels() {
+        let ids = Set(RemoteASRProvider.aliyunBailianASR.modelOptions.map(\.id))
+        XCTAssertTrue(ids.contains("qwen3.5-omni-flash-realtime"))
+        XCTAssertTrue(ids.contains("qwen3.5-omni-plus-realtime"))
+        XCTAssertTrue(ids.contains("qwen-omni-turbo-realtime"))
+    }
+
+    func testAliyunRealtimeModelFamilyDetectionSeparatesQwenAndOmni() {
+        XCTAssertEqual(
+            RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: "qwen3-asr-flash-realtime"),
+            .qwenASR
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: "qwen3.5-omni-flash-realtime"),
+            .omniASR
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: "qwen3.5-omni-plus-realtime"),
+            .omniASR
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: "qwen-omni-turbo-realtime"),
+            .omniASR
+        )
+        XCTAssertNil(RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: "fun-asr-realtime"))
+    }
+
+    func testAliyunOmniSessionUpdatePayloadUsesExplicitInputTranscriptionModel() throws {
+        let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
+            kind: .omniASR,
+            hintPayload: ResolvedASRHintPayload(language: "zh", languageHints: ["zh"])
+        )
+
+        let session = try XCTUnwrap(payload["session"] as? [String: Any])
+        let transcription = try XCTUnwrap(session["input_audio_transcription"] as? [String: Any])
+        let turnDetection = try XCTUnwrap(session["turn_detection"] as? [String: Any])
+
+        XCTAssertEqual(payload["type"] as? String, "session.update")
+        XCTAssertEqual(session["modalities"] as? [String], ["text"])
+        XCTAssertEqual(session["input_audio_format"] as? String, "pcm")
+        XCTAssertEqual(session["sample_rate"] as? Int, 16000)
+        XCTAssertEqual(transcription["model"] as? String, "qwen3-asr-flash-realtime")
+        XCTAssertEqual(transcription["language"] as? String, "zh")
+        XCTAssertEqual(turnDetection["type"] as? String, "server_vad")
+        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.0)
+        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, 400)
+    }
+
+    func testAliyunOmniRealtimeDoesNotRequireManualCommitWhenUsingServerVAD() {
+        XCTAssertFalse(AliyunQwenRealtimeSessionKind.omniASR.shouldCommitBeforeFinish)
+    }
+
+    func testAliyunQwenSessionUpdatePayloadLeavesTranscriptionModelUnset() throws {
+        let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
+            kind: .qwenASR,
+            hintPayload: ResolvedASRHintPayload(language: nil, languageHints: [])
+        )
+
+        let session = try XCTUnwrap(payload["session"] as? [String: Any])
+        let transcription = try XCTUnwrap(session["input_audio_transcription"] as? [String: Any])
+
+        XCTAssertNil(transcription["model"])
+        XCTAssertNil(transcription["language"])
+    }
+
     func testLoadSaveRoundTripPreservesConfigurations() {
         let stored: [String: RemoteProviderConfiguration] = [
             RemoteASRProvider.openAIWhisper.rawValue: TestFactories.makeRemoteConfiguration(

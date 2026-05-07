@@ -41,4 +41,14 @@ final class RemoteProviderConnectivityTestEndpointsTests: XCTestCase {
             "wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime"
         )
     }
+
+    func testResolvedAliyunOmniRealtimeEndpointAddsMissingModelQuery() {
+        XCTAssertEqual(
+            RemoteProviderConnectivityTestEndpoints.resolvedAliyunASRQwenRealtimeWebSocketEndpoint(
+                endpoint: "wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
+                model: "qwen3.5-omni-flash-realtime"
+            ),
+            "wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3.5-omni-flash-realtime"
+        )
+    }
 }
