@@ -528,7 +528,7 @@ private struct WhisperASRConfigurationSheetView: View {
                                 .toggleStyle(.switch)
                             Toggle("Enable Timestamps", isOn: $whisperTimestampsEnabled)
                                 .toggleStyle(.switch)
-                            Toggle("Realtime", isOn: $whisperRealtimeEnabled)
+                            Toggle("Live Realtime (Experimental)", isOn: $whisperRealtimeEnabled)
                                 .toggleStyle(.switch)
                         }
 
@@ -580,7 +580,7 @@ private struct WhisperASRConfigurationSheetView: View {
                         )
                     }
 
-                    Text("These settings apply to Whisper transcription sessions. Standard ASR always uses transcribe; Whisper translate is only used by the translation hotkey when Whisper translation is selected.")
+                    Text("These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -597,7 +597,7 @@ private struct WhisperASRConfigurationSheetView: View {
                     whisperTemperature = 0
                     whisperVADEnabled = true
                     whisperTimestampsEnabled = false
-                    whisperRealtimeEnabled = true
+                    whisperRealtimeEnabled = false
                     whisperKeepResidentLoaded = true
                 }
                 .buttonStyle(SettingsPillButtonStyle())

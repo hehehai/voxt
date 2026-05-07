@@ -792,6 +792,9 @@
 "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "書き換えにのみ適用されます。無効時は、書き込み可能な入力欄にフォーカスがない場合のみ回答カードを表示します。有効時は、フォーカス状態に関係なく常に回答カードを表示します。";
 "Whisper" = "Whisper";
 "Realtime" = "リアルタイム";
+"Live Realtime (Experimental)" = "ライブリアルタイム（実験的）";
+"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected." = "これらの設定は Whisper の文字起こしセッションに適用されます。ライブリアルタイム（実験的）では話している間に partial テキストを継続表示し、停止後に最終補正を行います。オフにすると品質優先の非リアルタイム経路を使います。Whisper translate は Whisper 翻訳を選択した場合にのみ使われます。";
+"Meeting Notes currently supports MLX Audio and Remote ASR. Direct Dictation is not available for meetings." = "Meeting Notes は現在 MLX Audio と Remote ASR のみをサポートしており、Direct Dictation は会議では利用できません。";
 "Realtime On" = "リアルタイム";
 "Quality Mode" = "高品質モード";
 "Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider." = "Whisper 翻訳は ASR エンジンが Whisper のときのみ使えます。それ以外では保存済みの LLM プロバイダにフォールバックします。";

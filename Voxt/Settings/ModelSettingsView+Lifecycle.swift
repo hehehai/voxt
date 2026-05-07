@@ -13,7 +13,7 @@ extension ModelSettingsView {
         }
         whisperModelManager.updateModel(id: canonicalWhisperModelID)
         if UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) == nil {
-            whisperRealtimeEnabled = true
+            whisperRealtimeEnabled = false
         }
         if UserDefaults.standard.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) == nil {
             whisperKeepResidentLoaded = true

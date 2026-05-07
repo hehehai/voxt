@@ -254,7 +254,7 @@ extension AppDelegate {
     }
 
     var whisperRealtimeEnabled: Bool {
-        defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true
+        defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
     }
 
     var whisperKeepResidentLoaded: Bool {

@@ -18,7 +18,7 @@ struct FeatureModelCatalogBuilder {
     func entries(for sheet: FeatureModelSelectorSheet) -> [FeatureModelSelectorEntry] {
         switch sheet {
         case .transcriptionASR, .translationASR, .rewriteASR, .meetingASR:
-            return asrEntries()
+            return asrEntries(for: sheet)
         case .transcriptionLLM, .transcriptionNoteTitle, .rewriteLLM, .meetingSummary:
             return llmEntries(includeAppleIntelligence: true)
         case .translationModel:
@@ -78,7 +78,7 @@ struct FeatureModelCatalogBuilder {
         }
     }
 
-    private func asrEntries() -> [FeatureModelSelectorEntry] {
+    private func asrEntries(for sheet: FeatureModelSelectorSheet) -> [FeatureModelSelectorEntry] {
         var entries = [FeatureModelSelectorEntry]()
         entries.append(
             FeatureModelSelectorEntry(
@@ -134,7 +134,8 @@ struct FeatureModelCatalogBuilder {
             )
         })
 
-        entries.append(contentsOf: WhisperKitModelManager.availableModels.map { model in
+        if sheet != .meetingASR {
+            entries.append(contentsOf: WhisperKitModelManager.availableModels.map { model in
             let selectionID = FeatureModelSelectionID.whisper(model.id)
             let isInstalled = whisperModelManager.isModelDownloaded(id: model.id)
             return FeatureModelSelectorEntry(
@@ -164,7 +165,8 @@ struct FeatureModelCatalogBuilder {
                 isSelectable: isInstalled,
                 disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
             )
-        })
+            })
+        }
 
         let remoteConfigurations = RemoteModelConfigurationStore.loadConfigurations(
             from: remoteASRProviderConfigurationsRaw,

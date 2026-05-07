@@ -4,6 +4,185 @@ import Combine
 import AudioToolbox
 import WhisperKit
 
+public struct WhisperRealtimeEagerState {
+    private static let stableHoldbackCharacterCount = 4
+    private static let minimumNewUtteranceCharacterCount = 4
+
+    public private(set) var stableCommittedText = ""
+    public private(set) var currentCommittedText = ""
+    public private(set) var liveCandidateText = ""
+    public private(set) var lastRawCandidateText = ""
+    public private(set) var publishedText = ""
+    public private(set) var continuesFromCommittedPrefix = false
+
+    public init() {}
+
+    public mutating func reset() {
+        stableCommittedText = ""
+        currentCommittedText = ""
+        liveCandidateText = ""
+        lastRawCandidateText = ""
+        publishedText = ""
+        continuesFromCommittedPrefix = false
+    }
+
+    public mutating func apply(_ result: TranscriptionResult) -> String? {
+        apply(hypothesisText: result.text)
+    }
+
+    mutating func apply(
+        hypothesisText text: String
+    ) -> String? {
+        let normalized = Self.normalize(text)
+        guard !normalized.isEmpty else { return nil }
+        let candidate = resolvedCurrentUtteranceText(from: normalized)
+        guard !candidate.isEmpty else {
+            continuesFromCommittedPrefix = true
+            return nil
+        }
+
+        if continuesFromCommittedPrefix,
+           liveCandidateText.isEmpty,
+           lastRawCandidateText.isEmpty,
+           !stableCommittedText.isEmpty,
+           candidate.count < Self.minimumNewUtteranceCharacterCount {
+            lastRawCandidateText = candidate
+            return nil
+        }
+
+        let displayCandidate = resolvedDisplayCandidate(
+            previousCandidate: lastRawCandidateText,
+            currentCandidate: candidate
+        )
+
+        if !lastRawCandidateText.isEmpty {
+            let agreedCount = Self.longestCommonPrefixCount(
+                Array(lastRawCandidateText),
+                Array(displayCandidate)
+            )
+            let commitCount = max(currentCommittedText.count, max(0, agreedCount - Self.stableHoldbackCharacterCount))
+            if commitCount > currentCommittedText.count {
+                currentCommittedText = String(displayCandidate.prefix(commitCount))
+            }
+        } else {
+            currentCommittedText = ""
+        }
+
+        lastRawCandidateText = displayCandidate
+        liveCandidateText = displayCandidate
+        continuesFromCommittedPrefix = false
+        return publish(stableCommittedText + displayCandidate)
+    }
+
+    public mutating func applyFinal(_ text: String) -> String? {
+        let normalized = Self.normalize(text)
+        reset()
+        return publish(normalized, force: true)
+    }
+
+    public mutating func sealCurrentPublishedTextForNextUtterance() {
+        let committed = publishedText
+        stableCommittedText = committed
+        currentCommittedText = ""
+        liveCandidateText = ""
+        lastRawCandidateText = ""
+        continuesFromCommittedPrefix = true
+    }
+
+    var mutablePublishedCharacterCount: Int {
+        max(0, liveCandidateText.count - currentCommittedText.count)
+    }
+
+    private mutating func publish(_ text: String, force: Bool = false) -> String? {
+        let normalized = Self.normalize(text)
+        guard force || normalized != publishedText else { return nil }
+        publishedText = normalized
+        return normalized
+    }
+
+    private func resolvedCurrentUtteranceText(from fullText: String) -> String {
+        guard !stableCommittedText.isEmpty else { return fullText }
+        if fullText.hasPrefix(stableCommittedText) {
+            return String(fullText.dropFirst(stableCommittedText.count))
+        }
+
+        if stableCommittedText.contains(fullText) {
+            return ""
+        }
+
+        let overlapCount = Self.longestSuffixPrefixOverlapCount(
+            sourceCharacters: Array(stableCommittedText),
+            candidateCharacters: Array(fullText)
+        )
+        if overlapCount >= 2 {
+            return String(fullText.dropFirst(overlapCount))
+        }
+
+        return fullText
+    }
+
+    private func resolvedDisplayCandidate(
+        previousCandidate: String,
+        currentCandidate: String
+    ) -> String {
+        guard !previousCandidate.isEmpty else { return currentCandidate }
+        if currentCandidate.hasPrefix(previousCandidate) {
+            return currentCandidate
+        }
+        if previousCandidate.hasPrefix(currentCandidate) {
+            return previousCandidate
+        }
+
+        let overlapCount = Self.longestSuffixPrefixOverlapCount(
+            sourceCharacters: Array(previousCandidate),
+            candidateCharacters: Array(currentCandidate)
+        )
+        guard overlapCount >= 2 else { return currentCandidate }
+        return previousCandidate + String(currentCandidate.dropFirst(overlapCount))
+    }
+
+    private static func normalize(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func longestCommonPrefixCount(_ lhs: [Character], _ rhs: [Character]) -> Int {
+        let upperBound = min(lhs.count, rhs.count)
+        var count = 0
+        while count < upperBound, lhs[count] == rhs[count] {
+            count += 1
+        }
+        return count
+    }
+
+    private static func longestSuffixPrefixOverlapCount(
+        sourceCharacters: [Character],
+        candidateCharacters: [Character]
+    ) -> Int {
+        let upperBound = min(sourceCharacters.count, candidateCharacters.count)
+        guard upperBound > 0 else { return 0 }
+        for overlap in stride(from: upperBound, through: 1, by: -1) {
+            if Array(sourceCharacters.suffix(overlap)) == Array(candidateCharacters.prefix(overlap)) {
+                return overlap
+            }
+        }
+        return 0
+    }
+
+}
+
+struct WhisperRealtimeReplayEvent: Equatable {
+    let elapsedSeconds: Double
+    let text: String
+    let isFinal: Bool
+    let source: String
+    let rawText: String
+}
+
+struct WhisperRealtimeReplayDiagnostics: Equatable {
+    let events: [WhisperRealtimeReplayEvent]
+    let trace: [String]
+}
+
 @MainActor
 final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private final class AudioSampleStore {
@@ -49,49 +228,36 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
-    private actor RealtimeStartGate {
-        enum Outcome {
-            case success
-            case failure(Error)
-        }
+    private enum WhisperInferenceProfile: String {
+        case offline
+        case realtimeDraft
+        case realtimeEager
+        case realtimeFinal
 
-        private var outcome: Outcome?
-        private var continuation: CheckedContinuation<Outcome, Never>?
-
-        func wait() async -> Outcome {
-            if let outcome {
-                return outcome
+        var usesLiveDecodingBias: Bool {
+            switch self {
+            case .offline:
+                return false
+            case .realtimeDraft, .realtimeEager, .realtimeFinal:
+                return true
             }
-            return await withCheckedContinuation { continuation in
-                if let outcome {
-                    continuation.resume(returning: outcome)
-                    return
-                }
-                self.continuation = continuation
-            }
-        }
-
-        func succeed() {
-            resolve(.success)
-        }
-
-        func fail(_ error: Error) {
-            resolve(.failure(error))
-        }
-
-        private func resolve(_ outcome: Outcome) {
-            guard self.outcome == nil else {
-                return
-            }
-            self.outcome = outcome
-            let continuation = self.continuation
-            self.continuation = nil
-            continuation?.resume(returning: outcome)
         }
     }
 
     static let offlinePartialPollInterval: Duration = .seconds(6)
     static let offlineFirstPartialMinimumSeconds: Double = 5.0
+    static let realtimeEagerPollInterval: Duration = .milliseconds(250)
+    static let realtimeEagerFirstPassMinimumSeconds: Double = 0.35
+    static let realtimeEagerSteadyStateMinimumSeconds: Double = 0.65
+    static let realtimeEagerMinimumNewAudioSeconds: Double = 0.18
+    static let realtimeDraftBootstrapSeconds: Double = 2.8
+    static let realtimeDraftBootstrapCharacterCount = 18
+    static let realtimeDraftWindowSeconds: Double = 1.6
+    static let realtimeDraftFallbackStallSeconds: Double = 1.1
+    static let realtimeSilenceWindowSeconds: Double = 0.45
+    static let realtimeSilenceRMSHoldThreshold: Float = 0.0035
+    static let realtimeSilencePeakHoldThreshold: Float = 0.018
+    static let realtimeSegmentOverlapSeconds: Double = 0.8
 
     @Published var isRecording = false
     @Published var isModelInitializing = false
@@ -118,11 +284,18 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private var partialLoopTask: Task<Void, Never>?
     private var finalizationTask: Task<Void, Never>?
     private var captureWatchdogTask: Task<Void, Never>?
-    private var realtimeTranscriptionTask: Task<Void, Never>?
-    private var audioStreamTranscriber: AudioStreamTranscriber?
+    private var realtimeEagerTask: Task<Void, Never>?
+    private var realtimeLevelTask: Task<Void, Never>?
     private var activeUseHeld = false
     private var isInferenceRunning = false
     private var didRetryCaptureStartup = false
+    private var realtimeEagerLastSampleCount = 0
+    private var realtimeEagerLastPublishedSampleCount = 0
+    private var realtimeEagerState = WhisperRealtimeEagerState()
+    private var realtimeTraceEntries: [String] = []
+    private var realtimeCommittedSampleCount = 0
+    private var realtimeWasRecentlySpeaking = false
+    private var realtimeDidFlushCurrentSilence = false
 
     private let captureStartupWatchdogDelay: Duration = .seconds(1.2)
     private let targetSampleRate = Double(WhisperKit.sampleRate)
@@ -238,14 +411,14 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         partialLoopTask = nil
         captureWatchdogTask?.cancel()
         captureWatchdogTask = nil
+        realtimeEagerTask?.cancel()
+        realtimeEagerTask = nil
 
         isFinalizingTranscription = true
         finalizationTask?.cancel()
         if whisperRealtimeEnabled {
-            let streamTranscriber = audioStreamTranscriber
-            audioStreamTranscriber = nil
+            preparedWhisper?.audioProcessor.stopRecording()
             finalizationTask = Task { [weak self] in
-                await streamTranscriber?.stopStreamTranscription()
                 guard let self else { return }
                 await self.runFinalTranscription(
                     revision: revision,
@@ -302,6 +475,244 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         return normalizeText(results.map(\.text).joined(separator: " "))
     }
 
+    func debugReplayRealtimeAudioFile(
+        _ fileURL: URL,
+        outputMode: SessionOutputMode = .transcription,
+        useBuiltInTranslationTask: Bool = false,
+        stepSeconds: Double = 0.25
+    ) async throws -> [WhisperRealtimeReplayEvent] {
+        try await debugReplayRealtimeAudioFileWithTrace(
+            fileURL,
+            outputMode: outputMode,
+            useBuiltInTranslationTask: useBuiltInTranslationTask,
+            stepSeconds: stepSeconds
+        ).events
+    }
+
+    func debugReplayRealtimeAudioFileWithTrace(
+        _ fileURL: URL,
+        outputMode: SessionOutputMode = .transcription,
+        useBuiltInTranslationTask: Bool = false,
+        stepSeconds: Double = 0.25
+    ) async throws -> WhisperRealtimeReplayDiagnostics {
+        let loaded = try DebugAudioClipIO.loadMonoSamples(from: fileURL)
+        preparedOutputMode = outputMode
+        preparedUseBuiltInTranslationTask = useBuiltInTranslationTask
+        let whisper = try await modelManager.loadWhisper()
+        let preparedSamples = prepareInputSamples(loaded.samples, sampleRate: loaded.sampleRate)
+        let stepSampleCount = max(Int(stepSeconds * targetSampleRate), 1)
+        var eagerState = WhisperRealtimeEagerState()
+        var events: [WhisperRealtimeReplayEvent] = []
+        var trace: [String] = []
+        var lastPublishedEndSample = 0
+        var committedSampleCount = 0
+        var wasRecentlySpeaking = false
+        var didFlushCurrentSilence = false
+
+        var endSample = stepSampleCount
+        while endSample <= preparedSamples.count {
+            let windowSamples = Array(preparedSamples.prefix(endSample))
+            let overlapSampleCount = max(Int(Self.realtimeSegmentOverlapSeconds * targetSampleRate), 0)
+            let activeSegmentStartSample = max(0, min(committedSampleCount, windowSamples.count) - overlapSampleCount)
+            let activeSegmentSamples = Array(windowSamples.suffix(windowSamples.count - activeSegmentStartSample))
+            let minimumSeconds = eagerState.mutablePublishedCharacterCount == 0
+                ? Self.realtimeEagerFirstPassMinimumSeconds
+                : Self.realtimeEagerSteadyStateMinimumSeconds
+            if Double(activeSegmentSamples.count) / targetSampleRate >= minimumSeconds {
+                let bufferedSeconds = Double(activeSegmentSamples.count) / targetSampleRate
+                let publishedStallSeconds = Double(max(endSample - lastPublishedEndSample, 0)) / targetSampleRate
+                let published: (text: String, source: String, rawText: String)?
+                let usesBootstrapDraft = Self.shouldUseRealtimeDraftBootstrap(
+                    bufferedSeconds: bufferedSeconds,
+                    publishedCharacterCount: eagerState.mutablePublishedCharacterCount
+                )
+                let hasRecentSpeech = Self.hasRecentSpeechActivity(
+                    samples: windowSamples,
+                    targetSampleRate: targetSampleRate
+                )
+                if hasRecentSpeech {
+                    wasRecentlySpeaking = true
+                    didFlushCurrentSilence = false
+                }
+                let shouldFlushSilenceBoundary = !hasRecentSpeech &&
+                    wasRecentlySpeaking &&
+                    !didFlushCurrentSilence &&
+                    !eagerState.publishedText.isEmpty &&
+                    publishedStallSeconds >= Self.realtimeDraftFallbackStallSeconds
+                if shouldFlushSilenceBoundary {
+                    let result = try await whisper.transcribe(
+                        audioArray: activeSegmentSamples,
+                        decodeOptions: buildDecodingOptions(
+                            whisper: whisper,
+                            includeWordTimings: false,
+                            profile: .realtimeFinal
+                        )
+                    ).first
+                    let silencePublished = result.flatMap { result in
+                        eagerState.apply(hypothesisText: result.text).map {
+                            (
+                                text: $0,
+                                source: "silence-flush",
+                                rawText: result.text
+                            )
+                        }
+                    }
+                    trace.append(
+                        String(
+                            format: "[%.1fs] silence-flush raw=%@ published=%@",
+                            Double(endSample) / targetSampleRate,
+                            Self.traceQuoted(normalizeText(result?.text ?? "")),
+                            Self.traceQuoted(normalizeText(silencePublished?.text ?? eagerState.publishedText))
+                        )
+                    )
+                    if let silencePublished {
+                        let normalized = normalizeText(silencePublished.text)
+                        if !normalized.isEmpty, events.last?.text != normalized {
+                            lastPublishedEndSample = endSample
+                            events.append(
+                                WhisperRealtimeReplayEvent(
+                                    elapsedSeconds: Double(endSample) / targetSampleRate,
+                                    text: normalized,
+                                    isFinal: false,
+                                    source: silencePublished.source,
+                                    rawText: normalizeText(silencePublished.rawText)
+                                )
+                            )
+                        }
+                    }
+                    eagerState.sealCurrentPublishedTextForNextUtterance()
+                    committedSampleCount = endSample
+                    lastPublishedEndSample = endSample
+                    didFlushCurrentSilence = true
+                    wasRecentlySpeaking = false
+                    endSample = min(endSample + stepSampleCount, preparedSamples.count)
+                    continue
+                }
+                let shouldHoldForSilence = !hasRecentSpeech &&
+                    !eagerState.publishedText.isEmpty &&
+                    publishedStallSeconds >= Self.realtimeDraftFallbackStallSeconds
+                if shouldHoldForSilence {
+                    trace.append(
+                        String(
+                            format: "[%.1fs] hold/silence published=%@",
+                            Double(endSample) / targetSampleRate,
+                            Self.traceQuoted(eagerState.publishedText)
+                        )
+                    )
+                    endSample = min(endSample + stepSampleCount, preparedSamples.count)
+                    continue
+                }
+                if usesBootstrapDraft {
+                    let draftWindowSampleCount = max(Int(Self.realtimeDraftWindowSeconds * targetSampleRate), 1)
+                    let draftWindow = Array(activeSegmentSamples.suffix(min(activeSegmentSamples.count, draftWindowSampleCount)))
+                    let result = try await whisper.transcribe(
+                        audioArray: draftWindow,
+                        decodeOptions: buildDecodingOptions(
+                            whisper: whisper,
+                            includeWordTimings: false,
+                            profile: .realtimeDraft
+                        )
+                    ).first
+                    published = result.flatMap { result in
+                        eagerState.apply(hypothesisText: result.text).map {
+                            (
+                                text: $0,
+                                source: usesBootstrapDraft ? "draft-bootstrap" : "draft-fallback",
+                                rawText: result.text
+                            )
+                        }
+                    }
+                    trace.append(
+                        String(
+                            format: "[%.1fs] %@ raw=%@ published=%@",
+                            Double(endSample) / targetSampleRate,
+                            "draft-bootstrap",
+                            Self.traceQuoted(normalizeText(result?.text ?? "")),
+                            Self.traceQuoted(normalizeText(published?.text ?? eagerState.publishedText))
+                        )
+                    )
+                } else {
+                    let result = try await whisper.transcribe(
+                        audioArray: activeSegmentSamples,
+                        decodeOptions: buildDecodingOptions(
+                            whisper: whisper,
+                            includeWordTimings: false,
+                            profile: .realtimeEager
+                        )
+                    ).first
+                    published = result.flatMap { result in
+                        eagerState.apply(result).map {
+                            (
+                                text: $0,
+                                source: "eager",
+                                rawText: result.text
+                            )
+                        }
+                    }
+                    trace.append(
+                        String(
+                            format: "[%.1fs] eager raw=%@ published=%@",
+                            Double(endSample) / targetSampleRate,
+                            Self.traceQuoted(normalizeText(result?.text ?? "")),
+                            Self.traceQuoted(normalizeText(published?.text ?? eagerState.publishedText))
+                        )
+                    )
+                }
+
+                if let published {
+                    let normalized = normalizeText(published.text)
+                    if !normalized.isEmpty, events.last?.text != normalized {
+                        lastPublishedEndSample = endSample
+                        events.append(
+                            WhisperRealtimeReplayEvent(
+                                elapsedSeconds: Double(endSample) / targetSampleRate,
+                                text: normalized,
+                                isFinal: false,
+                                source: published.source,
+                                rawText: normalizeText(published.rawText)
+                            )
+                        )
+                    }
+                }
+            }
+
+            if endSample == preparedSamples.count {
+                break
+            }
+            endSample = min(endSample + stepSampleCount, preparedSamples.count)
+        }
+
+        let finalResults = try await whisper.transcribe(
+            audioArray: preparedSamples,
+            decodeOptions: buildDecodingOptions(
+                whisper: whisper,
+                includeWordTimings: false,
+                profile: .realtimeFinal
+            )
+        )
+        let finalText = normalizeText(finalResults.map(\.text).joined(separator: " "))
+        if !finalText.isEmpty {
+            events.append(
+                WhisperRealtimeReplayEvent(
+                    elapsedSeconds: Double(preparedSamples.count) / targetSampleRate,
+                    text: finalText,
+                    isFinal: true,
+                    source: "final",
+                    rawText: finalText
+                )
+            )
+            trace.append(
+                String(
+                    format: "[%.1fs] final raw=%@",
+                    Double(preparedSamples.count) / targetSampleRate,
+                    Self.traceQuoted(finalText)
+                )
+            )
+        }
+
+        return WhisperRealtimeReplayDiagnostics(events: events, trace: trace)
+    }
+
     func restartCaptureForPreferredInputDevice() throws {
         guard isRecording else { return }
         guard !whisperRealtimeEnabled else {
@@ -321,34 +732,21 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         do {
-            let startGate = RealtimeStartGate()
-            let streamTranscriber = try makeAudioStreamTranscriber(
-                whisper: whisper,
-                revision: revision,
-                startGate: startGate
-            )
-            audioStreamTranscriber = streamTranscriber
-            realtimeTranscriptionTask = Task { [weak self] in
-                do {
-                    try await streamTranscriber.startStreamTranscription()
-                } catch {
-                    await startGate.fail(error)
-                    await self?.handleRealtimeTranscriptionError(error, revision: revision)
+            inputSampleRate = targetSampleRate
+            try whisper.audioProcessor.startRecordingLive(inputDeviceID: preferredInputDeviceID) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.handleRealtimeAudioBuffer(revision: revision)
                 }
-                self?.handleRealtimeTranscriptionTaskExit(revision: revision)
             }
-
-            let outcome = await startGate.wait()
-            switch outcome {
-            case .success:
-                return nil
-            case .failure(let error):
-                let message = String(localized: "Whisper failed to start recording.")
-                lastStartFailureMessage = message
-                VoxtLog.error("Whisper realtime start failed: \(error)")
-                cleanupPreparedWhisperIfNeeded()
-                return message
-            }
+            isRecording = true
+            isModelInitializing = false
+            startRealtimeLevelUpdates(revision: revision)
+            startRealtimeEagerLoop(revision: revision)
+            VoxtLog.info(
+                "Whisper audio capture started. sampleRate=\(Int(targetSampleRate)), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), mode=realtime-eager",
+                verbose: true
+            )
+            return nil
         } catch {
             let message = String(localized: "Whisper failed to start recording.")
             lastStartFailureMessage = message
@@ -395,7 +793,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             samples: samples,
             sampleRate: sampleRate,
             includeWordTimings: whisperTimestampsEnabled,
-            publishFinalResult: true
+            publishFinalResult: true,
+            profile: whisperRealtimeEnabled ? .realtimeFinal : .offline
         )
     }
 
@@ -404,7 +803,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         samples: [Float],
         sampleRate: Double,
         includeWordTimings: Bool,
-        publishFinalResult: Bool
+        publishFinalResult: Bool,
+        profile: WhisperInferenceProfile = .offline
     ) async {
         guard !samples.isEmpty else {
             if publishFinalResult {
@@ -430,30 +830,28 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             }
             return
         }
-
-        isInferenceRunning = true
         defer {
-            isInferenceRunning = false
             if publishFinalResult {
                 cleanupPreparedWhisperIfNeeded()
             }
         }
 
         do {
-            let preparedSamples = prepareInputSamples(samples, sampleRate: sampleRate)
-            let decodeOptions = buildDecodingOptions(
+            let transcription = try await transcribePreparedSamples(
                 whisper: whisper,
-                includeWordTimings: includeWordTimings
+                samples: samples,
+                sampleRate: sampleRate,
+                includeWordTimings: includeWordTimings,
+                profile: profile,
+                revision: revision
             )
-            let results = try await whisper.transcribe(audioArray: preparedSamples, decodeOptions: decodeOptions)
-            guard revision == sessionRevision else { return }
-
-            let text = normalizeText(results.map(\.text).joined(separator: " "))
+            let preparedSamples = transcription.preparedSamples
+            let results = transcription.results
+            let text = transcription.text
             if publishFinalResult {
                 stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = includeWordTimings ? buildWordTimings(from: results) : []
-                transcribedText = text
-                onPartialTranscription?(text)
+                publishWhisperFinalText(text)
                 onTranscriptionFinished?(text)
             } else {
                 transcribedText = text
@@ -472,12 +870,47 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
     private func buildDecodingOptions(
         whisper: WhisperKit,
-        includeWordTimings: Bool
+        includeWordTimings: Bool,
+        profile: WhisperInferenceProfile = .offline
     ) -> DecodingOptions {
         let hintPayload = resolvedHintPayload()
         let tuningSettings = resolvedLocalTuningSettings()
         let resolvedTask = resolvedDecodingTask()
-        let detectLanguage = hintPayload.language == nil
+        let resolvedLanguage = resolvedWhisperLanguage(for: profile, hintPayload: hintPayload)
+        let detectLanguage = resolvedLanguage == nil
+        let temperature: Float
+        let temperatureIncrementOnFallback: Float
+        let temperatureFallbackCount: Int
+        let noSpeechThreshold: Float
+        let chunkingStrategy: ChunkingStrategy?
+
+        switch profile {
+        case .offline:
+            temperature = whisperTemperature
+            temperatureIncrementOnFallback = Float(tuningSettings.temperatureIncrementOnFallback)
+            temperatureFallbackCount = tuningSettings.temperatureFallbackCount
+            noSpeechThreshold = Float(tuningSettings.noSpeechThreshold)
+            chunkingStrategy = whisperVADEnabled ? .vad : nil
+        case .realtimeDraft:
+            temperature = 0
+            temperatureIncrementOnFallback = 0
+            temperatureFallbackCount = 1
+            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.35))
+            chunkingStrategy = nil
+        case .realtimeEager:
+            temperature = 0
+            temperatureIncrementOnFallback = Float(min(tuningSettings.temperatureIncrementOnFallback, 0.1))
+            temperatureFallbackCount = min(max(tuningSettings.temperatureFallbackCount, 1), 2)
+            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.45))
+            chunkingStrategy = nil
+        case .realtimeFinal:
+            temperature = 0
+            temperatureIncrementOnFallback = Float(min(tuningSettings.temperatureIncrementOnFallback, 0.15))
+            temperatureFallbackCount = max(tuningSettings.temperatureFallbackCount, 2)
+            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.45))
+            chunkingStrategy = nil
+        }
+
         let promptTokens: [Int]?
         if let prompt = hintPayload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
            !prompt.isEmpty,
@@ -488,18 +921,20 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             promptTokens = nil
         }
 
-        VoxtLog.info(
-            "Whisper decode options. task=\(resolvedTask.description), language=\(hintPayload.language ?? "auto"), detectLanguage=\(detectLanguage), promptChars=\(hintPayload.prompt?.count ?? 0), promptTokens=\(promptTokens?.count ?? 0), realtime=\(whisperRealtimeEnabled)",
-            verbose: true
-        )
+        if profile == .offline {
+            VoxtLog.info(
+                "Whisper decode options. profile=\(profile.rawValue), task=\(resolvedTask.description), language=\(resolvedLanguage ?? "auto"), detectLanguage=\(detectLanguage), promptChars=\(hintPayload.prompt?.count ?? 0), promptTokens=\(promptTokens?.count ?? 0), realtime=\(whisperRealtimeEnabled)",
+                verbose: true
+            )
+        }
 
         return DecodingOptions(
             verbose: false,
             task: resolvedTask,
-            language: hintPayload.language,
-            temperature: whisperTemperature,
-            temperatureIncrementOnFallback: Float(tuningSettings.temperatureIncrementOnFallback),
-            temperatureFallbackCount: tuningSettings.temperatureFallbackCount,
+            language: resolvedLanguage,
+            temperature: temperature,
+            temperatureIncrementOnFallback: temperatureIncrementOnFallback,
+            temperatureFallbackCount: temperatureFallbackCount,
             usePrefillPrompt: true,
             detectLanguage: detectLanguage,
             skipSpecialTokens: true,
@@ -508,8 +943,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             promptTokens: promptTokens,
             compressionRatioThreshold: Float(tuningSettings.compressionRatioThreshold),
             logProbThreshold: Float(tuningSettings.logProbThreshold),
-            noSpeechThreshold: Float(tuningSettings.noSpeechThreshold),
-            chunkingStrategy: whisperVADEnabled ? .vad : nil
+            noSpeechThreshold: noSpeechThreshold,
+            chunkingStrategy: chunkingStrategy
         )
     }
 
@@ -569,7 +1004,13 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         isModelInitializing = false
         isFinalizingTranscription = false
         latestWordTimings = []
-        audioStreamTranscriber = nil
+        realtimeEagerLastSampleCount = 0
+        realtimeEagerLastPublishedSampleCount = 0
+        realtimeEagerState.reset()
+        realtimeTraceEntries.removeAll(keepingCapacity: false)
+        realtimeCommittedSampleCount = 0
+        realtimeWasRecentlySpeaking = false
+        realtimeDidFlushCurrentSilence = false
         preparedWhisper?.audioProcessor.stopRecording()
         preparedWhisper?.audioProcessor.purgeAudioSamples(keepingLast: 0)
     }
@@ -602,8 +1043,16 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         isFinalizingTranscription = false
         captureWatchdogTask?.cancel()
         captureWatchdogTask = nil
-        realtimeTranscriptionTask?.cancel()
-        realtimeTranscriptionTask = nil
+        realtimeEagerTask?.cancel()
+        realtimeEagerTask = nil
+        realtimeLevelTask?.cancel()
+        realtimeLevelTask = nil
+        realtimeEagerLastSampleCount = 0
+        realtimeEagerLastPublishedSampleCount = 0
+        realtimeTraceEntries.removeAll(keepingCapacity: false)
+        realtimeCommittedSampleCount = 0
+        realtimeWasRecentlySpeaking = false
+        realtimeDidFlushCurrentSilence = false
     }
 
     private func stopAudioEngine() {
@@ -616,7 +1065,17 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private func cleanupPreparedWhisperIfNeeded() {
         preparedWhisper?.audioProcessor.stopRecording()
         preparedWhisper?.audioProcessor.purgeAudioSamples(keepingLast: 0)
-        audioStreamTranscriber = nil
+        realtimeEagerTask?.cancel()
+        realtimeEagerTask = nil
+        realtimeLevelTask?.cancel()
+        realtimeLevelTask = nil
+        realtimeEagerLastSampleCount = 0
+        realtimeEagerLastPublishedSampleCount = 0
+        realtimeEagerState.reset()
+        realtimeTraceEntries.removeAll(keepingCapacity: false)
+        realtimeCommittedSampleCount = 0
+        realtimeWasRecentlySpeaking = false
+        realtimeDidFlushCurrentSilence = false
         if activeUseHeld {
             modelManager.endActiveUse()
             activeUseHeld = false
@@ -698,86 +1157,389 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func makeAudioStreamTranscriber(
-        whisper: WhisperKit,
-        revision: Int,
-        startGate: RealtimeStartGate
-    ) throws -> AudioStreamTranscriber {
-        guard let tokenizer = whisper.tokenizer else {
-            throw NSError(domain: "Voxt.WhisperKitTranscriber", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Whisper tokenizer is unavailable."
-            ])
+    private func handleRealtimeAudioBuffer(revision: Int) {
+        guard revision == sessionRevision, isRecording, whisperRealtimeEnabled else { return }
+        audioLevel = resolvedRealtimeAudioLevel(from: preparedWhisper?.audioProcessor.relativeEnergy ?? [])
+    }
+
+    private func startRealtimeEagerLoop(revision: Int) {
+        realtimeEagerTask?.cancel()
+        realtimeEagerLastSampleCount = 0
+        realtimeEagerLastPublishedSampleCount = 0
+        realtimeEagerTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: Self.realtimeEagerPollInterval)
+                } catch {
+                    return
+                }
+                await self?.runRealtimeEagerPassIfNeeded(revision: revision)
+            }
+        }
+    }
+
+    private func runRealtimeEagerPassIfNeeded(revision: Int) async {
+        guard revision == sessionRevision, isRecording, whisperRealtimeEnabled else { return }
+        let samples = snapshotPreparedAudioSamples()
+        let sampleCount = samples.count
+        guard sampleCount > 0 else { return }
+
+        let activeSegmentSamples = resolvedRealtimeInferenceSamples(from: samples)
+        let activeSegmentSampleCount = activeSegmentSamples.count
+        guard activeSegmentSampleCount > 0 else { return }
+
+        let bufferedSeconds = Double(activeSegmentSampleCount) / targetSampleRate
+        let minimumSeconds = realtimeEagerState.mutablePublishedCharacterCount == 0
+            ? Self.realtimeEagerFirstPassMinimumSeconds
+            : Self.realtimeEagerSteadyStateMinimumSeconds
+        guard bufferedSeconds >= minimumSeconds else { return }
+        let hasRecentSpeech = Self.hasRecentSpeechActivity(
+            samples: samples,
+            targetSampleRate: targetSampleRate
+        )
+        let publishedStallSeconds = Double(max(sampleCount - realtimeEagerLastPublishedSampleCount, 0)) / targetSampleRate
+        if hasRecentSpeech {
+            realtimeWasRecentlySpeaking = true
+            realtimeDidFlushCurrentSilence = false
+        }
+        let shouldFlushSilenceBoundary = !hasRecentSpeech &&
+            realtimeWasRecentlySpeaking &&
+            !realtimeDidFlushCurrentSilence &&
+            !realtimeEagerState.publishedText.isEmpty &&
+            publishedStallSeconds >= Self.realtimeDraftFallbackStallSeconds
+        if shouldFlushSilenceBoundary {
+            await reconcileRealtimeSilenceBoundary(
+                revision: revision,
+                samples: activeSegmentSamples,
+                sampleCount: sampleCount
+            )
+            realtimeDidFlushCurrentSilence = true
+            realtimeWasRecentlySpeaking = false
+            return
+        }
+        let shouldHoldForSilence = !hasRecentSpeech &&
+            !realtimeEagerState.publishedText.isEmpty &&
+            publishedStallSeconds >= Self.realtimeDraftFallbackStallSeconds
+        if shouldHoldForSilence {
+            recordRealtimeTrace(
+                "hold",
+                sampleCount: sampleCount,
+                rawText: "",
+                publishedText: realtimeEagerState.publishedText,
+                note: "silence-hold"
+            )
+            return
         }
 
-        let decodeOptions = buildDecodingOptions(whisper: whisper, includeWordTimings: false)
-        inputSampleRate = targetSampleRate
-        return AudioStreamTranscriber(
-            audioEncoder: whisper.audioEncoder,
-            featureExtractor: whisper.featureExtractor,
-            segmentSeeker: whisper.segmentSeeker,
-            textDecoder: whisper.textDecoder,
-            tokenizer: tokenizer,
-            audioProcessor: whisper.audioProcessor,
-            decodingOptions: decodeOptions,
-            useVAD: whisperVADEnabled,
-            stateChangeCallback: { [weak self] oldState, newState in
-                Task { @MainActor [weak self] in
-                    self?.handleRealtimeStateChange(
-                        oldState: oldState,
-                        newState: newState,
-                        revision: revision,
-                        startGate: startGate
-                    )
+        if realtimeEagerLastSampleCount > 0 {
+            let newAudioSeconds = Double(max(sampleCount - realtimeEagerLastSampleCount, 0)) / targetSampleRate
+            guard newAudioSeconds >= Self.realtimeEagerMinimumNewAudioSeconds else { return }
+        }
+        realtimeEagerLastSampleCount = sampleCount
+
+        let usesBootstrapDraft = shouldUseRealtimeDraftBootstrap(bufferedSeconds: bufferedSeconds)
+        if usesBootstrapDraft,
+           let draftCandidate = await makeRealtimeDraftCandidate(revision: revision, samples: activeSegmentSamples),
+           publishRealtimeDraftCandidate(
+                draftCandidate,
+                sampleCount: sampleCount,
+                source: "draft-bootstrap"
+           ) {
+            return
+        }
+
+        guard let candidate = await makeRealtimeEagerCandidate(revision: revision, samples: activeSegmentSamples) else { return }
+        _ = publishRealtimeEagerCandidate(candidate, sampleCount: sampleCount)
+    }
+
+    private func reconcileRealtimeSilenceBoundary(
+        revision: Int,
+        samples: [Float],
+        sampleCount: Int
+    ) async {
+        if let candidate = await makeRealtimeSilenceReconcileCandidate(
+            revision: revision,
+            samples: samples
+        ) {
+            _ = publishRealtimeDraftCandidate(
+                candidate,
+                sampleCount: sampleCount,
+                source: "silence-flush"
+            )
+        } else {
+            recordRealtimeTrace(
+                "silence-flush",
+                sampleCount: sampleCount,
+                rawText: "",
+                publishedText: realtimeEagerState.publishedText,
+                note: "reconcile-miss"
+            )
+        }
+        realtimeEagerState.sealCurrentPublishedTextForNextUtterance()
+        realtimeCommittedSampleCount = sampleCount
+        realtimeEagerLastPublishedSampleCount = sampleCount
+    }
+
+    private func makeRealtimeDraftCandidate(revision: Int, samples: [Float]) async -> TranscriptionResult? {
+        guard let whisper = preparedWhisper else { return nil }
+        let windowSampleCount = max(Int(Self.realtimeDraftWindowSeconds * targetSampleRate), 1)
+        let draftSamples = Array(samples.suffix(min(samples.count, windowSampleCount)))
+        do {
+            let transcription = try await transcribePreparedSamples(
+                whisper: whisper,
+                samples: draftSamples,
+                sampleRate: targetSampleRate,
+                includeWordTimings: false,
+                profile: .realtimeDraft,
+                revision: revision
+            )
+            return transcription.results.first
+        } catch is CancellationError {
+            return nil
+        } catch {
+            VoxtLog.warning("Whisper realtime draft pass failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func makeRealtimeEagerCandidate(revision: Int, samples: [Float]) async -> TranscriptionResult? {
+        guard let whisper = preparedWhisper else { return nil }
+        do {
+            let transcription = try await transcribePreparedSamples(
+                whisper: whisper,
+                samples: samples,
+                sampleRate: targetSampleRate,
+                includeWordTimings: false,
+                profile: .realtimeEager,
+                revision: revision
+            )
+            return transcription.results.first
+        } catch is CancellationError {
+            return nil
+        } catch {
+            VoxtLog.warning("Whisper realtime eager pass failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func makeRealtimeSilenceReconcileCandidate(revision: Int, samples: [Float]) async -> TranscriptionResult? {
+        guard let whisper = preparedWhisper else { return nil }
+        do {
+            let transcription = try await transcribePreparedSamples(
+                whisper: whisper,
+                samples: samples,
+                sampleRate: targetSampleRate,
+                includeWordTimings: false,
+                profile: .realtimeFinal,
+                revision: revision
+            )
+            return transcription.results.first
+        } catch is CancellationError {
+            return nil
+        } catch {
+            VoxtLog.warning("Whisper realtime silence reconcile failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func startRealtimeLevelUpdates(revision: Int) {
+        realtimeLevelTask?.cancel()
+        realtimeLevelTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .milliseconds(50))
+                } catch {
+                    return
                 }
+                self?.publishRealtimeAudioLevelIfNeeded(revision: revision)
             }
+        }
+    }
+
+    private func publishRealtimeAudioLevelIfNeeded(revision: Int) {
+        guard revision == sessionRevision, isRecording, whisperRealtimeEnabled else { return }
+        let energy = preparedWhisper?.audioProcessor.relativeEnergy ?? []
+        audioLevel = resolvedRealtimeAudioLevel(from: energy)
+    }
+
+    private func resolvedRealtimeAudioLevel(from energy: [Float]) -> Float {
+        guard !energy.isEmpty else { return 0 }
+        let recentEnergy = Array(energy.suffix(4))
+        guard !recentEnergy.isEmpty else { return 0 }
+        let peak = recentEnergy.max() ?? 0
+        let average = recentEnergy.reduce(0, +) / Float(recentEnergy.count)
+        return min(max((peak * 0.7) + (average * 0.3), 0), 1)
+    }
+
+    @discardableResult
+    private func publishRealtimeDraftCandidate(
+        _ result: TranscriptionResult,
+        sampleCount: Int,
+        source: String
+    ) -> Bool {
+        guard let published = realtimeEagerState.apply(hypothesisText: result.text) else { return false }
+        let normalized = normalizeText(published)
+        guard !normalized.isEmpty else { return false }
+        transcribedText = normalized
+        onPartialTranscription?(normalized)
+        realtimeEagerLastPublishedSampleCount = sampleCount
+        recordRealtimeTrace(
+            source,
+            sampleCount: sampleCount,
+            rawText: result.text,
+            publishedText: normalized
+        )
+        return true
+    }
+
+    @discardableResult
+    private func publishRealtimeEagerCandidate(_ result: TranscriptionResult, sampleCount: Int) -> Bool {
+        guard let published = realtimeEagerState.apply(result) else { return false }
+        let normalized = normalizeText(published)
+        guard !normalized.isEmpty else { return false }
+        transcribedText = normalized
+        onPartialTranscription?(normalized)
+        realtimeEagerLastPublishedSampleCount = sampleCount
+        recordRealtimeTrace(
+            "eager",
+            sampleCount: sampleCount,
+            rawText: result.text,
+            publishedText: normalized
+        )
+        return true
+    }
+
+    private func shouldUseRealtimeDraftBootstrap(bufferedSeconds: Double) -> Bool {
+        Self.shouldUseRealtimeDraftBootstrap(
+            bufferedSeconds: bufferedSeconds,
+            publishedCharacterCount: realtimeEagerState.mutablePublishedCharacterCount
         )
     }
 
-    private func handleRealtimeStateChange(
-        oldState: AudioStreamTranscriber.State,
-        newState: AudioStreamTranscriber.State,
-        revision: Int,
-        startGate: RealtimeStartGate
-    ) {
-        guard revision == sessionRevision else { return }
+    private static func shouldUseRealtimeDraftBootstrap(
+        bufferedSeconds: Double,
+        publishedCharacterCount: Int
+    ) -> Bool {
+        bufferedSeconds <= Self.realtimeDraftBootstrapSeconds &&
+            publishedCharacterCount < Self.realtimeDraftBootstrapCharacterCount
+    }
 
-        if newState.isRecording && !oldState.isRecording {
-            isRecording = true
-            Task {
-                await startGate.succeed()
+    private func publishWhisperFinalText(_ text: String) {
+        if whisperRealtimeEnabled {
+            let normalized = normalizeText(text)
+            if let published = realtimeEagerState.applyFinal(normalized) {
+                transcribedText = published
+                onPartialTranscription?(published)
+                recordRealtimeTrace(
+                    "final",
+                    sampleCount: snapshotPreparedAudioSamples().count,
+                    rawText: normalized,
+                    publishedText: published
+                )
             }
-            VoxtLog.info(
-                "Whisper audio capture started. sampleRate=\(Int(targetSampleRate)), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), mode=realtime",
-                verbose: true
-            )
+            return
         }
 
-        audioLevel = max(newState.bufferEnergy.max() ?? 0, 0)
-        let mergedText = mergedRealtimeText(from: newState)
-        if !mergedText.isEmpty {
-            transcribedText = mergedText
-            onPartialTranscription?(mergedText)
+        transcribedText = text
+        onPartialTranscription?(text)
+    }
+
+    func consumeRealtimeTraceEntries() -> [String] {
+        let entries = realtimeTraceEntries
+        realtimeTraceEntries.removeAll(keepingCapacity: false)
+        return entries
+    }
+
+    private func recordRealtimeTrace(
+        _ source: String,
+        sampleCount: Int,
+        rawText: String,
+        publishedText: String,
+        note: String? = nil
+    ) {
+        let seconds = Double(sampleCount) / targetSampleRate
+        let trace = String(
+            format: "[%.2fs] %@ raw=%@ published=%@%@",
+            seconds,
+            source,
+            Self.traceQuoted(normalizeText(rawText)),
+            Self.traceQuoted(normalizeText(publishedText)),
+            note.map { " note=\($0)" } ?? ""
+        )
+        realtimeTraceEntries.append(trace)
+        if realtimeTraceEntries.count > 200 {
+            realtimeTraceEntries.removeFirst(realtimeTraceEntries.count - 200)
         }
     }
 
-    private func handleRealtimeTranscriptionError(_ error: Error, revision: Int) async {
-        guard revision == sessionRevision else { return }
-        VoxtLog.error("Whisper realtime transcription failed: \(error)")
-        guard isRecording else { return }
-        stopRecording()
+    private static func traceQuoted(_ text: String) -> String {
+        "\"\(text.replacingOccurrences(of: "\"", with: "\\\""))\""
     }
 
-    private func handleRealtimeTranscriptionTaskExit(revision: Int) {
-        guard revision == sessionRevision else { return }
-        realtimeTranscriptionTask = nil
+    private static func hasRecentSpeechActivity(
+        samples: [Float],
+        targetSampleRate: Double
+    ) -> Bool {
+        guard !samples.isEmpty else { return false }
+        let windowSampleCount = max(Int(Self.realtimeSilenceWindowSeconds * targetSampleRate), 1)
+        let recentSamples = samples.suffix(min(samples.count, windowSampleCount))
+        guard !recentSamples.isEmpty else { return false }
+
+        var sumSquares: Float = 0
+        var peak: Float = 0
+        for sample in recentSamples {
+            let magnitude = abs(sample)
+            sumSquares += magnitude * magnitude
+            peak = max(peak, magnitude)
+        }
+
+        let rms = sqrt(sumSquares / Float(recentSamples.count))
+        return rms >= Self.realtimeSilenceRMSHoldThreshold || peak >= Self.realtimeSilencePeakHoldThreshold
     }
 
-    private func mergedRealtimeText(from state: AudioStreamTranscriber.State) -> String {
-        let confirmed = state.confirmedSegments.map(\.text).joined()
-        let unconfirmedSegments = state.unconfirmedSegments.map(\.text).joined()
-        let fallback = state.currentText.isEmpty ? state.unconfirmedText.last ?? "" : state.currentText
-        let merged = normalizeText(confirmed + (unconfirmedSegments.isEmpty ? fallback : unconfirmedSegments))
-        return merged == "Waiting for speech..." ? "" : merged
+    private func resolvedRealtimeInferenceSamples(from samples: [Float]) -> [Float] {
+        guard !samples.isEmpty else { return [] }
+        let overlapSampleCount = max(Int(Self.realtimeSegmentOverlapSeconds * targetSampleRate), 0)
+        let startSample = max(0, min(realtimeCommittedSampleCount, samples.count) - overlapSampleCount)
+        guard startSample > 0 else { return samples }
+        return Array(samples[startSample...])
+    }
+
+    private func transcribePreparedSamples(
+        whisper: WhisperKit,
+        samples: [Float],
+        sampleRate: Double,
+        includeWordTimings: Bool,
+        profile: WhisperInferenceProfile,
+        revision: Int
+    ) async throws -> (preparedSamples: [Float], results: [TranscriptionResult], text: String) {
+        while isInferenceRunning {
+            do {
+                try await Task.sleep(for: .milliseconds(80))
+            } catch {
+                throw CancellationError()
+            }
+        }
+
+        guard revision == sessionRevision else {
+            throw CancellationError()
+        }
+
+        isInferenceRunning = true
+        defer { isInferenceRunning = false }
+
+        let preparedSamples = prepareInputSamples(samples, sampleRate: sampleRate)
+        let decodeOptions = buildDecodingOptions(
+            whisper: whisper,
+            includeWordTimings: includeWordTimings,
+            profile: profile
+        )
+        let results = try await whisper.transcribe(audioArray: preparedSamples, decodeOptions: decodeOptions)
+        guard revision == sessionRevision else {
+            throw CancellationError()
+        }
+        let text = normalizeText(results.map(\.text).joined(separator: " "))
+        return (preparedSamples, results, text)
     }
 
     private func snapshotPreparedAudioSamples() -> [Float] {
@@ -807,7 +1569,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private var whisperRealtimeEnabled: Bool {
-        UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true
+        UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
     }
 
     private var preferredMainLanguage: UserMainLanguageOption {
@@ -819,6 +1581,27 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             return option
         }
         return UserMainLanguageOption.fallbackOption()
+    }
+
+    private func resolvedWhisperLanguage(
+        for profile: WhisperInferenceProfile,
+        hintPayload: ResolvedASRHintPayload
+    ) -> String? {
+        if !profile.usesLiveDecodingBias {
+            return hintPayload.language
+        }
+        if let language = hintPayload.language {
+            return language
+        }
+
+        let selectedCodes = UserMainLanguageOption.storedSelection(
+            from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
+        )
+        let selectedOptions = selectedCodes.compactMap(UserMainLanguageOption.option(for:))
+        guard selectedOptions.count == 1, let mainLanguage = selectedOptions.first else {
+            return nil
+        }
+        return mainLanguage.baseLanguageCode
     }
 
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {

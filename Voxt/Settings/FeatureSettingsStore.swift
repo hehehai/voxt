@@ -88,7 +88,10 @@ enum FeatureSettingsStore {
             ),
             meeting: MeetingFeatureSettings(
                 enabled: defaults.object(forKey: AppPreferenceKey.meetingNotesBetaEnabled) as? Bool ?? false,
-                asrSelectionID: transcriptionASR,
+                asrSelectionID: supportedMeetingASRSelection(
+                    transcriptionASR,
+                    defaults: defaults
+                ),
                 summaryModelSelectionID: meetingSummary,
                 summaryPrompt: AppPromptDefaults.resolvedStoredText(
                     defaults.string(forKey: AppPreferenceKey.meetingSummaryPromptTemplate),
@@ -135,9 +138,10 @@ enum FeatureSettingsStore {
         from settings: FeatureSettings,
         defaults: UserDefaults = .standard
     ) {
-        syncLegacyMeeting(settings.meeting, defaults: defaults)
+        let sanitizedMeeting = sanitizedMeetingSettings(settings.meeting, defaults: defaults)
+        syncLegacyMeeting(sanitizedMeeting, defaults: defaults)
         syncLegacyTranslation(settings.translation, defaults: defaults)
-        syncLegacyASRSelection(settings.meeting.asrSelectionID, defaults: defaults)
+        syncLegacyASRSelection(sanitizedMeeting.asrSelectionID, defaults: defaults)
     }
 
     private static func loadRaw(defaults: UserDefaults) -> String? {
@@ -289,7 +293,10 @@ enum FeatureSettingsStore {
             ),
             meeting: MeetingFeatureSettings(
                 enabled: settings.meeting.enabled,
-                asrSelectionID: settings.meeting.asrSelectionID.asrSelection == nil ? fallback.meeting.asrSelectionID : settings.meeting.asrSelectionID,
+                asrSelectionID: supportedMeetingASRSelection(
+                    settings.meeting.asrSelectionID.asrSelection == nil ? fallback.meeting.asrSelectionID : settings.meeting.asrSelectionID,
+                    defaults: defaults
+                ),
                 summaryModelSelectionID: settings.meeting.summaryModelSelectionID.textSelection == nil ? fallback.meeting.summaryModelSelectionID : settings.meeting.summaryModelSelectionID,
                 summaryPrompt: AppPromptDefaults.resolvedStoredText(
                     sanitizedPrompt(settings.meeting.summaryPrompt),
@@ -414,6 +421,39 @@ enum FeatureSettingsStore {
             modifiers: settings.modifiers,
             sidedModifiers: settings.sidedModifiers
         )
+    }
+
+    private static func sanitizedMeetingSettings(
+        _ settings: MeetingFeatureSettings,
+        defaults: UserDefaults
+    ) -> MeetingFeatureSettings {
+        MeetingFeatureSettings(
+            enabled: settings.enabled,
+            asrSelectionID: supportedMeetingASRSelection(settings.asrSelectionID, defaults: defaults),
+            summaryModelSelectionID: settings.summaryModelSelectionID,
+            summaryPrompt: settings.summaryPrompt,
+            summaryAutoGenerate: settings.summaryAutoGenerate,
+            realtimeTranslateEnabled: settings.realtimeTranslateEnabled,
+            realtimeTargetLanguageRawValue: settings.realtimeTargetLanguageRawValue,
+            showOverlayInScreenShare: settings.showOverlayInScreenShare
+        )
+    }
+
+    private static func supportedMeetingASRSelection(
+        _ selectionID: FeatureModelSelectionID,
+        defaults: UserDefaults
+    ) -> FeatureModelSelectionID {
+        let fallbackRepo = MLXModelManager.canonicalModelRepo(
+            defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
+        )
+        switch selectionID.asrSelection {
+        case .whisper:
+            return .mlx(fallbackRepo)
+        case .none:
+            return .mlx(fallbackRepo)
+        case .dictation, .mlx, .remote:
+            return selectionID
+        }
     }
 
     private static func legacyASRSelection(defaults: UserDefaults) -> FeatureModelSelectionID {

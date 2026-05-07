@@ -265,7 +265,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.whisperTemperature: 0.0,
             AppPreferenceKey.whisperVADEnabled: true,
             AppPreferenceKey.whisperTimestampsEnabled: false,
-            AppPreferenceKey.whisperRealtimeEnabled: true,
+            AppPreferenceKey.whisperRealtimeEnabled: false,
             AppPreferenceKey.whisperKeepResidentLoaded: true,
             AppPreferenceKey.translationFallbackModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.rewriteCustomLLMModelRepo: CustomLLMModelManager.defaultModelRepo,

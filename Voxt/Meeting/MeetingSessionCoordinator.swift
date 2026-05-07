@@ -726,7 +726,7 @@ final class MeetingSessionCoordinator {
     private func resolvedEngineContext() -> MeetingASREngineContext {
         let transcriptionEngine = resolvedTranscriptionEngine()
         let remoteSelection = resolvedRemoteASRSelection()
-        let whisperRealtimeEnabled = UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true
+        let whisperRealtimeEnabled = UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
 
         return MeetingASRSupport.resolveContext(
             transcriptionEngine: transcriptionEngine,

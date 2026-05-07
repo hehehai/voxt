@@ -9,7 +9,7 @@ enum MeetingStartBlockReason: Equatable {
     var userMessage: String {
         switch self {
         case .dictationUnsupported:
-            return String(localized: "Meeting Notes currently supports Whisper, MLX Audio, and Remote ASR. Direct Dictation is not available for meetings.")
+            return String(localized: "Meeting Notes currently supports MLX Audio and Remote ASR. Direct Dictation is not available for meetings.")
         case .recording(let reason):
             return reason.userMessage
         case .remoteASRUnavailable:
@@ -62,12 +62,12 @@ enum MeetingStartPlanner {
             }
         case .whisperKit:
             switch RecordingStartPlanner.resolve(
-                selectedEngine: .whisperKit,
+                selectedEngine: .mlxAudio,
                 mlxModelState: mlxModelState,
                 whisperModelState: whisperModelState
             ) {
             case .start:
-                return .start(.whisperKit)
+                return .start(.mlxAudio)
             case .blocked(let reason):
                 return .blocked(.recording(reason))
             }

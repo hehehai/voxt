@@ -31,7 +31,7 @@ final class MeetingASRSupportTests: XCTestCase {
         }
     }
 
-    func testWhisperRealtimeUsesRealtimeProfile() {
+    func testWhisperMeetingFallsBackToMLXContext() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .whisperKit,
             whisperModelState: .ready,
@@ -39,17 +39,21 @@ final class MeetingASRSupportTests: XCTestCase {
             whisperRealtimeEnabled: true,
             whisperIsCurrentModelLoaded: true,
             whisperDisplayTitle: { _ in "Whisper Base" },
-            mlxModelState: .notDownloaded,
-            mlxCurrentModelRepo: MLXModelManager.defaultModelRepo,
-            mlxIsCurrentModelLoaded: false,
-            mlxDisplayTitle: { _ in "" },
+            mlxModelState: .ready,
+            mlxCurrentModelRepo: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
+            mlxIsCurrentModelLoaded: true,
+            mlxDisplayTitle: { _ in "Voxtral Realtime Mini 4B" },
             remoteProvider: .openAIWhisper,
             remoteConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "")
         )
 
-        XCTAssertEqual(context.engine, .whisperKit)
+        XCTAssertEqual(context.engine, .mlxAudio)
         XCTAssertEqual(context.chunkingProfile, .realtime)
         XCTAssertFalse(context.needsModelInitialization)
+        XCTAssertEqual(
+            context.historyModelDescription,
+            "Voxtral Realtime Mini 4B (mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16)"
+        )
     }
 
     func testMLXRealtimeModelUsesRealtimeProfile() {

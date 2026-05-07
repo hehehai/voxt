@@ -98,6 +98,23 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         )
     }
 
+    func testMeetingASRSelectorExcludesWhisperEntries() {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(meetingASR: .mlx(MLXModelManager.defaultModelRepo))
+        )
+
+        let meetingEntries = builder.entries(for: .meetingASR)
+
+        XCTAssertFalse(
+            meetingEntries.contains { entry in
+                if case .whisper = entry.selectionID.asrSelection {
+                    return true
+                }
+                return false
+            }
+        )
+    }
+
     func testUnconfiguredRemoteLLMEntryRemainsNotConfiguredInSelector() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(translationModel: .remoteLLM(.openAI))

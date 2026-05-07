@@ -793,6 +793,9 @@
 "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "仅适用于转写。关闭时，只有在未聚焦可写输入框时才显示答案卡片；开启后，转写无论是否聚焦输入框都会显示答案卡片。";
 "Whisper" = "Whisper";
 "Realtime" = "实时";
+"Live Realtime (Experimental)" = "实时转写（实验性）";
+"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected." = "这些设置适用于 Whisper 转录会话。实时转写（实验性）会在你说话时持续输出 partial 文本，并在停止后再做一次最终修正。关闭后会回到质量优先的非实时路径。只有在选择了 Whisper 翻译时，才会使用 Whisper translate。";
+"Meeting Notes currently supports MLX Audio and Remote ASR. Direct Dictation is not available for meetings." = "会议记录当前只支持 MLX Audio 和 Remote ASR，不支持 Direct Dictation。";
 "Realtime On" = "实时模式";
 "Quality Mode" = "质量模式";
 "Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider." = "Whisper 翻译仅在 ASR 引擎为 Whisper 时可用。否则 Voxt 会回退到你保存的 LLM 提供者。";

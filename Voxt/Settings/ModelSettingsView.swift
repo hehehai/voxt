@@ -71,7 +71,7 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.whisperTemperature) var whisperTemperature = 0.0
     @AppStorage(AppPreferenceKey.whisperVADEnabled) var whisperVADEnabled = true
     @AppStorage(AppPreferenceKey.whisperTimestampsEnabled) var whisperTimestampsEnabled = false
-    @AppStorage(AppPreferenceKey.whisperRealtimeEnabled) var whisperRealtimeEnabled = true
+    @AppStorage(AppPreferenceKey.whisperRealtimeEnabled) var whisperRealtimeEnabled = false
     @AppStorage(AppPreferenceKey.whisperKeepResidentLoaded) var whisperKeepResidentLoaded = true
     @AppStorage(AppPreferenceKey.whisperLocalASRTuningSettings) var whisperLocalASRTuningSettingsRaw = WhisperLocalTuningSettingsStore.defaultStoredValue()
     @AppStorage(AppPreferenceKey.customLLMModelRepo) var customLLMRepo = CustomLLMModelManager.defaultModelRepo

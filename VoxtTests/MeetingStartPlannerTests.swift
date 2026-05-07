@@ -3,7 +3,19 @@ import XCTest
 
 @MainActor
 final class MeetingStartPlannerTests: XCTestCase {
-    func testWhisperMeetingFollowsRecordingPlanner() {
+    func testWhisperMeetingFallsBackToMLXWhenAvailable() {
+        let decision = MeetingStartPlanner.resolve(
+            selectedEngine: .whisperKit,
+            mlxModelState: .ready,
+            whisperModelState: .ready,
+            remoteASRProvider: .openAIWhisper,
+            remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
+        )
+
+        XCTAssertEqual(decision, .start(.mlxAudio))
+    }
+
+    func testWhisperMeetingUsesMLXAvailabilityRules() {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .whisperKit,
             mlxModelState: .notDownloaded,
@@ -12,7 +24,7 @@ final class MeetingStartPlannerTests: XCTestCase {
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
 
-        XCTAssertEqual(decision, .start(.whisperKit))
+        XCTAssertEqual(decision, .blocked(.recording(.mlxModelNotInstalled)))
     }
 
     func testMLXMeetingFollowsRecordingPlanner() {

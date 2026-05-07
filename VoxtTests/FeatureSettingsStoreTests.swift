@@ -145,6 +145,66 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: AppPreferenceKey.meetingRealtimeTranslateEnabled))
     }
 
+    func testPrepareLegacyMeetingFallsBackFromWhisperToMLX() {
+        let defaults = TestDoubles.makeUserDefaults()
+        defaults.set("mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit", forKey: AppPreferenceKey.mlxModelRepo)
+        let settings = FeatureSettings(
+            transcription: .init(
+                asrSelectionID: .whisper("large-v3"),
+                llmEnabled: false,
+                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                prompt: AppPreferenceKey.defaultEnhancementPrompt
+            ),
+            translation: .init(
+                asrSelectionID: .whisper("large-v3"),
+                modelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
+                prompt: AppPreferenceKey.defaultTranslationPrompt,
+                replaceSelectedText: true
+            ),
+            rewrite: .init(
+                asrSelectionID: .whisper("large-v3"),
+                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                prompt: AppPreferenceKey.defaultRewritePrompt,
+                appEnhancementEnabled: false
+            ),
+            meeting: .init(
+                enabled: true,
+                asrSelectionID: .whisper("large-v3"),
+                summaryModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
+                summaryAutoGenerate: true,
+                realtimeTranslateEnabled: false,
+                realtimeTargetLanguageRawValue: "",
+                showOverlayInScreenShare: false
+            )
+        )
+
+        FeatureSettingsStore.prepareLegacyMeeting(from: settings, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.transcriptionEngine), TranscriptionEngine.mlxAudio.rawValue)
+        XCTAssertEqual(
+            defaults.string(forKey: AppPreferenceKey.mlxModelRepo),
+            "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"
+        )
+    }
+
+    func testLoadFallsBackMeetingWhisperSelectionToMLX() {
+        let defaults = TestDoubles.makeUserDefaults()
+        defaults.set("mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit", forKey: AppPreferenceKey.mlxModelRepo)
+        defaults.set(
+            """
+            {"transcription":{"asrSelectionID":"whisper:large-v3","llmEnabled":false,"llmSelectionID":"local-llm:\(CustomLLMModelManager.defaultModelRepo)","prompt":"prompt","notes":{"enabled":false,"triggerShortcut":{"keyCode":49,"modifiersRawValue":0,"sidedModifiersRawValue":0},"titleModelSelectionID":"local-llm:\(CustomLLMModelManager.defaultModelRepo)","soundEnabled":false,"soundPreset":"soft"}},"translation":{"asrSelectionID":"whisper:large-v3","modelSelectionID":"local-llm:\(CustomLLMModelManager.defaultModelRepo)","targetLanguageRawValue":"english","prompt":"translation","replaceSelectedText":true,"showResultWindow":true},"rewrite":{"asrSelectionID":"whisper:large-v3","llmSelectionID":"local-llm:\(CustomLLMModelManager.defaultModelRepo)","prompt":"rewrite","appEnhancementEnabled":false,"continueShortcut":{"keyCode":49,"modifiersRawValue":0,"sidedModifiersRawValue":0}},"meeting":{"enabled":true,"asrSelectionID":"whisper:large-v3","summaryModelSelectionID":"local-llm:\(CustomLLMModelManager.defaultModelRepo)","summaryPrompt":"meeting","summaryAutoGenerate":true,"realtimeTranslateEnabled":false,"realtimeTargetLanguageRawValue":"","showOverlayInScreenShare":false}}
+            """,
+            forKey: AppPreferenceKey.featureSettings
+        )
+
+        let settings = FeatureSettingsStore.load(defaults: defaults)
+
+        XCTAssertEqual(settings.meeting.asrSelectionID, .mlx("mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"))
+        XCTAssertEqual(settings.transcription.asrSelectionID, .whisper("large-v3"))
+    }
+
     func testPrepareLegacyMeetingMirrorsDisabledMeetingState() {
         let defaults = TestDoubles.makeUserDefaults()
         let settings = FeatureSettings(

@@ -52,10 +52,12 @@ enum MeetingASRSupport {
         switch transcriptionEngine {
         case .whisperKit:
             return MeetingASREngineContext(
-                engine: .whisperKit,
-                historyModelDescription: "\(whisperDisplayTitle(whisperCurrentModelID)) (\(whisperCurrentModelID))",
-                resolvedMode: .chunk(profile: whisperRealtimeEnabled ? .realtime : .quality),
-                needsModelInitialization: !whisperIsCurrentModelLoaded && modelStateNeedsInitialization(whisperModelState)
+                engine: .mlxAudio,
+                historyModelDescription: "\(mlxDisplayTitle(mlxCurrentModelRepo)) (\(mlxCurrentModelRepo))",
+                resolvedMode: .chunk(
+                    profile: MLXModelManager.isRealtimeCapableModelRepo(mlxCurrentModelRepo) ? .realtime : .quality
+                ),
+                needsModelInitialization: !mlxIsCurrentModelLoaded && modelStateNeedsInitialization(mlxModelState)
             )
         case .mlxAudio:
             return MeetingASREngineContext(

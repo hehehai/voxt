@@ -40,6 +40,17 @@ struct ASRDebugResult: Identifiable, Equatable {
     var isError: Bool { errorText != nil }
 }
 
+private func formatWhisperRealtimeReplay(_ events: [WhisperRealtimeReplayEvent]) -> String {
+    guard !events.isEmpty else { return modelDebugLocalized("No realtime replay output.") }
+    return events
+        .map { event in
+            let time = String(format: "%.1fs", event.elapsedSeconds)
+            let phase = event.isFinal ? "final" : "live"
+            return "[\(time)] \(phase): \(event.text)"
+        }
+        .joined(separator: "\n")
+}
+
 struct ASRDebugClipItem: Identifiable, Equatable {
     let id: UUID
     let clip: DebugAudioClip
@@ -401,6 +412,13 @@ final class ASRDebugViewModel: ObservableObject {
                 errorText: nil
             )
             results.insert(result, at: 0)
+            if case .whisper = option.selection {
+                await appendWhisperRealtimeReplayResult(
+                    option: option,
+                    clipItem: clipItem,
+                    source: source
+                )
+            }
             updateClipTitleIfNeeded(clipID: clipItem.id, transcript: output)
             statusMessage = AppLocalization.format("Completed %@", option.title)
         } catch {
@@ -449,6 +467,54 @@ final class ASRDebugViewModel: ObservableObject {
                 clip.fileURL,
                 provider: provider,
                 configuration: configuration
+            )
+        }
+    }
+
+    private func appendWhisperRealtimeReplayResult(
+        option: ASRDebugModelOption,
+        clipItem: ASRDebugClipItem,
+        source: ASRDebugResult.Source
+    ) async {
+        guard case .whisper = option.selection else { return }
+        let startedAt = Date()
+        do {
+            let events = try await whisperTranscriber.debugReplayRealtimeAudioFile(clipItem.clip.fileURL)
+            let replayText = formatWhisperRealtimeReplay(events)
+            let elapsed = Date().timeIntervalSince(startedAt)
+            results.insert(
+                ASRDebugResult(
+                    id: UUID(),
+                    clipID: clipItem.id,
+                    clipTitle: clipItem.displayTitle,
+                    modelTitle: "\(option.title) · Realtime Replay",
+                    source: source,
+                    audioDurationText: String(format: "%.1fs", clipItem.clip.durationSeconds),
+                    runtimeText: String(format: "%.2fs", elapsed),
+                    characterCount: replayText.count,
+                    createdAt: Date(),
+                    outputText: replayText,
+                    errorText: nil
+                ),
+                at: 0
+            )
+        } catch {
+            let elapsed = Date().timeIntervalSince(startedAt)
+            results.insert(
+                ASRDebugResult(
+                    id: UUID(),
+                    clipID: clipItem.id,
+                    clipTitle: clipItem.displayTitle,
+                    modelTitle: "\(option.title) · Realtime Replay",
+                    source: source,
+                    audioDurationText: String(format: "%.1fs", clipItem.clip.durationSeconds),
+                    runtimeText: String(format: "%.2fs", elapsed),
+                    characterCount: 0,
+                    createdAt: Date(),
+                    outputText: "",
+                    errorText: error.localizedDescription
+                ),
+                at: 0
             )
         }
     }

@@ -472,7 +472,7 @@ enum ConfigurationTransferManager {
             whisperTemperature = try container.decodeIfPresent(Double.self, forKey: .whisperTemperature) ?? 0.0
             whisperVADEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperVADEnabled) ?? true
             whisperTimestampsEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperTimestampsEnabled) ?? false
-            whisperRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperRealtimeEnabled) ?? true
+            whisperRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperRealtimeEnabled) ?? false
             whisperKeepResidentLoaded = try container.decodeIfPresent(Bool.self, forKey: .whisperKeepResidentLoaded) ?? true
             customLLMModelRepo = try container.decode(String.self, forKey: .customLLMModelRepo)
             translationCustomLLMModelRepo = try container.decode(String.self, forKey: .translationCustomLLMModelRepo)
@@ -905,7 +905,7 @@ enum ConfigurationTransferManager {
                 whisperTemperature: defaults.object(forKey: AppPreferenceKey.whisperTemperature) as? Double ?? 0.0,
                 whisperVADEnabled: defaults.object(forKey: AppPreferenceKey.whisperVADEnabled) as? Bool ?? true,
                 whisperTimestampsEnabled: defaults.object(forKey: AppPreferenceKey.whisperTimestampsEnabled) as? Bool ?? false,
-                whisperRealtimeEnabled: defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? true,
+                whisperRealtimeEnabled: defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false,
                 whisperKeepResidentLoaded: defaults.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? true,
                 customLLMModelRepo: defaults.string(forKey: AppPreferenceKey.customLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
                 translationCustomLLMModelRepo: defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,

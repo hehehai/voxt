@@ -793,6 +793,9 @@
 "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card." = "Applies only to rewrite. When disabled, the answer card appears only if no writable input is focused. When enabled, rewrite always shows the answer card.";
 "Whisper" = "Whisper";
 "Realtime" = "Realtime";
+"Live Realtime (Experimental)" = "Live Realtime (Experimental)";
+"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected." = "These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected.";
+"Meeting Notes currently supports MLX Audio and Remote ASR. Direct Dictation is not available for meetings." = "Meeting Notes currently supports MLX Audio and Remote ASR. Direct Dictation is not available for meetings.";
 "Realtime On" = "Realtime On";
 "Quality Mode" = "Quality Mode";
 "Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider." = "Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider.";
