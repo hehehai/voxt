@@ -12,28 +12,28 @@ enum VoxtLog {
         case error = "ERROR"
     }
 
-    static var verboseEnabled = false
+    nonisolated(unsafe) static var verboseEnabled = false
 
-    static func info(_ message: @autoclosure () -> String, verbose: Bool = false) {
+    nonisolated static func info(_ message: @autoclosure () -> String, verbose: Bool = false) {
         log(message(), level: .info, verbose: verbose)
     }
 
-    static func hotkey(_ message: @autoclosure () -> String) {
+    nonisolated static func hotkey(_ message: @autoclosure () -> String) {
         guard UserDefaults.standard.bool(forKey: AppPreferenceKey.hotkeyDebugLoggingEnabled) else { return }
         log(message(), level: .info)
     }
 
-    static func llm(_ message: @autoclosure () -> String) {
+    nonisolated static func llm(_ message: @autoclosure () -> String) {
         guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
         log(message(), level: .info)
     }
 
-    static func model(_ message: @autoclosure () -> String) {
+    nonisolated static func model(_ message: @autoclosure () -> String) {
         guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
         log(message(), level: .info)
     }
 
-    static func llmPreview(_ text: String, limit: Int = 1200) -> String {
+    nonisolated static func llmPreview(_ text: String, limit: Int = 1200) -> String {
         let normalized = text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -43,15 +43,15 @@ enum VoxtLog {
         return "\(normalized[..<endIndex])…"
     }
 
-    static func warning(_ message: @autoclosure () -> String) {
+    nonisolated static func warning(_ message: @autoclosure () -> String) {
         log(message(), level: .warning)
     }
 
-    static func error(_ message: @autoclosure () -> String) {
+    nonisolated static func error(_ message: @autoclosure () -> String) {
         log(message(), level: .error)
     }
 
-    static func latestLogUpdateDate() -> Date? {
+    nonisolated static func latestLogUpdateDate() -> Date? {
         lock.lock()
         defer { lock.unlock() }
         do {
@@ -62,7 +62,7 @@ enum VoxtLog {
         }
     }
 
-    static func latestLogExportPayload(limit: Int = 2000) -> ExportPayload {
+    nonisolated static func latestLogExportPayload(limit: Int = 2000) -> ExportPayload {
         lock.lock()
         defer { lock.unlock() }
         loadCacheIfNeeded()
@@ -77,24 +77,24 @@ enum VoxtLog {
         return ExportPayload(filename: filename, content: content)
     }
 
-    static func exportLatestLogs(limit: Int = 2000) throws -> URL {
+    nonisolated static func exportLatestLogs(limit: Int = 2000) throws -> URL {
         let payload = latestLogExportPayload(limit: limit)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(payload.filename)
         try payload.content.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
 
-    private static let lock = NSLock()
-    private static let maxStoredLines = 10000
-    private static var didLoadCache = false
-    private static var logLines: [String] = []
-    private static let lineDateFormatter: ISO8601DateFormatter = {
+    private nonisolated static let lock = NSLock()
+    private nonisolated static let maxStoredLines = 10000
+    private nonisolated(unsafe) static var didLoadCache = false
+    private nonisolated(unsafe) static var logLines: [String] = []
+    private nonisolated(unsafe) static let lineDateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    private static var logFileURL: URL {
+    private nonisolated static var logFileURL: URL {
         let supportDirectory = try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -108,19 +108,19 @@ enum VoxtLog {
             .appendingPathComponent("voxt.log")
     }
 
-    private static func log(_ message: String, level: Level, verbose: Bool = false) {
+    private nonisolated static func log(_ message: String, level: Level, verbose: Bool = false) {
         guard !verbose || verboseEnabled else { return }
         let line = formatLine(message: message, level: level)
         print(line)
         persist(line: line)
     }
 
-    private static func formatLine(message: String, level: Level) -> String {
+    private nonisolated static func formatLine(message: String, level: Level) -> String {
         let dateText = lineDateFormatter.string(from: Date())
         return "[Voxt] \(dateText) [\(level.rawValue)] \(message)"
     }
 
-    private static func persist(line: String) {
+    private nonisolated static func persist(line: String) {
         lock.lock()
         defer { lock.unlock() }
         loadCacheIfNeeded()
@@ -129,7 +129,7 @@ enum VoxtLog {
         writeAllLines()
     }
 
-    private static func loadCacheIfNeeded() {
+    private nonisolated static func loadCacheIfNeeded() {
         guard !didLoadCache else { return }
         didLoadCache = true
         guard let content = try? String(contentsOf: logFileURL, encoding: .utf8), !content.isEmpty else {
@@ -142,12 +142,12 @@ enum VoxtLog {
         trimIfNeeded()
     }
 
-    private static func trimIfNeeded() {
+    private nonisolated static func trimIfNeeded() {
         guard logLines.count > maxStoredLines else { return }
         logLines = Array(logLines.suffix(maxStoredLines))
     }
 
-    private static func writeAllLines() {
+    private nonisolated static func writeAllLines() {
         do {
             try FileManager.default.createDirectory(
                 at: logFileURL.deletingLastPathComponent(),

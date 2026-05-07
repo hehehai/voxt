@@ -521,7 +521,7 @@ extension AppDelegate {
                     }
                 }
             } else {
-                try? historyStore.replaceAudioArchive(for: activeEntryID, with: pendingAudioArchiveURL)
+                _ = try? historyStore.replaceAudioArchive(for: activeEntryID, with: pendingAudioArchiveURL)
             }
         }
 

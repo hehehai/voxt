@@ -169,7 +169,7 @@ struct LocalModelPickerCard<PickerContent: View>: View {
                         .foregroundStyle(.green)
                     Button(openLabel, action: onOpen)
                         .buttonStyle(SettingsPillButtonStyle())
-                    if let onUninstall {
+                    if onUninstall != nil {
                         Button(isRunningUninstall ? localized("Uninstalling…") : localized("Uninstall"), role: .destructive) {
                             isShowingUninstallConfirmation = true
                         }

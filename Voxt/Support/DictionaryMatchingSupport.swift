@@ -13,15 +13,17 @@ private struct DictionaryScriptProfile {
     var containsKana = false
     var containsHangul = false
 
-    var containsCJKLike: Bool {
+    nonisolated init() {}
+
+    nonisolated var containsCJKLike: Bool {
         containsHan || containsKana || containsHangul
     }
 
-    var isLatinLike: Bool {
+    nonisolated var isLatinLike: Bool {
         (containsLatin || containsDigit) && !containsCJKLike
     }
 
-    var isMixedScript: Bool {
+    nonisolated var isMixedScript: Bool {
         containsCJKLike && (containsLatin || containsDigit)
     }
 }
@@ -36,7 +38,7 @@ private enum DictionaryMatchVariantSource {
     case replacementTerm
     case observedVariant
 
-    var source: DictionaryMatchSource {
+    nonisolated var source: DictionaryMatchSource {
         switch self {
         case .term:
             return .term
@@ -47,8 +49,13 @@ private enum DictionaryMatchVariantSource {
         }
     }
 
-    var allowsFuzzyMatch: Bool {
-        self != .replacementTerm
+    nonisolated var allowsFuzzyMatch: Bool {
+        switch self {
+        case .replacementTerm:
+            return false
+        case .term, .observedVariant:
+            return true
+        }
     }
 }
 
@@ -104,7 +111,7 @@ nonisolated func dictionaryIsHangul(_ scalar: UnicodeScalar) -> Bool {
     }
 }
 
-private func dictionaryScriptProfile(for text: String) -> DictionaryScriptProfile {
+private nonisolated func dictionaryScriptProfile(for text: String) -> DictionaryScriptProfile {
     var profile = DictionaryScriptProfile()
     for scalar in text.unicodeScalars {
         if CharacterSet.decimalDigits.contains(scalar) {
@@ -129,7 +136,7 @@ private func dictionaryScriptProfile(for text: String) -> DictionaryScriptProfil
     return profile
 }
 
-private func dictionaryNormalizedMapping(for text: String) -> DictionaryNormalizedMapping {
+private nonisolated func dictionaryNormalizedMapping(for text: String) -> DictionaryNormalizedMapping {
     var output = ""
     var sourceRanges: [NSRange] = []
     var previousWasWhitespace = false
@@ -175,7 +182,7 @@ private func dictionaryNormalizedMapping(for text: String) -> DictionaryNormaliz
     return DictionaryNormalizedMapping(text: output, sourceRanges: sourceRanges)
 }
 
-private func dictionaryExactNormalizedMatchRanges(
+private nonisolated func dictionaryExactNormalizedMatchRanges(
     in text: String,
     normalizedNeedle: String,
     requireTokenBoundaries: Bool
@@ -231,12 +238,12 @@ struct DictionaryMatcher {
     let entries: [DictionaryEntry]
     let blockedGlobalMatchKeys: Set<String>
 
-    func promptContext(for text: String) -> DictionaryPromptContext {
+    nonisolated func promptContext(for text: String) -> DictionaryPromptContext {
         let candidates = recallCandidates(in: text)
         return DictionaryPromptContext(entries: entries, candidates: candidates)
     }
 
-    func recallCandidates(in text: String) -> [DictionaryMatchCandidate] {
+    nonisolated func recallCandidates(in text: String) -> [DictionaryMatchCandidate] {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
 
         let rawTokens = tokenize(text)
@@ -283,7 +290,7 @@ struct DictionaryMatcher {
         }
     }
 
-    func applyCorrections(to text: String, automaticReplacementEnabled: Bool) -> DictionaryCorrectionResult {
+    nonisolated func applyCorrections(to text: String, automaticReplacementEnabled: Bool) -> DictionaryCorrectionResult {
         let candidates = recallCandidates(in: text)
         let replacementCandidates = candidates
             .filter { shouldApplyReplacement(for: $0, automaticReplacementEnabled: automaticReplacementEnabled) }
@@ -314,7 +321,7 @@ struct DictionaryMatcher {
         )
     }
 
-    private func shouldApplyReplacement(
+    private nonisolated func shouldApplyReplacement(
         for candidate: DictionaryMatchCandidate,
         automaticReplacementEnabled: Bool
     ) -> Bool {
@@ -325,7 +332,7 @@ struct DictionaryMatcher {
         return candidate.allowsAutomaticReplacement
     }
 
-    private func replacementSortComparator(
+    private nonisolated func replacementSortComparator(
         lhs: DictionaryMatchCandidate,
         rhs: DictionaryMatchCandidate
     ) -> Bool {
@@ -350,7 +357,7 @@ struct DictionaryMatcher {
         return lhs.score > rhs.score
     }
 
-    private func replacementPriority(for candidate: DictionaryMatchCandidate) -> Int {
+    private nonisolated func replacementPriority(for candidate: DictionaryMatchCandidate) -> Int {
         if candidate.source == .replacementTerm {
             return 4
         }
@@ -367,7 +374,7 @@ struct DictionaryMatcher {
         }
     }
 
-    private func matchVariants(for entry: DictionaryEntry) -> [DictionaryMatchVariant] {
+    private nonisolated func matchVariants(for entry: DictionaryEntry) -> [DictionaryMatchVariant] {
         var variants = [
             DictionaryMatchVariant(
                 text: entry.term,
@@ -399,12 +406,12 @@ struct DictionaryMatcher {
         return variants
     }
 
-    private func shouldBlock(variant: DictionaryMatchVariant, entry: DictionaryEntry) -> Bool {
+    private nonisolated func shouldBlock(variant: DictionaryMatchVariant, entry: DictionaryEntry) -> Bool {
         guard entry.groupID == nil else { return false }
         return blockedGlobalMatchKeys.contains(variant.normalizedText)
     }
 
-    private func exactCandidates(
+    private nonisolated func exactCandidates(
         for entry: DictionaryEntry,
         variant: DictionaryMatchVariant,
         text: String
@@ -435,7 +442,7 @@ struct DictionaryMatcher {
         }
     }
 
-    private func exactReason(
+    private nonisolated func exactReason(
         for entry: DictionaryEntry,
         variant: DictionaryMatchVariant,
         matchedText: String
@@ -448,7 +455,7 @@ struct DictionaryMatcher {
         }
     }
 
-    private func bestFuzzyCandidate(
+    private nonisolated func bestFuzzyCandidate(
         for entry: DictionaryEntry,
         variant: DictionaryMatchVariant,
         text: String,
@@ -514,7 +521,7 @@ struct DictionaryMatcher {
         return best
     }
 
-    private func tokenize(_ text: String) -> [DictionaryToken] {
+    private nonisolated func tokenize(_ text: String) -> [DictionaryToken] {
         var tokens: [DictionaryToken] = []
         var currentStart: String.Index?
         var current = ""
@@ -560,26 +567,26 @@ struct DictionaryMatcher {
         return tokens
     }
 
-    private func allowsFuzzyMatch(for profile: DictionaryScriptProfile) -> Bool {
+    private nonisolated func allowsFuzzyMatch(for profile: DictionaryScriptProfile) -> Bool {
         profile.isLatinLike || profile.isMixedScript
     }
 
-    private func minimumFuzzyLength(for profile: DictionaryScriptProfile) -> Int {
+    private nonisolated func minimumFuzzyLength(for profile: DictionaryScriptProfile) -> Int {
         profile.isMixedScript ? 5 : 4
     }
 
-    private func minimumFuzzyScore(for profile: DictionaryScriptProfile) -> Double {
+    private nonisolated func minimumFuzzyScore(for profile: DictionaryScriptProfile) -> Double {
         profile.isMixedScript ? 0.96 : 0.90
     }
 
-    private func fuzzyThreshold(for profile: DictionaryScriptProfile, maxLength: Int) -> Int {
+    private nonisolated func fuzzyThreshold(for profile: DictionaryScriptProfile, maxLength: Int) -> Int {
         if profile.isMixedScript {
             return maxLength >= 10 ? 2 : 1
         }
         return max(1, min(2, maxLength / 6))
     }
 
-    private func levenshteinDistance(lhs: String, rhs: String) -> Int {
+    private nonisolated func levenshteinDistance(lhs: String, rhs: String) -> Int {
         let lhsChars = Array(lhs)
         let rhsChars = Array(rhs)
         guard !lhsChars.isEmpty else { return rhsChars.count }

@@ -1,10 +1,10 @@
 import Foundation
 
 enum HistoryAudioArchiveSupport {
-    static let targetSampleRate: Double = 16_000
-    static let rewriteJoinGapSeconds: Double = 0.3
+    nonisolated static let targetSampleRate: Double = 16_000
+    nonisolated static let rewriteJoinGapSeconds: Double = 0.3
 
-    static func exportWAV(
+    nonisolated static func exportWAV(
         samples: [Float],
         sampleRate: Double,
         to destinationURL: URL
@@ -20,7 +20,7 @@ enum HistoryAudioArchiveSupport {
         return true
     }
 
-    static func mergedRewriteArchive(
+    nonisolated static func mergedRewriteArchive(
         existingArchiveURL: URL?,
         appendedArchiveURL: URL
     ) throws -> URL {
@@ -49,7 +49,7 @@ enum HistoryAudioArchiveSupport {
         return tempURL
     }
 
-    static func readWAVSamples(from fileURL: URL) throws -> [Float] {
+    nonisolated static func readWAVSamples(from fileURL: URL) throws -> [Float] {
         let data = try Data(contentsOf: fileURL)
         guard data.count >= 44 else {
             throw NSError(
@@ -112,18 +112,18 @@ enum HistoryAudioArchiveSupport {
         }
     }
 
-    static func silenceSamples(durationSeconds: Double) -> [Float] {
+    nonisolated static func silenceSamples(durationSeconds: Double) -> [Float] {
         let count = max(Int((durationSeconds * targetSampleRate).rounded()), 0)
         return [Float](repeating: 0, count: count)
     }
 
-    static func temporaryArchiveURL(prefix: String) -> URL {
+    nonisolated static func temporaryArchiveURL(prefix: String) -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
             .appendingPathExtension("wav")
     }
 
-    private static func wavData(for samples: [Float], sampleRate: Int) -> Data {
+    private nonisolated static func wavData(for samples: [Float], sampleRate: Int) -> Data {
         let channelCount: UInt16 = 1
         let bitsPerSample: UInt16 = 16
         let byteRate = UInt32(sampleRate) * UInt32(channelCount) * UInt32(bitsPerSample / 8)
@@ -157,12 +157,12 @@ enum HistoryAudioArchiveSupport {
         return data
     }
 
-    private static func bytes<T>(of value: T) -> Data {
+    private nonisolated static func bytes<T>(of value: T) -> Data {
         var mutableValue = value
         return withUnsafeBytes(of: &mutableValue) { Data($0) }
     }
 
-    private static func resample(samples: [Float], from inputRate: Double, to outputRate: Double) -> [Float] {
+    private nonisolated static func resample(samples: [Float], from inputRate: Double, to outputRate: Double) -> [Float] {
         guard !samples.isEmpty, inputRate > 0, outputRate > 0 else { return samples }
         if abs(inputRate - outputRate) <= 1 {
             return samples
@@ -185,13 +185,13 @@ enum HistoryAudioArchiveSupport {
         return output
     }
 
-    private static func littleEndianUInt16(from data: Data, at offset: Int) -> UInt16 {
+    private nonisolated static func littleEndianUInt16(from data: Data, at offset: Int) -> UInt16 {
         data.subdata(in: offset..<(offset + 2)).withUnsafeBytes { rawBuffer in
             rawBuffer.load(as: UInt16.self).littleEndian
         }
     }
 
-    private static func littleEndianUInt32(from data: Data, at offset: Int) -> UInt32 {
+    private nonisolated static func littleEndianUInt32(from data: Data, at offset: Int) -> UInt32 {
         data.subdata(in: offset..<(offset + 4)).withUnsafeBytes { rawBuffer in
             rawBuffer.load(as: UInt32.self).littleEndian
         }

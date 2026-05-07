@@ -199,13 +199,13 @@ struct DictionaryMatchCandidate: Identifiable, Hashable {
     let source: DictionaryMatchSource
     let matchRange: NSRange?
 
-    var id: String {
+    nonisolated var id: String {
         let location = matchRange?.location ?? -1
         let length = matchRange?.length ?? 0
         return "\(entryID.uuidString)|\(normalizedMatchedText)|\(reason.rawValue)|\(source.rawValue)|\(location)|\(length)"
     }
 
-    var allowsAutomaticReplacement: Bool {
+    nonisolated var allowsAutomaticReplacement: Bool {
         if source == .replacementTerm {
             return true
         }
@@ -222,7 +222,7 @@ struct DictionaryMatchCandidate: Identifiable, Hashable {
         }
     }
 
-    var shouldPersistObservedVariant: Bool {
+    nonisolated var shouldPersistObservedVariant: Bool {
         source != .replacementTerm && reason != .exactTerm
     }
 }
