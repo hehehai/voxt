@@ -19,6 +19,7 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.meetingNotesBetaEnabled) private var meetingNotesBetaEnabled = false
     @AppStorage(AppPreferenceKey.hideMeetingOverlayFromScreenSharing) private var hideMeetingOverlayFromScreenSharing = false
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) private var autoCopyWhenNoFocusedInput = false
+    @AppStorage(AppPreferenceKey.realtimeTextDisplayEnabled) private var realtimeTextDisplayEnabled = true
     @AppStorage(AppPreferenceKey.customPasteHotkeyEnabled) private var customPasteHotkeyEnabled = false
     @AppStorage(AppPreferenceKey.customPasteHotkeyKeyCode) private var customPasteHotkeyKeyCode = Int(HotkeyPreference.defaultCustomPasteKeyCode)
     @AppStorage(AppPreferenceKey.customPasteHotkeyModifiers) private var customPasteHotkeyModifiers = Int(HotkeyPreference.defaultCustomPasteModifiers.rawValue)
@@ -157,6 +158,7 @@ struct GeneralSettingsView: View {
 
             GeneralOutputCard(
                 autoCopyWhenNoFocusedInput: $autoCopyWhenNoFocusedInput,
+                realtimeTextDisplayEnabled: $realtimeTextDisplayEnabled,
                 customPasteHotkeyEnabled: $customPasteHotkeyEnabled,
                 customPasteHotkeyDisplayString: currentCustomPasteHotkeyDisplayString
             )
@@ -258,6 +260,9 @@ struct GeneralSettingsView: View {
         }
         .onChange(of: overlayCardCornerRadius) { _, newValue in
             overlayCardCornerRadius = min(max(newValue, 0), 40)
+            postOverlayAppearanceDidChange()
+        }
+        .onChange(of: realtimeTextDisplayEnabled) { _, _ in
             postOverlayAppearanceDidChange()
         }
         .onChange(of: overlayScreenEdgeInset) { _, newValue in

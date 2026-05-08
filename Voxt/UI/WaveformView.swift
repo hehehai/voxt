@@ -5,6 +5,7 @@ import AppKit
 struct WaveformView: View {
     @AppStorage(AppPreferenceKey.overlayCardOpacity) private var overlayCardOpacity = 82
     @AppStorage(AppPreferenceKey.overlayCardCornerRadius) private var overlayCardCornerRadius = 24
+    @AppStorage(AppPreferenceKey.realtimeTextDisplayEnabled) private var realtimeTextDisplayEnabled = true
 
     static let defaultWaveformBarWidth: CGFloat = 3.2
     static let defaultWaveformBarSpacing: CGFloat = 2.5
@@ -104,6 +105,7 @@ struct WaveformView: View {
     private var displayText: String {
         let message = statusMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         if !message.isEmpty { return message }
+        guard isAnswerMode || realtimeTextDisplayEnabled else { return "" }
         return sanitizedDisplayText(transcribedText)
     }
 

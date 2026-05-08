@@ -67,6 +67,8 @@
 "Copy Answer" = "Copy Answer";
 "Inject into Current Input" = "Inject into current input";
 "Also copy result to clipboard" = "Also copy result to clipboard";
+"Show Realtime Text" = "Show Realtime Text";
+"Show live transcription text while recording. Turn this off to keep only waveform and status, which can improve ASR speed and performance." = "Show live transcription text while recording. Turn this off to keep only waveform and status, which can improve ASR speed and performance.";
 "Enable custom paste shortcut" = "Enable custom paste shortcut";
 "Lets you paste your latest Voxt result into the current input field. Shortcut: %@." = "Lets you paste your latest Voxt result into the current input field. Shortcut: %@.";
 "App Behavior" = "App Behavior";
@@ -963,6 +965,7 @@
 "Dictionary Entries" = "Dictionary Entries";
 "Sources" = "Sources";
 "History Settings" = "History Settings";
+"History Details" = "History Details";
 "History Entries" = "History Entries";
 "Transcription Test" = "Transcription Test";
 "No Microphone Available" = "No Microphone Available";

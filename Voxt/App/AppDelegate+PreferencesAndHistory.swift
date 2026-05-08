@@ -261,6 +261,10 @@ extension AppDelegate {
         defaults.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) as? Bool ?? true
     }
 
+    var realtimeTextDisplayEnabled: Bool {
+        defaults.object(forKey: AppPreferenceKey.realtimeTextDisplayEnabled) as? Bool ?? true
+    }
+
     var whisperKeepResidentLoaded: Bool {
         !localModelMemoryOptimizationEnabled
     }

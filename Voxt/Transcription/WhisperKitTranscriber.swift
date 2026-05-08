@@ -265,6 +265,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     @Published var transcribedText = ""
     @Published var isEnhancing = false
     @Published var isFinalizingTranscription = false
+    var sessionAllowsRealtimeTextDisplay = true
 
     var onTranscriptionFinished: ((String) -> Void)?
     var onPartialTranscription: ((String) -> Void)?
@@ -374,7 +375,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         lastStartFailureMessage = nil
         didRetryCaptureStartup = false
 
-        if whisperRealtimeEnabled {
+        if effectiveWhisperRealtimeEnabled {
             return await startRealtimeRecordingSession(revision: sessionRevision)
         }
 
@@ -404,11 +405,11 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         guard isRecording else { return }
 
         let revision = sessionRevision
-        let stopSampleCount = whisperRealtimeEnabled ? snapshotPreparedAudioSamples().count : sampleStore.count()
-        let stopBufferedSeconds = Double(stopSampleCount) / max(whisperRealtimeEnabled ? targetSampleRate : inputSampleRate, 1)
+        let stopSampleCount = effectiveWhisperRealtimeEnabled ? snapshotPreparedAudioSamples().count : sampleStore.count()
+        let stopBufferedSeconds = Double(stopSampleCount) / max(effectiveWhisperRealtimeEnabled ? targetSampleRate : inputSampleRate, 1)
         VoxtLog.info(
             """
-            Whisper stop requested. revision=\(revision), realtime=\(whisperRealtimeEnabled), sampleCount=\(stopSampleCount), bufferedSec=\(String(format: "%.2f", stopBufferedSeconds)), partialChars=\(transcribedText.count)
+            Whisper stop requested. revision=\(revision), realtime=\(effectiveWhisperRealtimeEnabled), sampleCount=\(stopSampleCount), bufferedSec=\(String(format: "%.2f", stopBufferedSeconds)), partialChars=\(transcribedText.count)
             """,
             verbose: true
         )
@@ -425,7 +426,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
         isFinalizingTranscription = true
         finalizationTask?.cancel()
-        if whisperRealtimeEnabled {
+        if effectiveWhisperRealtimeEnabled {
             preparedWhisper?.audioProcessor.stopRecording()
             finalizationTask = Task { [weak self] in
                 guard let self else { return }
@@ -449,7 +450,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func forceIntermediateTranscription() {
-        guard isRecording, !whisperRealtimeEnabled else { return }
+        guard isRecording, !effectiveWhisperRealtimeEnabled else { return }
         let revision = sessionRevision
         let samples = sampleStore.snapshot()
         guard !samples.isEmpty else { return }
@@ -730,7 +731,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
     func restartCaptureForPreferredInputDevice() throws {
         guard isRecording else { return }
-        guard !whisperRealtimeEnabled else {
+        guard !effectiveWhisperRealtimeEnabled else {
             throw NSError(
                 domain: "Voxt.WhisperKitTranscriber",
                 code: -2,
@@ -799,11 +800,11 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private func runFinalTranscription(revision: Int, samples: [Float], sampleRate: Double) async {
         let bufferedSeconds = Double(samples.count) / max(sampleRate, 1)
         let useOfflineFinalProfile = Self.shouldUseOfflineFinalProfileForStop(
-            realtimeEnabled: whisperRealtimeEnabled,
+            realtimeEnabled: effectiveWhisperRealtimeEnabled,
             bufferedSeconds: bufferedSeconds
         )
         let finalProfile: WhisperInferenceProfile = useOfflineFinalProfile ? .offline : .realtimeFinal
-        if whisperRealtimeEnabled, useOfflineFinalProfile {
+        if effectiveWhisperRealtimeEnabled, useOfflineFinalProfile {
             VoxtLog.info(
                 "Whisper realtime finalization promoted to offline long-form profile. bufferedSec=\(String(format: "%.2f", bufferedSeconds))",
                 verbose: true
@@ -935,8 +936,10 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                 publishWhisperFinalText(resolvedFinalText)
                 onTranscriptionFinished?(resolvedFinalText)
             } else {
-                transcribedText = text
-                onPartialTranscription?(text)
+                if sessionAllowsRealtimeTextDisplay {
+                    transcribedText = text
+                    onPartialTranscription?(text)
+                }
             }
         } catch {
             VoxtLog.error("Whisper inference failed: \(error)")
@@ -1009,7 +1012,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
         if profile == .offline {
             VoxtLog.info(
-                "Whisper decode options. profile=\(profile.rawValue), task=\(resolvedTask.description), language=\(resolvedLanguage ?? "auto"), detectLanguage=\(detectLanguage), promptChars=\(hintPayload.prompt?.count ?? 0), promptTokens=\(promptTokens?.count ?? 0), realtime=\(whisperRealtimeEnabled)",
+                "Whisper decode options. profile=\(profile.rawValue), task=\(resolvedTask.description), language=\(resolvedLanguage ?? "auto"), detectLanguage=\(detectLanguage), promptChars=\(hintPayload.prompt?.count ?? 0), promptTokens=\(promptTokens?.count ?? 0), realtime=\(effectiveWhisperRealtimeEnabled)",
                 verbose: true
             )
         }
@@ -1294,7 +1297,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func handleRealtimeAudioBuffer(revision: Int) {
-        guard revision == sessionRevision, isRecording, whisperRealtimeEnabled else { return }
+        guard revision == sessionRevision, isRecording, effectiveWhisperRealtimeEnabled else { return }
         audioLevel = resolvedRealtimeAudioLevel(from: preparedWhisper?.audioProcessor.relativeEnergy ?? [])
     }
 
@@ -1315,7 +1318,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func runRealtimeEagerPassIfNeeded(revision: Int) async {
-        guard revision == sessionRevision, isRecording, whisperRealtimeEnabled else { return }
+        guard revision == sessionRevision, isRecording, effectiveWhisperRealtimeEnabled else { return }
         let samples = snapshotPreparedAudioSamples()
         let sampleCount = samples.count
         guard sampleCount > 0 else { return }
@@ -1493,7 +1496,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func publishRealtimeAudioLevelIfNeeded(revision: Int) {
-        guard revision == sessionRevision, isRecording, whisperRealtimeEnabled else { return }
+        guard revision == sessionRevision, isRecording, effectiveWhisperRealtimeEnabled else { return }
         let energy = preparedWhisper?.audioProcessor.relativeEnergy ?? []
         audioLevel = resolvedRealtimeAudioLevel(from: energy)
     }
@@ -1516,6 +1519,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         guard let published = realtimeEagerState.apply(hypothesisText: result.text) else { return false }
         let normalized = normalizeText(published)
         guard !normalized.isEmpty else { return false }
+        guard sessionAllowsRealtimeTextDisplay else { return false }
         transcribedText = normalized
         onPartialTranscription?(normalized)
         realtimeEagerLastPublishedSampleCount = sampleCount
@@ -1533,6 +1537,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         guard let published = realtimeEagerState.apply(result) else { return false }
         let normalized = normalizeText(published)
         guard !normalized.isEmpty else { return false }
+        guard sessionAllowsRealtimeTextDisplay else { return false }
         transcribedText = normalized
         onPartialTranscription?(normalized)
         realtimeEagerLastPublishedSampleCount = sampleCount
@@ -1561,7 +1566,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func publishWhisperFinalText(_ text: String) {
-        if whisperRealtimeEnabled {
+        if effectiveWhisperRealtimeEnabled {
             let normalized = normalizeText(text)
             if let published = realtimeEagerState.applyFinal(normalized) {
                 transcribedText = published
@@ -1587,11 +1592,11 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func debugCaptureStopSummary() -> String {
-        let sampleCount = whisperRealtimeEnabled ? snapshotPreparedAudioSamples().count : sampleStore.count()
-        let sampleRate = whisperRealtimeEnabled ? targetSampleRate : inputSampleRate
+        let sampleCount = effectiveWhisperRealtimeEnabled ? snapshotPreparedAudioSamples().count : sampleStore.count()
+        let sampleRate = effectiveWhisperRealtimeEnabled ? targetSampleRate : inputSampleRate
         let bufferedSeconds = Double(sampleCount) / max(sampleRate, 1)
         return """
-        realtime=\(whisperRealtimeEnabled), sampleCount=\(sampleCount), bufferedSec=\(String(format: "%.2f", bufferedSeconds)), callbacks=\(sampleStore.callbacksReceived()), partialChars=\(transcribedText.count), finalizing=\(isFinalizingTranscription)
+        realtime=\(effectiveWhisperRealtimeEnabled), sampleCount=\(sampleCount), bufferedSec=\(String(format: "%.2f", bufferedSeconds)), callbacks=\(sampleStore.callbacksReceived()), partialChars=\(transcribedText.count), finalizing=\(isFinalizingTranscription)
         """
     }
 
@@ -1715,6 +1720,10 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
     private var whisperRealtimeEnabled: Bool {
         UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
+    }
+
+    private var effectiveWhisperRealtimeEnabled: Bool {
+        sessionAllowsRealtimeTextDisplay && whisperRealtimeEnabled
     }
 
     private var preferredMainLanguage: UserMainLanguageOption {

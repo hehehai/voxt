@@ -357,6 +357,7 @@ struct GeneralModelStorageCard: View {
 
 struct GeneralOutputCard: View {
     @Binding var autoCopyWhenNoFocusedInput: Bool
+    @Binding var realtimeTextDisplayEnabled: Bool
     @Binding var customPasteHotkeyEnabled: Bool
     let customPasteHotkeyDisplayString: String
 
@@ -366,6 +367,12 @@ struct GeneralOutputCard: View {
 
     var body: some View {
         GeneralSettingsCard(title: localizedKey("Output")) {
+            GeneralToggleRow(
+                title: localizedKey("Show Realtime Text"),
+                description: localizedKey("Show live transcription text while recording. Turn this off to keep only waveform and status, which can improve ASR speed and performance."),
+                isOn: $realtimeTextDisplayEnabled
+            )
+
             GeneralToggleRow(
                 title: localizedKey("Also copy result to clipboard"),
                 description: localizedKey("When enabled, Voxt auto-pastes result text and also keeps it in clipboard."),

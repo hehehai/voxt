@@ -33,6 +33,7 @@ extension AppDelegate {
         let sessionID = activeRecordingSessionID
         overlayState.statusMessage = ""
         mlx.transcribedText = ""
+        mlx.sessionAllowsRealtimeTextDisplay = realtimeTextDisplayEnabled
         mlx.setPreferredInputDevice(selectedInputDeviceID)
         mlx.onTranscriptionFinished = { [weak self] text in
             self?.stashPendingCompletedHistoryAudioArchive(self?.mlxTranscriber?.consumeCompletedAudioArchiveURL())
@@ -63,6 +64,7 @@ extension AppDelegate {
             self.overlayState.statusMessage = ""
             let sessionID = self.activeRecordingSessionID
             self.speechTranscriber.transcribedText = ""
+            self.speechTranscriber.sessionReportsPartialResultsOverride = self.realtimeTextDisplayEnabled
             self.speechTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.stashPendingCompletedHistoryAudioArchive(self?.speechTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
@@ -100,6 +102,7 @@ extension AppDelegate {
         overlayState.isModelInitializing = needsModelInitialization
         overlayState.initializingEngine = needsModelInitialization ? .whisperKit : nil
         whisper.transcribedText = ""
+        whisper.sessionAllowsRealtimeTextDisplay = realtimeTextDisplayEnabled
         whisper.isModelInitializing = needsModelInitialization
         whisper.setPreferredInputDevice(selectedInputDeviceID)
         whisper.onPartialTranscription = nil
@@ -168,6 +171,7 @@ extension AppDelegate {
             self.overlayState.statusMessage = ""
             let sessionID = self.activeRecordingSessionID
             self.remoteASRTranscriber.transcribedText = ""
+            self.remoteASRTranscriber.sessionAllowsRealtimeTextDisplay = self.realtimeTextDisplayEnabled
             self.remoteASRTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.stashPendingCompletedHistoryAudioArchive(self?.remoteASRTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)

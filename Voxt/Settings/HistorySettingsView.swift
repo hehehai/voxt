@@ -549,7 +549,7 @@ private struct HistoryDetailSheetContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
-                Text(localized("Details"))
+                Text(localized("History Details"))
                     .font(.title3.weight(.semibold))
 
                 Spacer(minLength: 12)
@@ -560,9 +560,9 @@ private struct HistoryDetailSheetContent: View {
                 .buttonStyle(SettingsPillButtonStyle())
                 .keyboardShortcut(.cancelAction)
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
 
             Divider()
 
@@ -572,8 +572,8 @@ private struct HistoryDetailSheetContent: View {
                 locale: locale,
                 style: .window
             )
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
         }
     }
 }

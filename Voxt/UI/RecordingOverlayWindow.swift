@@ -195,7 +195,9 @@ class RecordingOverlayWindow: NSPanel {
     private func panelSize(for state: OverlayState) -> CGSize {
         switch state.displayMode {
         case .recording, .processing:
-            return CGSize(width: 360, height: state.isSessionTranslationTargetPickerPresented ? 388 : 140)
+            let allowsRealtimeText = UserDefaults.standard.object(forKey: AppPreferenceKey.realtimeTextDisplayEnabled) as? Bool ?? true
+            let width: CGFloat = allowsRealtimeText ? 360 : 220
+            return CGSize(width: width, height: state.isSessionTranslationTargetPickerPresented ? 388 : 140)
         case .answer:
             return CGSize(width: 560, height: state.isSessionTranslationTargetPickerPresented ? 540 : 340)
         }

@@ -39,7 +39,7 @@ struct TranscriptionDetailContentView: View {
     }
 
     private var contentPadding: CGFloat {
-        style == .popover ? 8 : 18
+        style == .popover ? 8 : 14
     }
 
     private var sectionSpacing: CGFloat {
@@ -155,7 +155,7 @@ struct TranscriptionDetailContentView: View {
                 }
             }
             .padding(.horizontal, contentPadding)
-            .padding(.vertical, style == .popover ? 10 : 18)
+            .padding(.vertical, style == .popover ? 10 : 14)
             .frame(width: preferredContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -175,7 +175,7 @@ struct TranscriptionDetailContentView: View {
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(style == .popover ? 0 : 14)
+            .padding(style == .popover ? 0 : 12)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(sectionCardFill)

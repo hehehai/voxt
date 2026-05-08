@@ -67,6 +67,8 @@
 "Copy Answer" = "回答をコピー";
 "Inject into Current Input" = "現在の入力欄に挿入";
 "Also copy result to clipboard" = "結果を同時にクリップボードへコピー";
+"Show Realtime Text" = "リアルタイムテキストを表示";
+"Show live transcription text while recording. Turn this off to keep only waveform and status, which can improve ASR speed and performance." = "録音中にリアルタイム文字起こしを表示します。オフにすると波形と状態のみを表示し、ASR の速度と性能を改善できます。";
 "Enable custom paste shortcut" = "カスタム貼り付けショートカットを有効にする";
 "Lets you paste your latest Voxt result into the current input field. Shortcut: %@." = "最新の Voxt 結果を現在の入力欄に貼り付けられます。現在のショートカット: %@。";
 "App Behavior" = "アプリ動作";
@@ -915,6 +917,7 @@
 "Dictionary Entries" = "辞書項目";
 "Sources" = "ソース";
 "History Settings" = "履歴設定";
+"History Details" = "履歴詳細";
 "History Entries" = "履歴項目";
 "Transcription Test" = "文字起こしテスト";
 "No Microphone Available" = "利用可能なマイクがありません";

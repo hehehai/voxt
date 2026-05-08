@@ -46,6 +46,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
 
     private var finalizeTimeoutTask: Task<Void, Never>?
     private var hasDeliveredFinalResult = false
+    var sessionReportsPartialResultsOverride: Bool?
 
     var onTranscriptionFinished: ((String) -> Void)?
     private(set) var lastStartFailureMessage: String?
@@ -253,7 +254,10 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             if let result {
                 let text = result.bestTranscription.formattedString
                 Task { @MainActor in
-                    self.transcribedText = text
+                    let allowsPartial = self.sessionReportsPartialResultsOverride ?? true
+                    if allowsPartial || result.isFinal {
+                        self.transcribedText = text
+                    }
                     if result.isFinal {
                         self.finishRecognition(with: text)
                     }
@@ -312,10 +316,20 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         let userLanguageCodes = UserMainLanguageOption.storedSelection(
             from: defaults.string(forKey: AppPreferenceKey.userMainLanguageCodes)
         )
-        return ASRHintResolver.resolveDictationSettings(
+        let resolved = ASRHintResolver.resolveDictationSettings(
             settings: settings,
             userLanguageCodes: userLanguageCodes
         )
+        if let override = sessionReportsPartialResultsOverride {
+            return ResolvedDictationSettings(
+                localeIdentifier: resolved.localeIdentifier,
+                contextualPhrases: resolved.contextualPhrases,
+                prefersOnDeviceRecognition: resolved.prefersOnDeviceRecognition,
+                addsPunctuation: resolved.addsPunctuation,
+                reportsPartialResults: override
+            )
+        }
+        return resolved
     }
 
     private func refreshSpeechRecognizer(localeIdentifier: String?) {

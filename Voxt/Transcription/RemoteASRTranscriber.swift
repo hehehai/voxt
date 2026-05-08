@@ -35,6 +35,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     @Published var isEnhancing = false
     @Published var isRequesting = false
     @Published var isFinalizingTranscription = false
+    var sessionAllowsRealtimeTextDisplay = true
 
     var onTranscriptionFinished: ((String) -> Void)?
     var onStartFailure: ((String) -> Void)?
@@ -153,7 +154,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         do {
             try startFileRecordingMode()
-            if provider == .openAIWhisper, configuration.openAIChunkPseudoRealtimeEnabled {
+            if provider == .openAIWhisper,
+               configuration.openAIChunkPseudoRealtimeEnabled,
+               sessionAllowsRealtimeTextDisplay {
                 startOpenAIPreviewLoop(configuration: configuration)
             }
         } catch {
@@ -1031,7 +1034,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             let isSentenceEnd = sentence["sentence_end"] as? Bool ?? false
             if !partialText.isEmpty {
                 let merged = await context.responseState.updateWithSentence(partialText, isSentenceEnd: isSentenceEnd)
-                transcribedText = merged
+                publishIntermediateTranscription(merged)
             }
             return
         }
@@ -1234,7 +1237,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             let partial = (object["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if !partial.isEmpty {
                 let merged = await context.responseState.setPartial(partial)
-                transcribedText = merged
+                publishIntermediateTranscription(merged)
             }
             return
         }
@@ -1243,7 +1246,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             let final = (object["transcript"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if !final.isEmpty {
                 let merged = await context.responseState.commit(final)
-                transcribedText = merged
+                publishIntermediateTranscription(merged)
             }
             return
         }
@@ -1855,7 +1858,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                             if let text = parsed.text, !text.isEmpty {
                                 let merged = await context.responseState.replace(text: text, isFinal: parsed.isFinal)
                                 await MainActor.run {
-                                    self.transcribedText = merged
+                                    self.publishIntermediateTranscription(merged)
                                 }
                             } else if parsed.isFinal {
                                 await context.responseState.markFinal()
@@ -2565,7 +2568,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             if let fragment = RemoteASRTextSupport.extractTextFragment(fromLine: line), !fragment.isEmpty {
                 aggregate = RemoteASRTextSupport.mergeStreamFragment(current: aggregate, incoming: fragment)
                 await MainActor.run {
-                    self.transcribedText = aggregate
+                    self.publishIntermediateTranscription(aggregate)
                 }
             }
         }
@@ -2810,11 +2813,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             guard !normalized.isEmpty else { return }
             if normalized != openAIPreviewLastText {
                 openAIPreviewLastText = normalized
-                transcribedText = normalized
+                publishIntermediateTranscription(normalized)
             }
         } catch {
             // Preview failures are expected while recorder header is still mutating.
         }
+    }
+
+    private func publishIntermediateTranscription(_ text: String) {
+        guard sessionAllowsRealtimeTextDisplay else { return }
+        transcribedText = text
     }
 
     private func normalizeWAVHeaderForSnapshot(at fileURL: URL) {

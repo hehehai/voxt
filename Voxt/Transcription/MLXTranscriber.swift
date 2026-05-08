@@ -183,6 +183,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var preloadTask: Task<Void, Never>?
     private var captureWatchdogTask: Task<Void, Never>?
     private var inferenceBusy = false
+    var sessionAllowsRealtimeTextDisplay = true
     private var didRetryCaptureStartup = false
     private var activeCaptureUsesPreferredInputDevice = false
     private var loggedSampleExtractionFailure = false
@@ -226,6 +227,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         sessionRevision += 1
         let revision = sessionRevision
         activeSessionBehavior = modelManager.currentTranscriptionBehavior
+        if !sessionAllowsRealtimeTextDisplay {
+            activeSessionBehavior = MLXModelManager.TranscriptionBehavior(
+                correctionMode: .finalizationOnly,
+                allowsQuickStopPass: activeSessionBehavior.allowsQuickStopPass,
+                preloadsOnRecordingStart: activeSessionBehavior.preloadsOnRecordingStart
+            )
+        }
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         isModelInitializing = modelManager.state != .ready
         VoxtLog.info(
@@ -581,6 +589,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func publishPartial(_ text: String) {
+        guard sessionAllowsRealtimeTextDisplay else { return }
         onPartialTranscription?(text)
     }
 
@@ -657,6 +666,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func applyCandidate(_ candidate: String, stage: CorrectionStage) {
+        if !sessionAllowsRealtimeTextDisplay {
+            guard stage == .postStopFinal else { return }
+            transcribedText = candidate
+            stableCommittedText = candidate
+            lastCandidateText = candidate
+            return
+        }
+
         switch stage {
         case .postStopFinal:
             transcribedText = candidate

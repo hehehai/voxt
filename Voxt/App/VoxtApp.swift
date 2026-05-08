@@ -259,6 +259,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.voiceEndCommandPreset: VoiceEndCommandPreset.over.rawValue,
             AppPreferenceKey.voiceEndCommandText: "",
             AppPreferenceKey.autoCopyWhenNoFocusedInput: false,
+            AppPreferenceKey.realtimeTextDisplayEnabled: true,
             AppPreferenceKey.alwaysShowRewriteAnswerCard: false,
             AppPreferenceKey.appEnhancementEnabled: false,
             AppPreferenceKey.translationSystemPrompt: "",

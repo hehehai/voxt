@@ -67,6 +67,8 @@
 "Copy Answer" = "复制答案";
 "Inject into Current Input" = "注入到当前输入框";
 "Also copy result to clipboard" = "同时复制结果到剪贴板";
+"Show Realtime Text" = "显示实时文本";
+"Show live transcription text while recording. Turn this off to keep only waveform and status, which can improve ASR speed and performance." = "录音时显示实时转写文本。关闭后只显示波形和状态，并可提升 ASR 速度与性能。";
 "Enable custom paste shortcut" = "开启自定义粘贴快捷键";
 "Lets you paste your latest Voxt result into the current input field. Shortcut: %@." = "可将最近一次 Voxt 结果粘贴到当前输入框。当前快捷键：%@。";
 "App Behavior" = "应用行为";
@@ -963,6 +965,7 @@
 "Dictionary Entries" = "词典条目";
 "Sources" = "来源";
 "History Settings" = "历史设置";
+"History Details" = "历史详情";
 "History Entries" = "历史记录";
 "Transcription Test" = "转录测试";
 "No Microphone Available" = "无可用麦克风";
