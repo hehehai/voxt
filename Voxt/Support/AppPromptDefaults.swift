@@ -6,6 +6,7 @@ enum AppPromptKind: CaseIterable {
     case rewrite
     case meetingSummary
     case dictionaryIngest
+    case dictionaryAutoLearning
     case openAIASRHint
     case glmASRHint
     case whisperASRHint
@@ -165,6 +166,8 @@ enum AppPromptDefaults {
               { "term": "MCP" }
             ]
             """
+        case .dictionaryAutoLearning:
+            return AppPreferenceKey.defaultAutomaticDictionaryLearningPrompt
         case .openAIASRHint:
             return AppPreferenceKey.defaultOpenAIASRHintPrompt
         case .glmASRHint:
@@ -366,6 +369,53 @@ enum AppPromptDefaults {
               { "term": "MCP" }
             ]
             """
+        case .dictionaryAutoLearning:
+            return """
+            你要审查一次语音转文字后的用户修正，并判断哪些词汇值得加入语音词典。
+
+            用户主要口语语言：{{USER_MAIN_LANGUAGE}}
+            用户其他常用语言：{{USER_OTHER_LANGUAGES}}
+
+            初次插入的文本：
+            <inserted_text>
+            {{INSERTED}}
+            </inserted_text>
+
+            刚插入后采集到的上下文：
+            <baseline_context>
+            {{BEFORE_CTX}}
+            </baseline_context>
+
+            用户修正后采集到的上下文：
+            <final_context>
+            {{AFTER_CTX}}
+            </final_context>
+
+            修正前被改动的片段：
+            <baseline_changed_fragment>
+            {{BEFORE_EDIT}}
+            </baseline_changed_fragment>
+
+            修正后的片段：
+            <final_changed_fragment>
+            {{AFTER_EDIT}}
+            </final_changed_fragment>
+
+            当前已存在的词典词条：
+            <existing_terms>
+            {{EXISTING}}
+            </existing_terms>
+
+            只返回值得加入词典的词汇。优先保留最终修正结果中的稳定专有名词、产品名、公司名、人名、技术术语，以及不常见的领域词汇。
+
+            规则：
+            1. 如果用户只是继续往后输入、做了无关编辑，或只改了标点和大小写，返回空数组。
+            2. 不要返回常见词、语气词、整句内容或过长短语。
+            3. 不要返回当前词典里已经存在的词。
+            4. 必须返回最终修正后的正确写法，而不是原来的错误写法。
+            输出严格 JSON，格式必须是如下数组对象：
+            [{"term":"示例"}]
+            """
         case .openAIASRHint:
             return "说话者的主要语言是 {{USER_MAIN_LANGUAGE}}。请优先保证该语言的识别准确性，同时按原样保留混合语言词汇、人名、产品术语、URL 和类似代码的文本。"
         case .glmASRHint:
@@ -564,6 +614,53 @@ enum AppPromptDefaults {
               { "term": "OpenAI" },
               { "term": "MCP" }
             ]
+            """
+        case .dictionaryAutoLearning:
+            return """
+            あなたは音声入力の訂正内容を確認し、どの語彙を音声辞書に追加すべきか判断します。
+
+            ユーザーの主要な話し言葉：{{USER_MAIN_LANGUAGE}}
+            ユーザーのその他の頻出言語：{{USER_OTHER_LANGUAGES}}
+
+            最初に挿入されたテキスト：
+            <inserted_text>
+            {{INSERTED}}
+            </inserted_text>
+
+            挿入直後に取得したコンテキスト：
+            <baseline_context>
+            {{BEFORE_CTX}}
+            </baseline_context>
+
+            ユーザー訂正後に取得したコンテキスト：
+            <final_context>
+            {{AFTER_CTX}}
+            </final_context>
+
+            訂正前に変更された断片：
+            <baseline_changed_fragment>
+            {{BEFORE_EDIT}}
+            </baseline_changed_fragment>
+
+            訂正後の断片：
+            <final_changed_fragment>
+            {{AFTER_EDIT}}
+            </final_changed_fragment>
+
+            現在すでに辞書にある語：
+            <existing_terms>
+            {{EXISTING}}
+            </existing_terms>
+
+            辞書に追加する価値がある語だけを返してください。最終的な訂正結果に現れる、安定した固有名詞、製品名、会社名、人名、技術用語、一般的ではない分野用語を優先します。
+
+            ルール：
+            1. 追加入力だけだった場合、無関係な編集だった場合、句読点や大文字小文字だけの修正だった場合は空配列を返すこと。
+            2. 一般語、フィラー、文章全体、長いフレーズは返さないこと。
+            3. すでに辞書に存在する語は返さないこと。
+            4. 誤った形ではなく、最終的に訂正された正しい形を返すこと。
+            出力は必ず次の形式の厳密な JSON 配列にしてください：
+            [{"term":"Example"}]
             """
         case .openAIASRHint:
             return "話者の主要言語は {{USER_MAIN_LANGUAGE}} です。その言語での認識精度を優先しつつ、混在言語の語句、人名、製品用語、URL、コード風テキストは発話どおりに保持してください。"

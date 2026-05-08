@@ -9,6 +9,7 @@ enum AppPreferenceKey {
     static let whisperVADEnabled = "whisperVADEnabled"
     static let whisperTimestampsEnabled = "whisperTimestampsEnabled"
     static let whisperRealtimeEnabled = "whisperRealtimeEnabled"
+    static let localModelMemoryOptimizationEnabled = "localModelMemoryOptimizationEnabled"
     static let whisperKeepResidentLoaded = "whisperKeepResidentLoaded"
     static let whisperLocalASRTuningSettings = "whisperLocalASRTuningSettings"
     static let customLLMModelRepo = "customLLMModelRepo"
@@ -100,6 +101,7 @@ enum AppPreferenceKey {
     static let historyAudioStorageRootBookmark = "historyAudioStorageRootBookmark"
     static let dictionaryRecognitionEnabled = "dictionaryRecognitionEnabled"
     static let dictionaryAutoLearningEnabled = "dictionaryAutoLearningEnabled"
+    static let dictionaryAutoLearningPrompt = "dictionaryAutoLearningPrompt"
     static let dictionaryHighConfidenceCorrectionEnabled = "dictionaryHighConfidenceCorrectionEnabled"
     static let dictionarySuggestionHistoryScanCheckpoint = "dictionarySuggestionHistoryScanCheckpoint"
     static let dictionarySuggestionFilterSettings = "dictionarySuggestionFilterSettings"
@@ -196,6 +198,60 @@ enum AppPreferenceKey {
         """
 
     static let defaultMeetingSummaryPrompt = MeetingSummarySupport.defaultPromptTemplate()
+    static let automaticDictionaryLearningMainLanguageTemplateVariable = "{{USER_MAIN_LANGUAGE}}"
+    static let automaticDictionaryLearningOtherLanguagesTemplateVariable = "{{USER_OTHER_LANGUAGES}}"
+    static let automaticDictionaryLearningInsertedTextTemplateVariable = "{{INSERTED}}"
+    static let automaticDictionaryLearningBaselineContextTemplateVariable = "{{BEFORE_CTX}}"
+    static let automaticDictionaryLearningFinalContextTemplateVariable = "{{AFTER_CTX}}"
+    static let automaticDictionaryLearningBaselineFragmentTemplateVariable = "{{BEFORE_EDIT}}"
+    static let automaticDictionaryLearningFinalFragmentTemplateVariable = "{{AFTER_EDIT}}"
+    static let automaticDictionaryLearningExistingTermsTemplateVariable = "{{EXISTING}}"
+    static let defaultAutomaticDictionaryLearningPrompt = """
+        You review a dictation correction and decide which vocabulary terms should be added to a speech dictionary.
+
+        User main language: {{USER_MAIN_LANGUAGE}}
+        User other languages: {{USER_OTHER_LANGUAGES}}
+
+        Original inserted text:
+        <inserted_text>
+        {{INSERTED}}
+        </inserted_text>
+
+        Baseline context captured right after insertion:
+        <baseline_context>
+        {{BEFORE_CTX}}
+        </baseline_context>
+
+        Final context captured after the user edited the same input:
+        <final_context>
+        {{AFTER_CTX}}
+        </final_context>
+
+        Baseline changed fragment:
+        <baseline_changed_fragment>
+        {{BEFORE_EDIT}}
+        </baseline_changed_fragment>
+
+        Final changed fragment:
+        <final_changed_fragment>
+        {{AFTER_EDIT}}
+        </final_changed_fragment>
+
+        Existing dictionary terms:
+        <existing_terms>
+        {{EXISTING}}
+        </existing_terms>
+
+        Return only vocabulary terms worth adding to the dictionary. Prefer durable proper nouns, product names, company names, personal names, technical terms, and uncommon domain terminology that appear in the final corrected text.
+
+        Rules:
+        1. Return an empty array if the user only appended more text, made unrelated edits, or corrected punctuation or casing only.
+        2. Do not return common words, filler, whole sentences, or long phrases.
+        3. Do not return anything already present in the existing dictionary list.
+        4. Use the final corrected form, not the mistaken form.
+        Output strict JSON as an array of objects with this exact shape:
+        [{"term":"Example"}]
+        """
 
     static let asrUserMainLanguageTemplateVariable = "{{USER_MAIN_LANGUAGE}}"
     static let asrUserOtherLanguagesTemplateVariable = "{{USER_OTHER_LANGUAGES}}"

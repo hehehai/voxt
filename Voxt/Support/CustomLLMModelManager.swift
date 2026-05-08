@@ -129,6 +129,9 @@ class CustomLLMModelManager: ObservableObject {
     private var lastInvalidRepoLogged: String?
     private let idleUnloadDelay: Duration = .seconds(90)
     private var activeInferenceCount = 0
+    private var isMemoryOptimizationEnabled: Bool {
+        UserDefaults.standard.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) as? Bool ?? true
+    }
 
     init(modelRepo: String, hubBaseURL: URL = URL(string: "https://huggingface.co")!) {
         let repoSelection = Self.resolveModelRepo(modelRepo)
@@ -146,6 +149,19 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     var currentModelRepo: String { modelRepo }
+
+    func refreshMemoryOptimizationPolicy() {
+        guard inferenceContainer != nil else {
+            cancelIdleUnloadTask()
+            return
+        }
+        guard activeInferenceCount == 0 else { return }
+        if isMemoryOptimizationEnabled {
+            scheduleIdleUnloadIfNeeded()
+        } else {
+            cancelIdleUnloadTask()
+        }
+    }
 
     func isModelLoaded(repo: String) -> Bool {
         let canonicalRepo = Self.canonicalModelRepo(repo)
@@ -1225,6 +1241,10 @@ class CustomLLMModelManager: ObservableObject {
 
     private func scheduleIdleUnloadIfNeeded() {
         guard inferenceContainer != nil else { return }
+        guard isMemoryOptimizationEnabled else {
+            cancelIdleUnloadTask()
+            return
+        }
         idleUnloadTask?.cancel()
         let expectedRepo = inferenceModelRepo
         let delay = idleUnloadDelay

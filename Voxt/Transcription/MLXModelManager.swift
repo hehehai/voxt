@@ -91,6 +91,9 @@ class MLXModelManager: ObservableObject {
     private let downloadSizeTolerance: Double = 0.9
     private let idleUnloadDelay: Duration = .seconds(90)
     private var activeUseCount = 0
+    private var isMemoryOptimizationEnabled: Bool {
+        UserDefaults.standard.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) as? Bool ?? true
+    }
 
     init(modelRepo: String, hubBaseURL: URL = URL(string: "https://huggingface.co")!) {
         self.modelRepo = Self.canonicalModelRepo(modelRepo)
@@ -101,6 +104,19 @@ class MLXModelManager: ObservableObject {
 
     var currentModelRepo: String { modelRepo }
     var isCurrentModelLoaded: Bool { loadedModel != nil && loadedRepo == modelRepo }
+
+    func refreshMemoryOptimizationPolicy() {
+        guard loadedModel != nil else {
+            cancelIdleUnloadTask()
+            return
+        }
+        guard activeUseCount == 0 else { return }
+        if isMemoryOptimizationEnabled {
+            scheduleIdleUnloadIfNeeded()
+        } else {
+            cancelIdleUnloadTask()
+        }
+    }
 
     func displayTitle(for repo: String) -> String {
         MLXModelCatalog.displayTitle(for: repo)
@@ -1202,6 +1218,10 @@ class MLXModelManager: ObservableObject {
 
     private func scheduleIdleUnloadIfNeeded() {
         guard loadedModel != nil else { return }
+        guard isMemoryOptimizationEnabled else {
+            cancelIdleUnloadTask()
+            return
+        }
         idleUnloadTask?.cancel()
         let expectedRepo = loadedRepo
         let delay = idleUnloadDelay

@@ -257,8 +257,12 @@ extension AppDelegate {
         defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
     }
 
+    var localModelMemoryOptimizationEnabled: Bool {
+        defaults.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) as? Bool ?? true
+    }
+
     var whisperKeepResidentLoaded: Bool {
-        defaults.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? true
+        !localModelMemoryOptimizationEnabled
     }
 
     var historyEnabled: Bool {
@@ -270,7 +274,15 @@ extension AppDelegate {
     }
 
     var dictionaryAutoLearningEnabled: Bool {
-        false
+        defaults.object(forKey: AppPreferenceKey.dictionaryAutoLearningEnabled) as? Bool ?? true
+    }
+
+    var dictionaryAutoLearningPrompt: String {
+        AppPromptDefaults.resolvedStoredText(
+            defaults.string(forKey: AppPreferenceKey.dictionaryAutoLearningPrompt),
+            kind: .dictionaryAutoLearning,
+            defaults: defaults
+        )
     }
 
     var autoCheckForUpdates: Bool {

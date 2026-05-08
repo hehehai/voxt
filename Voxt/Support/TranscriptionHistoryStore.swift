@@ -540,6 +540,26 @@ final class TranscriptionHistoryStore: ObservableObject {
         persist()
     }
 
+    func applyDictionaryCorrectedTerms(_ correctedTermsByHistoryID: [UUID: [String]]) {
+        guard !correctedTermsByHistoryID.isEmpty else { return }
+
+        var didChange = false
+        for (historyID, correctedTerms) in correctedTermsByHistoryID {
+            guard let index = allEntries.firstIndex(where: { $0.id == historyID }) else { continue }
+            let merged = mergeUniqueTerms(
+                existing: allEntries[index].dictionaryCorrectedTerms,
+                incoming: correctedTerms
+            )
+            guard merged != allEntries[index].dictionaryCorrectedTerms else { continue }
+            allEntries[index] = allEntries[index].updatingDictionaryCorrectedTerms(merged)
+            didChange = true
+        }
+
+        guard didChange else { return }
+        entries = Array(allEntries.prefix(loadedCount))
+        persist()
+    }
+
     @discardableResult
     func updateMeetingSummary(_ summary: MeetingSummarySnapshot?, for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let index = allEntries.firstIndex(where: { $0.id == entryID }) else { return nil }
@@ -733,6 +753,22 @@ final class TranscriptionHistoryStore: ObservableObject {
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return "\(formatter.string(from: entry.createdAt))-\(audioFolderName(for: entry.kind))-\(entry.id.uuidString).wav"
     }
+
+    private func mergeUniqueTerms(existing: [String], incoming: [String]) -> [String] {
+        var merged = existing
+        let existingNormalized = Set(existing.map(DictionaryStore.normalizeTerm))
+        var appended = Set<String>()
+
+        for term in incoming {
+            let normalized = DictionaryStore.normalizeTerm(term)
+            guard !normalized.isEmpty else { continue }
+            guard !existingNormalized.contains(normalized) else { continue }
+            guard appended.insert(normalized).inserted else { continue }
+            merged.append(term)
+        }
+
+        return merged
+    }
 }
 
 struct HistoryAudioExportSummary: Equatable {
@@ -747,6 +783,46 @@ struct HistoryAudioStorageStats: Equatable {
 }
 
 private extension TranscriptionHistoryEntry {
+    func updatingDictionaryCorrectedTerms(_ dictionaryCorrectedTerms: [String]) -> TranscriptionHistoryEntry {
+        TranscriptionHistoryEntry(
+            id: id,
+            text: text,
+            createdAt: createdAt,
+            transcriptionEngine: transcriptionEngine,
+            transcriptionModel: transcriptionModel,
+            enhancementMode: enhancementMode,
+            enhancementModel: enhancementModel,
+            kind: kind,
+            isTranslation: isTranslation,
+            audioDurationSeconds: audioDurationSeconds,
+            transcriptionProcessingDurationSeconds: transcriptionProcessingDurationSeconds,
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: focusedAppName,
+            focusedAppBundleID: focusedAppBundleID,
+            matchedGroupID: matchedGroupID,
+            matchedGroupName: matchedGroupName,
+            matchedAppGroupName: matchedAppGroupName,
+            matchedURLGroupName: matchedURLGroupName,
+            remoteASRProvider: remoteASRProvider,
+            remoteASRModel: remoteASRModel,
+            remoteASREndpoint: remoteASREndpoint,
+            remoteLLMProvider: remoteLLMProvider,
+            remoteLLMModel: remoteLLMModel,
+            remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
+            whisperWordTimings: whisperWordTimings,
+            meetingSegments: meetingSegments,
+            meetingAudioRelativePath: meetingAudioRelativePath,
+            meetingSummary: meetingSummary,
+            meetingSummaryChatMessages: meetingSummaryChatMessages,
+            displayTitle: displayTitle,
+            transcriptionChatMessages: transcriptionChatMessages,
+            dictionaryHitTerms: dictionaryHitTerms,
+            dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionarySuggestedTerms: dictionarySuggestedTerms
+        )
+    }
+
     func updatingDictionarySuggestedTerms(_ dictionarySuggestedTerms: [DictionarySuggestionSnapshot]) -> TranscriptionHistoryEntry {
         TranscriptionHistoryEntry(
             id: id,

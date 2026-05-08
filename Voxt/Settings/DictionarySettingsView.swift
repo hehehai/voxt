@@ -9,6 +9,8 @@ private func localized(_ key: String) -> String {
 
 struct DictionarySettingsView: View {
     @AppStorage(AppPreferenceKey.dictionaryRecognitionEnabled) private var dictionaryRecognitionEnabled = true
+    @AppStorage(AppPreferenceKey.dictionaryAutoLearningEnabled) private var dictionaryAutoLearningEnabled = true
+    @AppStorage(AppPreferenceKey.dictionaryAutoLearningPrompt) private var storedAutomaticLearningPrompt = ""
     @AppStorage(AppPreferenceKey.dictionaryHighConfidenceCorrectionEnabled) private var dictionaryHighConfidenceCorrectionEnabled = true
     @AppStorage(AppPreferenceKey.dictionarySuggestionIngestModelOptionID) private var preferredHistoryScanModelID = ""
 
@@ -26,6 +28,7 @@ struct DictionarySettingsView: View {
     @State private var showDictionaryInfo = false
     @State private var showDictionaryAdvancedSettings = false
     @State private var suggestionFilterDraft = DictionarySuggestionFilterSettings.defaultValue
+    @State private var automaticLearningPromptDraft = AppPromptDefaults.text(for: .dictionaryAutoLearning)
     @State private var historyScanModelOptions: [DictionaryHistoryScanModelOption] = []
     @State private var selectedHistoryScanModelID = ""
     @State private var dictionaryTransferMessage: String?
@@ -102,6 +105,8 @@ struct DictionarySettingsView: View {
         }
         .sheet(isPresented: $showDictionaryAdvancedSettings) {
             DictionaryAdvancedSettingsDialog(
+                dictionaryAutoLearningEnabled: $dictionaryAutoLearningEnabled,
+                automaticLearningPromptDraft: $automaticLearningPromptDraft,
                 dictionaryHighConfidenceCorrectionEnabled: $dictionaryHighConfidenceCorrectionEnabled,
                 isPresented: $showDictionaryAdvancedSettings,
                 dictionaryRecognitionEnabled: dictionaryRecognitionEnabled,
@@ -111,6 +116,7 @@ struct DictionarySettingsView: View {
                 selectedModelOption: selectedHistoryScanModelOption,
                 selectedModelID: $selectedHistoryScanModelID,
                 draftPrompt: $suggestionFilterDraft.prompt,
+                onRestoreDefaultAutomaticLearningPrompt: restoreAutomaticLearningPromptToDefault,
                 onRestoreDefaultPrompt: restoreSuggestionIngestPromptToDefault,
                 onSave: saveSuggestionIngestSettings
             )
@@ -401,6 +407,10 @@ struct DictionarySettingsView: View {
         reloadGroups()
         resetVisibleEntryLimit()
         historyScanModelOptions = availableHistoryScanModels()
+        automaticLearningPromptDraft = AppPromptDefaults.resolvedStoredText(
+            storedAutomaticLearningPrompt,
+            kind: .dictionaryAutoLearning
+        )
         suggestionFilterDraft = dictionarySuggestionStore.filterSettings
         selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: historyScanModelOptions)
     }
@@ -408,6 +418,10 @@ struct DictionarySettingsView: View {
     private func openDictionaryAdvancedSettings() {
         let options = availableHistoryScanModels()
         historyScanModelOptions = options
+        automaticLearningPromptDraft = AppPromptDefaults.resolvedStoredText(
+            storedAutomaticLearningPrompt,
+            kind: .dictionaryAutoLearning
+        )
         suggestionFilterDraft = dictionarySuggestionStore.filterSettings
         selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: options)
         showDictionaryAdvancedSettings = true
@@ -457,6 +471,16 @@ struct DictionarySettingsView: View {
     }
 
     private func saveSuggestionIngestSettings() {
+        let resolvedAutomaticLearningPrompt = AppPromptDefaults.resolvedStoredText(
+            automaticLearningPromptDraft,
+            kind: .dictionaryAutoLearning
+        )
+        automaticLearningPromptDraft = resolvedAutomaticLearningPrompt
+        storedAutomaticLearningPrompt = AppPromptDefaults.canonicalStoredText(
+            resolvedAutomaticLearningPrompt,
+            kind: .dictionaryAutoLearning
+        )
+
         let sanitized = DictionarySuggestionFilterSettings(
             prompt: suggestionFilterDraft.prompt,
             batchSize: dictionarySuggestionStore.filterSettings.batchSize,
@@ -472,6 +496,10 @@ struct DictionarySettingsView: View {
 
     private func restoreSuggestionIngestPromptToDefault() {
         suggestionFilterDraft.prompt = DictionarySuggestionFilterSettings.defaultPrompt
+    }
+
+    private func restoreAutomaticLearningPromptToDefault() {
+        automaticLearningPromptDraft = AppPromptDefaults.text(for: .dictionaryAutoLearning)
     }
 
     private func resolvedDefaultHistoryScanModelID(from options: [DictionaryHistoryScanModelOption]) -> String {

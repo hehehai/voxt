@@ -152,11 +152,12 @@ extension AppDelegate {
             "Commit transcription prepared payload. inputChars=\(text.count), outputChars=\(context.outputText.count), hasRewritePayload=\(context.rewriteAnswerPayload != nil), dictionaryMatches=\(context.dictionaryMatches.count), dictionaryCorrections=\(context.dictionaryCorrectedTerms.count)"
         )
 
-        deliverCommittedOutput(context) { [weak self] in
+        deliverCommittedOutput(context) { [weak self] didInject in
             guard let self else { return }
             self.finalizeCommittedOutputPostDeliveryAsync(
                 deliveredContext: context,
-                outputMode: sessionOutputMode
+                outputMode: sessionOutputMode,
+                didInject: didInject
             )
             onDeliveryCompleted?()
         }
@@ -321,7 +322,7 @@ extension AppDelegate {
 
     private func deliverCommittedOutput(
         _ context: SessionFinalizeContext,
-        completion: (() -> Void)? = nil
+        completion: ((Bool) -> Void)? = nil
     ) {
         let delivery = resolvedOutputDelivery(for: context)
         let deliveryLabel: String
@@ -340,9 +341,9 @@ extension AppDelegate {
         switch delivery {
         case .typeText:
             beginOverlayOutputDelivery()
-            typeText(context.outputText) { [weak self] _ in
+            typeText(context.outputText) { [weak self] didInject in
                 self?.endOverlayOutputDelivery()
-                completion?()
+                completion?(didInject)
             }
         case .answerOverlay:
             if overlayState.isRewriteConversationActive, context.rewriteAnswerPayload == nil {
@@ -351,16 +352,17 @@ extension AppDelegate {
                 let payload = resolvedAnswerPayload(for: context)
                 presentRewriteAnswerOverlay(title: payload.title, content: payload.content)
             }
-            completion?()
+            completion?(false)
         case .selectedTextTranslationResultWindow:
             presentSelectedTextTranslationAnswerOverlay(content: context.outputText)
-            completion?()
+            completion?(false)
         }
     }
 
     private func finalizeCommittedOutputPostDeliveryAsync(
         deliveredContext: SessionFinalizeContext,
-        outputMode: SessionOutputMode
+        outputMode: SessionOutputMode,
+        didInject: Bool
     ) {
         let deliveredText = deliveredContext.outputText
         let displayTitle = deliveredContext.rewriteAnswerPayload?.trimmedTitle
@@ -391,6 +393,12 @@ extension AppDelegate {
                     dictionarySuggestedTerms: dictionarySuggestions.map(\.snapshot)
                 )
                 self.overlayState.latestHistoryEntryID = historyEntryID
+                self.scheduleAutomaticDictionaryLearningIfNeeded(
+                    insertedText: deliveredText,
+                    outputMode: outputMode,
+                    didInject: didInject,
+                    historyEntryID: historyEntryID
+                )
                 self.persistDictionaryEvidence(
                     candidates: dictionaryMatches,
                     suggestions: dictionarySuggestions,

@@ -197,7 +197,6 @@ extension ModelSettingsView {
                 whisperVADEnabled: $whisperVADEnabled,
                 whisperTimestampsEnabled: $whisperTimestampsEnabled,
                 whisperRealtimeEnabled: $whisperRealtimeEnabled,
-                whisperKeepResidentLoaded: $whisperKeepResidentLoaded,
                 userLanguageCodes: selectedUserLanguageCodes
             ) {
                 activeLocalASRConfigurationTarget = nil
@@ -460,7 +459,6 @@ private struct WhisperASRConfigurationSheetView: View {
     @Binding var whisperVADEnabled: Bool
     @Binding var whisperTimestampsEnabled: Bool
     @Binding var whisperRealtimeEnabled: Bool
-    @Binding var whisperKeepResidentLoaded: Bool
     let userLanguageCodes: [String]
     let onDone: () -> Void
 
@@ -536,9 +534,6 @@ private struct WhisperASRConfigurationSheetView: View {
                                 .toggleStyle(.switch)
                         }
 
-                        Toggle(localized("Keep Resident"), isOn: $whisperKeepResidentLoaded)
-                            .toggleStyle(.switch)
-
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(localized("Temperature"))
@@ -602,7 +597,6 @@ private struct WhisperASRConfigurationSheetView: View {
                     whisperVADEnabled = true
                     whisperTimestampsEnabled = false
                     whisperRealtimeEnabled = false
-                    whisperKeepResidentLoaded = true
                 }
                 .buttonStyle(SettingsPillButtonStyle())
             } trailing: {

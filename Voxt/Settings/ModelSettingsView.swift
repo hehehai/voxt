@@ -72,7 +72,7 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.whisperVADEnabled) var whisperVADEnabled = true
     @AppStorage(AppPreferenceKey.whisperTimestampsEnabled) var whisperTimestampsEnabled = false
     @AppStorage(AppPreferenceKey.whisperRealtimeEnabled) var whisperRealtimeEnabled = false
-    @AppStorage(AppPreferenceKey.whisperKeepResidentLoaded) var whisperKeepResidentLoaded = true
+    @AppStorage(AppPreferenceKey.localModelMemoryOptimizationEnabled) var localModelMemoryOptimizationEnabled = true
     @AppStorage(AppPreferenceKey.whisperLocalASRTuningSettings) var whisperLocalASRTuningSettingsRaw = WhisperLocalTuningSettingsStore.defaultStoredValue()
     @AppStorage(AppPreferenceKey.customLLMModelRepo) var customLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.translationCustomLLMModelRepo) var translationCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
@@ -425,9 +425,11 @@ struct ModelSettingsView: View {
                     whisperModelManager.updateModel(id: canonicalModelID)
                     refreshCatalogSnapshot()
                 }
-                .onChange(of: whisperKeepResidentLoaded) { _, _ in
-                    whisperModelManager.refreshResidencyPolicy()
-                    guard selectedEngine == .whisperKit, whisperKeepResidentLoaded else { return }
+                .onChange(of: localModelMemoryOptimizationEnabled) { _, _ in
+                    mlxModelManager.refreshMemoryOptimizationPolicy()
+                    customLLMManager.refreshMemoryOptimizationPolicy()
+                    whisperModelManager.refreshMemoryOptimizationPolicy()
+                    guard selectedEngine == .whisperKit, !localModelMemoryOptimizationEnabled else { return }
                     Task { @MainActor in
                         whisperModelManager.beginActiveUse()
                         defer { whisperModelManager.endActiveUse() }
@@ -435,8 +437,8 @@ struct ModelSettingsView: View {
                     }
                 }
                 .onChange(of: engineRaw) { _, _ in
-                    whisperModelManager.refreshResidencyPolicy()
-                    guard selectedEngine == .whisperKit, whisperKeepResidentLoaded else { return }
+                    whisperModelManager.refreshMemoryOptimizationPolicy()
+                    guard selectedEngine == .whisperKit, !localModelMemoryOptimizationEnabled else { return }
                     Task { @MainActor in
                         whisperModelManager.beginActiveUse()
                         defer { whisperModelManager.endActiveUse() }
@@ -880,6 +882,14 @@ struct ModelSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+            }
+
+            GeneralSettingsCard(titleText: localized("Memory")) {
+                Toggle(localized("Memory Optimization"), isOn: $localModelMemoryOptimizationEnabled)
+
+                Text(localized("When enabled, Voxt unloads idle local ASR and local LLM models after cooldown to reduce memory usage. Turn it off to keep loaded local models resident for faster reuse."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             GeneralSettingsCard(titleText: localized("Download Source")) {

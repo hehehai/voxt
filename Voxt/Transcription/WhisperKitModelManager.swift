@@ -83,6 +83,10 @@ final class WhisperKitModelManager: ObservableObject {
     private let idleUnloadDelay: Duration = .seconds(90)
     private var activeUseCount = 0
     private var downloadErrorByID: [String: String] = [:]
+    private var isMemoryOptimizationEnabled: Bool {
+        let defaults = UserDefaults.standard
+        return defaults.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) as? Bool ?? true
+    }
 
     init(modelID: String, hubBaseURL: URL) {
         self.modelID = Self.canonicalModelID(modelID)
@@ -93,12 +97,6 @@ final class WhisperKitModelManager: ObservableObject {
 
     var currentModelID: String { modelID }
     var isCurrentModelLoaded: Bool { loadedWhisper != nil && loadedModelID == modelID }
-    private var shouldKeepResidentLoaded: Bool {
-        let defaults = UserDefaults.standard
-        let keepResident = defaults.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? true
-        let engineRaw = defaults.string(forKey: AppPreferenceKey.transcriptionEngine) ?? ""
-        return keepResident && engineRaw == TranscriptionEngine.whisperKit.rawValue
-    }
 
     nonisolated static func canonicalModelID(_ modelID: String) -> String {
         WhisperKitModelCatalog.canonicalModelID(modelID)
@@ -135,11 +133,17 @@ final class WhisperKitModelManager: ObservableObject {
         fetchRemoteSize(for: modelID)
     }
 
-    func refreshResidencyPolicy() {
-        cancelIdleUnloadTask()
-        guard activeUseCount == 0, loadedWhisper != nil else { return }
-        guard !shouldKeepResidentLoaded else { return }
-        scheduleIdleUnloadIfNeeded()
+    func refreshMemoryOptimizationPolicy() {
+        guard loadedWhisper != nil else {
+            cancelIdleUnloadTask()
+            return
+        }
+        guard activeUseCount == 0 else { return }
+        if isMemoryOptimizationEnabled {
+            scheduleIdleUnloadIfNeeded()
+        } else {
+            cancelIdleUnloadTask()
+        }
     }
 
     func beginActiveUse() {
@@ -1145,7 +1149,7 @@ final class WhisperKitModelManager: ObservableObject {
 
     private func scheduleIdleUnloadIfNeeded() {
         cancelIdleUnloadTask()
-        guard !shouldKeepResidentLoaded else { return }
+        guard isMemoryOptimizationEnabled else { return }
         idleUnloadTask = Task { [weak self] in
             guard let self else { return }
             do {

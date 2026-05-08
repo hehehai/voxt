@@ -166,6 +166,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingWhisperStartupTask: Task<Void, Never>?
     var pendingMeetingStartupTask: Task<Void, Never>?
     var pendingDictionaryHistoryScanTask: Task<Void, Never>?
+    var pendingAutomaticDictionaryLearningTask: Task<Void, Never>?
     var whisperWarmupTask: Task<Void, Never>?
     var overlayReminderTask: Task<Void, Never>?
     var overlayStatusClearTask: Task<Void, Never>?
@@ -268,7 +269,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.whisperVADEnabled: true,
             AppPreferenceKey.whisperTimestampsEnabled: false,
             AppPreferenceKey.whisperRealtimeEnabled: false,
-            AppPreferenceKey.whisperKeepResidentLoaded: true,
+            AppPreferenceKey.localModelMemoryOptimizationEnabled: true,
+            AppPreferenceKey.whisperKeepResidentLoaded: false,
             AppPreferenceKey.translationFallbackModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.rewriteCustomLLMModelRepo: CustomLLMModelManager.defaultModelRepo,
             AppPreferenceKey.remoteASRSelectedProvider: RemoteASRProvider.openAIWhisper.rawValue,
@@ -284,7 +286,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.historyRetentionPeriod: HistoryRetentionPeriod.ninetyDays.rawValue,
             AppPreferenceKey.historyAudioStorageEnabled: false,
             AppPreferenceKey.dictionaryRecognitionEnabled: true,
-            AppPreferenceKey.dictionaryAutoLearningEnabled: false,
+            AppPreferenceKey.dictionaryAutoLearningEnabled: true,
+            AppPreferenceKey.dictionaryAutoLearningPrompt: "",
             AppPreferenceKey.dictionaryHighConfidenceCorrectionEnabled: true,
             AppPreferenceKey.autoCheckForUpdates: true,
             AppPreferenceKey.hotkeyDebugLoggingEnabled: false,
@@ -299,6 +302,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         FeatureSettingsStore.migrateIfNeeded(defaults: .standard)
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
+        Self.migrateLegacyLocalModelMemoryPreferenceIfNeeded()
         Self.migrateLegacyNetworkProxyPreferenceIfNeeded()
         RemoteModelConfigurationStore.migrateLegacyLLMEndpoints()
         VoxtNetworkSession.migrateLegacyProxyCredentials()
@@ -309,6 +313,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         super.init()
         AppDelegate.shared = self
+    }
+
+    private static func migrateLegacyLocalModelMemoryPreferenceIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) == nil else { return }
+        let keepResident = defaults.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? false
+        defaults.set(!keepResident, forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled)
+        defaults.set(keepResident, forKey: AppPreferenceKey.whisperKeepResidentLoaded)
     }
 
     var transcriptionEngine: TranscriptionEngine {
@@ -630,14 +642,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func scheduleWhisperIdleWarmupIfNeeded() {
         whisperWarmupTask?.cancel()
         guard transcriptionEngine == .whisperKit else { return }
-        guard UserDefaults.standard.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? true else { return }
+        guard !(UserDefaults.standard.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) as? Bool ?? true) else { return }
         guard isWhisperReady else { return }
 
         whisperWarmupTask = Task { @MainActor [weak self] in
             guard let self else { return }
             guard !Task.isCancelled else { return }
             guard self.transcriptionEngine == .whisperKit else { return }
-            guard UserDefaults.standard.object(forKey: AppPreferenceKey.whisperKeepResidentLoaded) as? Bool ?? true else { return }
+            guard !(UserDefaults.standard.object(forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled) as? Bool ?? true) else { return }
             guard self.isWhisperReady else { return }
 
             self.whisperModelManager.beginActiveUse()
