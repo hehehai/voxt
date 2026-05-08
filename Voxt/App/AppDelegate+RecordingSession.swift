@@ -10,24 +10,53 @@ extension AppDelegate {
         case extendGrace(seconds: TimeInterval)
     }
 
+    private struct LocalEngineFinalizationState: Equatable {
+        let shouldDeferFallback: Bool
+        let description: String
+    }
+
     nonisolated static func stopRecordingFallbackDecision(
         transcriptionEngine: TranscriptionEngine,
-        isWhisperFinalizing: Bool,
+        isLocalEngineFinalizing: Bool,
         transcriptionResultReceived: Bool,
         isExtendedGrace: Bool
     ) -> StopRecordingFallbackDecision {
-        guard transcriptionEngine == .whisperKit else { return .finishNow }
-        guard isWhisperFinalizing else { return .finishNow }
+        switch transcriptionEngine {
+        case .whisperKit, .mlxAudio:
+            break
+        case .dictation, .remote:
+            return .finishNow
+        }
+        guard isLocalEngineFinalizing else { return .finishNow }
         guard !transcriptionResultReceived else { return .finishNow }
         guard !isExtendedGrace else { return .finishNow }
         return .extendGrace(seconds: 12)
     }
 
-    private func shouldDeferStopRecordingFallback() -> Bool {
-        guard transcriptionEngine == .whisperKit else { return false }
-        guard whisperTranscriber?.isFinalizingTranscription == true else { return false }
-        guard transcriptionResultReceivedAt == nil else { return false }
-        return true
+    private func currentLocalEngineFinalizationState() -> LocalEngineFinalizationState {
+        let whisperFinalizing = whisperTranscriber?.isFinalizingTranscription == true
+        let mlxFinalizing = mlxTranscriber?.isFinalizingTranscription == true
+        let resultReceived = transcriptionResultReceivedAt != nil
+
+        switch transcriptionEngine {
+        case .whisperKit:
+            let shouldDefer = whisperFinalizing && !resultReceived
+            return LocalEngineFinalizationState(
+                shouldDeferFallback: shouldDefer,
+                description: "whisper=\(whisperFinalizing), mlx=\(mlxFinalizing)"
+            )
+        case .mlxAudio:
+            let shouldDefer = mlxFinalizing && !resultReceived
+            return LocalEngineFinalizationState(
+                shouldDeferFallback: shouldDefer,
+                description: "whisper=\(whisperFinalizing), mlx=\(mlxFinalizing)"
+            )
+        case .dictation, .remote:
+            return LocalEngineFinalizationState(
+                shouldDeferFallback: false,
+                description: "whisper=\(whisperFinalizing), mlx=\(mlxFinalizing)"
+            )
+        }
     }
 
     private func armStopRecordingFallback(
@@ -45,16 +74,17 @@ extension AppDelegate {
             guard !Task.isCancelled else { return }
             guard self.isSessionActive, self.activeRecordingSessionID == armedSessionID else { return }
 
+            let finalizationState = self.currentLocalEngineFinalizationState()
             let fallbackDecision = Self.stopRecordingFallbackDecision(
                 transcriptionEngine: self.transcriptionEngine,
-                isWhisperFinalizing: self.shouldDeferStopRecordingFallback(),
+                isLocalEngineFinalizing: finalizationState.shouldDeferFallback,
                 transcriptionResultReceived: self.transcriptionResultReceivedAt != nil,
                 isExtendedGrace: isExtendedGrace
             )
             if case .extendGrace(let graceSeconds) = fallbackDecision {
                 VoxtLog.warning(
                     """
-                    Stop recording fallback reached while Whisper finalization is still running; extending grace. sessionID=\(armedSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode))
+                    Stop recording fallback reached while local finalization is still running; extending grace. sessionID=\(armedSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode)), finalizing=\(finalizationState.description)
                     """
                 )
                 self.armStopRecordingFallback(timeoutSeconds: graceSeconds, isExtendedGrace: true)
@@ -63,7 +93,7 @@ extension AppDelegate {
 
             VoxtLog.warning(
                 """
-                Stop recording fallback triggered; forcing session finish. sessionID=\(self.activeRecordingSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode)), resultReceived=\(self.transcriptionResultReceivedAt != nil), endingSessionID=\(self.currentEndingSessionID?.uuidString ?? "nil"), whisperFinalizing=\(self.whisperTranscriber?.isFinalizingTranscription == true)
+                Stop recording fallback triggered; forcing session finish. sessionID=\(self.activeRecordingSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode)), resultReceived=\(self.transcriptionResultReceivedAt != nil), endingSessionID=\(self.currentEndingSessionID?.uuidString ?? "nil"), finalizing=\(finalizationState.description)
                 """
             )
             if self.transcriptionEngine == .remote {

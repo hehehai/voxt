@@ -82,7 +82,19 @@ final class SessionEndFlowTests: XCTestCase {
         XCTAssertEqual(
             AppDelegate.stopRecordingFallbackDecision(
                 transcriptionEngine: .whisperKit,
-                isWhisperFinalizing: true,
+                isLocalEngineFinalizing: true,
+                transcriptionResultReceived: false,
+                isExtendedGrace: false
+            ),
+            .extendGrace(seconds: 12)
+        )
+    }
+
+    func testStopRecordingFallbackDecisionExtendsGraceForMLXFinalizationWithoutResult() {
+        XCTAssertEqual(
+            AppDelegate.stopRecordingFallbackDecision(
+                transcriptionEngine: .mlxAudio,
+                isLocalEngineFinalizing: true,
                 transcriptionResultReceived: false,
                 isExtendedGrace: false
             ),
@@ -94,7 +106,7 @@ final class SessionEndFlowTests: XCTestCase {
         XCTAssertEqual(
             AppDelegate.stopRecordingFallbackDecision(
                 transcriptionEngine: .whisperKit,
-                isWhisperFinalizing: true,
+                isLocalEngineFinalizing: true,
                 transcriptionResultReceived: true,
                 isExtendedGrace: false
             ),
@@ -106,7 +118,16 @@ final class SessionEndFlowTests: XCTestCase {
         XCTAssertEqual(
             AppDelegate.stopRecordingFallbackDecision(
                 transcriptionEngine: .whisperKit,
-                isWhisperFinalizing: true,
+                isLocalEngineFinalizing: true,
+                transcriptionResultReceived: false,
+                isExtendedGrace: true
+            ),
+            .finishNow
+        )
+        XCTAssertEqual(
+            AppDelegate.stopRecordingFallbackDecision(
+                transcriptionEngine: .mlxAudio,
+                isLocalEngineFinalizing: true,
                 transcriptionResultReceived: false,
                 isExtendedGrace: true
             ),
@@ -114,11 +135,11 @@ final class SessionEndFlowTests: XCTestCase {
         )
     }
 
-    func testStopRecordingFallbackDecisionFinishesForNonWhisperEngines() {
+    func testStopRecordingFallbackDecisionFinishesForNonLocalFinalizingEngines() {
         XCTAssertEqual(
             AppDelegate.stopRecordingFallbackDecision(
-                transcriptionEngine: .mlxAudio,
-                isWhisperFinalizing: true,
+                transcriptionEngine: .dictation,
+                isLocalEngineFinalizing: true,
                 transcriptionResultReceived: false,
                 isExtendedGrace: false
             ),
@@ -127,7 +148,7 @@ final class SessionEndFlowTests: XCTestCase {
         XCTAssertEqual(
             AppDelegate.stopRecordingFallbackDecision(
                 transcriptionEngine: .remote,
-                isWhisperFinalizing: true,
+                isLocalEngineFinalizing: true,
                 transcriptionResultReceived: false,
                 isExtendedGrace: false
             ),

@@ -47,6 +47,13 @@ final class RecordingSessionSupportTests: XCTestCase {
             ),
             8
         )
+        XCTAssertEqual(
+            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
+                transcriptionEngine: .mlxAudio,
+                remoteProvider: .openAIWhisper
+            ),
+            20
+        )
     }
 
     func testExtractTranscriptionTextValuePrefersKnownKeysAndNestedContent() {

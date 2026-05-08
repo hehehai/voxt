@@ -121,7 +121,9 @@ enum RecordingSessionSupport {
         switch transcriptionEngine {
         case .whisperKit:
             return 20
-        case .mlxAudio, .dictation:
+        case .mlxAudio:
+            return 20
+        case .dictation:
             return 8
         case .remote:
             break
