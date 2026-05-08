@@ -99,7 +99,7 @@ struct SettingsView: View {
             .padding(.top, 10)
         }
         .clipShape(RoundedRectangle(cornerRadius: SettingsUIStyle.windowCornerRadius, style: .continuous))
-        .frame(minWidth: 760, minHeight: 560)
+        .frame(minWidth: 760, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .environment(\.locale, interfaceLanguage.locale)
         .groupBoxStyle(SettingsPanelGroupBoxStyle())
         .id(languageRefreshToken)
