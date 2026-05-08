@@ -46,7 +46,6 @@ public struct WhisperRealtimeEagerState {
            lastRawCandidateText.isEmpty,
            !stableCommittedText.isEmpty,
            candidate.count < Self.minimumNewUtteranceCharacterCount {
-            lastRawCandidateText = candidate
             return nil
         }
 
@@ -253,11 +252,12 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     static let realtimeDraftBootstrapSeconds: Double = 2.8
     static let realtimeDraftBootstrapCharacterCount = 18
     static let realtimeDraftWindowSeconds: Double = 1.6
-    static let realtimeDraftFallbackStallSeconds: Double = 1.1
+    static let realtimeDraftFallbackStallSeconds: Double = 0.55
     static let realtimeSilenceWindowSeconds: Double = 0.45
     static let realtimeSilenceRMSHoldThreshold: Float = 0.0035
     static let realtimeSilencePeakHoldThreshold: Float = 0.018
     static let realtimeSegmentOverlapSeconds: Double = 0.8
+    nonisolated static let realtimeLongFormFinalProfileThresholdSeconds: Double = 30
 
     @Published var isRecording = false
     @Published var isModelInitializing = false
@@ -403,6 +403,14 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         guard isRecording else { return }
 
         let revision = sessionRevision
+        let stopSampleCount = whisperRealtimeEnabled ? snapshotPreparedAudioSamples().count : sampleStore.count()
+        let stopBufferedSeconds = Double(stopSampleCount) / max(whisperRealtimeEnabled ? targetSampleRate : inputSampleRate, 1)
+        VoxtLog.info(
+            """
+            Whisper stop requested. revision=\(revision), realtime=\(whisperRealtimeEnabled), sampleCount=\(stopSampleCount), bufferedSec=\(String(format: "%.2f", stopBufferedSeconds)), partialChars=\(transcribedText.count)
+            """,
+            verbose: true
+        )
         isRecording = false
         isModelInitializing = false
         audioLevel = 0
@@ -682,12 +690,17 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             endSample = min(endSample + stepSampleCount, preparedSamples.count)
         }
 
+        let bufferedSeconds = Double(preparedSamples.count) / targetSampleRate
+        let useOfflineFinalProfile = Self.shouldUseOfflineFinalProfileForStop(
+            realtimeEnabled: true,
+            bufferedSeconds: bufferedSeconds
+        )
         let finalResults = try await whisper.transcribe(
             audioArray: preparedSamples,
             decodeOptions: buildDecodingOptions(
                 whisper: whisper,
                 includeWordTimings: false,
-                profile: .realtimeFinal
+                profile: useOfflineFinalProfile ? .offline : .realtimeFinal
             )
         )
         let finalText = normalizeText(finalResults.map(\.text).joined(separator: " "))
@@ -703,8 +716,9 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             )
             trace.append(
                 String(
-                    format: "[%.1fs] final raw=%@",
+                    format: "[%.1fs] final/%@ raw=%@",
                     Double(preparedSamples.count) / targetSampleRate,
+                    useOfflineFinalProfile ? "offline" : "realtime",
                     Self.traceQuoted(finalText)
                 )
             )
@@ -782,6 +796,18 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func runFinalTranscription(revision: Int, samples: [Float], sampleRate: Double) async {
+        let bufferedSeconds = Double(samples.count) / max(sampleRate, 1)
+        let useOfflineFinalProfile = Self.shouldUseOfflineFinalProfileForStop(
+            realtimeEnabled: whisperRealtimeEnabled,
+            bufferedSeconds: bufferedSeconds
+        )
+        let finalProfile: WhisperInferenceProfile = useOfflineFinalProfile ? .offline : .realtimeFinal
+        if whisperRealtimeEnabled, useOfflineFinalProfile {
+            VoxtLog.info(
+                "Whisper realtime finalization promoted to offline long-form profile. bufferedSec=\(String(format: "%.2f", bufferedSeconds))",
+                verbose: true
+            )
+        }
         defer {
             if revision == sessionRevision {
                 isFinalizingTranscription = false
@@ -794,8 +820,40 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             sampleRate: sampleRate,
             includeWordTimings: whisperTimestampsEnabled,
             publishFinalResult: true,
-            profile: whisperRealtimeEnabled ? .realtimeFinal : .offline
+            profile: finalProfile
         )
+    }
+
+    nonisolated static func shouldUseOfflineFinalProfileForStop(
+        realtimeEnabled: Bool,
+        bufferedSeconds: Double
+    ) -> Bool {
+        guard realtimeEnabled else { return true }
+        return bufferedSeconds >= Self.realtimeLongFormFinalProfileThresholdSeconds
+    }
+
+    nonisolated static func reconcileRealtimeFinalText(
+        finalText: String,
+        latestPublishedText: String
+    ) -> String {
+        let normalizedFinal = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLive = latestPublishedText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalizedLive.isEmpty else { return normalizedFinal }
+        guard !normalizedFinal.isEmpty else { return normalizedLive }
+        guard normalizedLive != normalizedFinal else { return normalizedFinal }
+
+        if normalizedLive.hasPrefix(normalizedFinal) {
+            let finalCount = normalizedFinal.count
+            let liveCount = normalizedLive.count
+            let delta = liveCount - finalCount
+            let minimumExtraCharacters = max(8, Int(Double(liveCount) * 0.12))
+            if delta >= minimumExtraCharacters {
+                return normalizedLive
+            }
+        }
+
+        return normalizedFinal
     }
 
     private func runInference(
@@ -808,6 +866,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     ) async {
         guard !samples.isEmpty else {
             if publishFinalResult {
+                VoxtLog.warning("Whisper finalization produced an empty audio snapshot; finishing with empty transcription.")
                 cleanupPreparedWhisperIfNeeded()
                 onTranscriptionFinished?("")
             }
@@ -825,6 +884,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         guard revision == sessionRevision else { return }
         guard let whisper = preparedWhisper else {
             if publishFinalResult {
+                VoxtLog.warning("Whisper finalization aborted because preparedWhisper was already released.")
                 cleanupPreparedWhisperIfNeeded()
                 onTranscriptionFinished?("")
             }
@@ -837,6 +897,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         do {
+            let inferenceStartedAt = Date()
             let transcription = try await transcribePreparedSamples(
                 whisper: whisper,
                 samples: samples,
@@ -849,10 +910,29 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             let results = transcription.results
             let text = transcription.text
             if publishFinalResult {
+                let latestPublishedText = transcribedText
+                let resolvedFinalText = Self.reconcileRealtimeFinalText(
+                    finalText: text,
+                    latestPublishedText: latestPublishedText
+                )
+                let elapsedMs = max(Int(Date().timeIntervalSince(inferenceStartedAt) * 1000), 0)
                 stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = includeWordTimings ? buildWordTimings(from: results) : []
-                publishWhisperFinalText(text)
-                onTranscriptionFinished?(text)
+                VoxtLog.info(
+                    """
+                    Whisper final transcription ready. revision=\(revision), chars=\(resolvedFinalText.count), preparedSampleCount=\(preparedSamples.count), segmentCount=\(results.count), elapsedMs=\(elapsedMs)
+                    """
+                )
+                if resolvedFinalText != text {
+                    VoxtLog.info(
+                        """
+                        Whisper final transcription preserved longer live hypothesis tail. revision=\(revision), finalChars=\(text.count), liveChars=\(latestPublishedText.trimmingCharacters(in: .whitespacesAndNewlines).count), resolvedChars=\(resolvedFinalText.count)
+                        """,
+                        verbose: true
+                    )
+                }
+                publishWhisperFinalText(resolvedFinalText)
+                onTranscriptionFinished?(resolvedFinalText)
             } else {
                 transcribedText = text
                 onPartialTranscription?(text)
@@ -863,6 +943,11 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                 let preparedSamples = prepareInputSamples(samples, sampleRate: sampleRate)
                 stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = []
+                VoxtLog.warning(
+                    """
+                    Whisper final inference failed; falling back to latest partial text. revision=\(revision), fallbackChars=\(transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).count), preparedSampleCount=\(preparedSamples.count)
+                    """
+                )
                 onTranscriptionFinished?(transcribedText.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
@@ -1448,6 +1533,15 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         let entries = realtimeTraceEntries
         realtimeTraceEntries.removeAll(keepingCapacity: false)
         return entries
+    }
+
+    func debugCaptureStopSummary() -> String {
+        let sampleCount = whisperRealtimeEnabled ? snapshotPreparedAudioSamples().count : sampleStore.count()
+        let sampleRate = whisperRealtimeEnabled ? targetSampleRate : inputSampleRate
+        let bufferedSeconds = Double(sampleCount) / max(sampleRate, 1)
+        return """
+        realtime=\(whisperRealtimeEnabled), sampleCount=\(sampleCount), bufferedSec=\(String(format: "%.2f", bufferedSeconds)), callbacks=\(sampleStore.callbacksReceived()), partialChars=\(transcribedText.count), finalizing=\(isFinalizingTranscription)
+        """
     }
 
     private func recordRealtimeTrace(

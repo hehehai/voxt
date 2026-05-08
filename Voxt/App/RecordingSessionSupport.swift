@@ -118,7 +118,14 @@ enum RecordingSessionSupport {
         transcriptionEngine: TranscriptionEngine,
         remoteProvider: RemoteASRProvider
     ) -> TimeInterval {
-        guard transcriptionEngine == .remote else { return 8 }
+        switch transcriptionEngine {
+        case .whisperKit:
+            return 20
+        case .mlxAudio, .dictation:
+            return 8
+        case .remote:
+            break
+        }
         switch remoteProvider {
         case .openAIWhisper, .glmASR:
             return 60

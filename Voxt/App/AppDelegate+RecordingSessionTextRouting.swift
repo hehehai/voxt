@@ -6,7 +6,20 @@ extension AppDelegate {
     }
 
     func processTranscription(_ rawText: String, sessionID: UUID) {
-        guard shouldHandleCallbacks(for: sessionID) else { return }
+        let callbackDecision = Self.sessionCallbackHandlingDecision(
+            requestedSessionID: sessionID,
+            activeSessionID: activeRecordingSessionID,
+            isSessionCancellationRequested: isSessionCancellationRequested
+        )
+        guard callbackDecision == .accept else {
+            VoxtLog.warning(
+                """
+                Dropping transcription callback before processing. reason=\(callbackDecision.logDescription), callbackSessionID=\(sessionID.uuidString), activeSessionID=\(activeRecordingSessionID.uuidString), stopped=\(recordingStoppedAt != nil), endingSessionID=\(currentEndingSessionID?.uuidString ?? "nil"), rawChars=\(rawText.count)
+                """,
+                verbose: true
+            )
+            return
+        }
         if didCommitSessionOutput {
             VoxtLog.info("Ignoring transcription callback because current session output has already been committed.")
             return
@@ -16,6 +29,13 @@ extension AppDelegate {
         stopRecordingFallbackTask = nil
 
         transcriptionResultReceivedAt = Date()
+        if let stoppedAt = recordingStoppedAt {
+            let stopToResultMs = max(Int(Date().timeIntervalSince(stoppedAt) * 1000), 0)
+            VoxtLog.info(
+                "Transcription callback accepted after stop. sessionID=\(sessionID.uuidString), stopToResultMs=\(stopToResultMs), rawChars=\(rawText.count)",
+                verbose: true
+            )
+        }
         let displayText = RecordingSessionSupport.normalizedTranscriptionDisplayText(
             rawText,
             transcriptionEngine: transcriptionEngine,

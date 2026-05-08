@@ -119,7 +119,19 @@ extension AppDelegate {
         let sessionID = activeRecordingSessionID
         let sessionOutputMode = sessionOutputMode
         let userMainLanguage = userMainLanguage
-        guard shouldHandleCallbacks(for: sessionID) else { return }
+        let callbackDecision = Self.sessionCallbackHandlingDecision(
+            requestedSessionID: sessionID,
+            activeSessionID: activeRecordingSessionID,
+            isSessionCancellationRequested: isSessionCancellationRequested
+        )
+        guard callbackDecision == .accept else {
+            VoxtLog.warning(
+                """
+                Commit transcription abandoned after session invalidation. reason=\(callbackDecision.logDescription), sessionID=\(sessionID.uuidString), activeSessionID=\(activeRecordingSessionID.uuidString), outputMode=\(RecordingSessionSupport.outputLabel(for: sessionOutputMode)), chars=\(text.count), stopped=\(recordingStoppedAt != nil)
+                """
+            )
+            return
+        }
 
         VoxtLog.info("Commit transcription entered. characters=\(text.count)")
 

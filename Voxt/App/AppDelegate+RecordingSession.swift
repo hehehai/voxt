@@ -5,6 +5,74 @@ import AVFoundation
 import Speech
 
 extension AppDelegate {
+    enum StopRecordingFallbackDecision: Equatable {
+        case finishNow
+        case extendGrace(seconds: TimeInterval)
+    }
+
+    nonisolated static func stopRecordingFallbackDecision(
+        transcriptionEngine: TranscriptionEngine,
+        isWhisperFinalizing: Bool,
+        transcriptionResultReceived: Bool,
+        isExtendedGrace: Bool
+    ) -> StopRecordingFallbackDecision {
+        guard transcriptionEngine == .whisperKit else { return .finishNow }
+        guard isWhisperFinalizing else { return .finishNow }
+        guard !transcriptionResultReceived else { return .finishNow }
+        guard !isExtendedGrace else { return .finishNow }
+        return .extendGrace(seconds: 12)
+    }
+
+    private func shouldDeferStopRecordingFallback() -> Bool {
+        guard transcriptionEngine == .whisperKit else { return false }
+        guard whisperTranscriber?.isFinalizingTranscription == true else { return false }
+        guard transcriptionResultReceivedAt == nil else { return false }
+        return true
+    }
+
+    private func armStopRecordingFallback(
+        timeoutSeconds: TimeInterval,
+        isExtendedGrace: Bool = false
+    ) {
+        let armedSessionID = activeRecordingSessionID
+        stopRecordingFallbackTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: .seconds(timeoutSeconds))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            guard self.isSessionActive, self.activeRecordingSessionID == armedSessionID else { return }
+
+            let fallbackDecision = Self.stopRecordingFallbackDecision(
+                transcriptionEngine: self.transcriptionEngine,
+                isWhisperFinalizing: self.shouldDeferStopRecordingFallback(),
+                transcriptionResultReceived: self.transcriptionResultReceivedAt != nil,
+                isExtendedGrace: isExtendedGrace
+            )
+            if case .extendGrace(let graceSeconds) = fallbackDecision {
+                VoxtLog.warning(
+                    """
+                    Stop recording fallback reached while Whisper finalization is still running; extending grace. sessionID=\(armedSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode))
+                    """
+                )
+                self.armStopRecordingFallback(timeoutSeconds: graceSeconds, isExtendedGrace: true)
+                return
+            }
+
+            VoxtLog.warning(
+                """
+                Stop recording fallback triggered; forcing session finish. sessionID=\(self.activeRecordingSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode)), resultReceived=\(self.transcriptionResultReceivedAt != nil), endingSessionID=\(self.currentEndingSessionID?.uuidString ?? "nil"), whisperFinalizing=\(self.whisperTranscriber?.isFinalizingTranscription == true)
+                """
+            )
+            if self.transcriptionEngine == .remote {
+                self.remoteASRTranscriber.discardPendingSessionOutput()
+            }
+            self.finishSession(after: 0)
+        }
+    }
+
     func continueRewriteConversation() {
         guard overlayState.canContinueRewriteAnswer else { return }
         overlayState.beginRewriteConversationIfNeeded()
@@ -220,21 +288,7 @@ extension AppDelegate {
             transcriptionEngine: transcriptionEngine,
             remoteProvider: remoteASRSelectedProvider
         )
-        stopRecordingFallbackTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await Task.sleep(for: .seconds(fallbackTimeoutSeconds))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            guard self.isSessionActive else { return }
-            VoxtLog.warning("Stop recording fallback triggered; forcing session finish.")
-            if self.transcriptionEngine == .remote {
-                self.remoteASRTranscriber.discardPendingSessionOutput()
-            }
-            self.finishSession(after: 0)
-        }
+        armStopRecordingFallback(timeoutSeconds: fallbackTimeoutSeconds)
     }
 
     func cancelActiveRecordingSession() {

@@ -21,6 +21,13 @@ final class RecordingSessionSupportTests: XCTestCase {
     func testStopRecordingFallbackTimeoutUsesProviderSpecificRemoteBudget() {
         XCTAssertEqual(
             RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
+                transcriptionEngine: .whisperKit,
+                remoteProvider: .openAIWhisper
+            ),
+            20
+        )
+        XCTAssertEqual(
+            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
                 transcriptionEngine: .remote,
                 remoteProvider: .openAIWhisper
             ),

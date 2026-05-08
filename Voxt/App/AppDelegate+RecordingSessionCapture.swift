@@ -332,6 +332,12 @@ extension AppDelegate {
         if transcriptionEngine == .mlxAudio, isMLXReady {
             mlxTranscriber?.stopRecording()
         } else if transcriptionEngine == .whisperKit, isWhisperReady {
+            if let whisperTranscriber {
+                VoxtLog.info(
+                    "Issuing Whisper stop. \(whisperTranscriber.debugCaptureStopSummary())",
+                    verbose: true
+                )
+            }
             whisperTranscriber?.stopRecording()
         } else if transcriptionEngine == .remote {
             remoteASRTranscriber.stopRecording()

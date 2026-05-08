@@ -73,4 +73,54 @@ struct WhisperRealtimeEagerStateTests {
         #expect(state.publishedText == "final corrected text")
         #expect(state.liveCandidateText.isEmpty)
     }
+
+    @Test
+    func shortRealtimeStopKeepsRealtimeFinalProfile() {
+        let useOffline = WhisperKitTranscriber.shouldUseOfflineFinalProfileForStop(
+            realtimeEnabled: true,
+            bufferedSeconds: 12
+        )
+
+        #expect(useOffline == false)
+    }
+
+    @Test
+    func longRealtimeStopPromotesToOfflineProfile() {
+        let useOffline = WhisperKitTranscriber.shouldUseOfflineFinalProfileForStop(
+            realtimeEnabled: true,
+            bufferedSeconds: 123
+        )
+
+        #expect(useOffline)
+    }
+
+    @Test
+    func realtimeFinalPreservesLongerLiveTailWhenModelFinalCollapsesToPrefix() {
+        let resolved = WhisperKitTranscriber.reconcileRealtimeFinalText(
+            finalText: "你好这是一个最小的回归测试",
+            latestPublishedText: "你好这是一个最小的回归测试相比上一版长时间已经继续输出有问题了"
+        )
+
+        #expect(resolved == "你好这是一个最小的回归测试相比上一版长时间已经继续输出有问题了")
+    }
+
+    @Test
+    func realtimeFinalKeepsModelFinalWhenLiveTextDoesNotExtendItAsPrefix() {
+        let resolved = WhisperKitTranscriber.reconcileRealtimeFinalText(
+            finalText: "你好这是一个最小的回归测试已经通过",
+            latestPublishedText: "你好这是一个最小的回归测试相比上一版"
+        )
+
+        #expect(resolved == "你好这是一个最小的回归测试已经通过")
+    }
+
+    @Test
+    func realtimeFinalDoesNotPreferSlightlyLongerLiveTail() {
+        let resolved = WhisperKitTranscriber.reconcileRealtimeFinalText(
+            finalText: "你好这是一个最小的回归测试",
+            latestPublishedText: "你好这是一个最小的回归测试呀"
+        )
+
+        #expect(resolved == "你好这是一个最小的回归测试")
+    }
 }

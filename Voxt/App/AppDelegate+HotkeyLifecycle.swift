@@ -3,6 +3,23 @@ import Carbon
 
 @MainActor
 extension AppDelegate {
+    enum SessionCallbackHandlingDecision: Equatable {
+        case accept
+        case rejectStale
+        case rejectCancelled
+
+        var logDescription: String {
+            switch self {
+            case .accept:
+                return "accept"
+            case .rejectStale:
+                return "stale-session"
+            case .rejectCancelled:
+                return "cancelled-session"
+            }
+        }
+    }
+
     func setupHotkey() {
         // Callback contract:
         // - HotkeyManager only emits normalized events (transcriptionDown/up, translationDown/up, rewriteDown/up).
@@ -403,16 +420,35 @@ extension AppDelegate {
         pendingTranscriptionStartTask = nil
     }
 
-    func shouldHandleCallbacks(for sessionID: UUID) -> Bool {
-        guard sessionID == activeRecordingSessionID else {
-            VoxtLog.info("Ignoring stale session callback. sessionID=\(sessionID.uuidString)", verbose: true)
-            return false
+    nonisolated static func sessionCallbackHandlingDecision(
+        requestedSessionID: UUID,
+        activeSessionID: UUID,
+        isSessionCancellationRequested: Bool
+    ) -> SessionCallbackHandlingDecision {
+        guard requestedSessionID == activeSessionID else {
+            return .rejectStale
         }
         guard !isSessionCancellationRequested else {
+            return .rejectCancelled
+        }
+        return .accept
+    }
+
+    func shouldHandleCallbacks(for sessionID: UUID) -> Bool {
+        switch Self.sessionCallbackHandlingDecision(
+            requestedSessionID: sessionID,
+            activeSessionID: activeRecordingSessionID,
+            isSessionCancellationRequested: isSessionCancellationRequested
+        ) {
+        case .accept:
+            return true
+        case .rejectStale:
+            VoxtLog.info("Ignoring stale session callback. sessionID=\(sessionID.uuidString)", verbose: true)
+            return false
+        case .rejectCancelled:
             VoxtLog.info("Ignoring callback for cancelled session. sessionID=\(sessionID.uuidString)", verbose: true)
             return false
         }
-        return true
     }
 
     var sessionOutputModeLabel: String {
