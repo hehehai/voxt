@@ -55,9 +55,8 @@ enum MeetingStartPlanner {
         switch selectedEngine {
         case .dictation:
             return .blocked(.dictationUnsupported)
-        case .mlxAudio:
-            switch RecordingStartPlanner.resolve(
-                selectedEngine: .mlxAudio,
+        case .mlxAudio, .whisperKit:
+            return resolveLocalMeetingStart(
                 selectedMLXRepo: selectedMLXRepo,
                 activeMLXDownloadRepo: activeMLXDownloadRepo,
                 isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
@@ -66,29 +65,7 @@ enum MeetingStartPlanner {
                 activeWhisperDownloadModelID: activeWhisperDownloadModelID,
                 isSelectedWhisperModelDownloaded: isSelectedWhisperModelDownloaded,
                 whisperModelState: whisperModelState
-            ) {
-            case .start:
-                return .start(.mlxAudio)
-            case .blocked(let reason):
-                return .blocked(.recording(reason))
-            }
-        case .whisperKit:
-            switch RecordingStartPlanner.resolve(
-                selectedEngine: .mlxAudio,
-                selectedMLXRepo: selectedMLXRepo,
-                activeMLXDownloadRepo: activeMLXDownloadRepo,
-                isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
-                mlxModelState: mlxModelState,
-                selectedWhisperModelID: selectedWhisperModelID,
-                activeWhisperDownloadModelID: activeWhisperDownloadModelID,
-                isSelectedWhisperModelDownloaded: isSelectedWhisperModelDownloaded,
-                whisperModelState: whisperModelState
-            ) {
-            case .start:
-                return .start(.mlxAudio)
-            case .blocked(let reason):
-                return .blocked(.recording(reason))
-            }
+            )
         case .remote:
             guard remoteASRConfiguration.isConfigured else {
                 return .blocked(.remoteASRUnavailable)
@@ -100,6 +77,34 @@ enum MeetingStartPlanner {
                 return .blocked(.remoteASRMeetingUnavailable(remoteASRProvider))
             }
             return .start(.remote)
+        }
+    }
+
+    private static func resolveLocalMeetingStart(
+        selectedMLXRepo: String?,
+        activeMLXDownloadRepo: String?,
+        isSelectedMLXModelDownloaded: Bool,
+        mlxModelState: MLXModelManager.ModelState,
+        selectedWhisperModelID: String?,
+        activeWhisperDownloadModelID: String?,
+        isSelectedWhisperModelDownloaded: Bool,
+        whisperModelState: WhisperKitModelManager.ModelState
+    ) -> MeetingStartDecision {
+        switch RecordingStartPlanner.resolve(
+            selectedEngine: .mlxAudio,
+            selectedMLXRepo: selectedMLXRepo,
+            activeMLXDownloadRepo: activeMLXDownloadRepo,
+            isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
+            mlxModelState: mlxModelState,
+            selectedWhisperModelID: selectedWhisperModelID,
+            activeWhisperDownloadModelID: activeWhisperDownloadModelID,
+            isSelectedWhisperModelDownloaded: isSelectedWhisperModelDownloaded,
+            whisperModelState: whisperModelState
+        ) {
+        case .start:
+            return .start(.mlxAudio)
+        case .blocked(let reason):
+            return .blocked(.recording(reason))
         }
     }
 }

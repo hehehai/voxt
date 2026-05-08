@@ -1,6 +1,6 @@
 import SwiftUI
 
-private func localized(_ key: String) -> String {
+private func localizedModelCatalog(_ key: String) -> String {
     AppLocalization.localizedString(key)
 }
 
@@ -53,194 +53,9 @@ struct ModelCatalogBuilder {
     func asrEntries() -> [ModelCatalogEntry] {
         var entries = [ModelCatalogEntry]()
 
-        entries.append(
-            ModelCatalogEntry(
-                id: FeatureModelSelectionID.dictation.rawValue,
-                title: localized("Direct Dictation"),
-                engine: localized("System ASR"),
-                sizeText: localized("Built-in"),
-                ratingText: "3.4",
-                filterTags: catalogFilterTags(
-                    base: [localized("Local"), localized("Built-in"), localized("Fast")],
-                    installed: true,
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: .dictation
-                ),
-                displayTags: catalogDisplayTags(
-                    base: [localized("Local"), localized("Built-in"), localized("Fast")],
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: .dictation
-                ),
-                statusText: "",
-                usageLocations: usageLocations(for: .dictation),
-                badgeText: nil,
-                primaryAction: ModelTableAction(title: localized("Settings")) {
-                    showASRHintTarget(.dictation)
-                },
-                secondaryActions: []
-            )
-        )
-
-        entries.append(contentsOf: MLXModelManager.availableModels.map { model in
-            let repo = MLXModelManager.canonicalModelRepo(model.id)
-            let selectionID = FeatureModelSelectionID.mlx(repo)
-            let isInstalled = mlxModelManager.isModelDownloaded(repo: repo)
-            let badge = hasIssue(.mlxModel(repo)) ? localized("Needs Setup") : nil
-            let status = isUninstallingModel(repo) ? localized("Uninstalling…") : modelStatusText(repo)
-
-            let primaryAction: ModelTableAction?
-            var secondaryActions = [ModelTableAction]()
-            if isUninstallingModel(repo) {
-                primaryAction = ModelTableAction(title: localized("Uninstalling…"), isEnabled: false) {}
-            } else if isDownloadingModel(repo) {
-                primaryAction = ModelTableAction(title: localized("Pause")) {
-                    mlxModelManager.pauseDownload()
-                }
-                secondaryActions.append(
-                    ModelTableAction(title: localized("Cancel"), role: .destructive) {
-                        mlxModelManager.cancelDownload()
-                    }
-                )
-            } else if isPausedModel(repo) {
-                primaryAction = ModelTableAction(title: localized("Continue")) {
-                    downloadModel(repo)
-                }
-                secondaryActions.append(
-                    ModelTableAction(title: localized("Cancel"), role: .destructive) {
-                        cancelModelDownload(repo)
-                    }
-                )
-            } else if isInstalled {
-                primaryAction = ModelTableAction(title: localized("Uninstall"), role: .destructive) {
-                    deleteModel(repo)
-                }
-                secondaryActions.append(
-                    ModelTableAction(title: localized("Open Location")) {
-                        openMLXModelDirectory(repo)
-                    }
-                )
-            } else {
-                primaryAction = ModelTableAction(title: localized("Install"), isEnabled: !isAnotherModelDownloading(repo)) {
-                    downloadModel(repo)
-                }
-            }
-            secondaryActions.append(
-                ModelTableAction(title: localized("Settings")) {
-                    presentMLXSettings(repo)
-                }
-            )
-
-            return ModelCatalogEntry(
-                id: "mlx:\(repo)",
-                title: mlxModelManager.displayTitle(for: repo),
-                engine: localized("MLX Audio"),
-                sizeText: isInstalled
-                    ? (mlxModelManager.cachedModelSizeText(repo: repo) ?? mlxModelManager.remoteSizeText(repo: repo))
-                    : mlxModelManager.remoteSizeText(repo: repo),
-                ratingText: MLXModelManager.ratingText(for: repo),
-                filterTags: catalogFilterTags(
-                    base: [localized("Local")] + mlxCatalogTags(for: repo),
-                    installed: isInstalled,
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: selectionID
-                ),
-                displayTags: catalogDisplayTags(
-                    base: [localized("Local")] + mlxCatalogTags(for: repo),
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: selectionID
-                ),
-                statusText: status,
-                usageLocations: usageLocations(for: selectionID),
-                badgeText: badge,
-                primaryAction: primaryAction,
-                secondaryActions: secondaryActions
-            )
-        })
-
-        entries.append(contentsOf: WhisperKitModelManager.availableModels.map { model in
-            let modelID = WhisperKitModelManager.canonicalModelID(model.id)
-            let selectionID = FeatureModelSelectionID.whisper(modelID)
-            let isInstalled = whisperModelManager.isModelDownloaded(id: modelID)
-            let badge = hasIssue(.whisperModel(modelID)) ? localized("Needs Setup") : nil
-            let status = isUninstallingWhisperModel(modelID) ? localized("Uninstalling…") : whisperModelStatusText(modelID)
-
-            let primaryAction: ModelTableAction?
-            var secondaryActions = [ModelTableAction]()
-            if isUninstallingWhisperModel(modelID) {
-                primaryAction = ModelTableAction(title: localized("Uninstalling…"), isEnabled: false) {}
-            } else if isDownloadingWhisperModel(modelID) {
-                primaryAction = ModelTableAction(title: localized("Pause")) {
-                    whisperModelManager.pauseDownload()
-                }
-                secondaryActions.append(
-                    ModelTableAction(title: localized("Cancel"), role: .destructive) {
-                        whisperModelManager.cancelDownload()
-                    }
-                )
-            } else if isPausedWhisperModel(modelID) {
-                primaryAction = ModelTableAction(title: localized("Continue")) {
-                    downloadWhisperModel(modelID)
-                }
-                secondaryActions.append(
-                    ModelTableAction(title: localized("Cancel"), role: .destructive) {
-                        cancelWhisperDownload(modelID)
-                    }
-                )
-            } else if isInstalled {
-                primaryAction = ModelTableAction(title: localized("Uninstall"), role: .destructive) {
-                    deleteWhisperModel(modelID)
-                }
-            } else {
-                primaryAction = ModelTableAction(title: localized("Install"), isEnabled: !isAnotherWhisperModelDownloading(modelID)) {
-                    downloadWhisperModel(modelID)
-                }
-            }
-
-            if isInstalled {
-                secondaryActions.append(
-                    ModelTableAction(title: localized("Open Location")) {
-                        openWhisperModelDirectory(modelID)
-                    }
-                )
-            }
-            secondaryActions.append(
-                ModelTableAction(title: localized("Whisper Settings")) {
-                    presentWhisperSettings()
-                }
-            )
-
-            return ModelCatalogEntry(
-                id: "whisper:\(modelID)",
-                title: whisperModelManager.displayTitle(for: modelID),
-                engine: localized("Whisper"),
-                sizeText: isInstalled
-                    ? (whisperModelManager.cachedModelSizeText(id: modelID) ?? whisperModelManager.remoteSizeText(id: modelID))
-                    : whisperModelManager.remoteSizeText(id: modelID),
-                ratingText: WhisperKitModelManager.ratingText(for: modelID),
-                filterTags: catalogFilterTags(
-                    base: [localized("Local")] + whisperCatalogTags(for: modelID),
-                    installed: isInstalled,
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: selectionID
-                ),
-                displayTags: catalogDisplayTags(
-                    base: [localized("Local")] + whisperCatalogTags(for: modelID),
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: selectionID
-                ),
-                statusText: status,
-                usageLocations: usageLocations(for: selectionID),
-                badgeText: badge,
-                primaryAction: primaryAction,
-                secondaryActions: secondaryActions
-            )
-        })
+        entries.append(dictationASREntry())
+        entries.append(contentsOf: mlxASREntries())
+        entries.append(contentsOf: whisperASREntries())
 
         entries.append(contentsOf: RemoteASRProvider.allCases.map { provider in
             let selectionID = FeatureModelSelectionID.remoteASR(provider)
@@ -259,26 +74,26 @@ struct ModelCatalogBuilder {
             return ModelCatalogEntry(
                 id: "remote-asr:\(provider.rawValue)",
                 title: provider.title,
-                engine: localized("Remote ASR"),
-                sizeText: configuration.hasUsableModel ? configuration.model : localized("Cloud"),
+                engine: localizedModelCatalog("Remote ASR"),
+                sizeText: configuration.hasUsableModel ? configuration.model : localizedModelCatalog("Cloud"),
                 ratingText: provider == .openAIWhisper ? "4.6" : "4.4",
                 filterTags: catalogFilterTags(
-                    base: [localized("Remote")] + remoteASRCatalogTags(for: provider, configuration: configuration),
+                    base: [localizedModelCatalog("Remote")] + remoteASRCatalogTags(for: provider, configuration: configuration),
                     installed: false,
                     requiresConfiguration: true,
                     configured: configured,
                     selectionID: selectionID
                 ),
                 displayTags: catalogDisplayTags(
-                    base: [localized("Remote")] + remoteASRCatalogTags(for: provider, configuration: configuration),
+                    base: [localizedModelCatalog("Remote")] + remoteASRCatalogTags(for: provider, configuration: configuration),
                     requiresConfiguration: true,
                     configured: configured,
                     selectionID: selectionID
                 ),
                 statusText: remoteASRStatusText(provider, configuration),
                 usageLocations: usageLocations(for: selectionID),
-                badgeText: needsMeetingSetup ? localized("Needs Setup") : nil,
-                primaryAction: ModelTableAction(title: localized("Configure")) {
+                badgeText: needsMeetingSetup ? localizedModelCatalog("Needs Setup") : nil,
+                primaryAction: ModelTableAction(title: localizedModelCatalog("Configure")) {
                     configureASRProvider(provider)
                 },
                 secondaryActions: []
@@ -296,42 +111,42 @@ struct ModelCatalogBuilder {
             let selectionID = FeatureModelSelectionID.localLLM(repo)
             let isInstalled = customLLMManager.isModelDownloaded(repo: repo)
             let badge = customLLMBadgeText(repo)
-            let status = isUninstallingCustomLLM(repo) ? localized("Uninstalling…") : customLLMStatusText(repo)
+            let status = isUninstallingCustomLLM(repo) ? localizedModelCatalog("Uninstalling…") : customLLMStatusText(repo)
 
             let primaryAction: ModelTableAction?
             let secondaryActions: [ModelTableAction]
             if isUninstallingCustomLLM(repo) {
-                primaryAction = ModelTableAction(title: localized("Uninstalling…"), isEnabled: false) {}
+                primaryAction = ModelTableAction(title: localizedModelCatalog("Uninstalling…"), isEnabled: false) {}
                 secondaryActions = []
             } else if isDownloadingCustomLLM(repo) {
-                primaryAction = ModelTableAction(title: localized("Pause")) {
+                primaryAction = ModelTableAction(title: localizedModelCatalog("Pause")) {
                     customLLMManager.pauseDownload()
                 }
                 secondaryActions = [
-                    ModelTableAction(title: localized("Cancel"), role: .destructive) {
+                    ModelTableAction(title: localizedModelCatalog("Cancel"), role: .destructive) {
                         customLLMManager.cancelDownload()
                     }
                 ]
             } else if isPausedCustomLLM(repo) {
-                primaryAction = ModelTableAction(title: localized("Continue")) {
+                primaryAction = ModelTableAction(title: localizedModelCatalog("Continue")) {
                     downloadCustomLLM(repo)
                 }
                 secondaryActions = [
-                    ModelTableAction(title: localized("Cancel"), role: .destructive) {
+                    ModelTableAction(title: localizedModelCatalog("Cancel"), role: .destructive) {
                         cancelCustomLLMDownload(repo)
                     }
                 ]
             } else if isInstalled {
-                primaryAction = ModelTableAction(title: localized("Uninstall"), role: .destructive) {
+                primaryAction = ModelTableAction(title: localizedModelCatalog("Uninstall"), role: .destructive) {
                     deleteCustomLLM(repo)
                 }
                 secondaryActions = [
-                    ModelTableAction(title: localized("Open Location")) {
+                    ModelTableAction(title: localizedModelCatalog("Open Location")) {
                         openCustomLLMModelDirectory(repo)
                     }
                 ]
             } else {
-                primaryAction = ModelTableAction(title: localized("Install"), isEnabled: !isAnotherCustomLLMDownloading(repo)) {
+                primaryAction = ModelTableAction(title: localizedModelCatalog("Install"), isEnabled: !isAnotherCustomLLMDownloading(repo)) {
                     downloadCustomLLM(repo)
                 }
                 secondaryActions = []
@@ -340,20 +155,20 @@ struct ModelCatalogBuilder {
             return ModelCatalogEntry(
                 id: "local-llm:\(repo)",
                 title: customLLMManager.displayTitle(for: repo),
-                engine: localized("Local LLM"),
+                engine: localizedModelCatalog("Local LLM"),
                 sizeText: isInstalled
                     ? (customLLMManager.cachedModelSizeText(repo: repo) ?? customLLMManager.remoteSizeText(repo: repo))
                     : customLLMManager.remoteSizeText(repo: repo),
                 ratingText: CustomLLMModelManager.ratingText(for: repo),
                 filterTags: catalogFilterTags(
-                    base: [localized("Local")] + llmCatalogTags(for: repo),
+                    base: [localizedModelCatalog("Local")] + llmCatalogTags(for: repo),
                     installed: isInstalled,
                     requiresConfiguration: false,
                     configured: true,
                     selectionID: selectionID
                 ),
                 displayTags: catalogDisplayTags(
-                    base: [localized("Local")] + llmCatalogTags(for: repo),
+                    base: [localizedModelCatalog("Local")] + llmCatalogTags(for: repo),
                     requiresConfiguration: false,
                     configured: true,
                     selectionID: selectionID
@@ -373,23 +188,23 @@ struct ModelCatalogBuilder {
                 stored: remoteLLMConfigurations
             )
             let configured = configuration.isConfigured && configuration.hasUsableModel
-            let status = configured ? "" : localized("Not configured")
+            let status = configured ? "" : localizedModelCatalog("Not configured")
 
             return ModelCatalogEntry(
                 id: "remote-llm:\(provider.rawValue)",
                 title: provider.title,
-                engine: localized("Remote LLM"),
-                sizeText: configuration.hasUsableModel ? configuration.model : localized("Cloud"),
+                engine: localizedModelCatalog("Remote LLM"),
+                sizeText: configuration.hasUsableModel ? configuration.model : localizedModelCatalog("Cloud"),
                 ratingText: "4.5",
                 filterTags: catalogFilterTags(
-                    base: [localized("Remote")] + remoteLLMCatalogTags(for: provider),
+                    base: [localizedModelCatalog("Remote")] + remoteLLMCatalogTags(for: provider),
                     installed: false,
                     requiresConfiguration: true,
                     configured: configured,
                     selectionID: selectionID
                 ),
                 displayTags: catalogDisplayTags(
-                    base: [localized("Remote")] + remoteLLMCatalogTags(for: provider),
+                    base: [localizedModelCatalog("Remote")] + remoteLLMCatalogTags(for: provider),
                     requiresConfiguration: true,
                     configured: configured,
                     selectionID: selectionID
@@ -397,7 +212,7 @@ struct ModelCatalogBuilder {
                 statusText: status,
                 usageLocations: usageLocations(for: selectionID),
                 badgeText: remoteLLMBadgeText(provider),
-                primaryAction: ModelTableAction(title: localized("Configure")) {
+                primaryAction: ModelTableAction(title: localizedModelCatalog("Configure")) {
                     configureLLMProvider(provider)
                 },
                 secondaryActions: []
@@ -407,29 +222,29 @@ struct ModelCatalogBuilder {
         return entries
     }
 
-    private func usageLocations(for selectionID: FeatureModelSelectionID) -> [String] {
+    func usageLocations(for selectionID: FeatureModelSelectionID) -> [String] {
         var labels = [String]()
         if featureSettings.transcription.asrSelectionID == selectionID ||
             (featureSettings.transcription.llmEnabled && featureSettings.transcription.llmSelectionID == selectionID) {
-            labels.append(localized("Transcription"))
+            labels.append(localizedModelCatalog("Transcription"))
         }
         if featureSettings.translation.asrSelectionID == selectionID ||
             featureSettings.translation.modelSelectionID == selectionID {
-            labels.append(localized("Translation"))
+            labels.append(localizedModelCatalog("Translation"))
         }
         if featureSettings.rewrite.asrSelectionID == selectionID ||
             featureSettings.rewrite.llmSelectionID == selectionID {
-            labels.append(localized("Rewrite"))
+            labels.append(localizedModelCatalog("Rewrite"))
         }
         if featureSettings.meeting.enabled &&
             (featureSettings.meeting.asrSelectionID == selectionID ||
                 featureSettings.meeting.summaryModelSelectionID == selectionID) {
-            labels.append(localized("Meeting"))
+            labels.append(localizedModelCatalog("Meeting"))
         }
         return labels
     }
 
-    private func catalogFilterTags(
+    func catalogFilterTags(
         base: [String],
         installed: Bool,
         requiresConfiguration: Bool,
@@ -438,46 +253,46 @@ struct ModelCatalogBuilder {
     ) -> [String] {
         var tags = base
         if installed {
-            tags.append(localized("Installed"))
+            tags.append(localizedModelCatalog("Installed"))
         }
         if requiresConfiguration && configured {
-            tags.append(localized("Configured"))
+            tags.append(localizedModelCatalog("Configured"))
         }
         if !usageLocations(for: selectionID).isEmpty {
-            tags.append(localized("In Use"))
+            tags.append(localizedModelCatalog("In Use"))
         }
         return deduplicatedTags(tags)
     }
 
-    private func catalogDisplayTags(
+    func catalogDisplayTags(
         base: [String],
         requiresConfiguration: Bool,
         configured: Bool,
         selectionID: FeatureModelSelectionID
     ) -> [String] {
-        var tags = base.filter { $0 != localized("Multilingual") }
+        var tags = base.filter { $0 != localizedModelCatalog("Multilingual") }
         if let languageSupportTag = primaryLanguageSupportTag(for: selectionID) {
             tags.append(languageSupportTag)
         }
         if requiresConfiguration && configured {
-            tags.append(localized("Configured"))
+            tags.append(localizedModelCatalog("Configured"))
         }
         if !usageLocations(for: selectionID).isEmpty {
-            tags.append(localized("In Use"))
+            tags.append(localizedModelCatalog("In Use"))
         }
         return deduplicatedTags(tags)
     }
 
-    private func mlxCatalogTags(for repo: String) -> [String] {
-        deduplicatedTags(MLXModelManager.catalogTagKeys(for: repo).map(localized))
+    func mlxCatalogTags(for repo: String) -> [String] {
+        deduplicatedTags(MLXModelManager.catalogTagKeys(for: repo).map(localizedModelCatalog))
     }
 
-    private func whisperCatalogTags(for modelID: String) -> [String] {
-        deduplicatedTags(WhisperKitModelManager.catalogTagKeys(for: modelID).map(localized))
+    func whisperCatalogTags(for modelID: String) -> [String] {
+        deduplicatedTags(WhisperKitModelManager.catalogTagKeys(for: modelID).map(localizedModelCatalog))
     }
 
     private func llmCatalogTags(for repo: String) -> [String] {
-        deduplicatedTags(CustomLLMModelManager.catalogTagKeys(for: repo).map(localized))
+        deduplicatedTags(CustomLLMModelManager.catalogTagKeys(for: repo).map(localizedModelCatalog))
     }
 
     private func remoteASRCatalogTags(
@@ -487,15 +302,15 @@ struct ModelCatalogBuilder {
         var tags = [String]()
         switch provider {
         case .openAIWhisper:
-            tags.append(localized("Multilingual"))
+            tags.append(localizedModelCatalog("Multilingual"))
         case .doubaoASR:
-            tags.append(contentsOf: [localized("Realtime"), localized("Multilingual")])
+            tags.append(contentsOf: [localizedModelCatalog("Realtime"), localizedModelCatalog("Multilingual")])
         case .glmASR:
-            tags.append(contentsOf: [localized("Accurate"), localized("Multilingual")])
+            tags.append(contentsOf: [localizedModelCatalog("Accurate"), localizedModelCatalog("Multilingual")])
         case .aliyunBailianASR:
-            tags.append(localized("Multilingual"))
+            tags.append(localizedModelCatalog("Multilingual"))
             if RemoteASRRealtimeSupport.isAliyunRealtimeModel(configuration.model) {
-                tags.append(localized("Realtime"))
+                tags.append(localizedModelCatalog("Realtime"))
             }
         }
         return deduplicatedTags(tags)
@@ -506,7 +321,7 @@ struct ModelCatalogBuilder {
         case .lmStudio, .ollama:
             return []
         default:
-            return [localized("Accurate")]
+            return [localizedModelCatalog("Accurate")]
         }
     }
 
@@ -516,7 +331,7 @@ struct ModelCatalogBuilder {
 
     private func primaryLanguageSupportTag(for selectionID: FeatureModelSelectionID) -> String? {
         guard let support = supportsPrimaryLanguage(for: selectionID) else { return nil }
-        return localized(support ? "Supports Primary Language" : "Does Not Support Primary Language")
+        return localizedModelCatalog(support ? "Supports Primary Language" : "Does Not Support Primary Language")
     }
 
     private func supportsPrimaryLanguage(for selectionID: FeatureModelSelectionID) -> Bool? {
