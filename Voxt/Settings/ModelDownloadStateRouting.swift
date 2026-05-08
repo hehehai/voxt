@@ -3,17 +3,18 @@ import Foundation
 enum ModelDownloadStateRouting {
     static func isMLXOperationTarget(
         repo: String,
-        managerRepo: String
+        activeRepo: String?
     ) -> Bool {
-        MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(managerRepo)
+        guard let activeRepo else { return false }
+        return MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(activeRepo)
     }
 
     static func isMLXDownloading(
         repo: String,
-        managerRepo: String,
+        activeRepo: String?,
         state: MLXModelManager.ModelState
     ) -> Bool {
-        guard isMLXOperationTarget(repo: repo, managerRepo: managerRepo) else { return false }
+        guard isMLXOperationTarget(repo: repo, activeRepo: activeRepo) else { return false }
         if case .downloading = state {
             return true
         }
@@ -22,10 +23,10 @@ enum ModelDownloadStateRouting {
 
     static func isMLXPaused(
         repo: String,
-        managerRepo: String,
+        activeRepo: String?,
         state: MLXModelManager.ModelState
     ) -> Bool {
-        guard isMLXOperationTarget(repo: repo, managerRepo: managerRepo) else { return false }
+        guard isMLXOperationTarget(repo: repo, activeRepo: activeRepo) else { return false }
         if case .paused = state {
             return true
         }
@@ -34,11 +35,11 @@ enum ModelDownloadStateRouting {
 
     static func isAnotherMLXDownloadActive(
         repo: String,
-        managerRepo: String,
+        activeRepo: String?,
         state: MLXModelManager.ModelState
     ) -> Bool {
         guard case .downloading = state else { return false }
-        return !isMLXOperationTarget(repo: repo, managerRepo: managerRepo)
+        return !isMLXOperationTarget(repo: repo, activeRepo: activeRepo)
     }
 
     static func isCustomLLMOperationTarget(

@@ -184,7 +184,13 @@ extension AppDelegate {
         synchronizeRuntimeASRStateForSession(outputMode: outputMode)
         let startDecision = RecordingStartPlanner.resolve(
             selectedEngine: transcriptionEngine,
+            selectedMLXRepo: mlxModelManager.currentModelRepo,
+            activeMLXDownloadRepo: mlxModelManager.activeDownloadRepo,
+            isSelectedMLXModelDownloaded: mlxModelManager.isModelDownloaded(repo: mlxModelManager.currentModelRepo),
             mlxModelState: mlxModelManager.state,
+            selectedWhisperModelID: whisperModelManager.currentModelID,
+            activeWhisperDownloadModelID: whisperModelManager.activeDownload?.modelID,
+            isSelectedWhisperModelDownloaded: whisperModelManager.isModelDownloaded(id: whisperModelManager.currentModelID),
             whisperModelState: whisperModelManager.state
         )
         guard case .start(let recordingEngine) = startDecision else {

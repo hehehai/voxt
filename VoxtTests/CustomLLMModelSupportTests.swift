@@ -146,4 +146,18 @@ final class CustomLLMModelSupportTests: XCTestCase {
 
         XCTAssertTrue(CustomLLMModelDownloadSupport.hasUsableChatTemplate(in: root))
     }
+
+    func testPartialCustomLLMDirectoryIsNotTreatedAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let modelDirectory = root
+            .appendingPathComponent("mlx-llm")
+            .appendingPathComponent("mlx-community_Qwen3-4B-4bit")
+
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertFalse(CustomLLMModelStorageSupport.isModelDirectoryValid(modelDirectory))
+        XCTAssertTrue(FileManager.default.directoryContainsRegularFiles(at: modelDirectory))
+    }
 }

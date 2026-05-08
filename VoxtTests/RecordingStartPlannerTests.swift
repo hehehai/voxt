@@ -35,6 +35,8 @@ final class RecordingStartPlannerTests: XCTestCase {
     func testMLXAudioDownloadingBlocksRecordingStart() {
         let decision = RecordingStartPlanner.resolve(
             selectedEngine: .mlxAudio,
+            selectedMLXRepo: "mlx-community/Qwen3-ASR-0.6B-4bit",
+            activeMLXDownloadRepo: "mlx-community/Qwen3-ASR-0.6B-4bit",
             mlxModelState: .downloading(
                 progress: 0.5,
                 completed: 10,
@@ -47,6 +49,26 @@ final class RecordingStartPlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(decision, .blocked(.mlxModelDownloading))
+    }
+
+    func testMLXAudioDownloadingDifferentRepoDoesNotBlockInstalledSelection() {
+        let decision = RecordingStartPlanner.resolve(
+            selectedEngine: .mlxAudio,
+            selectedMLXRepo: "mlx-community/parakeet-tdt-0.6b-v3",
+            activeMLXDownloadRepo: "mlx-community/Qwen3-ASR-0.6B-4bit",
+            isSelectedMLXModelDownloaded: true,
+            mlxModelState: .downloading(
+                progress: 0.5,
+                completed: 10,
+                total: 20,
+                currentFile: "weights.bin",
+                completedFiles: 1,
+                totalFiles: 2
+            ),
+            whisperModelState: .notDownloaded
+        )
+
+        XCTAssertEqual(decision, .start(.mlxAudio))
     }
 
     func testDictationStartIgnoresMLXModelState() {

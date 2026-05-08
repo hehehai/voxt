@@ -221,27 +221,42 @@ struct ModelSettingsView: View {
             remoteLLMBadgeText: remoteLLMBadgeText(for:),
             primaryUserLanguageCode: selectedUserLanguageCodes.first,
             isDownloadingModel: isDownloadingModel,
+            isPausedModel: isPausedModel,
             isAnotherModelDownloading: isAnotherModelDownloading,
             isDownloadingWhisperModel: isDownloadingWhisperModel,
+            isPausedWhisperModel: isPausedWhisperModel,
             isAnotherWhisperModelDownloading: isAnotherWhisperModelDownloading,
             isDownloadingCustomLLM: isDownloadingCustomLLM,
+            isPausedCustomLLM: isPausedCustomLLM,
             isAnotherCustomLLMDownloading: isAnotherCustomLLMDownloading,
             isUninstallingModel: isUninstallingModel,
             isUninstallingWhisperModel: isUninstallingWhisperModel,
             isUninstallingCustomLLM: isUninstallingCustomLLM,
             downloadModel: downloadModel,
+            cancelModelDownload: {
+                mlxModelManager.cancelDownload(repo: $0)
+                refreshCatalogSnapshot()
+            },
             deleteModel: requestDeleteModel,
             openMLXModelDirectory: openMLXModelDirectory,
             presentMLXSettings: { repo in
                 activeLocalASRConfigurationTarget = .mlx(repo: repo)
             },
             downloadWhisperModel: downloadWhisperModel,
+            cancelWhisperDownload: {
+                whisperModelManager.cancelDownload(id: $0)
+                refreshCatalogSnapshot()
+            },
             deleteWhisperModel: requestDeleteWhisperModel,
             openWhisperModelDirectory: openWhisperModelDirectory,
             presentWhisperSettings: {
                 activeLocalASRConfigurationTarget = .whisper(modelID: whisperModelID)
             },
             downloadCustomLLM: downloadCustomLLM,
+            cancelCustomLLMDownload: {
+                customLLMManager.cancelDownload(repo: $0)
+                refreshCatalogSnapshot()
+            },
             deleteCustomLLM: requestDeleteCustomLLM,
             openCustomLLMModelDirectory: openCustomLLMModelDirectory,
             configureASRProvider: { editingASRProvider = $0 },
@@ -467,7 +482,11 @@ struct ModelSettingsView: View {
                     updateMirrorSetting()
                 }
                 .onChange(of: modelStorageRootPath) { _, _ in
+                    mlxModelManager.refreshStorageRoot()
+                    whisperModelManager.refreshStorageRoot()
+                    customLLMManager.refreshStorageRoot()
                     refreshModelStorageDisplayPath()
+                    refreshCatalogSnapshot()
                 }
                 .onChange(of: featureSettingsRaw) { _, _ in
                     cachedFeatureSettings = FeatureSettingsStore.load(defaults: .standard)
@@ -662,7 +681,11 @@ struct ModelSettingsView: View {
         do {
             try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
             modelStorageSelectionError = nil
+            mlxModelManager.refreshStorageRoot()
+            whisperModelManager.refreshStorageRoot()
+            customLLMManager.refreshStorageRoot()
             refreshModelStorageDisplayPath()
+            refreshCatalogSnapshot()
         } catch {
             let format = NSLocalizedString("Failed to update model storage path: %@", comment: "")
             modelStorageSelectionError = String(format: format, error.localizedDescription)

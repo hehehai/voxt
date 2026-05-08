@@ -21,23 +21,29 @@ struct ModelCatalogBuilder {
     let remoteLLMBadgeText: (RemoteLLMProvider) -> String?
     let primaryUserLanguageCode: String?
     let isDownloadingModel: (String) -> Bool
+    let isPausedModel: (String) -> Bool
     let isAnotherModelDownloading: (String) -> Bool
     let isDownloadingWhisperModel: (String) -> Bool
+    let isPausedWhisperModel: (String) -> Bool
     let isAnotherWhisperModelDownloading: (String) -> Bool
     let isDownloadingCustomLLM: (String) -> Bool
+    let isPausedCustomLLM: (String) -> Bool
     let isAnotherCustomLLMDownloading: (String) -> Bool
     let isUninstallingModel: (String) -> Bool
     let isUninstallingWhisperModel: (String) -> Bool
     let isUninstallingCustomLLM: (String) -> Bool
     let downloadModel: (String) -> Void
+    let cancelModelDownload: (String) -> Void
     let deleteModel: (String) -> Void
     let openMLXModelDirectory: (String) -> Void
     let presentMLXSettings: (String) -> Void
     let downloadWhisperModel: (String) -> Void
+    let cancelWhisperDownload: (String) -> Void
     let deleteWhisperModel: (String) -> Void
     let openWhisperModelDirectory: (String) -> Void
     let presentWhisperSettings: () -> Void
     let downloadCustomLLM: (String) -> Void
+    let cancelCustomLLMDownload: (String) -> Void
     let deleteCustomLLM: (String) -> Void
     let openCustomLLMModelDirectory: (String) -> Void
     let configureASRProvider: (RemoteASRProvider) -> Void
@@ -97,17 +103,13 @@ struct ModelCatalogBuilder {
                         mlxModelManager.cancelDownload()
                     }
                 )
-            } else if ModelDownloadStateRouting.isMLXPaused(
-                repo: repo,
-                managerRepo: mlxModelManager.currentModelRepo,
-                state: mlxModelManager.state
-            ) {
+            } else if isPausedModel(repo) {
                 primaryAction = ModelTableAction(title: localized("Continue")) {
                     downloadModel(repo)
                 }
                 secondaryActions.append(
                     ModelTableAction(title: localized("Cancel"), role: .destructive) {
-                        mlxModelManager.cancelDownload()
+                        cancelModelDownload(repo)
                     }
                 )
             } else if isInstalled {
@@ -179,14 +181,13 @@ struct ModelCatalogBuilder {
                         whisperModelManager.cancelDownload()
                     }
                 )
-            } else if whisperModelManager.activeDownload?.modelID == modelID,
-                      whisperModelManager.activeDownload?.isPaused == true {
+            } else if isPausedWhisperModel(modelID) {
                 primaryAction = ModelTableAction(title: localized("Continue")) {
                     downloadWhisperModel(modelID)
                 }
                 secondaryActions.append(
                     ModelTableAction(title: localized("Cancel"), role: .destructive) {
-                        whisperModelManager.cancelDownload()
+                        cancelWhisperDownload(modelID)
                     }
                 )
             } else if isInstalled {
@@ -311,17 +312,13 @@ struct ModelCatalogBuilder {
                         customLLMManager.cancelDownload()
                     }
                 ]
-            } else if ModelDownloadStateRouting.isCustomLLMPaused(
-                repo: repo,
-                managerRepo: customLLMManager.currentModelRepo,
-                state: customLLMManager.state
-            ) {
+            } else if isPausedCustomLLM(repo) {
                 primaryAction = ModelTableAction(title: localized("Continue")) {
                     downloadCustomLLM(repo)
                 }
                 secondaryActions = [
                     ModelTableAction(title: localized("Cancel"), role: .destructive) {
-                        customLLMManager.cancelDownload()
+                        cancelCustomLLMDownload(repo)
                     }
                 ]
             } else if isInstalled {

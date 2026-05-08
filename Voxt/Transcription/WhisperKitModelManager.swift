@@ -230,6 +230,16 @@ final class WhisperKitModelManager: ObservableObject {
         pausedStatusMessageByID[Self.canonicalModelID(id)]
     }
 
+    func hasResumableDownload(id: String) -> Bool {
+        let canonicalModelID = Self.canonicalModelID(id)
+        guard !isModelDownloaded(id: canonicalModelID),
+              let rawFolder = rawModelDirectoryURL(id: canonicalModelID),
+              FileManager.default.fileExists(atPath: rawFolder.path) else {
+            return false
+        }
+        return FileManager.default.directoryContainsRegularFiles(at: rawFolder)
+    }
+
     private func downloadModel(targetID: String) async {
         if downloadTask != nil { return }
         if case .loading = state { return }
@@ -381,19 +391,65 @@ final class WhisperKitModelManager: ObservableObject {
         VoxtLog.info("Whisper download cancelled from paused state. model=\(pausedDownload.modelID)")
     }
 
+    func cancelDownload(id: String) {
+        let canonicalModelID = Self.canonicalModelID(id)
+        if downloadTask != nil, activeDownload?.modelID == canonicalModelID {
+            cancelDownload()
+            return
+        }
+        if let activeDownload, activeDownload.modelID == canonicalModelID, activeDownload.isPaused {
+            pausedStatusMessageByID.removeValue(forKey: canonicalModelID)
+            downloadErrorByID.removeValue(forKey: canonicalModelID)
+            self.activeDownload = nil
+            removeModelDirectoryIfPresent(id: canonicalModelID)
+            if canonicalModelID == modelID {
+                checkExistingModel()
+            }
+            VoxtLog.info("Whisper download cancelled from paused state. model=\(canonicalModelID)")
+            return
+        }
+
+        pausedStatusMessageByID.removeValue(forKey: canonicalModelID)
+        downloadErrorByID.removeValue(forKey: canonicalModelID)
+        removeModelDirectoryIfPresent(id: canonicalModelID)
+        if canonicalModelID == modelID {
+            checkExistingModel()
+        }
+    }
+
     func checkExistingModel() {
         guard modelDirectoryURL(id: modelID) != nil else {
-            state = .notDownloaded
+            if downloadTask == nil {
+                restorePausedDownloadIfPossible(for: modelID)
+            } else {
+                state = .notDownloaded
+            }
             downloadedStateByID[modelID] = false
             return
         }
 
+        if downloadTask == nil,
+           activeDownload?.modelID == modelID,
+           activeDownload?.isPaused == true {
+            activeDownload = nil
+        }
         downloadedStateByID[modelID] = true
         if loadedWhisper != nil, loadedModelID == modelID {
             state = .ready
         } else {
             state = .downloaded
         }
+    }
+
+    func refreshStorageRoot() {
+        downloadedStateByID.removeAll()
+        directoryLookupCacheByID.removeAll()
+        directoryLookupCachePrimed = false
+        localSizeTextByID.removeAll()
+        if downloadTask == nil {
+            activeDownload = nil
+        }
+        checkExistingModel()
     }
 
     func isModelDownloaded(id: String) -> Bool {
@@ -840,6 +896,41 @@ final class WhisperKitModelManager: ObservableObject {
     private func downloadRootURL() -> URL {
         WhisperKitModelStorageSupport.downloadRootURL(
             rootDirectory: ModelStorageDirectoryManager.resolvedRootURL()
+        )
+    }
+
+    private func restorePausedDownloadIfPossible(for modelID: String) {
+        guard hasResumableDownload(id: modelID) else {
+            if activeDownload?.modelID == modelID, activeDownload?.isPaused == true {
+                activeDownload = nil
+            }
+            state = .notDownloaded
+            return
+        }
+
+        let canonicalModelID = Self.canonicalModelID(modelID)
+        let pausedDownload = ActiveDownload(
+            modelID: canonicalModelID,
+            isPaused: true,
+            progress: 0,
+            completed: 0,
+            total: 0,
+            currentFile: nil,
+            currentFileCompleted: 0,
+            currentFileTotal: 0,
+            completedFiles: 0,
+            totalFiles: 0
+        )
+        if activeDownload?.isPaused != true || activeDownload?.modelID == canonicalModelID {
+            activeDownload = pausedDownload
+        }
+        state = .paused(
+            progress: 0,
+            completed: 0,
+            total: 0,
+            currentFile: nil,
+            completedFiles: 0,
+            totalFiles: 0
         )
     }
 

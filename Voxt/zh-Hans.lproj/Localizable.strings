@@ -243,6 +243,7 @@
 "Downloading: %@ (%@)" = "下载中：%@（%@）";
 "Downloading: %@ (%@ · %@)" = "下载中：%@（%@ · %@）";
 "Paused. Ready to continue. (%@)" = "已暂停，可继续下载（%@）";
+"Paused. Ready to continue." = "已暂停，可继续下载";
 "Paused: %@ (%@)" = "已暂停：%@（%@）";
 "Paused: %@ (%@ · %@)" = "已暂停：%@（%@ · %@）";
 "Downloading %@" = "下载中 %@";

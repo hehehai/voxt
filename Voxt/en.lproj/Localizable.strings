@@ -243,6 +243,7 @@
 "Downloading: %@ (%@)" = "Downloading: %@ (%@)";
 "Downloading: %@ (%@ · %@)" = "Downloading: %@ (%@ · %@)";
 "Paused. Ready to continue. (%@)" = "Paused. Ready to continue. (%@)";
+"Paused. Ready to continue." = "Paused. Ready to continue.";
 "Paused: %@ (%@)" = "Paused: %@ (%@)";
 "Paused: %@ (%@ · %@)" = "Paused: %@ (%@ · %@)";
 "Downloading %@" = "Downloading %@";

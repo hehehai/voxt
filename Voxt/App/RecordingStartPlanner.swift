@@ -51,7 +51,13 @@ enum RecordingStartDecision: Equatable {
 enum RecordingStartPlanner {
     static func resolve(
         selectedEngine: TranscriptionEngine,
+        selectedMLXRepo: String? = nil,
+        activeMLXDownloadRepo: String? = nil,
+        isSelectedMLXModelDownloaded: Bool = false,
         mlxModelState: MLXModelManager.ModelState,
+        selectedWhisperModelID: String? = nil,
+        activeWhisperDownloadModelID: String? = nil,
+        isSelectedWhisperModelDownloaded: Bool = false,
         whisperModelState: WhisperKitModelManager.ModelState
     ) -> RecordingStartDecision {
         switch selectedEngine {
@@ -60,24 +66,62 @@ enum RecordingStartPlanner {
         case .remote:
             return .start(.remote)
         case .mlxAudio:
+            let selectedMLXCanonicalRepo = selectedMLXRepo.map(MLXModelManager.canonicalModelRepo)
+            let activeMLXCanonicalRepo = activeMLXDownloadRepo.map(MLXModelManager.canonicalModelRepo)
+            let isSelectedMLXDownloadActive =
+                selectedMLXCanonicalRepo != nil &&
+                selectedMLXCanonicalRepo == activeMLXCanonicalRepo
+
+            if !isSelectedMLXDownloadActive,
+               isSelectedMLXModelDownloaded,
+               case .downloading = mlxModelState {
+                return .start(.mlxAudio)
+            }
+            if !isSelectedMLXDownloadActive,
+               isSelectedMLXModelDownloaded,
+               case .paused = mlxModelState {
+                return .start(.mlxAudio)
+            }
+
             switch mlxModelState {
             case .downloaded, .ready, .loading:
                 return .start(.mlxAudio)
             case .notDownloaded:
                 return .blocked(.mlxModelNotInstalled)
             case .downloading, .paused:
-                return .blocked(.mlxModelDownloading)
+                return isSelectedMLXDownloadActive
+                    ? .blocked(.mlxModelDownloading)
+                    : (isSelectedMLXModelDownloaded ? .start(.mlxAudio) : .blocked(.mlxModelNotInstalled))
             case .error:
                 return .blocked(.mlxModelUnavailable)
             }
         case .whisperKit:
+            let selectedWhisperCanonicalID = selectedWhisperModelID.map(WhisperKitModelManager.canonicalModelID)
+            let activeWhisperCanonicalID = activeWhisperDownloadModelID.map(WhisperKitModelManager.canonicalModelID)
+            let isSelectedWhisperDownloadActive =
+                selectedWhisperCanonicalID != nil &&
+                selectedWhisperCanonicalID == activeWhisperCanonicalID
+
+            if !isSelectedWhisperDownloadActive,
+               isSelectedWhisperModelDownloaded,
+               case .downloading = whisperModelState {
+                return .start(.whisperKit)
+            }
+            if !isSelectedWhisperDownloadActive,
+               isSelectedWhisperModelDownloaded,
+               case .paused = whisperModelState {
+                return .start(.whisperKit)
+            }
+
             switch whisperModelState {
             case .downloaded, .ready, .loading:
                 return .start(.whisperKit)
             case .notDownloaded:
                 return .blocked(.whisperModelNotInstalled)
             case .downloading, .paused:
-                return .blocked(.whisperModelDownloading)
+                return isSelectedWhisperDownloadActive
+                    ? .blocked(.whisperModelDownloading)
+                    : (isSelectedWhisperModelDownloaded ? .start(.whisperKit) : .blocked(.whisperModelNotInstalled))
             case .error:
                 return .blocked(.whisperModelUnavailable)
             }

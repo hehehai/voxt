@@ -483,6 +483,9 @@ extension OnboardingSettingsView {
         do {
             try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
             modelStorageSelectionError = nil
+            mlxModelManager.refreshStorageRoot()
+            whisperModelManager.refreshStorageRoot()
+            customLLMManager.refreshStorageRoot()
             refreshModelStorageDisplayPath()
         } catch {
             modelStorageSelectionError = AppLocalization.format("Failed to update model storage path: %@", error.localizedDescription)

@@ -41,7 +41,13 @@ enum MeetingStartDecision: Equatable {
 enum MeetingStartPlanner {
     static func resolve(
         selectedEngine: TranscriptionEngine,
+        selectedMLXRepo: String? = nil,
+        activeMLXDownloadRepo: String? = nil,
+        isSelectedMLXModelDownloaded: Bool = false,
         mlxModelState: MLXModelManager.ModelState,
+        selectedWhisperModelID: String? = nil,
+        activeWhisperDownloadModelID: String? = nil,
+        isSelectedWhisperModelDownloaded: Bool = false,
         whisperModelState: WhisperKitModelManager.ModelState,
         remoteASRProvider: RemoteASRProvider,
         remoteASRConfiguration: RemoteProviderConfiguration
@@ -52,7 +58,13 @@ enum MeetingStartPlanner {
         case .mlxAudio:
             switch RecordingStartPlanner.resolve(
                 selectedEngine: .mlxAudio,
+                selectedMLXRepo: selectedMLXRepo,
+                activeMLXDownloadRepo: activeMLXDownloadRepo,
+                isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
                 mlxModelState: mlxModelState,
+                selectedWhisperModelID: selectedWhisperModelID,
+                activeWhisperDownloadModelID: activeWhisperDownloadModelID,
+                isSelectedWhisperModelDownloaded: isSelectedWhisperModelDownloaded,
                 whisperModelState: whisperModelState
             ) {
             case .start:
@@ -63,7 +75,13 @@ enum MeetingStartPlanner {
         case .whisperKit:
             switch RecordingStartPlanner.resolve(
                 selectedEngine: .mlxAudio,
+                selectedMLXRepo: selectedMLXRepo,
+                activeMLXDownloadRepo: activeMLXDownloadRepo,
+                isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
                 mlxModelState: mlxModelState,
+                selectedWhisperModelID: selectedWhisperModelID,
+                activeWhisperDownloadModelID: activeWhisperDownloadModelID,
+                isSelectedWhisperModelDownloaded: isSelectedWhisperModelDownloaded,
                 whisperModelState: whisperModelState
             ) {
             case .start:

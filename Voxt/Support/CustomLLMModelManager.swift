@@ -482,6 +482,16 @@ class CustomLLMModelManager: ObservableObject {
         return isDownloaded
     }
 
+    func hasResumableDownload(repo: String) -> Bool {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        guard !isModelDownloaded(repo: canonicalRepo),
+              let modelDir = cacheDirectory(for: canonicalRepo),
+              FileManager.default.fileExists(atPath: modelDir.path) else {
+            return false
+        }
+        return FileManager.default.directoryContainsRegularFiles(at: modelDir)
+    }
+
     func modelSizeOnDisk(repo: String) -> String {
         if let cached = localSizeTextByRepo[repo] {
             return cached
@@ -547,7 +557,20 @@ class CustomLLMModelManager: ObservableObject {
         lastInvalidRepoLogged = nil
         let isDownloaded = CustomLLMModelStorageSupport.isModelDirectoryValid(modelDir)
         downloadedStateByRepo[modelRepo] = isDownloaded
-        state = isDownloaded ? .downloaded : .notDownloaded
+        if isDownloaded {
+            state = .downloaded
+        } else if downloadTask == nil, hasResumableDownload(repo: modelRepo) {
+            setPausedState(
+                progress: 0,
+                completed: 0,
+                total: 0,
+                currentFile: nil,
+                completedFiles: 0,
+                totalFiles: 0
+            )
+        } else {
+            state = .notDownloaded
+        }
         let downloaded = (state == .downloaded)
         if lastLoggedModelPresence?.repo != modelRepo || lastLoggedModelPresence?.downloaded != downloaded {
             VoxtLog.model("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(downloaded)")
@@ -627,6 +650,29 @@ class CustomLLMModelManager: ObservableObject {
     func downloadModel(repo: String) async {
         updateModel(repo: repo)
         await downloadModel()
+    }
+
+    func cancelDownload(repo: String) {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        if canonicalRepo == modelRepo {
+            cancelDownload()
+            return
+        }
+
+        if let modelDir = cacheDirectory(for: canonicalRepo) {
+            try? FileManager.default.removeItem(at: modelDir)
+        }
+        if let repoID = Repo.ID(rawValue: canonicalRepo) {
+            CustomLLMModelStorageSupport.clearHubCache(for: repoID)
+        }
+        invalidateLocalCache(for: canonicalRepo)
+    }
+
+    func refreshStorageRoot() {
+        downloadedStateByRepo.removeAll()
+        downloadedStateCachePrimed = false
+        localSizeTextByRepo.removeAll()
+        checkExistingModel()
     }
 
     func pauseDownload() {

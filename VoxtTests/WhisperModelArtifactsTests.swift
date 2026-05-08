@@ -36,6 +36,20 @@ final class WhisperModelArtifactsTests: XCTestCase {
         XCTAssertTrue(WhisperModelArtifacts.isCorruptLoadFailure(error))
     }
 
+    func testIncompleteWhisperFolderIsNotTreatedAsInstalled() throws {
+        let root = try makeTemporaryDirectory()
+        let modelDirectory = root
+            .appendingPathComponent("whisperkit")
+            .appendingPathComponent("openai_whisper-base", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("config.json"))
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertFalse(WhisperModelArtifacts.isValidModelDirectory(modelDirectory))
+        XCTAssertTrue(FileManager.default.directoryContainsRegularFiles(at: modelDirectory))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)

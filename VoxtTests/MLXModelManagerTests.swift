@@ -199,6 +199,23 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertNotNil(CustomLLMModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-8B-4bit"))
     }
 
+    func testPartialMLXDownloadDirectoryIsNotTreatedAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let partialDirectory = root
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent("mlx-community_Qwen3-ASR-0.6B-4bit-download")
+        let finalDirectory = root
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent("mlx-community_Qwen3-ASR-0.6B-4bit")
+
+        try FileManager.default.createDirectory(at: partialDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: partialDirectory.appendingPathComponent("weights.bin"))
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertTrue(FileManager.default.directoryContainsRegularFiles(at: partialDirectory))
+        XCTAssertFalse(MLXModelDownloadSupport.isModelDirectoryValid(finalDirectory, fileManager: .default))
+    }
+
     func testAllCuratedWhisperModelsHaveRemoteSizeFallbacks() {
         let missingModelIDs = WhisperKitModelManager.availableModels
             .map(\.id)

@@ -183,7 +183,10 @@ extension ModelSettingsView {
         if isPausedWhisperModel(modelID) {
             return ModelDownloadPresentationSupport.pausedActions(
                 onResume: { downloadWhisperModel(modelID) },
-                onCancel: { whisperModelManager.cancelDownload() }
+                onCancel: {
+                    whisperModelManager.cancelDownload(id: modelID)
+                    refreshCatalogSnapshot()
+                }
             )
         }
 
@@ -216,7 +219,10 @@ extension ModelSettingsView {
         if isPausedModel(repo) {
             return ModelDownloadPresentationSupport.pausedActions(
                 onResume: { downloadModel(repo) },
-                onCancel: { mlxModelManager.cancelDownload() }
+                onCancel: {
+                    mlxModelManager.cancelDownload(repo: repo)
+                    refreshCatalogSnapshot()
+                }
             )
         }
 
@@ -249,7 +255,10 @@ extension ModelSettingsView {
         if isPausedCustomLLM(repo) {
             return ModelDownloadPresentationSupport.pausedActions(
                 onResume: { downloadCustomLLM(repo) },
-                onCancel: { customLLMManager.cancelDownload() }
+                onCancel: {
+                    customLLMManager.cancelDownload(repo: repo)
+                    refreshCatalogSnapshot()
+                }
             )
         }
 
@@ -320,7 +329,7 @@ extension ModelSettingsView {
     func isDownloadingModel(_ repo: String) -> Bool {
         ModelDownloadStateRouting.isMLXDownloading(
             repo: repo,
-            managerRepo: mlxModelManager.currentModelRepo,
+            activeRepo: mlxModelManager.activeDownloadRepo,
             state: mlxModelManager.state
         )
     }
@@ -328,9 +337,9 @@ extension ModelSettingsView {
     func isPausedModel(_ repo: String) -> Bool {
         ModelDownloadStateRouting.isMLXPaused(
             repo: repo,
-            managerRepo: mlxModelManager.currentModelRepo,
+            activeRepo: mlxModelManager.activeDownloadRepo,
             state: mlxModelManager.state
-        )
+        ) || mlxModelManager.hasResumableDownload(repo: repo)
     }
 
     func isDownloadingWhisperModel(_ modelID: String) -> Bool {
@@ -339,21 +348,24 @@ extension ModelSettingsView {
     }
 
     func isPausedWhisperModel(_ modelID: String) -> Bool {
-        guard let activeDownload = whisperModelManager.activeDownload else { return false }
-        return activeDownload.modelID == WhisperKitModelManager.canonicalModelID(modelID) && activeDownload.isPaused
+        if let activeDownload = whisperModelManager.activeDownload {
+            return activeDownload.modelID == WhisperKitModelManager.canonicalModelID(modelID) && activeDownload.isPaused
+        }
+        return whisperModelManager.hasResumableDownload(id: modelID)
     }
 
     func isAnotherModelDownloading(_ repo: String) -> Bool {
         ModelDownloadStateRouting.isAnotherMLXDownloadActive(
             repo: repo,
-            managerRepo: mlxModelManager.currentModelRepo,
+            activeRepo: mlxModelManager.activeDownloadRepo,
             state: mlxModelManager.state
         )
     }
 
     func isAnotherWhisperModelDownloading(_ modelID: String) -> Bool {
-        guard let activeDownloadModelID = whisperModelManager.activeDownload?.modelID else { return false }
-        return activeDownloadModelID != WhisperKitModelManager.canonicalModelID(modelID)
+        guard let activeDownload = whisperModelManager.activeDownload,
+              activeDownload.isPaused == false else { return false }
+        return activeDownload.modelID != WhisperKitModelManager.canonicalModelID(modelID)
     }
 
     func modelStatusText(for repo: String) -> String {
@@ -379,9 +391,19 @@ extension ModelSettingsView {
             )
         }
 
+        if isPausedModel(repo) {
+            return ModelDownloadPresentationSupport.statusText(
+                downloadState: .paused(
+                    completed: 0,
+                    total: 0,
+                    pauseMessage: AppLocalization.localizedString("Paused. Ready to continue.")
+                )
+            )
+        }
+
         if ModelDownloadStateRouting.isMLXOperationTarget(
             repo: repo,
-            managerRepo: mlxModelManager.currentModelRepo
+            activeRepo: mlxModelManager.activeDownloadRepo
         ), case .error(let message) = mlxModelManager.state {
             return ModelDownloadPresentationSupport.statusText(
                 downloadState: .idle,
@@ -408,6 +430,25 @@ extension ModelSettingsView {
                 }
                 return message
             }()
+
+        if activeDownload == nil, whisperModelManager.hasResumableDownload(id: modelID) {
+            return ModelDownloadPresentationSupport.whisperStatusText(
+                activeDownload: .init(
+                    modelID: canonicalModelID,
+                    isPaused: true,
+                    progress: 0,
+                    completed: 0,
+                    total: 0,
+                    currentFile: nil,
+                    currentFileCompleted: 0,
+                    currentFileTotal: 0,
+                    completedFiles: 0,
+                    totalFiles: 0
+                ),
+                pauseMessage: AppLocalization.localizedString("Paused. Ready to continue."),
+                errorMessage: errorMessage
+            )
+        }
 
         return ModelDownloadPresentationSupport.whisperStatusText(
             activeDownload: activeDownload,
@@ -513,7 +554,7 @@ extension ModelSettingsView {
             repo: repo,
             managerRepo: customLLMManager.currentModelRepo,
             state: customLLMManager.state
-        )
+        ) || customLLMManager.hasResumableDownload(repo: repo)
     }
 
     func isAnotherCustomLLMDownloading(_ repo: String) -> Bool {
@@ -543,6 +584,16 @@ extension ModelSettingsView {
                     completed: completed,
                     total: total,
                     pauseMessage: customLLMManager.pausedStatusMessage
+                )
+            )
+        }
+
+        if isPausedCustomLLM(repo) {
+            return ModelDownloadPresentationSupport.statusText(
+                downloadState: .paused(
+                    completed: 0,
+                    total: 0,
+                    pauseMessage: AppLocalization.localizedString("Paused. Ready to continue.")
                 )
             )
         }

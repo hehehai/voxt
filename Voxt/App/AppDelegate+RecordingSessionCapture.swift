@@ -329,7 +329,7 @@ extension AppDelegate {
     }
 
     func stopActiveRecordingTranscriber() {
-        if transcriptionEngine == .mlxAudio, isMLXReady {
+        if transcriptionEngine == .mlxAudio {
             mlxTranscriber?.stopRecording()
         } else if transcriptionEngine == .whisperKit, isWhisperReady {
             if let whisperTranscriber {

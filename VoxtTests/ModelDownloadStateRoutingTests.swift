@@ -2,7 +2,7 @@ import XCTest
 @testable import Voxt
 
 final class ModelDownloadStateRoutingTests: XCTestCase {
-    func testMLXDownloadRoutingTracksManagerCurrentRepoInsteadOfSelectedRepo() {
+    func testMLXDownloadRoutingTracksActiveDownloadRepo() {
         let targetRepo = "mlx-community/Qwen3-ASR-0.6B-4bit"
         let otherRepo = "mlx-community/parakeet-tdt-0.6b-v3"
         let state = MLXModelManager.ModelState.downloading(
@@ -17,21 +17,21 @@ final class ModelDownloadStateRoutingTests: XCTestCase {
         XCTAssertTrue(
             ModelDownloadStateRouting.isMLXDownloading(
                 repo: targetRepo,
-                managerRepo: targetRepo,
+                activeRepo: targetRepo,
                 state: state
             )
         )
         XCTAssertTrue(
             ModelDownloadStateRouting.isAnotherMLXDownloadActive(
                 repo: otherRepo,
-                managerRepo: targetRepo,
+                activeRepo: targetRepo,
                 state: state
             )
         )
         XCTAssertFalse(
             ModelDownloadStateRouting.isAnotherMLXDownloadActive(
                 repo: targetRepo,
-                managerRepo: targetRepo,
+                activeRepo: targetRepo,
                 state: state
             )
         )
@@ -93,7 +93,7 @@ final class ModelDownloadStateRoutingTests: XCTestCase {
         XCTAssertTrue(
             ModelDownloadStateRouting.isMLXPaused(
                 repo: "mlx-community/Qwen3-ASR-0.6B-4bit",
-                managerRepo: "mlx-community/Qwen3-ASR-0.6B-4bit",
+                activeRepo: "mlx-community/Qwen3-ASR-0.6B-4bit",
                 state: mlxState
             )
         )

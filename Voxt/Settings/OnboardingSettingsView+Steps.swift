@@ -853,17 +853,20 @@ extension OnboardingSettingsView {
 
     var isSelectedMLXModelDownloading: Bool {
         guard case .downloading = mlxModelManager.state else { return false }
-        return MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo) == MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        guard let activeDownloadRepo = mlxModelManager.activeDownloadRepo else { return false }
+        return MLXModelManager.canonicalModelRepo(activeDownloadRepo) == MLXModelManager.canonicalModelRepo(mlxModelRepo)
     }
 
     var isAnotherMLXModelDownloading: Bool {
         guard case .downloading = mlxModelManager.state else { return false }
-        return MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo) != MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        guard let activeDownloadRepo = mlxModelManager.activeDownloadRepo else { return false }
+        return MLXModelManager.canonicalModelRepo(activeDownloadRepo) != MLXModelManager.canonicalModelRepo(mlxModelRepo)
     }
 
     var isSelectedMLXModelPaused: Bool {
         guard case .paused = mlxModelManager.state else { return false }
-        return MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo) == MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        guard let activeDownloadRepo = mlxModelManager.activeDownloadRepo else { return false }
+        return MLXModelManager.canonicalModelRepo(activeDownloadRepo) == MLXModelManager.canonicalModelRepo(mlxModelRepo)
     }
 
     var selectedMLXDownloadStatus: ModelDownloadStatusSnapshot? {

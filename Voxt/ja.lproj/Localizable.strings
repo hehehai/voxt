@@ -241,6 +241,7 @@
 "Downloading: %@ (%@)" = "ダウンロード中: %@（%@）";
 "Downloading: %@ (%@ · %@)" = "ダウンロード中: %@（%@ · %@）";
 "Paused. Ready to continue. (%@)" = "一時停止中。続行できます（%@）";
+"Paused. Ready to continue." = "一時停止中。続行できます";
 "Paused: %@ (%@)" = "一時停止中: %@（%@）";
 "Paused: %@ (%@ · %@)" = "一時停止中: %@（%@ · %@）";
 "Downloading %@" = "%@ をダウンロード中";
