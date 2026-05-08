@@ -12,7 +12,7 @@ extension AppDelegate {
             isSessionCancellationRequested: isSessionCancellationRequested
         )
         guard callbackDecision == .accept else {
-            VoxtLog.warning(
+            VoxtLog.info(
                 """
                 Dropping transcription callback before processing. reason=\(callbackDecision.logDescription), callbackSessionID=\(sessionID.uuidString), activeSessionID=\(activeRecordingSessionID.uuidString), stopped=\(recordingStoppedAt != nil), endingSessionID=\(currentEndingSessionID?.uuidString ?? "nil"), rawChars=\(rawText.count)
                 """,
