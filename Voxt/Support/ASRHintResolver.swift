@@ -23,7 +23,8 @@ enum ASRHintResolver {
         target: ASRHintTarget,
         settings: ASRHintSettings,
         userLanguageCodes: [String],
-        mlxModelRepo: String? = nil
+        mlxModelRepo: String? = nil,
+        dictionaryTerms: String = ""
     ) -> ResolvedASRHintPayload {
         let selectedOptions = selectedLanguageOptions(userLanguageCodes)
         let mainLanguage = selectedOptions.first ?? UserMainLanguageOption.fallbackOption()
@@ -32,7 +33,8 @@ enum ASRHintResolver {
             for: target,
             template: settings.promptTemplate,
             mainLanguage: mainLanguage,
-            otherLanguages: otherLanguageOptions
+            otherLanguages: otherLanguageOptions,
+            dictionaryTerms: dictionaryTerms
         )
         let otherLanguages = otherLanguageOptions.map(\.promptName)
         let usesExplicitSingleLanguageHint = settings.followsUserMainLanguage && otherLanguageOptions.isEmpty
@@ -161,7 +163,8 @@ enum ASRHintResolver {
         for target: ASRHintTarget,
         template: String,
         mainLanguage: UserMainLanguageOption,
-        otherLanguages: [UserMainLanguageOption]
+        otherLanguages: [UserMainLanguageOption],
+        dictionaryTerms: String
     ) -> String? {
         guard target.supportsPromptEditor else { return nil }
         let trimmed = template.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -178,7 +181,7 @@ enum ASRHintResolver {
             in: trimmed,
             mainLanguage: mainLanguage,
             otherLanguages: otherLanguages,
-            dictionaryTerms: "",
+            dictionaryTerms: dictionaryTerms,
             appendOtherLanguagesWhenMissing: true
         )
         let compact = resolved.trimmingCharacters(in: .whitespacesAndNewlines)

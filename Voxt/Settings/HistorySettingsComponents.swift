@@ -73,9 +73,8 @@ struct HistoryRow: View {
     let audioURL: URL?
     let isCopied: Bool
     let onCopy: () -> Void
+    let onShowInfo: () -> Void
     let onDelete: () -> Void
-
-    @State private var showModelInfo = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -125,15 +124,10 @@ struct HistoryRow: View {
 
             VStack(alignment: .trailing, spacing: 6) {
                 HStack(spacing: 8) {
-                    Button {
-                        showModelInfo.toggle()
-                    } label: {
+                    Button(action: onShowInfo) {
                         Image(systemName: "info.circle")
                     }
                     .buttonStyle(.plain)
-                    .popover(isPresented: $showModelInfo, arrowEdge: .trailing) {
-                        HistoryInfoPopover(entry: entry, audioURL: audioURL, locale: locale)
-                    }
 
                     if supportsDetail {
                         Button(localized("Detail")) {
@@ -313,22 +307,6 @@ struct HistoryRow: View {
             return
         }
         appDelegate.showTranscriptionDetailWindow(for: entry)
-    }
-}
-
-private struct HistoryInfoPopover: View {
-    let entry: TranscriptionHistoryEntry
-    let audioURL: URL?
-    let locale: Locale
-
-    var body: some View {
-        TranscriptionDetailContentView(
-            entry: entry,
-            audioURL: audioURL,
-            locale: locale,
-            style: .popover
-        )
-        .frame(maxHeight: 460)
     }
 }
 

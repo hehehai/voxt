@@ -1433,3 +1433,6 @@
 "Type" = "種類";
 "Created At" = "作成日時";
 "Meeting Segments" = "会議セグメント";
+"Start Ingest" = "取り込み開始";
+"Delete All Dictionary Terms?" = "辞書の全項目を削除しますか？";
+"This will permanently delete all dictionary terms." = "すべての辞書項目が完全に削除されます。";

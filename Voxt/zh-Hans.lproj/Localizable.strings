@@ -1510,3 +1510,6 @@
 "Type" = "类型";
 "Created At" = "创建时间";
 "Meeting Segments" = "会议分段";
+"Start Ingest" = "开始录入";
+"Delete All Dictionary Terms?" = "确认清空全部词典词条？";
+"This will permanently delete all dictionary terms." = "这会永久删除所有词典词条。";

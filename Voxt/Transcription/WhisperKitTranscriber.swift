@@ -268,6 +268,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
     var onTranscriptionFinished: ((String) -> Void)?
     var onPartialTranscription: ((String) -> Void)?
+    var dictionaryEntryProvider: (() -> [DictionaryEntry])?
     private(set) var lastStartFailureMessage: String?
     private(set) var latestWordTimings: [WhisperHistoryWordTiming] = []
 
@@ -1052,8 +1053,58 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         return ASRHintResolver.resolve(
             target: .whisperKit,
             settings: settings,
-            userLanguageCodes: userLanguageCodes
+            userLanguageCodes: userLanguageCodes,
+            dictionaryTerms: resolvedDictionaryTermsTemplateValue()
         )
+    }
+
+    private func resolvedDictionaryTermsTemplateValue() -> String {
+        let entries = dictionaryEntryProvider?() ?? []
+        guard !entries.isEmpty else { return "" }
+
+        let sortedEntries = entries.sorted {
+            if $0.matchCount != $1.matchCount {
+                return $0.matchCount > $1.matchCount
+            }
+            switch ($0.lastMatchedAt, $1.lastMatchedAt) {
+            case let (lhs?, rhs?) where lhs != rhs:
+                return lhs > rhs
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            default:
+                break
+            }
+            if $0.updatedAt != $1.updatedAt {
+                return $0.updatedAt > $1.updatedAt
+            }
+            return $0.term.localizedCaseInsensitiveCompare($1.term) == .orderedAscending
+        }
+
+        var seen = Set<String>()
+        var terms: [String] = []
+        var totalCharacters = 0
+
+        for entry in sortedEntries {
+            let trimmed = entry.term.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard seen.insert(entry.normalizedTerm).inserted else { continue }
+
+            let projectedCharacters = totalCharacters + trimmed.count + (terms.isEmpty ? 0 : 1)
+            if !terms.isEmpty && projectedCharacters > 260 {
+                break
+            }
+
+            terms.append(trimmed)
+            totalCharacters = projectedCharacters
+
+            if terms.count >= 20 || totalCharacters >= 260 {
+                break
+            }
+        }
+
+        return terms.joined(separator: "\n")
     }
 
     private func resolvedLocalTuningSettings() -> WhisperLocalTuningSettings {

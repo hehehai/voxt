@@ -50,6 +50,30 @@ struct ASRHintSettingsSheet: View {
         )
     }
 
+    private var promptVariables: [PromptTemplateVariableDescriptor] {
+        var variables = [
+            PromptTemplateVariableDescriptor(
+                token: AppPreferenceKey.asrUserMainLanguageTemplateVariable,
+                tipKey: "Template tip {{USER_MAIN_LANGUAGE}}"
+            ),
+            PromptTemplateVariableDescriptor(
+                token: AppPreferenceKey.asrUserOtherLanguagesTemplateVariable,
+                tipKey: "Template tip {{USER_OTHER_LANGUAGES}}"
+            )
+        ]
+
+        if target == .whisperKit {
+            variables.append(
+                PromptTemplateVariableDescriptor(
+                    token: AppPreferenceKey.asrDictionaryTermsTemplateVariable,
+                    tipKey: "Template tip {{DICTIONARY_TERMS}}"
+                )
+            )
+        }
+
+        return variables
+    }
+
     private var languagePreview: String {
         resolvedPayload.language ?? AppLocalization.localizedString("Automatic")
     }
@@ -128,16 +152,7 @@ struct ASRHintSettingsSheet: View {
                 PromptEditorView(
                     text: $draftSettings.promptTemplate,
                     height: 128,
-                    variables: [
-                        PromptTemplateVariableDescriptor(
-                            token: AppPreferenceKey.asrUserMainLanguageTemplateVariable,
-                            tipKey: "Template tip {{USER_MAIN_LANGUAGE}}"
-                        ),
-                        PromptTemplateVariableDescriptor(
-                            token: AppPreferenceKey.asrUserOtherLanguagesTemplateVariable,
-                            tipKey: "Template tip {{USER_OTHER_LANGUAGES}}"
-                        )
-                    ]
+                    variables: promptVariables
                 )
             }
 

@@ -8,7 +8,6 @@ private func localized(_ key: String) -> String {
 }
 
 struct DictionarySettingsView: View {
-    @AppStorage(AppPreferenceKey.dictionaryRecognitionEnabled) private var dictionaryRecognitionEnabled = true
     @AppStorage(AppPreferenceKey.dictionaryAutoLearningEnabled) private var dictionaryAutoLearningEnabled = true
     @AppStorage(AppPreferenceKey.dictionaryAutoLearningPrompt) private var storedAutomaticLearningPrompt = ""
     @AppStorage(AppPreferenceKey.dictionaryHighConfidenceCorrectionEnabled) private var dictionaryHighConfidenceCorrectionEnabled = true
@@ -25,8 +24,10 @@ struct DictionarySettingsView: View {
     @State private var selectedFilter: DictionaryFilter = .all
     @State private var dialog: DictionaryDialog?
     @State private var availableGroups: [AppBranchGroup] = []
-    @State private var showDictionaryInfo = false
+    @State private var availableGroupNamesByID: [UUID: String] = [:]
     @State private var showDictionaryAdvancedSettings = false
+    @State private var showDictionaryIngestDialog = false
+    @State private var showClearAllConfirmation = false
     @State private var suggestionFilterDraft = DictionarySuggestionFilterSettings.defaultValue
     @State private var automaticLearningPromptDraft = AppPromptDefaults.text(for: .dictionaryAutoLearning)
     @State private var historyScanModelOptions: [DictionaryHistoryScanModelOption] = []
@@ -66,22 +67,6 @@ struct DictionarySettingsView: View {
         dictionarySuggestionStore.historyScanProgress
     }
 
-    private var oneClickIngestButtonTitle: String {
-        if historyScanProgress.isRunning {
-            return historyScanProgress.isCancellationRequested
-                ? localized("Canceling...")
-                : localized("Cancel Ingest")
-        }
-        return localized("One-Click Ingest")
-    }
-
-    private var oneClickIngestButtonDisabled: Bool {
-        if historyScanProgress.isRunning {
-            return historyScanProgress.isCancellationRequested
-        }
-        return pendingHistoryScanCount == 0
-    }
-
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -109,16 +94,26 @@ struct DictionarySettingsView: View {
                 automaticLearningPromptDraft: $automaticLearningPromptDraft,
                 dictionaryHighConfidenceCorrectionEnabled: $dictionaryHighConfidenceCorrectionEnabled,
                 isPresented: $showDictionaryAdvancedSettings,
-                dictionaryRecognitionEnabled: dictionaryRecognitionEnabled,
+                onRestoreDefaultAutomaticLearningPrompt: restoreAutomaticLearningPromptToDefault,
+                onSave: saveDictionaryAdvancedSettings
+            )
+        }
+        .sheet(isPresented: $showDictionaryIngestDialog) {
+            DictionaryOneClickIngestDialog(
+                isPresented: $showDictionaryIngestDialog,
                 pendingHistoryScanCount: pendingHistoryScanCount,
                 localModelOptions: localHistoryScanModelOptions,
                 remoteModelOptions: remoteHistoryScanModelOptions,
-                selectedModelOption: selectedHistoryScanModelOption,
                 selectedModelID: $selectedHistoryScanModelID,
                 draftPrompt: $suggestionFilterDraft.prompt,
-                onRestoreDefaultAutomaticLearningPrompt: restoreAutomaticLearningPromptToDefault,
+                historyScanProgress: historyScanProgress,
+                statusText: historyScanStatusText,
+                cancellationText: historyScanCancellationText,
+                actionMessage: suggestionActionMessage,
                 onRestoreDefaultPrompt: restoreSuggestionIngestPromptToDefault,
-                onSave: saveSuggestionIngestSettings
+                onSave: saveSuggestionIngestSettings,
+                onStart: startSuggestionIngestFromDialog,
+                onCancelRunning: requestSuggestionIngestCancellation
             )
         }
         .onAppear(perform: reloadContentAsync)
@@ -131,14 +126,13 @@ struct DictionarySettingsView: View {
         .onChange(of: dictionaryStore.entries.count) { _, _ in
             resetVisibleEntryLimit()
         }
-        .onReceive(historyStore.$entries) { _ in
-            refreshPendingHistoryScanCountAsync()
-        }
-        .onReceive(dictionarySuggestionStore.$suggestions) { _ in
-            refreshPendingHistoryScanCountAsync()
-        }
-        .onChange(of: dictionarySuggestionStore.historyScanProgress) { _, _ in
-            refreshPendingHistoryScanCountAsync()
+        .alert(localized("Delete All Dictionary Terms?"), isPresented: $showClearAllConfirmation) {
+            Button(localized("Delete"), role: .destructive) {
+                dictionaryStore.clearAll()
+            }
+            Button(localized("Cancel"), role: .cancel) {}
+        } message: {
+            Text(localized("This will permanently delete all dictionary terms."))
         }
     }
 
@@ -186,72 +180,39 @@ struct DictionarySettingsView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 16) {
-                    Toggle(localized("Enable Dictionary"), isOn: $dictionaryRecognitionEnabled)
-                        .controlSize(.small)
-
-                    Button {
-                        openDictionaryAdvancedSettings()
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .foregroundStyle(.secondary)
+                    Button(localized("One-Click Ingest")) {
+                        openDictionaryIngestDialog()
                     }
-                    .buttonStyle(.plain)
-                    .help(localized("Dictionary Advanced Settings"))
-
-                    Button {
-                        showDictionaryInfo.toggle()
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $showDictionaryInfo, arrowEdge: .top) {
-                        Text(localized("Dictionary recognition injects matched terms into prompts and can correct high-confidence near matches before output."))
-                            .font(.caption)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .frame(width: 300, alignment: .leading)
-                    }
+                    .buttonStyle(SettingsPillButtonStyle())
 
                     Spacer(minLength: 12)
 
-                    Button(oneClickIngestButtonTitle) {
-                        handleOneClickIngestButton()
+                    Button {
+                        openDictionaryAdvancedSettings()
+                    }
+                    label: {
+                        Text(localized("Settings"))
                     }
                     .buttonStyle(SettingsPillButtonStyle())
-                    .disabled(oneClickIngestButtonDisabled)
+                    .help(localized("Dictionary Advanced Settings"))
 
-                    Divider()
-                        .frame(height: 16)
-
-                    Button(localized("Import")) {
-                        importDictionary()
-                    }
-                    .buttonStyle(SettingsPillButtonStyle())
-
-                    Button(localized("Export")) {
-                        exportDictionary()
-                    }
-                    .buttonStyle(SettingsPillButtonStyle())
+                    DictionaryHeaderActionMenuButton(
+                        actions: [
+                            DictionaryHeaderMenuAction(title: localized("Import"), handler: importDictionary),
+                            DictionaryHeaderMenuAction(title: localized("Export"), handler: exportDictionary)
+                        ]
+                    )
+                    .frame(width: 28, height: 28)
+                    .help(localized("More"))
                 }
 
-                if historyScanProgress.isRunning {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ProgressView(
-                            value: Double(historyScanProgress.processedCount),
-                            total: Double(max(historyScanProgress.totalCount, 1))
-                        )
-                        Text(historyScanProgress.isCancellationRequested ? historyScanCancellationText : historyScanStatusText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else if let errorMessage = historyScanProgress.errorMessage,
+                if let errorMessage = historyScanProgress.errorMessage,
                           !errorMessage.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(errorMessage)
                             .font(.caption)
                             .foregroundStyle(.red)
-                        Text(localized("Review the ingest prompt in Dictionary Advanced Settings, then run One-Click Ingest again."))
+                        Text(localized("Review the ingest prompt in One-Click Ingest, then try again."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -259,15 +220,6 @@ struct DictionarySettingsView: View {
                     Text(historyScanSummaryText(lastRunAt: lastRunAt))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                } else if pendingHistoryScanCount > 0 {
-                    Text(
-                        AppLocalization.format(
-                            "%d new history records are ready for dictionary ingestion.",
-                            pendingHistoryScanCount
-                        )
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
 
                 if let suggestionActionMessage, !suggestionActionMessage.isEmpty {
@@ -295,7 +247,7 @@ struct DictionarySettingsView: View {
                     .buttonStyle(SettingsPillButtonStyle())
 
                     Button(localized("Clean All"), role: .destructive) {
-                        dictionaryStore.clearAll()
+                        showClearAllConfirmation = true
                     }
                     .buttonStyle(SettingsStatusButtonStyle(tint: .red))
                     .disabled(dictionaryStore.entries.isEmpty)
@@ -400,7 +352,6 @@ struct DictionarySettingsView: View {
         dictionaryStore.reloadAsync()
         dictionarySuggestionStore.reloadAsync()
         refreshLocalContentState()
-        refreshPendingHistoryScanCountAsync()
     }
 
     private func refreshLocalContentState() {
@@ -416,23 +367,20 @@ struct DictionarySettingsView: View {
     }
 
     private func openDictionaryAdvancedSettings() {
-        let options = availableHistoryScanModels()
-        historyScanModelOptions = options
         automaticLearningPromptDraft = AppPromptDefaults.resolvedStoredText(
             storedAutomaticLearningPrompt,
             kind: .dictionaryAutoLearning
         )
-        suggestionFilterDraft = dictionarySuggestionStore.filterSettings
-        selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: options)
         showDictionaryAdvancedSettings = true
     }
 
-    private func handleOneClickIngestButton() {
-        if historyScanProgress.isRunning {
-            requestSuggestionIngestCancellation()
-        } else {
-            runSuggestionIngest()
-        }
+    private func openDictionaryIngestDialog() {
+        let options = availableHistoryScanModels()
+        historyScanModelOptions = options
+        suggestionFilterDraft = dictionarySuggestionStore.filterSettings
+        selectedHistoryScanModelID = resolvedDefaultHistoryScanModelID(from: options)
+        refreshPendingHistoryScanCountAsync()
+        showDictionaryIngestDialog = true
     }
 
     private func requestSuggestionIngestCancellation() {
@@ -470,7 +418,12 @@ struct DictionarySettingsView: View {
         )
     }
 
-    private func saveSuggestionIngestSettings() {
+    private func startSuggestionIngestFromDialog() {
+        saveSuggestionIngestSettings()
+        runSuggestionIngest()
+    }
+
+    private func saveDictionaryAdvancedSettings() {
         let resolvedAutomaticLearningPrompt = AppPromptDefaults.resolvedStoredText(
             automaticLearningPromptDraft,
             kind: .dictionaryAutoLearning
@@ -480,7 +433,9 @@ struct DictionarySettingsView: View {
             resolvedAutomaticLearningPrompt,
             kind: .dictionaryAutoLearning
         )
+    }
 
+    private func saveSuggestionIngestSettings() {
         let sanitized = DictionarySuggestionFilterSettings(
             prompt: suggestionFilterDraft.prompt,
             batchSize: dictionarySuggestionStore.filterSettings.batchSize,
@@ -563,9 +518,12 @@ struct DictionarySettingsView: View {
               let groups = try? JSONDecoder().decode([AppBranchGroup].self, from: data)
         else {
             availableGroups = []
+            availableGroupNamesByID = [:]
             return
         }
-        availableGroups = groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let sortedGroups = groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        availableGroups = sortedGroups
+        availableGroupNamesByID = Dictionary(uniqueKeysWithValues: sortedGroups.map { ($0.id, $0.name) })
     }
 
     private func selectedGroupName(for selectedGroupID: UUID?) -> String? {
@@ -575,7 +533,7 @@ struct DictionarySettingsView: View {
 
     private func groupName(for id: UUID?) -> String? {
         guard let id else { return nil }
-        return availableGroups.first(where: { $0.id == id })?.name
+        return availableGroupNamesByID[id]
     }
 
     private func scopeLabel(for entry: DictionaryEntry) -> String {
@@ -611,21 +569,172 @@ struct DictionarySettingsView: View {
         relative.unitsStyle = .short
         let timeText = relative.localizedString(for: lastRunAt, relativeTo: Date())
         let progress = historyScanProgress
-        if pendingHistoryScanCount > 0 {
-            return AppLocalization.format(
-                "Last scan %@ processed %d history records and added %d dictionary terms. %d new history records are waiting.",
-                timeText,
-                progress.lastProcessedCount,
-                progress.lastNewSuggestionCount,
-                pendingHistoryScanCount
-            )
-        }
         return AppLocalization.format(
             "Last scan %@ processed %d history records and added %d dictionary terms.",
             timeText,
             progress.lastProcessedCount,
             progress.lastNewSuggestionCount
         )
+    }
+}
+
+private struct DictionaryHeaderMenuAction {
+    let title: String
+    let handler: () -> Void
+}
+
+private struct DictionaryHeaderActionMenuButton: NSViewRepresentable {
+    let actions: [DictionaryHeaderMenuAction]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(actions: actions)
+    }
+
+    func makeNSView(context: Context) -> DictionaryHeaderActionMenuHostView {
+        let hostView = DictionaryHeaderActionMenuHostView()
+        hostView.toolTip = localized("More")
+        hostView.update(actions: actions, target: context.coordinator)
+        return hostView
+    }
+
+    func updateNSView(_ nsView: DictionaryHeaderActionMenuHostView, context: Context) {
+        context.coordinator.actions = actions
+        nsView.update(actions: actions, target: context.coordinator)
+    }
+
+    final class Coordinator: NSObject {
+        var actions: [DictionaryHeaderMenuAction]
+
+        init(actions: [DictionaryHeaderMenuAction]) {
+            self.actions = actions
+        }
+
+        @objc
+        func performAction(_ sender: NSMenuItem) {
+            guard actions.indices.contains(sender.tag) else { return }
+            actions[sender.tag].handler()
+        }
+    }
+}
+
+private final class DictionaryHeaderActionMenuHostView: NSView {
+    private let popupMenu = NSMenu()
+    private let iconView = NSImageView()
+    private var trackingAreaRef: NSTrackingArea?
+    private var isHovered = false {
+        didSet { updateAppearance() }
+    }
+    private var isPressed = false {
+        didSet { updateAppearance() }
+    }
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 28, height: 28)
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        popupMenu.autoenablesItems = false
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.image = NSImage(
+            systemSymbolName: "ellipsis",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
+        iconView.imageScaling = .scaleProportionallyDown
+
+        addSubview(iconView)
+
+        NSLayoutConstraint.activate([
+            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 12),
+            iconView.heightAnchor.constraint(equalToConstant: 12)
+        ])
+
+        updateAppearance()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = 9
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaRef {
+            removeTrackingArea(trackingAreaRef)
+        }
+
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        trackingAreaRef = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard !popupMenu.items.isEmpty else { return }
+        isPressed = true
+        let anchorPoint = NSPoint(x: 0, y: bounds.height + 6)
+        _ = popupMenu.popUp(positioning: nil, at: anchorPoint, in: self)
+        isPressed = false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    func update(actions: [DictionaryHeaderMenuAction], target: AnyObject) {
+        popupMenu.removeAllItems()
+        for (index, action) in actions.enumerated() {
+            let item = NSMenuItem(
+                title: action.title,
+                action: #selector(DictionaryHeaderActionMenuButton.Coordinator.performAction(_:)),
+                keyEquivalent: ""
+            )
+            item.target = target
+            item.tag = index
+            popupMenu.addItem(item)
+        }
+    }
+
+    private func updateAppearance() {
+        let fillColor: NSColor
+        if isPressed {
+            fillColor = SettingsUIStyle.subtleFillNSColor.blended(withFraction: 0.18, of: .labelColor) ?? SettingsUIStyle.subtleFillNSColor
+        } else if isHovered {
+            fillColor = SettingsUIStyle.subtleFillNSColor.blended(withFraction: 0.08, of: .labelColor) ?? SettingsUIStyle.subtleFillNSColor
+        } else {
+            fillColor = SettingsUIStyle.subtleFillNSColor
+        }
+
+        layer?.backgroundColor = fillColor.cgColor
+        layer?.borderColor = SettingsUIStyle.subtleBorderNSColor.cgColor
+        layer?.borderWidth = 1
+        iconView.contentTintColor = isPressed ? .labelColor : .secondaryLabelColor
     }
 }
 

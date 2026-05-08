@@ -269,5 +269,10 @@ enum AppPreferenceKey {
         The speaker's primary language is {{USER_MAIN_LANGUAGE}}. Prioritize accurate recognition in that language. Preserve mixed-language words, names, product terms, URLs, and code-like text exactly as spoken.
         """
 
-    static let defaultWhisperASRHintPrompt = ""
+    static let defaultWhisperASRHintPrompt = """
+        The speaker's primary language is {{USER_MAIN_LANGUAGE}}. Prioritize accurate transcription in that language while preserving mixed-language words, names, product terms, URLs, and code-like text exactly as spoken.
+
+        Prefer these dictionary terms when they match the audio:
+        {{DICTIONARY_TERMS}}
+        """
 }

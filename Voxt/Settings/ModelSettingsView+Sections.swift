@@ -414,7 +414,7 @@ private struct MLXASRConfigurationSheetView: View {
             SettingsDialogActionRow {
                 Button(localized("Reset to Default")) {
                     hintSettings = ASRHintSettingsStore.defaultSettings(for: .mlxAudio)
-                    tuningSettings = MLXLocalTuningSettings.defaults(for: .balanced)
+                    tuningSettings = MLXLocalTuningSettings.defaults(for: .balanced, family: family)
                 }
                 .buttonStyle(SettingsPillButtonStyle())
             } trailing: {
@@ -450,6 +450,12 @@ private struct WhisperASRConfigurationSheetView: View {
         PromptTemplateVariableDescriptor(
             token: AppPreferenceKey.asrUserOtherLanguagesTemplateVariable,
             tipKey: "Template tip {{USER_OTHER_LANGUAGES}}"
+        )
+    ]
+    private static let whisperPromptVariables = asrLanguageVariables + [
+        PromptTemplateVariableDescriptor(
+            token: AppPreferenceKey.asrDictionaryTermsTemplateVariable,
+            tipKey: "Template tip {{DICTIONARY_TERMS}}"
         )
     ]
 
@@ -519,7 +525,7 @@ private struct WhisperASRConfigurationSheetView: View {
 
                     Text(localized("Recognition Prompt"))
                         .font(.subheadline.weight(.medium))
-                    PromptEditorView(text: $hintSettings.promptTemplate, height: 110, variables: Self.asrLanguageVariables)
+                    PromptEditorView(text: $hintSettings.promptTemplate, height: 110, variables: Self.whisperPromptVariables)
                     Text(localized("Use a short recognition-focused prompt for names, product terms, or formatting habits. Keep it concise."))
                         .font(.caption)
                         .foregroundStyle(.secondary)

@@ -160,7 +160,14 @@ struct MLXLocalTuningSettings: Codable, Equatable {
     }
 
     static func defaults(for preset: LocalASRRecognitionPreset) -> MLXLocalTuningSettings {
-        MLXLocalTuningSettings(preset: preset)
+        defaults(for: preset, family: nil)
+    }
+
+    static func defaults(for preset: LocalASRRecognitionPreset, family: MLXModelFamily?) -> MLXLocalTuningSettings {
+        MLXLocalTuningSettings(
+            preset: preset,
+            qwenContextBias: family == .qwen3ASR ? AppPromptDefaults.text(for: .qwenASRContextBias) : ""
+        )
     }
 }
 
@@ -182,7 +189,13 @@ enum MLXLocalTuningSettingsStore {
 
     static func resolvedSettings(for repo: String, rawValue: String?) -> MLXLocalTuningSettings {
         let key = familyKey(for: repo)
-        return load(from: rawValue)[key] ?? MLXLocalTuningSettings.defaults(for: .balanced)
+        let family = MLXModelFamily.family(for: repo)
+        var settings = load(from: rawValue)[key] ?? MLXLocalTuningSettings.defaults(for: .balanced, family: family)
+        if family == .qwen3ASR,
+           settings.qwenContextBias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settings.qwenContextBias = AppPromptDefaults.text(for: .qwenASRContextBias)
+        }
+        return settings
     }
 
     static func save(_ settings: MLXLocalTuningSettings, for repo: String, rawValue: String?) -> String {

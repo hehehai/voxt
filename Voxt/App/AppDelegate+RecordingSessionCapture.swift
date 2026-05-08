@@ -87,6 +87,12 @@ extension AppDelegate {
     func startWhisperRecordingSession() {
         let whisper = whisperTranscriber ?? WhisperKitTranscriber(modelManager: whisperModelManager)
         whisperTranscriber = whisper
+        whisper.dictionaryEntryProvider = { [weak self] in
+            guard let self else { return [] }
+            return self.dictionaryStore.activeEntriesForRemoteRequest(
+                activeGroupID: self.activeDictionaryGroupID()
+            )
+        }
         let sessionID = activeRecordingSessionID
         let needsModelInitialization = !whisperModelManager.isCurrentModelLoaded
 

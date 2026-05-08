@@ -7,6 +7,7 @@ enum AppPromptKind: CaseIterable {
     case meetingSummary
     case dictionaryIngest
     case dictionaryAutoLearning
+    case qwenASRContextBias
     case openAIASRHint
     case glmASRHint
     case whisperASRHint
@@ -168,6 +169,15 @@ enum AppPromptDefaults {
             """
         case .dictionaryAutoLearning:
             return AppPreferenceKey.defaultAutomaticDictionaryLearningPrompt
+        case .qwenASRContextBias:
+            return """
+            The speaker's primary language is {{USER_MAIN_LANGUAGE}}. Other commonly used languages: {{USER_OTHER_LANGUAGES}}.
+
+            Bias recognition toward correct spelling of names, product terms, technical terminology, and mixed-language content exactly as spoken. Do not translate.
+
+            Prefer these dictionary terms when they match the audio:
+            {{DICTIONARY_TERMS}}
+            """
         case .openAIASRHint:
             return AppPreferenceKey.defaultOpenAIASRHintPrompt
         case .glmASRHint:
@@ -416,12 +426,26 @@ enum AppPromptDefaults {
             输出严格 JSON，格式必须是如下数组对象：
             [{"term":"示例"}]
             """
+        case .qwenASRContextBias:
+            return """
+            说话者的主要语言是 {{USER_MAIN_LANGUAGE}}，其他常用语言是 {{USER_OTHER_LANGUAGES}}。
+
+            请将识别偏向于人名、产品名、技术术语和混合语言内容的正确拼写，并保持与原始发音一致，不要翻译。
+
+            当音频中确实出现这些词时，请优先参考下列词典词汇：
+            {{DICTIONARY_TERMS}}
+            """
         case .openAIASRHint:
             return "说话者的主要语言是 {{USER_MAIN_LANGUAGE}}。请优先保证该语言的识别准确性，同时按原样保留混合语言词汇、人名、产品术语、URL 和类似代码的文本。"
         case .glmASRHint:
             return "说话者的主要语言是 {{USER_MAIN_LANGUAGE}}。请优先保证该语言的识别准确性，并按原样保留人名、术语、混合语言内容和类似代码的文本。"
         case .whisperASRHint:
-            return ""
+            return """
+            说话者的主要语言是 {{USER_MAIN_LANGUAGE}}。请优先保证该语言的识别准确性，同时按原样保留混合语言词汇、人名、产品术语、URL 和类似代码的文本。
+
+            当音频中确实出现这些词时，请优先参考下列词典词汇：
+            {{DICTIONARY_TERMS}}
+            """
         }
     }
 
@@ -662,12 +686,26 @@ enum AppPromptDefaults {
             出力は必ず次の形式の厳密な JSON 配列にしてください：
             [{"term":"Example"}]
             """
+        case .qwenASRContextBias:
+            return """
+            話者の主要言語は {{USER_MAIN_LANGUAGE}}、その他のよく使う言語は {{USER_OTHER_LANGUAGES}} です。
+
+            人名、製品名、技術用語、混在言語の内容について、発話どおりの正しい綴りに認識を寄せてください。翻訳はしないでください。
+
+            音声内で実際に一致する場合は、次の辞書語を優先して参考にしてください：
+            {{DICTIONARY_TERMS}}
+            """
         case .openAIASRHint:
             return "話者の主要言語は {{USER_MAIN_LANGUAGE}} です。その言語での認識精度を優先しつつ、混在言語の語句、人名、製品用語、URL、コード風テキストは発話どおりに保持してください。"
         case .glmASRHint:
             return "話者の主要言語は {{USER_MAIN_LANGUAGE}} です。その言語での認識精度を優先し、人名、用語、混在言語の内容、コード風テキストは発話どおりに保持してください。"
         case .whisperASRHint:
-            return ""
+            return """
+            話者の主要言語は {{USER_MAIN_LANGUAGE}} です。その言語での認識精度を優先しつつ、混在言語の語句、人名、製品用語、URL、コード風テキストは発話どおりに保持してください。
+
+            音声内で実際に一致する場合は、次の辞書語を優先して参考にしてください：
+            {{DICTIONARY_TERMS}}
+            """
         }
     }
 }

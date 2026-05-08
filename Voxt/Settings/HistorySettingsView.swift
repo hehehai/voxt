@@ -22,6 +22,7 @@ private enum HistoryBulkDeletionTarget: Identifiable {
 struct HistorySettingsView: View {
     private static let pageSize = 40
 
+    @Environment(\.locale) private var locale
     @AppStorage(AppPreferenceKey.historyCleanupEnabled) private var historyCleanupEnabled = true
     @AppStorage(AppPreferenceKey.historyRetentionPeriod) private var historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
     @AppStorage(AppPreferenceKey.historyAudioStorageEnabled) private var historyAudioStorageEnabled = false
@@ -41,17 +42,25 @@ struct HistorySettingsView: View {
     @State private var historyAudioExportResultMessage: String?
     @State private var historyAudioStorageStats = HistoryAudioStorageStats(storedFileCount: 0, totalBytes: 0)
     @State private var pendingBulkDeletionTarget: HistoryBulkDeletionTarget?
+    @State private var selectedHistoryInfoEntry: TranscriptionHistoryEntry?
 
     private var historyRetentionPeriod: HistoryRetentionPeriod {
         HistoryRetentionPeriod(rawValue: historyRetentionPeriodRaw) ?? .ninetyDays
     }
 
-    private var allEntries: [TranscriptionHistoryEntry] {
-        historyStore.allHistoryEntries
-    }
-
     private var filteredEntries: [TranscriptionHistoryEntry] {
-        allEntries.filter { selectedFilter.matches($0) }
+        switch selectedFilter {
+        case .transcription:
+            historyStore.historyEntries(for: .normal)
+        case .translation:
+            historyStore.historyEntries(for: .translation)
+        case .rewrite:
+            historyStore.historyEntries(for: .rewrite)
+        case .meeting:
+            historyStore.historyEntries(for: .meeting)
+        case .note:
+            []
+        }
     }
 
     private var allNotes: [VoxtNoteItem] {
@@ -85,33 +94,16 @@ struct HistorySettingsView: View {
                     GroupBox {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(alignment: .center, spacing: 12) {
-                                Toggle(localized("History Cleanup"), isOn: $historyCleanupEnabled)
-                                Spacer(minLength: 12)
-                                if historyCleanupEnabled {
-                                    Text(localized("Retention"))
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                    SettingsMenuPicker(
-                                        selection: $historyRetentionPeriodRaw,
-                                        options: HistoryRetentionPeriod.allCases.map { option in
-                                            SettingsMenuOption(value: option.rawValue, title: option.title)
-                                        },
-                                        selectedTitle: historyRetentionPeriod.title,
-                                        width: 160
-                                    )
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                    }
-                    .settingsNavigationAnchor(.historySettings)
-
-                    GroupBox {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(alignment: .center, spacing: 12) {
                                 HistoryFilterTabPicker(selectedTab: $selectedFilter)
                                 Spacer(minLength: 12)
+                                Button {
+                                    pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(SettingsCompactIconButtonStyle(tone: .destructive))
+                                .help(localized("Delete All"))
+                                .disabled(isNoteTabSelected ? allNotes.isEmpty : historyStore.allHistoryEntries.isEmpty)
                                 Button {
                                     historyAudioStorageSelectionError = nil
                                     historyAudioExportResultMessage = nil
@@ -120,21 +112,13 @@ struct HistorySettingsView: View {
                                     Image(systemName: "gearshape")
                                 }
                                 .buttonStyle(SettingsCompactIconButtonStyle())
-                                Button {
-                                    pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(SettingsCompactIconButtonStyle(tone: .destructive))
-                                .help(localized("Delete All"))
-                                .disabled(isNoteTabSelected ? allNotes.isEmpty : allEntries.isEmpty)
                             }
 
                             if isNoteTabSelected && allNotes.isEmpty {
                                 Text(localized("No notes yet."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                            } else if !isNoteTabSelected && allEntries.isEmpty {
+                            } else if !isNoteTabSelected && historyStore.allHistoryEntries.isEmpty {
                                 Text(localized("No history yet."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -202,6 +186,9 @@ struct HistorySettingsView: View {
                                                         }
                                                     }
                                                 },
+                                                onShowInfo: {
+                                                    selectedHistoryInfoEntry = entry
+                                                },
                                                 onDelete: {
                                                     copiedEntryID = nil
                                                     historyStore.delete(id: entry.id)
@@ -229,6 +216,7 @@ struct HistorySettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                     }
+                    .settingsNavigationAnchor(.historySettings)
                     .settingsNavigationAnchor(.historyEntries)
                     .frame(maxHeight: .infinity, alignment: .top)
                 }
@@ -244,6 +232,14 @@ struct HistorySettingsView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .sheet(isPresented: $isHistoryAudioSettingsPresented) {
             historyAudioSettingsSheet
+        }
+        .sheet(item: $selectedHistoryInfoEntry) { entry in
+            HistoryDetailSheetContent(
+                entry: entry,
+                audioURL: historyStore.audioURL(for: entry),
+                locale: locale
+            )
+            .frame(minWidth: 520, idealWidth: 620, minHeight: 480, idealHeight: 640)
         }
         .alert(item: $pendingBulkDeletionTarget) { target in
             Alert(
@@ -349,8 +345,32 @@ struct HistorySettingsView: View {
 
     private var historyAudioSettingsSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(localized("History Audio Settings"))
+            Text(localized("History Settings"))
                 .font(.title3.weight(.semibold))
+
+            GeneralSettingsCard(titleText: localized("Cleanup")) {
+                Toggle(localized("History Cleanup"), isOn: $historyCleanupEnabled)
+
+                if historyCleanupEnabled {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(localized("Retention"))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        SettingsMenuPicker(
+                            selection: $historyRetentionPeriodRaw,
+                            options: HistoryRetentionPeriod.allCases.map { option in
+                                SettingsMenuOption(value: option.rawValue, title: option.title)
+                            },
+                            selectedTitle: historyRetentionPeriod.title,
+                            width: 160
+                        )
+                    }
+                } else {
+                    Text(localized("When disabled, Voxt keeps history entries until you delete them manually."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             GeneralSettingsCard(titleText: localized("Audio Storage")) {
                 Toggle(localized("Save history audio"), isOn: $historyAudioStorageEnabled)
@@ -516,5 +536,44 @@ struct HistorySettingsView: View {
             )
         }
         refreshHistoryAudioStorageStats()
+    }
+}
+
+private struct HistoryDetailSheetContent: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let entry: TranscriptionHistoryEntry
+    let audioURL: URL?
+    let locale: Locale
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(localized("Details"))
+                    .font(.title3.weight(.semibold))
+
+                Spacer(minLength: 12)
+
+                Button(localized("Close")) {
+                    dismiss()
+                }
+                .buttonStyle(SettingsPillButtonStyle())
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
+
+            Divider()
+
+            TranscriptionDetailContentView(
+                entry: entry,
+                audioURL: audioURL,
+                locale: locale,
+                style: .window
+            )
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
     }
 }

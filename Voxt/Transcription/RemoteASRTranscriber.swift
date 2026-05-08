@@ -579,7 +579,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let dictionaryPayload = DoubaoDictionaryRequestPayloadBuilder.build(
             configuration: configuration,
             entries: doubaoDictionaryEntryProvider?() ?? [],
-            dictionaryEnabled: UserDefaults.standard.object(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) as? Bool ?? true
+            dictionaryEnabled: true
         )
         return DoubaoASRConfiguration.fullRequestPayload(
             requestID: requestID,

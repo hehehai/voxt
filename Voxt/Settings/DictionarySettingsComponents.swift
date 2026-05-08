@@ -83,7 +83,6 @@ struct DictionaryRow: View {
         if !entry.replacementTerms.isEmpty {
             parts.append(AppLocalization.format("Aliases %d", entry.replacementTerms.count))
         }
-        parts.append(AppLocalization.format("Variants %d", entry.observedVariants.count))
         if let lastMatchedAt = entry.lastMatchedAt {
             parts.append(
                 AppLocalization.format(

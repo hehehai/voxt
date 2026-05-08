@@ -216,6 +216,7 @@ final class TranscriptionHistoryStore: ObservableObject {
     @Published private(set) var entries: [TranscriptionHistoryEntry] = []
 
     private var allEntries: [TranscriptionHistoryEntry] = []
+    private var entriesByKind: [TranscriptionHistoryKind: [TranscriptionHistoryEntry]] = [:]
     private var loadedCount = 0
     private var reloadGeneration = 0
     private let pageSize = 40
@@ -237,6 +238,10 @@ final class TranscriptionHistoryStore: ObservableObject {
 
     var allHistoryEntries: [TranscriptionHistoryEntry] {
         allEntries
+    }
+
+    func historyEntries(for kind: TranscriptionHistoryKind) -> [TranscriptionHistoryEntry] {
+        entriesByKind[kind] ?? []
     }
 
     func entry(id: UUID) -> TranscriptionHistoryEntry? {
@@ -386,7 +391,8 @@ final class TranscriptionHistoryStore: ObservableObject {
         _ = applyRetentionPolicyIfNeeded()
 
         loadedCount = min(max(loadedCount + 1, pageSize), allEntries.count)
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
         return entry.id
     }
@@ -395,7 +401,8 @@ final class TranscriptionHistoryStore: ObservableObject {
         let removed = allEntries.filter { $0.id == id }
         allEntries.removeAll { $0.id == id }
         loadedCount = min(loadedCount, allEntries.count)
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         removed.forEach(removeAudioIfNeeded(for:))
         persist()
     }
@@ -403,8 +410,9 @@ final class TranscriptionHistoryStore: ObservableObject {
     func clearAll() {
         allEntries.forEach(removeAudioIfNeeded(for:))
         allEntries = []
-        entries = []
         loadedCount = 0
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
     }
 
@@ -536,7 +544,8 @@ final class TranscriptionHistoryStore: ObservableObject {
         }
 
         guard didChange else { return }
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
     }
 
@@ -556,7 +565,8 @@ final class TranscriptionHistoryStore: ObservableObject {
         }
 
         guard didChange else { return }
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
     }
 
@@ -564,7 +574,8 @@ final class TranscriptionHistoryStore: ObservableObject {
     func updateMeetingSummary(_ summary: MeetingSummarySnapshot?, for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let index = allEntries.firstIndex(where: { $0.id == entryID }) else { return nil }
         allEntries[index] = allEntries[index].updatingMeetingSummary(summary)
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
         return allEntries[index]
     }
@@ -573,7 +584,8 @@ final class TranscriptionHistoryStore: ObservableObject {
     func updateMeetingSummaryChatMessages(_ messages: [MeetingSummaryChatMessage], for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let index = allEntries.firstIndex(where: { $0.id == entryID }) else { return nil }
         allEntries[index] = allEntries[index].updatingMeetingSummaryChatMessages(messages)
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
         return allEntries[index]
     }
@@ -582,7 +594,8 @@ final class TranscriptionHistoryStore: ObservableObject {
     func updateTranscriptionChatMessages(_ messages: [MeetingSummaryChatMessage], for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let index = allEntries.firstIndex(where: { $0.id == entryID }) else { return nil }
         allEntries[index] = allEntries[index].updatingTranscriptionChatMessages(messages)
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
         return allEntries[index]
     }
@@ -621,7 +634,8 @@ final class TranscriptionHistoryStore: ObservableObject {
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
         allEntries.sort { $0.createdAt > $1.createdAt }
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
         persist()
         return allEntries.first(where: { $0.id == entryID })
     }
@@ -659,7 +673,8 @@ final class TranscriptionHistoryStore: ObservableObject {
         }
 
         loadedCount = min(targetLoadedCount, allEntries.count)
-        entries = Array(allEntries.prefix(loadedCount))
+        refreshEntryIndexes()
+        publishVisibleEntries()
 
         if didPrune {
             persist()
@@ -676,6 +691,14 @@ final class TranscriptionHistoryStore: ObservableObject {
         allEntries.removeAll { $0.createdAt < cutoff }
         removedEntries.forEach(removeAudioIfNeeded(for:))
         return allEntries.count != originalCount
+    }
+
+    private func refreshEntryIndexes() {
+        entriesByKind = Dictionary(grouping: allEntries, by: \.kind)
+    }
+
+    private func publishVisibleEntries() {
+        entries = Array(allEntries.prefix(loadedCount))
     }
 
     private func historyFileURL() throws -> URL {

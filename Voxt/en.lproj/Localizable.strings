@@ -1508,3 +1508,6 @@
 "Type" = "Type";
 "Created At" = "Created At";
 "Meeting Segments" = "Meeting Segments";
+"Start Ingest" = "Start Ingest";
+"Delete All Dictionary Terms?" = "Delete All Dictionary Terms?";
+"This will permanently delete all dictionary terms." = "This will permanently delete all dictionary terms.";

@@ -298,6 +298,7 @@ final class DictionaryStore: ObservableObject {
     private let defaults = UserDefaults.standard
     private let fileManager = FileManager.default
     private var reloadGeneration = 0
+    private var filteredEntriesCache: [DictionaryFilter: [DictionaryEntry]] = [:]
     private let persistenceCoordinator = AsyncJSONPersistenceCoordinator(
         label: "com.voxt.dictionary.persistence"
     )
@@ -354,14 +355,60 @@ final class DictionaryStore: ObservableObject {
     }
 
     func filteredEntries(for filter: DictionaryFilter) -> [DictionaryEntry] {
-        switch filter {
-        case .all:
-            return entries
-        case .autoAdded:
-            return entries.filter { $0.source == .auto }
-        case .manualAdded:
-            return entries.filter { $0.source == .manual }
+        filteredEntriesCache[filter] ?? entries
+    }
+
+    func promptBiasTermsText(
+        activeGroupID: UUID?,
+        maxCount: Int = 24,
+        maxCharacters: Int = 320
+    ) -> String {
+        let candidates = activeEntriesForRemoteRequest(activeGroupID: activeGroupID)
+        guard !candidates.isEmpty, maxCount > 0, maxCharacters > 0 else { return "" }
+
+        let sortedCandidates = candidates.sorted {
+            if $0.matchCount != $1.matchCount {
+                return $0.matchCount > $1.matchCount
+            }
+            switch ($0.lastMatchedAt, $1.lastMatchedAt) {
+            case let (lhs?, rhs?) where lhs != rhs:
+                return lhs > rhs
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            default:
+                break
+            }
+            if $0.updatedAt != $1.updatedAt {
+                return $0.updatedAt > $1.updatedAt
+            }
+            return $0.term.localizedCaseInsensitiveCompare($1.term) == .orderedAscending
         }
+
+        var seen = Set<String>()
+        var selectedTerms: [String] = []
+        var totalCharacters = 0
+
+        for entry in sortedCandidates {
+            let trimmed = entry.term.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard seen.insert(entry.normalizedTerm).inserted else { continue }
+
+            let projectedCharacters = totalCharacters + trimmed.count + (selectedTerms.isEmpty ? 0 : 1)
+            if !selectedTerms.isEmpty && projectedCharacters > maxCharacters {
+                break
+            }
+
+            selectedTerms.append(trimmed)
+            totalCharacters = projectedCharacters
+
+            if selectedTerms.count >= maxCount || totalCharacters >= maxCharacters {
+                break
+            }
+        }
+
+        return selectedTerms.joined(separator: "\n")
     }
 
     func createManualEntry(
@@ -417,8 +464,9 @@ final class DictionaryStore: ObservableObject {
             updatedAt: now,
             replacementTerms: prepared.replacementTerms
         )
-        entries.insert(entry, at: 0)
-        entries = sortEntries(entries)
+        var updatedEntries = entries
+        updatedEntries.insert(entry, at: 0)
+        replaceEntries(updatedEntries)
         persist()
     }
 
@@ -445,17 +493,17 @@ final class DictionaryStore: ObservableObject {
 
         let reservedKeys = Set([prepared.normalized] + prepared.replacementTerms.map(\.normalizedText))
         entries[index].observedVariants.removeAll { reservedKeys.contains($0.normalizedText) }
-        entries = sortEntries(entries)
+        replaceEntries(entries)
         persist()
     }
 
     func delete(id: UUID) {
-        entries.removeAll { $0.id == id }
+        replaceEntries(entries.filter { $0.id != id }, sort: false)
         persist()
     }
 
     func clearAll() {
-        entries = []
+        replaceEntries([], sort: false)
         persist()
     }
 
@@ -469,7 +517,6 @@ final class DictionaryStore: ObservableObject {
     }
 
     func makeMatcherIfEnabled(activeGroupID: UUID?) -> DictionaryMatcher? {
-        guard defaults.bool(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) else { return nil }
         let configuration = matcherConfiguration(for: activeGroupID)
         guard !configuration.entries.isEmpty else { return nil }
         return DictionaryMatcher(
@@ -510,19 +557,17 @@ final class DictionaryStore: ObservableObject {
     }
 
     func activeEntriesForRemoteRequest(activeGroupID: UUID?) -> [DictionaryEntry] {
-        guard defaults.bool(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) else { return [] }
         return matcherConfiguration(for: activeGroupID).entries.filter { $0.status == .active }
     }
 
     func activeEntriesAcrossAllScopesForRemoteSync() -> [DictionaryEntry] {
-        guard defaults.bool(forKey: AppPreferenceKey.dictionaryRecognitionEnabled) else { return [] }
         return entries.filter { $0.status == .active }
     }
 
     func recordMatches(_ candidates: [DictionaryMatchCandidate]) {
         recordCandidates(candidates)
         guard !candidates.isEmpty else { return }
-        entries = sortEntries(entries)
+        replaceEntries(entries)
         persist()
     }
 
@@ -660,7 +705,7 @@ final class DictionaryStore: ObservableObject {
             }
         }
 
-        entries = sortEntries(mergedEntries)
+        replaceEntries(mergedEntries)
         persist()
         return DictionaryImportResult(addedCount: addedCount, skippedCount: skippedCount)
     }
@@ -767,6 +812,16 @@ final class DictionaryStore: ObservableObject {
     }
 
     private func applyReloadedEntries(_ decodedEntries: [DictionaryEntry]) {
-        entries = sortEntries(decodedEntries)
+        replaceEntries(decodedEntries)
+    }
+
+    private func replaceEntries(_ values: [DictionaryEntry], sort: Bool = true) {
+        let resolvedEntries = sort ? sortEntries(values) : values
+        entries = resolvedEntries
+        filteredEntriesCache = [
+            .all: resolvedEntries,
+            .autoAdded: resolvedEntries.filter { $0.source == .auto },
+            .manualAdded: resolvedEntries.filter { $0.source == .manual }
+        ]
     }
 }
