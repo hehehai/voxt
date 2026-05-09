@@ -52,6 +52,22 @@ final class AutomaticDictionaryLearningMonitorTests: XCTestCase {
         XCTAssertLessThanOrEqual(request.editRatio, AutomaticDictionaryLearningMonitor.maximumEditRatio)
     }
 
+    func testBuildsLearningRequestForMultiClauseChineseCorrectionWithoutMergingWholeSentence() {
+        let outcome = AutomaticDictionaryLearningMonitor.makeLearningRequest(
+            insertedText: "看一下我们投坑中有没有新的词源了。这个新的词源也需要接飞。",
+            baselineText: "看一下我们投坑中有没有新的词源了。这个新的词源也需要接飞。",
+            finalText: "看一下我们投坑中有没有新的词元了。这个新的词元也需要接入。"
+        )
+
+        guard case .ready(let request) = outcome else {
+            return XCTFail("Expected ready outcome, got \(outcome)")
+        }
+
+        XCTAssertEqual(request.baselineChangedFragment, "词源")
+        XCTAssertEqual(request.finalChangedFragment, "词元")
+        XCTAssertLessThanOrEqual(request.editRatio, AutomaticDictionaryLearningMonitor.maximumEditRatio)
+    }
+
     func testDirectCandidateTermsFallbackReturnsFinalCorrectedToolName() {
         let request = AutomaticDictionaryLearningRequest(
             insertedText: "帮我看一下我们的 WeChat 里面有没有 Cloud Code 新发的消息。",

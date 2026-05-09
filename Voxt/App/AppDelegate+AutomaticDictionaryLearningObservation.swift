@@ -126,6 +126,7 @@ extension AppDelegate {
             baselineText: baselineScopedText
         )
         var lastChangeAt: Date?
+        var didLogDeferredAnalysis = false
         let deadline = Date().addingTimeInterval(
             AutomaticDictionaryLearningMonitor.observationWindowSeconds
         )
@@ -162,9 +163,12 @@ extension AppDelegate {
                             baselineText: baselineScopedText,
                             currentFinalText: state.latestText
                        ) {
-                        VoxtLog.info(
-                            "Automatic dictionary learning deferred analysis: latest observed edit still looks like an incomplete deletion/replacement."
-                        )
+                        if !didLogDeferredAnalysis {
+                            VoxtLog.info(
+                                "Automatic dictionary learning deferred analysis: latest observed edit still looks like an incomplete deletion/replacement."
+                            )
+                            didLogDeferredAnalysis = true
+                        }
                         continue
                     }
 
@@ -175,20 +179,16 @@ extension AppDelegate {
                     VoxtLog.info(
                         "Automatic dictionary learning observed input change. previousChars=\(previousText.count), currentChars=\(scopedText.count), role=\(snapshot.role ?? "unknown"), editable=\(snapshot.isEditable), focused=\(snapshot.isFocusedTarget), textSource=\(snapshot.textSource ?? "nil")"
                     )
+                    didLogDeferredAnalysis = false
                     lastChangeAt = Date()
                 case .stopWithoutAnalysis:
                     shouldTerminateObservation = true
                 case .settleForAnalysis:
-                    VoxtLog.info(
-                        "Automatic dictionary learning observed stable edit while input is still focused; waiting for focus loss or observation timeout."
-                    )
                     shouldTerminateObservation = AutomaticDictionaryLearningMonitor.shouldFinalizeWhileFocused(
                         decision: .settleForAnalysis(finalText: state.latestText)
                     )
                 }
             } else {
-                VoxtLog.info("Automatic dictionary learning poll skipped: no focused input snapshot.")
-
                 switch AutomaticDictionaryLearningMonitor.observeMissingSnapshot(state: &state) {
                 case .continueObserving:
                     continue

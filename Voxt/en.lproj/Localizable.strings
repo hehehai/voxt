@@ -1331,7 +1331,10 @@
 "Meeting HTTP · US (Virginia)" = "Meeting HTTP · US (Virginia)";
 "Back" = "Back";
 "Clear" = "Clear";
+"Correct" = "Correct";
 "Confirm" = "Confirm";
+"Corrected text cannot be empty." = "Corrected text cannot be empty.";
+"Please modify the text before correcting." = "Please modify the text before correcting.";
 "Current active dictionary terms are sent with each Doubao ASR request." = "Current active dictionary terms are sent with each Doubao ASR request.";
 "Dictionary Boosting" = "Dictionary Boosting";
 "Do not send Voxt dictionary terms to Doubao." = "Do not send Voxt dictionary terms to Doubao.";

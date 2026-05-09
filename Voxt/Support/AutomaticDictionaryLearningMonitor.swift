@@ -79,6 +79,11 @@ enum AutomaticDictionaryLearningMonitor {
         let containsDeletionOnlyChangeGroup: Bool
     }
 
+    private struct ScoredSemanticChangeSummary {
+        let summary: SemanticChangeSummary
+        let score: Int
+    }
+
     enum RequestOutcome: Equatable {
         case ready(AutomaticDictionaryLearningRequest)
         case skipped(reason: String)
@@ -743,11 +748,335 @@ enum AutomaticDictionaryLearningMonitor {
         let deletionOnlyGroupExists = relevantGroups.contains {
             $0.baselineStartToken != nil && $0.finalStartToken == nil
         }
+        let candidateGroups = semanticCandidateGroups(
+            relevantGroups: relevantGroups,
+            baselineText: baselineText,
+            baselineTokens: baselineTokens,
+            finalText: finalText,
+            finalTokens: finalTokens
+        )
+        guard let selectedSummary = bestSemanticChangeSummary(
+            candidateGroups: candidateGroups,
+            relevantGroups: relevantGroups,
+            baselineText: baselineText,
+            baselineTokens: baselineTokens,
+            finalText: finalText,
+            finalTokens: finalTokens
+        ) else {
+            return SemanticChangeSummary(
+                baselineRange: NSRange(location: 0, length: 0),
+                finalRange: NSRange(location: 0, length: 0),
+                baselineFragment: "",
+                finalFragment: "",
+                baselineChangedCharacterCount: 0,
+                finalChangedCharacterCount: 0,
+                containsDeletionOnlyChangeGroup: deletionOnlyGroupExists
+            )
+        }
 
-        let baselineStartToken = relevantGroups.compactMap(\.baselineStartToken).min()
-        let baselineEndToken = relevantGroups.compactMap(\.baselineEndToken).max()
-        let finalStartToken = relevantGroups.compactMap(\.finalStartToken).min()
-        let finalEndToken = relevantGroups.compactMap(\.finalEndToken).max()
+        return SemanticChangeSummary(
+            baselineRange: selectedSummary.baselineRange,
+            finalRange: selectedSummary.finalRange,
+            baselineFragment: selectedSummary.baselineFragment,
+            finalFragment: selectedSummary.finalFragment,
+            baselineChangedCharacterCount: selectedSummary.baselineChangedCharacterCount,
+            finalChangedCharacterCount: selectedSummary.finalChangedCharacterCount,
+            containsDeletionOnlyChangeGroup: deletionOnlyGroupExists
+        )
+    }
+
+    private static func semanticCandidateGroups(
+        relevantGroups: [SemanticChangeGroup],
+        baselineText: String,
+        baselineTokens: [SemanticToken],
+        finalText: String,
+        finalTokens: [SemanticToken]
+    ) -> [SemanticChangeGroup] {
+        guard !relevantGroups.isEmpty else {
+            return []
+        }
+
+        var candidates: [SemanticChangeGroup] = []
+        func appendUnique(_ group: SemanticChangeGroup) {
+            guard !candidates.contains(group) else { return }
+            candidates.append(group)
+        }
+
+        for group in relevantGroups {
+            appendUnique(group)
+        }
+
+        let clusteredGroups = clusteredSemanticChangeGroups(
+            relevantGroups: relevantGroups,
+            baselineText: baselineText,
+            baselineTokens: baselineTokens,
+            finalText: finalText,
+            finalTokens: finalTokens
+        )
+        for group in clusteredGroups {
+            appendUnique(group)
+        }
+
+        if clusteredGroups.count <= 1,
+           let mergedGroup = mergeSemanticChangeGroups(relevantGroups) {
+            appendUnique(mergedGroup)
+        }
+
+        return candidates
+    }
+
+    private static func clusteredSemanticChangeGroups(
+        relevantGroups: [SemanticChangeGroup],
+        baselineText: String,
+        baselineTokens: [SemanticToken],
+        finalText: String,
+        finalTokens: [SemanticToken]
+    ) -> [SemanticChangeGroup] {
+        guard var current = relevantGroups.first else {
+            return []
+        }
+
+        var clusters: [SemanticChangeGroup] = []
+
+        for next in relevantGroups.dropFirst() {
+            if shouldMergeSemanticChangeGroups(
+                current,
+                next,
+                baselineText: baselineText,
+                baselineTokens: baselineTokens,
+                finalText: finalText,
+                finalTokens: finalTokens
+            ),
+               let merged = mergeSemanticChangeGroups([current, next]) {
+                current = merged
+            } else {
+                clusters.append(current)
+                current = next
+            }
+        }
+
+        clusters.append(current)
+        return clusters
+    }
+
+    private static func shouldMergeSemanticChangeGroups(
+        _ lhs: SemanticChangeGroup,
+        _ rhs: SemanticChangeGroup,
+        baselineText: String,
+        baselineTokens: [SemanticToken],
+        finalText: String,
+        finalTokens: [SemanticToken]
+    ) -> Bool {
+        let maximumTokenGap = 3
+
+        if let baselineGap = tokenGapSize(lhs.baselineEndToken, rhs.baselineStartToken),
+           baselineGap > maximumTokenGap {
+            return false
+        }
+        if let finalGap = tokenGapSize(lhs.finalEndToken, rhs.finalStartToken),
+           finalGap > maximumTokenGap {
+            return false
+        }
+
+        if hasClauseBoundaryBetween(
+            text: baselineText,
+            tokens: baselineTokens,
+            leftEndToken: lhs.baselineEndToken,
+            rightStartToken: rhs.baselineStartToken
+        ) {
+            return false
+        }
+        if hasClauseBoundaryBetween(
+            text: finalText,
+            tokens: finalTokens,
+            leftEndToken: lhs.finalEndToken,
+            rightStartToken: rhs.finalStartToken
+        ) {
+            return false
+        }
+
+        return true
+    }
+
+    private static func mergeSemanticChangeGroups(
+        _ groups: [SemanticChangeGroup]
+    ) -> SemanticChangeGroup? {
+        guard !groups.isEmpty else {
+            return nil
+        }
+        return SemanticChangeGroup(
+            baselineStartToken: groups.compactMap(\.baselineStartToken).min(),
+            baselineEndToken: groups.compactMap(\.baselineEndToken).max(),
+            finalStartToken: groups.compactMap(\.finalStartToken).min(),
+            finalEndToken: groups.compactMap(\.finalEndToken).max()
+        )
+    }
+
+    private static func tokenGapSize(_ leftEndToken: Int?, _ rightStartToken: Int?) -> Int? {
+        guard let leftEndToken, let rightStartToken else {
+            return nil
+        }
+        return max(0, rightStartToken - leftEndToken - 1)
+    }
+
+    private static func hasClauseBoundaryBetween(
+        text: String,
+        tokens: [SemanticToken],
+        leftEndToken: Int?,
+        rightStartToken: Int?
+    ) -> Bool {
+        guard let leftEndToken,
+              let rightStartToken,
+              leftEndToken >= 0,
+              rightStartToken >= 0,
+              leftEndToken < tokens.count,
+              rightStartToken < tokens.count,
+              leftEndToken < rightStartToken else {
+            return false
+        }
+
+        let start = tokens[leftEndToken].end
+        let end = tokens[rightStartToken].start
+        let characters = Array(text)
+        guard start < end, end <= characters.count else {
+            return false
+        }
+
+        return characters[start..<end].contains { clauseBoundaryCharacters.contains($0) }
+    }
+
+    private static func bestSemanticChangeSummary(
+        candidateGroups: [SemanticChangeGroup],
+        relevantGroups: [SemanticChangeGroup],
+        baselineText: String,
+        baselineTokens: [SemanticToken],
+        finalText: String,
+        finalTokens: [SemanticToken]
+    ) -> SemanticChangeSummary? {
+        var best: ScoredSemanticChangeSummary?
+
+        for group in candidateGroups {
+            let prefersPhraseCompletion = !relevantGroups.contains(group)
+            let summary = semanticChangeSummary(
+                baselineText: baselineText,
+                baselineTokens: baselineTokens,
+                baselineStartToken: group.baselineStartToken,
+                baselineEndToken: group.baselineEndToken,
+                finalText: finalText,
+                finalTokens: finalTokens,
+                finalStartToken: group.finalStartToken,
+                finalEndToken: group.finalEndToken,
+                allowSharedTrailingIdeographicSuffixExpansion: prefersPhraseCompletion || relevantGroups.count == 1
+            )
+
+            let score = semanticChangeSummaryScore(summary) + semanticPhraseCompletionBonus(
+                summary,
+                prefersPhraseCompletion: prefersPhraseCompletion
+            )
+            guard score > Int.min else {
+                continue
+            }
+
+            if let best, best.score >= score {
+                continue
+            }
+            best = ScoredSemanticChangeSummary(summary: summary, score: score)
+        }
+
+        return best?.summary
+    }
+
+    private static func semanticChangeSummaryScore(_ summary: SemanticChangeSummary) -> Int {
+        let baselineFragment = summary.baselineFragment
+        let finalFragment = summary.finalFragment
+        let baselineMeaningful = DictionaryStore.normalizeTerm(baselineFragment)
+        let finalMeaningful = DictionaryStore.normalizeTerm(finalFragment)
+
+        guard !baselineMeaningful.isEmpty || !finalMeaningful.isEmpty else {
+            return Int.min
+        }
+
+        let maximumFragmentLength = max(baselineFragment.count, finalFragment.count)
+        let punctuationPenalty = sentenceBoundaryPenalty(in: baselineFragment) + sentenceBoundaryPenalty(in: finalFragment)
+
+        var score = 0
+        if isDirectCandidateTermLike(finalFragment) {
+            score += 120
+        }
+        if isDirectCandidateTermLike(baselineFragment) {
+            score += 60
+        }
+        if containsMixedScript(finalFragment) {
+            score += 60
+        }
+        if containsMixedScript(baselineFragment) {
+            score += 25
+        }
+        if maximumFragmentLength <= 12 {
+            score += 25
+        }
+        if summary.baselineChangedCharacterCount <= 12, summary.finalChangedCharacterCount <= 12 {
+            score += 25
+        }
+
+        score -= maximumFragmentLength
+        score -= max(summary.baselineChangedCharacterCount, summary.finalChangedCharacterCount)
+        score -= punctuationPenalty
+
+        return score
+    }
+
+    private static func semanticPhraseCompletionBonus(
+        _ summary: SemanticChangeSummary,
+        prefersPhraseCompletion: Bool
+    ) -> Int {
+        guard prefersPhraseCompletion else {
+            return 0
+        }
+
+        let baselineFragment = summary.baselineFragment
+        let finalFragment = summary.finalFragment
+        var score = 0
+
+        if containsMixedScript(finalFragment) || containsMixedScript(baselineFragment) {
+            score += 45
+        }
+        if isDirectCandidateTermLike(finalFragment),
+           finalFragment.count >= 4 {
+            score += 20
+        }
+
+        return score
+    }
+
+    private static func sentenceBoundaryPenalty(in text: String) -> Int {
+        text.reduce(into: 0) { partial, character in
+            if clauseBoundaryCharacters.contains(character) {
+                partial += 40
+            }
+            if character == "\n" {
+                partial += 60
+            }
+        }
+    }
+
+    private static func containsMixedScript(_ text: String) -> Bool {
+        let hasASCIIWord = text.contains { isASCIIWordCharacter($0) }
+        let hasIdeographic = text.contains { isIdeographicCharacter($0) }
+        return hasASCIIWord && hasIdeographic
+    }
+
+    private static func semanticChangeSummary(
+        baselineText: String,
+        baselineTokens: [SemanticToken],
+        baselineStartToken: Int?,
+        baselineEndToken: Int?,
+        finalText: String,
+        finalTokens: [SemanticToken],
+        finalStartToken: Int?,
+        finalEndToken: Int?,
+        allowSharedTrailingIdeographicSuffixExpansion: Bool
+    ) -> SemanticChangeSummary {
         let shouldExpandForwardPhrase =
             shouldExpandForwardPhrase(
                 in: baselineText,
@@ -774,14 +1103,16 @@ enum AutomaticDictionaryLearningMonitor {
                 endToken: finalEndToken
             )
             : finalEndToken
-        let sharedContiguousSuffixLength = sharedContiguousSuffixLength(
-            baselineText: baselineText,
-            baselineTokens: baselineTokens,
-            baselineEndToken: adjustedBaselineEndToken,
-            finalText: finalText,
-            finalTokens: finalTokens,
-            finalEndToken: adjustedFinalEndToken
-        )
+        let sharedContiguousSuffixLength = allowSharedTrailingIdeographicSuffixExpansion
+            ? sharedContiguousSuffixLength(
+                baselineText: baselineText,
+                baselineTokens: baselineTokens,
+                baselineEndToken: adjustedBaselineEndToken,
+                finalText: finalText,
+                finalTokens: finalTokens,
+                finalEndToken: adjustedFinalEndToken
+            )
+            : 0
         let fullyAdjustedBaselineEndToken = adjustedBaselineEndToken.map {
             min($0 + sharedContiguousSuffixLength, baselineTokens.count - 1)
         }
@@ -815,12 +1146,20 @@ enum AutomaticDictionaryLearningMonitor {
             startToken: trimmedBounds.2,
             endToken: trimmedBounds.3
         )
-        let expandedRanges = expandingSharedIdeographicSuffixRanges(
+        let prefixExpandedRanges = expandingSharedIdeographicPrefixRanges(
             baselineText: baselineText,
             baselineRange: baselineRange,
             finalText: finalText,
             finalRange: finalRange
         )
+        let expandedRanges = allowSharedTrailingIdeographicSuffixExpansion
+            ? expandingSharedIdeographicSuffixRanges(
+                baselineText: baselineText,
+                baselineRange: prefixExpandedRanges.0,
+                finalText: finalText,
+                finalRange: prefixExpandedRanges.1
+            )
+            : prefixExpandedRanges
         return SemanticChangeSummary(
             baselineRange: expandedRanges.0,
             finalRange: expandedRanges.1,
@@ -828,7 +1167,7 @@ enum AutomaticDictionaryLearningMonitor {
             finalFragment: fragment(in: finalText, range: expandedRanges.1),
             baselineChangedCharacterCount: expandedRanges.0.length,
             finalChangedCharacterCount: expandedRanges.1.length,
-            containsDeletionOnlyChangeGroup: deletionOnlyGroupExists
+            containsDeletionOnlyChangeGroup: false
         )
     }
 
@@ -1161,6 +1500,61 @@ enum AutomaticDictionaryLearningMonitor {
         )
     }
 
+    private static func expandingSharedIdeographicPrefixRanges(
+        baselineText: String,
+        baselineRange: NSRange,
+        finalText: String,
+        finalRange: NSRange
+    ) -> (NSRange, NSRange) {
+        let baselineChars = Array(baselineText)
+        let finalChars = Array(finalText)
+        guard baselineRange.length > 0, finalRange.length > 0 else {
+            return (baselineRange, finalRange)
+        }
+        guard baselineRange.location + baselineRange.length <= baselineChars.count,
+              finalRange.location + finalRange.length <= finalChars.count else {
+            return (baselineRange, finalRange)
+        }
+
+        var baselineStart = baselineRange.location
+        var finalStart = finalRange.location
+
+        while baselineStart > 0,
+              finalStart > 0 {
+            let baselinePrevious = baselineChars[baselineStart - 1]
+            let finalPrevious = finalChars[finalStart - 1]
+            guard baselinePrevious == finalPrevious,
+                  isIdeographicCharacter(baselinePrevious),
+                  !commonIdeographicSuffixStopCharacters.contains(baselinePrevious),
+                  isContiguousWithoutWhitespace(
+                    baselineText,
+                    previousEnd: baselineStart - 1,
+                    nextStart: baselineStart
+                  ),
+                  isContiguousWithoutWhitespace(
+                    finalText,
+                    previousEnd: finalStart - 1,
+                    nextStart: finalStart
+                  ) else {
+                break
+            }
+
+            baselineStart -= 1
+            finalStart -= 1
+        }
+
+        return (
+            NSRange(
+                location: baselineStart,
+                length: baselineRange.location + baselineRange.length - baselineStart
+            ),
+            NSRange(
+                location: finalStart,
+                length: finalRange.location + finalRange.length - finalStart
+            )
+        )
+    }
+
     private static func isASCIIWordToken(_ token: SemanticToken) -> Bool {
         token.text.allSatisfy { isASCIIWordCharacter($0) }
     }
@@ -1218,6 +1612,7 @@ enum AutomaticDictionaryLearningMonitor {
     }
 
     private static let commonIdeographicSuffixStopCharacters: Set<Character> = ["的", "了", "呢", "吗", "啊", "呀", "吧"]
+    private static let clauseBoundaryCharacters: Set<Character> = ["。", "！", "？", "；", ".", "!", "?", ";", "\n"]
 
     private static func fragment(in text: String, range: NSRange) -> String {
         guard let swiftRange = Range(range, in: text) else { return "" }

@@ -633,6 +633,37 @@ final class TranscriptionHistoryStore: ObservableObject {
         persist()
     }
 
+    func replaceDictionaryCorrectionResult(
+        historyID: UUID,
+        updatedText: String,
+        correctedTerms: [String],
+        correctionSnapshots: [DictionaryCorrectionSnapshot]
+    ) {
+        guard let index = allEntries.firstIndex(where: { $0.id == historyID }) else { return }
+
+        let trimmedUpdatedText = updatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let mergedTerms = mergeUniqueTerms(
+            existing: allEntries[index].dictionaryCorrectedTerms,
+            incoming: correctedTerms
+        )
+
+        guard !trimmedUpdatedText.isEmpty else { return }
+        let didTextChange = trimmedUpdatedText != allEntries[index].text
+        let didTermsChange = mergedTerms != allEntries[index].dictionaryCorrectedTerms
+        let didSnapshotsChange = correctionSnapshots != allEntries[index].dictionaryCorrectionSnapshots
+        guard didTextChange || didTermsChange || didSnapshotsChange else { return }
+
+        allEntries[index] = allEntries[index].updatingDictionaryCorrectionResult(
+            text: trimmedUpdatedText,
+            dictionaryCorrectedTerms: mergedTerms,
+            dictionaryCorrectionSnapshots: correctionSnapshots
+        )
+
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        persist()
+    }
+
     @discardableResult
     func updateMeetingSummary(_ summary: MeetingSummarySnapshot?, for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let index = allEntries.firstIndex(where: { $0.id == entryID }) else { return nil }

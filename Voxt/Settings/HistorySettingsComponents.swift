@@ -109,13 +109,6 @@ struct HistoryRow: View {
                             }
                         }
                     }
-
-                    if !entry.dictionaryHitTerms.isEmpty {
-                        Text("\(localized("Matched dictionary terms")): \(matchedTermsPreview)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -238,15 +231,6 @@ struct HistoryRow: View {
             )
             .foregroundStyle(color)
     }
-
-    private var matchedTermsPreview: String {
-        let previewTerms = Array(entry.dictionaryHitTerms.prefix(3))
-        let base = previewTerms.joined(separator: ", ")
-        let remainingCount = entry.dictionaryHitTerms.count - previewTerms.count
-        guard remainingCount > 0 else { return base }
-        return "\(base) +\(remainingCount)"
-    }
-
     private func formattedDuration(_ seconds: TimeInterval?) -> String? {
         guard let seconds else { return nil }
         if seconds < 1 {

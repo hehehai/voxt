@@ -10,24 +10,21 @@ enum TranscriptionDetailPresentationStyle {
 }
 
 struct TranscriptionDetailContentView: View {
-    let entry: TranscriptionHistoryEntry
-    let audioURL: URL?
+    @ObservedObject var viewModel: TranscriptionDetailViewModel
     let locale: Locale
     let style: TranscriptionDetailPresentationStyle
 
     @StateObject private var playbackController: HistoryAudioPlaybackController
 
     init(
-        entry: TranscriptionHistoryEntry,
-        audioURL: URL?,
+        viewModel: TranscriptionDetailViewModel,
         locale: Locale,
         style: TranscriptionDetailPresentationStyle
     ) {
-        self.entry = entry
-        self.audioURL = audioURL
+        self.viewModel = viewModel
         self.locale = locale
         self.style = style
-        _playbackController = StateObject(wrappedValue: HistoryAudioPlaybackController(audioURL: audioURL))
+        _playbackController = StateObject(wrappedValue: HistoryAudioPlaybackController(audioURL: viewModel.audioURL))
     }
 
     private var preferredContentWidth: CGFloat? {
@@ -57,44 +54,104 @@ struct TranscriptionDetailContentView: View {
     }
 
     private var hasDictionaryActivity: Bool {
-        !entry.dictionaryHitTerms.isEmpty ||
-        !entry.dictionaryCorrectedTerms.isEmpty ||
-        !entry.dictionarySuggestedTerms.isEmpty
+        !viewModel.entry.dictionaryHitTerms.isEmpty ||
+        !viewModel.entry.dictionaryCorrectedTerms.isEmpty ||
+        !viewModel.entry.dictionarySuggestedTerms.isEmpty
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: stackSpacing) {
-                detailSection(title: localized("Text")) {
-                    correctionPreviewText
-                        .font(.system(size: style == .popover ? 13 : 14, weight: .medium))
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                detailSection(
+                    title: localized("Text"),
+                    trailing: {
+                        if viewModel.canShowManualCorrection {
+                            if viewModel.isEditingCorrection {
+                                HStack(spacing: 8) {
+                                    Button(localized("Cancel")) {
+                                        viewModel.cancelManualCorrection()
+                                    }
+                                    .buttonStyle(SettingsPillButtonStyle())
+                                    .disabled(viewModel.isSubmittingCorrection)
+
+                                    Button {
+                                        viewModel.submitManualCorrection()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            if viewModel.isSubmittingCorrection {
+                                                ProgressView()
+                                                    .controlSize(.small)
+                                                Text(localized("Loading…"))
+                                            } else {
+                                                Text(localized("Confirm"))
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(SettingsPillButtonStyle())
+                                    .disabled(!viewModel.canConfirmManualCorrection)
+                                }
+                            } else {
+                                Button(localized("Correct")) {
+                                    viewModel.beginManualCorrection()
+                                }
+                                .buttonStyle(SettingsPillButtonStyle())
+                            }
+                        }
+                    }
+                ) {
+                    if viewModel.isEditingCorrection {
+                        TextEditor(text: $viewModel.correctionDraft)
+                            .font(.system(size: style == .popover ? 13 : 14, weight: .medium))
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: style == .popover ? 120 : 160)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color(nsColor: .textBackgroundColor))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color(nsColor: .quaternaryLabelColor).opacity(0.25), lineWidth: 1)
+                            )
+
+                        if let errorMessage = viewModel.correctionErrorMessage,
+                           !errorMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } else {
+                        correctionPreviewText
+                            .font(.system(size: style == .popover ? 13 : 14, weight: .medium))
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
                 }
 
                 detailSection(title: localized("Metadata")) {
-                    detailLine(label: localized("Type"), value: historyKindTitle(entry.kind))
-                    detailLine(label: localized("Created At"), value: formattedDate(entry.createdAt))
-                    detailLine(label: localized("Engine"), value: entry.transcriptionEngine)
-                    detailLine(label: localized("Model"), value: entry.transcriptionModel)
-                    detailLine(label: modeMetadataLabel(for: entry.kind), value: entry.enhancementMode)
-                    detailLine(label: modelMetadataLabel(for: entry.kind), value: entry.enhancementModel)
-                    optionalDetailLine(label: localized("Audio Duration"), value: formattedDuration(entry.audioDurationSeconds))
-                    optionalDetailLine(label: localized("ASR Processing"), value: formattedDuration(entry.transcriptionProcessingDurationSeconds))
-                    optionalDetailLine(label: localized("LLM Duration"), value: formattedDuration(entry.llmDurationSeconds))
-                    optionalDetailLine(label: localized("Remote ASR Provider"), value: entry.remoteASRProvider)
-                    optionalDetailLine(label: localized("Remote ASR Model"), value: entry.remoteASRModel)
-                    optionalDetailLine(label: localized("Remote ASR Endpoint"), value: entry.remoteASREndpoint)
-                    optionalDetailLine(label: localized("Remote LLM Provider"), value: entry.remoteLLMProvider)
-                    optionalDetailLine(label: localized("Remote LLM Model"), value: entry.remoteLLMModel)
-                    optionalDetailLine(label: localized("Remote LLM Endpoint"), value: entry.remoteLLMEndpoint)
-                    optionalDetailLine(label: localized("Focused App"), value: entry.focusedAppName)
-                    optionalDetailLine(label: localized("Focused App Bundle ID"), value: entry.focusedAppBundleID)
-                    optionalDetailLine(label: localized("Matched Group"), value: entry.matchedGroupName)
-                    optionalDetailLine(label: localized("App Group"), value: entry.matchedAppGroupName)
-                    optionalDetailLine(label: localized("URL Group"), value: entry.matchedURLGroupName)
+                    detailLine(label: localized("Type"), value: historyKindTitle(viewModel.entry.kind))
+                    detailLine(label: localized("Created At"), value: formattedDate(viewModel.entry.createdAt))
+                    detailLine(label: localized("Engine"), value: viewModel.entry.transcriptionEngine)
+                    detailLine(label: localized("Model"), value: viewModel.entry.transcriptionModel)
+                    detailLine(label: modeMetadataLabel(for: viewModel.entry.kind), value: viewModel.entry.enhancementMode)
+                    detailLine(label: modelMetadataLabel(for: viewModel.entry.kind), value: viewModel.entry.enhancementModel)
+                    optionalDetailLine(label: localized("Audio Duration"), value: formattedDuration(viewModel.entry.audioDurationSeconds))
+                    optionalDetailLine(label: localized("ASR Processing"), value: formattedDuration(viewModel.entry.transcriptionProcessingDurationSeconds))
+                    optionalDetailLine(label: localized("LLM Duration"), value: formattedDuration(viewModel.entry.llmDurationSeconds))
+                    optionalDetailLine(label: localized("Remote ASR Provider"), value: viewModel.entry.remoteASRProvider)
+                    optionalDetailLine(label: localized("Remote ASR Model"), value: viewModel.entry.remoteASRModel)
+                    optionalDetailLine(label: localized("Remote ASR Endpoint"), value: viewModel.entry.remoteASREndpoint)
+                    optionalDetailLine(label: localized("Remote LLM Provider"), value: viewModel.entry.remoteLLMProvider)
+                    optionalDetailLine(label: localized("Remote LLM Model"), value: viewModel.entry.remoteLLMModel)
+                    optionalDetailLine(label: localized("Remote LLM Endpoint"), value: viewModel.entry.remoteLLMEndpoint)
+                    optionalDetailLine(label: localized("Focused App"), value: viewModel.entry.focusedAppName)
+                    optionalDetailLine(label: localized("Focused App Bundle ID"), value: viewModel.entry.focusedAppBundleID)
+                    optionalDetailLine(label: localized("Matched Group"), value: viewModel.entry.matchedGroupName)
+                    optionalDetailLine(label: localized("App Group"), value: viewModel.entry.matchedAppGroupName)
+                    optionalDetailLine(label: localized("URL Group"), value: viewModel.entry.matchedURLGroupName)
                 }
 
                 if playbackController.isAvailable {
@@ -106,7 +163,7 @@ struct TranscriptionDetailContentView: View {
                     }
                 }
 
-                if let whisperWordTimings = entry.whisperWordTimings,
+                if let whisperWordTimings = viewModel.entry.whisperWordTimings,
                    !whisperWordTimings.isEmpty {
                     detailSection(title: localized("Whisper Timestamps")) {
                         ForEach(Array(whisperWordTimings.enumerated()), id: \.offset) { _, timing in
@@ -118,7 +175,7 @@ struct TranscriptionDetailContentView: View {
                     }
                 }
 
-                if let meetingSegments = entry.meetingSegments,
+                if let meetingSegments = viewModel.entry.meetingSegments,
                    !meetingSegments.isEmpty {
                     detailSection(title: localized("Meeting Segments")) {
                         ForEach(meetingSegments) { segment in
@@ -132,22 +189,22 @@ struct TranscriptionDetailContentView: View {
 
                 if hasDictionaryActivity {
                     detailSection(title: localized("Dictionary")) {
-                        if !entry.dictionaryHitTerms.isEmpty {
+                        if !viewModel.entry.dictionaryHitTerms.isEmpty {
                             detailTagGroup(
                                 title: localized("Matched dictionary terms"),
-                                values: entry.dictionaryHitTerms
+                                values: viewModel.entry.dictionaryHitTerms
                             )
                         }
-                        if !entry.dictionaryCorrectedTerms.isEmpty {
+                        if !viewModel.entry.dictionaryCorrectedTerms.isEmpty {
                             detailTagGroup(
                                 title: localized("Corrected terms"),
-                                values: entry.dictionaryCorrectedTerms
+                                values: viewModel.entry.dictionaryCorrectedTerms
                             )
                         }
-                        if !entry.dictionarySuggestedTerms.isEmpty {
+                        if !viewModel.entry.dictionarySuggestedTerms.isEmpty {
                             detailTagGroup(
                                 title: localized("Suggested terms"),
-                                values: entry.dictionarySuggestedTerms.map(\.term)
+                                values: viewModel.entry.dictionarySuggestedTerms.map(\.term)
                             )
                         }
                     }
@@ -158,17 +215,36 @@ struct TranscriptionDetailContentView: View {
             .frame(width: preferredContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .onChange(of: audioURL?.path) { _, _ in
-            playbackController.loadAudio(audioURL)
+        .onChange(of: viewModel.audioURL?.path) { _, _ in
+            playbackController.loadAudio(viewModel.audioURL)
+        }
+        .overlay(alignment: .top) {
+            if !viewModel.toastMessage.isEmpty {
+                ModelDebugToast(message: viewModel.toastMessage) {
+                    viewModel.dismissToast()
+                }
+                .padding(.top, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
     }
 
     @ViewBuilder
-    private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func detailSection<Trailing: View, Content: View>(
+        title: String,
+        @ViewBuilder trailing: () -> Trailing,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: sectionSpacing) {
-            Text(title)
-                .font(sectionTitleFont)
-                .foregroundStyle(.primary)
+            HStack(alignment: .center, spacing: 10) {
+                Text(title)
+                    .font(sectionTitleFont)
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 8)
+
+                trailing()
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 content()
@@ -184,6 +260,11 @@ struct TranscriptionDetailContentView: View {
                     .strokeBorder(style == .popover ? Color.clear : Color(nsColor: .quaternaryLabelColor).opacity(0.18), lineWidth: 1)
             )
         }
+    }
+
+    @ViewBuilder
+    private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        detailSection(title: title, trailing: { EmptyView() }, content: content)
     }
 
     private func detailLine(label: String, value: String) -> some View {
@@ -228,8 +309,8 @@ struct TranscriptionDetailContentView: View {
 
     private var correctionPreviewText: Text {
         HistoryCorrectionPresentation.segments(
-            for: entry.text,
-            snapshots: entry.dictionaryCorrectionSnapshots
+            for: viewModel.entry.text,
+            snapshots: viewModel.entry.dictionaryCorrectionSnapshots
         ).reduce(Text("")) { partial, segment in
             partial + styledText(for: segment)
         }

@@ -1258,7 +1258,10 @@
 "Meeting HTTP · US (Virginia)" = "会議 HTTP · 米国（バージニア）";
 "Back" = "戻る";
 "Clear" = "クリア";
+"Correct" = "修正";
 "Confirm" = "確認";
+"Corrected text cannot be empty." = "修正後のテキストは空にできません。";
+"Please modify the text before correcting." = "修正する前にテキストを変更してください。";
 "Current active dictionary terms are sent with each Doubao ASR request." = "現在有効な辞書語は、各 Doubao ASR リクエストと一緒に送信されます。";
 "Dictionary Boosting" = "辞書ブースト";
 "Do not send Voxt dictionary terms to Doubao." = "Voxt の辞書語を Doubao に送信しません。";

@@ -18,10 +18,6 @@ extension AppDelegate {
             "Automatic dictionary learning analysis started. model=\(automaticDictionaryLearningModelDescription(model)), historyEntryID=\(historyEntryID?.uuidString ?? "nil")"
         )
         let existingTerms = dictionaryStore.entries.map(\.term)
-        let directCandidateTerms = AutomaticDictionaryLearningMonitor.directCandidateTerms(
-            for: request,
-            existingTerms: existingTerms
-        )
         let prompt = AutomaticDictionaryLearningMonitor.buildPrompt(
             template: dictionaryAutoLearningPrompt,
             for: request,
@@ -29,10 +25,15 @@ extension AppDelegate {
             userMainLanguage: userMainLanguagePromptValue,
             userOtherLanguages: userOtherMainLanguagesPromptValue
         )
+        let directCandidateTerms = AutomaticDictionaryLearningMonitor.directCandidateTerms(
+            for: request,
+            existingTerms: existingTerms
+        )
         let scannedTerms = try await runAutomaticDictionaryLearningPrompt(prompt, model: model)
-        let mergedTerms = mergeAutomaticDictionaryLearningTerms(
+        let mergedTerms = mergeDictionaryLearningTerms(
             directCandidateTerms,
             scannedTerms,
+            excludeExistingTerms: true,
             existingTerms: existingTerms
         )
         VoxtLog.info(
@@ -63,6 +64,97 @@ extension AppDelegate {
         }
         showOverlayStatus(automaticDictionaryLearningSuccessMessage(for: addedTerms), clearAfter: 3.2)
         VoxtLog.info("Automatic dictionary learning added terms: \(addedTerms.joined(separator: ", "))")
+    }
+
+    func applyManualDictionaryCorrection(
+        entry: TranscriptionHistoryEntry,
+        correctedText rawCorrectedText: String
+    ) async throws -> TranscriptionHistoryEntry? {
+        let correctedText = rawCorrectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baselineText = HistoryCorrectionPresentation.correctedText(
+            for: entry.text,
+            snapshots: entry.dictionaryCorrectionSnapshots
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard entry.kind == .normal else {
+            return historyStore.entry(id: entry.id) ?? entry
+        }
+        guard !correctedText.isEmpty else {
+            throw NSError(
+                domain: "Voxt.ManualDictionaryCorrection",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Corrected text cannot be empty.")]
+            )
+        }
+        guard correctedText != baselineText else {
+            return historyStore.entry(id: entry.id) ?? entry
+        }
+
+        let existingTerms = dictionaryStore.entries.map(\.term)
+        var correctedTerms: [String] = []
+        var correctionSnapshots: [DictionaryCorrectionSnapshot] = []
+
+        let requestOutcome = AutomaticDictionaryLearningMonitor.makeLearningRequest(
+            insertedText: baselineText,
+            baselineText: baselineText,
+            finalText: correctedText
+        )
+        switch requestOutcome {
+        case .ready(let request):
+            let directCandidateTerms = AutomaticDictionaryLearningMonitor.directCandidateTerms(
+                for: request,
+                existingTerms: existingTerms
+            )
+            var scannedTerms: [String] = []
+            if let model = try? resolvedAutomaticDictionaryLearningModel() {
+                let prompt = AutomaticDictionaryLearningMonitor.buildPrompt(
+                    template: dictionaryAutoLearningPrompt,
+                    for: request,
+                    existingTerms: existingTerms,
+                    userMainLanguage: userMainLanguagePromptValue,
+                    userOtherLanguages: userOtherMainLanguagesPromptValue
+                )
+                do {
+                    scannedTerms = try await runAutomaticDictionaryLearningPrompt(prompt, model: model)
+                } catch {
+                    VoxtLog.warning("Manual dictionary correction term analysis failed: \(error)")
+                }
+            }
+
+            correctedTerms = mergeDictionaryLearningTerms(
+                directCandidateTerms,
+                scannedTerms,
+                excludeExistingTerms: false,
+                existingTerms: existingTerms
+            )
+            correctionSnapshots = automaticDictionaryLearningHistorySnapshots(
+                request: request,
+                updatedText: correctedText
+            )
+        case .skipped(let reason):
+            VoxtLog.info("Manual dictionary correction skipped term analysis: \(reason)")
+        }
+
+        let matchedGroupID = entry.matchedGroupID ?? currentDictionaryScope().groupID
+        let matchedGroupName = entry.matchedGroupName ?? currentDictionaryScope().groupName
+        let addedTerms = persistAutomaticDictionaryLearningTerms(
+            correctedTerms,
+            groupID: matchedGroupID,
+            groupNameSnapshot: matchedGroupName
+        )
+
+        historyStore.replaceDictionaryCorrectionResult(
+            historyID: entry.id,
+            updatedText: correctedText,
+            correctedTerms: correctedTerms,
+            correctionSnapshots: correctionSnapshots
+        )
+
+        if !addedTerms.isEmpty {
+            showOverlayStatus(automaticDictionaryLearningSuccessMessage(for: addedTerms), clearAfter: 3.2)
+        }
+
+        return historyStore.entry(id: entry.id)
     }
 
     private func persistAutomaticDictionaryLearningTerms(
@@ -97,9 +189,10 @@ extension AppDelegate {
         return addedTerms
     }
 
-    private func mergeAutomaticDictionaryLearningTerms(
+    private func mergeDictionaryLearningTerms(
         _ directTerms: [String],
         _ modelTerms: [String],
+        excludeExistingTerms: Bool,
         existingTerms: [String]
     ) -> [String] {
         let existingNormalized = Set(existingTerms.map(DictionaryStore.normalizeTerm))
@@ -109,8 +202,10 @@ extension AppDelegate {
         for term in directTerms + modelTerms {
             let normalized = DictionaryStore.normalizeTerm(term)
             guard !normalized.isEmpty,
-                  !existingNormalized.contains(normalized),
                   !seen.contains(normalized) else {
+                continue
+            }
+            if excludeExistingTerms, existingNormalized.contains(normalized) {
                 continue
             }
             seen.insert(normalized)

@@ -174,28 +174,38 @@ extension AppDelegate {
     }
 
     func currentFocusedInputTextSnapshot(
-        expectedBundleID: String? = nil
+        expectedBundleID: String? = nil,
+        logDiagnostics: Bool = true
     ) -> FocusedInputTextSnapshot? {
         guard let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
-            VoxtLog.info("Focused input snapshot unavailable: no frontmost application.")
+            if logDiagnostics {
+                VoxtLog.info("Focused input snapshot unavailable: no frontmost application.")
+            }
             return nil
         }
         if let expectedBundleID,
            let bundleIdentifier = frontmostApplication.bundleIdentifier,
            bundleIdentifier != expectedBundleID {
-            VoxtLog.info(
-                "Focused input snapshot skipped: frontmost app changed. expectedBundleID=\(expectedBundleID), actualBundleID=\(bundleIdentifier)"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input snapshot skipped: frontmost app changed. expectedBundleID=\(expectedBundleID), actualBundleID=\(bundleIdentifier)"
+                )
+            }
             return nil
         }
 
         let bundleIdentifier = frontmostApplication.bundleIdentifier
         let processIdentifier = frontmostApplication.processIdentifier
 
-        guard let focusedElement = focusedAXElement(preferredProcessID: processIdentifier) else {
-            VoxtLog.info(
-                "Focused input snapshot unavailable: no focused AX element. bundleID=\(bundleIdentifier ?? "unknown")"
-            )
+        guard let focusedElement = focusedAXElement(
+            preferredProcessID: processIdentifier,
+            logDiagnostics: logDiagnostics
+        ) else {
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input snapshot unavailable: no focused AX element. bundleID=\(bundleIdentifier ?? "unknown")"
+                )
+            }
             return nil
         }
 
@@ -204,9 +214,11 @@ extension AppDelegate {
         )
         guard let writableElement else {
             let role = axStringAttribute(kAXRoleAttribute as CFString, for: focusedElement) ?? "unknown"
-            VoxtLog.info(
-                "Focused input snapshot unavailable: no writable text element found. bundleID=\(bundleIdentifier ?? "unknown"), role=\(role)"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input snapshot unavailable: no writable text element found. bundleID=\(bundleIdentifier ?? "unknown"), role=\(role)"
+                )
+            }
             return nil
         }
 
@@ -217,9 +229,11 @@ extension AppDelegate {
         guard let text = value, !text.isEmpty else {
             let textFailureReason = unreadableTextFailureReason(for: writableElement)
             let role = axStringAttribute(kAXRoleAttribute as CFString, for: writableElement) ?? "unknown"
-            VoxtLog.info(
-                "Focused input snapshot unavailable: writable element has empty/unreadable value. bundleID=\(bundleIdentifier ?? "unknown"), role=\(role), failureReason=\(textFailureReason)"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input snapshot unavailable: writable element has empty/unreadable value. bundleID=\(bundleIdentifier ?? "unknown"), role=\(role), failureReason=\(textFailureReason)"
+                )
+            }
             return nil
         }
 
@@ -233,14 +247,19 @@ extension AppDelegate {
             failureReason: nil,
             textSource: "ax-value"
         )
-        VoxtLog.info("Focused input snapshot ready: \(focusedInputSnapshotSummary(snapshot))")
+        if logDiagnostics {
+            VoxtLog.info("Focused input snapshot ready: \(focusedInputSnapshotSummary(snapshot))")
+        }
         return snapshot
     }
 
     func currentFocusedInputTextSnapshotForAutomaticDictionaryLearning(
         expectedBundleID: String? = nil
     ) async -> FocusedInputTextSnapshot? {
-        if let snapshot = currentFocusedInputTextSnapshot(expectedBundleID: expectedBundleID) {
+        if let snapshot = currentFocusedInputTextSnapshot(
+            expectedBundleID: expectedBundleID,
+            logDiagnostics: false
+        ) {
             return snapshot
         }
 
@@ -257,34 +276,42 @@ extension AppDelegate {
             bundleIdentifier: frontmostApplication.bundleIdentifier,
             processIdentifier: frontmostApplication.processIdentifier
         ) {
-            VoxtLog.info("Focused input snapshot ready via CDP: \(focusedInputSnapshotSummary(cdpSnapshot))")
             return cdpSnapshot
         }
 
         return nil
     }
 
-    private func focusedAXElement(preferredProcessID: pid_t) -> AXUIElement? {
+    private func focusedAXElement(
+        preferredProcessID: pid_t,
+        logDiagnostics: Bool = true
+    ) -> AXUIElement? {
         guard AccessibilityPermissionManager.isTrusted() else {
-            VoxtLog.info("Focused input check: accessibility not trusted.")
+            if logDiagnostics {
+                VoxtLog.info("Focused input check: accessibility not trusted.")
+            }
             return nil
         }
 
-        if let appFocusedElement = focusedAXElement(for: preferredProcessID) {
+        if let appFocusedElement = focusedAXElement(for: preferredProcessID, logDiagnostics: logDiagnostics) {
             return appFocusedElement
         }
 
         let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
-        if let systemFocusedElement = systemFocusedAXElement() {
-            VoxtLog.info("Focused input check: falling back to system-wide focused element. bundleID=\(bundleID)")
+        if let systemFocusedElement = systemFocusedAXElement(logDiagnostics: logDiagnostics) {
+            if logDiagnostics {
+                VoxtLog.info("Focused input check: falling back to system-wide focused element. bundleID=\(bundleID)")
+            }
             return systemFocusedElement
         }
 
-        VoxtLog.info("Focused input check: app/system focus resolution failed. bundleID=\(bundleID)")
+        if logDiagnostics {
+            VoxtLog.info("Focused input check: app/system focus resolution failed. bundleID=\(bundleID)")
+        }
         return nil
     }
 
-    private func systemFocusedAXElement() -> AXUIElement? {
+    private func systemFocusedAXElement(logDiagnostics: Bool = true) -> AXUIElement? {
         let systemWide = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(systemWide, Self.axMessagingTimeout)
         var focusedElementRef: CFTypeRef?
@@ -297,56 +324,73 @@ extension AppDelegate {
               let focusedElementRef,
               CFGetTypeID(focusedElementRef) == AXUIElementGetTypeID() else {
             let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
-            VoxtLog.info(
-                "Focused input check: system-wide focused element unavailable. status=\(focusedStatus.rawValue), bundleID=\(bundleID)"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input check: system-wide focused element unavailable. status=\(focusedStatus.rawValue), bundleID=\(bundleID)"
+                )
+            }
             return nil
         }
         let focusedElement = unsafeBitCast(focusedElementRef, to: AXUIElement.self)
         return resolveFocusedElement(focusedElement)
     }
 
-    private func focusedAXElement(for processID: pid_t) -> AXUIElement? {
+    private func focusedAXElement(
+        for processID: pid_t,
+        logDiagnostics: Bool = true
+    ) -> AXUIElement? {
         let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
         let appElement = AXUIElementCreateApplication(processID)
         AXUIElementSetMessagingTimeout(appElement, Self.axMessagingTimeout)
         if let focusedAppElement = axElementAttribute(kAXFocusedUIElementAttribute as CFString, for: appElement),
            let resolved = resolveFocusedElement(focusedAppElement) {
-            VoxtLog.info(
-                "Focused input check: using frontmost app focused element. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input check: using frontmost app focused element. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
+                )
+            }
             return resolved
         }
 
         guard let focusedWindow = axElementAttribute(kAXFocusedWindowAttribute as CFString, for: appElement) else {
-            VoxtLog.info("Focused input check: no focused window on frontmost app. bundleID=\(bundleID)")
+            if logDiagnostics {
+                VoxtLog.info("Focused input check: no focused window on frontmost app. bundleID=\(bundleID)")
+            }
             return nil
         }
 
         if let focusedWindowElement = axElementAttribute(kAXFocusedUIElementAttribute as CFString, for: focusedWindow),
            let resolved = resolveFocusedElement(focusedWindowElement) {
-            VoxtLog.info(
-                "Focused input check: using focused window focused element. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input check: using focused window focused element. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
+                )
+            }
             return resolved
         }
 
         if let focusedDescendant = findFocusedDescendant(in: focusedWindow, depthRemaining: 8),
            let resolved = resolveFocusedElement(focusedDescendant) {
-            VoxtLog.info(
-                "Focused input check: resolved focused descendant from window subtree. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input check: resolved focused descendant from window subtree. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
+                )
+            }
             return resolved
         }
 
         if let bestEditableDescendant = findBestWritableTextDescendant(in: focusedWindow, depthRemaining: 8) {
-            VoxtLog.info(
-                "Focused input check: using best editable descendant from focused window. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: bestEditableDescendant) ?? "unknown")"
-            )
+            if logDiagnostics {
+                VoxtLog.info(
+                    "Focused input check: using best editable descendant from focused window. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: bestEditableDescendant) ?? "unknown")"
+                )
+            }
             return bestEditableDescendant
         }
 
-        VoxtLog.info("Focused input check: falling back to focused window element. bundleID=\(bundleID)")
+        if logDiagnostics {
+            VoxtLog.info("Focused input check: falling back to focused window element. bundleID=\(bundleID)")
+        }
         return resolveFocusedElement(focusedWindow)
     }
 
