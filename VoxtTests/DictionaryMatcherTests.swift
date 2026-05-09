@@ -21,7 +21,7 @@ final class DictionaryMatcherTests: XCTestCase {
                     originalText: "anthropic ai",
                     correctedText: "Anthropic",
                     finalLocation: 0,
-                    finalLength: 10
+                    finalLength: 9
                 )
             ]
         )

@@ -10,7 +10,10 @@ final class ASRHintSettingsTests: XCTestCase {
 
         let loaded = ASRHintSettingsStore.load(from: raw)
 
-        XCTAssertEqual(loaded[.mlxAudio]?.promptTemplate, "")
+        XCTAssertEqual(
+            loaded[.mlxAudio]?.promptTemplate,
+            AppPromptDefaults.text(for: .whisperASRHint)
+        )
         XCTAssertEqual(loaded[.openAIWhisper]?.promptTemplate, "Bias {{USER_MAIN_LANGUAGE}}")
     }
 
@@ -53,7 +56,7 @@ final class ASRHintSettingsTests: XCTestCase {
         let settings = ASRHintSettingsStore.resolvedSettings(for: .whisperKit, rawValue: nil)
 
         XCTAssertTrue(settings.followsUserMainLanguage)
-        XCTAssertEqual(settings.promptTemplate, "")
+        XCTAssertEqual(settings.promptTemplate, AppPromptDefaults.text(for: .whisperASRHint))
     }
 
     func testSanitizedWhisperLegacyDefaultPromptMigratesToEmpty() {
