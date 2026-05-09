@@ -3,6 +3,8 @@ import XCTest
 
 @MainActor
 final class WhisperLongFormReplayIntegrationTests: XCTestCase {
+    private let minimumLongFormDurationSeconds = WhisperKitTranscriber.realtimeLongFormFinalProfileThresholdSeconds
+
     private func resolvedCandidateClipPaths() -> [String] {
         let overridePathFile = "/tmp/voxt-longform-replay-clip-path.txt"
         let overridePath = try? String(contentsOfFile: overridePathFile, encoding: .utf8)
@@ -23,6 +25,15 @@ final class WhisperLongFormReplayIntegrationTests: XCTestCase {
         return candidates.filter { seen.insert($0).inserted }
     }
 
+    private func resolvedLongFormCandidateClipPaths() -> [String] {
+        resolvedCandidateClipPaths().filter { path in
+            guard let clip = try? DebugAudioClipIO.clip(for: URL(fileURLWithPath: path)) else {
+                return false
+            }
+            return clip.durationSeconds >= minimumLongFormDurationSeconds
+        }
+    }
+
     private func knownGoodBaselineClipPaths() -> [String] {
         let preferred = [
             ProcessInfo.processInfo.environment["VOXT_LONGFORM_REPLAY_CLIP"],
@@ -38,6 +49,15 @@ final class WhisperLongFormReplayIntegrationTests: XCTestCase {
 
         var seen = Set<String>()
         return preferred.filter { seen.insert($0).inserted }
+    }
+
+    private func knownGoodLongFormBaselineClipPaths() -> [String] {
+        knownGoodBaselineClipPaths().filter { path in
+            guard let clip = try? DebugAudioClipIO.clip(for: URL(fileURLWithPath: path)) else {
+                return false
+            }
+            return clip.durationSeconds >= minimumLongFormDurationSeconds
+        }
     }
 
     private func resolvedModelIDAndHubURL() throws -> (modelID: String, hubURL: URL) {
@@ -59,7 +79,7 @@ final class WhisperLongFormReplayIntegrationTests: XCTestCase {
     }
 
     func testOfflineTranscriptionConfirmsModelSupportsProvidedLongFormClip() async throws {
-        let existingClipPaths = resolvedCandidateClipPaths()
+        let existingClipPaths = resolvedLongFormCandidateClipPaths()
         guard let clipPath = existingClipPaths.first else {
             throw XCTSkip("No long-form replay clip is available.")
         }
@@ -75,7 +95,7 @@ final class WhisperLongFormReplayIntegrationTests: XCTestCase {
     }
 
     func testReplayProvidedLongFormClipProducesFinalTranscript() async throws {
-        let existingClipPaths = resolvedCandidateClipPaths()
+        let existingClipPaths = resolvedLongFormCandidateClipPaths()
         guard let clipPath = existingClipPaths.first else {
             throw XCTSkip("No long-form replay clip is available.")
         }
@@ -139,7 +159,7 @@ final class WhisperLongFormReplayIntegrationTests: XCTestCase {
     }
 
     func testReplayAllAvailableLongFormClipsProduceNonEmptyFinalTranscript() async throws {
-        let candidateClipPaths = resolvedCandidateClipPaths()
+        let candidateClipPaths = resolvedLongFormCandidateClipPaths()
         guard !candidateClipPaths.isEmpty else {
             throw XCTSkip("No available long-form clips found.")
         }
@@ -161,7 +181,7 @@ final class WhisperLongFormReplayIntegrationTests: XCTestCase {
     }
 
     func testReplayAllAvailableLongFormClipsTrackOfflineBaseline() async throws {
-        let candidateClipPaths = knownGoodBaselineClipPaths()
+        let candidateClipPaths = knownGoodLongFormBaselineClipPaths()
         guard !candidateClipPaths.isEmpty else {
             throw XCTSkip("No known-good long-form baseline clips found.")
         }

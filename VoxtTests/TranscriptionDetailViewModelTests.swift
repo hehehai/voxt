@@ -92,7 +92,10 @@ final class TranscriptionDetailViewModelTests: XCTestCase {
 
         XCTAssertFalse(didInvokeHandler)
         XCTAssertTrue(viewModel.isEditingCorrection)
-        XCTAssertEqual(viewModel.toastMessage, "Please modify the text before correcting.")
+        XCTAssertEqual(
+            viewModel.toastMessage,
+            AppLocalization.localizedString("Please modify the text before correcting.")
+        )
     }
 }
 
