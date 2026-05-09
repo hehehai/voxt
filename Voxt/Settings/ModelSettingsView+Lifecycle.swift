@@ -1,6 +1,12 @@
 import Foundation
 
 extension ModelSettingsView {
+    func refreshAllModelStorageRoots() {
+        mlxModelManager.refreshStorageRoot()
+        whisperModelManager.refreshStorageRoot()
+        customLLMManager.refreshStorageRoot()
+    }
+
     func handleOnAppear() {
         let canonicalRepo = MLXModelManager.canonicalModelRepo(modelRepo)
         if canonicalRepo != modelRepo {

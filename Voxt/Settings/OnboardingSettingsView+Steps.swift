@@ -790,28 +790,24 @@ extension OnboardingSettingsView {
     }
 
     var isSelectedMLXModelDownloading: Bool {
-        guard case .downloading = mlxModelManager.state else { return false }
-        guard let activeDownloadRepo = mlxModelManager.activeDownloadRepo else { return false }
-        return MLXModelManager.canonicalModelRepo(activeDownloadRepo) == MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        mlxModelManager.isDownloading(repo: mlxModelRepo)
     }
 
     var isAnotherMLXModelDownloading: Bool {
-        guard case .downloading = mlxModelManager.state else { return false }
-        guard let activeDownloadRepo = mlxModelManager.activeDownloadRepo else { return false }
-        return MLXModelManager.canonicalModelRepo(activeDownloadRepo) != MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        mlxModelManager.activeDownloadRepos.contains(where: { repo in
+            MLXModelManager.canonicalModelRepo(repo) != MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        })
     }
 
     var isSelectedMLXModelPaused: Bool {
-        guard case .paused = mlxModelManager.state else { return false }
-        guard let activeDownloadRepo = mlxModelManager.activeDownloadRepo else { return false }
-        return MLXModelManager.canonicalModelRepo(activeDownloadRepo) == MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        mlxModelManager.isPaused(repo: mlxModelRepo)
     }
 
     var selectedMLXDownloadStatus: ModelDownloadStatusSnapshot? {
         guard isSelectedMLXModelDownloading || isSelectedMLXModelPaused else { return nil }
         return ModelDownloadStatusSnapshot.fromMLXState(
-            mlxModelManager.state,
-            pauseMessage: mlxModelManager.pausedStatusMessage
+            mlxModelManager.state(for: mlxModelRepo),
+            pauseMessage: mlxModelManager.pausedStatusMessage(for: mlxModelRepo)
         )
     }
 

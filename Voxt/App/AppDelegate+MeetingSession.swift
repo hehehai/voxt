@@ -254,16 +254,17 @@ extension AppDelegate {
             provider: remoteASRSelectedProvider,
             stored: remoteASRConfigurations
         )
+        let localASRStartContext = currentLocalASRStartContext()
         let startDecision = MeetingStartPlanner.resolve(
             selectedEngine: transcriptionEngine,
-            selectedMLXRepo: mlxModelManager.currentModelRepo,
-            activeMLXDownloadRepo: mlxModelManager.activeDownloadRepo,
-            isSelectedMLXModelDownloaded: mlxModelManager.isModelDownloaded(repo: mlxModelManager.currentModelRepo),
-            mlxModelState: mlxModelManager.state,
-            selectedWhisperModelID: whisperModelManager.currentModelID,
-            activeWhisperDownloadModelID: whisperModelManager.activeDownload?.modelID,
-            isSelectedWhisperModelDownloaded: whisperModelManager.isModelDownloaded(id: whisperModelManager.currentModelID),
-            whisperModelState: whisperModelManager.state,
+            selectedMLXRepo: localASRStartContext.selectedMLXRepo,
+            activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
+            isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
+            mlxModelState: localASRStartContext.mlxModelState,
+            selectedWhisperModelID: localASRStartContext.selectedWhisperModelID,
+            activeWhisperDownloadModelID: localASRStartContext.activeWhisperDownloadModelID,
+            isSelectedWhisperModelDownloaded: localASRStartContext.isSelectedWhisperModelDownloaded,
+            whisperModelState: localASRStartContext.whisperModelState,
             remoteASRProvider: remoteASRSelectedProvider,
             remoteASRConfiguration: remoteConfiguration
         )

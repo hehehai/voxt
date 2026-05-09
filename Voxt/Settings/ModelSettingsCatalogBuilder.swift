@@ -22,7 +22,6 @@ struct ModelCatalogBuilder {
     let primaryUserLanguageCode: String?
     let isDownloadingModel: (String) -> Bool
     let isPausedModel: (String) -> Bool
-    let isAnotherModelDownloading: (String) -> Bool
     let isDownloadingWhisperModel: (String) -> Bool
     let isPausedWhisperModel: (String) -> Bool
     let isAnotherWhisperModelDownloading: (String) -> Bool
@@ -33,6 +32,7 @@ struct ModelCatalogBuilder {
     let isUninstallingWhisperModel: (String) -> Bool
     let isUninstallingCustomLLM: (String) -> Bool
     let downloadModel: (String) -> Void
+    let pauseModelDownload: (String) -> Void
     let cancelModelDownload: (String) -> Void
     let deleteModel: (String) -> Void
     let openMLXModelDirectory: (String) -> Void

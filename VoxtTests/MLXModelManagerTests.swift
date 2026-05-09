@@ -404,4 +404,154 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(CustomLLMOutputSanitizer.normalizeResultText(output), #"{"resultText":"Hello"}"#)
         XCTAssertEqual(CustomLLMOutputSanitizer.normalizeResultText("<think>\n\n</think>\n\nHello"), "Hello")
     }
+
+    func testStateForUnknownRepoDefaultsToNotDownloaded() async {
+        await withIsolatedModelStorageRoot { _ in
+            let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+            let unknownRepo = "mlx-community/some-unknown-repo"
+
+            XCTAssertEqual(manager.state(for: unknownRepo), .notDownloaded)
+            XCTAssertNil(manager.pausedStatusMessage(for: unknownRepo))
+            XCTAssertFalse(manager.isDownloading(repo: unknownRepo))
+            XCTAssertFalse(manager.isPaused(repo: unknownRepo))
+        }
+    }
+
+    func testStateForRepoReturnsDownloadedWhenValidModelDirExists() async throws {
+        try await withIsolatedModelStorageRoot { root in
+            let otherRepo = "mlx-community/parakeet-tdt-0.6b-v3"
+            try seedValidMLXModelDirectory(repo: otherRepo, root: root)
+
+            let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+            XCTAssertEqual(manager.state(for: otherRepo), .downloaded)
+            XCTAssertFalse(manager.isDownloading(repo: otherRepo))
+        }
+    }
+
+    func testCancelDownloadForUnknownRepoIsSafeAndDoesNotMutateCurrent() async {
+        await withIsolatedModelStorageRoot { _ in
+            let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+            let stateBefore = manager.state
+
+            manager.cancelDownload(repo: "mlx-community/some-unknown-repo")
+
+            XCTAssertEqual(manager.state, stateBefore)
+        }
+    }
+
+    func testCancelDownloadForNonActiveRepoCleansUpPartialArtifacts() async throws {
+        try await withIsolatedModelStorageRoot { root in
+            let staleRepo = "mlx-community/parakeet-tdt-0.6b-v3"
+            let staleDir = root
+                .appendingPathComponent("mlx-audio")
+                .appendingPathComponent("mlx-community_parakeet-tdt-0.6b-v3-download")
+            try FileManager.default.createDirectory(at: staleDir, withIntermediateDirectories: true)
+            try Data("partial".utf8).write(to: staleDir.appendingPathComponent("weights.bin"))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: staleDir.path))
+
+            let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+            manager.cancelDownload(repo: staleRepo)
+
+            XCTAssertFalse(FileManager.default.fileExists(atPath: staleDir.path))
+        }
+    }
+
+    func testActiveDownloadReposIsEmptyWhenNothingIsRunning() async {
+        await withIsolatedModelStorageRoot { _ in
+            let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+            XCTAssertTrue(manager.activeDownloadRepos.isEmpty)
+        }
+    }
+
+    func testDeleteModelForNonCurrentRepoClearsStoredPerRepoState() async throws {
+        try await withIsolatedModelStorageRoot { root in
+            let otherRepo = "mlx-community/parakeet-tdt-0.6b-v3"
+            try seedValidMLXModelDirectory(repo: otherRepo, root: root)
+
+            let manager = MLXModelManager(modelRepo: otherRepo)
+            XCTAssertEqual(manager.state(for: otherRepo), .downloaded)
+
+            manager.updateModel(repo: MLXModelManager.defaultModelRepo)
+            XCTAssertEqual(manager.state(for: otherRepo), .downloaded)
+
+            manager.deleteModel(repo: otherRepo)
+
+            XCTAssertEqual(manager.state(for: otherRepo), .notDownloaded)
+            XCTAssertNil(manager.pausedStatusMessage(for: otherRepo))
+        }
+    }
+
+    func testRefreshStorageRootClearsStoredPerRepoState() async throws {
+        let defaults = UserDefaults.standard
+        let previousPath = defaults.string(forKey: AppPreferenceKey.modelStorageRootPath)
+        let previousBookmark = defaults.data(forKey: AppPreferenceKey.modelStorageRootBookmark)
+
+        try await withIsolatedModelStorageRoot { originalRoot in
+            let otherRepo = "mlx-community/parakeet-tdt-0.6b-v3"
+            try seedValidMLXModelDirectory(repo: otherRepo, root: originalRoot)
+
+            let manager = MLXModelManager(modelRepo: otherRepo)
+            XCTAssertEqual(manager.state(for: otherRepo), .downloaded)
+
+            manager.updateModel(repo: MLXModelManager.defaultModelRepo)
+            XCTAssertEqual(manager.state(for: otherRepo), .downloaded)
+
+            let newRoot = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            defaults.set(newRoot.path, forKey: AppPreferenceKey.modelStorageRootPath)
+            defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+            defer {
+                if let previousPath {
+                    defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)
+                } else {
+                    defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootPath)
+                }
+                if let previousBookmark {
+                    defaults.set(previousBookmark, forKey: AppPreferenceKey.modelStorageRootBookmark)
+                } else {
+                    defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+                }
+                try? FileManager.default.removeItem(at: newRoot)
+            }
+
+            manager.refreshStorageRoot()
+
+            XCTAssertEqual(manager.state(for: otherRepo), .notDownloaded)
+            XCTAssertNil(manager.pausedStatusMessage(for: otherRepo))
+        }
+    }
+
+    private func withIsolatedModelStorageRoot<T>(_ body: (URL) throws -> T) rethrows -> T {
+        let defaults = UserDefaults.standard
+        let previousPath = defaults.string(forKey: AppPreferenceKey.modelStorageRootPath)
+        let previousBookmark = defaults.data(forKey: AppPreferenceKey.modelStorageRootBookmark)
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defaults.set(root.path, forKey: AppPreferenceKey.modelStorageRootPath)
+        defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+        defer {
+            if let previousPath {
+                defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootPath)
+            }
+            if let previousBookmark {
+                defaults.set(previousBookmark, forKey: AppPreferenceKey.modelStorageRootBookmark)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+            }
+            try? FileManager.default.removeItem(at: root)
+        }
+        return try body(root)
+    }
+
+    private func seedValidMLXModelDirectory(repo: String, root: URL) throws {
+        let modelSubdir = repo.replacingOccurrences(of: "/", with: "_")
+        let modelDir = root
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent(modelSubdir)
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: modelDir.appendingPathComponent("config.json"))
+        try Data("weights".utf8).write(to: modelDir.appendingPathComponent("weights.safetensors"))
+    }
 }

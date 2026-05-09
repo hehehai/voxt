@@ -183,16 +183,17 @@ extension AppDelegate {
         releaseResidualRecordingResources(reason: "begin-recording")
         prepareLegacySettingsForSession(outputMode: outputMode)
         synchronizeRuntimeASRStateForSession(outputMode: outputMode)
+        let localASRStartContext = currentLocalASRStartContext()
         let startDecision = RecordingStartPlanner.resolve(
             selectedEngine: transcriptionEngine,
-            selectedMLXRepo: mlxModelManager.currentModelRepo,
-            activeMLXDownloadRepo: mlxModelManager.activeDownloadRepo,
-            isSelectedMLXModelDownloaded: mlxModelManager.isModelDownloaded(repo: mlxModelManager.currentModelRepo),
-            mlxModelState: mlxModelManager.state,
-            selectedWhisperModelID: whisperModelManager.currentModelID,
-            activeWhisperDownloadModelID: whisperModelManager.activeDownload?.modelID,
-            isSelectedWhisperModelDownloaded: whisperModelManager.isModelDownloaded(id: whisperModelManager.currentModelID),
-            whisperModelState: whisperModelManager.state
+            selectedMLXRepo: localASRStartContext.selectedMLXRepo,
+            activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
+            isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
+            mlxModelState: localASRStartContext.mlxModelState,
+            selectedWhisperModelID: localASRStartContext.selectedWhisperModelID,
+            activeWhisperDownloadModelID: localASRStartContext.activeWhisperDownloadModelID,
+            isSelectedWhisperModelDownloaded: localASRStartContext.isSelectedWhisperModelDownloaded,
+            whisperModelState: localASRStartContext.whisperModelState
         )
         guard case .start(let recordingEngine) = startDecision else {
             if case .blocked(let reason) = startDecision {

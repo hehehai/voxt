@@ -45,22 +45,6 @@ struct ModelSettingsView: View {
         let detailText: String
     }
 
-    private struct CatalogSnapshot {
-        let allEntries: [ModelCatalogEntry]
-        let availableTags: [String]
-        let availableTagGroups: [[String]]
-        let filteredEntries: [ModelCatalogEntry]
-        let displayItems: [ModelCatalogDisplayItem]
-
-        static let empty = CatalogSnapshot(
-            allEntries: [],
-            availableTags: [],
-            availableTagGroups: [],
-            filteredEntries: [],
-            displayItems: []
-        )
-    }
-
     @AppStorage(AppPreferenceKey.transcriptionEngine) var engineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.enhancementMode) var enhancementModeRaw = EnhancementMode.off.rawValue
     @AppStorage(AppPreferenceKey.enhancementSystemPrompt) var systemPrompt = ""
@@ -103,11 +87,11 @@ struct ModelSettingsView: View {
     let navigationRequest: SettingsNavigationRequest?
     let isActive: Bool
 
-    @State private var catalogTab: ModelCatalogTab = .asr
-    @State private var selectedTags = Set<String>()
-    @State private var cachedFeatureSettings = FeatureSettingsStore.load()
-    @State private var cachedRemoteASRConfigurations = [String: RemoteProviderConfiguration]()
-    @State private var cachedRemoteLLMConfigurations = [String: RemoteProviderConfiguration]()
+    @State var catalogTab: ModelCatalogTab = .asr
+    @State var selectedTags = Set<String>()
+    @State var cachedFeatureSettings = FeatureSettingsStore.load()
+    @State var cachedRemoteASRConfigurations = [String: RemoteProviderConfiguration]()
+    @State var cachedRemoteLLMConfigurations = [String: RemoteProviderConfiguration]()
     @State private var modelStorageDisplayPath = ""
     @State private var modelStorageSelectionError: String?
     @State var showMirrorInfo = false
@@ -122,7 +106,7 @@ struct ModelSettingsView: View {
     @State private var collapsedModelGroupIDs = Set<String>()
     @State private var globalDownloadEndpointResult: DownloadEndpointCheckResult?
     @State private var chinaDownloadEndpointResult: DownloadEndpointCheckResult?
-    @State private var catalogSnapshot = CatalogSnapshot.empty
+    @State var catalogSnapshot = ModelSettingsCatalogSnapshot.empty
     @State var pendingModelRemovalTarget: LocalModelRemovalTarget?
     @State var uninstallingModelTarget: LocalModelRemovalTarget?
 
@@ -222,7 +206,6 @@ struct ModelSettingsView: View {
             primaryUserLanguageCode: selectedUserLanguageCodes.first,
             isDownloadingModel: isDownloadingModel,
             isPausedModel: isPausedModel,
-            isAnotherModelDownloading: isAnotherModelDownloading,
             isDownloadingWhisperModel: isDownloadingWhisperModel,
             isPausedWhisperModel: isPausedWhisperModel,
             isAnotherWhisperModelDownloading: isAnotherWhisperModelDownloading,
@@ -233,6 +216,7 @@ struct ModelSettingsView: View {
             isUninstallingWhisperModel: isUninstallingWhisperModel,
             isUninstallingCustomLLM: isUninstallingCustomLLM,
             downloadModel: downloadModel,
+            pauseModelDownload: { mlxModelManager.pauseDownload(repo: $0) },
             cancelModelDownload: {
                 mlxModelManager.cancelDownload(repo: $0)
                 refreshCatalogSnapshot()
@@ -267,16 +251,6 @@ struct ModelSettingsView: View {
 
     private var allEntries: [ModelCatalogEntry] { catalogSnapshot.allEntries }
 
-    private var locationScopedEntriesForTags: [ModelCatalogEntry] {
-        if selectedTags.contains(localized("Local")) {
-            return allEntries.filter { $0.filterTags.contains(localized("Local")) }
-        }
-        if selectedTags.contains(localized("Remote")) {
-            return allEntries.filter { $0.filterTags.contains(localized("Remote")) }
-        }
-        return allEntries
-    }
-
     private var availableTags: [String] { catalogSnapshot.availableTags }
 
     private var availableTagGroups: [[String]] { catalogSnapshot.availableTagGroups }
@@ -284,19 +258,6 @@ struct ModelSettingsView: View {
     private var filteredEntries: [ModelCatalogEntry] { catalogSnapshot.filteredEntries }
 
     private var displayItems: [ModelCatalogDisplayItem] { catalogSnapshot.displayItems }
-
-    private func prioritizedEntries(_ entries: [ModelCatalogEntry]) -> [ModelCatalogEntry] {
-        entries.enumerated()
-            .sorted { lhs, rhs in
-                let lhsInUse = !lhs.element.usageLocations.isEmpty
-                let rhsInUse = !rhs.element.usageLocations.isEmpty
-                if lhsInUse != rhsInUse {
-                    return lhsInUse && !rhsInUse
-                }
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
-    }
 
     private var tagFilterBar: some View {
         Group {
@@ -388,162 +349,12 @@ struct ModelSettingsView: View {
         collapsedModelGroupIDs.remove(group.id)
     }
 
-    private var mainContent: some View {
+    var mainContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             modelTabHeader
             tagFilterBar
             modelCatalogContent
         }
-    }
-
-    private var contentWithLifecycle: some View {
-        let appeared = AnyView(
-            mainContent
-                .onAppear(perform: handleOnAppear)
-                .onAppear(perform: reloadCachedConfigurationState)
-                .onAppear(perform: refreshModelStorageDisplayPath)
-                .onAppear(perform: refreshCatalogSnapshot)
-        )
-
-        let modelObserved = AnyView(
-            appeared
-                .onChange(of: modelRepo) { _, newValue in
-                    let canonicalRepo = MLXModelManager.canonicalModelRepo(newValue)
-                    if canonicalRepo != newValue {
-                        modelRepo = canonicalRepo
-                        return
-                    }
-                    mlxModelManager.updateModel(repo: canonicalRepo)
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: whisperModelID) { _, newValue in
-                    let canonicalModelID = WhisperKitModelManager.canonicalModelID(newValue)
-                    if canonicalModelID != newValue {
-                        whisperModelID = canonicalModelID
-                        return
-                    }
-                    whisperModelManager.updateModel(id: canonicalModelID)
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: localModelMemoryOptimizationEnabled) { _, _ in
-                    mlxModelManager.refreshMemoryOptimizationPolicy()
-                    customLLMManager.refreshMemoryOptimizationPolicy()
-                    whisperModelManager.refreshMemoryOptimizationPolicy()
-                    guard selectedEngine == .whisperKit, !localModelMemoryOptimizationEnabled else { return }
-                    Task { @MainActor in
-                        whisperModelManager.beginActiveUse()
-                        defer { whisperModelManager.endActiveUse() }
-                        _ = try? await whisperModelManager.loadWhisper()
-                    }
-                }
-                .onChange(of: engineRaw) { _, _ in
-                    whisperModelManager.refreshMemoryOptimizationPolicy()
-                    guard selectedEngine == .whisperKit, !localModelMemoryOptimizationEnabled else { return }
-                    Task { @MainActor in
-                        whisperModelManager.beginActiveUse()
-                        defer { whisperModelManager.endActiveUse() }
-                        _ = try? await whisperModelManager.loadWhisper()
-                    }
-                }
-        )
-
-        let configurationObserved = AnyView(
-            modelObserved
-                .onChange(of: customLLMRepo) { _, newValue in
-                    customLLMManager.updateModel(repo: newValue)
-                    ensureTranslationModelSelectionConsistency()
-                    ensureRewriteModelSelectionConsistency()
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: translationModelProviderRaw) { _, _ in
-                    syncTranslationFallbackProvider()
-                    ensureTranslationModelSelectionConsistency()
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: rewriteModelProviderRaw) { _, _ in
-                    ensureRewriteModelSelectionConsistency()
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: remoteLLMProviderConfigurationsRaw) { _, _ in
-                    cachedRemoteLLMConfigurations = RemoteModelConfigurationStore.loadConfigurations(
-                        from: remoteLLMProviderConfigurationsRaw,
-                        sensitiveValueLoading: .metadataOnly
-                    )
-                    ensureTranslationModelSelectionConsistency()
-                    ensureRewriteModelSelectionConsistency()
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: remoteASRProviderConfigurationsRaw) { _, _ in
-                    cachedRemoteASRConfigurations = RemoteModelConfigurationStore.loadConfigurations(
-                        from: remoteASRProviderConfigurationsRaw,
-                        sensitiveValueLoading: .metadataOnly
-                    )
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: useHfMirror) { _, _ in
-                    updateMirrorSetting()
-                }
-                .onChange(of: modelStorageRootPath) { _, _ in
-                    mlxModelManager.refreshStorageRoot()
-                    whisperModelManager.refreshStorageRoot()
-                    customLLMManager.refreshStorageRoot()
-                    refreshModelStorageDisplayPath()
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: featureSettingsRaw) { _, _ in
-                    cachedFeatureSettings = FeatureSettingsStore.load(defaults: .standard)
-                    pruneSelectedTags()
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: catalogTab) { _, _ in
-                    pruneSelectedTags()
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: selectedTags) { _, _ in
-                    pruneSelectedTags()
-                    refreshCatalogSnapshot()
-                }
-        )
-
-        let stateObserved = AnyView(
-            configurationObserved
-                .onChange(of: mlxModelManager.state) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: whisperModelManager.state) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: whisperModelManager.activeDownload) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: whisperModelManager.pausedStatusMessageByID) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: customLLMManager.state) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: mlxModelManager.remoteSizeTextByRepo) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: whisperModelManager.remoteSizeTextByID) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-                .onChange(of: customLLMManager.remoteSizeTextByRepo) { _, _ in
-                    refreshCatalogSnapshot()
-                }
-        )
-
-        return AnyView(
-            stateObserved
-                .onReceive(modelStateRefreshTimer) { _ in
-                    guard isActive else { return }
-                    guard mainWindowState.isVisible else { return }
-                    guard shouldPollModelState else { return }
-                    refreshModelInstallStateIfNeeded()
-                    pruneSelectedTags()
-                    refreshCatalogSnapshot()
-                }
-        )
     }
 
     private var contentWithSheets: some View {
@@ -609,7 +420,7 @@ struct ModelSettingsView: View {
         .id(interfaceLanguageRaw)
     }
 
-    private func reloadCachedConfigurationState() {
+    func reloadCachedConfigurationState() {
         cachedFeatureSettings = FeatureSettingsStore.load(defaults: .standard)
         cachedRemoteASRConfigurations = RemoteModelConfigurationStore.loadConfigurations(
             from: remoteASRProviderConfigurationsRaw,
@@ -625,48 +436,14 @@ struct ModelSettingsView: View {
     func refreshCatalogSnapshot() {
         let entries = switch catalogTab {
         case .asr:
-            prioritizedEntries(catalogBuilder.asrEntries())
+            catalogBuilder.asrEntries()
         case .llm:
-            prioritizedEntries(catalogBuilder.llmEntries())
+            catalogBuilder.llmEntries()
         }
 
-        let locationTags = Set(entries.flatMap(\.filterTags)).intersection(ModelCatalogTag.locationTags)
-        let locationScopedEntries: [ModelCatalogEntry]
-        if selectedTags.contains(localized("Local")) {
-            locationScopedEntries = entries.filter { $0.filterTags.contains(localized("Local")) }
-        } else if selectedTags.contains(localized("Remote")) {
-            locationScopedEntries = entries.filter { $0.filterTags.contains(localized("Remote")) }
-        } else {
-            locationScopedEntries = entries
-        }
-
-        let tagSet = locationTags.union(Set(locationScopedEntries.flatMap(\.filterTags)))
-        let availableTags = ModelCatalogTag.priority.compactMap { tagSet.contains($0) ? $0 : nil }
-        let available = Set(availableTags)
-        var availableTagGroups = [[String]]()
-        let locationGroup = ModelCatalogTag.groups[0].filter { available.contains($0) }
-        if !locationGroup.isEmpty {
-            availableTagGroups.append(locationGroup)
-        }
-        availableTagGroups.append(
-            contentsOf: ModelCatalogTag.groups.dropFirst()
-                .map { $0.filter { available.contains($0) } }
-                .filter { !$0.isEmpty }
-        )
-
-        let filteredEntries: [ModelCatalogEntry]
-        if selectedTags.isEmpty {
-            filteredEntries = entries
-        } else {
-            filteredEntries = entries.filter { selectedTags.isSubset(of: Set($0.filterTags)) }
-        }
-
-        catalogSnapshot = CatalogSnapshot(
-            allEntries: entries,
-            availableTags: availableTags,
-            availableTagGroups: availableTagGroups,
-            filteredEntries: filteredEntries,
-            displayItems: LocalModelSeriesGrouping.modelCatalogItems(from: filteredEntries)
+        catalogSnapshot = ModelSettingsCatalogSnapshotBuilder.build(
+            entries: entries,
+            selectedTags: selectedTags
         )
     }
 
@@ -683,9 +460,7 @@ struct ModelSettingsView: View {
         do {
             try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
             modelStorageSelectionError = nil
-            mlxModelManager.refreshStorageRoot()
-            whisperModelManager.refreshStorageRoot()
-            customLLMManager.refreshStorageRoot()
+            refreshAllModelStorageRoots()
             refreshModelStorageDisplayPath()
             refreshCatalogSnapshot()
         } catch {
@@ -694,7 +469,7 @@ struct ModelSettingsView: View {
         }
     }
 
-    private func refreshModelStorageDisplayPath() {
+    func refreshModelStorageDisplayPath() {
         let resolved = ModelStorageDirectoryManager.resolvedRootURL().path
         modelStorageDisplayPath = resolved
         if modelStorageRootPath != resolved {
@@ -980,7 +755,7 @@ struct ModelSettingsView: View {
         }
     }
 
-    private var shouldPollModelState: Bool {
+    var shouldPollModelState: Bool {
         isModelStatePollingRequired(for: mlxModelManager.state)
         || isWhisperStatePollingRequired(for: whisperModelManager.state)
         || isCustomLLMStatePollingRequired(for: customLLMManager.state)
@@ -997,7 +772,7 @@ struct ModelSettingsView: View {
         }
     }
 
-    private func pruneSelectedTags() {
+    func pruneSelectedTags() {
         selectedTags = selectedTags.intersection(Set(availableTags))
     }
 

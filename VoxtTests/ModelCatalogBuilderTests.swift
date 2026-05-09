@@ -132,6 +132,56 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(entry.primaryAction?.title, AppLocalization.localizedString("Pause"))
     }
 
+    func testMLXCatalogPauseActionTargetsDownloadingRepo() throws {
+        let selectedRepo = "mlx-community/parakeet-tdt-0.6b-v3"
+        let downloadingRepo = "mlx-community/Qwen3-ASR-0.6B-4bit"
+        var pausedRepo: String?
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(selectedRepo)),
+            isDownloadingModel: { repo in
+                MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(downloadingRepo)
+            },
+            pauseModelDownload: { pausedRepo = $0 }
+        )
+
+        let entry = try XCTUnwrap(
+            builder.asrEntries().first(where: { $0.id == "mlx:\(downloadingRepo)" })
+        )
+        let action = try XCTUnwrap(entry.primaryAction)
+        action.handler()
+
+        XCTAssertEqual(
+            MLXModelManager.canonicalModelRepo(pausedRepo ?? ""),
+            MLXModelManager.canonicalModelRepo(downloadingRepo)
+        )
+    }
+
+    func testMLXCatalogCancelActionTargetsDownloadingRepo() throws {
+        let selectedRepo = "mlx-community/parakeet-tdt-0.6b-v3"
+        let downloadingRepo = "mlx-community/Qwen3-ASR-0.6B-4bit"
+        var cancelledRepo: String?
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(selectedRepo)),
+            isDownloadingModel: { repo in
+                MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(downloadingRepo)
+            },
+            cancelModelDownload: { cancelledRepo = $0 }
+        )
+
+        let entry = try XCTUnwrap(
+            builder.asrEntries().first(where: { $0.id == "mlx:\(downloadingRepo)" })
+        )
+        let cancelAction = try XCTUnwrap(
+            entry.secondaryActions.first(where: { $0.title == AppLocalization.localizedString("Cancel") })
+        )
+        cancelAction.handler()
+
+        XCTAssertEqual(
+            MLXModelManager.canonicalModelRepo(cancelledRepo ?? ""),
+            MLXModelManager.canonicalModelRepo(downloadingRepo)
+        )
+    }
+
     func testCustomLLMCatalogShowsPauseForDownloadingNonSelectedModel() throws {
         let selectedRepo = "mlx-community/Qwen3-8B-4bit"
         let downloadingRepo = "mlx-community/Qwen3-4B-4bit"
@@ -204,7 +254,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
         hasIssue: @escaping (ConfigurationTransferManager.MissingConfigurationIssue.Scope) -> Bool = { _ in false },
         isDownloadingModel: @escaping (String) -> Bool = { _ in false },
         isPausedModel: @escaping (String) -> Bool = { _ in false },
-        isAnotherModelDownloading: @escaping (String) -> Bool = { _ in false },
         isDownloadingWhisperModel: @escaping (String) -> Bool = { _ in false },
         isPausedWhisperModel: @escaping (String) -> Bool = { _ in false },
         isAnotherWhisperModelDownloading: @escaping (String) -> Bool = { _ in false },
@@ -213,7 +262,9 @@ final class ModelCatalogBuilderTests: XCTestCase {
         isAnotherCustomLLMDownloading: @escaping (String) -> Bool = { _ in false },
         isUninstallingModel: @escaping (String) -> Bool = { _ in false },
         isUninstallingWhisperModel: @escaping (String) -> Bool = { _ in false },
-        isUninstallingCustomLLM: @escaping (String) -> Bool = { _ in false }
+        isUninstallingCustomLLM: @escaping (String) -> Bool = { _ in false },
+        pauseModelDownload: @escaping (String) -> Void = { _ in },
+        cancelModelDownload: @escaping (String) -> Void = { _ in }
     ) -> ModelCatalogBuilder {
         ModelCatalogBuilder(
             mlxModelManager: TestModelManagers.mlx,
@@ -232,7 +283,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
             primaryUserLanguageCode: primaryUserLanguageCode,
             isDownloadingModel: isDownloadingModel,
             isPausedModel: isPausedModel,
-            isAnotherModelDownloading: isAnotherModelDownloading,
             isDownloadingWhisperModel: isDownloadingWhisperModel,
             isPausedWhisperModel: isPausedWhisperModel,
             isAnotherWhisperModelDownloading: isAnotherWhisperModelDownloading,
@@ -243,7 +293,8 @@ final class ModelCatalogBuilderTests: XCTestCase {
             isUninstallingWhisperModel: isUninstallingWhisperModel,
             isUninstallingCustomLLM: isUninstallingCustomLLM,
             downloadModel: { _ in },
-            cancelModelDownload: { _ in },
+            pauseModelDownload: pauseModelDownload,
+            cancelModelDownload: cancelModelDownload,
             deleteModel: { _ in },
             openMLXModelDirectory: { _ in },
             presentMLXSettings: { _ in },

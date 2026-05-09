@@ -68,10 +68,12 @@ class MLXModelManager: ObservableObject {
     }
 
     @Published private(set) var state: ModelState = .notDownloaded
+    @Published private(set) var stateByRepo: [String: ModelState] = [:]
     @Published private(set) var sizeState: ModelSizeState = .unknown
     @Published private(set) var remoteSizeTextByRepo: [String: String] = [:]
     @Published private(set) var pausedStatusMessage: String?
-    @Published private(set) var activeDownloadRepo: String?
+    @Published private(set) var pausedStatusMessageByRepo: [String: String] = [:]
+    @Published private(set) var activeDownloadRepos: Set<String> = []
 
     private var downloadedStateByRepo: [String: Bool] = [:]
     private var downloadedStateCachePrimed = false
@@ -82,12 +84,11 @@ class MLXModelManager: ObservableObject {
     private var loadedRepo: String?
     private var loadingTask: Task<Void, Error>?
     private var loadingRepo: String?
-    private var downloadTask: Task<Void, Never>?
+    private var downloadTasksByRepo: [String: Task<Void, Never>] = [:]
+    private var downloadStopActionsByRepo: [String: DownloadStopAction] = [:]
     private var sizeTask: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
-    private var downloadTempDir: URL?
-    private var downloadStopAction: DownloadStopAction?
     private let downloadSizeTolerance: Double = 0.9
     private let idleUnloadDelay: Duration = .seconds(90)
     private var activeUseCount = 0
@@ -215,23 +216,32 @@ class MLXModelManager: ObservableObject {
             }
         }
         invalidateLocalCache(for: canonicalRepo)
+        clearPerRepoState(for: canonicalRepo)
     }
 
     func downloadModel(repo: String) async {
-        updateModel(repo: repo)
-        await downloadModel()
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        await performDownload(forRepo: canonicalRepo)
     }
 
     func cancelDownload(repo: String) {
         let canonicalRepo = Self.canonicalModelRepo(repo)
-        if activeDownloadRepo == canonicalRepo || canonicalRepo == modelRepo {
-            cancelDownload()
+        if let task = downloadTasksByRepo[canonicalRepo] {
+            downloadStopActionsByRepo[canonicalRepo] = .cancel
+            setPausedStatusMessage(nil, for: canonicalRepo)
+            setState(.notDownloaded, for: canonicalRepo)
+            task.cancel()
             return
         }
 
+        setPausedStatusMessage(nil, for: canonicalRepo)
         cleanupPartialDownload(for: canonicalRepo)
         clearHubCache(for: canonicalRepo)
         invalidateLocalCache(for: canonicalRepo)
+        setState(.notDownloaded, for: canonicalRepo)
+        if canonicalRepo == modelRepo {
+            checkExistingModel()
+        }
     }
 
     func updateModel(repo: String) {
@@ -287,27 +297,24 @@ class MLXModelManager: ObservableObject {
 
     func checkExistingModel() {
         guard let modelDir = cacheDirectory(for: modelRepo) else {
-            state = .error("Invalid model identifier")
+            setState(.error("Invalid model identifier"), for: modelRepo)
             downloadedStateByRepo[modelRepo] = false
             return
         }
 
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
-            if downloadTask == nil, hasResumableDownload(repo: modelRepo) {
-                activeDownloadRepo = modelRepo
+            if downloadTasksByRepo[modelRepo] == nil, hasResumableDownload(repo: modelRepo) {
                 setPausedState(
                     progress: 0,
                     completed: 0,
                     total: 0,
                     currentFile: nil,
                     completedFiles: 0,
-                    totalFiles: 0
+                    totalFiles: 0,
+                    for: modelRepo
                 )
             } else {
-                if downloadTask == nil, activeDownloadRepo == modelRepo {
-                    activeDownloadRepo = nil
-                }
-                state = .notDownloaded
+                setState(.notDownloaded, for: modelRepo)
             }
             downloadedStateByRepo[modelRepo] = false
             return
@@ -316,75 +323,134 @@ class MLXModelManager: ObservableObject {
         if MLXModelDownloadSupport.isModelDirectoryValid(modelDir, fileManager: .default) {
             downloadedStateByRepo[modelRepo] = true
             if loadedModel != nil, loadedRepo == modelRepo {
-                state = .ready
+                setState(.ready, for: modelRepo)
             } else {
-                state = .downloaded
+                setState(.downloaded, for: modelRepo)
             }
         } else {
-            if downloadTask == nil, hasResumableDownload(repo: modelRepo) {
-                activeDownloadRepo = modelRepo
+            if downloadTasksByRepo[modelRepo] == nil, hasResumableDownload(repo: modelRepo) {
                 setPausedState(
                     progress: 0,
                     completed: 0,
                     total: 0,
                     currentFile: nil,
                     completedFiles: 0,
-                    totalFiles: 0
+                    totalFiles: 0,
+                    for: modelRepo
                 )
             } else {
-                if downloadTask == nil, activeDownloadRepo == modelRepo {
-                    activeDownloadRepo = nil
-                }
-                state = .notDownloaded
+                setState(.notDownloaded, for: modelRepo)
             }
             downloadedStateByRepo[modelRepo] = false
         }
+    }
+
+    func state(for repo: String) -> ModelState {
+        MLXModelPerRepoStateSupport.resolvedState(
+            for: repo,
+            currentRepo: modelRepo,
+            currentState: state,
+            storedStates: stateByRepo,
+            isDownloaded: { isModelDownloaded(repo: $0) },
+            hasResumableDownload: { hasResumableDownload(repo: $0) }
+        )
+    }
+
+    func pausedStatusMessage(for repo: String) -> String? {
+        MLXModelPerRepoStateSupport.pausedStatusMessage(
+            for: repo,
+            storedMessages: pausedStatusMessageByRepo
+        )
+    }
+
+    func isDownloading(repo: String) -> Bool {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        if downloadTasksByRepo[canonicalRepo] != nil { return true }
+        if case .downloading = state(for: canonicalRepo) { return true }
+        return false
+    }
+
+    func isPaused(repo: String) -> Bool {
+        if case .paused = state(for: repo) { return true }
+        return false
+    }
+
+    func isDownloadOperationActive(repo: String) -> Bool {
+        switch state(for: repo) {
+        case .downloading, .paused:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func setState(_ newState: ModelState, for repo: String) {
+        MLXModelPerRepoStateSupport.applyState(
+            newState,
+            for: repo,
+            currentRepo: modelRepo,
+            currentState: &state,
+            storedStates: &stateByRepo
+        )
+    }
+
+    private func setPausedStatusMessage(_ message: String?, for repo: String) {
+        MLXModelPerRepoStateSupport.applyPausedStatusMessage(
+            message,
+            for: repo,
+            currentRepo: modelRepo,
+            currentMessage: &pausedStatusMessage,
+            storedMessages: &pausedStatusMessageByRepo
+        )
+    }
+
+    private func clearPerRepoState(for repo: String) {
+        MLXModelPerRepoStateSupport.clearState(
+            for: repo,
+            currentRepo: modelRepo,
+            currentPausedStatusMessage: &pausedStatusMessage,
+            storedStates: &stateByRepo,
+            storedMessages: &pausedStatusMessageByRepo
+        )
     }
 
     func refreshStorageRoot() {
         downloadedStateByRepo.removeAll()
         downloadedStateCachePrimed = false
         localSizeTextByRepo.removeAll()
-        downloadTempDir = nil
-        if downloadTask == nil {
-            activeDownloadRepo = nil
-        }
+        MLXModelPerRepoStateSupport.resetStorageRootState(
+            currentPausedStatusMessage: &pausedStatusMessage,
+            storedStates: &stateByRepo,
+            storedMessages: &pausedStatusMessageByRepo
+        )
         checkExistingModel()
     }
 
     func downloadModel() async {
-        if downloadTask != nil { return }
-        if case .loading = state { return }
-        let targetRepo = modelRepo
-        if case .paused = state,
-           let pausedRepo = activeDownloadRepo,
-           Self.canonicalModelRepo(pausedRepo) != targetRepo {
-            pausedStatusMessage = nil
-            cleanupPartialDownload(for: pausedRepo)
-            clearHubCache(for: pausedRepo)
-            invalidateLocalCache(for: pausedRepo)
-            state = .notDownloaded
-            activeDownloadRepo = nil
-        }
+        await performDownload(forRepo: modelRepo)
+    }
 
-        downloadTask = Task { [weak self] in
+    private func performDownload(forRepo canonicalRepo: String) async {
+        if downloadTasksByRepo[canonicalRepo] != nil { return }
+        if case .loading = state(for: canonicalRepo) { return }
+
+        let task = Task { [weak self] in
             guard let self else { return }
             defer {
-                downloadTask = nil
-                if downloadStopAction != .pause, activeDownloadRepo == targetRepo {
-                    activeDownloadRepo = nil
-                }
-                downloadStopAction = nil
+                self.downloadTasksByRepo[canonicalRepo] = nil
+                self.downloadStopActionsByRepo[canonicalRepo] = nil
+                self.activeDownloadRepos.remove(canonicalRepo)
             }
-            activeDownloadRepo = targetRepo
-            if let pausedState = pausedDownloadSnapshot {
+            activeDownloadRepos.insert(canonicalRepo)
+            if let pausedState = pausedDownloadSnapshot(for: canonicalRepo) {
                 setDownloadingState(
                     progress: pausedState.progress,
                     completed: pausedState.completed,
                     total: pausedState.total,
                     currentFile: pausedState.currentFile,
                     completedFiles: pausedState.completedFiles,
-                    totalFiles: pausedState.totalFiles
+                    totalFiles: pausedState.totalFiles,
+                    for: canonicalRepo
                 )
             } else {
                 setDownloadingState(
@@ -393,12 +459,13 @@ class MLXModelManager: ObservableObject {
                     total: 0,
                     currentFile: nil,
                     completedFiles: 0,
-                    totalFiles: 0
+                    totalFiles: 0,
+                    for: canonicalRepo
                 )
             }
             do {
-                pausedStatusMessage = nil
-                let modelDir = try await performDownloadWithFallback(for: targetRepo)
+                setPausedStatusMessage(nil, for: canonicalRepo)
+                let modelDir = try await performDownloadWithFallback(for: canonicalRepo)
                 try Task.checkCancellation()
                 try MLXModelDownloadSupport.validateDownloadedModel(
                     at: modelDir,
@@ -406,74 +473,70 @@ class MLXModelManager: ObservableObject {
                     downloadSizeTolerance: downloadSizeTolerance,
                     fileManager: .default
                 )
-                downloadedStateByRepo[targetRepo] = true
-                localSizeTextByRepo.removeValue(forKey: targetRepo)
-                checkExistingModel()
-                VoxtLog.info("Download complete. repo=\(targetRepo)")
-            } catch is CancellationError {
-                switch downloadStopAction {
-                case .pause:
-                    pausedStatusMessage = nil
-                    VoxtLog.info("Download paused. repo=\(targetRepo)")
-                case .cancel, .none:
-                    pausedStatusMessage = nil
-                    cleanupPartialDownload(for: targetRepo)
-                    clearHubCache(for: targetRepo)
-                    invalidateLocalCache(for: targetRepo)
+                downloadedStateByRepo[canonicalRepo] = true
+                localSizeTextByRepo.removeValue(forKey: canonicalRepo)
+                if canonicalRepo == modelRepo {
                     checkExistingModel()
-                    VoxtLog.info("Download cancelled. repo=\(targetRepo)")
+                } else {
+                    setState(.downloaded, for: canonicalRepo)
+                }
+                VoxtLog.info("Download complete. repo=\(canonicalRepo)")
+            } catch is CancellationError {
+                switch downloadStopActionsByRepo[canonicalRepo] {
+                case .pause:
+                    setPausedStatusMessage(nil, for: canonicalRepo)
+                    VoxtLog.info("Download paused. repo=\(canonicalRepo)")
+                case .cancel, .none:
+                    setPausedStatusMessage(nil, for: canonicalRepo)
+                    cleanupPartialDownload(for: canonicalRepo)
+                    clearHubCache(for: canonicalRepo)
+                    invalidateLocalCache(for: canonicalRepo)
+                    if canonicalRepo == modelRepo {
+                        checkExistingModel()
+                    } else {
+                        setState(.notDownloaded, for: canonicalRepo)
+                    }
+                    VoxtLog.info("Download cancelled. repo=\(canonicalRepo)")
                 }
             } catch {
-                if pauseDownloadIfNetworkIssue(error, repo: targetRepo) {
+                if pauseDownloadIfNetworkIssue(error, repo: canonicalRepo) {
                     return
                 }
-                pausedStatusMessage = nil
-                clearHubCache(for: targetRepo)
-                if targetRepo == modelRepo {
-                    state = .error(downloadErrorMessage(for: error, repo: targetRepo))
-                } else {
-                    checkExistingModel()
-                }
-                VoxtLog.error("Download error. repo=\(targetRepo), error=\(error.localizedDescription)")
+                setPausedStatusMessage(nil, for: canonicalRepo)
+                clearHubCache(for: canonicalRepo)
+                setState(.error(downloadErrorMessage(for: error, repo: canonicalRepo)), for: canonicalRepo)
+                VoxtLog.error("Download error. repo=\(canonicalRepo), error=\(error.localizedDescription)")
             }
         }
+        downloadTasksByRepo[canonicalRepo] = task
+        await task.value
     }
 
     func pauseDownload() {
-        guard downloadTask != nil else { return }
-        downloadStopAction = .pause
-        pausedStatusMessage = nil
-        if let snapshot = downloadingSnapshot {
+        pauseDownload(repo: modelRepo)
+    }
+
+    func pauseDownload(repo: String) {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        guard let task = downloadTasksByRepo[canonicalRepo] else { return }
+        downloadStopActionsByRepo[canonicalRepo] = .pause
+        setPausedStatusMessage(nil, for: canonicalRepo)
+        if let snapshot = downloadingSnapshot(for: canonicalRepo) {
             setPausedState(
                 progress: snapshot.progress,
                 completed: snapshot.completed,
                 total: snapshot.total,
                 currentFile: snapshot.currentFile,
                 completedFiles: snapshot.completedFiles,
-                totalFiles: snapshot.totalFiles
+                totalFiles: snapshot.totalFiles,
+                for: canonicalRepo
             )
         }
-        downloadTask?.cancel()
+        task.cancel()
     }
 
     func cancelDownload() {
-        if downloadTask != nil {
-            downloadStopAction = .cancel
-            pausedStatusMessage = nil
-            state = .notDownloaded
-            downloadTask?.cancel()
-            return
-        }
-
-        guard pausedDownloadSnapshot != nil else { return }
-        pausedStatusMessage = nil
-        let targetRepo = activeDownloadRepo ?? modelRepo
-        cleanupPartialDownload(for: targetRepo)
-        clearHubCache(for: targetRepo)
-        invalidateLocalCache(for: targetRepo)
-        activeDownloadRepo = nil
-        checkExistingModel()
-        VoxtLog.info("Download cancelled from paused state. repo=\(targetRepo)")
+        cancelDownload(repo: modelRepo)
     }
 
     func loadModel() async throws -> any STTGenerationModel {
@@ -491,7 +554,7 @@ class MLXModelManager: ObservableObject {
         let repo = modelRepo
         let startedAt = Date()
         VoxtLog.info("MLX Audio model load started. repo=\(repo)", verbose: true)
-        state = .loading
+        setState(.loading, for: repo)
         let loadingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let model = try await Self.loadSTTModel(for: repo)
@@ -499,7 +562,7 @@ class MLXModelManager: ObservableObject {
             guard self.loadingRepo == repo else { return }
             self.loadedModel = model
             self.loadedRepo = repo
-            self.state = .ready
+            self.setState(.ready, for: repo)
         }
         self.loadingTask = loadingTask
         self.loadingRepo = repo
@@ -514,7 +577,7 @@ class MLXModelManager: ObservableObject {
         } catch {
             self.loadingTask = nil
             self.loadingRepo = nil
-            state = .error("Model load failed: \(error.localizedDescription)")
+            setState(.error("Model load failed: \(error.localizedDescription)"), for: repo)
             let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
             VoxtLog.error("MLX Audio model load failed. repo=\(repo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)")
             throw error
@@ -522,7 +585,7 @@ class MLXModelManager: ObservableObject {
     }
 
     func deleteModel() {
-        pausedStatusMessage = nil
+        setPausedStatusMessage(nil, for: modelRepo)
         cancelIdleUnloadTask()
         loadingTask?.cancel()
         loadingTask = nil
@@ -535,7 +598,7 @@ class MLXModelManager: ObservableObject {
         clearHubCache(for: modelRepo)
 
         guard let modelDir = cacheDirectory(for: modelRepo) else {
-            state = .notDownloaded
+            setState(.notDownloaded, for: modelRepo)
             invalidateLocalCache(for: modelRepo)
             return
         }
@@ -543,12 +606,12 @@ class MLXModelManager: ObservableObject {
             try FileManager.default.removeItem(at: modelDir)
             VoxtLog.info("Deleted MLX Audio model directory. repo=\(modelRepo), path=\(modelDir.path)")
         } catch {
-            state = .error("Couldn't uninstall MLX model. It may still be in use.")
+            setState(.error("Couldn't uninstall MLX model. It may still be in use."), for: modelRepo)
             VoxtLog.error("Failed to delete MLX Audio model directory. repo=\(modelRepo), error=\(error.localizedDescription)")
             return
         }
         invalidateLocalCache(for: modelRepo)
-        state = .notDownloaded
+        setState(.notDownloaded, for: modelRepo)
     }
 
     func beginActiveUse() {
@@ -694,17 +757,14 @@ class MLXModelManager: ObservableObject {
     }
 
     private func cleanupPartialDownload(for repo: String) {
-        if let tempDir = downloadTempDir {
-            try? FileManager.default.removeItem(at: tempDir)
-            downloadTempDir = nil
-        } else if let tempDir = downloadTempDirectory(for: repo) {
+        if let tempDir = downloadTempDirectory(for: repo) {
             try? FileManager.default.removeItem(at: tempDir)
         }
         guard let modelDir = cacheDirectory(for: repo) else { return }
         try? FileManager.default.removeItem(at: modelDir)
     }
 
-    private var downloadingSnapshot: (
+    private func downloadingSnapshot(for repo: String) -> (
         progress: Double,
         completed: Int64,
         total: Int64,
@@ -719,13 +779,13 @@ class MLXModelManager: ObservableObject {
             let currentFile,
             let completedFiles,
             let totalFiles
-        ) = state else {
+        ) = state(for: repo) else {
             return nil
         }
         return (progress, completed, total, currentFile, completedFiles, totalFiles)
     }
 
-    private var pausedDownloadSnapshot: (
+    private func pausedDownloadSnapshot(for repo: String) -> (
         progress: Double,
         completed: Int64,
         total: Int64,
@@ -740,7 +800,7 @@ class MLXModelManager: ObservableObject {
             let currentFile,
             let completedFiles,
             let totalFiles
-        ) = state else {
+        ) = state(for: repo) else {
             return nil
         }
         return (progress, completed, total, currentFile, completedFiles, totalFiles)
@@ -752,7 +812,8 @@ class MLXModelManager: ObservableObject {
         total: Int64,
         currentFile: String?,
         completedFiles: Int,
-        totalFiles: Int
+        totalFiles: Int,
+        for repo: String
     ) {
         let nextState = ModelState.paused(
             progress: progress,
@@ -762,17 +823,15 @@ class MLXModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
-        if state != nextState {
-            state = nextState
-        }
+        setState(nextState, for: repo)
     }
 
     private func pauseDownloadIfNetworkIssue(_ error: Error, repo: String) -> Bool {
         guard let message = MLXModelDownloadSupport.pauseMessageForInterruptedDownload(error) else {
             return false
         }
-        let snapshot = downloadingSnapshot ?? pausedDownloadSnapshot
-        pausedStatusMessage = message
+        let snapshot = downloadingSnapshot(for: repo) ?? pausedDownloadSnapshot(for: repo)
+        setPausedStatusMessage(message, for: repo)
         if let snapshot {
             setPausedState(
                 progress: snapshot.progress,
@@ -780,7 +839,8 @@ class MLXModelManager: ObservableObject {
                 total: snapshot.total,
                 currentFile: snapshot.currentFile,
                 completedFiles: snapshot.completedFiles,
-                totalFiles: snapshot.totalFiles
+                totalFiles: snapshot.totalFiles,
+                for: repo
             )
         } else {
             setPausedState(
@@ -789,7 +849,8 @@ class MLXModelManager: ObservableObject {
                 total: 0,
                 currentFile: nil,
                 completedFiles: 0,
-                totalFiles: 0
+                totalFiles: 0,
+                for: repo
             )
         }
         VoxtLog.warning("Download auto-paused after network issue. repo=\(repo), error=\(error.localizedDescription)")
@@ -977,6 +1038,7 @@ class MLXModelManager: ObservableObject {
         baseURL: URL,
         bearerToken: String?
     ) async throws -> URL {
+        let repo = repoID.description
         let modelSubdir = repoID.description.replacingOccurrences(of: "/", with: "_")
         let baseDir = ModelStorageDirectoryManager.resolvedRootURL().appendingPathComponent("mlx-audio")
         let modelDir = baseDir.appendingPathComponent(modelSubdir)
@@ -986,7 +1048,6 @@ class MLXModelManager: ObservableObject {
             return modelDir
         }
 
-        downloadTempDir = tempDir
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         VoxtLog.info("Fetching model entries: \(repoID.description)")
@@ -1019,7 +1080,8 @@ class MLXModelManager: ObservableObject {
                 total: totalBytes,
                 currentFile: entry.path,
                 completedFiles: completedFiles,
-                totalFiles: totalFiles
+                totalFiles: totalFiles,
+                for: repo
             )
             VoxtLog.info("Download start: \(entry.path) (size=\(entry.size ?? -1))", verbose: true)
 
@@ -1043,7 +1105,8 @@ class MLXModelManager: ObservableObject {
                             total: totalBytes,
                             currentFile: displayCurrentFile,
                             completedFiles: displayCompletedFiles,
-                            totalFiles: totalFiles
+                            totalFiles: totalFiles,
+                            for: repo
                         )
                     }
                     try? await Task.sleep(for: .milliseconds(200))
@@ -1067,7 +1130,8 @@ class MLXModelManager: ObservableObject {
                     total: totalBytes,
                     currentFile: nil,
                     completedFiles: finishedFiles,
-                    totalFiles: totalFiles
+                    totalFiles: totalFiles,
+                    for: repo
                 )
                 VoxtLog.info("Download resume reused existing file: \(entry.path)", verbose: true)
                 continue
@@ -1092,7 +1156,8 @@ class MLXModelManager: ObservableObject {
                 total: totalBytes,
                 currentFile: nil,
                 completedFiles: finishedFiles,
-                totalFiles: totalFiles
+                totalFiles: totalFiles,
+                for: repo
             )
             VoxtLog.info(
                 "Download progress: files=\(finishedFiles)/\(totalFiles), bytes=\(min(completedBytes, totalBytes))/\(totalBytes)",
@@ -1110,7 +1175,6 @@ class MLXModelManager: ObservableObject {
         VoxtLog.info("Moving downloaded files into final cache...", verbose: true)
         try MLXModelDownloadSupport.clearDirectory(at: modelDir, fileManager: .default)
         try FileManager.default.moveItem(at: tempDir, to: modelDir)
-        downloadTempDir = nil
         VoxtLog.info("Download files moved to final cache.", verbose: true)
         return modelDir
     }
@@ -1149,9 +1213,12 @@ class MLXModelManager: ObservableObject {
         total: Int64,
         currentFile: String?,
         completedFiles: Int,
-        totalFiles: Int
+        totalFiles: Int,
+        for repo: String
     ) {
-        guard downloadTask != nil, downloadStopAction == nil else { return }
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        guard downloadTasksByRepo[canonicalRepo] != nil,
+              downloadStopActionsByRepo[canonicalRepo] == nil else { return }
         let nextState = ModelState.downloading(
             progress: progress,
             completed: completed,
@@ -1160,9 +1227,7 @@ class MLXModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
-        if state != nextState {
-            state = nextState
-        }
+        setState(nextState, for: canonicalRepo)
     }
 
     private static func inFlightBytes(

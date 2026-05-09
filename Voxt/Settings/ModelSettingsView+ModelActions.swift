@@ -211,8 +211,8 @@ extension ModelSettingsView {
 
         if isDownloadingModel(repo) {
             return ModelDownloadPresentationSupport.downloadingActions(
-                onPause: { mlxModelManager.pauseDownload() },
-                onCancel: { mlxModelManager.cancelDownload() }
+                onPause: { mlxModelManager.pauseDownload(repo: repo) },
+                onCancel: { mlxModelManager.cancelDownload(repo: repo) }
             )
         }
 
@@ -235,7 +235,7 @@ extension ModelSettingsView {
         }
 
         return ModelDownloadPresentationSupport.installActions(
-            isEnabled: !isAnotherModelDownloading(repo),
+            isEnabled: true,
             onInstall: { downloadModel(repo) }
         )
     }
@@ -327,19 +327,11 @@ extension ModelSettingsView {
     }
 
     func isDownloadingModel(_ repo: String) -> Bool {
-        ModelDownloadStateRouting.isMLXDownloading(
-            repo: repo,
-            activeRepo: mlxModelManager.activeDownloadRepo,
-            state: mlxModelManager.state
-        )
+        mlxModelManager.isDownloading(repo: repo)
     }
 
     func isPausedModel(_ repo: String) -> Bool {
-        ModelDownloadStateRouting.isMLXPaused(
-            repo: repo,
-            activeRepo: mlxModelManager.activeDownloadRepo,
-            state: mlxModelManager.state
-        ) || mlxModelManager.hasResumableDownload(repo: repo)
+        mlxModelManager.isPaused(repo: repo) || mlxModelManager.hasResumableDownload(repo: repo)
     }
 
     func isDownloadingWhisperModel(_ modelID: String) -> Bool {
@@ -354,14 +346,6 @@ extension ModelSettingsView {
         return whisperModelManager.hasResumableDownload(id: modelID)
     }
 
-    func isAnotherModelDownloading(_ repo: String) -> Bool {
-        ModelDownloadStateRouting.isAnotherMLXDownloadActive(
-            repo: repo,
-            activeRepo: mlxModelManager.activeDownloadRepo,
-            state: mlxModelManager.state
-        )
-    }
-
     func isAnotherWhisperModelDownloading(_ modelID: String) -> Bool {
         guard let activeDownload = whisperModelManager.activeDownload,
               activeDownload.isPaused == false else { return false }
@@ -373,20 +357,20 @@ extension ModelSettingsView {
             return AppLocalization.localizedString("Uninstalling…")
         }
 
-        if isDownloadingModel(repo),
-           case .downloading(_, let completed, let total, _, _, _) = mlxModelManager.state {
+        let perRepoState = mlxModelManager.state(for: repo)
+
+        if case .downloading(_, let completed, let total, _, _, _) = perRepoState {
             return ModelDownloadPresentationSupport.statusText(
                 downloadState: .downloading(completed: completed, total: total)
             )
         }
 
-        if isPausedModel(repo),
-           case .paused(_, let completed, let total, _, _, _) = mlxModelManager.state {
+        if case .paused(_, let completed, let total, _, _, _) = perRepoState {
             return ModelDownloadPresentationSupport.statusText(
                 downloadState: .paused(
                     completed: completed,
                     total: total,
-                    pauseMessage: mlxModelManager.pausedStatusMessage
+                    pauseMessage: mlxModelManager.pausedStatusMessage(for: repo)
                 )
             )
         }
@@ -401,10 +385,7 @@ extension ModelSettingsView {
             )
         }
 
-        if ModelDownloadStateRouting.isMLXOperationTarget(
-            repo: repo,
-            activeRepo: mlxModelManager.activeDownloadRepo
-        ), case .error(let message) = mlxModelManager.state {
+        if case .error(let message) = perRepoState {
             return ModelDownloadPresentationSupport.statusText(
                 downloadState: .idle,
                 errorMessage: message
