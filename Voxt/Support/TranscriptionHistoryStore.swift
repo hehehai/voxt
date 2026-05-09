@@ -50,6 +50,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let transcriptionChatMessages: [MeetingSummaryChatMessage]?
     let dictionaryHitTerms: [String]
     let dictionaryCorrectedTerms: [String]
+    let dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot]
     let dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
 
     enum CodingKeys: String, CodingKey {
@@ -87,6 +88,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case transcriptionChatMessages
         case dictionaryHitTerms
         case dictionaryCorrectedTerms
+        case dictionaryCorrectionSnapshots
         case dictionarySuggestedTerms
     }
 
@@ -125,6 +127,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         transcriptionChatMessages: [MeetingSummaryChatMessage]? = nil,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
+        dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot] = [],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
     ) {
         self.id = id
@@ -161,6 +164,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.transcriptionChatMessages = transcriptionChatMessages
         self.dictionaryHitTerms = dictionaryHitTerms
         self.dictionaryCorrectedTerms = dictionaryCorrectedTerms
+        self.dictionaryCorrectionSnapshots = dictionaryCorrectionSnapshots
         self.dictionarySuggestedTerms = dictionarySuggestedTerms
     }
 
@@ -207,6 +211,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         transcriptionChatMessages = try container.decodeIfPresent([MeetingSummaryChatMessage].self, forKey: .transcriptionChatMessages)
         dictionaryHitTerms = try container.decodeIfPresent([String].self, forKey: .dictionaryHitTerms) ?? []
         dictionaryCorrectedTerms = try container.decodeIfPresent([String].self, forKey: .dictionaryCorrectedTerms) ?? []
+        dictionaryCorrectionSnapshots = try container.decodeIfPresent([DictionaryCorrectionSnapshot].self, forKey: .dictionaryCorrectionSnapshots) ?? []
         dictionarySuggestedTerms = try container.decodeIfPresent([DictionarySuggestionSnapshot].self, forKey: .dictionarySuggestedTerms) ?? []
     }
 }
@@ -342,6 +347,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         transcriptionChatMessages: [MeetingSummaryChatMessage]? = nil,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
+        dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot] = [],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
     ) -> UUID? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -381,6 +387,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
 
@@ -570,6 +577,62 @@ final class TranscriptionHistoryStore: ObservableObject {
         persist()
     }
 
+    func applyDictionaryCorrectionSnapshots(_ snapshotsByHistoryID: [UUID: [DictionaryCorrectionSnapshot]]) {
+        guard !snapshotsByHistoryID.isEmpty else { return }
+
+        var didChange = false
+        for (historyID, snapshots) in snapshotsByHistoryID {
+            guard let index = allEntries.firstIndex(where: { $0.id == historyID }) else { continue }
+            let merged = mergeCorrectionSnapshots(
+                existing: allEntries[index].dictionaryCorrectionSnapshots,
+                incoming: snapshots
+            )
+            guard merged != allEntries[index].dictionaryCorrectionSnapshots else { continue }
+            allEntries[index] = allEntries[index].updatingDictionaryCorrectionSnapshots(merged)
+            didChange = true
+        }
+
+        guard didChange else { return }
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        persist()
+    }
+
+    func applyDictionaryCorrectionResult(
+        historyID: UUID,
+        updatedText: String,
+        correctedTerms: [String],
+        correctionSnapshots: [DictionaryCorrectionSnapshot]
+    ) {
+        guard let index = allEntries.firstIndex(where: { $0.id == historyID }) else { return }
+
+        let trimmedUpdatedText = updatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let mergedTerms = mergeUniqueTerms(
+            existing: allEntries[index].dictionaryCorrectedTerms,
+            incoming: correctedTerms
+        )
+        let mergedSnapshots = mergeCorrectionSnapshots(
+            existing: allEntries[index].dictionaryCorrectionSnapshots,
+            incoming: correctionSnapshots
+        )
+
+        guard !trimmedUpdatedText.isEmpty else { return }
+        let didTextChange = trimmedUpdatedText != allEntries[index].text
+        let didTermsChange = mergedTerms != allEntries[index].dictionaryCorrectedTerms
+        let didSnapshotsChange = mergedSnapshots != allEntries[index].dictionaryCorrectionSnapshots
+        guard didTextChange || didTermsChange || didSnapshotsChange else { return }
+
+        allEntries[index] = allEntries[index].updatingDictionaryCorrectionResult(
+            text: trimmedUpdatedText,
+            dictionaryCorrectedTerms: mergedTerms,
+            dictionaryCorrectionSnapshots: mergedSnapshots
+        )
+
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        persist()
+    }
+
     @discardableResult
     func updateMeetingSummary(_ summary: MeetingSummarySnapshot?, for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let index = allEntries.firstIndex(where: { $0.id == entryID }) else { return nil }
@@ -612,6 +675,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         transcriptionChatMessages: [MeetingSummaryChatMessage],
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
+        dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot] = [],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
     ) -> TranscriptionHistoryEntry? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -631,6 +695,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
         allEntries.sort { $0.createdAt > $1.createdAt }
@@ -743,6 +808,24 @@ final class TranscriptionHistoryStore: ObservableObject {
         return merged
     }
 
+    private func mergeCorrectionSnapshots(
+        existing: [DictionaryCorrectionSnapshot],
+        incoming: [DictionaryCorrectionSnapshot]
+    ) -> [DictionaryCorrectionSnapshot] {
+        guard !incoming.isEmpty else { return existing }
+        var merged = existing
+        var seen = Set(existing)
+        for snapshot in incoming where seen.insert(snapshot).inserted {
+            merged.append(snapshot)
+        }
+        return merged.sorted { lhs, rhs in
+            if lhs.finalLocation == rhs.finalLocation {
+                return lhs.finalLength < rhs.finalLength
+            }
+            return lhs.finalLocation < rhs.finalLocation
+        }
+    }
+
     private func audioFolderName(for kind: TranscriptionHistoryKind) -> String {
         switch kind {
         case .normal:
@@ -806,6 +889,51 @@ struct HistoryAudioStorageStats: Equatable {
 }
 
 private extension TranscriptionHistoryEntry {
+    func updatingDictionaryCorrectionResult(
+        text: String,
+        dictionaryCorrectedTerms: [String],
+        dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot]
+    ) -> TranscriptionHistoryEntry {
+        TranscriptionHistoryEntry(
+            id: id,
+            text: text,
+            createdAt: createdAt,
+            transcriptionEngine: transcriptionEngine,
+            transcriptionModel: transcriptionModel,
+            enhancementMode: enhancementMode,
+            enhancementModel: enhancementModel,
+            kind: kind,
+            isTranslation: isTranslation,
+            audioDurationSeconds: audioDurationSeconds,
+            transcriptionProcessingDurationSeconds: transcriptionProcessingDurationSeconds,
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: focusedAppName,
+            focusedAppBundleID: focusedAppBundleID,
+            matchedGroupID: matchedGroupID,
+            matchedGroupName: matchedGroupName,
+            matchedAppGroupName: matchedAppGroupName,
+            matchedURLGroupName: matchedURLGroupName,
+            remoteASRProvider: remoteASRProvider,
+            remoteASRModel: remoteASRModel,
+            remoteASREndpoint: remoteASREndpoint,
+            remoteLLMProvider: remoteLLMProvider,
+            remoteLLMModel: remoteLLMModel,
+            remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
+            whisperWordTimings: whisperWordTimings,
+            meetingSegments: meetingSegments,
+            meetingAudioRelativePath: meetingAudioRelativePath,
+            meetingSummary: meetingSummary,
+            meetingSummaryChatMessages: meetingSummaryChatMessages,
+            displayTitle: displayTitle,
+            transcriptionChatMessages: transcriptionChatMessages,
+            dictionaryHitTerms: dictionaryHitTerms,
+            dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
+            dictionarySuggestedTerms: dictionarySuggestedTerms
+        )
+    }
+
     func updatingDictionaryCorrectedTerms(_ dictionaryCorrectedTerms: [String]) -> TranscriptionHistoryEntry {
         TranscriptionHistoryEntry(
             id: id,
@@ -842,6 +970,48 @@ private extension TranscriptionHistoryEntry {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
+            dictionarySuggestedTerms: dictionarySuggestedTerms
+        )
+    }
+
+    func updatingDictionaryCorrectionSnapshots(_ dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot]) -> TranscriptionHistoryEntry {
+        TranscriptionHistoryEntry(
+            id: id,
+            text: text,
+            createdAt: createdAt,
+            transcriptionEngine: transcriptionEngine,
+            transcriptionModel: transcriptionModel,
+            enhancementMode: enhancementMode,
+            enhancementModel: enhancementModel,
+            kind: kind,
+            isTranslation: isTranslation,
+            audioDurationSeconds: audioDurationSeconds,
+            transcriptionProcessingDurationSeconds: transcriptionProcessingDurationSeconds,
+            llmDurationSeconds: llmDurationSeconds,
+            focusedAppName: focusedAppName,
+            focusedAppBundleID: focusedAppBundleID,
+            matchedGroupID: matchedGroupID,
+            matchedGroupName: matchedGroupName,
+            matchedAppGroupName: matchedAppGroupName,
+            matchedURLGroupName: matchedURLGroupName,
+            remoteASRProvider: remoteASRProvider,
+            remoteASRModel: remoteASRModel,
+            remoteASREndpoint: remoteASREndpoint,
+            remoteLLMProvider: remoteLLMProvider,
+            remoteLLMModel: remoteLLMModel,
+            remoteLLMEndpoint: remoteLLMEndpoint,
+            audioRelativePath: audioRelativePath,
+            whisperWordTimings: whisperWordTimings,
+            meetingSegments: meetingSegments,
+            meetingAudioRelativePath: meetingAudioRelativePath,
+            meetingSummary: meetingSummary,
+            meetingSummaryChatMessages: meetingSummaryChatMessages,
+            displayTitle: displayTitle,
+            transcriptionChatMessages: transcriptionChatMessages,
+            dictionaryHitTerms: dictionaryHitTerms,
+            dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
     }
@@ -882,6 +1052,7 @@ private extension TranscriptionHistoryEntry {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
     }
@@ -922,6 +1093,7 @@ private extension TranscriptionHistoryEntry {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
     }
@@ -962,6 +1134,7 @@ private extension TranscriptionHistoryEntry {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
     }
@@ -1002,6 +1175,7 @@ private extension TranscriptionHistoryEntry {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
     }
@@ -1016,6 +1190,7 @@ private extension TranscriptionHistoryEntry {
         transcriptionChatMessages: [MeetingSummaryChatMessage],
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
+        dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
     ) -> TranscriptionHistoryEntry {
         TranscriptionHistoryEntry(
@@ -1053,6 +1228,7 @@ private extension TranscriptionHistoryEntry {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
     }
@@ -1093,6 +1269,7 @@ private extension TranscriptionHistoryEntry {
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
     }

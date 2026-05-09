@@ -29,6 +29,7 @@ extension AppDelegate {
             context.outputText = result.text
             context.dictionaryMatches = result.candidates
             context.dictionaryCorrectedTerms = result.correctedTerms
+            context.dictionaryCorrectionSnapshots = result.correctionSnapshots
         }
     }
 
@@ -79,7 +80,7 @@ extension AppDelegate {
     }
 
     private struct AppendHistoryStage: SessionFinalizeStage {
-        let append: (String, String?, TimeInterval?, [String], [String], [DictionarySuggestionSnapshot]) -> UUID?
+        let append: (String, String?, TimeInterval?, [String], [String], [DictionaryCorrectionSnapshot], [DictionarySuggestionSnapshot]) -> UUID?
 
         var name: String { "appendHistory" }
 
@@ -90,6 +91,7 @@ extension AppDelegate {
                 context.llmDurationSeconds,
                 Self.uniqueTerms(from: context.dictionaryMatches),
                 Self.deduplicatedTerms(context.dictionaryCorrectedTerms),
+                context.dictionaryCorrectionSnapshots,
                 context.dictionarySuggestions.map(\.snapshot)
             )
         }
@@ -170,12 +172,22 @@ extension AppDelegate {
         automaticReplacementEnabled: Bool
     ) -> DictionaryCorrectionResult {
         guard let matcher else {
-            return DictionaryCorrectionResult(text: text, candidates: [], correctedTerms: [])
+            return DictionaryCorrectionResult(
+                text: text,
+                candidates: [],
+                correctedTerms: [],
+                correctionSnapshots: []
+            )
         }
 
         if usesConservativeEvidence {
             let candidates = matcher.recallCandidates(in: text)
-            return DictionaryCorrectionResult(text: text, candidates: candidates, correctedTerms: [])
+            return DictionaryCorrectionResult(
+                text: text,
+                candidates: candidates,
+                correctedTerms: [],
+                correctionSnapshots: []
+            )
         }
 
         return matcher.applyCorrections(
@@ -217,6 +229,7 @@ extension AppDelegate {
             llmDurationSeconds: llmDurationSeconds,
             dictionaryMatches: uniqueDictionaryMatches,
             dictionaryCorrectedTerms: dictionaryCorrection.correctedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrection.correctionSnapshots,
             dictionarySuggestions: [],
             historyEntryID: nil,
             rewriteAnswerPayload: rewriteAnswerPayload
@@ -368,6 +381,7 @@ extension AppDelegate {
         let displayTitle = deliveredContext.rewriteAnswerPayload?.trimmedTitle
         let dictionaryMatches = deliveredContext.dictionaryMatches
         let dictionaryCorrectedTerms = deliveredContext.dictionaryCorrectedTerms
+        let dictionaryCorrectionSnapshots = deliveredContext.dictionaryCorrectionSnapshots
         let llmDurationSeconds = deliveredContext.llmDurationSeconds
 
         Task.detached(priority: .utility) { [weak self] in
@@ -390,6 +404,7 @@ extension AppDelegate {
                     llmDurationSeconds: llmDurationSeconds,
                     dictionaryHitTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryMatches.map(\.term)),
                     dictionaryCorrectedTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryCorrectedTerms),
+                    dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
                     dictionarySuggestedTerms: dictionarySuggestions.map(\.snapshot)
                 )
                 self.overlayState.latestHistoryEntryID = historyEntryID

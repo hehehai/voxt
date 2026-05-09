@@ -517,25 +517,11 @@ struct GeneralAppBehaviorCard: View {
 
 private extension GeneralAppBehaviorCard {
     var networkProxyModeTitle: String {
-        switch networkProxyMode {
-        case .system:
-            return localized("Follow System")
-        case .disabled:
-            return localized("Off")
-        case .custom:
-            return localized("Custom")
-        }
+        GeneralSettingsData.networkProxyModeTitle(networkProxyMode)
     }
 
     var customProxySchemeTitle: String {
-        switch customProxyScheme {
-        case .http:
-            return "HTTP"
-        case .https:
-            return "HTTPS"
-        case .socks5:
-            return "SOCKS5"
-        }
+        GeneralSettingsData.proxySchemeTitle(customProxyScheme)
     }
 }
 

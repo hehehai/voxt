@@ -80,7 +80,7 @@ struct HistoryRow: View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: onCopy) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(entry.text)
+                    Text(displayText)
                         .font(.body)
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
@@ -157,6 +157,13 @@ struct HistoryRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(.quaternary, lineWidth: 1)
+        )
+    }
+
+    private var displayText: String {
+        HistoryCorrectionPresentation.correctedText(
+            for: entry.text,
+            snapshots: entry.dictionaryCorrectionSnapshots
         )
     }
 

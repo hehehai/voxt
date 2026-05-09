@@ -163,6 +163,7 @@ extension AppDelegate {
         VoxtLog.info(
             "Begin recording requested. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), isSessionActive=\(isSessionActive), isMeetingActive=\(meetingSessionCoordinator.isActive)"
         )
+        pendingAutomaticDictionaryLearningTask?.cancel()
         guard !meetingSessionCoordinator.isActive else {
             VoxtLog.info(
                 "Begin recording ignored because Meeting Notes is active. output=\(RecordingSessionSupport.outputLabel(for: outputMode))"

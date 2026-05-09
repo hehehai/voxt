@@ -297,12 +297,18 @@ struct DictionaryMatcher {
             .sorted(by: replacementSortComparator)
 
         guard !replacementCandidates.isEmpty else {
-            return DictionaryCorrectionResult(text: text, candidates: candidates, correctedTerms: [])
+            return DictionaryCorrectionResult(
+                text: text,
+                candidates: candidates,
+                correctedTerms: [],
+                correctionSnapshots: []
+            )
         }
 
         let output = NSMutableString(string: text)
         var correctedTerms: [String] = []
         var appliedRanges: [NSRange] = []
+        var appliedSnapshots: [(originalRange: NSRange, snapshot: DictionaryCorrectionSnapshot)] = []
 
         for candidate in replacementCandidates {
             guard let matchRange = candidate.matchRange, matchRange.length > 0 else { continue }
@@ -312,13 +318,47 @@ struct DictionaryMatcher {
             output.replaceCharacters(in: matchRange, with: candidate.term)
             correctedTerms.append(candidate.term)
             appliedRanges.append(matchRange)
+            appliedSnapshots.append((
+                originalRange: matchRange,
+                snapshot: DictionaryCorrectionSnapshot(
+                    originalText: candidate.matchedText,
+                    correctedText: candidate.term,
+                    finalLocation: 0,
+                    finalLength: 0
+                )
+            ))
         }
+
+        let correctionSnapshots = finalizedCorrectionSnapshots(from: appliedSnapshots)
 
         return DictionaryCorrectionResult(
             text: output as String,
             candidates: candidates,
-            correctedTerms: correctedTerms
+            correctedTerms: correctedTerms,
+            correctionSnapshots: correctionSnapshots
         )
+    }
+
+    private nonisolated func finalizedCorrectionSnapshots(
+        from appliedSnapshots: [(originalRange: NSRange, snapshot: DictionaryCorrectionSnapshot)]
+    ) -> [DictionaryCorrectionSnapshot] {
+        var delta = 0
+        return appliedSnapshots
+            .sorted { lhs, rhs in
+                lhs.originalRange.location < rhs.originalRange.location
+            }
+            .map { item in
+                let originalLength = item.originalRange.length
+                let correctedLength = (item.snapshot.correctedText as NSString).length
+                let finalized = DictionaryCorrectionSnapshot(
+                    originalText: item.snapshot.originalText,
+                    correctedText: item.snapshot.correctedText,
+                    finalLocation: item.originalRange.location + delta,
+                    finalLength: correctedLength
+                )
+                delta += correctedLength - originalLength
+                return finalized
+            }
     }
 
     private nonisolated func shouldApplyReplacement(

@@ -18,6 +18,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         let sourceEnvironment = TestEnvironmentFactory.configurationTransferEnvironment(in: sourceDirectory)
 
         sourceDefaults.set(AppInterfaceLanguage.english.rawValue, forKey: AppPreferenceKey.interfaceLanguage)
+        sourceDefaults.set(false, forKey: AppPreferenceKey.realtimeTextDisplayEnabled)
         sourceDefaults.set("builtin-mic", forKey: AppPreferenceKey.activeInputDeviceUID)
         sourceDefaults.set(false, forKey: AppPreferenceKey.microphoneAutoSwitchEnabled)
         sourceDefaults.set(["usb-mic", "builtin-mic"], forKey: AppPreferenceKey.microphonePriorityUIDs)
@@ -123,6 +124,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
             UserMainLanguageOption.storedSelection(from: targetDefaults.string(forKey: AppPreferenceKey.userMainLanguageCodes)),
             ["zh-hant", "en"]
         )
+        XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.realtimeTextDisplayEnabled))
         XCTAssertEqual(targetDefaults.string(forKey: AppPreferenceKey.activeInputDeviceUID), "builtin-mic")
         XCTAssertFalse(targetDefaults.bool(forKey: AppPreferenceKey.microphoneAutoSwitchEnabled))
         XCTAssertEqual(targetDefaults.stringArray(forKey: AppPreferenceKey.microphonePriorityUIDs), ["usb-mic", "builtin-mic"])
@@ -249,6 +251,7 @@ final class ConfigurationTransferManagerTests: XCTestCase {
         XCTAssertEqual(decoded.trackedMicrophoneRecords, [TrackedMicrophoneRecord(uid: "usb-mic", lastKnownName: "USB Mic")])
         XCTAssertEqual(decoded.overlayCardOpacity, 82)
         XCTAssertEqual(decoded.userMainLanguageCodes, UserMainLanguageOption.defaultSelectionCodes())
+        XCTAssertTrue(decoded.realtimeTextDisplayEnabled)
         XCTAssertFalse(decoded.hideMeetingOverlayFromScreenSharing)
         XCTAssertEqual(decoded.meetingRealtimeTranslationTargetLanguage, "")
         XCTAssertFalse(decoded.alwaysShowRewriteAnswerCard)

@@ -28,6 +28,7 @@ final class TranscriptionHistoryEntryAudioTests: XCTestCase {
 
         XCTAssertEqual(entry.meetingAudioRelativePath, "meeting/legacy.wav")
         XCTAssertEqual(entry.audioRelativePath, "meeting/legacy.wav")
+        XCTAssertTrue(entry.dictionaryCorrectionSnapshots.isEmpty)
     }
 
     func testEncodingGenericAudioPathOmitsLegacyFieldWhenUnset() throws {
@@ -68,5 +69,6 @@ final class TranscriptionHistoryEntryAudioTests: XCTestCase {
 
         XCTAssertEqual(object["audioRelativePath"] as? String, "transcription/sample.wav")
         XCTAssertNil(object["meetingAudioRelativePath"])
+        XCTAssertTrue((object["dictionaryCorrectionSnapshots"] as? [Any])?.isEmpty == true)
     }
 }

@@ -57,7 +57,12 @@ extension AppDelegate {
             for: text,
             activeGroupID: activeDictionaryGroupID()
         ) else {
-            return DictionaryCorrectionResult(text: text, candidates: [], correctedTerms: [])
+            return DictionaryCorrectionResult(
+                text: text,
+                candidates: [],
+                correctedTerms: [],
+                correctionSnapshots: []
+            )
         }
 
         if result.text != text {
@@ -73,7 +78,12 @@ extension AppDelegate {
             for: text,
             activeGroupID: activeDictionaryGroupID()
         ) else {
-            return DictionaryCorrectionResult(text: text, candidates: [], correctedTerms: [])
+            return DictionaryCorrectionResult(
+                text: text,
+                candidates: [],
+                correctedTerms: [],
+                correctionSnapshots: []
+            )
         }
 
         if !result.candidates.isEmpty {

@@ -300,6 +300,7 @@ extension AppDelegate {
         llmDurationSeconds: TimeInterval?,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
+        dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot] = [],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
     ) -> UUID? {
         guard historyEnabled else {
@@ -391,6 +392,7 @@ extension AppDelegate {
                     : nil,
                 dictionaryHitTerms: dictionaryHitTerms,
                 dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+                dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
                 dictionarySuggestedTerms: dictionarySuggestedTerms
            ) {
             lastEnhancementPromptContext = nil
@@ -440,6 +442,7 @@ extension AppDelegate {
                 : nil,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
 
@@ -463,6 +466,7 @@ extension AppDelegate {
         whisperWordTimings: [WhisperHistoryWordTiming]?,
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
+        dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot],
         dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
     ) -> UUID? {
         guard overlayState.isRewriteConversationActive,
@@ -518,6 +522,7 @@ extension AppDelegate {
                 existing: existingEntry.dictionaryCorrectedTerms,
                 incoming: dictionaryCorrectedTerms
             ),
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
             dictionarySuggestedTerms: mergedSuggestedTerms
         )
 

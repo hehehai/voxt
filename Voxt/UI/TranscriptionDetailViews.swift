@@ -66,9 +66,8 @@ struct TranscriptionDetailContentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: stackSpacing) {
                 detailSection(title: localized("Text")) {
-                    Text(entry.text)
+                    correctionPreviewText
                         .font(.system(size: style == .popover ? 13 : 14, weight: .medium))
-                        .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -224,6 +223,30 @@ struct TranscriptionDetailContentView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
+        }
+    }
+
+    private var correctionPreviewText: Text {
+        HistoryCorrectionPresentation.segments(
+            for: entry.text,
+            snapshots: entry.dictionaryCorrectionSnapshots
+        ).reduce(Text("")) { partial, segment in
+            partial + styledText(for: segment)
+        }
+    }
+
+    private func styledText(for segment: HistoryCorrectionSegment) -> Text {
+        switch segment {
+        case .plain(let value):
+            return Text(verbatim: value).foregroundColor(.primary)
+        case .original(let value):
+            return Text(verbatim: value)
+                .foregroundColor(.red)
+                .strikethrough(true, color: .red)
+        case .corrected(let value):
+            return Text(verbatim: value)
+                .foregroundColor(.green)
+                .fontWeight(.semibold)
         }
     }
 

@@ -14,6 +14,17 @@ final class DictionaryMatcherTests: XCTestCase {
         let withAutomatic = matcher.applyCorrections(to: "anthropic ai", automaticReplacementEnabled: true)
         XCTAssertEqual(withAutomatic.text, "Anthropic")
         XCTAssertEqual(withAutomatic.correctedTerms, ["Anthropic"])
+        XCTAssertEqual(
+            withAutomatic.correctionSnapshots,
+            [
+                DictionaryCorrectionSnapshot(
+                    originalText: "anthropic ai",
+                    correctedText: "Anthropic",
+                    finalLocation: 0,
+                    finalLength: 10
+                )
+            ]
+        )
     }
 
     func testFuzzyLatinWindowIsDetected() {
@@ -47,6 +58,17 @@ final class DictionaryMatcherTests: XCTestCase {
 
         XCTAssertEqual(result.text, "open AI")
         XCTAssertEqual(result.correctedTerms, ["AI"])
+        XCTAssertEqual(
+            result.correctionSnapshots,
+            [
+                DictionaryCorrectionSnapshot(
+                    originalText: "ai",
+                    correctedText: "AI",
+                    finalLocation: 5,
+                    finalLength: 2
+                )
+            ]
+        )
     }
 
     func testCJKExactMatchDoesNotRequireWhitespaceBoundaries() {

@@ -152,6 +152,7 @@ struct SessionFinalizeContext {
     let llmDurationSeconds: TimeInterval?
     var dictionaryMatches: [DictionaryMatchCandidate]
     var dictionaryCorrectedTerms: [String]
+    var dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot]
     var dictionarySuggestions: [DictionarySuggestionDraft]
     var historyEntryID: UUID?
     var rewriteAnswerPayload: RewriteAnswerPayload?
