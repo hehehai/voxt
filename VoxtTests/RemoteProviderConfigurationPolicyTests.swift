@@ -279,40 +279,6 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         )
     }
 
-    func testSelectingCustomMeetingModelPrefillsCurrentBuiltinModel() {
-        let customMeetingModelID = RemoteProviderConfigurationPolicy.nextCustomModelID(
-            previousResolvedModel: "qwen3-asr-flash",
-            newSelection: RemoteProviderConfigurationPolicy.customModelOptionID,
-            currentCustomModelID: "",
-            supportsCustomSelection: true
-        )
-        let resolvedSelection = RemoteProviderConfigurationPolicy.resolvedMeetingSelection(
-            selectedMeetingModel: RemoteProviderConfigurationPolicy.customModelOptionID,
-            configuredMeetingModel: "qwen3-asr-flash-filetrans",
-            meetingOptionIDs: RemoteASRMeetingConfiguration.meetingModelOptions(for: .aliyunBailianASR).map(\.id)
-        )
-
-        XCTAssertEqual(customMeetingModelID, "qwen3-asr-flash")
-        XCTAssertEqual(resolvedSelection, RemoteProviderConfigurationPolicy.customModelOptionID)
-    }
-
-    func testSelectingCustomMeetingModelKeepsExistingCustomValue() {
-        let customMeetingModelID = RemoteProviderConfigurationPolicy.nextCustomModelID(
-            previousResolvedModel: "qwen3-asr-flash",
-            newSelection: RemoteProviderConfigurationPolicy.customModelOptionID,
-            currentCustomModelID: "qwen3-asr-flash-2026-03-01",
-            supportsCustomSelection: true
-        )
-        let resolvedSelection = RemoteProviderConfigurationPolicy.resolvedMeetingSelection(
-            selectedMeetingModel: RemoteProviderConfigurationPolicy.customModelOptionID,
-            configuredMeetingModel: "qwen3-asr-flash-filetrans",
-            meetingOptionIDs: RemoteASRMeetingConfiguration.meetingModelOptions(for: .aliyunBailianASR).map(\.id)
-        )
-
-        XCTAssertEqual(customMeetingModelID, "qwen3-asr-flash-2026-03-01")
-        XCTAssertEqual(resolvedSelection, RemoteProviderConfigurationPolicy.customModelOptionID)
-    }
-
     func testAliyunEndpointPresetsDependOnModelType() {
         let qwenPresets = RemoteProviderConfigurationPolicy.endpointPresets(
             target: .asr(.aliyunBailianASR),
@@ -392,8 +358,7 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
 
     private func makeSheet(
         target: RemoteProviderTestTarget,
-        model: String,
-        meetingModel: String = ""
+        model: String
     ) -> RemoteProviderConfigurationSheet {
         RemoteProviderConfigurationSheet(
             providerTitle: providerTitle(for: target),
@@ -403,7 +368,6 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
             configuration: RemoteProviderConfiguration(
                 providerID: providerID(for: target),
                 model: model,
-                meetingModel: meetingModel,
                 endpoint: "",
                 apiKey: ""
             ),
@@ -413,7 +377,7 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
 
     private func providerTitle(for target: RemoteProviderTestTarget) -> String {
         switch target {
-        case .asr(let provider), .meetingASR(let provider):
+        case .asr(let provider):
             return provider.title
         case .llm(let provider):
             return provider.title
@@ -422,7 +386,7 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
 
     private func providerID(for target: RemoteProviderTestTarget) -> String {
         switch target {
-        case .asr(let provider), .meetingASR(let provider):
+        case .asr(let provider):
             return provider.rawValue
         case .llm(let provider):
             return provider.rawValue

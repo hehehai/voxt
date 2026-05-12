@@ -9,6 +9,37 @@ struct GroupEditorSheet: View {
     let onCancel: () -> Void
     let onSave: () -> Void
 
+    private struct PromptPreset: Identifiable {
+        let id: String
+        let title: String
+        let prompt: String
+    }
+
+    private var presets: [PromptPreset] {
+        [
+            PromptPreset(
+                id: "slack",
+                title: AppLocalization.localizedString("Slack / Chat"),
+                prompt: AppLocalization.localizedString("Keep the result concise and natural. Preserve a conversational tone. Avoid making it overly formal.")
+            ),
+            PromptPreset(
+                id: "email",
+                title: AppLocalization.localizedString("Email"),
+                prompt: AppLocalization.localizedString("Make sentence boundaries clear and punctuation complete. Preserve a professional and polite tone without adding extra content.")
+            ),
+            PromptPreset(
+                id: "ide",
+                title: AppLocalization.localizedString("IDE / Terminal"),
+                prompt: AppLocalization.localizedString("Preserve code symbols, file paths, commands, API names, and casing exactly when they appear intentional.")
+            ),
+            PromptPreset(
+                id: "docs",
+                title: AppLocalization.localizedString("Docs / Notes"),
+                prompt: AppLocalization.localizedString("Improve paragraph readability and punctuation consistency. Keep the wording faithful and structured.")
+            )
+        ]
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title)
@@ -25,21 +56,39 @@ struct GroupEditorSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppLocalization.localizedString("Prompt"))
                     .font(.headline)
+                Text(PromptAuthoringGuidance.appEnhancement)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(AppLocalization.localizedString("Starter templates"))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(minimum: 120), alignment: .leading),
+                            GridItem(.flexible(minimum: 120), alignment: .leading)
+                        ],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
+                        ForEach(presets) { preset in
+                            Button(preset.title) {
+                                prompt = preset.prompt
+                            }
+                            .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 28))
+                        }
+                    }
+                }
+
                 PromptEditorView(
                     text: $prompt,
                     height: 160,
                     contentPadding: 8,
-                    variables: [
-                        PromptTemplateVariableDescriptor(
-                            token: AppDelegate.rawTranscriptionTemplateVariable,
-                            tipKey: "Template tip {{RAW_TRANSCRIPTION}}"
-                        ),
-                        PromptTemplateVariableDescriptor(
-                            token: AppDelegate.userMainLanguageTemplateVariable,
-                            tipKey: "Template tip {{USER_MAIN_LANGUAGE}}"
-                        )
-                    ],
-                    variablesLayout: .twoColumns
+                    variables: ModelSettingsPromptVariables.appEnhancement,
+                    variablesLayout: .twoColumns,
+                    variablesTitle: PromptAuthoringGuidance.optionalVariablesTitle
                 )
             }
 

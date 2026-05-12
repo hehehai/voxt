@@ -6,7 +6,7 @@ final class ModelSettingsCatalogSnapshotBuilderTests: XCTestCase {
         let snapshot = ModelSettingsCatalogSnapshotBuilder.build(
             entries: [
                 makeEntry(id: "local-idle", filterTags: [localTag, installedTag]),
-                makeEntry(id: "remote-in-use", filterTags: [remoteTag, configuredTag], usageLocations: ["Meeting"])
+                makeEntry(id: "remote-in-use", filterTags: [remoteTag, configuredTag], usageLocations: ["Translation"])
             ],
             selectedTags: []
         )

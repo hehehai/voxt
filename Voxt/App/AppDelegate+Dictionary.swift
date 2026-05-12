@@ -1,55 +1,30 @@
 import Foundation
 
 extension AppDelegate {
+    func dictionaryGlossaryText(
+        for sourceText: String,
+        purpose: DictionaryGlossaryPurpose,
+        selectionPolicy: DictionaryGlossarySelectionPolicy? = nil
+    ) -> String? {
+        let effectivePolicy = selectionPolicy ?? purpose.selectionPolicy
+        let glossary = dictionaryStore.glossaryContext(
+            for: sourceText,
+            activeGroupID: activeDictionaryGroupID()
+        )?.glossaryText(policy: effectivePolicy)
+        let trimmed = glossary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+
+        let selectedTermCount = trimmed.split(separator: "\n").count
+        VoxtLog.info(
+            "Dictionary glossary selected. purpose=\(purpose), selectedTerms=\(selectedTermCount), glossaryChars=\(trimmed.count), maxTerms=\(effectivePolicy.maxTerms), maxChars=\(effectivePolicy.maxCharacters)"
+        )
+        return trimmed
+    }
+
     private enum DictionaryHistoryScanModel {
         case appleIntelligence
         case customLLM(repo: String)
         case remoteLLM(provider: RemoteLLMProvider, configuration: RemoteProviderConfiguration)
-    }
-
-    func appendDictionaryEnhancementGlossary(to prompt: String, sourceText: String) -> String {
-        appendDictionaryGlossary(to: prompt, sourceText: sourceText, purpose: "enhancement")
-    }
-
-    func appendDictionaryTranslationGlossary(to prompt: String, sourceText: String) -> String {
-        appendDictionaryGlossary(to: prompt, sourceText: sourceText, purpose: "translation")
-    }
-
-    func appendDictionaryRewriteGlossary(to prompt: String, sourceText: String) -> String {
-        appendDictionaryGlossary(to: prompt, sourceText: sourceText, purpose: "rewrite")
-    }
-
-    private func appendDictionaryGlossary(
-        to prompt: String,
-        sourceText: String,
-        purpose: String
-    ) -> String {
-        guard let context = dictionaryStore.glossaryContext(
-            for: sourceText,
-            activeGroupID: activeDictionaryGroupID()
-        ) else {
-            return prompt
-        }
-
-        let glossary = context.glossaryText()
-        guard !glossary.isEmpty else { return prompt }
-
-        let glossaryPurpose: DictionaryGlossaryPurpose
-        switch purpose {
-        case "enhancement":
-            glossaryPurpose = .enhancement
-        case "translation":
-            glossaryPurpose = .translation
-        default:
-            glossaryPurpose = .rewrite
-        }
-
-        VoxtLog.info("Dictionary glossary appended. purpose=\(glossaryPurpose), terms=\(context.candidates.count)")
-        return DictionaryGlossaryPromptComposer.append(
-            prompt: prompt,
-            glossary: glossary,
-            purpose: glossaryPurpose
-        )
     }
 
     func resolveDictionaryCorrection(for text: String) -> DictionaryCorrectionResult {

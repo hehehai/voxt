@@ -19,7 +19,6 @@ final class TranscriptionDoubleTapRewriteResolverTests: XCTestCase {
                 triggerMode: .tap,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey,
                 isSessionActive: false,
-                isMeetingActive: false,
                 hasPendingTranscriptionStart: false
             )
         )
@@ -33,7 +32,6 @@ final class TranscriptionDoubleTapRewriteResolverTests: XCTestCase {
                 triggerMode: .tap,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey,
                 isSessionActive: false,
-                isMeetingActive: false,
                 hasPendingTranscriptionStart: true
             )
         )
@@ -47,7 +45,6 @@ final class TranscriptionDoubleTapRewriteResolverTests: XCTestCase {
                 triggerMode: .longPress,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey,
                 isSessionActive: false,
-                isMeetingActive: false,
                 hasPendingTranscriptionStart: false
             )
         )
@@ -61,7 +58,6 @@ final class TranscriptionDoubleTapRewriteResolverTests: XCTestCase {
                 triggerMode: .tap,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey,
                 isSessionActive: true,
-                isMeetingActive: false,
                 hasPendingTranscriptionStart: true
             )
         )

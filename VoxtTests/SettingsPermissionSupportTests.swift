@@ -6,15 +6,19 @@ final class SettingsPermissionSupportTests: XCTestCase {
         transcriptionASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         translationASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         rewriteASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
-        meetingEnabled: Bool = false,
-        meetingASR: FeatureModelSelectionID = .remoteASR(.doubaoASR)
+        remindersEnabled: Bool = false
     ) -> FeatureSettings {
         FeatureSettings(
             transcription: .init(
                 asrSelectionID: transcriptionASR,
                 llmEnabled: false,
                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
-                prompt: AppPreferenceKey.defaultEnhancementPrompt
+                prompt: AppPreferenceKey.defaultEnhancementPrompt,
+                notes: .init(
+                    enabled: false,
+                    titleModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                    remindersSync: .init(enabled: remindersEnabled)
+                )
             ),
             translation: .init(
                 asrSelectionID: translationASR,
@@ -28,45 +32,29 @@ final class SettingsPermissionSupportTests: XCTestCase {
                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultRewritePrompt,
                 appEnhancementEnabled: false
-            ),
-            meeting: .init(
-                enabled: meetingEnabled,
-                asrSelectionID: meetingASR,
-                summaryModelSelectionID: .remoteLLM(.openAI),
-                summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
-                summaryAutoGenerate: true,
-                realtimeTranslateEnabled: false,
-                realtimeTargetLanguageRawValue: "",
-                showOverlayInScreenShare: false
             )
         )
     }
 
-    func testSidebarRequirementContextOnlyIncludesMeetingPermissionsWhenMeetingIsEnabled() {
-        let disabledMeetingSettings = makeFeatureSettings()
-
-        let disabledContext = SettingsPermissionRequirementResolver.sidebarRequirementContext(
-            selectedEngine: .remote,
-            muteSystemAudioWhileRecording: false,
-            featureSettings: disabledMeetingSettings
-        )
-        XCTAssertFalse(disabledContext.meetingNotesEnabled)
-
-        var enabledMeetingSettings = disabledMeetingSettings
-        enabledMeetingSettings.meeting.enabled = true
-        let enabledContext = SettingsPermissionRequirementResolver.sidebarRequirementContext(
-            selectedEngine: .remote,
-            muteSystemAudioWhileRecording: false,
-            featureSettings: enabledMeetingSettings
-        )
-        XCTAssertTrue(enabledContext.meetingNotesEnabled)
-    }
-
-    func testSidebarPermissionsExcludeSystemAudioWhenMeetingAndMuteAreDisabled() {
+    func testSidebarRequirementContextPreservesFeatureSettingsSelections() {
+        let settings = makeFeatureSettings(remindersEnabled: true)
         let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
             selectedEngine: .remote,
             muteSystemAudioWhileRecording: false,
-            featureSettings: makeFeatureSettings(meetingEnabled: false)
+            featureSettings: settings
+        )
+
+        XCTAssertEqual(context.selectedEngine, .remote)
+        XCTAssertFalse(context.muteSystemAudioWhileRecording)
+        XCTAssertEqual(context.featureSettings?.translation.asrSelectionID, settings.translation.asrSelectionID)
+        XCTAssertTrue(context.featureSettings?.transcription.notes.remindersSync.enabled == true)
+    }
+
+    func testSidebarPermissionsExcludeSystemAudioWhenMuteIsDisabled() {
+        let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
+            selectedEngine: .remote,
+            muteSystemAudioWhileRecording: false,
+            featureSettings: makeFeatureSettings()
         )
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
@@ -74,23 +62,11 @@ final class SettingsPermissionSupportTests: XCTestCase {
         XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring])
     }
 
-    func testSidebarPermissionsIncludeSystemAudioWhenMeetingIsEnabled() {
-        let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
-            selectedEngine: .remote,
-            muteSystemAudioWhileRecording: false,
-            featureSettings: makeFeatureSettings(meetingEnabled: true)
-        )
-
-        let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
-
-        XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture])
-    }
-
     func testSidebarPermissionsIncludeSystemAudioWhenMuteDuringRecordingIsEnabled() {
         let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
             selectedEngine: .remote,
             muteSystemAudioWhileRecording: true,
-            featureSettings: makeFeatureSettings(meetingEnabled: false)
+            featureSettings: makeFeatureSettings()
         )
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
@@ -103,8 +79,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
             selectedEngine: .remote,
             muteSystemAudioWhileRecording: false,
             featureSettings: makeFeatureSettings(
-                transcriptionASR: .dictation,
-                meetingEnabled: false
+                transcriptionASR: .dictation
             )
         )
 
@@ -116,21 +91,18 @@ final class SettingsPermissionSupportTests: XCTestCase {
         )
     }
 
-    func testSidebarPermissionsIncludeSpeechRecognitionWhenMeetingUsesDictation() {
+    func testSidebarPermissionsIncludeRemindersWhenTranscriptionNotesSyncReminders() {
         let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
             selectedEngine: .remote,
             muteSystemAudioWhileRecording: false,
-            featureSettings: makeFeatureSettings(
-                meetingEnabled: true,
-                meetingASR: .dictation
-            )
+            featureSettings: makeFeatureSettings(remindersEnabled: true)
         )
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .speechRecognition, .systemAudioCapture]
+            [.microphone, .accessibility, .inputMonitoring, .reminders]
         )
     }
 
@@ -139,7 +111,6 @@ final class SettingsPermissionSupportTests: XCTestCase {
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .mlxAudio,
                 muteSystemAudioWhileRecording: false,
-                meetingNotesEnabled: false,
                 featureSettings: nil
             )
         )
@@ -155,7 +126,6 @@ final class SettingsPermissionSupportTests: XCTestCase {
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .dictation,
                 muteSystemAudioWhileRecording: false,
-                meetingNotesEnabled: false,
                 featureSettings: nil
             )
         )
@@ -166,12 +136,11 @@ final class SettingsPermissionSupportTests: XCTestCase {
         )
     }
 
-    func testRequiredPermissionsIncludeSystemAudioWhenMeetingNotesAreEnabled() {
+    func testRequiredPermissionsIncludeSystemAudioWhenMuteDuringRecordingIsEnabled() {
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .remote,
-                muteSystemAudioWhileRecording: false,
-                meetingNotesEnabled: true,
+                muteSystemAudioWhileRecording: true,
                 featureSettings: nil
             )
         )
@@ -182,19 +151,18 @@ final class SettingsPermissionSupportTests: XCTestCase {
         )
     }
 
-    func testRequiredPermissionsDoNotIncludeSystemAudioWhenMeetingFeatureIsDisabled() {
+    func testRequiredPermissionsIncludeRemindersWhenFeatureSettingsNeedIt() {
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .remote,
                 muteSystemAudioWhileRecording: false,
-                meetingNotesEnabled: false,
-                featureSettings: makeFeatureSettings(meetingEnabled: false)
+                featureSettings: makeFeatureSettings(remindersEnabled: true)
             )
         )
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring]
+            [.microphone, .accessibility, .inputMonitoring, .reminders]
         )
     }
 }

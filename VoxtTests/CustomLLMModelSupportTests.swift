@@ -2,6 +2,28 @@ import XCTest
 @testable import Voxt
 
 final class CustomLLMModelSupportTests: XCTestCase {
+    func testRepetitionGuardTruncatesShortRepeatedSuffix() {
+        let repeated = String(repeating: "好", count: 24)
+        let result = LLMOutputRepetitionGuard().repeatedSuffix(in: "结论：\(repeated)")
+
+        XCTAssertEqual(result?.repeatedUnit, "好")
+        XCTAssertEqual(result?.truncatedText, "结论：好")
+    }
+
+    func testRepetitionGuardTruncatesRepeatedPhraseSuffix() {
+        let repeated = String(repeating: " thank you", count: 8)
+        let result = LLMOutputRepetitionGuard().repeatedSuffix(in: "Done.\(repeated)")
+
+        XCTAssertEqual(result?.repeatedUnit, " thank you")
+        XCTAssertEqual(result?.truncatedText, "Done. thank you")
+    }
+
+    func testRepetitionGuardIgnoresSmallNaturalRepetitions() {
+        let result = LLMOutputRepetitionGuard().repeatedSuffix(in: "谢谢，谢谢，谢谢。")
+
+        XCTAssertNil(result)
+    }
+
     func testCatalogRecognizesSupportedRepoAndFallbackTitle() {
         XCTAssertTrue(CustomLLMModelCatalog.isSupportedModelRepo("mlx-community/Qwen3-4B-4bit"))
         XCTAssertTrue(CustomLLMModelCatalog.isSupportedModelRepo("Qwen/Qwen3-8B-4bit"))

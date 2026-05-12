@@ -18,6 +18,7 @@ extension AppDelegate {
     func processStandardTranscription(_ text: String, sessionID: UUID) {
         guard shouldHandleCallbacks(for: sessionID) else { return }
         VoxtLog.info("Standard transcription flow entered. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
+
         switch enhancementMode {
         case .off:
             setEnhancingState(false)
@@ -28,7 +29,8 @@ extension AppDelegate {
             }
 
         case .customLLM:
-            guard customLLMManager.isModelDownloaded(repo: customLLMManager.currentModelRepo) else {
+            guard let enhancementRepo = resolvedTranscriptionEnhancementLocalRepo(),
+                  customLLMManager.isModelDownloaded(repo: enhancementRepo) else {
                 VoxtLog.warning("Custom LLM selected but local model is not installed. Using raw transcription.")
                 showOverlayStatus(
                     String(localized: "Custom LLM model is not installed. Open Settings > Model to install it."),
@@ -42,18 +44,31 @@ extension AppDelegate {
                 }
                 return
             }
-            runStandardTranscriptionPipelineAsync(text, sessionID: sessionID)
+            runStandardTranscriptionPipelineAsync(
+                text,
+                sessionID: sessionID
+            )
 
         case .appleIntelligence, .remoteLLM:
-            runStandardTranscriptionPipelineAsync(text, sessionID: sessionID)
+            runStandardTranscriptionPipelineAsync(
+                text,
+                sessionID: sessionID
+            )
         }
     }
 
-    private func runStandardTranscriptionPipelineAsync(_ text: String, sessionID: UUID) {
+    private func runStandardTranscriptionPipelineAsync(
+        _ text: String,
+        sessionID: UUID
+    ) {
         setEnhancingState(true)
+        overlayState.transcribedText = text
+        let requestID = beginLLMRequest()
         Task {
             defer {
-                self.setEnhancingState(false)
+                if self.isCurrentLLMRequest(requestID) {
+                    self.setEnhancingState(false)
+                }
             }
 
             let llmStartedAt = Date()
@@ -65,7 +80,7 @@ extension AppDelegate {
             }
             do {
                 let enhanced = try await self.runStandardTranscriptionPipeline(text: text)
-                guard self.shouldHandleCallbacks(for: sessionID) else { return }
+                guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
                 VoxtLog.info("Enhancement completed. mode=\(self.enhancementMode.rawValue), inputChars=\(text.count), outputChars=\(enhanced.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.overlayState.transcribedText = enhanced
@@ -73,7 +88,7 @@ extension AppDelegate {
                     self?.finishSession(after: 0)
                 }
             } catch {
-                guard self.shouldHandleCallbacks(for: sessionID) else { return }
+                guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
                 VoxtLog.warning("Standard transcription pipeline enhancement failed, using raw text: \(error)")
                 self.overlayState.transcribedText = text
                 self.commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
@@ -83,13 +98,18 @@ extension AppDelegate {
         }
     }
 
-    private func runStandardTranscriptionPipeline(text: String) async throws -> String {
+    func runStandardTranscriptionPipeline(
+        text: String
+    ) async throws -> String {
         let sessionID = activeRecordingSessionID
         let runner = SessionPipelineRunner(
             stages: [
                 TranscriptionEnhanceStage(transform: { [weak self] value in
                     guard let self else { return value }
-                    return try await self.enhanceTextForCurrentMode(value, sessionID: sessionID)
+                    return try await self.enhanceTextForCurrentMode(
+                        value,
+                        sessionID: sessionID
+                    )
                 })
             ]
         )
@@ -97,41 +117,44 @@ extension AppDelegate {
         return result.workingText
     }
 
-    func enhanceTextForCurrentMode(_ text: String, sessionID: UUID? = nil) async throws -> String {
-        let promptResolution = resolvedEnhancementPrompt(rawTranscription: text)
-        if promptResolution.delivery == .skipEnhancement {
+    func enhanceTextForCurrentMode(
+        _ text: String,
+        sessionID: UUID? = nil
+    ) async throws -> String {
+        guard let provider = resolvedTranscriptionEnhancementProvider() else {
+            return text
+        }
+        let basePolicy = DictionaryGlossaryPurpose.enhancement.selectionPolicy
+        let provisionalStrategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .transcriptionEnhancement,
+            rawText: text,
+            promptCharacterCount: 0,
+            baseGlossarySelectionPolicy: basePolicy,
+            capabilities: llmProviderModelCapabilities(for: provider)
+        )
+        let promptResolution = resolvedEnhancementPrompt(
+            rawTranscription: text,
+            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
+        )
+        let strategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .transcriptionEnhancement,
+            rawText: text,
+            promptCharacterCount: promptResolution.content.count + (promptResolution.dictionaryGlossary?.count ?? 0),
+            baseGlossarySelectionPolicy: basePolicy,
+            capabilities: llmProviderModelCapabilities(for: provider)
+        )
+        VoxtLog.info(
+            "Task LLM strategy resolved. inputChars=\(text.count), \(strategy.logLabel)",
+            verbose: true
+        )
+        if promptResolution.delivery == EnhancementPromptResolution.Delivery.skipEnhancement {
             return text
         }
         if let sessionID {
             applyEnhancementOverlayIconIfNeeded(match: promptResolution.overlayIconMatch, sessionID: sessionID)
         }
 
-        switch enhancementMode {
-        case .off:
-            return text
-        case .appleIntelligence:
-            guard let enhancer else { return text }
-            if #available(macOS 26.0, *) {
-                switch promptResolution.delivery {
-                case .systemPrompt:
-                    return try await enhancer.enhance(text, systemPrompt: promptResolution.content)
-                case .userMessage:
-                    return try await enhancer.enhance(userPrompt: promptResolution.content)
-                case .skipEnhancement:
-                    return text
-                }
-            }
-            return text
-        case .customLLM:
-            switch promptResolution.delivery {
-            case .systemPrompt:
-                return try await customLLMManager.enhance(text, systemPrompt: promptResolution.content)
-            case .userMessage:
-                return try await customLLMManager.enhance(userPrompt: promptResolution.content)
-            case .skipEnhancement:
-                return text
-            }
-        case .remoteLLM:
+        if enhancementMode == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: false)
             guard RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
                 provider: context.provider,
@@ -143,19 +166,27 @@ extension AppDelegate {
             VoxtLog.llm(
                 "Remote LLM enhancement request. provider=\(context.provider.rawValue), model=\(context.configuration.model)"
             )
-            switch promptResolution.delivery {
-            case .systemPrompt:
-                return try await RemoteLLMRuntimeClient().enhance(
-                    text: text,
-                    systemPrompt: promptResolution.content,
-                    provider: context.provider,
-                    configuration: context.configuration
-                )
-            case .userMessage:
-                return try await RemoteLLMRuntimeClient().enhance(userPrompt: promptResolution.content, provider: context.provider, configuration: context.configuration)
-            case .skipEnhancement:
-                return text
-            }
         }
+
+        guard let plan = buildEnhancementExecutionPlan(
+            rawText: text,
+            promptResolution: promptResolution,
+            providerOverride: provider,
+            executionStrategy: strategy
+        ) else {
+            return text
+        }
+        let enhanced = try await executeLLMExecutionPlan(plan)
+        let guarded = TaskLLMStrategyResolver.applyTruncationGuard(
+            outputText: enhanced,
+            originalText: text,
+            strategy: strategy
+        )
+        if guarded.didFallback {
+            VoxtLog.warning(
+                "Enhancement truncation guard restored raw text. inputChars=\(text.count), outputChars=\(enhanced.count), strategy=\(strategy.logLabel)"
+            )
+        }
+        return guarded.text
     }
 }

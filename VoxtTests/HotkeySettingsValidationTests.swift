@@ -21,7 +21,6 @@ final class HotkeySettingsValidationTests: XCTestCase {
                 ),
                 rewriteHotkey: transcriptionHotkey,
                 shouldValidateRewriteHotkey: false,
-                meetingHotkey: nil,
                 customPasteHotkey: nil
             )
         )
@@ -53,7 +52,6 @@ final class HotkeySettingsValidationTests: XCTestCase {
                 ),
                 rewriteHotkey: transcriptionHotkey,
                 shouldValidateRewriteHotkey: true,
-                meetingHotkey: nil,
                 customPasteHotkey: nil
             )
         )
@@ -90,7 +88,6 @@ final class HotkeySettingsValidationTests: XCTestCase {
                     sidedModifiers: []
                 ),
                 shouldValidateRewriteHotkey: true,
-                meetingHotkey: nil,
                 customPasteHotkey: customPasteHotkey
             )
         )

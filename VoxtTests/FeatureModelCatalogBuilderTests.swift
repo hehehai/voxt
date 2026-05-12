@@ -50,7 +50,6 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             RemoteASRProvider.aliyunBailianASR.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteASRProvider.aliyunBailianASR.rawValue,
                 model: "fun-asr-realtime",
-                meetingModel: "qwen3-asr-flash-filetrans",
                 endpoint: "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription",
                 apiKey: "token"
             )
@@ -67,16 +66,14 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
                 translationASR: .remoteASR(.aliyunBailianASR),
-                translationModel: .remoteLLM(.openAI),
-                meetingASR: .remoteASR(.aliyunBailianASR),
-                meetingSummary: .remoteLLM(.openAI)
+                translationModel: .remoteLLM(.openAI)
             ),
             remoteASRConfigurationsRaw: remoteASRConfigurations,
             remoteLLMConfigurationsRaw: remoteLLMConfigurations
         )
 
-        let meetingASREntry = try XCTUnwrap(
-            builder.entries(for: .meetingASR)
+        let translationASREntry = try XCTUnwrap(
+            builder.entries(for: .translationASR)
                 .first(where: { $0.selectionID == .remoteASR(.aliyunBailianASR) })
         )
         let translationLLMEntry = try XCTUnwrap(
@@ -84,9 +81,9 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
                 .first(where: { $0.selectionID == .remoteLLM(.openAI) })
         )
 
-        XCTAssertTrue(meetingASREntry.isSelectable)
-        XCTAssertTrue(meetingASREntry.filterTags.contains(AppLocalization.localizedString("Configured")))
-        XCTAssertTrue(meetingASREntry.usageLocations.contains(AppLocalization.localizedString("Meeting")))
+        XCTAssertTrue(translationASREntry.isSelectable)
+        XCTAssertTrue(translationASREntry.filterTags.contains(AppLocalization.localizedString("Configured")))
+        XCTAssertTrue(translationASREntry.usageLocations.contains(AppLocalization.localizedString("Translation")))
 
         XCTAssertTrue(translationLLMEntry.isSelectable)
         XCTAssertTrue(translationLLMEntry.displayTags.contains(AppLocalization.localizedString("Configured")))
@@ -95,23 +92,6 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(
             builder.asrSelectionSummary(.remoteASR(.aliyunBailianASR)),
             "\(RemoteASRProvider.aliyunBailianASR.title) · fun-asr-realtime"
-        )
-    }
-
-    func testMeetingASRSelectorExcludesWhisperEntries() {
-        let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(meetingASR: .mlx(MLXModelManager.defaultModelRepo))
-        )
-
-        let meetingEntries = builder.entries(for: .meetingASR)
-
-        XCTAssertFalse(
-            meetingEntries.contains { entry in
-                if case .whisper = entry.selectionID.asrSelection {
-                    return true
-                }
-                return false
-            }
         )
     }
 
@@ -286,9 +266,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
         translationTarget: TranslationTargetLanguage = .english,
         rewriteASR: FeatureModelSelectionID = .dictation,
-        rewriteLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
-        meetingASR: FeatureModelSelectionID = .dictation,
-        meetingSummary: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
+        rewriteLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
     ) -> FeatureSettings {
         FeatureSettings(
             transcription: .init(
@@ -309,16 +287,6 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
                 llmSelectionID: rewriteLLM,
                 prompt: AppPreferenceKey.defaultRewritePrompt,
                 appEnhancementEnabled: true
-            ),
-            meeting: .init(
-                enabled: true,
-                asrSelectionID: meetingASR,
-                summaryModelSelectionID: meetingSummary,
-                summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
-                summaryAutoGenerate: true,
-                realtimeTranslateEnabled: false,
-                realtimeTargetLanguageRawValue: "",
-                showOverlayInScreenShare: false
             )
         )
     }

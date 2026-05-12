@@ -46,7 +46,7 @@ final class ModelDebugSupportTests: XCTestCase {
         XCTAssertTrue(presets.contains(where: { $0.id == "builtin:enhancement" }))
         XCTAssertTrue(presets.contains(where: { $0.id == "builtin:translation" }))
         XCTAssertTrue(presets.contains(where: { $0.id == "builtin:rewrite" }))
-        XCTAssertTrue(presets.contains(where: { $0.id == "builtin:meeting-summary" }))
+        XCTAssertTrue(presets.contains(where: { $0.id == "builtin:transcript-summary" }))
         XCTAssertTrue(presets.contains(where: { $0.title.contains("Chrome") }))
     }
 
@@ -77,13 +77,13 @@ final class ModelDebugSupportTests: XCTestCase {
         XCTAssertEqual(resolved.inputSummary, "hello world")
     }
 
-    func testPromptResolverInjectsMeetingSummaryVariables() {
+    func testPromptResolverInjectsTranscriptSummaryVariables() {
         let preset = LLMDebugPresetOption(
-            id: "builtin:meeting-summary",
-            title: "Meeting Summary",
+            id: "builtin:transcript-summary",
+            title: "Transcript Summary",
             subtitle: "Built-in preset",
-            kind: .meetingSummary,
-            promptTemplate: "Minutes: {{MEETING_RECORD}} | Lang: {{USER_MAIN_LANGUAGE}}",
+            kind: .transcriptSummary,
+            promptTemplate: "Summary: {{TRANSCRIPT_RECORD}} | Lang: {{USER_MAIN_LANGUAGE}}",
             variables: [],
             defaultValues: [:]
         )
@@ -91,7 +91,7 @@ final class ModelDebugSupportTests: XCTestCase {
         let resolved = ModelDebugPromptResolver.resolve(
             preset: preset,
             values: [
-                "{{MEETING_RECORD}}": "Discuss launch blockers",
+                "{{TRANSCRIPT_RECORD}}": "Discuss launch blockers",
                 AppPreferenceKey.asrUserMainLanguageTemplateVariable: "Japanese"
             ]
         )
@@ -99,6 +99,90 @@ final class ModelDebugSupportTests: XCTestCase {
         XCTAssertTrue(resolved.content.contains("Discuss launch blockers"))
         XCTAssertTrue(resolved.content.contains("Japanese"))
         XCTAssertEqual(resolved.inputSummary, "Discuss launch blockers")
+    }
+
+    func testPromptResolverBuildsCompiledEnhancementRequestForDefaultPrompt() {
+        let preset = LLMDebugPresetOption(
+            id: "builtin:enhancement",
+            title: "Enhancement",
+            subtitle: "Built-in preset",
+            kind: .enhancement,
+            promptTemplate: AppPromptDefaults.text(for: .enhancement, language: .english),
+            variables: ModelSettingsPromptVariables.enhancement,
+            defaultValues: [
+                AppDelegate.rawTranscriptionTemplateVariable: "",
+                AppDelegate.userMainLanguageTemplateVariable: "Simplified Chinese"
+            ]
+        )
+
+        let resolved = ModelDebugPromptResolver.resolve(
+            preset: preset,
+            values: [
+                AppDelegate.rawTranscriptionTemplateVariable: "原始输入",
+                AppDelegate.userMainLanguageTemplateVariable: "Simplified Chinese"
+            ]
+        )
+
+        let compiled = try! XCTUnwrap(resolved.compiledRequest)
+        XCTAssertContains(compiled.instructions, "Voxt")
+        XCTAssertContains(compiled.instructions, "Runtime language preservation rules:")
+        XCTAssertContains(compiled.prompt, "原始输入")
+        XCTAssertFalse(compiled.instructions.contains("Raw transcription"))
+    }
+
+    func testPromptResolverBuildsCompiledTranslationRequestWithoutEmbeddingSourceTextInInstructionsByDefault() {
+        let preset = LLMDebugPresetOption(
+            id: "builtin:translation",
+            title: "Translation",
+            subtitle: "Built-in preset",
+            kind: .translation,
+            promptTemplate: AppPromptDefaults.text(for: .translation, language: .english),
+            variables: ModelSettingsPromptVariables.translation,
+            defaultValues: [
+                "{{TARGET_LANGUAGE}}": "English",
+                AppDelegate.userMainLanguageTemplateVariable: "Chinese",
+                "{{SOURCE_TEXT}}": ""
+            ]
+        )
+
+        let resolved = ModelDebugPromptResolver.resolve(
+            preset: preset,
+            values: [
+                "{{TARGET_LANGUAGE}}": "English",
+                AppDelegate.userMainLanguageTemplateVariable: "Chinese",
+                "{{SOURCE_TEXT}}": "待翻译原文"
+            ]
+        )
+
+        let compiled = try! XCTUnwrap(resolved.compiledRequest)
+        XCTAssertContains(compiled.instructions, "cleanup and translation assistant")
+        XCTAssertContains(compiled.prompt, "待翻译原文")
+        XCTAssertFalse(compiled.instructions.contains("待翻译原文"))
+    }
+
+    func testPromptResolverRoutesLegacyRewriteTemplateThroughUserPromptPreview() {
+        let preset = LLMDebugPresetOption(
+            id: "builtin:rewrite",
+            title: "Rewrite",
+            subtitle: "Built-in preset",
+            kind: .rewrite,
+            promptTemplate: "Rewrite {{SOURCE_TEXT}} with {{DICTATED_PROMPT}}",
+            variables: ModelSettingsPromptVariables.rewrite,
+            defaultValues: [:]
+        )
+
+        let resolved = ModelDebugPromptResolver.resolve(
+            preset: preset,
+            values: [
+                "{{DICTATED_PROMPT}}": "make it shorter",
+                "{{SOURCE_TEXT}}": "Original paragraph"
+            ]
+        )
+
+        let compiled = try! XCTUnwrap(resolved.compiledRequest)
+        XCTAssertContains(compiled.prompt, "Original paragraph")
+        XCTAssertContains(compiled.prompt, "make it shorter")
+        XCTAssertFalse(compiled.instructions.contains("Structured answer output"))
     }
 
     func testPromptResolverUsesRequestedTranslationTargetLanguage() {

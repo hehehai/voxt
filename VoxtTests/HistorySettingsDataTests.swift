@@ -7,7 +7,7 @@ final class HistorySettingsDataTests: XCTestCase {
             makeHistoryEntry(kind: .normal, text: "a"),
             makeHistoryEntry(kind: .translation, text: "b"),
             makeHistoryEntry(kind: .rewrite, text: "c"),
-            makeHistoryEntry(kind: .meeting, text: "d")
+            makeHistoryEntry(kind: .transcript, text: "d")
         ]
 
         XCTAssertEqual(
@@ -21,10 +21,6 @@ final class HistorySettingsDataTests: XCTestCase {
         XCTAssertEqual(
             HistorySettingsData.filteredEntries(for: .rewrite, allEntries: entries).map(\.text),
             ["c"]
-        )
-        XCTAssertEqual(
-            HistorySettingsData.filteredEntries(for: .meeting, allEntries: entries).map(\.text),
-            ["d"]
         )
         XCTAssertEqual(
             HistorySettingsData.filteredEntries(for: .note, allEntries: entries).map(\.text),
@@ -56,7 +52,7 @@ final class HistorySettingsDataTests: XCTestCase {
         )
         XCTAssertEqual(
             HistorySettingsData.emptyState(
-                selectedFilter: .meeting,
+                selectedFilter: .rewrite,
                 allEntries: [entry],
                 filteredEntries: [],
                 notes: [note]

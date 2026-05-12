@@ -48,6 +48,7 @@ struct LLMDebugPresetOption: Identifiable, Hashable {
 struct LLMDebugResolvedPrompt: Equatable {
     let content: String
     let inputSummary: String
+    let compiledRequest: LLMCompiledRequest?
 }
 
 struct DebugAudioClip: Identifiable, Equatable {
@@ -66,9 +67,6 @@ struct DebugAudioClip: Identifiable, Equatable {
 
 enum LLMDebugPresetStore {
     static let customPresetID = "custom"
-    private static let legacyPresetAliases: [String: [String]] = [
-        "builtin:transcript-summary": ["builtin:meeting-summary"]
-    ]
 
     static func customPrompt(defaults: UserDefaults = .standard) -> String {
         defaults.string(forKey: AppPreferenceKey.llmDebugCustomPrompt)?
@@ -81,15 +79,7 @@ enum LLMDebugPresetStore {
 
     static func promptOverride(for presetID: String, defaults: UserDefaults = .standard) -> String? {
         let overrides = promptOverrides(defaults: defaults)
-        if let prompt = overrides[presetID] {
-            return prompt
-        }
-        for legacyID in legacyPresetAliases[presetID] ?? [] {
-            if let prompt = overrides[legacyID] {
-                return prompt
-            }
-        }
-        return nil
+        return overrides[presetID]
     }
 
     static func savePromptOverride(_ prompt: String, for presetID: String, defaults: UserDefaults = .standard) {
@@ -319,7 +309,7 @@ enum ModelDebugCatalog {
                 kind: .transcriptSummary,
                 promptTemplate: LLMDebugPresetStore.promptOverride(for: "builtin:transcript-summary", defaults: defaults)
                     ?? AppPromptDefaults.resolvedStoredText(
-                        defaults.string(forKey: AppPreferenceKey.transcriptSummaryPromptTemplate),
+                        AppPreferenceKey.resolvedTranscriptSummaryPromptTemplate(defaults: defaults),
                         kind: .transcriptSummary,
                         defaults: defaults
                     ),
@@ -388,44 +378,98 @@ enum ModelDebugPromptResolver {
         case .custom:
             return LLMDebugResolvedPrompt(
                 content: preset.promptTemplate,
-                inputSummary: ""
+                inputSummary: "",
+                compiledRequest: nil
             )
         case .enhancement, .appGroup:
             let rawTranscription = mergedValues[AppDelegate.rawTranscriptionTemplateVariable] ?? ""
             let userMainLanguage = mergedValues[AppDelegate.userMainLanguageTemplateVariable] ?? ""
-            let content = resolveEnhancementPrompt(
+            let resolvedPrompt = resolveEnhancementPrompt(
                 template: preset.promptTemplate,
                 rawTranscription: rawTranscription,
                 userMainLanguage: userMainLanguage
             )
+            let plan = LLMExecutionPlan(
+                task: .enhancement(rawText: rawTranscription),
+                provider: .customLLM(repo: CustomLLMModelManager.defaultModelRepo),
+                delivery: enhancementDelivery(for: preset),
+                promptContent: resolvedPrompt,
+                fallbackText: rawTranscription,
+                executionStrategy: TaskLLMStrategyResolver.resolve(
+                    taskKind: .transcriptionEnhancement,
+                    rawText: rawTranscription,
+                    promptCharacterCount: resolvedPrompt.count,
+                    baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.enhancement.selectionPolicy,
+                    capabilities: .unknown
+                ),
+                outputTokenBudgetHint: nil,
+                contextBlocks: compactBlocks([
+                    LLMContextBlock(
+                        kind: .input,
+                        title: "Raw transcription",
+                        content: rawTranscription,
+                        isStablePrefixCandidate: false
+                    )
+                ]),
+                conversationHistory: [],
+                previousResponseID: nil,
+                responseFormat: nil
+            )
+            let compiledRequest = LLMExecutionPlanCompiler.compile(plan)
             return LLMDebugResolvedPrompt(
-                content: content,
-                inputSummary: rawTranscription
+                content: compiledRequestPreview(compiledRequest),
+                inputSummary: rawTranscription,
+                compiledRequest: compiledRequest
             )
         case .translation:
             let sourceText = mergedValues["{{SOURCE_TEXT}}"] ?? ""
-            let targetLanguage = TranslationTargetLanguage(
-                rawValue: defaults.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? ""
-            ) ?? .english
-            let languageName = mergedValues["{{TARGET_LANGUAGE}}"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedLanguage = TranslationTargetLanguage.allCases.first(where: {
-                $0.instructionName.caseInsensitiveCompare(languageName ?? "") == .orderedSame
-            }) ?? targetLanguage
-            let content = TranslationPromptBuilder.build(
+            let resolvedLanguage = resolvedTranslationTargetLanguage(values: mergedValues, defaults: defaults)
+            let resolvedPrompt = TranslationPromptBuilder.build(
                 systemPrompt: preset.promptTemplate,
                 targetLanguage: resolvedLanguage,
                 sourceText: sourceText,
                 userMainLanguagePromptValue: mergedValues[AppDelegate.userMainLanguageTemplateVariable] ?? "",
                 strict: true
             )
+            let plan = LLMExecutionPlan(
+                task: .translation(sourceText: sourceText, targetLanguage: resolvedLanguage),
+                provider: .customLLM(repo: CustomLLMModelManager.defaultModelRepo),
+                delivery: variableTemplateDelivery(
+                    preset.promptTemplate,
+                    variableTokens: ["{{SOURCE_TEXT}}"]
+                ),
+                promptContent: resolvedPrompt,
+                fallbackText: sourceText,
+                executionStrategy: TaskLLMStrategyResolver.resolve(
+                    taskKind: .translation,
+                    rawText: sourceText,
+                    promptCharacterCount: resolvedPrompt.count,
+                    baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.translation.selectionPolicy,
+                    capabilities: .unknown
+                ),
+                outputTokenBudgetHint: nil,
+                contextBlocks: compactBlocks([
+                    LLMContextBlock(
+                        kind: .input,
+                        title: "Source text",
+                        content: sourceText,
+                        isStablePrefixCandidate: false
+                    )
+                ]),
+                conversationHistory: [],
+                previousResponseID: nil,
+                responseFormat: nil
+            )
+            let compiledRequest = LLMExecutionPlanCompiler.compile(plan)
             return LLMDebugResolvedPrompt(
-                content: content,
-                inputSummary: sourceText
+                content: compiledRequestPreview(compiledRequest),
+                inputSummary: sourceText,
+                compiledRequest: compiledRequest
             )
         case .rewrite:
             let dictatedPrompt = mergedValues["{{DICTATED_PROMPT}}"] ?? ""
             let sourceText = mergedValues["{{SOURCE_TEXT}}"] ?? ""
-            let content = RewritePromptBuilder.build(
+            let resolvedPrompt = RewritePromptBuilder.build(
                 systemPrompt: preset.promptTemplate,
                 dictatedPrompt: dictatedPrompt,
                 sourceText: sourceText,
@@ -433,9 +477,52 @@ enum ModelDebugPromptResolver {
                 directAnswerMode: sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 forceNonEmptyAnswer: false
             )
+            let plan = LLMExecutionPlan(
+                task: .rewrite(
+                    dictatedPrompt: dictatedPrompt,
+                    sourceText: sourceText,
+                    structuredAnswerOutput: false
+                ),
+                provider: .customLLM(repo: CustomLLMModelManager.defaultModelRepo),
+                delivery: variableTemplateDelivery(
+                    preset.promptTemplate,
+                    variableTokens: ["{{DICTATED_PROMPT}}", "{{SOURCE_TEXT}}"]
+                ),
+                promptContent: resolvedPrompt,
+                fallbackText: sourceText,
+                executionStrategy: TaskLLMStrategyResolver.resolve(
+                    taskKind: .rewrite,
+                    rawText: sourceText.isEmpty ? dictatedPrompt : sourceText,
+                    promptCharacterCount: resolvedPrompt.count,
+                    baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.rewrite.selectionPolicy,
+                    capabilities: .unknown
+                ),
+                outputTokenBudgetHint: nil,
+                contextBlocks: compactBlocks([
+                    LLMContextBlock(
+                        kind: .input,
+                        title: "Spoken instruction",
+                        content: dictatedPrompt,
+                        isStablePrefixCandidate: false
+                    ),
+                    sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? nil
+                        : LLMContextBlock(
+                            kind: .input,
+                            title: "Selected source text",
+                            content: sourceText,
+                            isStablePrefixCandidate: false
+                        )
+                ]),
+                conversationHistory: [],
+                previousResponseID: nil,
+                responseFormat: nil
+            )
+            let compiledRequest = LLMExecutionPlanCompiler.compile(plan)
             return LLMDebugResolvedPrompt(
-                content: content,
-                inputSummary: sourceText.isEmpty ? dictatedPrompt : sourceText
+                content: compiledRequestPreview(compiledRequest),
+                inputSummary: sourceText.isEmpty ? dictatedPrompt : sourceText,
+                compiledRequest: compiledRequest
             )
         case .transcriptSummary:
             let transcript = TranscriptSummarySupport.transcriptRecord(from: mergedValues)
@@ -450,9 +537,63 @@ enum ModelDebugPromptResolver {
             )
             return LLMDebugResolvedPrompt(
                 content: content,
-                inputSummary: transcript
+                inputSummary: transcript,
+                compiledRequest: nil
             )
         }
+    }
+
+    private static func enhancementDelivery(for preset: LLMDebugPresetOption) -> LLMExecutionDelivery {
+        switch preset.kind {
+        case .appGroup:
+            return .userMessage
+        case .enhancement:
+            return preset.promptTemplate.contains(AppDelegate.rawTranscriptionTemplateVariable)
+                ? .userMessage
+                : .systemPrompt
+        case .custom, .translation, .rewrite, .transcriptSummary:
+            return .systemPrompt
+        }
+    }
+
+    private static func variableTemplateDelivery(
+        _ template: String,
+        variableTokens: [String]
+    ) -> LLMExecutionDelivery {
+        variableTokens.contains(where: template.contains) ? .userMessage : .systemPrompt
+    }
+
+    private static func resolvedTranslationTargetLanguage(
+        values: [String: String],
+        defaults: UserDefaults
+    ) -> TranslationTargetLanguage {
+        let storedTargetLanguage = TranslationTargetLanguage(
+            rawValue: defaults.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? ""
+        ) ?? .english
+        let languageName = values["{{TARGET_LANGUAGE}}"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return TranslationTargetLanguage.allCases.first(where: {
+            $0.instructionName.caseInsensitiveCompare(languageName ?? "") == .orderedSame
+        }) ?? storedTargetLanguage
+    }
+
+    private static func compactBlocks(_ blocks: [LLMContextBlock?]) -> [LLMContextBlock] {
+        blocks.compactMap { block in
+            guard let block else { return nil }
+            return block.trimmedContent.isEmpty ? nil : block
+        }
+    }
+
+    private static func compiledRequestPreview(_ request: LLMCompiledRequest) -> String {
+        let sections = [
+            request.instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? nil
+                : "[instructions]\n\(request.instructions)",
+            request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? nil
+                : "[prompt]\n\(request.prompt)"
+        ].compactMap { $0 }
+
+        return sections.joined(separator: "\n\n")
     }
 
     private static func resolveEnhancementPrompt(
@@ -467,9 +608,8 @@ enum ModelDebugPromptResolver {
         let languageRules = """
         Runtime language preservation rules:
         - User main language: \(userMainLanguage).
-        - It is guidance for punctuation, formatting, filler-word cleanup, and semantic disambiguation only.
-        - It is not a target output language and must not trigger translation.
-        - Preserve the original language distribution and wording in the transcription.
+        - Use this only for punctuation, formatting, filler-word cleanup, and ambiguity resolution.
+        - It is not an output target. Preserve the original language mix and never translate into the user main language.
         """
 
         return [resolved, languageRules]

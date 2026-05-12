@@ -33,8 +33,11 @@ extension AppDelegate {
         let sessionID = activeRecordingSessionID
         overlayState.statusMessage = ""
         mlx.transcribedText = ""
-        mlx.sessionAllowsRealtimeTextDisplay = realtimeTextDisplayEnabled
+        mlx.sessionAllowsRealtimeTextDisplay = transcriptionCapturePipeline.usesLiveDisplay
         mlx.setPreferredInputDevice(selectedInputDeviceID)
+        mlx.onPartialTranscription = { [weak self] text in
+            self?.handleLiveASRPartialTranscription(text, sessionID: sessionID)
+        }
         mlx.onTranscriptionFinished = { [weak self] text in
             self?.stashPendingCompletedHistoryAudioArchive(self?.mlxTranscriber?.consumeCompletedAudioArchiveURL())
             self?.processTranscription(text, sessionID: sessionID)
@@ -64,7 +67,7 @@ extension AppDelegate {
             self.overlayState.statusMessage = ""
             let sessionID = self.activeRecordingSessionID
             self.speechTranscriber.transcribedText = ""
-            self.speechTranscriber.sessionReportsPartialResultsOverride = self.realtimeTextDisplayEnabled
+            self.speechTranscriber.sessionReportsPartialResultsOverride = self.transcriptionCapturePipeline.usesLiveDisplay
             self.speechTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.stashPendingCompletedHistoryAudioArchive(self?.speechTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
@@ -102,10 +105,12 @@ extension AppDelegate {
         overlayState.isModelInitializing = needsModelInitialization
         overlayState.initializingEngine = needsModelInitialization ? .whisperKit : nil
         whisper.transcribedText = ""
-        whisper.sessionAllowsRealtimeTextDisplay = realtimeTextDisplayEnabled
+        whisper.sessionAllowsRealtimeTextDisplay = transcriptionCapturePipeline.usesLiveDisplay
         whisper.isModelInitializing = needsModelInitialization
         whisper.setPreferredInputDevice(selectedInputDeviceID)
-        whisper.onPartialTranscription = nil
+        whisper.onPartialTranscription = { [weak self] text in
+            self?.handleLiveASRPartialTranscription(text, sessionID: sessionID)
+        }
         whisper.onTranscriptionFinished = { [weak self] text in
             self?.stashPendingCompletedHistoryAudioArchive(self?.whisperTranscriber?.consumeCompletedAudioArchiveURL())
             self?.processTranscription(text, sessionID: sessionID)
@@ -171,7 +176,7 @@ extension AppDelegate {
             self.overlayState.statusMessage = ""
             let sessionID = self.activeRecordingSessionID
             self.remoteASRTranscriber.transcribedText = ""
-            self.remoteASRTranscriber.sessionAllowsRealtimeTextDisplay = self.realtimeTextDisplayEnabled
+            self.remoteASRTranscriber.sessionAllowsRealtimeTextDisplay = self.transcriptionCapturePipeline.usesLiveDisplay
             self.remoteASRTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.stashPendingCompletedHistoryAudioArchive(self?.remoteASRTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
@@ -219,13 +224,19 @@ extension AppDelegate {
         isSessionCancellationRequested = false
         didCommitSessionOutput = false
         activeRecordingSessionID = UUID()
+        invalidateActiveLLMRequest()
         currentEndingSessionID = nil
         lastCompletedSessionEndSessionID = nil
         sessionOutputMode = .transcription
+        recordingRequestedAt = nil
         recordingStartedAt = nil
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
         transcriptionResultReceivedAt = nil
+        firstLiveASRPartialReceivedAt = nil
+        sessionFinalOutputDeliveredAt = nil
+        sessionLLMExecutionTimings = []
+        transcriptionCapturePipeline = .liveDisplay
         isSelectedTextTranslationFlow = false
         sessionTargetApplicationPID = nil
         sessionTargetApplicationBundleID = nil

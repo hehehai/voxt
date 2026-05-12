@@ -92,4 +92,32 @@ final class DictionaryMatcherTests: XCTestCase {
         XCTAssertEqual(glossary.split(separator: "\n").count, 12)
         XCTAssertFalse(glossary.contains("- Term13"))
     }
+
+    func testPromptContextGlossaryHonorsPurposeCharacterBudget() {
+        let entries = [
+            TestFactories.makeEntry(term: "InternationalizationPlatform"),
+            TestFactories.makeEntry(term: "ObservabilityControlPlane"),
+            TestFactories.makeEntry(term: "KubernetesOperatorManager")
+        ]
+        let matcher = DictionaryMatcher(entries: entries, blockedGlobalMatchKeys: [])
+        let text = entries.map(\.term).joined(separator: " ")
+
+        let glossary = matcher.promptContext(for: text).glossaryText(
+            policy: DictionaryGlossarySelectionPolicy(maxTerms: 8, maxCharacters: 64)
+        )
+
+        XCTAssertEqual(glossary, "- InternationalizationPlatform\n- ObservabilityControlPlane")
+        XCTAssertFalse(glossary.contains("KubernetesOperatorManager"))
+    }
+
+    func testPromptContextGlossaryAlwaysKeepsFirstMatchedTermWhenSingleLineExceedsBudget() {
+        let entry = TestFactories.makeEntry(term: "SupercalifragilisticexpialidociousPlatform")
+        let matcher = DictionaryMatcher(entries: [entry], blockedGlobalMatchKeys: [])
+
+        let glossary = matcher.promptContext(for: entry.term).glossaryText(
+            policy: DictionaryGlossarySelectionPolicy(maxTerms: 8, maxCharacters: 10)
+        )
+
+        XCTAssertEqual(glossary, "- SupercalifragilisticexpialidociousPlatform")
+    }
 }

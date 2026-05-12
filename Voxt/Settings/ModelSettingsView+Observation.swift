@@ -186,6 +186,7 @@ extension ModelSettingsView {
         mlxModelManager.refreshMemoryOptimizationPolicy()
         customLLMManager.refreshMemoryOptimizationPolicy()
         whisperModelManager.refreshMemoryOptimizationPolicy()
+        AppDelegate.shared?.scheduleLLMIdleWarmupIfNeeded()
         guard selectedEngine == .whisperKit, !localModelMemoryOptimizationEnabled else { return }
         Task { @MainActor in
             whisperModelManager.beginActiveUse()
@@ -199,6 +200,8 @@ extension ModelSettingsView {
         ensureTranslationModelSelectionConsistency()
         ensureRewriteModelSelectionConsistency()
         refreshCatalogSnapshot()
+        AppDelegate.shared?.scheduleLLMIdleWarmupIfNeeded()
+        AppDelegate.shared?.prewarmLLMForCurrentActiveSessionIfNeeded()
     }
 
     func handleTranslationProviderChange() {

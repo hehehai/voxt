@@ -13,6 +13,7 @@ final class PromptBuildersTests: XCTestCase {
 
         XCTAssertContains(prompt, "Translate hello to Japanese for English")
         XCTAssertContains(prompt, "Translate every linguistic token into Japanese")
+        XCTAssertContains(prompt, "Return translated text only.")
     }
 
     func testRewritePromptBuilderAppendsConstraintsInStableOrder() {
@@ -105,7 +106,7 @@ final class PromptBuildersTests: XCTestCase {
 
         XCTAssertContains(prompt, "Conversation mode:")
         XCTAssertContains(prompt, "Return the next assistant reply as plain text only.")
-        XCTAssertContains(prompt, "Do not return JSON, field names, markdown fences, or surrounding quotes.")
-        XCTAssertContains(prompt, "A previous answer was empty, quoted-empty, or otherwise unusable.")
+        XCTAssertContains(prompt, "Do not return JSON, markdown fences, labels, or quotes.")
+        XCTAssertContains(prompt, "A previous answer was empty or unusable.")
     }
 }

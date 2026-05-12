@@ -2,9 +2,9 @@ import XCTest
 @testable import Voxt
 
 final class TranscriptionHistoryConversationSupportTests: XCTestCase {
-    func testSupportsDetailOnlyForTranscriptionAndMeeting() {
+    func testSupportsDetailOnlyForRewriteHistory() {
         XCTAssertFalse(TranscriptionHistoryConversationSupport.supportsDetail(for: .normal))
-        XCTAssertTrue(TranscriptionHistoryConversationSupport.supportsDetail(for: .meeting))
+        XCTAssertFalse(TranscriptionHistoryConversationSupport.supportsDetail(for: .transcript))
         XCTAssertFalse(TranscriptionHistoryConversationSupport.supportsDetail(for: .translation))
         XCTAssertTrue(TranscriptionHistoryConversationSupport.supportsDetail(for: .rewrite))
     }
@@ -48,7 +48,7 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
             text: "Seed transcript",
             createdAt: Date(timeIntervalSinceReferenceDate: 100),
             transcriptionChatMessages: [
-                MeetingSummaryChatMessage(role: .user, content: "What happened next?")
+                TranscriptSummaryChatMessage(role: .user, content: "What happened next?")
             ]
         )
 
@@ -92,8 +92,8 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
         let entry = makeEntry(
             text: "A",
             transcriptionChatMessages: [
-                MeetingSummaryChatMessage(role: .assistant, content: "A"),
-                MeetingSummaryChatMessage(role: .assistant, content: "B")
+                TranscriptSummaryChatMessage(role: .assistant, content: "A"),
+                TranscriptSummaryChatMessage(role: .assistant, content: "B")
             ]
         )
         let viewModel = TranscriptionDetailViewModel(
@@ -115,7 +115,7 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
         let entry = makeEntry(
             text: "Seed transcript",
             transcriptionChatMessages: [
-                MeetingSummaryChatMessage(role: .user, content: "Summarize this")
+                TranscriptSummaryChatMessage(role: .user, content: "Summarize this")
             ]
         )
         let viewModel = TranscriptionDetailViewModel(
@@ -137,7 +137,7 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
     private func makeEntry(
         text: String,
         createdAt: Date = Date(timeIntervalSinceReferenceDate: 42),
-        transcriptionChatMessages: [MeetingSummaryChatMessage]? = nil
+        transcriptionChatMessages: [TranscriptSummaryChatMessage]? = nil
     ) -> TranscriptionHistoryEntry {
         TranscriptionHistoryEntry(
             id: UUID(),
@@ -165,10 +165,10 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
             remoteLLMModel: nil,
             remoteLLMEndpoint: nil,
             whisperWordTimings: nil,
-            meetingSegments: nil,
-            meetingAudioRelativePath: nil,
-            meetingSummary: nil,
-            meetingSummaryChatMessages: nil,
+            transcriptSegments: nil,
+            transcriptAudioRelativePath: nil,
+            transcriptSummary: nil,
+            transcriptSummaryChatMessages: nil,
             displayTitle: nil,
             transcriptionChatMessages: transcriptionChatMessages,
             dictionaryHitTerms: [],

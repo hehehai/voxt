@@ -660,9 +660,9 @@ final class LLMDebugViewModel: ObservableObject {
                 forKey: AppPreferenceKey.rewriteSystemPrompt
             )
         case .transcriptSummary:
-            defaults.set(
+            AppPreferenceKey.setTranscriptSummaryPromptTemplate(
                 AppPromptDefaults.canonicalStoredText(prompt, kind: .transcriptSummary),
-                forKey: AppPreferenceKey.transcriptSummaryPromptTemplate
+                defaults: defaults
             )
         case .appGroup(let groupID):
             applyGroupPrompt(prompt, groupID: groupID, defaults: defaults)
@@ -798,61 +798,23 @@ final class LLMDebugViewModel: ObservableObject {
                     configuration: configuration
                 )
             }
-        case .enhancement, .appGroup:
-            let sourceText = values[AppDelegate.rawTranscriptionTemplateVariable] ?? ""
-            let prompt = promptResolution.content
-            switch model.selection {
-            case .local(let repo):
-                return try await customLLMManager.enhance(
-                    sourceText,
-                    systemPrompt: prompt,
-                    modelRepo: repo
-                )
-            case .remote(let provider, let configuration):
-                return try await RemoteLLMRuntimeClient().enhance(
-                    text: sourceText,
-                    systemPrompt: prompt,
-                    provider: provider,
-                    configuration: configuration
+        case .enhancement, .appGroup, .translation, .rewrite:
+            guard let compiledRequest = promptResolution.compiledRequest else {
+                throw NSError(
+                    domain: "Voxt.ModelDebug",
+                    code: -100,
+                    userInfo: [NSLocalizedDescriptionKey: "Debug preset request compilation failed."]
                 )
             }
-        case .translation:
-            let sourceText = values["{{SOURCE_TEXT}}"] ?? ""
-            let resolvedTarget = resolvedTranslationTargetLanguage(values: values)
-            let prompt = promptResolution.content
             switch model.selection {
             case .local(let repo):
-                return try await customLLMManager.translate(
-                    sourceText,
-                    targetLanguage: resolvedTarget,
-                    systemPrompt: prompt,
-                    modelRepo: repo
+                return try await customLLMManager.executeCompiledRequest(
+                    compiledRequest,
+                    repo: repo
                 )
             case .remote(let provider, let configuration):
-                return try await RemoteLLMRuntimeClient().translate(
-                    text: sourceText,
-                    systemPrompt: prompt,
-                    provider: provider,
-                    configuration: configuration
-                )
-            }
-        case .rewrite:
-            let dictatedPrompt = values["{{DICTATED_PROMPT}}"] ?? ""
-            let sourceText = values["{{SOURCE_TEXT}}"] ?? ""
-            let prompt = promptResolution.content
-            switch model.selection {
-            case .local(let repo):
-                return try await customLLMManager.rewrite(
-                    sourceText: sourceText,
-                    dictatedPrompt: dictatedPrompt,
-                    systemPrompt: prompt,
-                    modelRepo: repo
-                )
-            case .remote(let provider, let configuration):
-                return try await RemoteLLMRuntimeClient().rewrite(
-                    sourceText: sourceText,
-                    dictatedPrompt: dictatedPrompt,
-                    systemPrompt: prompt,
+                return try await RemoteLLMRuntimeClient().executeCompiledRequest(
+                    compiledRequest,
                     provider: provider,
                     configuration: configuration
                 )
@@ -870,16 +832,5 @@ final class LLMDebugViewModel: ObservableObject {
                 )
             }
         }
-    }
-
-    private func resolvedTranslationTargetLanguage(values: [String: String]) -> TranslationTargetLanguage {
-        let requested = values["{{TARGET_LANGUAGE}}"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if let matched = TranslationTargetLanguage.allCases.first(where: {
-            $0.instructionName.caseInsensitiveCompare(requested) == .orderedSame
-        }) {
-            return matched
-        }
-        return TranslationTargetLanguage(rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? "")
-            ?? .english
     }
 }

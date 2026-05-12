@@ -14,20 +14,20 @@ final class LocalizationResourcesTests: XCTestCase {
         XCTAssertEqual(AppLocalization.localizedString("Back", localeIdentifier: "ja"), "戻る")
     }
 
-    func testMeetingToggleLabelIsLocalizedInSupportedLanguages() {
-        XCTAssertEqual(AppLocalization.localizedString("Enable Meeting", localeIdentifier: "en"), "Enable Meeting")
+    func testAppEnhancementLabelIsLocalizedInSupportedLanguages() {
+        XCTAssertEqual(AppLocalization.localizedString("App Enhancement", localeIdentifier: "en"), "App Enhancement")
 
-        let chinese = AppLocalization.localizedString("Enable Meeting", localeIdentifier: "zh-Hans")
+        let chinese = AppLocalization.localizedString("App Enhancement", localeIdentifier: "zh-Hans")
         XCTAssertFalse(chinese.isEmpty)
-        XCTAssertNotEqual(chinese, "Enable Meeting")
+        XCTAssertNotEqual(chinese, "App Enhancement")
 
-        let japanese = AppLocalization.localizedString("Enable Meeting", localeIdentifier: "ja")
+        let japanese = AppLocalization.localizedString("App Enhancement", localeIdentifier: "ja")
         XCTAssertFalse(japanese.isEmpty)
-        XCTAssertNotEqual(japanese, "Enable Meeting")
+        XCTAssertNotEqual(japanese, "App Enhancement")
     }
 
-    func testMeetingToggleDescriptionIsLocalizedInSupportedLanguages() {
-        let key = "Turn on the dedicated meeting workflow, shortcut, overlay, and meeting-specific model settings."
+    func testAppEnhancementDescriptionIsLocalizedInSupportedLanguages() {
+        let key = "Use different enhancement prompts for different apps or browser pages."
 
         XCTAssertEqual(AppLocalization.localizedString(key, localeIdentifier: "en"), key)
 
@@ -40,11 +40,11 @@ final class LocalizationResourcesTests: XCTestCase {
         XCTAssertNotEqual(japanese, key)
     }
 
-    func testMeetingOnboardingLabelsAreLocalizedInSupportedLanguages() {
+    func testFeatureLabelsAreLocalizedInSupportedLanguages() {
         let keys = [
-            "Meeting Shortcut",
-            "Meeting is optional during onboarding. You can enable it later from Feature > Transcription.",
-            "Meeting permissions are only required after you turn this feature on."
+            "Transcription",
+            "Translation",
+            "Rewrite"
         ]
 
         for key in keys {

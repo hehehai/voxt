@@ -374,28 +374,30 @@ final class SettingsTypesTests: XCTestCase {
     }
 
     func testFeatureVisibleTabsHideAppEnhancementWhenDisabled() {
-        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, meetingEnabled: true, noteEnabled: false).contains(.appEnhancement))
-        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: true, noteEnabled: false).contains(.appEnhancement))
+        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, noteEnabled: false).contains(.appEnhancement))
+        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: false).contains(.appEnhancement))
     }
 
-    func testFeatureVisibleTabsHideMeetingWhenDisabled() {
-        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: false, noteEnabled: false).contains(.meeting))
-        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: true, noteEnabled: false).contains(.meeting))
-    }
-
-    func testFeatureVisibleTabsHideNotesWhenDisabled() {
-        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: true, noteEnabled: false).contains(.note))
-        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, meetingEnabled: true, noteEnabled: true).contains(.note))
-    }
-
-    func testHotkeyShortcutVisibilityHidesMeetingWhenDisabled() {
+    func testFeatureVisibleTabsOnlyIncludeCurrentFeatureTabs() {
         XCTAssertEqual(
-            HotkeyShortcutVisibility.visibleKinds(meetingEnabled: false),
+            FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, noteEnabled: false),
             [.transcription, .translation, .rewrite]
         )
         XCTAssertEqual(
-            HotkeyShortcutVisibility.visibleKinds(meetingEnabled: true),
-            [.transcription, .translation, .rewrite, .meeting]
+            FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true),
+            [.transcription, .note, .translation, .rewrite, .appEnhancement]
+        )
+    }
+
+    func testFeatureVisibleTabsHideNotesWhenDisabled() {
+        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: false).contains(.note))
+        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true).contains(.note))
+    }
+
+    func testHotkeyShortcutVisibilityOnlyIncludesCurrentFeatureKinds() {
+        XCTAssertEqual(
+            HotkeyShortcutVisibility.visibleKinds(),
+            [.transcription, .translation, .rewrite]
         )
     }
 
@@ -409,8 +411,7 @@ final class SettingsTypesTests: XCTestCase {
     func testPermissionRequirementResolverAggregatesFeatureSelections() {
         let context = SettingsPermissionRequirementContext(
             selectedEngine: .mlxAudio,
-            muteSystemAudioWhileRecording: false,
-            meetingNotesEnabled: false,
+            muteSystemAudioWhileRecording: true,
             featureSettings: FeatureSettings(
                 transcription: .init(
                     asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
@@ -430,16 +431,6 @@ final class SettingsTypesTests: XCTestCase {
                     llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                     prompt: AppPreferenceKey.defaultRewritePrompt,
                     appEnhancementEnabled: false
-                ),
-                meeting: .init(
-                    enabled: true,
-                    asrSelectionID: .mlx(MLXModelManager.defaultModelRepo),
-                    summaryModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
-                    summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
-                    summaryAutoGenerate: true,
-                    realtimeTranslateEnabled: false,
-                    realtimeTargetLanguageRawValue: "",
-                    showOverlayInScreenShare: false
                 )
             )
         )

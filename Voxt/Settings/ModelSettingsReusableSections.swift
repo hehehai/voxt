@@ -8,10 +8,6 @@ struct ModelSettingsProviderOption: Identifiable {
 enum ModelSettingsPromptVariables {
     static let enhancement = [
         PromptTemplateVariableDescriptor(
-            token: AppDelegate.rawTranscriptionTemplateVariable,
-            tipKey: "Template tip {{RAW_TRANSCRIPTION}}"
-        ),
-        PromptTemplateVariableDescriptor(
             token: AppDelegate.userMainLanguageTemplateVariable,
             tipKey: "Template tip {{USER_MAIN_LANGUAGE}}"
         )
@@ -25,23 +21,32 @@ enum ModelSettingsPromptVariables {
         PromptTemplateVariableDescriptor(
             token: "{{USER_MAIN_LANGUAGE}}",
             tipKey: "Template tip {{USER_MAIN_LANGUAGE}}"
-        ),
-        PromptTemplateVariableDescriptor(
-            token: "{{SOURCE_TEXT}}",
-            tipKey: "Template tip {{SOURCE_TEXT}}"
         )
     ]
 
-    static let rewrite = [
-        PromptTemplateVariableDescriptor(
-            token: "{{DICTATED_PROMPT}}",
-            tipKey: "Template tip {{DICTATED_PROMPT}}"
-        ),
-        PromptTemplateVariableDescriptor(
-            token: "{{SOURCE_TEXT}}",
-            tipKey: "Template tip {{SOURCE_TEXT}}"
-        )
-    ]
+    static let rewrite: [PromptTemplateVariableDescriptor] = []
+
+    static let appEnhancement: [PromptTemplateVariableDescriptor] = []
+}
+
+enum PromptAuthoringGuidance {
+    static let optionalVariablesTitle = AppLocalization.localizedString("Optional variables")
+
+    static let enhancement = AppLocalization.localizedString(
+        "Write stable cleanup rules only. Do not paste raw transcription here. Voxt injects the transcription, glossary, and app context automatically."
+    )
+
+    static let translation = AppLocalization.localizedString(
+        "Write translation rules only. Do not paste source text here. Voxt injects the source text, target language, and glossary automatically."
+    )
+
+    static let rewrite = AppLocalization.localizedString(
+        "Write rewrite behavior rules only. Do not paste spoken instructions or source text here. Voxt injects both automatically at runtime."
+    )
+
+    static let appEnhancement = AppLocalization.localizedString(
+        "Recommended: describe only app-specific tone or formatting preferences. Do not paste raw transcription unless you intentionally need compatibility template behavior."
+    )
 }
 
 struct ResettablePromptSection: View {
@@ -49,6 +54,8 @@ struct ResettablePromptSection: View {
     @Binding var text: String
     let defaultText: String
     let variables: [PromptTemplateVariableDescriptor]
+    var guidance: String? = nil
+    var variablesTitle: String? = nil
     var promptHeight: CGFloat = 124
     var onTextChange: ((String) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
@@ -65,10 +72,17 @@ struct ResettablePromptSection: View {
             .disabled(text == defaultText)
         }
 
+        if let guidance, !guidance.isEmpty {
+            Text(guidance)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
         PromptEditorView(
             text: $text,
             height: promptHeight,
             variables: variables,
+            variablesTitle: variablesTitle,
             onTextChange: onTextChange,
             onFocusChange: onFocusChange
         )
@@ -92,6 +106,7 @@ struct ModelTaskSettingsCard: View {
     @Binding var promptText: String
     let defaultPromptText: String
     let variables: [PromptTemplateVariableDescriptor]
+    let promptGuidance: String
 
     var body: some View {
         GroupBox {
@@ -167,7 +182,9 @@ struct ModelTaskSettingsCard: View {
                     title: promptTitle,
                     text: $promptText,
                     defaultText: defaultPromptText,
-                    variables: variables
+                    variables: variables,
+                    guidance: promptGuidance,
+                    variablesTitle: PromptAuthoringGuidance.optionalVariablesTitle
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)

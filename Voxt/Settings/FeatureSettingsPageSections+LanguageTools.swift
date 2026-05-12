@@ -72,6 +72,7 @@ extension FeatureSettingsView {
                             ),
                             defaultText: AppPromptDefaults.text(for: .translation),
                             variables: ModelSettingsPromptVariables.translation,
+                            guidance: PromptAuthoringGuidance.translation,
                             persistChanges: saveFeatureSettings
                         )
                     }
@@ -119,6 +120,7 @@ extension FeatureSettingsView {
                         ),
                         defaultText: AppPromptDefaults.text(for: .rewrite),
                         variables: ModelSettingsPromptVariables.rewrite,
+                        guidance: PromptAuthoringGuidance.rewrite,
                         persistChanges: saveFeatureSettings
                     )
                 }

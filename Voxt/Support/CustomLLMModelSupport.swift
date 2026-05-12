@@ -124,12 +124,101 @@ struct CustomLLMLogSection: Equatable {
     let content: String
 }
 
+enum CustomLLMContainerLoadSource: String, Equatable {
+    case reusedLoaded
+    case loadedFromDisk
+}
+
+struct CustomLLMRunDiagnostics: Equatable {
+    let repo: String
+    let taskLabel: String
+    let containerLoadSource: CustomLLMContainerLoadSource
+    let containerLoadMs: Int
+    let setupMs: Int
+    let modelElapsedMs: Int
+    let totalElapsedMs: Int
+    let firstChunkMs: Int?
+    let overallFirstChunkMs: Int?
+    let promptTokens: Int?
+    let completionTokens: Int?
+    let prefillMs: Int?
+    let generationMs: Int?
+    let modelOverheadMs: Int?
+    let totalOverheadMs: Int?
+}
+
+struct CustomLLMGenerationTuning: Equatable {
+    let prefillStepSizeOverride: Int?
+    let maxTokensOverride: Int?
+
+    static let `default` = CustomLLMGenerationTuning(prefillStepSizeOverride: nil, maxTokensOverride: nil)
+}
+
+struct LLMOutputRepetition: Equatable {
+    let repeatedUnit: String
+    let repetitionCount: Int
+    let truncatedText: String
+}
+
+struct LLMOutputRepetitionGuard {
+    var maximumUnitLength = 48
+    var minimumRepetitionCount = 6
+    var minimumRunCharacterCount = 48
+    var shortUnitMinimumRepetitionCount = 10
+    var shortUnitMinimumRunCharacterCount = 24
+
+    func repeatedSuffix(in text: String) -> LLMOutputRepetition? {
+        let characterCount = text.count
+        guard characterCount >= shortUnitMinimumRunCharacterCount else { return nil }
+
+        let longestUnit = min(maximumUnitLength, characterCount / minimumRepetitionCount)
+        guard longestUnit > 0 else { return nil }
+
+        for unitLength in 1...longestUnit {
+            guard let unitStart = text.index(text.endIndex, offsetBy: -unitLength, limitedBy: text.startIndex) else {
+                continue
+            }
+            let unit = String(text[unitStart...])
+            guard !unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue
+            }
+
+            var repetitions = 1
+            var runStart = unitStart
+            while let previousStart = text.index(runStart, offsetBy: -unitLength, limitedBy: text.startIndex),
+                  text[previousStart..<runStart] == text[unitStart..<text.endIndex] {
+                repetitions += 1
+                runStart = previousStart
+            }
+
+            let runCharacterCount = repetitions * unitLength
+            let isShortUnitRun = unitLength <= 4 &&
+                repetitions >= shortUnitMinimumRepetitionCount &&
+                runCharacterCount >= shortUnitMinimumRunCharacterCount
+            let isGeneralRun = repetitions >= minimumRepetitionCount &&
+                runCharacterCount >= minimumRunCharacterCount
+
+            guard isShortUnitRun || isGeneralRun else { continue }
+
+            let keepEnd = text.index(text.endIndex, offsetBy: -unitLength * (repetitions - 1))
+            return LLMOutputRepetition(
+                repeatedUnit: unit,
+                repetitionCount: repetitions,
+                truncatedText: String(text[..<keepEnd])
+            )
+        }
+
+        return nil
+    }
+}
+
 struct CustomLLMRequestPlan: Equatable {
     let kind: CustomLLMTaskKind
     let repo: String
     let instructions: String
     let prompt: String
     let inputCharacterCount: Int
+    let maxTokensOverride: Int?
     let logMode: String?
     let contentLogSections: [CustomLLMLogSection]
     let resultFallback: String
@@ -142,6 +231,48 @@ enum CustomLLMResponseExtractionMode: Equatable {
 }
 
 enum CustomLLMRequestPlanBuilder {
+    static func compiled(
+        request: LLMCompiledRequest,
+        repo: String
+    ) -> CustomLLMRequestPlan {
+        let kind: CustomLLMTaskKind
+        switch request.taskLabel {
+        case "enhancement":
+            kind = .enhancement
+        case "translation":
+            kind = .translation
+        case "rewrite":
+            kind = .rewrite
+        default:
+            kind = .enhancement
+        }
+
+        let usesUserMessageMode = request.instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        var sections: [CustomLLMLogSection] = [
+            CustomLLMLogSection(
+                label: "system_prompt",
+                content: usesUserMessageMode ? "<empty>" : request.instructions
+            ),
+            CustomLLMLogSection(label: "input", content: request.debugInput)
+        ]
+        if !usesUserMessageMode {
+            sections.append(CustomLLMLogSection(label: "request_content", content: request.prompt))
+        }
+
+        return CustomLLMRequestPlan(
+            kind: kind,
+            repo: repo,
+            instructions: request.instructions,
+            prompt: request.prompt,
+            inputCharacterCount: request.inputCharacterCount,
+            maxTokensOverride: request.outputTokenBudgetHint,
+            logMode: usesUserMessageMode ? "userMessage" : nil,
+            contentLogSections: sections,
+            resultFallback: request.fallbackText,
+            responseExtractionMode: .textResultPayloadOrNormalizedText
+        )
+    }
+
     static func enhancement(
         input: String,
         systemPrompt: String,
@@ -159,6 +290,7 @@ enum CustomLLMRequestPlanBuilder {
             instructions: systemPrompt,
             prompt: prompt,
             inputCharacterCount: input.count,
+            maxTokensOverride: nil,
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: systemPrompt),
@@ -180,6 +312,7 @@ enum CustomLLMRequestPlanBuilder {
             instructions: "",
             prompt: prompt,
             inputCharacterCount: prompt.count,
+            maxTokensOverride: nil,
             logMode: "userMessage",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -206,6 +339,7 @@ enum CustomLLMRequestPlanBuilder {
             instructions: instructions,
             prompt: prompt,
             inputCharacterCount: text.count,
+            maxTokensOverride: nil,
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: instructions),
@@ -213,6 +347,28 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "request_content", content: prompt)
             ],
             resultFallback: "",
+            responseExtractionMode: .textResultPayloadOrNormalizedText
+        )
+    }
+
+    static func userPromptTranslation(
+        prompt: String,
+        repo: String,
+        resultFallback: String
+    ) -> CustomLLMRequestPlan {
+        CustomLLMRequestPlan(
+            kind: .translation,
+            repo: repo,
+            instructions: "",
+            prompt: prompt,
+            inputCharacterCount: prompt.count,
+            maxTokensOverride: nil,
+            logMode: "userMessage",
+            contentLogSections: [
+                CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
+                CustomLLMLogSection(label: "input", content: prompt)
+            ],
+            resultFallback: resultFallback,
             responseExtractionMode: .textResultPayloadOrNormalizedText
         )
     }
@@ -241,6 +397,7 @@ enum CustomLLMRequestPlanBuilder {
             instructions: instructions,
             prompt: prompt,
             inputCharacterCount: combinedInput.count,
+            maxTokensOverride: nil,
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: instructions),
@@ -248,6 +405,28 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "request_content", content: prompt)
             ],
             resultFallback: "",
+            responseExtractionMode: .textResultPayloadOrNormalizedText
+        )
+    }
+
+    static func userPromptRewrite(
+        prompt: String,
+        repo: String,
+        resultFallback: String
+    ) -> CustomLLMRequestPlan {
+        CustomLLMRequestPlan(
+            kind: .rewrite,
+            repo: repo,
+            instructions: "",
+            prompt: prompt,
+            inputCharacterCount: prompt.count,
+            maxTokensOverride: nil,
+            logMode: "userMessage",
+            contentLogSections: [
+                CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
+                CustomLLMLogSection(label: "input", content: prompt)
+            ],
+            resultFallback: resultFallback,
             responseExtractionMode: .textResultPayloadOrNormalizedText
         )
     }
@@ -264,6 +443,7 @@ enum CustomLLMRequestPlanBuilder {
             instructions: "",
             prompt: requestPrompt,
             inputCharacterCount: prompt.count,
+            maxTokensOverride: nil,
             logMode: "dictionaryHistoryScan",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),

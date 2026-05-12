@@ -27,19 +27,6 @@ struct ConfigurationExportDocument: FileDocument {
 
 enum ConfigurationTransferManager {
     static let sensitivePlaceholder = "__VOXT_REQUIRED__"
-    private enum LegacyRetiredTranscriptPreferenceKey {
-        static let notesBetaEnabled = "meetingNotesBetaEnabled"
-        static let hideOverlayFromScreenSharing = "hideMeetingOverlayFromScreenSharing"
-        static let overlayCollapsed = "meetingOverlayCollapsed"
-        static let realtimeTranslateEnabled = "meetingRealtimeTranslateEnabled"
-        static let realtimeTranslationTargetLanguage = "meetingRealtimeTranslationTargetLanguage"
-        static let summaryAutoGenerate = "meetingSummaryAutoGenerate"
-        static let summaryPromptTemplate = AppPreferenceKey.transcriptSummaryPromptTemplate
-        static let summaryModelSelection = AppPreferenceKey.transcriptSummaryModelSelection
-        static let hotkeyKeyCode = "meetingHotkeyKeyCode"
-        static let hotkeyModifiers = "meetingHotkeyModifiers"
-        static let hotkeySidedModifiers = "meetingHotkeySidedModifiers"
-    }
 
     struct FileEnvironment {
         let dictionaryEntriesURL: () throws -> URL
@@ -979,14 +966,6 @@ enum ConfigurationTransferManager {
             forKey: AppPreferenceKey.userMainLanguageCodes
         )
         defaults.set(general.translateSelectedTextOnTranslationHotkey, forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
-        defaults.set(false, forKey: LegacyRetiredTranscriptPreferenceKey.notesBetaEnabled)
-        defaults.set(false, forKey: LegacyRetiredTranscriptPreferenceKey.hideOverlayFromScreenSharing)
-        defaults.set(false, forKey: LegacyRetiredTranscriptPreferenceKey.overlayCollapsed)
-        defaults.set(false, forKey: LegacyRetiredTranscriptPreferenceKey.realtimeTranslateEnabled)
-        defaults.set("", forKey: LegacyRetiredTranscriptPreferenceKey.realtimeTranslationTargetLanguage)
-        defaults.set(true, forKey: LegacyRetiredTranscriptPreferenceKey.summaryAutoGenerate)
-        defaults.set("", forKey: LegacyRetiredTranscriptPreferenceKey.summaryPromptTemplate)
-        defaults.set("", forKey: LegacyRetiredTranscriptPreferenceKey.summaryModelSelection)
         defaults.set(general.voiceEndCommandEnabled, forKey: AppPreferenceKey.voiceEndCommandEnabled)
         defaults.set(general.voiceEndCommandPreset, forKey: AppPreferenceKey.voiceEndCommandPreset)
         defaults.set(general.voiceEndCommandText, forKey: AppPreferenceKey.voiceEndCommandText)
@@ -1100,9 +1079,6 @@ enum ConfigurationTransferManager {
             rawValue: hotkey.rewriteHotkeyActivationMode
         ) ?? HotkeyPreference.defaultRewriteActivationMode
         HotkeyPreference.saveRewriteActivationMode(rewriteActivationMode, defaults: defaults)
-        defaults.removeObject(forKey: LegacyRetiredTranscriptPreferenceKey.hotkeyKeyCode)
-        defaults.removeObject(forKey: LegacyRetiredTranscriptPreferenceKey.hotkeyModifiers)
-        defaults.removeObject(forKey: LegacyRetiredTranscriptPreferenceKey.hotkeySidedModifiers)
         let triggerMode = HotkeyPreference.TriggerMode(rawValue: hotkey.hotkeyTriggerMode)
             ?? HotkeyPreference.defaultTriggerMode
         HotkeyPreference.saveTriggerMode(triggerMode, defaults: defaults)

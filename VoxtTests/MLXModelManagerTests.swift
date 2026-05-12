@@ -390,6 +390,28 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(plan.contentLogSections[1].content.contains("Selected source text:"))
     }
 
+    func testCustomLLMCompiledPlanPreservesOutputTokenBudgetHint() {
+        let compiled = LLMCompiledRequest(
+            taskLabel: "enhancement",
+            instructions: "system",
+            prompt: "prompt",
+            debugInput: "input",
+            fallbackText: "fallback",
+            inputCharacterCount: 5,
+            outputTokenBudgetHint: 321,
+            conversationHistory: [],
+            previousResponseID: nil,
+            responseFormat: nil
+        )
+
+        let plan = CustomLLMRequestPlanBuilder.compiled(
+            request: compiled,
+            repo: "mlx-community/Qwen3.5-4B-OptiQ-4bit"
+        )
+
+        XCTAssertEqual(plan.maxTokensOverride, 321)
+    }
+
     func testCustomLLMNormalizeResultTextStripsThinkBlocksAndMarkers() {
         let output = """
         <think>

@@ -35,7 +35,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         ]
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
-                meetingASR: .remoteASR(.aliyunBailianASR)
+                transcriptionASR: .remoteASR(.aliyunBailianASR)
             ),
             remoteASRConfigurations: remoteASRConfigurations,
             hasIssue: { scope in
@@ -315,8 +315,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
 
     private func makeFeatureSettings(
         transcriptionASR: FeatureModelSelectionID = .dictation,
-        translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
-        meetingASR: FeatureModelSelectionID = .dictation
+        translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
     ) -> FeatureSettings {
         FeatureSettings(
             transcription: .init(
@@ -337,16 +336,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultRewritePrompt,
                 appEnhancementEnabled: false
-            ),
-            meeting: .init(
-                enabled: true,
-                asrSelectionID: meetingASR,
-                summaryModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
-                summaryPrompt: AppPreferenceKey.defaultMeetingSummaryPrompt,
-                summaryAutoGenerate: true,
-                realtimeTranslateEnabled: false,
-                realtimeTargetLanguageRawValue: "",
-                showOverlayInScreenShare: false
             )
         )
     }

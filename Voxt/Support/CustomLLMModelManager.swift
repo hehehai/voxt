@@ -111,6 +111,8 @@ class CustomLLMModelManager: ObservableObject {
     @Published private(set) var sizeState: ModelSizeState = .unknown
     @Published private(set) var remoteSizeTextByRepo: [String: String] = [:]
     @Published private(set) var pausedStatusMessage: String?
+    @Published private(set) var lastRunDiagnostics: CustomLLMRunDiagnostics?
+    @Published var generationTuning = CustomLLMGenerationTuning.default
 
     private var downloadedStateByRepo: [String: Bool] = [:]
     private var downloadedStateCachePrimed = false
@@ -168,6 +170,20 @@ class CustomLLMModelManager: ObservableObject {
         return inferenceContainer != nil && inferenceModelRepo == canonicalRepo
     }
 
+    func prewarmModel(repo: String) async throws {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        try await withActiveInference {
+            guard isModelDownloaded(repo: canonicalRepo) else {
+                throw NSError(
+                    domain: "Voxt.CustomLLM",
+                    code: 404,
+                    userInfo: [NSLocalizedDescriptionKey: "Custom LLM model is not installed locally."]
+                )
+            }
+            _ = try await container(for: canonicalRepo)
+        }
+    }
+
     func enhance(_ rawText: String, systemPrompt: String) async throws -> String {
         try await enhance(rawText, systemPrompt: systemPrompt, modelRepo: modelRepo)
     }
@@ -211,6 +227,18 @@ class CustomLLMModelManager: ObservableObject {
         return try DictionaryHistoryScanResponseParser.parseTerms(from: rawOutput)
     }
 
+    func executeCompiledRequest(
+        _ request: LLMCompiledRequest,
+        repo: String,
+        onPartialText: (@Sendable (String) -> Void)? = nil
+    ) async throws -> String {
+        let prompt = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return request.fallbackText }
+        let compiledPlan = CustomLLMRequestPlanBuilder.compiled(request: request, repo: repo)
+        let result = try await runLocalPromptRequest(compiledPlan, onPartialText: onPartialText)
+        return result.isEmpty ? request.fallbackText : result
+    }
+
     func translate(
         _ text: String,
         targetLanguage: TranslationTargetLanguage,
@@ -226,6 +254,22 @@ class CustomLLMModelManager: ObservableObject {
             modelRepo: modelRepo
         )
         return translated.isEmpty ? text : translated
+    }
+
+    func translate(
+        userPrompt: String,
+        fallbackText: String,
+        modelRepo: String
+    ) async throws -> String {
+        let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return fallbackText }
+        let request = CustomLLMRequestPlanBuilder.userPromptTranslation(
+            prompt: prompt,
+            repo: modelRepo,
+            resultFallback: fallbackText
+        )
+        let translated = try await runLocalPromptRequest(request)
+        return translated.isEmpty ? fallbackText : translated
     }
 
     func rewrite(
@@ -246,6 +290,23 @@ class CustomLLMModelManager: ObservableObject {
             onPartialText: onPartialText
         )
         return result.isEmpty ? sourceText : result
+    }
+
+    func rewrite(
+        userPrompt: String,
+        fallbackText: String,
+        modelRepo: String,
+        onPartialText: (@Sendable (String) -> Void)? = nil
+    ) async throws -> String {
+        let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return fallbackText }
+        let request = CustomLLMRequestPlanBuilder.userPromptRewrite(
+            prompt: prompt,
+            repo: modelRepo,
+            resultFallback: fallbackText
+        )
+        let result = try await runLocalPromptRequest(request, onPartialText: onPartialText)
+        return result.isEmpty ? fallbackText : result
     }
 
     private func runTranslationPrompt(
@@ -279,21 +340,62 @@ class CustomLLMModelManager: ObservableObject {
         return try await runLocalPromptRequest(request, onPartialText: onPartialText)
     }
 
-    private func generationParameters(for kind: CustomLLMTaskKind, inputLength: Int) -> GenerateParameters {
-        let safeInput = max(1, inputLength)
-        let estimated = Int(Double(safeInput) * kind.tokenBudgetMultiplier)
-        let budget: Int
-        switch kind {
-        case .dictionaryHistoryScan:
-            budget = max(256, min(estimated + 96, 1024))
-        case .enhancement, .translation, .rewrite:
-            budget = max(96, min(estimated + 48, 320))
+    private func generationParameters(
+        for request: CustomLLMRequestPlan,
+        behavior: CustomLLMModelBehavior
+    ) -> GenerateParameters {
+        let safeInput = max(1, request.inputCharacterCount)
+        let estimated = Int(Double(safeInput) * request.kind.tokenBudgetMultiplier)
+        let totalPromptCharacters = request.instructions.count + request.prompt.count
+        let budget: Int?
+        if let override = generationTuning.maxTokensOverride {
+            budget = max(1, override)
+        } else if let override = request.maxTokensOverride {
+            budget = max(1, override)
+        } else {
+            budget = defaultOutputTokenBudget(for: request.kind, estimated: estimated)
         }
+
+        let prefillStepSize: Int
+        if let override = generationTuning.prefillStepSizeOverride {
+            prefillStepSize = override
+        } else {
+            switch totalPromptCharacters {
+            case ..<1000:
+                prefillStepSize = 256
+            case ..<3000:
+                prefillStepSize = 512
+            default:
+                prefillStepSize = 768
+            }
+        }
+
+        let repetitionPenalty: Float? =
+            behavior.family == .qwen3 ? 1.05 : nil
+
         return GenerateParameters(
             maxTokens: budget,
-            temperature: 0.1,
-            topP: 0.85
+            temperature: 0,
+            topP: 1.0,
+            topK: 0,
+            minP: 0,
+            repetitionPenalty: repetitionPenalty,
+            repetitionContextSize: 32,
+            prefillStepSize: prefillStepSize
         )
+    }
+
+    private func defaultOutputTokenBudget(for kind: CustomLLMTaskKind, estimated: Int) -> Int {
+        switch kind {
+        case .enhancement:
+            return max(128, min(estimated + 128, 1024))
+        case .translation:
+            return max(128, min(estimated + 160, 1024))
+        case .rewrite:
+            return max(256, min(estimated + 192, 1536))
+        case .dictionaryHistoryScan:
+            return max(256, min(estimated + 96, 2048))
+        }
     }
 
     private func runLocalPromptRequest(
@@ -309,7 +411,9 @@ class CustomLLMModelManager: ObservableObject {
                 )
             }
 
-            let container = try await container(for: request.repo)
+            let overallStartedAt = Date()
+            let containerSnapshot = try await profiledContainer(for: request.repo)
+            let container = containerSnapshot.container
             let behavior = CustomLLMModelBehaviorResolver.behavior(for: request.repo)
             let session = makeChatSession(
                 container: container,
@@ -317,28 +421,59 @@ class CustomLLMModelManager: ObservableObject {
                 repo: request.repo,
                 behavior: behavior
             )
-            let params = generationParameters(for: request.kind, inputLength: request.inputCharacterCount)
+            let params = generationParameters(for: request, behavior: behavior)
             session.generateParameters = params
 
-            let startedAt = Date()
+            let modelStartedAt = Date()
+            let setupMs = Int(modelStartedAt.timeIntervalSince(overallStartedAt) * 1000) - containerSnapshot.elapsedMs
             VoxtLog.llm(startLogMessage(for: request, params: params, behavior: behavior))
             VoxtLog.llm(contentLogMessage(for: request))
 
-            let response: String
-            if let onPartialText {
-                var aggregated = ""
-                for try await chunk in session.streamResponse(to: request.prompt) {
-                    aggregated += chunk
-                    let preview = CustomLLMOutputSanitizer.normalizeResultText(aggregated)
-                    if !preview.isEmpty {
-                        onPartialText(preview)
+            var aggregated = ""
+            var firstChunkLatencyMs: Int?
+            var completionInfo: GenerateCompletionInfo?
+            var repetitionStop: LLMOutputRepetition?
+            let repetitionGuard = LLMOutputRepetitionGuard()
+            for try await event in session.streamDetails(
+                to: request.prompt,
+                images: [],
+                videos: []
+            ) {
+                switch event {
+                case .chunk(let chunk):
+                    if firstChunkLatencyMs == nil, !chunk.isEmpty {
+                        firstChunkLatencyMs = Int(Date().timeIntervalSince(modelStartedAt) * 1000)
                     }
+                    aggregated += chunk
+                    if let repetition = repetitionGuard.repeatedSuffix(in: aggregated) {
+                        repetitionStop = repetition
+                        aggregated = repetition.truncatedText
+                        VoxtLog.warning(
+                            "Custom LLM \(request.kind.logLabel) repetition guard stopped generation. repo=\(request.repo), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(aggregated.count)"
+                        )
+                        break
+                    }
+                    if let onPartialText {
+                        let preview = CustomLLMOutputSanitizer.normalizeResultText(aggregated)
+                        if !preview.isEmpty {
+                            onPartialText(preview)
+                        }
+                    }
+                case .info(let info):
+                    completionInfo = info
+                case .toolCall:
+                    continue
                 }
-                response = aggregated
-            } else {
-                response = try await session.respond(to: request.prompt)
             }
-            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+            let response = aggregated
+            let modelElapsedMs = Int(Date().timeIntervalSince(modelStartedAt) * 1000)
+            let totalElapsedMs = Int(Date().timeIntervalSince(overallStartedAt) * 1000)
+            if repetitionStop != nil, let onPartialText {
+                let preview = CustomLLMOutputSanitizer.normalizeResultText(aggregated)
+                if !preview.isEmpty {
+                    onPartialText(preview)
+                }
+            }
             let cleaned: String
             switch request.responseExtractionMode {
             case .textResultPayloadOrNormalizedText:
@@ -348,8 +483,55 @@ class CustomLLMModelManager: ObservableObject {
             }
 
             VoxtLog.llm(
-                "Custom LLM \(request.kind.logLabel) completed. repo=\(request.repo), outputChars=\(cleaned.count), elapsedMs=\(elapsedMs)"
+                "Custom LLM \(request.kind.logLabel) completed. repo=\(request.repo), outputChars=\(cleaned.count), elapsedMs=\(modelElapsedMs), totalElapsedMs=\(totalElapsedMs)"
             )
+            var diagnostics = CustomLLMRunDiagnostics(
+                repo: request.repo,
+                taskLabel: request.kind.logLabel,
+                containerLoadSource: containerSnapshot.source,
+                containerLoadMs: containerSnapshot.elapsedMs,
+                setupMs: max(0, setupMs),
+                modelElapsedMs: modelElapsedMs,
+                totalElapsedMs: totalElapsedMs,
+                firstChunkMs: firstChunkLatencyMs,
+                overallFirstChunkMs: firstChunkLatencyMs.map { max(0, containerSnapshot.elapsedMs + max(0, setupMs) + $0) },
+                promptTokens: nil,
+                completionTokens: nil,
+                prefillMs: nil,
+                generationMs: nil,
+                modelOverheadMs: nil,
+                totalOverheadMs: nil
+            )
+            if let completionInfo {
+                let firstChunkText = firstChunkLatencyMs.map(String.init) ?? "n/a"
+                let promptTPS = String(format: "%.1f", completionInfo.promptTokensPerSecond)
+                let generationTPS = String(format: "%.1f", completionInfo.tokensPerSecond)
+                let prefillMs = Int((completionInfo.promptTime * 1000).rounded())
+                let generationMs = Int((completionInfo.generateTime * 1000).rounded())
+                let modelOverheadMs = max(0, modelElapsedMs - prefillMs - generationMs)
+                let totalOverheadMs = max(0, totalElapsedMs - prefillMs - generationMs)
+                diagnostics = CustomLLMRunDiagnostics(
+                    repo: request.repo,
+                    taskLabel: request.kind.logLabel,
+                    containerLoadSource: containerSnapshot.source,
+                    containerLoadMs: containerSnapshot.elapsedMs,
+                    setupMs: max(0, setupMs),
+                    modelElapsedMs: modelElapsedMs,
+                    totalElapsedMs: totalElapsedMs,
+                    firstChunkMs: firstChunkLatencyMs,
+                    overallFirstChunkMs: firstChunkLatencyMs.map { max(0, containerSnapshot.elapsedMs + max(0, setupMs) + $0) },
+                    promptTokens: completionInfo.promptTokenCount,
+                    completionTokens: completionInfo.generationTokenCount,
+                    prefillMs: prefillMs,
+                    generationMs: generationMs,
+                    modelOverheadMs: modelOverheadMs,
+                    totalOverheadMs: totalOverheadMs
+                )
+                VoxtLog.llm(
+                    "Custom LLM \(request.kind.logLabel) metrics. repo=\(request.repo), containerSource=\(containerSnapshot.source.rawValue), containerLoadMs=\(containerSnapshot.elapsedMs), setupMs=\(max(0, setupMs)), firstChunkMs=\(firstChunkText), overallFirstChunkMs=\(diagnostics.overallFirstChunkMs.map(String.init) ?? "n/a"), promptTokens=\(completionInfo.promptTokenCount), generationTokens=\(completionInfo.generationTokenCount), prefillMs=\(prefillMs), generationMs=\(generationMs), modelOverheadMs=\(modelOverheadMs), totalOverheadMs=\(totalOverheadMs), promptTPS=\(promptTPS), generationTPS=\(generationTPS), stopReason=\(completionInfo.stopReason)"
+                )
+            }
+            lastRunDiagnostics = diagnostics
             VoxtLog.llm(
                 """
                 Custom LLM \(request.kind.logLabel) output. repo=\(request.repo)
@@ -370,7 +552,7 @@ class CustomLLMModelManager: ObservableObject {
         if let mode = request.logMode {
             suffix = ", mode=\(mode)"
         }
-        return "Custom LLM \(request.kind.logLabel) started. repo=\(request.repo), inputChars=\(request.inputCharacterCount), maxTokens=\(params.maxTokens ?? 0), temperature=\(params.temperature), topP=\(params.topP)\(suffix), family=\(behavior.family.logLabel), thinkingDisabled=\(behavior.disablesThinking)"
+        return "Custom LLM \(request.kind.logLabel) started. repo=\(request.repo), inputChars=\(request.inputCharacterCount), maxTokens=\(params.maxTokens ?? 0), temperature=\(params.temperature), topP=\(params.topP), prefillStep=\(params.prefillStepSize)\(suffix), family=\(behavior.family.logLabel), thinkingDisabled=\(behavior.disablesThinking)"
     }
 
     private func contentLogMessage(for request: CustomLLMRequestPlan) -> String {
@@ -380,6 +562,28 @@ class CustomLLMModelManager: ObservableObject {
             lines.append(VoxtLog.llmPreview(section.content))
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func profiledContainer(for repo: String) async throws -> (
+        container: ModelContainer,
+        source: CustomLLMContainerLoadSource,
+        elapsedMs: Int
+    ) {
+        let startedAt = Date()
+        if let cached = inferenceContainer, inferenceModelRepo == repo {
+            return (
+                cached,
+                .reusedLoaded,
+                Int(Date().timeIntervalSince(startedAt) * 1000)
+            )
+        }
+
+        let container = try await container(for: repo)
+        return (
+            container,
+            .loadedFromDisk,
+            Int(Date().timeIntervalSince(startedAt) * 1000)
+        )
     }
 
     private func container(for repo: String) async throws -> ModelContainer {

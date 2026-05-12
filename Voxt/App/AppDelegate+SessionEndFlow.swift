@@ -51,9 +51,11 @@ extension AppDelegate {
                 delegate.overlayState.displayMode == .answer
 
             delegate.activeRecordingSessionID = UUID()
+            delegate.invalidateActiveLLMRequest()
             delegate.isSessionActive = false
             delegate.sessionOutputMode = .transcription
             delegate.isSelectedTextTranslationFlow = false
+            delegate.pendingOutputReplacementTransaction = nil
             if !shouldPreserveTranslationAnswerControls {
                 delegate.sessionTargetApplicationPID = nil
                 delegate.sessionTargetApplicationBundleID = nil

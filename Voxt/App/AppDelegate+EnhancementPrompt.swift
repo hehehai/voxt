@@ -14,6 +14,7 @@ extension AppDelegate {
         }
 
         let content: String
+        let dictionaryGlossary: String?
         let delivery: Delivery
         let source: EnhancementPromptResolver.Source
         let overlayIconMatch: OverlayEnhancementIconMatch?
@@ -22,8 +23,7 @@ extension AppDelegate {
     func resolveGlobalEnhancementPromptTemplate(_ prompt: String, rawTranscription: String) -> String {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else { return AppPromptDefaults.text(for: .enhancement) }
-        let resolved = resolveEnhancementPromptVariables(in: trimmedPrompt, rawTranscription: rawTranscription)
-        return appendDictionaryEnhancementGlossary(to: resolved, sourceText: rawTranscription)
+        return resolveEnhancementPromptVariables(in: trimmedPrompt, rawTranscription: rawTranscription)
     }
 
     func resolvedGlobalEnhancementPrompt() -> String {
@@ -33,7 +33,10 @@ extension AppDelegate {
         )
     }
 
-    func resolvedEnhancementPrompt(rawTranscription: String) -> EnhancementPromptResolution {
+    func resolvedEnhancementPrompt(
+        rawTranscription: String,
+        glossarySelectionPolicy: DictionaryGlossarySelectionPolicy? = nil
+    ) -> EnhancementPromptResolution {
         let groups = loadAppBranchGroups()
         let urlsByID = loadAppBranchURLsByID()
         let context = currentEnhancementContext()
@@ -43,10 +46,11 @@ extension AppDelegate {
             ? activeBrowserTabURL(frontmostBundleID: frontmostBundleID)
             : nil
         let normalizedActiveURL = AppBranchURLPatternService.normalizedURLForMatching(activeBrowserURL)
-        let glossary = dictionaryStore.glossaryContext(
+        let glossary = dictionaryGlossaryText(
             for: rawTranscription,
-            activeGroupID: activeDictionaryGroupID()
-        )?.glossaryText()
+            purpose: .enhancement,
+            selectionPolicy: glossarySelectionPolicy
+        )
 
         let resolution = EnhancementPromptResolver.resolve(
             .init(
@@ -102,6 +106,7 @@ extension AppDelegate {
 
         return EnhancementPromptResolution(
             content: resolution.content,
+            dictionaryGlossary: glossary,
             delivery: {
                 switch resolution.delivery {
                 case .systemPrompt:

@@ -1,6 +1,17 @@
 import Foundation
 
 extension AppDelegate {
+    enum VariablePromptDelivery: Equatable {
+        case systemPrompt
+        case userMessage
+    }
+
+    struct VariablePromptResolution: Equatable {
+        let content: String
+        let dictionaryGlossary: String?
+        let delivery: VariablePromptDelivery
+    }
+
     func isStoredRemoteLLMConfigured(_ provider: RemoteLLMProvider) -> Bool {
         RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
             provider: provider,
@@ -38,24 +49,45 @@ extension AppDelegate {
         return (provider, configuration)
     }
 
-    func translateText(_ text: String, targetLanguage: TranslationTargetLanguage) async throws -> String {
-        let resolvedPrompt = resolvedTranslationPrompt(
-            targetLanguage: targetLanguage,
-            sourceText: text,
-            strict: false
-        )
-        let translationRepo = translationCustomLLMRepo
+    func translateText(
+        _ text: String,
+        targetLanguage: TranslationTargetLanguage
+    ) async throws -> String {
         let resolution = resolvedTranslationProviderResolution(
             targetLanguage: targetLanguage,
             isSelectedTextTranslation: isSelectedTextTranslationFlow
         )
         let modelProvider = resolution.provider
-        VoxtLog.llm(
-            "Translation request. promptChars=\(resolvedPrompt.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo)"
-        )
-
+        let providerOverride: LLMExecutionProvider?
         switch modelProvider {
         case .customLLM:
+            providerOverride = .customLLM(repo: translationCustomLLMRepo)
+        case .remoteLLM:
+            let context = resolvedRemoteLLMContext(forTranslation: true)
+            providerOverride = .remote(provider: context.provider, configuration: context.configuration)
+        case .whisperKit:
+            providerOverride = nil
+        }
+        let basePolicy = DictionaryGlossaryPurpose.translation.selectionPolicy
+        let provisionalStrategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .translation,
+            rawText: text,
+            promptCharacterCount: 0,
+            baseGlossarySelectionPolicy: basePolicy,
+            capabilities: providerOverride.map(llmProviderModelCapabilities(for:)) ?? .unknown
+        )
+        let promptResolution = resolvedTranslationPrompt(
+            targetLanguage: targetLanguage,
+            sourceText: text,
+            strict: false,
+            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
+        )
+        let translationRepo = translationCustomLLMRepo
+        VoxtLog.llm(
+            "Translation request. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo), delivery=\(String(describing: promptResolution.delivery))"
+        )
+
+        if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: translationRepo) else {
                 VoxtLog.warning("Translation provider customLLM unavailable: model not downloaded. repo=\(translationRepo)")
                 showOverlayStatus(
@@ -65,13 +97,7 @@ extension AppDelegate {
                 return text
             }
             VoxtLog.info("Translation provider selected: customLLM")
-            return try await customLLMManager.translate(
-                text,
-                targetLanguage: targetLanguage,
-                systemPrompt: resolvedPrompt,
-                modelRepo: translationRepo
-            )
-        case .remoteLLM:
+        } else if modelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
                 VoxtLog.warning("Translation provider remoteLLM unavailable: no configured model.")
@@ -82,15 +108,33 @@ extension AppDelegate {
                 return text
             }
             VoxtLog.info("Translation provider selected: remoteLLM(\(context.provider.rawValue))")
-            return try await RemoteLLMRuntimeClient().translate(
-                text: text,
-                systemPrompt: resolvedPrompt,
-                provider: context.provider,
-                configuration: context.configuration
-            )
-        case .whisperKit:
+        } else {
             return text
         }
+
+        let strategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .translation,
+            rawText: text,
+            promptCharacterCount: promptResolution.content.count + (promptResolution.dictionaryGlossary?.count ?? 0),
+            baseGlossarySelectionPolicy: basePolicy,
+            capabilities: providerOverride.map(llmProviderModelCapabilities(for:)) ?? .unknown
+        )
+        guard let plan = buildTranslationExecutionPlan(
+            sourceText: text,
+            targetLanguage: targetLanguage,
+            promptResolution: promptResolution,
+            modelProvider: modelProvider,
+            providerOverride: providerOverride,
+            executionStrategy: strategy
+        ) else {
+            return text
+        }
+        let translated = try await executeLLMExecutionPlan(plan)
+        return TaskLLMStrategyResolver.applyTruncationGuard(
+            outputText: translated,
+            originalText: text,
+            strategy: strategy
+        ).text
     }
 
     func rewriteText(
@@ -104,8 +148,10 @@ extension AppDelegate {
         onResponseID: ((String) -> Void)? = nil
     ) async throws -> String {
         let directAnswerMode = sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let trimmedConversationHistory = trimmedRewriteConversationHistory(
+            conversationHistory
+        )
         let modelProvider = rewriteModelProvider
-        let runtimeClient = RemoteLLMRuntimeClient()
         let remoteContext = rewriteModelProvider == .remoteLLM ? resolvedRemoteLLMContext(forRewrite: true) : nil
         let shouldUseProviderManagedConversation =
             (remoteContext?.provider.usesResponsesAPI ?? false) &&
@@ -115,29 +161,34 @@ extension AppDelegate {
             modelProvider == .remoteLLM &&
             directAnswerMode &&
             !structuredAnswerOutput &&
-            !conversationHistory.isEmpty &&
+            !trimmedConversationHistory.isEmpty &&
             !shouldUseProviderManagedConversation
         if shouldUseChatMessageConversation {
-            let latestTurn = conversationHistory.last
+            let latestTurn = trimmedConversationHistory.last
             VoxtLog.info(
                 """
-                Rewrite continue conversation context prepared. turns=\(conversationHistory.count), latestTitle=\(VoxtLog.llmPreview(latestTurn?.resultTitle ?? "")), latestContent=\(VoxtLog.llmPreview(latestTurn?.resultContent ?? "")), currentPrompt=\(VoxtLog.llmPreview(dictatedPrompt))
+                Rewrite continue conversation context prepared. turns=\(trimmedConversationHistory.count), latestTitle=\(VoxtLog.llmPreview(latestTurn?.resultTitle ?? "")), latestContent=\(VoxtLog.llmPreview(latestTurn?.resultContent ?? "")), currentPrompt=\(VoxtLog.llmPreview(dictatedPrompt))
                 """
             )
         }
-        let resolvedPrompt = shouldUseChatMessageConversation
-            ? resolvedRewriteConversationPrompt(forceNonEmptyAnswer: forceNonEmptyAnswer)
+        let promptResolution = shouldUseChatMessageConversation
+            ? VariablePromptResolution(
+                content: resolvedRewriteConversationPrompt(forceNonEmptyAnswer: forceNonEmptyAnswer),
+                dictionaryGlossary: nil,
+                delivery: .systemPrompt
+            )
             : resolvedRewritePrompt(
                 dictatedPrompt: dictatedPrompt,
                 sourceText: sourceText,
-                conversationHistory: shouldUseProviderManagedConversation ? [] : conversationHistory,
+                conversationHistory: shouldUseProviderManagedConversation ? [] : trimmedConversationHistory,
                 structuredAnswerOutput: structuredAnswerOutput,
                 directAnswerMode: directAnswerMode,
-                forceNonEmptyAnswer: forceNonEmptyAnswer
+                forceNonEmptyAnswer: forceNonEmptyAnswer,
+                glossarySelectionPolicy: nil
             )
         let rewriteRepo = rewriteCustomLLMRepo
         VoxtLog.llm(
-            "Rewrite request. promptChars=\(resolvedPrompt.count), dictatedChars=\(dictatedPrompt.count), sourceChars=\(sourceText.count), provider=\(modelProvider.rawValue), rewriteRepo=\(rewriteRepo), structuredAnswerOutput=\(structuredAnswerOutput), directAnswerMode=\(directAnswerMode), forceNonEmptyAnswer=\(forceNonEmptyAnswer)"
+            "Rewrite request. promptChars=\(promptResolution.content.count), dictatedChars=\(dictatedPrompt.count), sourceChars=\(sourceText.count), provider=\(modelProvider.rawValue), rewriteRepo=\(rewriteRepo), structuredAnswerOutput=\(structuredAnswerOutput), directAnswerMode=\(directAnswerMode), forceNonEmptyAnswer=\(forceNonEmptyAnswer), delivery=\(String(describing: promptResolution.delivery))"
         )
         if shouldUseProviderManagedConversation, let remoteContext {
             VoxtLog.info(
@@ -153,8 +204,7 @@ extension AppDelegate {
             )
         }
 
-        switch modelProvider {
-        case .customLLM:
+        if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: rewriteRepo) else {
                 VoxtLog.warning("Rewrite provider customLLM unavailable: model not downloaded. repo=\(rewriteRepo)")
                 showOverlayStatus(
@@ -167,14 +217,7 @@ extension AppDelegate {
                     structuredAnswerOutput: structuredAnswerOutput
                 )
             }
-            return try await customLLMManager.rewrite(
-                sourceText: sourceText,
-                dictatedPrompt: dictatedPrompt,
-                systemPrompt: resolvedPrompt,
-                modelRepo: rewriteRepo,
-                onPartialText: onProgress
-            )
-        case .remoteLLM:
+        } else {
             let context = remoteContext ?? resolvedRemoteLLMContext(forRewrite: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
                 VoxtLog.warning("Rewrite provider remoteLLM unavailable: no configured model.")
@@ -188,62 +231,136 @@ extension AppDelegate {
                     structuredAnswerOutput: structuredAnswerOutput
                 )
             }
-            return try await runtimeClient.rewrite(
-                sourceText: sourceText,
-                dictatedPrompt: dictatedPrompt,
-                systemPrompt: resolvedPrompt,
-                provider: context.provider,
-                configuration: context.configuration,
-                conversationHistory: (shouldUseProviderManagedConversation || shouldUseChatMessageConversation) ? conversationHistory : [],
-                previousResponseID: shouldUseProviderManagedConversation ? previousConversationResponseID : nil,
-                openAICompatibleResponseFormat: (structuredAnswerOutput && context.provider == .deepseek) ? .jsonObject : nil,
-                onPartialText: onProgress,
-                onResponseID: onResponseID
-            )
         }
+
+        let conversationHistoryForPlan: [RewriteConversationPromptTurn]
+        switch modelProvider {
+        case .customLLM:
+            conversationHistoryForPlan = []
+        case .remoteLLM:
+            switch promptResolution.delivery {
+            case .systemPrompt:
+                conversationHistoryForPlan = (shouldUseProviderManagedConversation || shouldUseChatMessageConversation) ? trimmedConversationHistory : []
+            case .userMessage:
+                conversationHistoryForPlan = shouldUseProviderManagedConversation ? trimmedConversationHistory : []
+            }
+        }
+
+        let providerOverride: LLMExecutionProvider
+        switch modelProvider {
+        case .customLLM:
+            providerOverride = .customLLM(repo: rewriteRepo)
+        case .remoteLLM:
+            let context = remoteContext ?? resolvedRemoteLLMContext(forRewrite: true)
+            providerOverride = .remote(provider: context.provider, configuration: context.configuration)
+        }
+        let strategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .rewrite,
+            rawText: directAnswerMode ? dictatedPrompt : sourceText,
+            promptCharacterCount: promptResolution.content.count + (promptResolution.dictionaryGlossary?.count ?? 0),
+            baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.rewrite.selectionPolicy,
+            capabilities: llmProviderModelCapabilities(for: providerOverride)
+        )
+        let plan = buildRewriteExecutionPlan(
+            dictatedPrompt: dictatedPrompt,
+            sourceText: sourceText,
+            promptResolution: promptResolution,
+            modelProvider: modelProvider,
+            conversationHistory: conversationHistoryForPlan,
+            previousResponseID: shouldUseProviderManagedConversation ? previousConversationResponseID : nil,
+            structuredAnswerOutput: structuredAnswerOutput,
+            providerOverride: providerOverride,
+            executionStrategy: strategy
+        )
+        let rewritten = try await executeLLMExecutionPlan(
+            plan,
+            onPartialText: onProgress,
+            onResponseID: onResponseID
+        )
+        let originalText = sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? dictatedPrompt
+            : sourceText
+        return TaskLLMStrategyResolver.applyTruncationGuard(
+            outputText: rewritten,
+            originalText: originalText,
+            strategy: strategy
+        ).text
     }
 
-    func translateTextStrict(_ text: String, targetLanguage: TranslationTargetLanguage) async throws -> String {
-        let strictPrompt = resolvedTranslationPrompt(
-            targetLanguage: targetLanguage,
-            sourceText: text,
-            strict: true
-        )
-        let translationRepo = translationCustomLLMRepo
+    func translateTextStrict(
+        _ text: String,
+        targetLanguage: TranslationTargetLanguage
+    ) async throws -> String {
         let resolution = resolvedTranslationProviderResolution(
             targetLanguage: targetLanguage,
             isSelectedTextTranslation: isSelectedTextTranslationFlow
         )
         let modelProvider = resolution.provider
-        VoxtLog.llm(
-            "Strict translation retry. promptChars=\(strictPrompt.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo)"
-        )
-
+        let providerOverride: LLMExecutionProvider?
         switch modelProvider {
         case .customLLM:
+            providerOverride = .customLLM(repo: translationCustomLLMRepo)
+        case .remoteLLM:
+            let context = resolvedRemoteLLMContext(forTranslation: true)
+            providerOverride = .remote(provider: context.provider, configuration: context.configuration)
+        case .whisperKit:
+            providerOverride = nil
+        }
+        let basePolicy = DictionaryGlossaryPurpose.translation.selectionPolicy
+        let provisionalStrategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .translation,
+            rawText: text,
+            promptCharacterCount: 0,
+            baseGlossarySelectionPolicy: basePolicy,
+            capabilities: providerOverride.map(llmProviderModelCapabilities(for:)) ?? .unknown
+        )
+        let promptResolution = resolvedTranslationPrompt(
+            targetLanguage: targetLanguage,
+            sourceText: text,
+            strict: true,
+            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
+        )
+        let translationRepo = translationCustomLLMRepo
+        VoxtLog.llm(
+            "Strict translation retry. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo), delivery=\(String(describing: promptResolution.delivery))"
+        )
+
+        if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: translationRepo) else {
                 return text
             }
-            return try await customLLMManager.translate(
-                text,
-                targetLanguage: targetLanguage,
-                systemPrompt: strictPrompt,
-                modelRepo: translationRepo
-            )
-        case .remoteLLM:
+        } else if modelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
                 return text
             }
-            return try await RemoteLLMRuntimeClient().translate(
-                text: text,
-                systemPrompt: strictPrompt,
-                provider: context.provider,
-                configuration: context.configuration
-            )
-        case .whisperKit:
+        } else {
             return text
         }
+
+        let strategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .translation,
+            rawText: text,
+            promptCharacterCount: promptResolution.content.count + (promptResolution.dictionaryGlossary?.count ?? 0),
+            baseGlossarySelectionPolicy: basePolicy,
+            capabilities: providerOverride.map(llmProviderModelCapabilities(for:)) ?? .unknown
+        )
+        guard let plan = buildTranslationExecutionPlan(
+            sourceText: text,
+            targetLanguage: targetLanguage,
+            promptResolution: promptResolution,
+            modelProvider: modelProvider,
+            providerOverride: providerOverride,
+            executionStrategy: strategy
+        ) else {
+            return text
+        }
+        let translated = try await executeLLMExecutionPlan(plan)
+        return TaskLLMStrategyResolver.applyTruncationGuard(
+            outputText: translated,
+            originalText: text,
+            strategy: strategy
+        ).text
     }
 
     static func effectiveTranslationTargetLanguage(
@@ -478,8 +595,9 @@ extension AppDelegate {
     func resolvedTranslationPrompt(
         targetLanguage: TranslationTargetLanguage,
         sourceText: String,
-        strict: Bool
-    ) -> String {
+        strict: Bool,
+        glossarySelectionPolicy: DictionaryGlossarySelectionPolicy?
+    ) -> VariablePromptResolution {
         let basePrompt = TranslationPromptBuilder.build(
             systemPrompt: translationSystemPrompt,
             targetLanguage: targetLanguage,
@@ -487,9 +605,18 @@ extension AppDelegate {
             userMainLanguagePromptValue: userMainLanguagePromptValue,
             strict: strict
         )
-        return appendDictionaryTranslationGlossary(
-            to: basePrompt,
-            sourceText: sourceText
+        let glossary = dictionaryGlossaryText(
+            for: sourceText,
+            purpose: .translation,
+            selectionPolicy: glossarySelectionPolicy
+        )
+        return VariablePromptResolution(
+            content: basePrompt,
+            dictionaryGlossary: glossary,
+            delivery: deliveryForTemplate(
+                translationSystemPrompt,
+                variableTokens: ["{{SOURCE_TEXT}}"]
+            )
         )
     }
 
@@ -499,8 +626,9 @@ extension AppDelegate {
         conversationHistory: [RewriteConversationPromptTurn],
         structuredAnswerOutput: Bool,
         directAnswerMode: Bool,
-        forceNonEmptyAnswer: Bool
-    ) -> String {
+        forceNonEmptyAnswer: Bool,
+        glossarySelectionPolicy: DictionaryGlossarySelectionPolicy?
+    ) -> VariablePromptResolution {
         let resolved = RewritePromptBuilder.build(
             systemPrompt: rewriteSystemPrompt,
             dictatedPrompt: dictatedPrompt,
@@ -510,10 +638,26 @@ extension AppDelegate {
             directAnswerMode: directAnswerMode,
             forceNonEmptyAnswer: forceNonEmptyAnswer
         )
-        return appendDictionaryRewriteGlossary(
-            to: resolved,
-            sourceText: "\(dictatedPrompt)\n\(sourceText)"
+        let glossary = dictionaryGlossaryText(
+            for: "\(dictatedPrompt)\n\(sourceText)",
+            purpose: .rewrite,
+            selectionPolicy: glossarySelectionPolicy
         )
+        return VariablePromptResolution(
+            content: resolved,
+            dictionaryGlossary: glossary,
+            delivery: deliveryForTemplate(
+                rewriteSystemPrompt,
+                variableTokens: ["{{DICTATED_PROMPT}}", "{{SOURCE_TEXT}}"]
+            )
+        )
+    }
+
+    private func deliveryForTemplate(
+        _ template: String,
+        variableTokens: [String]
+    ) -> VariablePromptDelivery {
+        variableTokens.contains { template.contains($0) } ? .userMessage : .systemPrompt
     }
 
     func resolvedRewriteConversationPrompt(forceNonEmptyAnswer: Bool) -> String {
@@ -545,7 +689,33 @@ extension AppDelegate {
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
 
-        return appendDictionaryRewriteGlossary(to: prompt, sourceText: "")
+        return prompt
+    }
+
+    private func trimmedRewriteConversationHistory(
+        _ turns: [RewriteConversationPromptTurn]
+    ) -> [RewriteConversationPromptTurn] {
+        guard !turns.isEmpty else { return [] }
+        let budget = (maxTurns: 4, maxCharacters: 1_600)
+
+        let candidates = Array(turns.suffix(budget.maxTurns)).reversed()
+        var selectedReversed: [RewriteConversationPromptTurn] = []
+        var consumedCharacters = 0
+
+        for turn in candidates {
+            let turnCharacters = turn.userPromptText.count + turn.resultTitle.count + turn.resultContent.count
+            let separatorCost = selectedReversed.isEmpty ? 0 : 4
+            let nextCount = consumedCharacters + separatorCost + turnCharacters
+
+            if !selectedReversed.isEmpty && nextCount > budget.maxCharacters {
+                break
+            }
+
+            selectedReversed.append(turn)
+            consumedCharacters = nextCount
+        }
+
+        return selectedReversed.reversed()
     }
 
     func shouldRetryStructuredRewriteAnswer(for text: String, dictatedPrompt: String) -> Bool {

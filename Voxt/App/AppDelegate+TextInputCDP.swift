@@ -197,6 +197,7 @@ extension AppDelegate {
                 role: payload.tag ?? "CDP",
                 isEditable: true,
                 isFocusedTarget: true,
+                selectedRange: nil,
                 failureReason: nil,
                 textSource: "electron-cdp:\(payload.source ?? "unknown")"
             )

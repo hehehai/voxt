@@ -9,8 +9,36 @@ final class InstalledASRLongFormMatrixIntegrationTests: XCTestCase {
         let maximumReasonableCharacters: Int
     }
 
+    private func skipIfCI() throws {
+        let env = ProcessInfo.processInfo.environment
+        if env["CI"] == "true" || env["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Installed-model matrix integration tests are local-only and are skipped on CI.")
+        }
+    }
+
+    private func officialFixtureDirectoryURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/Audio/qwen-official", isDirectory: true)
+    }
+
+    private func officialFixturePath(named fileName: String) -> String? {
+        let path = officialFixtureDirectoryURL().appendingPathComponent(fileName).path
+        return FileManager.default.fileExists(atPath: path) ? path : nil
+    }
+
     private func longFormClips() -> [ClipCase] {
-        [
+        let preferred = [
+            ClipCase(
+                path: officialFixturePath(named: "qwen_audio_long_en_composite.wav") ?? "",
+                minimumReasonableCharacters: 80,
+                maximumReasonableCharacters: 8000
+            ),
+            ClipCase(
+                path: officialFixturePath(named: "qwen_audio_long_zh_composite.wav") ?? "",
+                minimumReasonableCharacters: 40,
+                maximumReasonableCharacters: 8000
+            ),
             ClipCase(
                 path: "/Users/guanwei/Library/Application Support/Voxt/transcription-history-audio/transcription/transcription-6247D986-B2EC-4758-AB40-7C1030296D7A.wav",
                 minimumReasonableCharacters: 40,
@@ -23,6 +51,9 @@ final class InstalledASRLongFormMatrixIntegrationTests: XCTestCase {
             )
         ]
             .filter { FileManager.default.fileExists(atPath: $0.path) }
+
+        var seen = Set<String>()
+        return preferred.filter { seen.insert($0.path).inserted }
     }
 
     private func configuredHubURL() -> URL {
@@ -54,6 +85,7 @@ final class InstalledASRLongFormMatrixIntegrationTests: XCTestCase {
     }
 
     func testInstalledWhisperModelsProduceReasonableLongFormResults() async throws {
+        try skipIfCI()
         let clips = longFormClips()
         guard !clips.isEmpty else {
             throw XCTSkip("No long-form clips are available for installed-model matrix testing.")
@@ -89,6 +121,7 @@ final class InstalledASRLongFormMatrixIntegrationTests: XCTestCase {
     }
 
     func testInstalledMultilingualMLXModelsProduceReasonableLongFormResults() async throws {
+        try skipIfCI()
         let clips = longFormClips()
         guard !clips.isEmpty else {
             throw XCTSkip("No long-form clips are available for installed-model matrix testing.")

@@ -177,6 +177,12 @@ struct WhisperRealtimeReplayEvent: Equatable {
     let rawText: String
 }
 
+struct WhisperOfflineTranscriptionDiagnostics: Equatable {
+    let rawSegments: [String]
+    let rawJoinedText: String
+    let normalizedText: String
+}
+
 struct WhisperRealtimeReplayDiagnostics: Equatable {
     let events: [WhisperRealtimeReplayEvent]
     let trace: [String]
@@ -243,6 +249,37 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
+    enum WhisperInferencePassKind: Equatable {
+        case offlineIntermediate
+        case realtimeDraft
+        case realtimeEager
+        case realtimeSilenceReconcile
+        case stopFinalRealtime
+        case stopFinalOffline
+
+        var isStopFinal: Bool {
+            switch self {
+            case .stopFinalRealtime, .stopFinalOffline:
+                return true
+            case .offlineIntermediate, .realtimeDraft, .realtimeEager, .realtimeSilenceReconcile:
+                return false
+            }
+        }
+    }
+
+    enum WhisperInferenceSchedulingDecision: Equatable {
+        case startImmediately
+        case waitForInFlightPass
+        case skipRequestedPass
+        case interruptInFlightPass
+    }
+
+    private struct WhisperPreparedTranscription {
+        let preparedSamples: [Float]
+        let results: [TranscriptionResult]
+        let text: String
+    }
+
     static let offlinePartialPollInterval: Duration = .seconds(6)
     static let offlineFirstPartialMinimumSeconds: Double = 5.0
     static let realtimeEagerPollInterval: Duration = .milliseconds(250)
@@ -258,6 +295,20 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     static let realtimeSilencePeakHoldThreshold: Float = 0.018
     static let realtimeSegmentOverlapSeconds: Double = 0.8
     nonisolated static let realtimeLongFormFinalProfileThresholdSeconds: Double = 30
+
+    nonisolated static func inferenceSchedulingDecision(
+        requestedPass: WhisperInferencePassKind,
+        inFlightPass: WhisperInferencePassKind?
+    ) -> WhisperInferenceSchedulingDecision {
+        guard let inFlightPass else { return .startImmediately }
+        if !requestedPass.isStopFinal {
+            return .skipRequestedPass
+        }
+        if !inFlightPass.isStopFinal {
+            return .interruptInFlightPass
+        }
+        return .waitForInFlightPass
+    }
 
     @Published var isRecording = false
     @Published var isModelInitializing = false
@@ -290,6 +341,9 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private var realtimeLevelTask: Task<Void, Never>?
     private var activeUseHeld = false
     private var isInferenceRunning = false
+    private var activeInferencePassID: UUID?
+    private var activeInferencePassTask: Task<WhisperPreparedTranscription, Error>?
+    private var activeInferencePassKind: WhisperInferencePassKind?
     private var didRetryCaptureStartup = false
     private var realtimeEagerLastSampleCount = 0
     private var realtimeEagerLastPublishedSampleCount = 0
@@ -470,6 +524,20 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         outputMode: SessionOutputMode = .transcription,
         useBuiltInTranslationTask: Bool = false
     ) async throws -> String {
+        let diagnostics = try await debugTranscribeAudioFileWithDiagnostics(
+            fileURL,
+            outputMode: outputMode,
+            useBuiltInTranslationTask: useBuiltInTranslationTask
+        )
+        return diagnostics.normalizedText
+    }
+
+    func debugTranscribeAudioFileWithDiagnostics(
+        _ fileURL: URL,
+        outputMode: SessionOutputMode = .transcription,
+        useBuiltInTranslationTask: Bool = false,
+        forcedLanguage: String? = nil
+    ) async throws -> WhisperOfflineTranscriptionDiagnostics {
         let loaded = try DebugAudioClipIO.loadMonoSamples(from: fileURL)
         preparedOutputMode = outputMode
         preparedUseBuiltInTranslationTask = useBuiltInTranslationTask
@@ -479,10 +547,18 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             audioArray: preparedSamples,
             decodeOptions: buildDecodingOptions(
                 whisper: whisper,
-                includeWordTimings: false
+                includeWordTimings: false,
+                audioDurationSeconds: Double(preparedSamples.count) / targetSampleRate,
+                forcedLanguage: forcedLanguage
             )
         )
-        return normalizeText(results.map(\.text).joined(separator: " "))
+        let rawSegments = results.map(\.text)
+        let rawJoinedText = rawSegments.joined(separator: " ")
+        return WhisperOfflineTranscriptionDiagnostics(
+            rawSegments: rawSegments,
+            rawJoinedText: rawJoinedText,
+            normalizedText: normalizeText(rawJoinedText)
+        )
     }
 
     func debugReplayRealtimeAudioFile(
@@ -555,7 +631,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                         decodeOptions: buildDecodingOptions(
                             whisper: whisper,
                             includeWordTimings: false,
-                            profile: .realtimeFinal
+                            profile: .realtimeFinal,
+                            audioDurationSeconds: Double(activeSegmentSamples.count) / targetSampleRate
                         )
                     ).first
                     let silencePublished = result.flatMap { result in
@@ -620,7 +697,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                         decodeOptions: buildDecodingOptions(
                             whisper: whisper,
                             includeWordTimings: false,
-                            profile: .realtimeDraft
+                            profile: .realtimeDraft,
+                            audioDurationSeconds: Double(draftWindow.count) / targetSampleRate
                         )
                     ).first
                     published = result.flatMap { result in
@@ -647,7 +725,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                         decodeOptions: buildDecodingOptions(
                             whisper: whisper,
                             includeWordTimings: false,
-                            profile: .realtimeEager
+                            profile: .realtimeEager,
+                            audioDurationSeconds: Double(activeSegmentSamples.count) / targetSampleRate
                         )
                     ).first
                     published = result.flatMap { result in
@@ -702,7 +781,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             decodeOptions: buildDecodingOptions(
                 whisper: whisper,
                 includeWordTimings: false,
-                profile: useOfflineFinalProfile ? .offline : .realtimeFinal
+                profile: useOfflineFinalProfile ? .offline : .realtimeFinal,
+                audioDurationSeconds: Double(preparedSamples.count) / targetSampleRate
             )
         )
         let finalText = normalizeText(finalResults.map(\.text).joined(separator: " "))
@@ -822,7 +902,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             sampleRate: sampleRate,
             includeWordTimings: whisperTimestampsEnabled,
             publishFinalResult: true,
-            profile: finalProfile
+            profile: finalProfile,
+            passKind: useOfflineFinalProfile ? .stopFinalOffline : .stopFinalRealtime
         )
     }
 
@@ -864,7 +945,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         sampleRate: Double,
         includeWordTimings: Bool,
         publishFinalResult: Bool,
-        profile: WhisperInferenceProfile = .offline
+        profile: WhisperInferenceProfile = .offline,
+        passKind: WhisperInferencePassKind? = nil
     ) async {
         guard !samples.isEmpty else {
             if publishFinalResult {
@@ -873,14 +955,6 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                 onTranscriptionFinished?("")
             }
             return
-        }
-
-        while isInferenceRunning {
-            do {
-                try await Task.sleep(for: .milliseconds(80))
-            } catch {
-                return
-            }
         }
 
         guard revision == sessionRevision else { return }
@@ -900,7 +974,12 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
         do {
             let inferenceStartedAt = Date()
-            let transcription = try await transcribePreparedSamples(
+            let resolvedPassKind = passKind ?? inferredPassKind(
+                profile: profile,
+                publishFinalResult: publishFinalResult
+            )
+            let transcription = try await runManagedTranscriptionPass(
+                passKind: resolvedPassKind,
                 whisper: whisper,
                 samples: samples,
                 sampleRate: sampleRate,
@@ -960,12 +1039,14 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private func buildDecodingOptions(
         whisper: WhisperKit,
         includeWordTimings: Bool,
-        profile: WhisperInferenceProfile = .offline
+        profile: WhisperInferenceProfile = .offline,
+        audioDurationSeconds: Double? = nil,
+        forcedLanguage: String? = nil
     ) -> DecodingOptions {
         let hintPayload = resolvedHintPayload()
         let tuningSettings = resolvedLocalTuningSettings()
         let resolvedTask = resolvedDecodingTask()
-        let resolvedLanguage = resolvedWhisperLanguage(for: profile, hintPayload: hintPayload)
+        let resolvedLanguage = forcedLanguage ?? resolvedWhisperLanguage(for: profile, hintPayload: hintPayload)
         let detectLanguage = resolvedLanguage == nil
         let temperature: Float
         let temperatureIncrementOnFallback: Float
@@ -978,25 +1059,32 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             temperature = whisperTemperature
             temperatureIncrementOnFallback = Float(tuningSettings.temperatureIncrementOnFallback)
             temperatureFallbackCount = tuningSettings.temperatureFallbackCount
-            noSpeechThreshold = Float(tuningSettings.noSpeechThreshold)
-            chunkingStrategy = whisperVADEnabled ? .vad : nil
+            if let audioDurationSeconds, audioDurationSeconds <= 12 {
+                noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.25))
+            } else {
+                noSpeechThreshold = Float(tuningSettings.noSpeechThreshold)
+            }
+            // Local Whisper long-form stability regresses with VAD chunking on multilingual
+            // fixtures. Prefer a single-pass decode for offline/final work and leave chunked
+            // behavior to the realtime draft/eager path.
+            chunkingStrategy = nil
         case .realtimeDraft:
             temperature = 0
             temperatureIncrementOnFallback = 0
             temperatureFallbackCount = 1
-            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.35))
+            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.2))
             chunkingStrategy = nil
         case .realtimeEager:
             temperature = 0
             temperatureIncrementOnFallback = Float(min(tuningSettings.temperatureIncrementOnFallback, 0.1))
             temperatureFallbackCount = min(max(tuningSettings.temperatureFallbackCount, 1), 2)
-            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.45))
+            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.25))
             chunkingStrategy = nil
         case .realtimeFinal:
             temperature = 0
             temperatureIncrementOnFallback = Float(min(tuningSettings.temperatureIncrementOnFallback, 0.15))
             temperatureFallbackCount = max(tuningSettings.temperatureFallbackCount, 2)
-            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.45))
+            noSpeechThreshold = Float(min(tuningSettings.noSpeechThreshold, 0.3))
             chunkingStrategy = nil
         }
 
@@ -1180,6 +1268,10 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         finalizationTask?.cancel()
         finalizationTask = nil
         isFinalizingTranscription = false
+        activeInferencePassTask?.cancel()
+        activeInferencePassTask = nil
+        activeInferencePassID = nil
+        activeInferencePassKind = nil
         captureWatchdogTask?.cancel()
         captureWatchdogTask = nil
         realtimeEagerTask?.cancel()
@@ -1208,6 +1300,10 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         realtimeEagerTask = nil
         realtimeLevelTask?.cancel()
         realtimeLevelTask = nil
+        activeInferencePassTask?.cancel()
+        activeInferencePassTask = nil
+        activeInferencePassID = nil
+        activeInferencePassKind = nil
         realtimeEagerLastSampleCount = 0
         realtimeEagerLastPublishedSampleCount = 0
         realtimeEagerState.reset()
@@ -1424,7 +1520,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         let windowSampleCount = max(Int(Self.realtimeDraftWindowSeconds * targetSampleRate), 1)
         let draftSamples = Array(samples.suffix(min(samples.count, windowSampleCount)))
         do {
-            let transcription = try await transcribePreparedSamples(
+            let transcription = try await runManagedTranscriptionPass(
+                passKind: .realtimeDraft,
                 whisper: whisper,
                 samples: draftSamples,
                 sampleRate: targetSampleRate,
@@ -1444,7 +1541,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private func makeRealtimeEagerCandidate(revision: Int, samples: [Float]) async -> TranscriptionResult? {
         guard let whisper = preparedWhisper else { return nil }
         do {
-            let transcription = try await transcribePreparedSamples(
+            let transcription = try await runManagedTranscriptionPass(
+                passKind: .realtimeEager,
                 whisper: whisper,
                 samples: samples,
                 sampleRate: targetSampleRate,
@@ -1464,7 +1562,8 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     private func makeRealtimeSilenceReconcileCandidate(revision: Int, samples: [Float]) async -> TranscriptionResult? {
         guard let whisper = preparedWhisper else { return nil }
         do {
-            let transcription = try await transcribePreparedSamples(
+            let transcription = try await runManagedTranscriptionPass(
+                passKind: .realtimeSilenceReconcile,
                 whisper: whisper,
                 samples: samples,
                 sampleRate: targetSampleRate,
@@ -1655,6 +1754,100 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         return Array(samples[startSample...])
     }
 
+    private func inferredPassKind(
+        profile: WhisperInferenceProfile,
+        publishFinalResult: Bool
+    ) -> WhisperInferencePassKind {
+        if publishFinalResult {
+            return profile == .offline ? .stopFinalOffline : .stopFinalRealtime
+        }
+        switch profile {
+        case .offline:
+            return .offlineIntermediate
+        case .realtimeDraft:
+            return .realtimeDraft
+        case .realtimeEager:
+            return .realtimeEager
+        case .realtimeFinal:
+            return .realtimeSilenceReconcile
+        }
+    }
+
+    private func runManagedTranscriptionPass(
+        passKind: WhisperInferencePassKind,
+        whisper: WhisperKit,
+        samples: [Float],
+        sampleRate: Double,
+        includeWordTimings: Bool,
+        profile: WhisperInferenceProfile,
+        revision: Int
+    ) async throws -> WhisperPreparedTranscription {
+        switch Self.inferenceSchedulingDecision(
+            requestedPass: passKind,
+            inFlightPass: activeInferencePassKind
+        ) {
+        case .startImmediately:
+            break
+        case .waitForInFlightPass:
+            break
+        case .skipRequestedPass:
+            throw CancellationError()
+        case .interruptInFlightPass:
+            if let activeInferencePassKind {
+                VoxtLog.info(
+                    "Whisper inference pass preempted. inFlight=\(String(describing: activeInferencePassKind)), requested=\(String(describing: passKind))",
+                    verbose: true
+                )
+            }
+            activeInferencePassTask?.cancel()
+        }
+
+        while let activeTask = activeInferencePassTask {
+            let activePassID = activeInferencePassID
+            do {
+                _ = try await activeTask.value
+            } catch {
+                // The launching caller handles the prior pass outcome; this waiter only
+                // needs the inference slot to clear before starting the next pass.
+            }
+            if activeInferencePassID == activePassID {
+                clearActiveInferencePassIfNeeded(passID: activePassID)
+            }
+        }
+
+        let passID = UUID()
+        let passTask = Task<WhisperPreparedTranscription, Error> { [weak self] in
+            guard let self else { throw CancellationError() }
+            return try await self.transcribePreparedSamples(
+                whisper: whisper,
+                samples: samples,
+                sampleRate: sampleRate,
+                includeWordTimings: includeWordTimings,
+                profile: profile,
+                revision: revision
+            )
+        }
+        activeInferencePassID = passID
+        activeInferencePassKind = passKind
+        activeInferencePassTask = passTask
+
+        do {
+            let result = try await passTask.value
+            clearActiveInferencePassIfNeeded(passID: passID)
+            return result
+        } catch {
+            clearActiveInferencePassIfNeeded(passID: passID)
+            throw error
+        }
+    }
+
+    private func clearActiveInferencePassIfNeeded(passID: UUID?) {
+        guard activeInferencePassID == passID else { return }
+        activeInferencePassID = nil
+        activeInferencePassTask = nil
+        activeInferencePassKind = nil
+    }
+
     private func transcribePreparedSamples(
         whisper: WhisperKit,
         samples: [Float],
@@ -1662,7 +1855,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         includeWordTimings: Bool,
         profile: WhisperInferenceProfile,
         revision: Int
-    ) async throws -> (preparedSamples: [Float], results: [TranscriptionResult], text: String) {
+    ) async throws -> WhisperPreparedTranscription {
         while isInferenceRunning {
             do {
                 try await Task.sleep(for: .milliseconds(80))
@@ -1678,18 +1871,61 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         isInferenceRunning = true
         defer { isInferenceRunning = false }
 
+        try Task.checkCancellation()
         let preparedSamples = prepareInputSamples(samples, sampleRate: sampleRate)
+        let audioDurationSeconds = Double(preparedSamples.count) / targetSampleRate
         let decodeOptions = buildDecodingOptions(
             whisper: whisper,
             includeWordTimings: includeWordTimings,
-            profile: profile
+            profile: profile,
+            audioDurationSeconds: audioDurationSeconds
         )
-        let results = try await whisper.transcribe(audioArray: preparedSamples, decodeOptions: decodeOptions)
+        var results = try await whisper.transcribe(audioArray: preparedSamples, decodeOptions: decodeOptions)
+        try Task.checkCancellation()
+        var rawJoinedText = results.map(\.text).joined(separator: " ")
+        let initialText = normalizeText(rawJoinedText)
+        if let fallbackLanguage = fallbackWhisperLanguageIfNeeded(
+            profile: profile,
+            audioDurationSeconds: audioDurationSeconds,
+            normalizedText: initialText
+        ) {
+            try Task.checkCancellation()
+            let fallbackResults = try await whisper.transcribe(
+                audioArray: preparedSamples,
+                decodeOptions: buildDecodingOptions(
+                    whisper: whisper,
+                    includeWordTimings: includeWordTimings,
+                    profile: profile,
+                    audioDurationSeconds: audioDurationSeconds,
+                    forcedLanguage: fallbackLanguage
+                )
+            )
+            try Task.checkCancellation()
+            let fallbackRawJoinedText = fallbackResults.map(\.text).joined(separator: " ")
+            let fallbackText = normalizeText(fallbackRawJoinedText)
+            if shouldPreferWhisperFallbackResult(
+                primaryText: initialText,
+                fallbackText: fallbackText
+            ) {
+                VoxtLog.info(
+                    """
+                    Whisper explicit-language fallback selected. profile=\(profile.rawValue), language=\(fallbackLanguage), primaryChars=\(initialText.count), fallbackChars=\(fallbackText.count), audioDurationSec=\(String(format: "%.1f", audioDurationSeconds))
+                    """,
+                    verbose: true
+                )
+                results = fallbackResults
+                rawJoinedText = fallbackRawJoinedText
+            }
+        }
         guard revision == sessionRevision else {
             throw CancellationError()
         }
-        let text = normalizeText(results.map(\.text).joined(separator: " "))
-        return (preparedSamples, results, text)
+        let text = normalizeText(rawJoinedText)
+        return WhisperPreparedTranscription(
+            preparedSamples: preparedSamples,
+            results: results,
+            text: text
+        )
     }
 
     private func snapshotPreparedAudioSamples() -> [Float] {
@@ -1704,6 +1940,35 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             outputMode: preparedOutputMode,
             usesBuiltInTranslationTask: preparedUseBuiltInTranslationTask
         )
+    }
+
+    private func fallbackWhisperLanguageIfNeeded(
+        profile: WhisperInferenceProfile,
+        audioDurationSeconds: Double,
+        normalizedText: String
+    ) -> String? {
+        guard profile == .offline else { return nil }
+        let preferredLanguage = preferredMainLanguage.baseLanguageCode
+        guard !preferredLanguage.isEmpty else { return nil }
+
+        if audioDurationSeconds >= Self.realtimeLongFormFinalProfileThresholdSeconds {
+            return normalizedText.count < 20 ? preferredLanguage : nil
+        }
+
+        return normalizedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? preferredLanguage
+            : nil
+    }
+
+    private func shouldPreferWhisperFallbackResult(
+        primaryText: String,
+        fallbackText: String
+    ) -> Bool {
+        let primaryCount = primaryText.trimmingCharacters(in: .whitespacesAndNewlines).count
+        let fallbackCount = fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).count
+        guard fallbackCount > 0 else { return false }
+        guard primaryCount > 0 else { return true }
+        return fallbackCount >= max(primaryCount + 8, Int(Double(primaryCount) * 1.5))
     }
 
     private var whisperTemperature: Float {
@@ -1741,21 +2006,11 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         for profile: WhisperInferenceProfile,
         hintPayload: ResolvedASRHintPayload
     ) -> String? {
-        if !profile.usesLiveDecodingBias {
-            return hintPayload.language
-        }
-        if let language = hintPayload.language {
-            return language
-        }
-
-        let selectedCodes = UserMainLanguageOption.storedSelection(
-            from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
-        )
-        let selectedOptions = selectedCodes.compactMap(UserMainLanguageOption.option(for:))
-        guard selectedOptions.count == 1, let mainLanguage = selectedOptions.first else {
-            return nil
-        }
-        return mainLanguage.baseLanguageCode
+        // Local Whisper performs better across mixed and unexpected language samples
+        // when we keep language as auto-detect and rely on prompt/context bias instead
+        // of force-pinning the decoder to the user's primary language.
+        _ = profile
+        return hintPayload.language
     }
 
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {

@@ -38,7 +38,7 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(payload.prompt, "Primary Traditional Chinese")
     }
 
-    func testResolveWhisperKitUsesBaseLanguageAndResolvedPrompt() {
+    func testResolveWhisperKitAvoidsPromptBiasAndForcedLanguage() {
         let payload = ASRHintResolver.resolve(
             target: .whisperKit,
             settings: ASRHintSettings(
@@ -48,8 +48,8 @@ final class ASRHintSettingsTests: XCTestCase {
             userLanguageCodes: ["zh-Hant"]
         )
 
-        XCTAssertEqual(payload.language, "zh")
-        XCTAssertEqual(payload.prompt, "Bias Traditional Chinese punctuation")
+        XCTAssertNil(payload.language)
+        XCTAssertNil(payload.prompt)
     }
 
     func testResolvedWhisperSettingsDefaultToEmptyPrompt() {

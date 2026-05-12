@@ -40,6 +40,7 @@ extension AppDelegate {
         let role: String?
         let isEditable: Bool
         let isFocusedTarget: Bool
+        let selectedRange: NSRange?
         let failureReason: String?
         let textSource: String?
     }
@@ -244,6 +245,7 @@ extension AppDelegate {
             role: role,
             isEditable: isWritableTextInputElement(writableElement),
             isFocusedTarget: isFocusedTarget,
+            selectedRange: selectedNSRange(from: axRangeAttribute(kAXSelectedTextRangeAttribute as CFString, for: writableElement)),
             failureReason: nil,
             textSource: "ax-value"
         )
@@ -447,6 +449,20 @@ extension AppDelegate {
         var range = CFRange()
         guard AXValueGetValue(axValue, .cfRange, &range) else { return nil }
         return range
+    }
+
+    private func setAXRangeAttribute(
+        _ attribute: CFString,
+        range: CFRange,
+        for element: AXUIElement
+    ) -> Bool {
+        var mutableRange = range
+        guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else {
+            return false
+        }
+        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
+        let status = AXUIElementSetAttributeValue(element, attribute, rangeValue)
+        return status == .success
     }
 
     private func hasSelectedTextRange(_ element: AXUIElement) -> Bool {
@@ -759,12 +775,20 @@ extension AppDelegate {
         return "missing-ax-value, \(diagnostics)"
     }
 
+    private func selectedNSRange(from range: CFRange?) -> NSRange? {
+        guard let range, range.location >= 0, range.length >= 0 else { return nil }
+        return NSRange(location: range.location, length: range.length)
+    }
+
     private func focusedInputSnapshotSummary(_ snapshot: FocusedInputTextSnapshot) -> String {
         let preview = String(snapshot.text.prefix(80))
+        let selectedRangeDescription = snapshot.selectedRange.map {
+            "{\($0.location),\($0.length)}"
+        } ?? "nil"
         return
             "bundleID=\(snapshot.bundleIdentifier ?? "nil") pid=\(snapshot.processIdentifier.map(String.init) ?? "nil") "
                 + "role=\(snapshot.role ?? "nil") editable=\(snapshot.isEditable) "
-                + "focused=\(snapshot.isFocusedTarget) textLength=\(snapshot.text.count) "
+                + "focused=\(snapshot.isFocusedTarget) selectedRange=\(selectedRangeDescription) textLength=\(snapshot.text.count) "
                 + "textSource=\(snapshot.textSource ?? "nil") preview=\(preview)"
     }
 
@@ -935,5 +959,115 @@ extension AppDelegate {
 
     private func promptForAccessibilityPermission() {
         _ = AccessibilityPermissionManager.request(prompt: true)
+    }
+
+    func makePendingOutputReplacementTransaction(
+        previewText: String,
+        sessionID: UUID,
+        expectedBundleID: String?
+    ) -> PendingOutputReplacementTransaction? {
+        let normalizedPreview = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPreview.isEmpty else { return nil }
+        guard let snapshot = currentFocusedInputTextSnapshot(
+            expectedBundleID: expectedBundleID,
+            logDiagnostics: false
+        ) else {
+            return nil
+        }
+        guard let selectedRange = snapshot.selectedRange else {
+            VoxtLog.info("Preview replacement transaction skipped: selected range unavailable.")
+            return nil
+        }
+
+        let baselineNSString = snapshot.text as NSString
+        guard selectedRange.location >= 0,
+              NSMaxRange(selectedRange) <= baselineNSString.length else {
+            VoxtLog.info("Preview replacement transaction skipped: selected range exceeded baseline text.")
+            return nil
+        }
+
+        let prefix = baselineNSString.substring(to: selectedRange.location)
+        let suffix = baselineNSString.substring(from: NSMaxRange(selectedRange))
+        let expectedTextAfterPreview = prefix + normalizedPreview + suffix
+        let previewLength = (normalizedPreview as NSString).length
+
+        return PendingOutputReplacementTransaction(
+            sessionID: sessionID,
+            bundleIdentifier: snapshot.bundleIdentifier ?? expectedBundleID,
+            baselineText: snapshot.text,
+            expectedTextAfterPreview: expectedTextAfterPreview,
+            previewText: normalizedPreview,
+            replacementRange: NSRange(location: selectedRange.location, length: previewLength)
+        )
+    }
+
+    func performPendingOutputReplacement(
+        _ transaction: PendingOutputReplacementTransaction,
+        replacementText: String
+    ) async -> Bool {
+        let trimmedReplacement = replacementText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedReplacement.isEmpty else {
+            VoxtLog.info("Pending output replacement skipped: replacement text was empty.")
+            return false
+        }
+
+        guard let snapshot = currentFocusedInputTextSnapshot(
+            expectedBundleID: transaction.bundleIdentifier,
+            logDiagnostics: false
+        ) else {
+            VoxtLog.info("Pending output replacement skipped: focused input snapshot unavailable.")
+            return false
+        }
+
+        guard snapshot.text == transaction.expectedTextAfterPreview else {
+            VoxtLog.info(
+                "Pending output replacement skipped: focused input changed after preview injection. baselineChars=\(transaction.baselineText.count), expectedChars=\(transaction.expectedTextAfterPreview.count), currentChars=\(snapshot.text.count)"
+            )
+            return false
+        }
+
+        guard let processIdentifier = snapshot.processIdentifier,
+              let focusedElement = focusedAXElement(preferredProcessID: processIdentifier, logDiagnostics: false)
+        else {
+            VoxtLog.info("Pending output replacement skipped: focused AX element unavailable.")
+            return false
+        }
+
+        let writableElement = writableTextInputElement(from: focusedElement) ?? (
+            isWritableTextInputElement(focusedElement) ? focusedElement : nil
+        )
+        guard let writableElement else {
+            VoxtLog.info("Pending output replacement skipped: writable AX element unavailable.")
+            return false
+        }
+
+        let replacementCFRange = CFRange(
+            location: transaction.replacementRange.location,
+            length: transaction.replacementRange.length
+        )
+        guard setAXRangeAttribute(
+            kAXSelectedTextRangeAttribute as CFString,
+            range: replacementCFRange,
+            for: writableElement
+        ) else {
+            VoxtLog.info("Pending output replacement skipped: unable to set selected text range.")
+            return false
+        }
+
+        let didInject = await typeTextAsync(trimmedReplacement)
+        if didInject {
+            VoxtLog.info(
+                "Pending output replacement succeeded. previewChars=\(transaction.previewText.count), replacementChars=\(trimmedReplacement.count)"
+            )
+        }
+        return didInject
+    }
+
+    private func typeTextAsync(_ text: String) async -> Bool {
+        await withCheckedContinuation { continuation in
+            typeText(text) { didInject in
+                continuation.resume(returning: didInject)
+            }
+        }
     }
 }

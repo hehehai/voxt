@@ -7,6 +7,7 @@ struct PromptEditorView: View {
     var contentPadding: CGFloat = 6
     var variables: [PromptTemplateVariableDescriptor] = []
     var variablesLayout: PromptTemplateVariablesLayout = .adaptive
+    var variablesTitle: String? = nil
     var onTextChange: ((String) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     @FocusState private var isFocused: Bool
@@ -24,7 +25,11 @@ struct PromptEditorView: View {
                 }
 
             if !variables.isEmpty {
-                PromptTemplateVariablesView(variables: variables, layout: variablesLayout)
+                PromptTemplateVariablesView(
+                    title: variablesTitle ?? AppLocalization.localizedString("Supported variables"),
+                    variables: variables,
+                    layout: variablesLayout
+                )
             }
         }
     }
@@ -43,6 +48,7 @@ enum PromptTemplateVariablesLayout {
 }
 
 struct PromptTemplateVariablesView: View {
+    let title: String
     let variables: [PromptTemplateVariableDescriptor]
     let layout: PromptTemplateVariablesLayout
 
@@ -51,7 +57,7 @@ struct PromptTemplateVariablesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(AppLocalization.localizedString("Supported variables"))
+            Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

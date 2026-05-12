@@ -160,6 +160,7 @@ extension AppDelegate {
     }
 
     func beginRecording(outputMode: SessionOutputMode) {
+        recordingRequestedAt = Date()
         VoxtLog.info(
             "Begin recording requested. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), isSessionActive=\(isSessionActive)"
         )
@@ -206,9 +207,14 @@ extension AppDelegate {
         recordingStoppedAt = nil
         transcriptionProcessingStartedAt = nil
         transcriptionResultReceivedAt = nil
+        firstLiveASRPartialReceivedAt = nil
+        sessionFinalOutputDeliveredAt = nil
+        sessionLLMExecutionTimings = []
         didCommitSessionOutput = false
         isSessionCancellationRequested = false
         activeRecordingSessionID = UUID()
+        invalidateActiveLLMRequest()
+        pendingOutputReplacementTransaction = nil
         currentEndingSessionID = nil
         lastCompletedSessionEndSessionID = nil
         sessionOutputMode = outputMode
@@ -216,6 +222,8 @@ extension AppDelegate {
         rewriteSessionHasSelectedSourceText = false
         resetSessionTranslationState()
         configureVoxtNoteSessionRuntimeStateForNewRecording()
+        configureTranscriptionCapturePipelineForCurrentSession()
+        prewarmLLMForUpcomingSession(outputMode: outputMode)
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
         let frontmostBundleID = frontmostApplication?.bundleIdentifier
         let sessionTargetBundleID = RecordingSessionSupport.fallbackInjectBundleID(
@@ -232,7 +240,7 @@ extension AppDelegate {
         resetVoiceEndCommandState()
 
         VoxtLog.info(
-            "Recording started. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), engine=\(recordingEngine.rawValue)"
+            "Recording started. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), engine=\(recordingEngine.rawValue), pipeline=\(transcriptionCapturePipeline.rawValue)"
         )
         if outputMode == .rewrite {
             VoxtLog.info(
@@ -305,6 +313,7 @@ extension AppDelegate {
         if transcriptionProcessingStartedAt == nil {
             transcriptionProcessingStartedAt = recordingStoppedAt
         }
+        prewarmLLMForPendingPostASRProcessing(outputMode: sessionOutputMode)
         overlayState.presentProcessing(iconMode: RecordingSessionSupport.overlayIconMode(for: sessionOutputMode))
         voiceEndCommandState.lastDetectedCommand = false
         enhancementContextSnapshot = captureEnhancementContextSnapshot()
@@ -332,6 +341,8 @@ extension AppDelegate {
 
         let cancelledSessionID = activeRecordingSessionID
         activeRecordingSessionID = UUID()
+        invalidateActiveLLMRequest()
+        pendingOutputReplacementTransaction = nil
         isSessionCancellationRequested = true
         didCommitSessionOutput = true
         sessionTargetApplicationPID = nil

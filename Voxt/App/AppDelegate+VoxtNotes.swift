@@ -10,6 +10,7 @@ extension AppDelegate {
 
     func configureVoxtNoteSessionRuntimeStateForNewRecording() {
         transcriptionCaptureSessionMode = .standard
+        configureTranscriptionCapturePipelineForCurrentSession()
         liveTranscriptSegmentationState.reset()
         overlayState.setTranscribedTextTransformer { [weak self] rawText in
             self?.resolvedLiveTranscriptDisplayText(from: rawText) ?? rawText
@@ -18,6 +19,7 @@ extension AppDelegate {
 
     func resetVoxtNoteSessionRuntimeState() {
         transcriptionCaptureSessionMode = .standard
+        configureTranscriptionCapturePipelineForCurrentSession()
         liveTranscriptSegmentationState.reset()
         overlayState.setTranscribedTextTransformer(nil)
     }
@@ -52,6 +54,7 @@ extension AppDelegate {
         }
 
         transcriptionCaptureSessionMode = .noteSession
+        configureTranscriptionCapturePipelineForCurrentSession()
         if noteFeatureSettings.soundEnabled {
             interactionSoundPlayer.playNote(preset: noteFeatureSettings.soundPreset)
         }
@@ -90,6 +93,7 @@ extension AppDelegate {
 
     private var isCurrentTranscriptionCaptureLive: Bool {
         guard recordingStoppedAt == nil else { return false }
+        guard transcriptionCapturePipeline.usesLiveDisplay else { return false }
         switch transcriptionEngine {
         case .dictation:
             return speechTranscriber.isRecording
@@ -106,10 +110,17 @@ extension AppDelegate {
         guard isSessionActive, sessionOutputMode == .transcription else {
             return rawText
         }
-        guard transcriptionCaptureSessionMode == .noteSession else {
+        guard transcriptionCapturePipeline == .noteSession else {
             return rawText
         }
         return liveTranscriptSegmentationState.displayText(for: rawText)
+    }
+
+    func configureTranscriptionCapturePipelineForCurrentSession() {
+        transcriptionCapturePipeline = TranscriptionCapturePipeline.resolve(
+            realtimeTextDisplayEnabled: realtimeTextDisplayEnabled,
+            captureSessionMode: transcriptionCaptureSessionMode
+        )
     }
 
     func currentSessionRawTranscribedText() -> String {
@@ -117,11 +128,20 @@ extension AppDelegate {
         case .dictation:
             return speechTranscriber.transcribedText
         case .mlxAudio:
-            return mlxTranscriber?.transcribedText ?? ""
+            return mlxTranscriber?.currentWorkingTranscriptText ?? ""
         case .whisperKit:
             return whisperTranscriber?.transcribedText ?? ""
         case .remote:
             return remoteASRTranscriber.transcribedText
+        }
+    }
+
+    func currentTranscriptionCaptureMetrics() -> TranscriptionCaptureMetrics? {
+        switch transcriptionEngine {
+        case .mlxAudio:
+            return mlxTranscriber?.lastCaptureMetrics
+        case .dictation, .whisperKit, .remote:
+            return nil
         }
     }
 

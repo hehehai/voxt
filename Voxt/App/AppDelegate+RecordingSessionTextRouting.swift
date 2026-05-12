@@ -1,6 +1,39 @@
 import Foundation
 
 extension AppDelegate {
+    func handleLiveASRPartialTranscription(_ rawText: String, sessionID: UUID) {
+        guard shouldHandleCallbacks(for: sessionID) else { return }
+        let displayText = RecordingSessionSupport.normalizedTranscriptionDisplayText(
+            rawText,
+            transcriptionEngine: transcriptionEngine,
+            remoteProvider: remoteASRSelectedProvider,
+            userMainLanguage: userMainLanguage
+        )
+        let text = sanitizedFinalTranscriptionText(displayText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        recordLiveASRPartialTranscription(text, sessionID: sessionID)
+    }
+
+    private func recordLiveASRPartialTranscription(_ text: String, sessionID: UUID) {
+        guard recordingStoppedAt == nil else { return }
+        guard transcriptionCapturePipeline.usesLiveDisplay else { return }
+        guard sessionOutputMode == .transcription else { return }
+
+        let isFirstLivePartial = firstLiveASRPartialReceivedAt == nil
+        if isFirstLivePartial {
+            firstLiveASRPartialReceivedAt = Date()
+            VoxtLog.info(
+                "Live ASR partial received. sessionID=\(sessionID.uuidString), chars=\(text.count), pipeline=\(transcriptionCapturePipeline.rawValue)",
+                verbose: true
+            )
+        }
+
+        if transcriptionCapturePipeline == .noteSession {
+            refreshVoxtNoteTranscriptDisplay()
+        }
+    }
+
     func processTranscription(_ rawText: String) {
         processTranscription(rawText, sessionID: activeRecordingSessionID)
     }

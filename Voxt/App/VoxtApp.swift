@@ -79,6 +79,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let overlayIconMatch: OverlayEnhancementIconMatch?
     }
 
+    struct PendingOutputReplacementTransaction: Equatable {
+        let sessionID: UUID
+        let bundleIdentifier: String?
+        let baselineText: String
+        let expectedTextAfterPreview: String
+        let previewText: String
+        let replacementRange: NSRange
+    }
+
+    struct SessionLLMExecutionTiming: Equatable {
+        let taskLabel: String
+        let providerLabel: String
+        let startedAt: Date
+        let firstChunkAt: Date?
+        let completedAt: Date
+        let diagnostics: CustomLLMRunDiagnostics?
+    }
+
     let speechTranscriber = SpeechTranscriber()
     var mlxTranscriber: MLXTranscriber?
     var whisperTranscriber: WhisperKitTranscriber?
@@ -145,6 +163,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingDictionaryHistoryScanTask: Task<Void, Never>?
     var pendingAutomaticDictionaryLearningTask: Task<Void, Never>?
     var whisperWarmupTask: Task<Void, Never>?
+    var llmWarmupTasksByRepo: [String: Task<Void, Never>] = [:]
+    var remoteLLMWarmupTasksByKey: [String: Task<Void, Never>] = [:]
     var overlayReminderTask: Task<Void, Never>?
     var overlayStatusClearTask: Task<Void, Never>?
     var pendingSystemAudioMuteTask: Task<Void, Never>?
@@ -155,20 +175,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var voiceEndCommandState = VoiceEndCommandState()
     let silenceAudioLevelThreshold: Float = 0.06
     let sessionFinishDelay: TimeInterval = 1.2
+    var recordingRequestedAt: Date?
     var recordingStartedAt: Date?
     var recordingStoppedAt: Date?
     var transcriptionProcessingStartedAt: Date?
     var transcriptionResultReceivedAt: Date?
+    var firstLiveASRPartialReceivedAt: Date?
+    var sessionFinalOutputDeliveredAt: Date?
+    var sessionLLMExecutionTimings: [SessionLLMExecutionTiming] = []
     var sessionOutputMode: SessionOutputMode = .transcription
     var isSelectedTextTranslationFlow = false
     var didCommitSessionOutput = false
     var activeRecordingSessionID = UUID()
+    var activeLLMRequestID = UUID()
     var currentEndingSessionID: UUID?
     var lastCompletedSessionEndSessionID: UUID?
     var isSessionCancellationRequested = false
     var browserAutomationDeniedUntilByBundleID: [String: Date] = [:]
     var pendingCompletedHistoryAudioArchiveURL: URL?
     var latestInjectableOutputText: String?
+    var pendingOutputReplacementTransaction: PendingOutputReplacementTransaction?
     var sessionTargetApplicationPID: pid_t?
     var sessionTargetApplicationBundleID: String?
     var pendingTranscriptionStartTask: Task<Void, Never>?
@@ -179,6 +205,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var rewriteSessionHadWritableFocusedInput = false
     var rewriteSessionFallbackInjectBundleID: String?
     var transcriptionCaptureSessionMode: TranscriptionCaptureSessionMode = .standard
+    var transcriptionCapturePipeline: TranscriptionCapturePipeline = .liveDisplay
     var liveTranscriptSegmentationState = LiveTranscriptSegmentationState()
     var sessionUsesWhisperDirectTranslation = false
     var sessionTranslationTargetLanguageOverride: TranslationTargetLanguage?
@@ -374,6 +401,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if maybeRunLLMSmokeAndTerminate() {
+            VoxtLog.info("Voxt launch entering LLM smoke mode.")
+            return
+        }
+
         RemoteModelConfigurationStore.migrateLegacyStoredSecrets()
 
         synchronizeAppActivationPolicy()
@@ -448,6 +480,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.buildMenu()
+                self?.scheduleLLMIdleWarmupIfNeeded()
             }
         }
 
@@ -496,6 +529,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         presentMainWindowOnLaunchIfNeeded()
         scheduleWhisperIdleWarmupIfNeeded()
+        scheduleLLMIdleWarmupIfNeeded()
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
     }
 
@@ -544,6 +578,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         inputDevicesRefreshTask?.cancel()
         whisperWarmupTask?.cancel()
+        for task in llmWarmupTasksByRepo.values {
+            task.cancel()
+        }
+        llmWarmupTasksByRepo.removeAll()
+        for task in remoteLLMWarmupTasksByKey.values {
+            task.cancel()
+        }
+        remoteLLMWarmupTasksByKey.removeAll()
     }
 
     func scheduleWhisperIdleWarmupIfNeeded() {

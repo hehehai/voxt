@@ -59,6 +59,133 @@ struct RemoteLLMRuntimeClient {
         }
     }
 
+    func warmupConnection(
+        provider: RemoteLLMProvider,
+        configuration: RemoteProviderConfiguration
+    ) async throws {
+        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? provider.suggestedModel
+            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpointValue = provider.usesResponsesAPI
+            ? responsesEndpointValue(provider: provider, endpoint: configuration.endpoint, model: model)
+            : resolvedLLMEndpoint(provider: provider, endpoint: configuration.endpoint, model: model)
+        guard let url = URL(string: endpointValue) else {
+            throw NSError(
+                domain: "Voxt.RemoteLLM",
+                code: -900,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid remote LLM endpoint URL: \(endpointValue)"]
+            )
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = min(8, requestTimeoutInterval(for: provider))
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (_, response) = try await VoxtNetworkSession.active.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+        guard (200..<500).contains(httpResponse.statusCode) else {
+            throw NSError(
+                domain: "Voxt.RemoteLLM",
+                code: httpResponse.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "Remote warmup failed with HTTP \(httpResponse.statusCode)."]
+            )
+        }
+    }
+
+    func executeCompiledRequest(
+        _ request: LLMCompiledRequest,
+        provider: RemoteLLMProvider,
+        configuration: RemoteProviderConfiguration,
+        onPartialText: (@Sendable (String) -> Void)? = nil,
+        onResponseID: ((String) -> Void)? = nil
+    ) async throws -> String {
+        let prompt = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return request.fallbackText }
+
+        let intent: CompletionIntent
+        switch request.taskLabel {
+        case "enhancement":
+            intent = .enhancement
+        case "translation":
+            intent = .translation
+        case "rewrite":
+            intent = .rewrite
+        default:
+            intent = .enhancement
+        }
+
+        let usesResponsesConversation =
+            intent == .rewrite &&
+            provider.usesResponsesAPI &&
+            (!request.conversationHistory.isEmpty ||
+             !(request.previousResponseID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty)
+        let usesChatConversation =
+            intent == .rewrite &&
+            !provider.usesResponsesAPI &&
+            !request.conversationHistory.isEmpty
+
+        if provider.usesResponsesAPI {
+            let trimmedPreviousResponseID = request.previousResponseID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let inputPayload: Any
+
+            if usesResponsesConversation {
+                if !trimmedPreviousResponseID.isEmpty {
+                    inputPayload = prompt
+                } else {
+                    inputPayload = responsesInputMessages(
+                        currentUserInput: prompt,
+                        conversationHistory: request.conversationHistory
+                    )
+                }
+            } else {
+                inputPayload = prompt
+            }
+
+            let result = try await completeResponses(
+                systemPrompt: request.instructions,
+                debugInput: request.debugInput,
+                requestContentForLog: prompt,
+                inputPayload: inputPayload,
+                inputTextLength: request.inputCharacterCount,
+                intent: intent,
+                provider: provider,
+                configuration: configuration,
+                previousResponseID: usesResponsesConversation ? request.previousResponseID : nil,
+                onPartialText: onPartialText,
+                onResponseID: onResponseID
+            )
+            let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? request.fallbackText : trimmed
+        }
+
+        let output = try await complete(
+            systemPrompt: request.instructions,
+            debugInput: request.debugInput,
+            userPrompt: prompt,
+            inputTextLength: request.inputCharacterCount,
+            intent: intent,
+            provider: provider,
+            configuration: configuration,
+            messagesOverride: usesChatConversation
+                ? openAICompatibleConversationMessages(
+                    systemPrompt: request.instructions,
+                    currentUserPrompt: prompt,
+                    conversationHistory: request.conversationHistory
+                )
+                : nil,
+            openAICompatibleResponseFormat: request.responseFormat,
+            onPartialText: onPartialText
+        )
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? request.fallbackText : trimmed
+    }
+
     func enhance(
         text: String,
         systemPrompt: String,
@@ -200,6 +327,41 @@ struct RemoteLLMRuntimeClient {
         return trimmed.isEmpty ? text : trimmed
     }
 
+    func translate(
+        userPrompt: String,
+        fallbackText: String,
+        provider: RemoteLLMProvider,
+        configuration: RemoteProviderConfiguration
+    ) async throws -> String {
+        let input = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return fallbackText }
+        if provider.usesResponsesAPI {
+            let result = try await completeResponses(
+                systemPrompt: "",
+                debugInput: input,
+                requestContentForLog: input,
+                inputPayload: input,
+                inputTextLength: input.count,
+                intent: .translation,
+                provider: provider,
+                configuration: configuration
+            )
+            let trimmed = result.text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            return trimmed.isEmpty ? fallbackText : trimmed
+        }
+        let output = try await complete(
+            systemPrompt: "",
+            debugInput: input,
+            userPrompt: input,
+            inputTextLength: input.count,
+            intent: .translation,
+            provider: provider,
+            configuration: configuration
+        )
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallbackText : trimmed
+    }
+
     func rewrite(
         sourceText: String,
         dictatedPrompt: String,
@@ -299,6 +461,75 @@ struct RemoteLLMRuntimeClient {
         )
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? sourceText : trimmed
+    }
+
+    func rewrite(
+        userPrompt: String,
+        fallbackText: String,
+        provider: RemoteLLMProvider,
+        configuration: RemoteProviderConfiguration,
+        conversationHistory: [RewriteConversationPromptTurn] = [],
+        previousResponseID: String? = nil,
+        openAICompatibleResponseFormat: OpenAICompatibleResponseFormat? = nil,
+        onPartialText: (@Sendable (String) -> Void)? = nil,
+        onResponseID: ((String) -> Void)? = nil
+    ) async throws -> String {
+        let input = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return fallbackText }
+
+        if provider.usesResponsesAPI {
+            let trimmedPreviousResponseID = previousResponseID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let inputPayload: Any
+
+            if !trimmedPreviousResponseID.isEmpty {
+                inputPayload = input
+            } else if !conversationHistory.isEmpty {
+                inputPayload = responsesInputMessages(
+                    currentUserInput: input,
+                    conversationHistory: conversationHistory
+                )
+            } else {
+                inputPayload = input
+            }
+
+            let result = try await completeResponses(
+                systemPrompt: "",
+                debugInput: input,
+                requestContentForLog: input,
+                inputPayload: inputPayload,
+                inputTextLength: input.count,
+                intent: .rewrite,
+                provider: provider,
+                configuration: configuration,
+                previousResponseID: previousResponseID,
+                onPartialText: onPartialText,
+                onResponseID: onResponseID
+            )
+            let trimmed = result.text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            return trimmed.isEmpty ? fallbackText : trimmed
+        }
+
+        let shouldUseConversationMessages = !conversationHistory.isEmpty
+        let output = try await complete(
+            systemPrompt: "",
+            debugInput: input,
+            userPrompt: input,
+            inputTextLength: input.count,
+            intent: .rewrite,
+            provider: provider,
+            configuration: configuration,
+            messagesOverride: shouldUseConversationMessages
+                ? openAICompatibleConversationMessages(
+                    systemPrompt: "",
+                    currentUserPrompt: input,
+                    conversationHistory: conversationHistory
+                )
+                : nil,
+            openAICompatibleResponseFormat: openAICompatibleResponseFormat,
+            onPartialText: onPartialText
+        )
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallbackText : trimmed
     }
 
     private func completeResponses(
@@ -426,6 +657,13 @@ struct RemoteLLMRuntimeClient {
             throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
         }
 
+        let guardedContent = guardRepeatedOutputIfNeeded(
+            content,
+            provider: provider,
+            endpointValue: endpointValue,
+            context: "Responses response"
+        )
+
         VoxtLog.llm(
             "Remote LLM Responses response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs)"
         )
@@ -433,11 +671,11 @@ struct RemoteLLMRuntimeClient {
             """
             Remote LLM Responses content. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode)
             [output]
-            \(VoxtLog.llmPreview(content))
+            \(VoxtLog.llmPreview(guardedContent))
             """
         )
         return ResponsesStreamingResult(
-            text: content,
+            text: guardedContent,
             responseID: (object as? [String: Any]).flatMap { responsesResponseID(from: $0) }
         )
     }
@@ -454,6 +692,8 @@ struct RemoteLLMRuntimeClient {
         var responseID: String?
         var emittedChunkCount = 0
         var partialDeliveryState = StreamingPartialDeliveryState()
+        let repetitionGuard = LLMOutputRepetitionGuard()
+        var didStopForRepetition = false
 
         do {
             let (bytes, response) = try await VoxtNetworkSession.active.bytes(for: request)
@@ -506,6 +746,15 @@ struct RemoteLLMRuntimeClient {
                         aggregated = mergedStreamingSnapshot(current: aggregated, next: delta)
                     }
                     emittedChunkCount += 1
+                    if let repetition = repetitionGuard.repeatedSuffix(in: aggregated) {
+                        aggregated = repetition.truncatedText
+                        didStopForRepetition = true
+                        VoxtLog.warning(
+                            "Remote LLM Responses streaming repetition guard stopped generation. provider=\(provider.rawValue), endpoint=\(endpointValue), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(aggregated.count)"
+                        )
+                        publishAggregated(force: true)
+                        return
+                    }
                     publishAggregated()
                 }
             }
@@ -516,6 +765,7 @@ struct RemoteLLMRuntimeClient {
                     if !bufferedEventLines.isEmpty {
                         try publish(bufferedEventLines.joined(separator: "\n"))
                         bufferedEventLines.removeAll(keepingCapacity: true)
+                        if didStopForRepetition { break }
                     }
                     continue
                 }
@@ -539,6 +789,7 @@ struct RemoteLLMRuntimeClient {
                     if shouldFlushBufferedEventLines(bufferedEventLines) {
                         try publish(bufferedEventLines.joined(separator: "\n"))
                         bufferedEventLines.removeAll(keepingCapacity: true)
+                        if didStopForRepetition { break }
                     }
                     continue
                 }
@@ -548,11 +799,12 @@ struct RemoteLLMRuntimeClient {
                     if shouldFlushBufferedEventLines(bufferedEventLines) {
                         try publish(bufferedEventLines.joined(separator: "\n"))
                         bufferedEventLines.removeAll(keepingCapacity: true)
+                        if didStopForRepetition { break }
                     }
                 }
             }
 
-            if !bufferedEventLines.isEmpty {
+            if !didStopForRepetition, !bufferedEventLines.isEmpty {
                 try publish(bufferedEventLines.joined(separator: "\n"))
             }
             publishAggregated(force: true)
@@ -701,6 +953,12 @@ struct RemoteLLMRuntimeClient {
                 let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
                 let attempt = index + 1
                 if let content = extractPrimaryText(from: object), !content.isEmpty {
+                    let guardedContent = guardRepeatedOutputIfNeeded(
+                        content,
+                        provider: provider,
+                        endpointValue: endpointValue,
+                        context: "response"
+                    )
                     VoxtLog.llm(
                         "Remote LLM response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs)"
                     )
@@ -708,10 +966,10 @@ struct RemoteLLMRuntimeClient {
                         """
                         Remote LLM response content. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode)
                         [output]
-                        \(VoxtLog.llmPreview(content))
+                        \(VoxtLog.llmPreview(guardedContent))
                         """
                     )
-                    return content
+                    return guardedContent
                 }
 
                 VoxtLog.warning(
@@ -1266,6 +1524,8 @@ struct RemoteLLMRuntimeClient {
         var aggregated = ""
         var emittedChunkCount = 0
         var partialDeliveryState = StreamingPartialDeliveryState()
+        let repetitionGuard = LLMOutputRepetitionGuard()
+        var didStopForRepetition = false
         do {
             let (bytes, response) = try await VoxtNetworkSession.active.bytes(for: request)
             guard let http = response as? HTTPURLResponse else {
@@ -1318,6 +1578,15 @@ struct RemoteLLMRuntimeClient {
                 }
 
                 emittedChunkCount += 1
+                if let repetition = repetitionGuard.repeatedSuffix(in: aggregated) {
+                    aggregated = repetition.truncatedText
+                    didStopForRepetition = true
+                    VoxtLog.warning(
+                        "Remote LLM streaming repetition guard stopped generation. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpointCount), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(aggregated.count)"
+                    )
+                    publishAggregated(force: true)
+                    return
+                }
                 publishAggregated()
             }
 
@@ -1327,6 +1596,7 @@ struct RemoteLLMRuntimeClient {
                     if !bufferedEventLines.isEmpty {
                         try publish(bufferedEventLines.joined(separator: "\n"))
                         bufferedEventLines.removeAll(keepingCapacity: true)
+                        if didStopForRepetition { break }
                     }
                     continue
                 }
@@ -1350,6 +1620,7 @@ struct RemoteLLMRuntimeClient {
                     if shouldFlushBufferedEventLines(bufferedEventLines) {
                         try publish(bufferedEventLines.joined(separator: "\n"))
                         bufferedEventLines.removeAll(keepingCapacity: true)
+                        if didStopForRepetition { break }
                     }
                     continue
                 }
@@ -1359,6 +1630,7 @@ struct RemoteLLMRuntimeClient {
                     if shouldFlushBufferedEventLines(bufferedEventLines) {
                         try publish(bufferedEventLines.joined(separator: "\n"))
                         bufferedEventLines.removeAll(keepingCapacity: true)
+                        if didStopForRepetition { break }
                     }
                 } else {
                     nonEventStreamBuffer.append(line)
@@ -1366,18 +1638,23 @@ struct RemoteLLMRuntimeClient {
                     let payloads = drainNonEventStreamPayloads(buffer: &nonEventStreamBuffer)
                     for payload in payloads {
                         try publish(payload)
+                        if didStopForRepetition { break }
                     }
+                    if didStopForRepetition { break }
                 }
             }
 
-            if !bufferedEventLines.isEmpty {
+            if !didStopForRepetition, !bufferedEventLines.isEmpty {
                 try publish(bufferedEventLines.joined(separator: "\n"))
             }
-            let trailingPayloads = drainNonEventStreamPayloads(buffer: &nonEventStreamBuffer)
-            for payload in trailingPayloads {
-                try publish(payload)
+            if !didStopForRepetition {
+                let trailingPayloads = drainNonEventStreamPayloads(buffer: &nonEventStreamBuffer)
+                for payload in trailingPayloads {
+                    try publish(payload)
+                    if didStopForRepetition { break }
+                }
             }
-            let trailingText = nonEventStreamBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trailingText = didStopForRepetition ? "" : nonEventStreamBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trailingText.isEmpty {
                 try publish(trailingText)
             }
@@ -1416,6 +1693,21 @@ struct RemoteLLMRuntimeClient {
         default:
             return 40
         }
+    }
+
+    private func guardRepeatedOutputIfNeeded(
+        _ content: String,
+        provider: RemoteLLMProvider,
+        endpointValue: String,
+        context: String
+    ) -> String {
+        guard let repetition = LLMOutputRepetitionGuard().repeatedSuffix(in: content) else {
+            return content
+        }
+        VoxtLog.warning(
+            "Remote LLM \(context) repetition guard truncated output. provider=\(provider.rawValue), endpoint=\(endpointValue), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(repetition.truncatedText.count)"
+        )
+        return repetition.truncatedText
     }
 
     private func generationTuning(

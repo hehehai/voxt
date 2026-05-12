@@ -22,7 +22,8 @@ extension ModelSettingsView {
             promptTitle: LocalizedStringKey(localized("Translation Prompt")),
             promptText: promptBinding(for: $translationPrompt, kind: .translation),
             defaultPromptText: AppPromptDefaults.text(for: .translation),
-            variables: ModelSettingsPromptVariables.translation
+            variables: ModelSettingsPromptVariables.translation,
+            promptGuidance: PromptAuthoringGuidance.translation
         )
     }
 
@@ -43,7 +44,8 @@ extension ModelSettingsView {
             promptTitle: LocalizedStringKey(localized("Content Rewrite Prompt")),
             promptText: promptBinding(for: $rewritePrompt, kind: .rewrite),
             defaultPromptText: AppPromptDefaults.text(for: .rewrite),
-            variables: ModelSettingsPromptVariables.rewrite
+            variables: ModelSettingsPromptVariables.rewrite,
+            promptGuidance: PromptAuthoringGuidance.rewrite
         )
     }
 
@@ -213,7 +215,9 @@ extension ModelSettingsView {
                 title: LocalizedStringKey(localized("System Prompt")),
                 text: promptBinding(for: $systemPrompt, kind: .enhancement),
                 defaultText: AppPromptDefaults.text(for: .enhancement),
-                variables: ModelSettingsPromptVariables.enhancement
+                variables: ModelSettingsPromptVariables.enhancement,
+                guidance: PromptAuthoringGuidance.enhancement,
+                variablesTitle: PromptAuthoringGuidance.optionalVariablesTitle
             )
 
             HStack {

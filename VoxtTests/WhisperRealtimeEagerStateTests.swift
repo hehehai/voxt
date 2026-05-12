@@ -123,4 +123,34 @@ struct WhisperRealtimeEagerStateTests {
 
         #expect(resolved == "你好这是一个最小的回归测试")
     }
+
+    @Test
+    func stopFinalInterruptsRealtimeInferencePass() {
+        let decision = WhisperKitTranscriber.inferenceSchedulingDecision(
+            requestedPass: .stopFinalRealtime,
+            inFlightPass: .realtimeEager
+        )
+
+        #expect(decision == .interruptInFlightPass)
+    }
+
+    @Test
+    func stopFinalWaitsForAnotherStopFinalPass() {
+        let decision = WhisperKitTranscriber.inferenceSchedulingDecision(
+            requestedPass: .stopFinalOffline,
+            inFlightPass: .stopFinalRealtime
+        )
+
+        #expect(decision == .waitForInFlightPass)
+    }
+
+    @Test
+    func realtimePassSkipsWhenAnotherPassIsInFlight() {
+        let decision = WhisperKitTranscriber.inferenceSchedulingDecision(
+            requestedPass: .realtimeDraft,
+            inFlightPass: .realtimeEager
+        )
+
+        #expect(decision == .skipRequestedPass)
+    }
 }

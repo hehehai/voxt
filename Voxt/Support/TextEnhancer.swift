@@ -6,6 +6,7 @@ protocol TextEnhancing: AnyObject {
     func enhance(_ rawText: String, systemPrompt: String) async throws -> String
     func enhance(userPrompt: String) async throws -> String
     func dictionaryHistoryScanTerms(userPrompt: String) async throws -> [String]
+    func executeCompiledRequest(_ request: LLMCompiledRequest) async throws -> String
     func translate(
         _ text: String,
         targetLanguage: TranslationTargetLanguage,
@@ -96,6 +97,21 @@ class TextEnhancer: TextEnhancing {
         return DictionaryHistoryScanResponseParser.normalizeAcceptedTerms(
             from: response.content.terms.map(\.term)
         )
+    }
+
+    func executeCompiledRequest(_ request: LLMCompiledRequest) async throws -> String {
+        let prompt = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return request.fallbackText }
+        guard TextEnhancer.isAvailable else { return request.fallbackText }
+
+        let session = LanguageModelSession(instructions: request.instructions)
+        let response = try await session.respond(
+            to: prompt,
+            generating: EnhancementOutput.self
+        )
+
+        let result = Self.normalizeResultText(response.content.resultText)
+        return result.isEmpty ? request.fallbackText : result
     }
 
     /// Translates text to the requested target language.

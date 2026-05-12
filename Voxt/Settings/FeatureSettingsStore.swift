@@ -1,26 +1,16 @@
 import Foundation
 
 enum FeatureSettingsStore {
-    private enum LegacyRetiredTranscriptPreferenceKey {
-        static let notesBetaEnabled = "meetingNotesBetaEnabled"
-        static let hideOverlayFromScreenSharing = "hideMeetingOverlayFromScreenSharing"
-        static let realtimeTranslateEnabled = "meetingRealtimeTranslateEnabled"
-        static let realtimeTranslationTargetLanguage = "meetingRealtimeTranslationTargetLanguage"
-        static let summaryAutoGenerate = "meetingSummaryAutoGenerate"
-        static let summaryPromptTemplate = AppPreferenceKey.transcriptSummaryPromptTemplate
-        static let summaryModelSelection = AppPreferenceKey.transcriptSummaryModelSelection
-    }
-
     static func migrateIfNeeded(defaults: UserDefaults = .standard) {
+        removeObsoleteLatencyProfileKeys(defaults: defaults)
         guard loadRaw(defaults: defaults) == nil else {
-            let settings = load(defaults: defaults)
-            syncLegacyMirror(from: settings, defaults: defaults)
             return
         }
         save(deriveFromLegacy(defaults: defaults), defaults: defaults)
     }
 
     static func load(defaults: UserDefaults = .standard) -> FeatureSettings {
+        removeObsoleteLatencyProfileKeys(defaults: defaults)
         if let raw = loadRaw(defaults: defaults),
            let data = raw.data(using: .utf8),
            let decoded = try? JSONDecoder().decode(FeatureSettings.self, from: data) {
@@ -32,13 +22,13 @@ enum FeatureSettingsStore {
     }
 
     static func save(_ settings: FeatureSettings, defaults: UserDefaults = .standard) {
+        removeObsoleteLatencyProfileKeys(defaults: defaults)
         let sanitized = sanitize(settings, defaults: defaults)
         let storageReady = storageRepresentation(for: sanitized)
         if let data = try? JSONEncoder().encode(storageReady),
            let raw = String(data: data, encoding: .utf8) {
             defaults.set(raw, forKey: AppPreferenceKey.featureSettings)
         }
-        syncLegacyMirror(from: storageReady, defaults: defaults)
         NotificationCenter.default.post(name: .voxtFeatureSettingsDidChange, object: nil)
     }
 
@@ -46,6 +36,12 @@ enum FeatureSettingsStore {
         var settings = load(defaults: defaults)
         mutate(&settings)
         save(settings, defaults: defaults)
+    }
+
+    private static func removeObsoleteLatencyProfileKeys(defaults: UserDefaults) {
+        defaults.removeObject(forKey: "enhancementLatencyProfile")
+        defaults.removeObject(forKey: "translationLatencyProfile")
+        defaults.removeObject(forKey: "rewriteLatencyProfile")
     }
 
     static func deriveFromLegacy(defaults: UserDefaults = .standard) -> FeatureSettings {
@@ -98,14 +94,6 @@ enum FeatureSettingsStore {
         )
     }
 
-    static func syncLegacyMirror(from settings: FeatureSettings, defaults: UserDefaults = .standard) {
-        syncLegacyASRSelection(settings.transcription.asrSelectionID, defaults: defaults)
-        syncLegacyTranscription(settings.transcription, defaults: defaults)
-        syncLegacyTranslation(settings.translation, defaults: defaults)
-        syncLegacyRewrite(settings.rewrite, defaults: defaults)
-        resetLegacyTranscript(defaults: defaults)
-    }
-
     static func prepareLegacySession(
         from settings: FeatureSettings,
         outputMode: SessionOutputMode,
@@ -114,7 +102,6 @@ enum FeatureSettingsStore {
         syncLegacyTranscription(settings.transcription, defaults: defaults)
         syncLegacyTranslation(settings.translation, defaults: defaults)
         syncLegacyRewrite(settings.rewrite, defaults: defaults)
-        resetLegacyTranscript(defaults: defaults)
 
         switch outputMode {
         case .transcription:
@@ -218,16 +205,6 @@ enum FeatureSettingsStore {
         case .none:
             defaults.set(RewriteModelProvider.customLLM.rawValue, forKey: AppPreferenceKey.rewriteModelProvider)
         }
-    }
-
-    private static func resetLegacyTranscript(defaults: UserDefaults) {
-        defaults.set(false, forKey: LegacyRetiredTranscriptPreferenceKey.notesBetaEnabled)
-        defaults.set(false, forKey: LegacyRetiredTranscriptPreferenceKey.hideOverlayFromScreenSharing)
-        defaults.set(false, forKey: LegacyRetiredTranscriptPreferenceKey.realtimeTranslateEnabled)
-        defaults.set("", forKey: LegacyRetiredTranscriptPreferenceKey.realtimeTranslationTargetLanguage)
-        defaults.set(true, forKey: LegacyRetiredTranscriptPreferenceKey.summaryAutoGenerate)
-        defaults.set("", forKey: LegacyRetiredTranscriptPreferenceKey.summaryPromptTemplate)
-        defaults.set("", forKey: LegacyRetiredTranscriptPreferenceKey.summaryModelSelection)
     }
 
     private static func sanitize(_ settings: FeatureSettings, defaults: UserDefaults) -> FeatureSettings {

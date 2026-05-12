@@ -69,6 +69,21 @@ extension AppDelegate {
         }
     }
 
+    private struct SessionTimingSummarySnapshot {
+        let transcriptionCapturePipeline: TranscriptionCapturePipeline
+        let captureStageLabels: [String]
+        let asrProvider: String
+        let asrModel: String
+        let captureMetrics: TranscriptionCaptureMetrics?
+        let recordingRequestedAt: Date?
+        let recordingStartedAt: Date?
+        let recordingStoppedAt: Date?
+        let transcriptionResultReceivedAt: Date?
+        let firstLiveASRPartialReceivedAt: Date?
+        let sessionFinalOutputDeliveredAt: Date?
+        let llmExecutions: [SessionLLMExecutionTiming]
+    }
+
     private struct PersistDictionaryEvidenceStage: SessionFinalizeStage {
         let persist: ([DictionaryMatchCandidate], [DictionarySuggestionDraft], UUID?) -> Void
 
@@ -163,6 +178,120 @@ extension AppDelegate {
             )
             onDeliveryCompleted?()
         }
+    }
+
+    func preparedDeliveryContextForCurrentSession(
+        originalText: String,
+        llmDurationSeconds: TimeInterval?
+    ) -> SessionFinalizeContext {
+        Self.preparedDeliveryContext(
+            originalText: originalText,
+            llmDurationSeconds: llmDurationSeconds,
+            sessionOutputMode: sessionOutputMode,
+            userMainLanguage: userMainLanguage,
+            matcher: dictionaryStore.makeMatcherIfEnabled(activeGroupID: activeDictionaryGroupID()),
+            usesConservativeEvidence: shouldUseConservativeDictionaryEvidenceForCurrentSession(),
+            automaticReplacementEnabled: UserDefaults.standard.bool(
+                forKey: AppPreferenceKey.dictionaryHighConfidenceCorrectionEnabled
+            )
+        )
+    }
+
+    func finalizePreviouslyDeliveredOutput(
+        _ text: String,
+        llmDurationSeconds: TimeInterval?,
+        didInject: Bool,
+        onDeliveryCompleted: (() -> Void)? = nil
+    ) {
+        if didCommitSessionOutput {
+            VoxtLog.info("Skipping duplicate finalize for previously delivered session output.")
+            return
+        }
+        didCommitSessionOutput = true
+
+        let sessionID = activeRecordingSessionID
+        let callbackDecision = Self.sessionCallbackHandlingDecision(
+            requestedSessionID: sessionID,
+            activeSessionID: activeRecordingSessionID,
+            isSessionCancellationRequested: isSessionCancellationRequested
+        )
+        guard callbackDecision == .accept else {
+            VoxtLog.warning(
+                "Finalize previously delivered output abandoned after session invalidation. reason=\(callbackDecision.logDescription), sessionID=\(sessionID.uuidString)"
+            )
+            return
+        }
+
+        let context = preparedDeliveryContextForCurrentSession(
+            originalText: text,
+            llmDurationSeconds: llmDurationSeconds
+        )
+        cacheLatestInjectableOutputText(context.outputText)
+        finalizeCommittedOutputPostDeliveryAsync(
+            deliveredContext: context,
+            outputMode: sessionOutputMode,
+            didInject: didInject
+        )
+        onDeliveryCompleted?()
+    }
+
+    func tryDeliverPreviewOutputIfPossible(
+        _ text: String,
+        sessionID: UUID,
+        requestID: UUID?
+    ) async -> String? {
+        let context = preparedDeliveryContextForCurrentSession(
+            originalText: text,
+            llmDurationSeconds: nil
+        )
+        guard resolvedOutputDelivery(for: context) == .typeText else {
+            return nil
+        }
+        guard let transaction = makePendingOutputReplacementTransaction(
+            previewText: context.outputText,
+            sessionID: sessionID,
+            expectedBundleID: sessionTargetApplicationBundleID
+        ) else {
+            return nil
+        }
+
+        beginOverlayOutputDelivery()
+        let didInject = await withCheckedContinuation { continuation in
+            typeText(context.outputText) { injected in
+                continuation.resume(returning: injected)
+            }
+        }
+        endOverlayOutputDelivery()
+
+        guard didInject else { return nil }
+        guard shouldHandleCallbacks(for: sessionID),
+              requestID.map(isCurrentLLMRequest) ?? true
+        else {
+            return nil
+        }
+
+        pendingOutputReplacementTransaction = transaction
+        cacheLatestInjectableOutputText(context.outputText)
+        VoxtLog.info(
+            "Preview output injected. chars=\(context.outputText.count), sessionID=\(sessionID.uuidString)"
+        )
+        return context.outputText
+    }
+
+    func performPendingOutputReplacementIfPossible(
+        with text: String,
+        sessionID: UUID
+    ) async -> Bool {
+        guard let transaction = pendingOutputReplacementTransaction,
+              transaction.sessionID == sessionID else {
+            return false
+        }
+
+        defer {
+            pendingOutputReplacementTransaction = nil
+        }
+
+        return await performPendingOutputReplacement(transaction, replacementText: text)
     }
 
     nonisolated static func resolveDictionaryOutput(
@@ -355,6 +484,7 @@ extension AppDelegate {
         case .typeText:
             beginOverlayOutputDelivery()
             typeText(context.outputText) { [weak self] didInject in
+                self?.sessionFinalOutputDeliveredAt = Date()
                 self?.endOverlayOutputDelivery()
                 completion?(didInject)
             }
@@ -365,9 +495,11 @@ extension AppDelegate {
                 let payload = resolvedAnswerPayload(for: context)
                 presentRewriteAnswerOverlay(title: payload.title, content: payload.content)
             }
+            sessionFinalOutputDeliveredAt = Date()
             completion?(false)
         case .selectedTextTranslationResultWindow:
             presentSelectedTextTranslationAnswerOverlay(content: context.outputText)
+            sessionFinalOutputDeliveredAt = Date()
             completion?(false)
         }
     }
@@ -383,6 +515,21 @@ extension AppDelegate {
         let dictionaryCorrectedTerms = deliveredContext.dictionaryCorrectedTerms
         let dictionaryCorrectionSnapshots = deliveredContext.dictionaryCorrectionSnapshots
         let llmDurationSeconds = deliveredContext.llmDurationSeconds
+        let asrSummary = sessionASRSummary(for: outputMode)
+        let timingSnapshot = SessionTimingSummarySnapshot(
+            transcriptionCapturePipeline: transcriptionCapturePipeline,
+            captureStageLabels: transcriptionCapturePipeline.stageLabels,
+            asrProvider: asrSummary.provider,
+            asrModel: asrSummary.model,
+            captureMetrics: currentTranscriptionCaptureMetrics(),
+            recordingRequestedAt: recordingRequestedAt,
+            recordingStartedAt: recordingStartedAt,
+            recordingStoppedAt: recordingStoppedAt,
+            transcriptionResultReceivedAt: transcriptionResultReceivedAt,
+            firstLiveASRPartialReceivedAt: firstLiveASRPartialReceivedAt,
+            sessionFinalOutputDeliveredAt: sessionFinalOutputDeliveredAt,
+            llmExecutions: sessionLLMExecutionTimings
+        )
 
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
@@ -422,8 +569,148 @@ extension AppDelegate {
                 VoxtLog.info(
                     "Deliver committed output finalized. historyEntryID=\(historyEntryID?.uuidString ?? "nil"), characters=\(deliveredText.count)"
                 )
+                self.logSessionTimingSummaryIfPossible(
+                    snapshot: timingSnapshot,
+                    deliveredText: deliveredText,
+                    outputMode: outputMode,
+                    didInject: didInject
+                )
             }
         }
+    }
+
+    private func logSessionTimingSummaryIfPossible(
+        snapshot: SessionTimingSummarySnapshot,
+        deliveredText: String,
+        outputMode: SessionOutputMode,
+        didInject: Bool
+    ) {
+        let outputCompletedAt = snapshot.sessionFinalOutputDeliveredAt ?? Date()
+        let firstLLMExecution = snapshot.llmExecutions.first
+        let finalLLMExecution = snapshot.llmExecutions.last
+
+        let requestToStartMs = resolvedDurationMs(from: snapshot.recordingRequestedAt, to: snapshot.recordingStartedAt)
+        let startToStopMs = resolvedDurationMs(from: snapshot.recordingStartedAt, to: snapshot.recordingStoppedAt)
+        let startToFirstLiveASRMs = resolvedDurationMs(
+            from: snapshot.recordingStartedAt,
+            to: snapshot.firstLiveASRPartialReceivedAt
+        )
+        let stopToASRMs = resolvedDurationMs(from: snapshot.recordingStoppedAt, to: snapshot.transcriptionResultReceivedAt)
+        let asrToFirstChunkMs = resolvedDurationMs(
+            from: snapshot.transcriptionResultReceivedAt,
+            to: firstLLMExecution?.firstChunkAt
+        )
+        let asrToFirstCompleteMs = resolvedDurationMs(
+            from: snapshot.transcriptionResultReceivedAt,
+            to: firstLLMExecution?.completedAt
+        )
+        let asrToFinalCompleteMs = resolvedDurationMs(
+            from: snapshot.transcriptionResultReceivedAt,
+            to: finalLLMExecution?.completedAt
+        )
+        let asrToDeliveredMs = resolvedDurationMs(
+            from: snapshot.transcriptionResultReceivedAt,
+            to: outputCompletedAt
+        )
+        let wallClockCaptureMs = resolvedDurationMs(
+            from: snapshot.recordingStartedAt,
+            to: snapshot.recordingStoppedAt
+        )
+        let capturedAudioMs = snapshot.captureMetrics.map { Int($0.capturedAudioSeconds * 1000) }
+        let captureGapMs = resolvedCaptureGapMs(
+            wallClockCaptureMs: wallClockCaptureMs,
+            capturedAudioMs: capturedAudioMs
+        )
+        let stopToDeliveredMs = resolvedDurationMs(from: snapshot.recordingStoppedAt, to: outputCompletedAt)
+        let overallMs = resolvedDurationMs(from: snapshot.recordingRequestedAt, to: outputCompletedAt)
+
+        let firstLLMSummary = sessionLLMSummaryLabel(firstLLMExecution)
+        let finalLLMSummary = sessionLLMSummaryLabel(finalLLMExecution)
+
+        if let captureGapMs, captureGapMs >= 350 {
+            VoxtLog.warning(
+                "Transcription capture gap detected. pipeline=\(snapshot.transcriptionCapturePipeline.rawValue), captureGapMs=\(captureGapMs), capturedAudioMs=\(timingValueLabel(capturedAudioMs)), startToStopMs=\(timingValueLabel(startToStopMs))"
+            )
+        }
+
+        VoxtLog.info(
+            """
+            Session timing summary. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), pipeline=\(snapshot.transcriptionCapturePipeline.rawValue), stages=\(snapshot.captureStageLabels.joined(separator: ">")), asrProvider=\(snapshot.asrProvider), asrModel=\(snapshot.asrModel), llmCalls=\(snapshot.llmExecutions.count), deliveredChars=\(deliveredText.count), didInject=\(didInject), requestToStartMs=\(timingValueLabel(requestToStartMs)), startToStopMs=\(timingValueLabel(startToStopMs)), startToFirstLiveASRMs=\(timingValueLabel(startToFirstLiveASRMs)), capturedAudioMs=\(timingValueLabel(capturedAudioMs)), captureGapMs=\(timingValueLabel(captureGapMs)), stopToASRMs=\(timingValueLabel(stopToASRMs)), asrToFirstLLMChunkMs=\(timingValueLabel(asrToFirstChunkMs)), asrToFirstLLMCompleteMs=\(timingValueLabel(asrToFirstCompleteMs)), asrToFinalLLMCompleteMs=\(timingValueLabel(asrToFinalCompleteMs)), asrToDeliveredMs=\(timingValueLabel(asrToDeliveredMs)), stopToDeliveredMs=\(timingValueLabel(stopToDeliveredMs)), overallMs=\(timingValueLabel(overallMs)), firstLLM=\(firstLLMSummary), finalLLM=\(finalLLMSummary)
+            """
+        )
+    }
+
+    private func sessionASRSummary(for outputMode: SessionOutputMode) -> (provider: String, model: String) {
+        let selectionID: FeatureModelSelectionID
+        switch outputMode {
+        case .transcription:
+            selectionID = transcriptionFeatureSettings.asrSelectionID
+        case .translation:
+            selectionID = translationFeatureSettings.asrSelectionID
+        case .rewrite:
+            selectionID = rewriteFeatureSettings.asrSelectionID
+        }
+
+        switch selectionID.asrSelection {
+        case .dictation:
+            return ("dictation", "builtin")
+        case .mlx(let repo):
+            return ("mlx", MLXModelManager.canonicalModelRepo(repo))
+        case .whisper(let modelID):
+            return ("whisper", WhisperKitModelManager.canonicalModelID(modelID))
+        case .remote(let provider):
+            let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
+            let stored = RemoteModelConfigurationStore.loadConfigurations(from: raw)
+            let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: stored)
+            return ("remote:\(provider.rawValue)", configuration.model)
+        case .none:
+            switch transcriptionEngine {
+            case .dictation:
+                return ("dictation", "builtin")
+            case .mlxAudio:
+                return ("mlx", MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo))
+            case .whisperKit:
+                return ("whisper", WhisperKitModelManager.canonicalModelID(whisperModelManager.currentModelID))
+            case .remote:
+                return ("remote", "unknown")
+            }
+        }
+    }
+
+    private func resolvedDurationMs(from start: Date?, to end: Date?) -> Int? {
+        guard let start, let end else { return nil }
+        return max(Int(end.timeIntervalSince(start) * 1000), 0)
+    }
+
+    private func resolvedLeadMs(earlier: Date?, later: Date?) -> Int? {
+        guard let earlier, let later else { return nil }
+        let deltaMs = Int(later.timeIntervalSince(earlier) * 1000)
+        return deltaMs >= 0 ? deltaMs : nil
+    }
+
+    private func resolvedCaptureGapMs(
+        wallClockCaptureMs: Int?,
+        capturedAudioMs: Int?
+    ) -> Int? {
+        guard let wallClockCaptureMs, let capturedAudioMs else { return nil }
+        return max(wallClockCaptureMs - capturedAudioMs, 0)
+    }
+
+    private func timingValueLabel(_ value: Int?) -> String {
+        value.map(String.init) ?? "n/a"
+    }
+
+    private func sessionLLMSummaryLabel(_ execution: SessionLLMExecutionTiming?) -> String {
+        guard let execution else { return "n/a" }
+        let diagnostics = execution.diagnostics
+        let firstChunk = diagnostics?.overallFirstChunkMs.map(String.init) ?? "n/a"
+        let prefill = diagnostics?.prefillMs.map(String.init) ?? "n/a"
+        let generation = diagnostics?.generationMs.map(String.init) ?? "n/a"
+        let total = diagnostics.map { String($0.totalElapsedMs) } ?? timingValueLabel(
+            resolvedDurationMs(from: execution.startedAt, to: execution.completedAt)
+        )
+        return
+            "task=\(execution.taskLabel),provider=\(execution.providerLabel),firstChunkMs=\(firstChunk),prefillMs=\(prefill),generationMs=\(generation),totalElapsedMs=\(total)"
     }
 
     private func resolvedOutputDelivery(for context: SessionFinalizeContext) -> SessionOutputDelivery {

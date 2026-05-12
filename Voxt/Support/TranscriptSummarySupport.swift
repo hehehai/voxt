@@ -61,7 +61,6 @@ struct TranscriptSummaryModelOption: Identifiable, Hashable, Sendable {
 
 enum TranscriptSummarySupport {
     static let transcriptRecordTemplateVariable = "{{TRANSCRIPT_RECORD}}"
-    private static let legacyTranscriptRecordTemplateVariable = "{{MEETING_RECORD}}"
     static let promptTemplateVariables = [
         AppPreferenceKey.asrUserMainLanguageTemplateVariable,
         transcriptRecordTemplateVariable
@@ -75,7 +74,6 @@ enum TranscriptSummarySupport {
         }
 
         let transcriptSummary: SummaryBlock?
-        let legacyTranscriptSummary: SummaryBlock?
         let title: String?
         let body: String?
         let content: String?
@@ -84,7 +82,6 @@ enum TranscriptSummarySupport {
 
         enum CodingKeys: String, CodingKey {
             case transcriptSummary = "transcript_summary"
-            case legacyTranscriptSummary = "meeting_summary"
             case title
             case body
             case content
@@ -153,11 +150,7 @@ enum TranscriptSummarySupport {
     }
 
     static func transcriptRecord(from values: [String: String]) -> String {
-        let transcript = values[transcriptRecordTemplateVariable]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let transcript, transcript.isEmpty == false {
-            return transcript
-        }
-        return values[legacyTranscriptRecordTemplateVariable] ?? ""
+        values[transcriptRecordTemplateVariable]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private static func resolvePromptTemplate(
@@ -176,8 +169,6 @@ enum TranscriptSummarySupport {
 
         if prompt.contains(transcriptRecordTemplateVariable) {
             prompt = prompt.replacingOccurrences(of: transcriptRecordTemplateVariable, with: transcriptRecord)
-        } else if prompt.contains(legacyTranscriptRecordTemplateVariable) {
-            prompt = prompt.replacingOccurrences(of: legacyTranscriptRecordTemplateVariable, with: transcriptRecord)
         } else {
             prompt += "\n\nTranscript:\n\(transcriptRecord)"
         }
@@ -267,7 +258,7 @@ enum TranscriptSummarySupport {
         settings: TranscriptSummarySettingsSnapshot,
         generatedAt: Date
     ) -> TranscriptSummarySnapshot? {
-        let summaryBlock = payload.transcriptSummary ?? payload.legacyTranscriptSummary
+        let summaryBlock = payload.transcriptSummary
         let title = (summaryBlock?.title ?? payload.title)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let body = (summaryBlock?.content ?? summaryBlock?.body ?? payload.body ?? payload.content)?

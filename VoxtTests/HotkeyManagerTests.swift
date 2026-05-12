@@ -19,14 +19,10 @@ final class HotkeyManagerTests: XCTestCase {
         AppPreferenceKey.rewriteHotkeyModifiers,
         AppPreferenceKey.rewriteHotkeySidedModifiers,
         AppPreferenceKey.rewriteHotkeyActivationMode,
-        AppPreferenceKey.meetingHotkeyKeyCode,
-        AppPreferenceKey.meetingHotkeyModifiers,
-        AppPreferenceKey.meetingHotkeySidedModifiers,
         AppPreferenceKey.customPasteHotkeyEnabled,
         AppPreferenceKey.customPasteHotkeyKeyCode,
         AppPreferenceKey.customPasteHotkeyModifiers,
         AppPreferenceKey.customPasteHotkeySidedModifiers,
-        AppPreferenceKey.meetingNotesBetaEnabled,
         AppPreferenceKey.hotkeyTriggerMode,
         AppPreferenceKey.hotkeyDistinguishModifierSides,
         AppPreferenceKey.hotkeyPreset,
@@ -53,7 +49,6 @@ final class HotkeyManagerTests: XCTestCase {
 
         managedDefaultKeys.forEach { defaults.removeObject(forKey: $0) }
         HotkeyPreference.registerDefaults()
-        defaults.set(false, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
         defaults.set(HotkeyPreference.TriggerMode.tap.rawValue, forKey: AppPreferenceKey.hotkeyTriggerMode)
         defaults.set(false, forKey: AppPreferenceKey.hotkeyCaptureInProgress)
     }
@@ -223,48 +218,6 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(rewriteKeyUpCount, 0)
     }
 
-    func testTapMeetingNonModifierConsumesOnlyMatchingRelease() {
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
-        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
-        HotkeyPreference.saveMeeting(
-            keyCode: UInt16(kVK_ANSI_M),
-            modifiers: [.function],
-            sidedModifiers: []
-        )
-
-        let manager = makeManager()
-
-        XCTAssertFalse(
-            manager.testingHandleEvent(
-                type: .keyUp,
-                keyCode: UInt16(kVK_ANSI_M),
-                flags: .maskSecondaryFn
-            )
-        )
-        XCTAssertTrue(
-            manager.testingHandleEvent(
-                type: .keyDown,
-                keyCode: UInt16(kVK_ANSI_M),
-                flags: .maskSecondaryFn
-            )
-        )
-        XCTAssertFalse(
-            manager.testingHandleEvent(
-                type: .keyUp,
-                keyCode: UInt16(kVK_ANSI_A),
-                flags: .maskSecondaryFn
-            )
-        )
-        XCTAssertTrue(
-            manager.testingHandleEvent(
-                type: .keyUp,
-                keyCode: UInt16(kVK_ANSI_M),
-                flags: .maskSecondaryFn
-            )
-        )
-    }
-
     func testResetTransientStateClearsPendingTapReleaseConsumptionForNonModifierHotkey() {
         let defaults = UserDefaults.standard
         defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
@@ -405,12 +358,10 @@ final class HotkeyManagerTests: XCTestCase {
                 isKeyDown: false,
                 isTranslationKeyDown: false,
                 isRewriteKeyDown: false,
-                isMeetingKeyDown: false,
                 isCustomPasteKeyDown: false,
                 hasTranscriptionModifierTapCandidate: false,
                 hasTranslationModifierTapCandidate: false,
                 hasRewriteModifierTapCandidate: false,
-                hasMeetingModifierTapCandidate: false,
                 hasCustomPasteModifierTapCandidate: false,
                 sawNonModifierKeyDuringFunctionChord: false,
                 currentSidedModifiers: []
@@ -615,116 +566,6 @@ final class HotkeyManagerTests: XCTestCase {
         )
 
         XCTAssertEqual(rewriteDownCount, 0)
-    }
-
-    func testDefaultMeetingModifierTapEmitsDedicatedCallback() async {
-        UserDefaults.standard.set(true, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
-
-        let manager = makeManager()
-        var transcriptionDownCount = 0
-        var meetingDownCount = 0
-        manager.onKeyDown = { transcriptionDownCount += 1 }
-        let callbackExpectation = expectation(description: "meeting callback")
-        manager.onMeetingKeyDown = {
-            meetingDownCount += 1
-            callbackExpectation.fulfill()
-        }
-
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Option),
-            flags: .maskAlternate
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Function),
-            flags: combinedFlags(.maskAlternate, .maskSecondaryFn)
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Function),
-            flags: .maskAlternate
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Option),
-            flags: []
-        )
-        await fulfillment(of: [callbackExpectation], timeout: 1.0)
-
-        XCTAssertEqual(transcriptionDownCount, 0)
-        XCTAssertEqual(meetingDownCount, 1)
-    }
-
-    func testDisabledMeetingModeDoesNotEmitMeetingCallback() {
-        UserDefaults.standard.set(false, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
-
-        let manager = makeManager()
-        var meetingDownCount = 0
-        manager.onMeetingKeyDown = {
-            meetingDownCount += 1
-        }
-
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Option),
-            flags: .maskAlternate
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Function),
-            flags: combinedFlags(.maskAlternate, .maskSecondaryFn)
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Function),
-            flags: .maskAlternate
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Option),
-            flags: []
-        )
-
-        XCTAssertEqual(meetingDownCount, 0)
-    }
-
-    func testDisabledMeetingModeFnOptionDoesNotFallBackToTranscription() {
-        UserDefaults.standard.set(false, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
-
-        let manager = makeManager()
-        var transcriptionDownCount = 0
-        var meetingDownCount = 0
-        manager.onKeyDown = {
-            transcriptionDownCount += 1
-        }
-        manager.onMeetingKeyDown = {
-            meetingDownCount += 1
-        }
-
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Option),
-            flags: .maskAlternate
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Function),
-            flags: combinedFlags(.maskAlternate, .maskSecondaryFn)
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Function),
-            flags: .maskAlternate
-        )
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_Option),
-            flags: []
-        )
-
-        XCTAssertEqual(transcriptionDownCount, 0)
-        XCTAssertEqual(meetingDownCount, 0)
     }
 
     func testIdleGapRecoveryClearsStaleChordStateBeforeFnRelease() async {
@@ -943,62 +784,6 @@ final class HotkeyManagerTests: XCTestCase {
 
         await fulfillment(of: [callbackExpectation], timeout: 1.0)
         XCTAssertEqual(customPasteDownCount, 1)
-    }
-
-    func testCustomPasteChordWinsOverMeetingWhenHotkeysConflict() async {
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: AppPreferenceKey.customPasteHotkeyEnabled)
-        defaults.set(true, forKey: AppPreferenceKey.meetingNotesBetaEnabled)
-        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
-        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
-
-        HotkeyPreference.save(
-            keyCode: HotkeyPreference.modifierOnlyKeyCode,
-            modifiers: [.command],
-            sidedModifiers: [.rightCommand]
-        )
-        HotkeyPreference.saveMeeting(
-            keyCode: UInt16(kVK_ANSI_L),
-            modifiers: [.command],
-            sidedModifiers: [.rightCommand]
-        )
-        HotkeyPreference.saveCustomPaste(
-            keyCode: UInt16(kVK_ANSI_L),
-            modifiers: [.command],
-            sidedModifiers: []
-        )
-
-        let manager = makeManager()
-        var customPasteDownCount = 0
-        var meetingDownCount = 0
-        let callbackExpectation = expectation(description: "custom paste wins conflict with meeting")
-        manager.onCustomPasteKeyDown = {
-            customPasteDownCount += 1
-            callbackExpectation.fulfill()
-        }
-        manager.onMeetingKeyDown = {
-            meetingDownCount += 1
-        }
-
-        manager.testingHandleEvent(
-            type: .flagsChanged,
-            keyCode: UInt16(kVK_RightCommand),
-            flags: commandFlags(for: .rightCommand)
-        )
-        manager.testingHandleEvent(
-            type: .keyDown,
-            keyCode: UInt16(kVK_ANSI_L),
-            flags: commandFlags(for: .rightCommand)
-        )
-        manager.testingHandleEvent(
-            type: .keyUp,
-            keyCode: UInt16(kVK_ANSI_L),
-            flags: commandFlags(for: .rightCommand)
-        )
-
-        await fulfillment(of: [callbackExpectation], timeout: 1.0)
-        XCTAssertEqual(customPasteDownCount, 1)
-        XCTAssertEqual(meetingDownCount, 0)
     }
 
     func testRightCommandTapRemainsStableAcrossDuplicateFlagsChangedEvents() async {

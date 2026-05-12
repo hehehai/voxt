@@ -1,11 +1,49 @@
 import Foundation
 import Combine
 
-enum TranscriptionHistoryKind: String, Codable {
+enum TranscriptionHistoryKind: Codable, Hashable, Sendable {
     case normal
     case translation
     case rewrite
-    case transcript = "meeting"
+    case transcript
+
+    var rawValue: String {
+        switch self {
+        case .normal:
+            return "normal"
+        case .translation:
+            return "translation"
+        case .rewrite:
+            return "rewrite"
+        case .transcript:
+            return "transcript"
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        switch rawValue {
+        case "normal":
+            self = .normal
+        case "translation":
+            self = .translation
+        case "rewrite":
+            self = .rewrite
+        case "transcript":
+            self = .transcript
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown TranscriptionHistoryKind value: \(rawValue)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 struct WhisperHistoryWordTiming: Codable, Hashable {
@@ -80,10 +118,10 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case remoteLLMEndpoint
         case audioRelativePath
         case whisperWordTimings
-        case transcriptSegments = "meetingSegments"
-        case transcriptAudioRelativePath = "meetingAudioRelativePath"
-        case transcriptSummary = "meetingSummary"
-        case transcriptSummaryChatMessages = "meetingSummaryChatMessages"
+        case transcriptSegments
+        case transcriptAudioRelativePath
+        case transcriptSummary
+        case transcriptSummaryChatMessages
         case displayTitle
         case transcriptionChatMessages
         case dictionaryHitTerms
@@ -213,6 +251,46 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         dictionaryCorrectedTerms = try container.decodeIfPresent([String].self, forKey: .dictionaryCorrectedTerms) ?? []
         dictionaryCorrectionSnapshots = try container.decodeIfPresent([DictionaryCorrectionSnapshot].self, forKey: .dictionaryCorrectionSnapshots) ?? []
         dictionarySuggestedTerms = try container.decodeIfPresent([DictionarySuggestionSnapshot].self, forKey: .dictionarySuggestedTerms) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(text, forKey: .text)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(transcriptionEngine, forKey: .transcriptionEngine)
+        try container.encode(transcriptionModel, forKey: .transcriptionModel)
+        try container.encode(enhancementMode, forKey: .enhancementMode)
+        try container.encode(enhancementModel, forKey: .enhancementModel)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(isTranslation, forKey: .isTranslation)
+        try container.encodeIfPresent(audioDurationSeconds, forKey: .audioDurationSeconds)
+        try container.encodeIfPresent(transcriptionProcessingDurationSeconds, forKey: .transcriptionProcessingDurationSeconds)
+        try container.encodeIfPresent(llmDurationSeconds, forKey: .llmDurationSeconds)
+        try container.encodeIfPresent(focusedAppName, forKey: .focusedAppName)
+        try container.encodeIfPresent(focusedAppBundleID, forKey: .focusedAppBundleID)
+        try container.encodeIfPresent(matchedGroupID, forKey: .matchedGroupID)
+        try container.encodeIfPresent(matchedGroupName, forKey: .matchedGroupName)
+        try container.encodeIfPresent(matchedAppGroupName, forKey: .matchedAppGroupName)
+        try container.encodeIfPresent(matchedURLGroupName, forKey: .matchedURLGroupName)
+        try container.encodeIfPresent(remoteASRProvider, forKey: .remoteASRProvider)
+        try container.encodeIfPresent(remoteASRModel, forKey: .remoteASRModel)
+        try container.encodeIfPresent(remoteASREndpoint, forKey: .remoteASREndpoint)
+        try container.encodeIfPresent(remoteLLMProvider, forKey: .remoteLLMProvider)
+        try container.encodeIfPresent(remoteLLMModel, forKey: .remoteLLMModel)
+        try container.encodeIfPresent(remoteLLMEndpoint, forKey: .remoteLLMEndpoint)
+        try container.encodeIfPresent(audioRelativePath, forKey: .audioRelativePath)
+        try container.encodeIfPresent(whisperWordTimings, forKey: .whisperWordTimings)
+        try container.encodeIfPresent(transcriptSegments, forKey: .transcriptSegments)
+        try container.encodeIfPresent(transcriptAudioRelativePath, forKey: .transcriptAudioRelativePath)
+        try container.encodeIfPresent(transcriptSummary, forKey: .transcriptSummary)
+        try container.encodeIfPresent(transcriptSummaryChatMessages, forKey: .transcriptSummaryChatMessages)
+        try container.encodeIfPresent(displayTitle, forKey: .displayTitle)
+        try container.encodeIfPresent(transcriptionChatMessages, forKey: .transcriptionChatMessages)
+        try container.encode(dictionaryHitTerms, forKey: .dictionaryHitTerms)
+        try container.encode(dictionaryCorrectedTerms, forKey: .dictionaryCorrectedTerms)
+        try container.encode(dictionaryCorrectionSnapshots, forKey: .dictionaryCorrectionSnapshots)
+        try container.encode(dictionarySuggestedTerms, forKey: .dictionarySuggestedTerms)
     }
 }
 
@@ -868,7 +946,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         case .rewrite:
             return "rewrite"
         case .transcript:
-            return "meeting"
+            return "transcript"
         }
     }
 

@@ -250,6 +250,44 @@ struct DictionaryPromptContext {
         }
         return lines.joined(separator: "\n")
     }
+
+    func glossaryText(for purpose: DictionaryGlossaryPurpose) -> String {
+        glossaryText(policy: purpose.selectionPolicy)
+    }
+
+    func glossaryText(policy: DictionaryGlossarySelectionPolicy) -> String {
+        guard !isEmpty, policy.maxTerms > 0, policy.maxCharacters > 0 else { return "" }
+
+        var seen = Set<UUID>()
+        var lines: [String] = []
+        var characterCount = 0
+
+        for candidate in candidates.sorted(by: { $0.score > $1.score }) {
+            guard let entry = entries.first(where: { $0.id == candidate.entryID }) else { continue }
+            guard seen.insert(entry.id).inserted else { continue }
+
+            let line = "- \(entry.term)"
+            let separatorCost = lines.isEmpty ? 0 : 1
+            let nextCharacterCount = characterCount + separatorCost + line.count
+
+            if !lines.isEmpty && nextCharacterCount > policy.maxCharacters {
+                break
+            }
+            if lines.isEmpty && line.count > policy.maxCharacters {
+                lines.append(line)
+                break
+            }
+
+            lines.append(line)
+            characterCount = nextCharacterCount
+
+            if lines.count >= policy.maxTerms {
+                break
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
 }
 
 struct DictionaryCorrectionResult {

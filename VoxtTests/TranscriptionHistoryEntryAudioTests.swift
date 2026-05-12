@@ -1,20 +1,21 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class TranscriptionHistoryEntryAudioTests: XCTestCase {
-    func testDecodingLegacyMeetingAudioPathPopulatesGenericAudioPath() throws {
+    func testDecodingTranscriptAudioPathPopulatesGenericAudioPath() throws {
         let createdAt = Date(timeIntervalSinceReferenceDate: 321)
         let payload: [String: Any] = [
             "id": UUID().uuidString,
-            "text": "Meeting transcript",
+            "text": "Transcript",
             "createdAt": createdAt.timeIntervalSince1970,
             "transcriptionEngine": "WhisperKit",
             "transcriptionModel": "base",
             "enhancementMode": "Off",
             "enhancementModel": "None",
-            "kind": "meeting",
+            "kind": "transcript",
             "isTranslation": false,
-            "meetingAudioRelativePath": "meeting/legacy.wav",
+            "transcriptAudioRelativePath": "transcript/clip.wav",
             "dictionaryHitTerms": [],
             "dictionaryCorrectedTerms": [],
             "dictionarySuggestedTerms": []
@@ -26,12 +27,13 @@ final class TranscriptionHistoryEntryAudioTests: XCTestCase {
 
         let entry = try decoder.decode(TranscriptionHistoryEntry.self, from: data)
 
-        XCTAssertEqual(entry.meetingAudioRelativePath, "meeting/legacy.wav")
-        XCTAssertEqual(entry.audioRelativePath, "meeting/legacy.wav")
+        XCTAssertEqual(entry.kind, .transcript)
+        XCTAssertEqual(entry.transcriptAudioRelativePath, "transcript/clip.wav")
+        XCTAssertEqual(entry.audioRelativePath, "transcript/clip.wav")
         XCTAssertTrue(entry.dictionaryCorrectionSnapshots.isEmpty)
     }
 
-    func testEncodingGenericAudioPathOmitsLegacyFieldWhenUnset() throws {
+    func testEncodingGenericAudioPathOmitsTranscriptSpecificFieldWhenUnset() throws {
         let entry = TranscriptionHistoryEntry(
             id: UUID(),
             text: "Transcript",
@@ -68,7 +70,7 @@ final class TranscriptionHistoryEntryAudioTests: XCTestCase {
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(object["audioRelativePath"] as? String, "transcription/sample.wav")
-        XCTAssertNil(object["meetingAudioRelativePath"])
+        XCTAssertNil(object["transcriptAudioRelativePath"])
         XCTAssertTrue((object["dictionaryCorrectionSnapshots"] as? [Any])?.isEmpty == true)
     }
 }

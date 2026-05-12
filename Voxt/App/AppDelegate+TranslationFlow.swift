@@ -45,6 +45,7 @@ extension AppDelegate {
             "Translation flow started. inputChars=\(text.count), targetLanguage=\(targetLanguage.instructionName), translationModelProvider=\(translationModelProvider.rawValue), resolvedProvider=\(resolution.provider.rawValue)"
         )
         setEnhancingState(true)
+        overlayState.transcribedText = text
         _Concurrency.Task<Void, Never> {
             defer {
                 self.setEnhancingState(false)
@@ -52,7 +53,6 @@ extension AppDelegate {
 
             let llmStartedAt = Date()
             do {
-                // Translation mode pipeline: translate only.
                 let translated = try await self.runTranslationPipeline(
                     text: text,
                     targetLanguage: targetLanguage,
@@ -130,13 +130,17 @@ extension AppDelegate {
         didCommitSessionOutput = false
         isSessionCancellationRequested = false
         activeRecordingSessionID = UUID()
+        invalidateActiveLLMRequest()
         currentEndingSessionID = nil
         lastCompletedSessionEndSessionID = nil
         sessionOutputMode = .translation
+        recordingRequestedAt = startedAt
         recordingStartedAt = startedAt
         recordingStoppedAt = startedAt
         transcriptionProcessingStartedAt = nil
         transcriptionResultReceivedAt = nil
+        sessionFinalOutputDeliveredAt = nil
+        sessionLLMExecutionTimings = []
         enhancementContextSnapshot = nil
         lastEnhancementPromptContext = nil
 
@@ -145,6 +149,7 @@ extension AppDelegate {
         }
 
         VoxtLog.info("Selected text translation started. inputChars=\(selectedText.count)")
+        prewarmSelectedTextTranslationLLMIfNeeded(targetLanguage: effectiveSessionTranslationTargetLanguage)
         processSelectedTextTranslation(selectedText)
         return true
     }
@@ -177,10 +182,14 @@ extension AppDelegate {
             "Rewrite flow started. promptChars=\(text.count), selectedSourceChars=\(selectedSourceText.count), rewriteModelProvider=\(rewriteModelProvider.rawValue), structuredAnswerOutput=\(prefersStructuredAnswerOutput), conversationHistoryTurns=\(conversationHistory.count)"
         )
         setEnhancingState(true)
+        let requestID = beginLLMRequest()
         let progressHandler: (@Sendable (String) -> Void)? = if isConversationContinuation {
             { [weak self] partialOutput in
                 Task { @MainActor [weak self] in
-                    guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
+                    guard let self,
+                          self.shouldHandleCallbacks(for: sessionID),
+                          self.isCurrentLLMRequest(requestID)
+                    else { return }
                     self.presentRewriteConversationStreamingPreview(content: partialOutput)
                 }
             }
@@ -190,13 +199,16 @@ extension AppDelegate {
 
         Task {
             defer {
-                self.setEnhancingState(false)
+                if self.isCurrentLLMRequest(requestID) {
+                    self.setEnhancingState(false)
+                }
             }
 
             let llmStartedAt = Date()
             var latestConversationResponseID: String?
             do {
-                var rewritten = try await self.runRewritePipeline(
+                var rewritten: String
+                let rewriteResult = try await self.runRewritePipeline(
                     dictatedText: text,
                     selectedSourceText: selectedSourceText,
                     conversationHistory: conversationHistory,
@@ -204,9 +216,11 @@ extension AppDelegate {
                     previousConversationResponseID: previousConversationResponseID,
                     onProgress: progressHandler,
                     onResponseID: { responseID in
+                        guard self.isCurrentLLMRequest(requestID) else { return }
                         latestConversationResponseID = responseID
                     }
                 )
+                rewritten = rewriteResult
                 if prefersStructuredAnswerOutput,
                    self.shouldRetryStructuredRewriteAnswer(for: rewritten, dictatedPrompt: text) {
                     VoxtLog.warning("Rewrite structured answer was missing usable content; retrying in direct-answer mode.")
@@ -219,6 +233,7 @@ extension AppDelegate {
                         previousConversationResponseID: previousConversationResponseID,
                         onProgress: nil,
                         onResponseID: { responseID in
+                            guard self.isCurrentLLMRequest(requestID) else { return }
                             latestConversationResponseID = responseID
                         }
                     ) {
@@ -261,6 +276,7 @@ extension AppDelegate {
                         previousConversationResponseID: previousConversationResponseID,
                         onProgress: progressHandler,
                         onResponseID: { responseID in
+                            guard self.isCurrentLLMRequest(requestID) else { return }
                             latestConversationResponseID = responseID
                         }
                     ) {
@@ -276,7 +292,7 @@ extension AppDelegate {
                         structuredAnswerOutput: false
                     )
                 }
-                guard self.shouldHandleCallbacks(for: sessionID) else { return }
+                guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
                 if isConversationContinuation, let latestConversationResponseID {
                     self.overlayState.rewriteConversationRemoteResponseID = latestConversationResponseID
                 }
@@ -291,11 +307,14 @@ extension AppDelegate {
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
                 VoxtLog.info("Rewrite flow succeeded. outputChars=\(rewritten.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.commitTranscription(rewritten, llmDurationSeconds: llmDuration) { [weak self] in
-                    guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
+                    guard let self,
+                          self.shouldHandleCallbacks(for: sessionID),
+                          self.isCurrentLLMRequest(requestID)
+                    else { return }
                     self.finishSession(after: 0)
                 }
             } catch {
-                guard self.shouldHandleCallbacks(for: sessionID) else { return }
+                guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
                 VoxtLog.warning("Rewrite flow failed, using rewrite fallback: \(error)")
                 let fallback = self.rewriteUnavailableFallbackText(
                     dictatedPrompt: text,
@@ -303,7 +322,10 @@ extension AppDelegate {
                     structuredAnswerOutput: prefersStructuredAnswerOutput
                 )
                 self.commitTranscription(fallback, llmDurationSeconds: nil) { [weak self] in
-                    guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
+                    guard let self,
+                          self.shouldHandleCallbacks(for: sessionID),
+                          self.isCurrentLLMRequest(requestID)
+                    else { return }
                     self.finishSession(after: 0)
                 }
             }
@@ -312,9 +334,12 @@ extension AppDelegate {
 
     private func processSelectedTextTranslation(_ text: String) {
         setEnhancingState(true)
+        let requestID = beginLLMRequest()
         Task {
             defer {
-                self.setEnhancingState(false)
+                if self.isCurrentLLMRequest(requestID) {
+                    self.setEnhancingState(false)
+                }
             }
 
             let llmStartedAt = Date()
@@ -324,6 +349,7 @@ extension AppDelegate {
                     targetLanguage: self.translationTargetLanguage,
                     allowStrictRetry: true
                 )
+                guard self.isCurrentLLMRequest(requestID) else { return }
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
                 if self.looksUntranslated(source: text, result: translated) {
                     VoxtLog.warning("Selected text translation output may be untranslated. inputChars=\(text.count), outputChars=\(translated.count)")
@@ -331,15 +357,19 @@ extension AppDelegate {
                 VoxtLog.info("Selected text translation succeeded. outputChars=\(translated.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.overlayState.transcribedText = translated
                 self.commitTranscription(translated, llmDurationSeconds: llmDuration) { [weak self] in
-                    self?.finishSession(after: 0)
+                    guard let self, self.isCurrentLLMRequest(requestID) else { return }
+                    self.finishSession(after: 0)
                 }
             } catch {
+                guard self.isCurrentLLMRequest(requestID) else { return }
                 VoxtLog.warning("Selected text translation failed, using original selected text: \(error)")
                 self.overlayState.transcribedText = text
                 self.commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
-                    self?.finishSession(after: 0)
+                    guard let self, self.isCurrentLLMRequest(requestID) else { return }
+                    self.finishSession(after: 0)
                 }
             }
         }
     }
+
 }

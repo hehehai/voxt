@@ -11,6 +11,18 @@ struct MLXIntermediateCorrectionDecision: Equatable {
     let contextSampleCount: Int
 }
 
+struct MLXRealtimeReplayEvent: Equatable {
+    let elapsedSeconds: Double
+    let text: String
+    let isFinal: Bool
+    let source: String
+}
+
+struct MLXRealtimeReplayDiagnostics: Equatable {
+    let events: [MLXRealtimeReplayEvent]
+    let trace: [String]
+}
+
 struct MLXFinalizationPlan: Equatable {
     let durationSeconds: Double
     let quickPassSampleCount: Int?
@@ -18,6 +30,19 @@ struct MLXFinalizationPlan: Equatable {
     var shouldRunQuickPass: Bool {
         quickPassSampleCount != nil
     }
+}
+
+enum MLXCorrectionPassKind: Equatable {
+    case intermediate
+    case postStopQuick
+    case postStopFinal
+}
+
+enum MLXCorrectionPassSchedulingDecision: Equatable {
+    case startImmediately
+    case waitForInFlightPass
+    case skipRequestedPass
+    case interruptInFlightPass
 }
 
 enum MLXTranscriptionPlanning {
@@ -66,6 +91,20 @@ enum MLXTranscriptionPlanning {
         )
     }
 
+    static func correctionPassSchedulingDecision(
+        requestedPass: MLXCorrectionPassKind,
+        inFlightPass: MLXCorrectionPassKind?
+    ) -> MLXCorrectionPassSchedulingDecision {
+        guard let inFlightPass else { return .startImmediately }
+        if requestedPass == .intermediate {
+            return .skipRequestedPass
+        }
+        if inFlightPass == .intermediate {
+            return .interruptInFlightPass
+        }
+        return .waitForInFlightPass
+    }
+
     static func automaticBiases(
         for family: MLXModelFamily,
         multilingualContext: String?
@@ -83,16 +122,169 @@ enum MLXTranscriptionPlanning {
             return (nil, nil)
         }
     }
+
+    static func mergedHiddenPostStopPreview(base: String, candidate: String) -> String {
+        let stableBase = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stableCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !stableBase.isEmpty else { return stableCandidate }
+        guard !stableCandidate.isEmpty else { return stableBase }
+        if stableBase == stableCandidate {
+            return stableCandidate
+        }
+        let maxTrustedCandidateCount = stableBase.count + max(48, stableBase.count / 3)
+        if stableCandidate.count > maxTrustedCandidateCount,
+           !stableCandidate.contains(stableBase) {
+            return stableBase
+        }
+        if stableBase.contains(stableCandidate) {
+            return stableBase
+        }
+        if stableCandidate.contains(stableBase) {
+            return stableCandidate
+        }
+        if endsWithSentenceBoundary(stableBase),
+           let stitched = stitchedSentenceContinuation(
+               base: stableBase,
+               candidate: stableCandidate,
+               minimumOverlap: 10,
+               maximumCandidatePrefixNoise: 4
+           ) {
+            return stitched
+        }
+
+        let sharedPrefix = longestCommonPrefix(stableBase, stableCandidate).count
+        let suffixPrefixOverlap = suffixPrefixOverlapCount(stableBase, stableCandidate)
+        if suffixPrefixOverlap == 0 && sharedPrefix < 8 {
+            if !hasSharedWindow(stableBase, stableCandidate, minLength: 12),
+               endsWithSentenceBoundary(stableBase) {
+                let combined = stableBase + stableCandidate
+                let maxSafeCombinedCount = stableBase.count + stableCandidate.count + 4
+                if combined.count <= maxSafeCombinedCount {
+                    return combined
+                }
+            }
+            return stableBase.count >= stableCandidate.count ? stableBase : stableCandidate
+        }
+
+        let merged = mergeStablePrefix(stableBase, candidate: stableCandidate)
+        let growthBudget = max(16, min(stableBase.count, stableCandidate.count) / 4)
+        let maxSafeCount = max(stableBase.count, stableCandidate.count) + growthBudget
+        if merged.count > maxSafeCount {
+            return stableBase.count >= stableCandidate.count ? stableBase : stableCandidate
+        }
+
+        return merged
+    }
+
+    private static func mergeStablePrefix(_ stable: String, candidate: String) -> String {
+        guard !stable.isEmpty else { return candidate }
+        guard !candidate.isEmpty else { return stable }
+        if candidate.hasPrefix(stable) {
+            return candidate
+        }
+
+        let stableChars = Array(stable)
+        let candidateChars = Array(candidate)
+        let maxOverlap = min(stableChars.count, candidateChars.count)
+
+        for overlap in stride(from: maxOverlap, through: 1, by: -1) {
+            let stableSuffix = String(stableChars.suffix(overlap))
+            let candidatePrefix = String(candidateChars.prefix(overlap))
+            if stableSuffix == candidatePrefix {
+                return stable + String(candidateChars.dropFirst(overlap))
+            }
+        }
+
+        return stable + " " + candidate
+    }
+
+    private static func longestCommonPrefix(_ lhs: String, _ rhs: String) -> String {
+        var leftIndex = lhs.startIndex
+        var rightIndex = rhs.startIndex
+
+        while leftIndex < lhs.endIndex, rightIndex < rhs.endIndex, lhs[leftIndex] == rhs[rightIndex] {
+            leftIndex = lhs.index(after: leftIndex)
+            rightIndex = rhs.index(after: rightIndex)
+        }
+
+        return String(lhs[..<leftIndex])
+    }
+
+    private static func suffixPrefixOverlapCount(_ lhs: String, _ rhs: String) -> Int {
+        let left = Array(lhs)
+        let right = Array(rhs)
+        let maxOverlap = min(left.count, right.count)
+
+        for overlap in stride(from: maxOverlap, through: 1, by: -1) {
+            if Array(left.suffix(overlap)) == Array(right.prefix(overlap)) {
+                return overlap
+            }
+        }
+
+        return 0
+    }
+
+    private static func hasSharedWindow(_ lhs: String, _ rhs: String, minLength: Int) -> Bool {
+        guard min(lhs.count, rhs.count) >= minLength else { return false }
+        let shorter = lhs.count <= rhs.count ? lhs : rhs
+        let longer = lhs.count <= rhs.count ? rhs : lhs
+        let chars = Array(shorter)
+        let upperBound = chars.count - minLength
+        guard upperBound >= 0 else { return false }
+
+        for start in 0...upperBound {
+            let window = String(chars[start..<(start + minLength)])
+            if longer.contains(window) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func stitchedSentenceContinuation(
+        base: String,
+        candidate: String,
+        minimumOverlap: Int,
+        maximumCandidatePrefixNoise: Int
+    ) -> String? {
+        let baseChars = Array(base)
+        let candidateChars = Array(candidate)
+        guard baseChars.count >= minimumOverlap, candidateChars.count >= minimumOverlap else {
+            return nil
+        }
+
+        let maxNoise = min(maximumCandidatePrefixNoise, max(candidateChars.count - minimumOverlap, 0))
+        for prefixNoise in 0...maxNoise {
+            let remaining = candidateChars.count - prefixNoise
+            guard remaining >= minimumOverlap else { continue }
+            let maxOverlap = min(baseChars.count, remaining)
+            for overlap in stride(from: maxOverlap, through: minimumOverlap, by: -1) {
+                let baseSuffix = Array(baseChars.suffix(overlap))
+                let candidateSlice = Array(candidateChars[prefixNoise..<(prefixNoise + overlap)])
+                if baseSuffix == candidateSlice {
+                    let continuationStart = prefixNoise + overlap
+                    let continuation = continuationStart < candidateChars.count
+                        ? String(candidateChars[continuationStart...])
+                        : ""
+                    return base + continuation
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private static func endsWithSentenceBoundary(_ text: String) -> Bool {
+        guard let last = text.trimmingCharacters(in: .whitespacesAndNewlines).last else {
+            return false
+        }
+        return "。！？!?；;：:）)]」』\"”".contains(last)
+    }
 }
 
 @MainActor
 class MLXTranscriber: ObservableObject, TranscriberProtocol {
-    private enum CorrectionStage {
-        case intermediate
-        case postStopQuick
-        case postStopFinal
-    }
-
     private struct ResolvedInferenceConfiguration {
         let generationParameters: STTGenerateParameters
         let languageHint: String?
@@ -170,11 +362,15 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var preferredInputDeviceID: AudioDeviceID?
     private let targetSampleRate = 16000
 
-    private let correctionIntervalSeconds: Double = 6.0
-    private let firstCorrectionMinimumSeconds: Double = 3.5
+    private let liveCorrectionIntervalSeconds: Double = 6.0
+    private let hiddenCorrectionIntervalSeconds: Double = 3.2
+    private let liveFirstCorrectionMinimumSeconds: Double = 3.5
+    private let hiddenFirstCorrectionMinimumSeconds: Double = 2.2
     private let correctionPollInterval: Duration = .milliseconds(600)
-    private let intermediateContextWindowSeconds: Double = 18.0
-    private let quickPassContextWindowSeconds: Double = 30.0
+    private let liveIntermediateContextWindowSeconds: Double = 18.0
+    private let hiddenIntermediateContextWindowSeconds: Double = 24.0
+    private let liveQuickPassContextWindowSeconds: Double = 30.0
+    private let hiddenQuickPassContextWindowSeconds: Double = 18.0
     private let quickPassMinimumDurationSeconds: Double = 14.0
 
     private var sessionRevision = 0
@@ -182,7 +378,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var finalizationTask: Task<Void, Never>?
     private var preloadTask: Task<Void, Never>?
     private var captureWatchdogTask: Task<Void, Never>?
-    private var inferenceBusy = false
+    private var activeCorrectionPassID: UUID?
+    private var activeCorrectionPassTask: Task<String?, Never>?
+    private var activeCorrectionPassKind: MLXCorrectionPassKind?
     var sessionAllowsRealtimeTextDisplay = true
     private var didRetryCaptureStartup = false
     private var activeCaptureUsesPreferredInputDevice = false
@@ -193,7 +391,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     private var stableCommittedText = ""
     private var lastCandidateText = ""
+    private var internalTranscribedText = ""
     private var nextCorrectionAtSeconds: Double = 6.0
+    private(set) var lastCaptureMetrics: TranscriptionCaptureMetrics?
 
     init(modelManager: MLXModelManager) {
         self.modelManager = modelManager
@@ -227,17 +427,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         sessionRevision += 1
         let revision = sessionRevision
         activeSessionBehavior = modelManager.currentTranscriptionBehavior
-        if !sessionAllowsRealtimeTextDisplay {
-            activeSessionBehavior = MLXModelManager.TranscriptionBehavior(
-                correctionMode: .finalizationOnly,
-                allowsQuickStopPass: activeSessionBehavior.allowsQuickStopPass,
-                preloadsOnRecordingStart: activeSessionBehavior.preloadsOnRecordingStart
-            )
-        }
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         isModelInitializing = modelManager.state != .ready
         VoxtLog.info(
-            "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), modelState=\(String(describing: modelManager.state))",
+            "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), modelState=\(String(describing: modelManager.state))",
             verbose: true
         )
 
@@ -276,8 +469,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let sampleRate = inputSampleRate
         let callbackCount = sampleStore.callbacksReceived()
         let sampleCount = sampleStore.count()
+        lastCaptureMetrics = TranscriptionCaptureMetrics(
+            callbackCount: callbackCount,
+            sampleCount: sampleCount,
+            sampleRate: sampleRate
+        )
+        let capturedAudioSec = String(format: "%.2f", lastCaptureMetrics?.capturedAudioSeconds ?? 0)
         VoxtLog.info(
-            "MLX recording stop captured. callbacks=\(callbackCount), samples=\(sampleCount), sampleRate=\(Int(sampleRate))",
+            "MLX recording stop captured. callbacks=\(callbackCount), samples=\(sampleCount), sampleRate=\(Int(sampleRate)), capturedAudioSec=\(capturedAudioSec)",
             verbose: true
         )
 
@@ -306,7 +505,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let revision = sessionRevision
         let sampleRate = inputSampleRate
         Task { [weak self] in
-            _ = await self?.runCorrectionPass(
+            _ = await self?.runManagedCorrectionPass(
                 stage: .intermediate,
                 revision: revision,
                 explicitSamples: nil,
@@ -336,19 +535,19 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 sampleRate: inputSampleRate,
                 nextCorrectionAtSeconds: nextCorrectionAtSeconds,
                 behavior: activeSessionBehavior,
-                firstCorrectionMinimumSeconds: firstCorrectionMinimumSeconds,
-                contextWindowSeconds: intermediateContextWindowSeconds
+                firstCorrectionMinimumSeconds: currentFirstCorrectionMinimumSeconds,
+                contextWindowSeconds: currentIntermediateContextWindowSeconds
             ) else { continue }
             let intermediateSamples = sampleStore.tail(sampleCount: decision.contextSampleCount)
 
-            _ = await runCorrectionPass(
+            _ = await runManagedCorrectionPass(
                 stage: .intermediate,
                 revision: revision,
                 explicitSamples: intermediateSamples,
                 sampleRate: inputSampleRate
             )
 
-            nextCorrectionAtSeconds = decision.elapsedSeconds + correctionIntervalSeconds
+            nextCorrectionAtSeconds = decision.elapsedSeconds + currentCorrectionIntervalSeconds
         }
     }
 
@@ -371,14 +570,15 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             sampleRate: sampleRate,
             behavior: activeSessionBehavior,
             quickPassMinimumDurationSeconds: quickPassMinimumDurationSeconds,
-            quickPassContextWindowSeconds: quickPassContextWindowSeconds
+            quickPassContextWindowSeconds: currentQuickPassContextWindowSeconds
         )
+        let shouldRunQuickPass = sessionAllowsRealtimeTextDisplay && plan.shouldRunQuickPass
         VoxtLog.info(
-            "MLX finalization started. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), quickPass=\(plan.shouldRunQuickPass)",
+            "MLX finalization started. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), quickPass=\(shouldRunQuickPass)",
             verbose: true
         )
         let quickSource: [Float]?
-        if let quickPassSampleCount = plan.quickPassSampleCount {
+        if shouldRunQuickPass, let quickPassSampleCount = plan.quickPassSampleCount {
             quickSource = latestWindow(from: snapshot, maxCount: quickPassSampleCount)
         } else {
             quickSource = nil
@@ -386,7 +586,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         let quickText: String?
         if let quickSource {
-            quickText = await runCorrectionPass(
+            quickText = await runManagedCorrectionPass(
                 stage: .postStopQuick,
                 revision: revision,
                 explicitSamples: quickSource,
@@ -396,7 +596,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             quickText = nil
         }
 
-        let finalText = await runCorrectionPass(
+        let finalText = await runManagedCorrectionPass(
             stage: .postStopFinal,
             revision: revision,
             explicitSamples: snapshot,
@@ -416,23 +616,73 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         sampleStore.clear()
     }
 
-    private func runCorrectionPass(
-        stage: CorrectionStage,
+    private func runManagedCorrectionPass(
+        stage: MLXCorrectionPassKind,
         revision: Int,
         explicitSamples: [Float]?,
         sampleRate: Double
     ) async -> String? {
-        if stage == .intermediate, inferenceBusy {
+        switch MLXTranscriptionPlanning.correctionPassSchedulingDecision(
+            requestedPass: stage,
+            inFlightPass: activeCorrectionPassKind
+        ) {
+        case .startImmediately:
+            break
+        case .waitForInFlightPass:
+            break
+        case .skipRequestedPass:
             VoxtLog.info("MLX intermediate correction skipped because inference is still busy.", verbose: true)
             return nil
+        case .interruptInFlightPass:
+            if let activeCorrectionPassKind {
+                VoxtLog.info(
+                    "MLX correction pass preempted. inFlight=\(stageLabel(for: activeCorrectionPassKind)), requested=\(stageLabel(for: stage))",
+                    verbose: true
+                )
+            }
+            activeCorrectionPassTask?.cancel()
         }
 
-        while inferenceBusy {
-            try? await Task.sleep(for: .milliseconds(80))
+        while let activeTask = activeCorrectionPassTask {
+            let activePassID = activeCorrectionPassID
+            _ = await activeTask.result
+            if activeCorrectionPassID == activePassID {
+                clearActiveCorrectionPassIfNeeded(passID: activePassID)
+            }
         }
-        inferenceBusy = true
-        defer { inferenceBusy = false }
 
+        let passID = UUID()
+        let passTask = Task<String?, Never> { [weak self] in
+            guard let self else { return nil }
+            return await self.executeCorrectionPass(
+                stage: stage,
+                revision: revision,
+                explicitSamples: explicitSamples,
+                sampleRate: sampleRate
+            )
+        }
+        activeCorrectionPassID = passID
+        activeCorrectionPassKind = stage
+        activeCorrectionPassTask = passTask
+
+        let result = await passTask.value
+        clearActiveCorrectionPassIfNeeded(passID: passID)
+        return result
+    }
+
+    private func clearActiveCorrectionPassIfNeeded(passID: UUID?) {
+        guard activeCorrectionPassID == passID else { return }
+        activeCorrectionPassID = nil
+        activeCorrectionPassTask = nil
+        activeCorrectionPassKind = nil
+    }
+
+    private func executeCorrectionPass(
+        stage: MLXCorrectionPassKind,
+        revision: Int,
+        explicitSamples: [Float]?,
+        sampleRate: Double
+    ) async -> String? {
         guard revision == sessionRevision else { return nil }
         let rawSamples = explicitSamples ?? sampleStore.snapshot()
         guard !rawSamples.isEmpty else { return nil }
@@ -441,9 +691,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let passStartedAt = Date()
 
         do {
+            try Task.checkCancellation()
             modelManager.beginActiveUse()
             defer { modelManager.endActiveUse() }
             let model = try await modelManager.loadModel()
+            try Task.checkCancellation()
             await MainActor.run {
                 self.isModelInitializing = false
             }
@@ -455,6 +707,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 audioSamples: audioSamples,
                 inferenceConfiguration: inferenceConfiguration
             )
+            try Task.checkCancellation()
             let inferenceElapsedMs = Int(Date().timeIntervalSince(inferenceStartedAt) * 1000)
 
             let candidate = normalizeText(finalOutput?.text ?? streamedText)
@@ -466,6 +719,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 verbose: true
             )
             return candidate
+        } catch is CancellationError {
+            let elapsedMs = Int(Date().timeIntervalSince(passStartedAt) * 1000)
+            VoxtLog.info(
+                "MLX correction pass cancelled. repo=\(repo), stage=\(stageLabel(for: stage)), audioSec=\(String(format: "%.2f", audioSeconds)), elapsedMs=\(elapsedMs)",
+                verbose: true
+            )
+            return nil
         } catch {
             await MainActor.run {
                 self.isModelInitializing = false
@@ -481,6 +741,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private func resetTransientState() {
         sampleStore.clear()
         transcribedText = ""
+        internalTranscribedText = ""
         audioLevel = 0
         isModelInitializing = false
         isFinalizingTranscription = false
@@ -488,8 +749,25 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         stableCommittedText = ""
         lastCandidateText = ""
-        nextCorrectionAtSeconds = correctionIntervalSeconds
+        nextCorrectionAtSeconds = currentCorrectionIntervalSeconds
         loggedSampleExtractionFailure = false
+        lastCaptureMetrics = nil
+    }
+
+    private var currentCorrectionIntervalSeconds: Double {
+        sessionAllowsRealtimeTextDisplay ? liveCorrectionIntervalSeconds : hiddenCorrectionIntervalSeconds
+    }
+
+    private var currentFirstCorrectionMinimumSeconds: Double {
+        sessionAllowsRealtimeTextDisplay ? liveFirstCorrectionMinimumSeconds : hiddenFirstCorrectionMinimumSeconds
+    }
+
+    private var currentIntermediateContextWindowSeconds: Double {
+        sessionAllowsRealtimeTextDisplay ? liveIntermediateContextWindowSeconds : hiddenIntermediateContextWindowSeconds
+    }
+
+    private var currentQuickPassContextWindowSeconds: Double {
+        sessionAllowsRealtimeTextDisplay ? liveQuickPassContextWindowSeconds : hiddenQuickPassContextWindowSeconds
     }
 
     private func stopAudioEngine() {
@@ -552,6 +830,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         correctionLoopTask = nil
         finalizationTask?.cancel()
         finalizationTask = nil
+        activeCorrectionPassTask?.cancel()
+        activeCorrectionPassTask = nil
+        activeCorrectionPassID = nil
+        activeCorrectionPassKind = nil
         isFinalizingTranscription = false
         preloadTask?.cancel()
         preloadTask = nil
@@ -665,15 +947,45 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func applyCandidate(_ candidate: String, stage: CorrectionStage) {
+    private func applyCandidate(_ candidate: String, stage: MLXCorrectionPassKind) {
         if !sessionAllowsRealtimeTextDisplay {
-            guard stage == .postStopFinal else { return }
-            transcribedText = candidate
-            stableCommittedText = candidate
-            lastCandidateText = candidate
-            return
+            switch stage {
+            case .postStopFinal:
+                internalTranscribedText = candidate
+                transcribedText = candidate
+                stableCommittedText = candidate
+                lastCandidateText = candidate
+                return
+            case .postStopQuick:
+                let trustedHiddenBaseline = resolvedTrustedHiddenPreviewBaseline(
+                    base: internalTranscribedText,
+                    candidate: candidate
+                )
+                let merged = MLXTranscriptionPlanning.mergedHiddenPostStopPreview(
+                    base: trustedHiddenBaseline,
+                    candidate: candidate
+                )
+                internalTranscribedText = merged
+                transcribedText = merged
+                lastCandidateText = merged
+                stableCommittedText = merged
+                return
+            case .intermediate:
+                // Keep hidden intermediate candidates off the UI, but preserve the most
+                // recent full-context hypothesis as a baseline for stop-time quick-pass
+                // merging. This lets final-only mode use a true tail-window quick pass
+                // without losing earlier transcript context.
+                let merged = MLXTranscriptionPlanning.mergedHiddenPostStopPreview(
+                    base: internalTranscribedText,
+                    candidate: candidate
+                )
+                internalTranscribedText = merged
+                lastCandidateText = merged
+                return
+            }
         }
 
+        internalTranscribedText = candidate
         switch stage {
         case .postStopFinal:
             transcribedText = candidate
@@ -738,7 +1050,21 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func resolvedInferenceConfiguration(for stage: CorrectionStage) -> ResolvedInferenceConfiguration {
+    private func resolvedTrustedHiddenPreviewBaseline(base: String, candidate: String) -> String {
+        let stableBase = normalizeText(base)
+        let stableCandidate = normalizeText(candidate)
+        guard !stableBase.isEmpty, !stableCandidate.isEmpty else { return stableBase }
+
+        let maxTrustedBaseCount = stableCandidate.count + max(48, stableCandidate.count / 2)
+        if stableBase.count > maxTrustedBaseCount,
+           !stableBase.contains(stableCandidate) {
+            return ""
+        }
+
+        return stableBase
+    }
+
+    private func resolvedInferenceConfiguration(for stage: MLXCorrectionPassKind) -> ResolvedInferenceConfiguration {
         let hintPayload = resolvedHintPayload()
         let tuningSettings = resolvedLocalTuningSettings()
         let userLanguageCodes = UserMainLanguageOption.storedSelection(
@@ -766,7 +1092,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         case .intermediate:
             maxTokens = 1024
         case .postStopQuick:
-            maxTokens = 2048
+            maxTokens = sessionAllowsRealtimeTextDisplay ? 1024 : 512
         case .postStopFinal:
             maxTokens = 8192
         }
@@ -823,7 +1149,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         )
     }
 
-    private func stageLabel(for stage: CorrectionStage) -> String {
+    private func stageLabel(for stage: MLXCorrectionPassKind) -> String {
         switch stage {
         case .intermediate: return "intermediate"
         case .postStopQuick: return "post-stop quick"
@@ -901,6 +1227,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         audioSamples: [Float],
         inferenceConfiguration: ResolvedInferenceConfiguration
     ) async throws -> (streamedText: String, finalOutput: STTOutput?) {
+        try Task.checkCancellation()
         let audioArray = MLXArray(audioSamples)
         var streamedText = ""
         var finalOutput: STTOutput?
@@ -941,6 +1268,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         for try await event in stream {
+            try Task.checkCancellation()
             switch event {
             case .token(let token):
                 streamedText += token
@@ -985,6 +1313,167 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             samples: loaded.samples,
             sampleRate: loaded.sampleRate
         ) ?? ""
+    }
+
+    func debugReplayAudioFileWithTrace(
+        _ fileURL: URL,
+        stepSeconds: Double = 4.0,
+        allowsRealtimeTextDisplay: Bool
+    ) async throws -> MLXRealtimeReplayDiagnostics {
+        let loaded = try DebugAudioClipIO.loadMonoSamples(from: fileURL)
+        let safeSampleRate = safeSampleRate(loaded.sampleRate)
+        let stepSampleCount = max(Int(stepSeconds * safeSampleRate), 1)
+        let revision = sessionRevision + 1
+
+        resetTransientState()
+        sessionRevision = revision
+        activeSessionBehavior = modelManager.currentTranscriptionBehavior
+        sessionAllowsRealtimeTextDisplay = allowsRealtimeTextDisplay
+
+        var events: [MLXRealtimeReplayEvent] = []
+        var trace: [String] = []
+        var endSample = stepSampleCount
+
+        while endSample <= loaded.samples.count {
+            let prefix = Array(loaded.samples.prefix(endSample))
+            if let decision = MLXTranscriptionPlanning.intermediateCorrectionDecision(
+                sampleCount: prefix.count,
+                sampleRate: loaded.sampleRate,
+                nextCorrectionAtSeconds: nextCorrectionAtSeconds,
+                behavior: activeSessionBehavior,
+                firstCorrectionMinimumSeconds: currentFirstCorrectionMinimumSeconds,
+                contextWindowSeconds: currentIntermediateContextWindowSeconds
+            ) {
+                let intermediateSamples = latestWindow(from: prefix, maxCount: decision.contextSampleCount)
+                let publishedBefore = transcribedText
+                let candidate = await runManagedCorrectionPass(
+                    stage: .intermediate,
+                    revision: revision,
+                    explicitSamples: intermediateSamples,
+                    sampleRate: loaded.sampleRate
+                )
+                nextCorrectionAtSeconds = decision.elapsedSeconds + currentCorrectionIntervalSeconds
+                let publishedAfter = normalizeText(transcribedText)
+                trace.append(
+                    String(
+                        format: "[%.1fs] intermediate candidate=%@ published=%@",
+                        Double(endSample) / safeSampleRate,
+                        Self.traceQuoted(normalizeText(candidate ?? "")),
+                        Self.traceQuoted(publishedAfter)
+                    )
+                )
+                if !publishedAfter.isEmpty, publishedAfter != normalizeText(publishedBefore) {
+                    events.append(
+                        MLXRealtimeReplayEvent(
+                            elapsedSeconds: Double(endSample) / safeSampleRate,
+                            text: publishedAfter,
+                            isFinal: false,
+                            source: "intermediate"
+                        )
+                    )
+                }
+            }
+            endSample += stepSampleCount
+        }
+
+        let snapshot = loaded.samples
+        let plan = MLXTranscriptionPlanning.finalizationPlan(
+            sampleCount: snapshot.count,
+            sampleRate: loaded.sampleRate,
+            behavior: activeSessionBehavior,
+            quickPassMinimumDurationSeconds: quickPassMinimumDurationSeconds,
+            quickPassContextWindowSeconds: currentQuickPassContextWindowSeconds
+        )
+        let shouldRunQuickPass = allowsRealtimeTextDisplay && plan.shouldRunQuickPass
+        if shouldRunQuickPass, let quickPassSampleCount = plan.quickPassSampleCount {
+            let quickSource = latestWindow(from: snapshot, maxCount: quickPassSampleCount)
+            let publishedBefore = transcribedText
+            let candidate = await runManagedCorrectionPass(
+                stage: .postStopQuick,
+                revision: revision,
+                explicitSamples: quickSource,
+                sampleRate: loaded.sampleRate
+            )
+            let publishedAfter = normalizeText(transcribedText)
+            trace.append(
+                String(
+                    format: "[%.1fs] post-stop-quick candidate=%@ published=%@",
+                    plan.durationSeconds,
+                    Self.traceQuoted(normalizeText(candidate ?? "")),
+                    Self.traceQuoted(publishedAfter)
+                )
+            )
+            if !publishedAfter.isEmpty, publishedAfter != normalizeText(publishedBefore) {
+                events.append(
+                    MLXRealtimeReplayEvent(
+                        elapsedSeconds: plan.durationSeconds,
+                        text: publishedAfter,
+                        isFinal: false,
+                        source: "post-stop-quick"
+                    )
+                )
+            }
+        }
+
+        let finalText = await runManagedCorrectionPass(
+            stage: .postStopFinal,
+            revision: revision,
+            explicitSamples: snapshot,
+            sampleRate: loaded.sampleRate
+        )
+        let resolvedFinal = normalizeText(finalText ?? transcribedText)
+        trace.append(
+            String(
+                format: "[%.1fs] final text=%@",
+                plan.durationSeconds,
+                Self.traceQuoted(resolvedFinal)
+            )
+        )
+        if !resolvedFinal.isEmpty {
+            events.append(
+                MLXRealtimeReplayEvent(
+                    elapsedSeconds: plan.durationSeconds,
+                    text: resolvedFinal,
+                    isFinal: true,
+                    source: "final"
+                )
+            )
+        }
+        return MLXRealtimeReplayDiagnostics(events: events, trace: trace)
+    }
+
+    func debugReplayRealtimeAudioFileWithTrace(
+        _ fileURL: URL,
+        stepSeconds: Double = 4.0
+    ) async throws -> MLXRealtimeReplayDiagnostics {
+        try await debugReplayAudioFileWithTrace(
+            fileURL,
+            stepSeconds: stepSeconds,
+            allowsRealtimeTextDisplay: true
+        )
+    }
+
+    func debugReplayFinalOnlyAudioFileWithTrace(
+        _ fileURL: URL,
+        stepSeconds: Double = 4.0
+    ) async throws -> MLXRealtimeReplayDiagnostics {
+        try await debugReplayAudioFileWithTrace(
+            fileURL,
+            stepSeconds: stepSeconds,
+            allowsRealtimeTextDisplay: false
+        )
+    }
+
+    var currentWorkingTranscriptText: String {
+        let internalText = internalTranscribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !internalText.isEmpty {
+            return internalText
+        }
+        return transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func traceQuoted(_ value: String) -> String {
+        value.isEmpty ? "\"\"" : "\"\(value)\""
     }
 
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {

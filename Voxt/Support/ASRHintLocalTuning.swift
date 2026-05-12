@@ -90,7 +90,7 @@ struct WhisperLocalTuningSettings: Codable, Equatable {
                 temperatureIncrementOnFallback: 0.2,
                 compressionRatioThreshold: 2.4,
                 logProbThreshold: -1.0,
-                noSpeechThreshold: 0.6
+                noSpeechThreshold: 0.4
             )
         case .accuracyFirst:
             return WhisperLocalTuningSettings(
@@ -99,7 +99,7 @@ struct WhisperLocalTuningSettings: Codable, Equatable {
                 temperatureIncrementOnFallback: 0.2,
                 compressionRatioThreshold: 2.2,
                 logProbThreshold: -1.2,
-                noSpeechThreshold: 0.45
+                noSpeechThreshold: 0.3
             )
         }
     }
