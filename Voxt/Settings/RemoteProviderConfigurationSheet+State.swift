@@ -110,7 +110,7 @@ extension RemoteProviderConfigurationSheet {
     }
 
     var openAIReasoningEffortMenuOptions: [SettingsMenuOption<String>] {
-        OpenAIReasoningEffort.allCases.map { option in
+        OpenAIReasoningEffort.supportedCases(forModel: resolvedModelValue()).map { option in
             SettingsMenuOption(value: option.rawValue, title: option.title)
         }
     }
@@ -121,7 +121,10 @@ extension RemoteProviderConfigurationSheet {
     }
 
     var openAITextVerbosityMenuOptions: [SettingsMenuOption<String>] {
-        OpenAITextVerbosity.allCases.map { option in
+        guard OpenAITextVerbosity.supportsModel(resolvedModelValue()) else {
+            return [SettingsMenuOption(value: OpenAITextVerbosity.automatic.rawValue, title: OpenAITextVerbosity.automatic.title)]
+        }
+        return OpenAITextVerbosity.allCases.map { option in
             SettingsMenuOption(value: option.rawValue, title: option.title)
         }
     }

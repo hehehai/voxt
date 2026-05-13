@@ -116,10 +116,12 @@ extension RemoteLLMRuntimeClient {
         var payload: [String: Any] = [
             "model": model,
             "stream": streamingEnabled,
-            "max_output_tokens": maxOutputTokens,
-            "temperature": tuning.temperature,
-            "top_p": tuning.topP
+            "max_output_tokens": maxOutputTokens
         ]
+        if provider != .openAI {
+            payload["temperature"] = tuning.temperature
+            payload["top_p"] = tuning.topP
+        }
 
         let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedSystemPrompt.isEmpty {
@@ -134,25 +136,23 @@ extension RemoteLLMRuntimeClient {
             payload["input"] = inputPayload
         }
 
-        if provider == .openAI {
-            switch configuration.openAIReasoningEffortValue {
-            case .automatic:
-                break
-            case .none, .minimal, .low, .medium, .high, .xhigh:
-                payload["reasoning"] = [
-                    "effort": configuration.openAIReasoningEffortValue.rawValue
-                ]
-            }
+        if provider == .openAI,
+           let reasoningEffort = OpenAIReasoningEffort.apiValue(
+            selection: configuration.openAIReasoningEffort,
+            model: model
+           ) {
+            payload["reasoning"] = [
+                "effort": reasoningEffort
+            ]
         }
 
         var textPayload = textFormat ?? [:]
-        if provider == .openAI {
-            switch configuration.openAITextVerbosityValue {
-            case .automatic:
-                break
-            case .low, .medium, .high:
-                textPayload["verbosity"] = configuration.openAITextVerbosityValue.rawValue
-            }
+        if provider == .openAI,
+           let verbosity = OpenAITextVerbosity.apiValue(
+            selection: configuration.openAITextVerbosity,
+            model: model
+           ) {
+            textPayload["verbosity"] = verbosity
         }
         if !textPayload.isEmpty {
             payload["text"] = textPayload

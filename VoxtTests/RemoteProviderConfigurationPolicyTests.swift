@@ -37,19 +37,19 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         XCTAssertEqual(
             RemoteProviderConfigurationPolicy.resolvedSelection(
                 target: target,
-                selectedProviderModel: "gpt-5.5",
+                selectedProviderModel: "gpt-5.2",
                 configuredModel: "custom-model"
             ),
-            "gpt-5.5"
+            "gpt-5.2"
         )
 
         XCTAssertEqual(
             RemoteProviderConfigurationPolicy.resolvedSelection(
                 target: target,
                 selectedProviderModel: "unknown",
-                configuredModel: "gpt-5.5"
+                configuredModel: "gpt-5.2"
             ),
-            "gpt-5.5"
+            "gpt-5.2"
         )
     }
 
@@ -245,7 +245,7 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
     func testOpenAISheetValidationRejectsInvalidMaxOutputTokens() {
         let sheet = makeSheet(
             target: .llm(.openAI),
-            model: "gpt-5.5"
+            model: "gpt-5.2"
         )
 
         XCTAssertEqual(
@@ -341,7 +341,7 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         XCTAssertEqual(
             RemoteProviderConfigurationPolicy.endpointPlaceholder(
                 target: .llm(.openAI),
-                resolvedModel: "gpt-5.5"
+                resolvedModel: "gpt-5.2"
             ),
             "https://api.openai.com/v1/responses"
         )

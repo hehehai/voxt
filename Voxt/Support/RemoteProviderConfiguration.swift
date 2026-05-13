@@ -89,6 +89,47 @@ enum OpenAIReasoningEffort: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("Extra High")
         }
     }
+
+    static func supportedCases(forModel model: String) -> [OpenAIReasoningEffort] {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "gpt-5.2-pro" || normalized.hasPrefix("gpt-5.2-pro-") {
+            return [.automatic, .medium, .high, .xhigh]
+        }
+        if normalized == "gpt-5-pro" || normalized.hasPrefix("gpt-5-pro-") {
+            return [.automatic, .high]
+        }
+        if normalized == "gpt-5.2-codex" || normalized.hasPrefix("gpt-5.2-codex-") {
+            return [.automatic, .low, .medium, .high, .xhigh]
+        }
+        if normalized == "gpt-5.1-codex-max" || normalized.hasPrefix("gpt-5.1-codex-max-") {
+            return [.automatic, .none, .medium, .high, .xhigh]
+        }
+        if normalized == "gpt-5.2" || normalized.hasPrefix("gpt-5.2-") {
+            return [.automatic, .none, .low, .medium, .high, .xhigh]
+        }
+        if normalized == "gpt-5.1" || normalized.hasPrefix("gpt-5.1-") {
+            return [.automatic, .none, .low, .medium, .high]
+        }
+        if normalized.hasPrefix("gpt-5") {
+            return [.automatic, .minimal, .low, .medium, .high]
+        }
+        if normalized.hasPrefix("o1") ||
+            normalized.hasPrefix("o3") ||
+            normalized.hasPrefix("o4") {
+            return [.automatic, .low, .medium, .high]
+        }
+        return [.automatic]
+    }
+
+    static func apiValue(selection: String, model: String) -> String? {
+        guard let value = OpenAIReasoningEffort(rawValue: selection),
+              value != .automatic,
+              supportedCases(forModel: model).contains(value)
+        else {
+            return nil
+        }
+        return value.rawValue
+    }
 }
 
 enum OpenAITextVerbosity: String, CaseIterable, Identifiable {
@@ -110,6 +151,22 @@ enum OpenAITextVerbosity: String, CaseIterable, Identifiable {
         case .high:
             return AppLocalization.localizedString("High")
         }
+    }
+
+    static func supportsModel(_ model: String) -> Bool {
+        model.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .hasPrefix("gpt-5")
+    }
+
+    static func apiValue(selection: String, model: String) -> String? {
+        guard supportsModel(model),
+              let value = OpenAITextVerbosity(rawValue: selection),
+              value != .automatic
+        else {
+            return nil
+        }
+        return value.rawValue
     }
 }
 

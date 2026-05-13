@@ -326,19 +326,24 @@ final class SettingsTypesTests: XCTestCase {
         )
     }
 
-    func testDictionaryHistoryScanResponsesSchemaUsesStrictTopLevelArray() throws {
+    func testDictionaryHistoryScanResponsesSchemaUsesStrictTopLevelObject() throws {
         let payload = DictionaryHistoryScanResponseParser.responsesTextFormatPayload()
         let format = try XCTUnwrap(payload["format"] as? [String: Any])
         let schema = try XCTUnwrap(format["schema"] as? [String: Any])
-        let items = try XCTUnwrap(schema["items"] as? [String: Any])
-        let properties = try XCTUnwrap(items["properties"] as? [String: Any])
+        let schemaProperties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let terms = try XCTUnwrap(schemaProperties["terms"] as? [String: Any])
+        let items = try XCTUnwrap(terms["items"] as? [String: Any])
+        let itemProperties = try XCTUnwrap(items["properties"] as? [String: Any])
 
         XCTAssertEqual(format["type"] as? String, "json_schema")
         XCTAssertEqual(format["strict"] as? Bool, true)
-        XCTAssertEqual(schema["type"] as? String, "array")
+        XCTAssertEqual(schema["type"] as? String, "object")
+        XCTAssertEqual(schema["additionalProperties"] as? Bool, false)
+        XCTAssertEqual(schema["required"] as? [String], ["terms"])
+        XCTAssertEqual(terms["type"] as? String, "array")
         XCTAssertEqual(items["type"] as? String, "object")
         XCTAssertEqual(items["additionalProperties"] as? Bool, false)
-        XCTAssertNotNil(properties["term"])
+        XCTAssertNotNil(itemProperties["term"])
         XCTAssertEqual(items["required"] as? [String], ["term"])
     }
 

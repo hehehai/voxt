@@ -60,7 +60,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         let remoteLLMConfigurations: [String: RemoteProviderConfiguration] = [
             RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteLLMProvider.openAI.rawValue,
-                model: "gpt-5.5",
+                model: "gpt-5.2",
                 endpoint: "https://example.com/v1",
                 apiKey: "secret"
             )
@@ -79,7 +79,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(entry.filterTags.contains(AppLocalization.localizedString("Configured")))
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("In Use")))
         XCTAssertTrue(entry.usageLocations.contains(AppLocalization.localizedString("Translation")))
-        XCTAssertEqual(entry.sizeText, "gpt-5.5")
+        XCTAssertEqual(entry.sizeText, "gpt-5.2")
         XCTAssertEqual(entry.primaryAction?.title, AppLocalization.localizedString("Configure"))
     }
 

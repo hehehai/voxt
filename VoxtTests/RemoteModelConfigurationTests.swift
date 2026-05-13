@@ -167,7 +167,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
             ),
             RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteLLMProvider.openAI.rawValue,
-                model: "gpt-5.5",
+                model: "gpt-5.2",
                 endpoint: "https://example.com/llm",
                 apiKey: "secret",
                 openAIReasoningEffort: OpenAIReasoningEffort.high.rawValue,
@@ -189,7 +189,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         let stored: [String: RemoteProviderConfiguration] = [
             RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteLLMProvider.openAI.rawValue,
-                model: "gpt-5.5",
+                model: "gpt-5.2",
                 endpoint: "https://example.com/llm",
                 apiKey: "secret"
             )
@@ -201,7 +201,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
             sensitiveValueLoading: .metadataOnly
         )
 
-        XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.model, "gpt-5.5")
+        XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.model, "gpt-5.2")
         XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.endpoint, "https://example.com/llm")
         XCTAssertFalse(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey.isEmpty ?? true)
         XCTAssertNotEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey, "secret")
@@ -229,10 +229,40 @@ final class RemoteModelConfigurationTests: XCTestCase {
     func testOpenAIConfigurationStillRequiresCredential() {
         let configuration = TestFactories.makeRemoteConfiguration(
             providerID: RemoteLLMProvider.openAI.rawValue,
-            model: "gpt-5.5"
+            model: "gpt-5.2"
         )
 
         XCTAssertFalse(configuration.isConfigured)
+    }
+
+    func testOpenAIModelCatalogUsesOfficialModelIDs() {
+        XCTAssertEqual(RemoteLLMProvider.openAI.suggestedModel, "gpt-5.2")
+
+        let ids = RemoteLLMProvider.openAI.modelOptions.map(\.id)
+        XCTAssertTrue(ids.contains("gpt-5.2"))
+        XCTAssertTrue(ids.contains("gpt-5.2-pro"))
+        XCTAssertTrue(ids.contains("gpt-5.1"))
+        XCTAssertFalse(ids.contains("gpt-5.5"))
+        XCTAssertFalse(ids.contains("gpt-5.4"))
+    }
+
+    func testOpenAIReasoningEffortOptionsFollowModelSupport() {
+        XCTAssertEqual(
+            OpenAIReasoningEffort.supportedCases(forModel: "gpt-5.2"),
+            [.automatic, .none, .low, .medium, .high, .xhigh]
+        )
+        XCTAssertEqual(
+            OpenAIReasoningEffort.supportedCases(forModel: "gpt-5.2-pro"),
+            [.automatic, .medium, .high, .xhigh]
+        )
+        XCTAssertEqual(
+            OpenAIReasoningEffort.supportedCases(forModel: "gpt-5.1"),
+            [.automatic, .none, .low, .medium, .high]
+        )
+        XCTAssertEqual(
+            OpenAIReasoningEffort.supportedCases(forModel: "gpt-5"),
+            [.automatic, .minimal, .low, .medium, .high]
+        )
     }
 
     func testLoadSaveRoundTripPreservesOllamaConfigurationFields() {
@@ -424,7 +454,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         [
           {
             "providerID": "openAI",
-            "model": "gpt-5.5",
+            "model": "gpt-5.2",
             "endpoint": "https://api.openai.com/v1/chat/completions",
             "apiKey": "",
             "appID": "",
@@ -451,7 +481,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
             [
               {
                 "providerID": "openAI",
-                "model": "gpt-5.5",
+                "model": "gpt-5.2",
                 "endpoint": "https://api.openai.com/v1/models",
                 "apiKey": "",
                 "appID": "",
@@ -507,7 +537,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         [
           {
             "providerID": "openAI",
-            "model": "gpt-5.5",
+            "model": "gpt-5.2",
             "endpoint": "https://example.com/responses",
             "apiKey": "",
             "appID": "",

@@ -88,17 +88,24 @@ enum DictionaryHistoryScanResponseParser {
                 "name": "dictionary_history_terms",
                 "strict": true,
                 "schema": [
-                    "type": "array",
-                    "items": [
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": [
-                            "term": [
-                                "type": "string"
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": [
+                        "terms": [
+                            "type": "array",
+                            "items": [
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": [
+                                    "term": [
+                                        "type": "string"
+                                    ]
+                                ],
+                                "required": ["term"]
                             ]
-                        ],
-                        "required": ["term"]
-                    ]
+                        ]
+                    ],
+                    "required": ["terms"]
                 ]
             ]
         ]
