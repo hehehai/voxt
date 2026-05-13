@@ -76,7 +76,9 @@ final class LLMExecutionPlanCompilerTests: XCTestCase {
         XCTAssertContains(compiled.instructions, "Clean up the transcript.")
         XCTAssertContains(compiled.instructions, "### Dictionary Guidance")
         XCTAssertContains(compiled.instructions, "- Anthropic")
+        XCTAssertContains(compiled.prompt, "Process this ASR transcription according to the system instructions.")
         XCTAssertContains(compiled.prompt, "raw transcript")
+        XCTAssertFalse(compiled.prompt.contains("Clean this ASR transcription conservatively."))
         XCTAssertFalse(compiled.instructions.contains("Raw transcription"))
     }
 

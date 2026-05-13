@@ -334,9 +334,8 @@ enum ModelDebugCatalog {
                     subtitle: AppLocalization.localizedString("Saved group preset"),
                     kind: .appGroup(groupID: group.id),
                     promptTemplate: LLMDebugPresetStore.promptOverride(for: "group:\(group.id.uuidString)", defaults: defaults) ?? trimmedPrompt,
-                    variables: ModelSettingsPromptVariables.enhancement,
+                    variables: ModelSettingsPromptVariables.appEnhancement,
                     defaultValues: [
-                        AppDelegate.rawTranscriptionTemplateVariable: "",
                         AppDelegate.userMainLanguageTemplateVariable: userMainLanguage
                     ]
                 )
@@ -546,7 +545,7 @@ enum ModelDebugPromptResolver {
     private static func enhancementDelivery(for preset: LLMDebugPresetOption) -> LLMExecutionDelivery {
         switch preset.kind {
         case .appGroup:
-            return .userMessage
+            return .systemPrompt
         case .enhancement:
             return preset.promptTemplate.contains(AppDelegate.rawTranscriptionTemplateVariable)
                 ? .userMessage

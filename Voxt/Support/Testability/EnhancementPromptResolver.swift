@@ -104,7 +104,7 @@ struct EnhancementPromptResolver {
                         userMainLanguagePromptValue: input.userMainLanguagePromptValue,
                         userOtherLanguagesPromptValue: input.userOtherLanguagesPromptValue
                     ),
-                    delivery: .userMessage,
+                    delivery: .systemPrompt,
                     promptContext: PromptContext(
                         focusedAppName: input.focusedAppName,
                         matchedGroupID: match.groupID,
@@ -151,7 +151,7 @@ struct EnhancementPromptResolver {
                         userMainLanguagePromptValue: input.userMainLanguagePromptValue,
                         userOtherLanguagesPromptValue: input.userOtherLanguagesPromptValue
                     ),
-                    delivery: .userMessage,
+                    delivery: .systemPrompt,
                     promptContext: PromptContext(
                         focusedAppName: input.focusedAppName,
                         matchedGroupID: group.id,

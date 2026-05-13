@@ -255,9 +255,12 @@ enum CustomLLMRequestPlanBuilder {
             ),
             CustomLLMLogSection(label: "input", content: request.debugInput)
         ]
-        if !usesUserMessageMode {
-            sections.append(CustomLLMLogSection(label: "request_content", content: request.prompt))
-        }
+        sections.append(
+            CustomLLMLogSection(
+                label: usesUserMessageMode ? "user_message_prompt" : "request_content",
+                content: request.prompt
+            )
+        )
 
         return CustomLLMRequestPlan(
             kind: kind,

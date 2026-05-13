@@ -15,6 +15,19 @@ extension AppEnhancementSettingsView {
                         Text(AppLocalization.localizedString("Tip: Drag resources into groups below."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        Button {
+                            refreshApps()
+                            withAnimation(.linear(duration: 0.5)) {
+                                appsRefreshRotation += 360
+                            }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .rotationEffect(.degrees(appsRefreshRotation))
+                        }
+                        .buttonStyle(SettingsCompactIconButtonStyle(size: 24))
+                        .help(AppLocalization.localizedString("Refresh Apps"))
+                        .accessibilityLabel(AppLocalization.localizedString("Refresh Apps"))
                     } else if sourceTab == .urls {
                         Button(AppLocalization.localizedString("Add")) {
                             urlDraft = ""

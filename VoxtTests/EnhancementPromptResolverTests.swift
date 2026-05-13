@@ -52,11 +52,11 @@ final class EnhancementPromptResolverTests: XCTestCase {
         XCTAssertEqual(output.source, .globalDefault(.appBranchDisabled))
     }
 
-    func testBrowserURLMatchUsesGroupPromptAndUserMessageDelivery() {
+    func testBrowserURLMatchUsesGroupPromptAndSystemPromptDelivery() {
         let docsID = UUID()
         let docsGroup = TestFactories.makeAppBranchGroup(
             name: "Docs",
-            prompt: "Docs {{RAW_TRANSCRIPTION}} {{USER_MAIN_LANGUAGE}}",
+            prompt: "Docs for {{USER_MAIN_LANGUAGE}}",
             urlPatternIDs: [docsID]
         )
 
@@ -77,10 +77,10 @@ final class EnhancementPromptResolverTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(output.delivery, .userMessage)
+        XCTAssertEqual(output.delivery, .systemPrompt)
         XCTAssertEqual(output.promptContext.matchedGroupID, docsGroup.id)
         XCTAssertEqual(output.promptContext.matchedURLGroupName, "Docs")
-        XCTAssertContains(output.content, "Docs fix this English")
+        XCTAssertContains(output.content, "Docs for English")
         XCTAssertContains(output.content, "Other user languages: Chinese.")
     }
 
@@ -110,7 +110,7 @@ final class EnhancementPromptResolverTests: XCTestCase {
     func testAppGroupMatchUsesAppPrompt() {
         let group = TestFactories.makeAppBranchGroup(
             name: "Xcode",
-            prompt: "Xcode {{RAW_TRANSCRIPTION}}",
+            prompt: "Xcode cleanup",
             appBundleIDs: ["com.apple.dt.Xcode"]
         )
 
@@ -131,9 +131,9 @@ final class EnhancementPromptResolverTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(output.delivery, .userMessage)
+        XCTAssertEqual(output.delivery, .systemPrompt)
         XCTAssertEqual(output.promptContext.matchedAppGroupName, "Xcode")
-        XCTAssertContains(output.content, "Xcode rewrite")
+        XCTAssertContains(output.content, "Xcode cleanup")
     }
 
     func testAppGroupWithEmptyPromptSkipsEnhancementButKeepsMatchedContext() {
@@ -232,7 +232,7 @@ final class EnhancementPromptResolverTests: XCTestCase {
     func testAppGroupPromptAlsoAppendsLanguagePreservationRules() {
         let group = TestFactories.makeAppBranchGroup(
             name: "Docs",
-            prompt: "Docs {{RAW_TRANSCRIPTION}}",
+            prompt: "Docs cleanup",
             appBundleIDs: ["com.example.docs"]
         )
 
@@ -253,7 +253,8 @@ final class EnhancementPromptResolverTests: XCTestCase {
             )
         )
 
-        XCTAssertContains(output.content, "Docs bonjour")
+        XCTAssertEqual(output.delivery, .systemPrompt)
+        XCTAssertContains(output.content, "Docs cleanup")
         XCTAssertContains(output.content, "Other user languages: None.")
         XCTAssertContains(output.content, "It is guidance only, not a translation target.")
     }

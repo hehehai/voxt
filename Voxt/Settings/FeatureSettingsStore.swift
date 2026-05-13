@@ -29,6 +29,7 @@ enum FeatureSettingsStore {
            let raw = String(data: data, encoding: .utf8) {
             defaults.set(raw, forKey: AppPreferenceKey.featureSettings)
         }
+        defaults.set(storageReady.rewrite.appEnhancementEnabled, forKey: AppPreferenceKey.appEnhancementEnabled)
         NotificationCenter.default.post(name: .voxtFeatureSettingsDidChange, object: nil)
     }
 

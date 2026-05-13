@@ -12,6 +12,7 @@ struct AppEnhancementSettingsView: View {
     @State var sourceTab: SourceTab = .apps
     @State var draggingAppID: String?
     @State var hoveredCardID: String?
+    @State var appsRefreshRotation = 0.0
 
     @State var modal: AppBranchModal?
     @State var groupNameDraft = ""

@@ -45,11 +45,8 @@ enum LLMExecutionPlanCompiler {
         switch task {
         case .enhancement(let rawText):
             return """
-            Clean this ASR transcription conservatively.
-            Preserve the original wording when it is semantically plausible.
-            Do not replace plausible words or phrases with synonyms just because they sound more natural.
-            Do not guess replacements for ambiguous or merely awkward wording.
-            Fix only obvious ASR, punctuation, spacing, and casing issues.
+            Process this ASR transcription according to the system instructions.
+            Return only the final processed text.
             Input:
             \(rawText)
             """

@@ -114,6 +114,7 @@ struct SettingsCompactActionButtonStyle: ButtonStyle {
 
 struct SettingsCompactIconButtonStyle: ButtonStyle {
     var tone: SettingsCompactActionButtonStyle.Tone = .neutral
+    var size: CGFloat = 28
 
     func makeBody(configuration: Configuration) -> some View {
         let foreground: Color = tone == .destructive ? .red : .secondary
@@ -125,7 +126,7 @@ struct SettingsCompactIconButtonStyle: ButtonStyle {
         return configuration.label
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(foreground)
-            .frame(width: 28, height: 28)
+            .frame(width: size, height: size)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(fill)

@@ -26,7 +26,12 @@ enum ModelSettingsPromptVariables {
 
     static let rewrite: [PromptTemplateVariableDescriptor] = []
 
-    static let appEnhancement: [PromptTemplateVariableDescriptor] = []
+    static let appEnhancement = [
+        PromptTemplateVariableDescriptor(
+            token: AppDelegate.userMainLanguageTemplateVariable,
+            tipKey: "Template tip {{USER_MAIN_LANGUAGE}}"
+        )
+    ]
 }
 
 enum PromptAuthoringGuidance {
@@ -45,7 +50,7 @@ enum PromptAuthoringGuidance {
     )
 
     static let appEnhancement = AppLocalization.localizedString(
-        "Recommended: describe only app-specific tone or formatting preferences. Do not paste raw transcription unless you intentionally need compatibility template behavior."
+        "Recommended: describe only app-specific tone or formatting preferences. Do not paste raw transcription here. Voxt injects the transcription automatically."
     )
 }
 

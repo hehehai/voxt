@@ -65,4 +65,20 @@ final class FeatureSettingsStoreTests: XCTestCase {
             XCTAssertEqual(reloaded, settings)
         }
     }
+
+    func testSaveSyncsLegacyAppEnhancementFlagForMenuVisibility() throws {
+        try withEphemeralDefaults { defaults in
+            var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+            settings.rewrite.appEnhancementEnabled = true
+
+            FeatureSettingsStore.save(settings, defaults: defaults)
+
+            XCTAssertTrue(defaults.bool(forKey: AppPreferenceKey.appEnhancementEnabled))
+
+            settings.rewrite.appEnhancementEnabled = false
+            FeatureSettingsStore.save(settings, defaults: defaults)
+
+            XCTAssertFalse(defaults.bool(forKey: AppPreferenceKey.appEnhancementEnabled))
+        }
+    }
 }
