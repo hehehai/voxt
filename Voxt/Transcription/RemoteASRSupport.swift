@@ -54,6 +54,27 @@ enum AliyunQwenRealtimePayloadSupport {
 }
 
 enum RemoteASRTextSupport {
+    static func openAITranscriptionMultipartFields(
+        model: String,
+        hintPayload: ResolvedASRHintPayload
+    ) -> [String: String] {
+        let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? RemoteASRProvider.openAIWhisper.suggestedModel
+            : model
+        var fields: [String: String] = [
+            "response_format": "json"
+        ]
+        if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
+            fields["language"] = language
+        }
+        if effectiveModel != "gpt-4o-transcribe-diarize",
+           let prompt = hintPayload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            fields["prompt"] = prompt
+        }
+        return fields
+    }
+
     static func extractTextFragment(fromLine line: String) -> String? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

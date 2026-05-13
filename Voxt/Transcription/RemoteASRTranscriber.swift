@@ -583,18 +583,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? RemoteASRProvider.openAIWhisper.suggestedModel
             : model
-        var extraFields: [String: String] = [
-            "response_format": "json",
-            "stream": "false"
-        ]
-        if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
-            extraFields["language"] = language
-        }
-        if effectiveModel != "gpt-4o-transcribe-diarize",
-           let prompt = hintPayload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !prompt.isEmpty {
-            extraFields["prompt"] = prompt
-        }
+        let extraFields = RemoteASRTextSupport.openAITranscriptionMultipartFields(
+            model: effectiveModel,
+            hintPayload: hintPayload
+        )
         let body = try makeMultipartBody(
             fileURL: fileURL,
             boundary: boundary,
