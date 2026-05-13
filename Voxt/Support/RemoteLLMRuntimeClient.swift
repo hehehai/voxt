@@ -640,7 +640,37 @@ struct RemoteLLMRuntimeClient {
         }
 
         let decodeStartedAt = Date()
-        let object = try JSONSerialization.jsonObject(with: data)
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            if let nonJSONContent = extractResponsesNonJSONText(from: data, response: http) {
+                let decodeElapsedMs = Int(Date().timeIntervalSince(decodeStartedAt) * 1000)
+                let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
+                let guardedContent = guardRepeatedOutputIfNeeded(
+                    nonJSONContent,
+                    provider: provider,
+                    endpointValue: endpointValue,
+                    context: "Responses non-JSON response"
+                )
+                VoxtLog.llm(
+                    "Remote LLM Responses non-JSON response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs), contentType=\(http.value(forHTTPHeaderField: "Content-Type") ?? "unknown")"
+                )
+                VoxtLog.llm(
+                    """
+                    Remote LLM Responses non-JSON content. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode)
+                    [output]
+                    \(VoxtLog.llmPreview(guardedContent))
+                    """
+                )
+                return ResponsesStreamingResult(text: guardedContent, responseID: nil)
+            }
+            let payloadPreview = String(data: data.prefix(1200), encoding: .utf8) ?? "<non-utf8>"
+            VoxtLog.warning(
+                "Remote LLM Responses response is not valid JSON. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payload=\(VoxtLog.llmPreview(payloadPreview)), detail=\(error.localizedDescription)"
+            )
+            throw error
+        }
         let decodeElapsedMs = Int(Date().timeIntervalSince(decodeStartedAt) * 1000)
         let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
 

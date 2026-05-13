@@ -99,7 +99,10 @@ extension RemoteLLMRuntimeClient {
         request.httpMethod = "POST"
         request.timeoutInterval = requestTimeoutInterval(for: provider)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("text/event-stream, application/json", forHTTPHeaderField: "Accept")
+        request.setValue(
+            streamingEnabled ? "text/event-stream, application/json" : "application/json",
+            forHTTPHeaderField: "Accept"
+        )
 
         let apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !apiKey.isEmpty {

@@ -575,6 +575,92 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(format["type"] as? String, "json_object")
     }
 
+    func testMakeResponsesRequestUsesJSONAcceptHeaderWhenNonStreaming() throws {
+        let client = RemoteLLMRuntimeClient()
+        let request = try client.makeResponsesRequest(
+            provider: .openAI,
+            endpointValue: "https://api.openai.com/v1/responses",
+            model: "gpt-5.2",
+            systemPrompt: "",
+            inputPayload: "ping",
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.openAI.rawValue,
+                model: "gpt-5.2",
+                endpoint: "",
+                apiKey: "test-key"
+            ),
+            previousResponseID: nil,
+            tuning: .init(maxTokens: 512, temperature: 0.2, topP: 0.9),
+            textFormat: nil,
+            streamingEnabled: false
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+    }
+
+    func testMakeResponsesRequestUsesEventStreamAcceptHeaderWhenStreaming() throws {
+        let client = RemoteLLMRuntimeClient()
+        let request = try client.makeResponsesRequest(
+            provider: .openAI,
+            endpointValue: "https://api.openai.com/v1/responses",
+            model: "gpt-5.2",
+            systemPrompt: "",
+            inputPayload: "ping",
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.openAI.rawValue,
+                model: "gpt-5.2",
+                endpoint: "",
+                apiKey: "test-key"
+            ),
+            previousResponseID: nil,
+            tuning: .init(maxTokens: 512, temperature: 0.2, topP: 0.9),
+            textFormat: nil,
+            streamingEnabled: true
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/event-stream, application/json")
+    }
+
+    func testExtractResponsesNonJSONTextAcceptsEventStreamBody() throws {
+        let client = RemoteLLMRuntimeClient()
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://api.openai.com/v1/responses")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/event-stream"]
+        ))
+        let stream = """
+        event: response.output_text.delta
+        data: {"type":"response.output_text.delta","delta":"你好"}
+
+        event: response.output_text.delta
+        data: {"type":"response.output_text.delta","delta":"，世界"}
+
+        data: [DONE]
+
+        """
+
+        XCTAssertEqual(
+            client.extractResponsesNonJSONText(from: Data(stream.utf8), response: response),
+            "你好，世界"
+        )
+    }
+
+    func testExtractResponsesNonJSONTextAcceptsPlainTextBody() throws {
+        let client = RemoteLLMRuntimeClient()
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://api.openai.com/v1/responses")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+        ))
+
+        XCTAssertEqual(
+            client.extractResponsesNonJSONText(from: Data("优化后的文本".utf8), response: response),
+            "优化后的文本"
+        )
+    }
+
     func testMakeResponsesRequestFiltersOpenAIOptionsByModelFamily() throws {
         let client = RemoteLLMRuntimeClient()
         let request = try client.makeResponsesRequest(

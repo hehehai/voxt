@@ -135,6 +135,86 @@ extension RemoteLLMRuntimeClient {
         return nil
     }
 
+    func extractResponsesNonJSONText(from data: Data, response: HTTPURLResponse) -> String? {
+        guard let rawText = String(data: data, encoding: .utf8) else { return nil }
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let contentType = response.value(forHTTPHeaderField: "Content-Type")?
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if contentType.contains("text/event-stream") || trimmed.hasPrefix("data:") || trimmed.hasPrefix("event:") {
+            return extractResponsesTextFromEventStream(trimmed)
+        }
+
+        guard contentType.contains("text/plain") || contentType.isEmpty else { return nil }
+        guard !trimmed.hasPrefix("<") else { return nil }
+        return trimmed
+    }
+
+    func extractResponsesTextFromEventStream(_ streamText: String) -> String? {
+        var aggregated = ""
+        var bufferedEventLines: [String] = []
+
+        func publish(_ chunkPayload: String) {
+            let trimmed = chunkPayload.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed != "[DONE]" else { return }
+
+            if let data = trimmed.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let delta = responsesStreamingDelta(from: object), !delta.isEmpty {
+                    let eventType = object["type"] as? String
+                    if eventType == "response.output_text.delta" {
+                        aggregated.append(delta)
+                    } else {
+                        aggregated = mergedStreamingSnapshot(current: aggregated, next: delta)
+                    }
+                } else if let snapshot = extractPrimaryText(from: object), !snapshot.isEmpty {
+                    aggregated = mergedStreamingSnapshot(current: aggregated, next: snapshot)
+                }
+            } else {
+                aggregated = mergedStreamingSnapshot(current: aggregated, next: trimmed)
+            }
+        }
+
+        for rawLine in streamText.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .newlines)
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if trimmedLine.isEmpty {
+                if !bufferedEventLines.isEmpty {
+                    publish(bufferedEventLines.joined(separator: "\n"))
+                    bufferedEventLines.removeAll(keepingCapacity: true)
+                }
+                continue
+            }
+
+            if trimmedLine.hasPrefix(":") ||
+                trimmedLine.hasPrefix("event:") ||
+                trimmedLine.hasPrefix("id:") ||
+                trimmedLine.hasPrefix("retry:") {
+                continue
+            }
+
+            if trimmedLine.hasPrefix("data:") {
+                var payload = String(trimmedLine.dropFirst(5))
+                if payload.hasPrefix(" ") {
+                    payload.removeFirst()
+                }
+                bufferedEventLines.append(payload)
+            } else {
+                bufferedEventLines.append(trimmedLine)
+            }
+        }
+
+        if !bufferedEventLines.isEmpty {
+            publish(bufferedEventLines.joined(separator: "\n"))
+        }
+
+        let trimmedOutput = aggregated.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedOutput.isEmpty ? nil : trimmedOutput
+    }
+
     func mergedStreamingSnapshot(current: String, next: String) -> String {
         let trimmedNext = next.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedNext.isEmpty else { return current }
