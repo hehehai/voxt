@@ -242,6 +242,19 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         )
     }
 
+    func testOpenAISheetValidationRejectsInvalidMaxOutputTokens() {
+        let sheet = makeSheet(
+            target: .llm(.openAI),
+            model: "gpt-5.5"
+        )
+
+        XCTAssertEqual(
+            sheet.validationMessageForOpenAISettings(maxOutputTokensText: "0"),
+            AppLocalization.localizedString("Max Output Tokens must be a positive integer.")
+        )
+        XCTAssertNil(sheet.validationMessageForOpenAISettings(maxOutputTokensText: "4096"))
+    }
+
     func testSelectingCustomProviderModelPrefillsCurrentBuiltinModel() {
         let customModelID = RemoteProviderConfigurationPolicy.nextCustomModelID(
             previousResolvedModel: "gpt-4o-transcribe",

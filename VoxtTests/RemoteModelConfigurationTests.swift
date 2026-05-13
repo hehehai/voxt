@@ -169,7 +169,10 @@ final class RemoteModelConfigurationTests: XCTestCase {
                 providerID: RemoteLLMProvider.openAI.rawValue,
                 model: "gpt-5.5",
                 endpoint: "https://example.com/llm",
-                apiKey: "secret"
+                apiKey: "secret",
+                openAIReasoningEffort: OpenAIReasoningEffort.high.rawValue,
+                openAITextVerbosity: OpenAITextVerbosity.low.rawValue,
+                openAIMaxOutputTokens: 4096
             )
         ]
 

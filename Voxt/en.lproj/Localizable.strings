@@ -1480,3 +1480,13 @@
 "Choose whether transcription enhancement should prioritize first-result speed or preserve more glossary context." = "Choose whether transcription enhancement should prioritize first-result speed or preserve more glossary context.";
 "Use a smaller context budget for faster translations or keep more context for higher-quality output." = "Use a smaller context budget for faster translations or keep more context for higher-quality output.";
 "Reduce follow-up context for faster replies or keep more conversation history for better continuity." = "Reduce follow-up context for faster replies or keep more conversation history for better continuity.";
+"OpenAI Options" = "OpenAI Options";
+"None" = "None";
+"Minimal" = "Minimal";
+"Extra High" = "Extra High";
+"Verbosity" = "Verbosity";
+"Max Output Tokens (Optional)" = "Max Output Tokens (Optional)";
+"e.g. 4096" = "e.g. 4096";
+"Maps to OpenAI reasoning.effort. Leave Default to use the model default; unsupported levels may be rejected by some models." = "Maps to OpenAI reasoning.effort. Leave Default to use the model default; unsupported levels may be rejected by some models.";
+"Overrides Voxt's task token budget for OpenAI Responses, including visible output and reasoning tokens." = "Overrides Voxt's task token budget for OpenAI Responses, including visible output and reasoning tokens.";
+"Max Output Tokens must be a positive integer." = "Max Output Tokens must be a positive integer.";

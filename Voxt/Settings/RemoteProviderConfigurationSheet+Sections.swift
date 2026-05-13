@@ -177,6 +177,55 @@ extension RemoteProviderConfigurationSheet {
         }
     }
 
+    var openAILLMConfigurationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(AppLocalization.localizedString("OpenAI Options"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(AppLocalization.localizedString("Think"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                SettingsMenuPicker(
+                    selection: $openAIReasoningEffort,
+                    options: openAIReasoningEffortMenuOptions,
+                    selectedTitle: openAIReasoningEffortSelectedTitle,
+                    width: 240
+                )
+                Text(AppLocalization.localizedString("Maps to OpenAI reasoning.effort. Leave Default to use the model default; unsupported levels may be rejected by some models."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(AppLocalization.localizedString("Verbosity"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                SettingsMenuPicker(
+                    selection: $openAITextVerbosity,
+                    options: openAITextVerbosityMenuOptions,
+                    selectedTitle: openAITextVerbositySelectedTitle,
+                    width: 240
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(AppLocalization.localizedString("Max Output Tokens (Optional)"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField(AppLocalization.localizedString("e.g. 4096"), text: $openAIMaxOutputTokensText)
+                    .textFieldStyle(.plain)
+                    .settingsFieldSurface(width: 140, minHeight: 34)
+                Text(AppLocalization.localizedString("Overrides Voxt's task token budget for OpenAI Responses, including visible output and reasoning tokens."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     var ollamaConfigurationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(AppLocalization.localizedString("Ollama Options"))

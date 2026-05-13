@@ -21,6 +21,9 @@ struct RemoteProviderConfigurationSheet: View {
     @State var accessToken = ""
     @State var searchEnabled = false
     @State var openAIChunkPseudoRealtimeEnabled = false
+    @State var openAIReasoningEffort = OpenAIReasoningEffort.automatic.rawValue
+    @State var openAITextVerbosity = OpenAITextVerbosity.automatic.rawValue
+    @State var openAIMaxOutputTokensText = ""
     @State var doubaoDictionaryMode = DoubaoDictionaryMode.requestScoped.rawValue
     @State var doubaoEnableRequestHotwords = true
     @State var doubaoEnableRequestCorrections = true
@@ -66,6 +69,10 @@ struct RemoteProviderConfigurationSheet: View {
 
                     if showsSearchSection {
                         searchSection
+                    }
+
+                    if isOpenAILLMProvider {
+                        openAILLMConfigurationSection
                     }
 
                     if isOllamaLLMProvider {
@@ -124,6 +131,9 @@ struct RemoteProviderConfigurationSheet: View {
             accessToken = configuration.accessToken
             searchEnabled = configuration.searchEnabled
             openAIChunkPseudoRealtimeEnabled = configuration.openAIChunkPseudoRealtimeEnabled
+            openAIReasoningEffort = configuration.openAIReasoningEffort
+            openAITextVerbosity = configuration.openAITextVerbosity
+            openAIMaxOutputTokensText = configuration.openAIMaxOutputTokens.map(String.init) ?? ""
             doubaoDictionaryMode = configuration.doubaoDictionaryMode
             doubaoEnableRequestHotwords = configuration.doubaoEnableRequestHotwords
             doubaoEnableRequestCorrections = configuration.doubaoEnableRequestCorrections

@@ -1482,3 +1482,13 @@
 "Choose whether transcription enhancement should prioritize first-result speed or preserve more glossary context." = "选择让转录增强优先更快给出首个结果，还是保留更多词汇表上下文。";
 "Use a smaller context budget for faster translations or keep more context for higher-quality output." = "选择使用更小的上下文预算以加快翻译，或保留更多上下文以提升输出质量。";
 "Reduce follow-up context for faster replies or keep more conversation history for better continuity." = "选择减少追问上下文以更快回复，或保留更多对话历史以获得更好的连续性。";
+"OpenAI Options" = "OpenAI 选项";
+"None" = "无";
+"Minimal" = "极低";
+"Extra High" = "超高";
+"Verbosity" = "详略程度";
+"Max Output Tokens (Optional)" = "最大输出 Tokens（可选）";
+"e.g. 4096" = "例如 4096";
+"Maps to OpenAI reasoning.effort. Leave Default to use the model default; unsupported levels may be rejected by some models." = "对应 OpenAI reasoning.effort。保持默认则使用模型默认值；部分模型可能会拒绝不支持的档位。";
+"Overrides Voxt's task token budget for OpenAI Responses, including visible output and reasoning tokens." = "覆盖 Voxt 为 OpenAI Responses 生成的任务 token 预算，包含可见输出和 reasoning tokens。";
+"Max Output Tokens must be a positive integer." = "最大输出 Tokens 必须是正整数。";

@@ -534,6 +534,76 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(tools.first?["type"] as? String, "web_search")
     }
 
+    func testMakeResponsesRequestAppliesOpenAIOptions() throws {
+        let client = RemoteLLMRuntimeClient()
+        let request = try client.makeResponsesRequest(
+            provider: .openAI,
+            endpointValue: "https://api.openai.com/v1/responses",
+            model: "gpt-5.5",
+            systemPrompt: "",
+            inputPayload: "ping",
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.openAI.rawValue,
+                model: "gpt-5.5",
+                endpoint: "",
+                apiKey: "test-key",
+                openAIReasoningEffort: OpenAIReasoningEffort.high.rawValue,
+                openAITextVerbosity: OpenAITextVerbosity.low.rawValue,
+                openAIMaxOutputTokens: 2048
+            ),
+            previousResponseID: nil,
+            tuning: .init(maxTokens: 512, temperature: 0.2, topP: 0.9),
+            textFormat: [
+                "format": [
+                    "type": "json_object"
+                ]
+            ],
+            streamingEnabled: false
+        )
+
+        let body = try XCTUnwrap(request.httpBody)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let reasoning = try XCTUnwrap(object["reasoning"] as? [String: Any])
+        let text = try XCTUnwrap(object["text"] as? [String: Any])
+        let format = try XCTUnwrap(text["format"] as? [String: Any])
+
+        XCTAssertEqual(object["max_output_tokens"] as? Int, 2048)
+        XCTAssertEqual(reasoning["effort"] as? String, "high")
+        XCTAssertEqual(text["verbosity"] as? String, "low")
+        XCTAssertEqual(format["type"] as? String, "json_object")
+    }
+
+    func testMakeResponsesRequestDoesNotApplyOpenAIOptionsToCompatibleProviders() throws {
+        let client = RemoteLLMRuntimeClient()
+        let request = try client.makeResponsesRequest(
+            provider: .aliyunBailian,
+            endpointValue: "https://dashscope.aliyuncs.com/compatible-mode/v1/responses",
+            model: "qwen-plus",
+            systemPrompt: "",
+            inputPayload: "ping",
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.aliyunBailian.rawValue,
+                model: "qwen-plus",
+                endpoint: "",
+                apiKey: "test-key",
+                openAIReasoningEffort: OpenAIReasoningEffort.high.rawValue,
+                openAITextVerbosity: OpenAITextVerbosity.low.rawValue,
+                openAIMaxOutputTokens: 2048
+            ),
+            previousResponseID: nil,
+            tuning: .init(maxTokens: 512, temperature: 0.2, topP: 0.9),
+            textFormat: nil,
+            streamingEnabled: false
+        )
+
+        let body = try XCTUnwrap(request.httpBody)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        XCTAssertEqual(object["max_output_tokens"] as? Int, 512)
+        XCTAssertNil(object["reasoning"])
+        XCTAssertNil(object["text"])
+    }
+
     func testOpenAICompatiblePayloadOmitsResponseFormatByDefault() {
         let client = RemoteLLMRuntimeClient()
 

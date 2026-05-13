@@ -106,10 +106,17 @@ extension RemoteLLMRuntimeClient {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
+        let maxOutputTokens: Int
+        if provider == .openAI, let configuredMaxOutputTokens = configuration.openAIMaxOutputTokens, configuredMaxOutputTokens > 0 {
+            maxOutputTokens = configuredMaxOutputTokens
+        } else {
+            maxOutputTokens = tuning.maxTokens
+        }
+
         var payload: [String: Any] = [
             "model": model,
             "stream": streamingEnabled,
-            "max_output_tokens": tuning.maxTokens,
+            "max_output_tokens": maxOutputTokens,
             "temperature": tuning.temperature,
             "top_p": tuning.topP
         ]
@@ -127,8 +134,28 @@ extension RemoteLLMRuntimeClient {
             payload["input"] = inputPayload
         }
 
-        if let textFormat {
-            payload["text"] = textFormat
+        if provider == .openAI {
+            switch configuration.openAIReasoningEffortValue {
+            case .automatic:
+                break
+            case .none, .minimal, .low, .medium, .high, .xhigh:
+                payload["reasoning"] = [
+                    "effort": configuration.openAIReasoningEffortValue.rawValue
+                ]
+            }
+        }
+
+        var textPayload = textFormat ?? [:]
+        if provider == .openAI {
+            switch configuration.openAITextVerbosityValue {
+            case .automatic:
+                break
+            case .low, .medium, .high:
+                textPayload["verbosity"] = configuration.openAITextVerbosityValue.rawValue
+            }
+        }
+        if !textPayload.isEmpty {
+            payload["text"] = textPayload
         }
 
         if configuration.searchEnabled && provider.supportsHostedSearch {

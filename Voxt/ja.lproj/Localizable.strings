@@ -1424,3 +1424,14 @@
 "Choose whether transcription enhancement should prioritize first-result speed or preserve more glossary context." = "文字起こし補正で、最初の結果の速さを優先するか、用語集コンテキストをより多く保持するかを選択します。";
 "Use a smaller context budget for faster translations or keep more context for higher-quality output." = "翻訳を速くするために小さい文脈予算を使うか、より高品質な出力のために多くの文脈を保持するかを選択します。";
 "Reduce follow-up context for faster replies or keep more conversation history for better continuity." = "応答を速くするために追加入力の文脈を減らすか、より自然な継続性のために会話履歴を多く保持するかを選択します。";
+"OpenAI Options" = "OpenAI オプション";
+"None" = "なし";
+"Minimal" = "最小";
+"Medium" = "中";
+"Extra High" = "最大";
+"Verbosity" = "詳細度";
+"Max Output Tokens (Optional)" = "最大出力トークン（任意）";
+"e.g. 4096" = "例: 4096";
+"Maps to OpenAI reasoning.effort. Leave Default to use the model default; unsupported levels may be rejected by some models." = "OpenAI reasoning.effort に対応します。既定のままならモデル既定値を使います。未対応のレベルはモデルによって拒否される場合があります。";
+"Overrides Voxt's task token budget for OpenAI Responses, including visible output and reasoning tokens." = "OpenAI Responses 向けに Voxt が生成するタスクのトークン予算を上書きします。表示出力と reasoning tokens を含みます。";
+"Max Output Tokens must be a positive integer." = "最大出力トークンは正の整数である必要があります。";

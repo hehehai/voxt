@@ -9,6 +9,9 @@ struct SanitizedRemoteProviderConfiguration: Codable {
     var accessToken: String
     var searchEnabled: Bool
     var openAIChunkPseudoRealtimeEnabled: Bool
+    var openAIReasoningEffort: String
+    var openAITextVerbosity: String
+    var openAIMaxOutputTokens: Int?
     var doubaoDictionaryMode: String
     var doubaoEnableRequestHotwords: Bool
     var doubaoEnableRequestCorrections: Bool
@@ -33,6 +36,9 @@ struct SanitizedRemoteProviderConfiguration: Codable {
         case accessToken
         case searchEnabled
         case openAIChunkPseudoRealtimeEnabled
+        case openAIReasoningEffort
+        case openAITextVerbosity
+        case openAIMaxOutputTokens
         case doubaoDictionaryMode
         case doubaoEnableRequestHotwords
         case doubaoEnableRequestCorrections
@@ -58,6 +64,9 @@ struct SanitizedRemoteProviderConfiguration: Codable {
         accessToken: String,
         searchEnabled: Bool,
         openAIChunkPseudoRealtimeEnabled: Bool,
+        openAIReasoningEffort: String,
+        openAITextVerbosity: String,
+        openAIMaxOutputTokens: Int?,
         doubaoDictionaryMode: String,
         doubaoEnableRequestHotwords: Bool,
         doubaoEnableRequestCorrections: Bool,
@@ -81,6 +90,9 @@ struct SanitizedRemoteProviderConfiguration: Codable {
         self.accessToken = accessToken
         self.searchEnabled = searchEnabled
         self.openAIChunkPseudoRealtimeEnabled = openAIChunkPseudoRealtimeEnabled
+        self.openAIReasoningEffort = openAIReasoningEffort
+        self.openAITextVerbosity = openAITextVerbosity
+        self.openAIMaxOutputTokens = openAIMaxOutputTokens
         self.doubaoDictionaryMode = doubaoDictionaryMode
         self.doubaoEnableRequestHotwords = doubaoEnableRequestHotwords
         self.doubaoEnableRequestCorrections = doubaoEnableRequestCorrections
@@ -108,6 +120,9 @@ struct SanitizedRemoteProviderConfiguration: Codable {
         let defaultSearchEnabled = RemoteLLMProvider(rawValue: providerID)?.defaultSearchEnabled ?? false
         searchEnabled = try container.decodeIfPresent(Bool.self, forKey: .searchEnabled) ?? defaultSearchEnabled
         openAIChunkPseudoRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .openAIChunkPseudoRealtimeEnabled) ?? false
+        openAIReasoningEffort = try container.decodeIfPresent(String.self, forKey: .openAIReasoningEffort) ?? OpenAIReasoningEffort.automatic.rawValue
+        openAITextVerbosity = try container.decodeIfPresent(String.self, forKey: .openAITextVerbosity) ?? OpenAITextVerbosity.automatic.rawValue
+        openAIMaxOutputTokens = try container.decodeIfPresent(Int.self, forKey: .openAIMaxOutputTokens)
         doubaoDictionaryMode = try container.decodeIfPresent(String.self, forKey: .doubaoDictionaryMode) ?? DoubaoDictionaryMode.requestScoped.rawValue
         doubaoEnableRequestHotwords = try container.decodeIfPresent(Bool.self, forKey: .doubaoEnableRequestHotwords) ?? true
         doubaoEnableRequestCorrections = try container.decodeIfPresent(Bool.self, forKey: .doubaoEnableRequestCorrections) ?? true
@@ -138,6 +153,9 @@ extension ConfigurationTransferManager {
                 accessToken: sanitizeSensitive($0.accessToken),
                 searchEnabled: $0.searchEnabled,
                 openAIChunkPseudoRealtimeEnabled: $0.openAIChunkPseudoRealtimeEnabled,
+                openAIReasoningEffort: $0.openAIReasoningEffort,
+                openAITextVerbosity: $0.openAITextVerbosity,
+                openAIMaxOutputTokens: $0.openAIMaxOutputTokens,
                 doubaoDictionaryMode: $0.doubaoDictionaryMode,
                 doubaoEnableRequestHotwords: $0.doubaoEnableRequestHotwords,
                 doubaoEnableRequestCorrections: $0.doubaoEnableRequestCorrections,
@@ -169,6 +187,9 @@ extension ConfigurationTransferManager {
                     accessToken: resolveImportedSensitive(item.accessToken),
                     searchEnabled: item.searchEnabled,
                     openAIChunkPseudoRealtimeEnabled: item.openAIChunkPseudoRealtimeEnabled,
+                    openAIReasoningEffort: item.openAIReasoningEffort,
+                    openAITextVerbosity: item.openAITextVerbosity,
+                    openAIMaxOutputTokens: item.openAIMaxOutputTokens,
                     doubaoDictionaryMode: item.doubaoDictionaryMode,
                     doubaoEnableRequestHotwords: item.doubaoEnableRequestHotwords,
                     doubaoEnableRequestCorrections: item.doubaoEnableRequestCorrections,
