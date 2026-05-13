@@ -175,6 +175,28 @@ enum RemoteProviderConfigurationPolicy {
         }
     }
 
+    static func endpointPlaceholder(target: RemoteProviderTestTarget, resolvedModel: String) -> String {
+        switch target {
+        case .asr(let provider):
+            switch provider {
+            case .openAIWhisper:
+                return "https://api.openai.com/v1/audio/transcriptions"
+            case .glmASR:
+                return "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
+            case .aliyunBailianASR:
+                return endpointPresets(target: target, resolvedModel: resolvedModel).first?.url ?? "https://..."
+            case .doubaoASR:
+                return "https://..."
+            }
+        case .llm(let provider):
+            return RemoteLLMRuntimeClient().resolvedLLMEndpoint(
+                provider: provider,
+                endpoint: "",
+                model: resolvedModel
+            )
+        }
+    }
+
     static func remappedEndpointOnModelChange(
         target: RemoteProviderTestTarget,
         previousModel: String,

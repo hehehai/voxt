@@ -74,7 +74,7 @@ extension RemoteProviderConfigurationSheet {
                 Text(AppLocalization.localizedString("Endpoint (Optional)"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                TextField(AppLocalization.localizedString("https://..."), text: $endpoint)
+                TextField(endpointFieldPlaceholder, text: $endpoint)
                     .textFieldStyle(.plain)
                     .settingsFieldSurface(minHeight: 34)
                 if !endpointPresets.isEmpty {

@@ -287,6 +287,13 @@ extension RemoteProviderConfigurationSheet {
         }
     }
 
+    var endpointFieldPlaceholder: String {
+        RemoteProviderConfigurationPolicy.endpointPlaceholder(
+            target: testTarget,
+            resolvedModel: resolvedModelValue()
+        )
+    }
+
     func testConnection() {
         guard let snapshot = validatedCurrentConfigurationSnapshot() else { return }
         runConnectionTest(for: testTarget, modelForLog: snapshot.model, snapshot: snapshot)

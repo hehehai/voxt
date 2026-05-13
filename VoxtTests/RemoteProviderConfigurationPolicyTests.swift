@@ -337,6 +337,23 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         )
     }
 
+    func testEndpointPlaceholderShowsResolvedProviderDefault() {
+        XCTAssertEqual(
+            RemoteProviderConfigurationPolicy.endpointPlaceholder(
+                target: .llm(.openAI),
+                resolvedModel: "gpt-5.5"
+            ),
+            "https://api.openai.com/v1/responses"
+        )
+        XCTAssertEqual(
+            RemoteProviderConfigurationPolicy.endpointPlaceholder(
+                target: .asr(.openAIWhisper),
+                resolvedModel: "gpt-4o-mini-transcribe"
+            ),
+            "https://api.openai.com/v1/audio/transcriptions"
+        )
+    }
+
     func testAliyunASREndpointRemapsRegionWhenSwitchingModelFamilies() {
         let endpoint = RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
             target: .asr(.aliyunBailianASR),
