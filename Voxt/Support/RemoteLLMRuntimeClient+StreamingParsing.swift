@@ -135,84 +135,56 @@ extension RemoteLLMRuntimeClient {
         return nil
     }
 
-    func extractResponsesNonJSONText(from data: Data, response: HTTPURLResponse) -> String? {
-        guard let rawText = String(data: data, encoding: .utf8) else { return nil }
-        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+    func decodeResponsesObject(from data: Data, response: HTTPURLResponse) throws -> [String: Any] {
+        do {
+            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw responsesDecodeError(
+                    data: data,
+                    response: response,
+                    fallbackDetail: "Responses API returned JSON that is not an object."
+                )
+            }
+            return object
+        } catch let error as NSError where error.domain == "Voxt.RemoteLLM" {
+            throw error
+        } catch {
+            throw responsesDecodeError(
+                data: data,
+                response: response,
+                fallbackDetail: error.localizedDescription
+            )
+        }
+    }
 
+    private func responsesDecodeError(
+        data: Data,
+        response: HTTPURLResponse,
+        fallbackDetail: String
+    ) -> NSError {
         let contentType = response.value(forHTTPHeaderField: "Content-Type")?
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if contentType.contains("text/event-stream") || trimmed.hasPrefix("data:") || trimmed.hasPrefix("event:") {
-            return extractResponsesTextFromEventStream(trimmed)
+        let preview = String(data: data.prefix(1200), encoding: .utf8) ?? "<non-utf8>"
+        let trimmedPreview = preview.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        let message: String
+        if contentType.contains("text/html") ||
+            trimmedPreview.hasPrefix("<!doctype html") ||
+            trimmedPreview.hasPrefix("<html") {
+            message = "Remote LLM Responses endpoint returned HTML instead of JSON. Check the endpoint URL; it must be an API route compatible with OpenAI Responses, not a gateway console or web page."
+        } else if contentType.contains("text/event-stream") ||
+                    trimmedPreview.hasPrefix("data:") ||
+                    trimmedPreview.hasPrefix("event:") {
+            message = "Remote LLM Responses endpoint returned an event stream for a non-streaming request. The API must return a JSON object when stream is false."
+        } else {
+            message = "Remote LLM Responses endpoint returned invalid JSON: \(fallbackDetail)"
         }
 
-        guard contentType.contains("text/plain") || contentType.isEmpty else { return nil }
-        guard !trimmed.hasPrefix("<") else { return nil }
-        return trimmed
-    }
-
-    func extractResponsesTextFromEventStream(_ streamText: String) -> String? {
-        var aggregated = ""
-        var bufferedEventLines: [String] = []
-
-        func publish(_ chunkPayload: String) {
-            let trimmed = chunkPayload.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, trimmed != "[DONE]" else { return }
-
-            if let data = trimmed.data(using: .utf8),
-               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let delta = responsesStreamingDelta(from: object), !delta.isEmpty {
-                    let eventType = object["type"] as? String
-                    if eventType == "response.output_text.delta" {
-                        aggregated.append(delta)
-                    } else {
-                        aggregated = mergedStreamingSnapshot(current: aggregated, next: delta)
-                    }
-                } else if let snapshot = extractPrimaryText(from: object), !snapshot.isEmpty {
-                    aggregated = mergedStreamingSnapshot(current: aggregated, next: snapshot)
-                }
-            } else {
-                aggregated = mergedStreamingSnapshot(current: aggregated, next: trimmed)
-            }
-        }
-
-        for rawLine in streamText.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = rawLine.trimmingCharacters(in: .newlines)
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if trimmedLine.isEmpty {
-                if !bufferedEventLines.isEmpty {
-                    publish(bufferedEventLines.joined(separator: "\n"))
-                    bufferedEventLines.removeAll(keepingCapacity: true)
-                }
-                continue
-            }
-
-            if trimmedLine.hasPrefix(":") ||
-                trimmedLine.hasPrefix("event:") ||
-                trimmedLine.hasPrefix("id:") ||
-                trimmedLine.hasPrefix("retry:") {
-                continue
-            }
-
-            if trimmedLine.hasPrefix("data:") {
-                var payload = String(trimmedLine.dropFirst(5))
-                if payload.hasPrefix(" ") {
-                    payload.removeFirst()
-                }
-                bufferedEventLines.append(payload)
-            } else {
-                bufferedEventLines.append(trimmedLine)
-            }
-        }
-
-        if !bufferedEventLines.isEmpty {
-            publish(bufferedEventLines.joined(separator: "\n"))
-        }
-
-        let trimmedOutput = aggregated.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedOutput.isEmpty ? nil : trimmedOutput
+        return NSError(
+            domain: "Voxt.RemoteLLM",
+            code: -309,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
     }
 
     func mergedStreamingSnapshot(current: String, next: String) -> String {

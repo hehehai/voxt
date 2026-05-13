@@ -621,7 +621,43 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/event-stream, application/json")
     }
 
-    func testExtractResponsesNonJSONTextAcceptsEventStreamBody() throws {
+    func testDecodeResponsesObjectAcceptsJSONResponseObject() throws {
+        let client = RemoteLLMRuntimeClient()
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://api.openai.com/v1/responses")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        ))
+        let body = #"{"id":"resp_123","output_text":"优化后的文本"}"#
+
+        XCTAssertEqual(
+            try client.decodeResponsesObject(from: Data(body.utf8), response: response)["output_text"] as? String,
+            "优化后的文本"
+        )
+    }
+
+    func testDecodeResponsesObjectRejectsHTMLGatewayPage() throws {
+        let client = RemoteLLMRuntimeClient()
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://api.openai.com/v1/responses")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/html; charset=utf-8"]
+        ))
+        let body = """
+        <!doctype html>
+        <html><head><title>AI API Gateway</title></head><body></body></html>
+        """
+
+        XCTAssertThrowsError(
+            try client.decodeResponsesObject(from: Data(body.utf8), response: response)
+        ) { error in
+            XCTAssertTrue(error.localizedDescription.contains("returned HTML instead of JSON"))
+        }
+    }
+
+    func testDecodeResponsesObjectRejectsEventStreamForNonStreamingResponse() throws {
         let client = RemoteLLMRuntimeClient()
         let response = try XCTUnwrap(HTTPURLResponse(
             url: URL(string: "https://api.openai.com/v1/responses")!,
@@ -629,36 +665,13 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
             httpVersion: nil,
             headerFields: ["Content-Type": "text/event-stream"]
         ))
-        let stream = """
-        event: response.output_text.delta
-        data: {"type":"response.output_text.delta","delta":"你好"}
+        let body = #"data: {"type":"response.output_text.delta","delta":"你好"}"#
 
-        event: response.output_text.delta
-        data: {"type":"response.output_text.delta","delta":"，世界"}
-
-        data: [DONE]
-
-        """
-
-        XCTAssertEqual(
-            client.extractResponsesNonJSONText(from: Data(stream.utf8), response: response),
-            "你好，世界"
-        )
-    }
-
-    func testExtractResponsesNonJSONTextAcceptsPlainTextBody() throws {
-        let client = RemoteLLMRuntimeClient()
-        let response = try XCTUnwrap(HTTPURLResponse(
-            url: URL(string: "https://api.openai.com/v1/responses")!,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: ["Content-Type": "text/plain; charset=utf-8"]
-        ))
-
-        XCTAssertEqual(
-            client.extractResponsesNonJSONText(from: Data("优化后的文本".utf8), response: response),
-            "优化后的文本"
-        )
+        XCTAssertThrowsError(
+            try client.decodeResponsesObject(from: Data(body.utf8), response: response)
+        ) { error in
+            XCTAssertTrue(error.localizedDescription.contains("event stream for a non-streaming request"))
+        }
     }
 
     func testMakeResponsesRequestFiltersOpenAIOptionsByModelFamily() throws {
