@@ -538,6 +538,7 @@
 "Configure" = "配置";
 "Default" = "默认";
 "OpenAI Whisper" = "OpenAI Whisper";
+"OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "豆包 ASR";
 "GLM ASR" = "GLM ASR";
 "Anthropic" = "Anthropic";

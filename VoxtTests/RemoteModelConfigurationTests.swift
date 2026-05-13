@@ -167,7 +167,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
             ),
             RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteLLMProvider.openAI.rawValue,
-                model: "gpt-5.2",
+                model: "gpt-5.5",
                 endpoint: "https://example.com/llm",
                 apiKey: "secret"
             )
@@ -186,7 +186,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         let stored: [String: RemoteProviderConfiguration] = [
             RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteLLMProvider.openAI.rawValue,
-                model: "gpt-5.2",
+                model: "gpt-5.5",
                 endpoint: "https://example.com/llm",
                 apiKey: "secret"
             )
@@ -198,7 +198,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
             sensitiveValueLoading: .metadataOnly
         )
 
-        XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.model, "gpt-5.2")
+        XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.model, "gpt-5.5")
         XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.endpoint, "https://example.com/llm")
         XCTAssertFalse(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey.isEmpty ?? true)
         XCTAssertNotEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey, "secret")
@@ -226,7 +226,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
     func testOpenAIConfigurationStillRequiresCredential() {
         let configuration = TestFactories.makeRemoteConfiguration(
             providerID: RemoteLLMProvider.openAI.rawValue,
-            model: "gpt-5.2"
+            model: "gpt-5.5"
         )
 
         XCTAssertFalse(configuration.isConfigured)
@@ -293,6 +293,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
     }
 
     func testResponsesProviderCapabilitiesAreConfiguredPerProvider() {
+        XCTAssertTrue(RemoteLLMProvider.openAI.usesResponsesAPI)
         XCTAssertTrue(RemoteLLMProvider.aliyunBailian.usesResponsesAPI)
         XCTAssertTrue(RemoteLLMProvider.volcengine.usesResponsesAPI)
         XCTAssertTrue(RemoteLLMProvider.aliyunBailian.supportsHostedSearch)
@@ -415,6 +416,28 @@ final class RemoteModelConfigurationTests: XCTestCase {
         )
     }
 
+    func testDecodeLegacyOpenAIEndpointMigratesToResponsesURL() {
+        let legacyJSON = """
+        [
+          {
+            "providerID": "openAI",
+            "model": "gpt-5.5",
+            "endpoint": "https://api.openai.com/v1/chat/completions",
+            "apiKey": "",
+            "appID": "",
+            "accessToken": ""
+          }
+        ]
+        """
+
+        let loaded = RemoteModelConfigurationStore.loadConfigurations(from: legacyJSON)
+
+        XCTAssertEqual(
+            loaded["openAI"]?.endpoint,
+            "https://api.openai.com/v1/responses"
+        )
+    }
+
     func testMigrateLegacyLLMEndpointsRewritesPersistedLegacyURLs() {
         let suiteName = "RemoteModelConfigurationTests.migrateLegacyLLMEndpoints.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -423,6 +446,14 @@ final class RemoteModelConfigurationTests: XCTestCase {
         defaults.set(
             """
             [
+              {
+                "providerID": "openAI",
+                "model": "gpt-5.5",
+                "endpoint": "https://api.openai.com/v1/models",
+                "apiKey": "",
+                "appID": "",
+                "accessToken": ""
+              },
               {
                 "providerID": "aliyunBailian",
                 "model": "qwen-plus-latest",
@@ -451,6 +482,10 @@ final class RemoteModelConfigurationTests: XCTestCase {
         )
 
         XCTAssertEqual(
+            migrated["openAI"]?.endpoint,
+            "https://api.openai.com/v1/responses"
+        )
+        XCTAssertEqual(
             migrated["aliyunBailian"]?.endpoint,
             "https://dashscope.aliyuncs.com/compatible-mode/v1/responses"
         )
@@ -469,7 +504,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         [
           {
             "providerID": "openAI",
-            "model": "gpt-5.2",
+            "model": "gpt-5.5",
             "endpoint": "https://example.com/responses",
             "apiKey": "",
             "appID": "",

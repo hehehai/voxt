@@ -20,7 +20,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         case .whisperKit:
             return AppLocalization.localizedString("Whisper")
         case .openAIWhisper:
-            return AppLocalization.localizedString("OpenAI Whisper")
+            return AppLocalization.localizedString("OpenAI Transcribe")
         case .glmASR:
             return AppLocalization.localizedString("GLM ASR")
         case .doubaoASR:

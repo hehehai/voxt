@@ -535,6 +535,7 @@
 "Configure" = "設定";
 "Default" = "デフォルト";
 "OpenAI Whisper" = "OpenAI Whisper";
+"OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "Doubao ASR";
 "GLM ASR" = "GLM ASR";
 "Anthropic" = "Anthropic";

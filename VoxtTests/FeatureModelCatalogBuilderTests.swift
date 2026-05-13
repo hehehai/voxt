@@ -57,7 +57,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         let remoteLLMConfigurations = RemoteModelConfigurationStore.saveConfigurations([
             RemoteLLMProvider.openAI.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteLLMProvider.openAI.rawValue,
-                model: "gpt-5.2",
+                model: "gpt-5.5",
                 endpoint: "https://example.com/v1",
                 apiKey: "secret"
             )
@@ -88,7 +88,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(translationLLMEntry.isSelectable)
         XCTAssertTrue(translationLLMEntry.displayTags.contains(AppLocalization.localizedString("Configured")))
         XCTAssertTrue(translationLLMEntry.usageLocations.contains(AppLocalization.localizedString("Translation")))
-        XCTAssertEqual(builder.llmSelectionSummary(.remoteLLM(.openAI)), "OpenAI · gpt-5.2")
+        XCTAssertEqual(builder.llmSelectionSummary(.remoteLLM(.openAI)), "OpenAI · gpt-5.5")
         XCTAssertEqual(
             builder.asrSelectionSummary(.remoteASR(.aliyunBailianASR)),
             "\(RemoteASRProvider.aliyunBailianASR.title) · fun-asr-realtime"

@@ -48,7 +48,7 @@ struct RemoteProviderConnectivityTester {
             return try await testASRMultipartReachability(
                 endpoint: endpoint,
                 headers: ["Authorization": "Bearer \(configuration.apiKey)"],
-                model: configuration.model.isEmpty ? "whisper-1" : configuration.model
+                model: configuration.model.isEmpty ? RemoteASRProvider.openAIWhisper.suggestedModel : configuration.model
             )
         case .glmASR:
             guard !configuration.apiKey.isEmpty else {

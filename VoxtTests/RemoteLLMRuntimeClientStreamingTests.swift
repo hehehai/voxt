@@ -76,17 +76,38 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         )
     }
 
-    func testStreamingEndpointValueKeepsOpenAICompatibleEndpoint() {
+    func testStreamingEndpointValueBuildsOpenAIResponsesEndpoint() {
         let client = RemoteLLMRuntimeClient()
 
         let endpoint = client.streamingEndpointValue(
             provider: .openAI,
             endpoint: "https://api.openai.com/v1/chat/completions",
-            model: "gpt-5.2",
+            model: "gpt-5.5",
             streamingEnabled: true
         )
 
-        XCTAssertEqual(endpoint, "https://api.openai.com/v1/chat/completions")
+        XCTAssertEqual(endpoint, "https://api.openai.com/v1/responses")
+    }
+
+    func testOpenAIResolvedEndpointDefaultsToResponsesAPI() {
+        let client = RemoteLLMRuntimeClient()
+
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .openAI,
+                endpoint: "",
+                model: "gpt-5.5"
+            ),
+            "https://api.openai.com/v1/responses"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .openAI,
+                endpoint: "https://api.openai.com",
+                model: "gpt-5.5"
+            ),
+            "https://api.openai.com/v1/responses"
+        )
     }
 
     func testResolvedLLMEndpointBuildsDeepSeekChatCompletionsFromOfficialBaseURL() {

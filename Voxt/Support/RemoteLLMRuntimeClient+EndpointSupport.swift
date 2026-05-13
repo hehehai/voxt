@@ -9,7 +9,7 @@ extension RemoteLLMRuntimeClient {
         case .google:
             return "https://generativelanguage.googleapis.com/v1beta/models"
         case .openAI:
-            return "https://api.openai.com/v1/models"
+            return "https://api.openai.com/v1/responses"
         case .ollama:
             return "http://localhost:11434"
         case .omlx:
@@ -89,6 +89,11 @@ extension RemoteLLMRuntimeClient {
                 base,
                 defaultPath: "/api/v3/responses"
             )
+        case .openAI:
+            return normalizedResponsesEndpoint(
+                base,
+                defaultPath: "/v1/responses"
+            )
         case .aliyunBailian:
             return normalizedResponsesEndpoint(
                 base,
@@ -146,7 +151,7 @@ extension RemoteLLMRuntimeClient {
             if path.hasSuffix("/v1") { return appendingPath(base, suffix: "/chat/completions") }
             if path.isEmpty || path == "/" { return base }
             return base
-        case .openAI, .omlx, .deepseek, .openrouter, .grok, .zai, .kimi, .lmStudio:
+        case .omlx, .deepseek, .openrouter, .grok, .zai, .kimi, .lmStudio:
             if path.hasSuffix("/v1/chat/completions") || path.hasSuffix("/chat/completions") {
                 return base
             }

@@ -221,16 +221,16 @@ For fuller provider notes, signup links, endpoints, and configuration examples, 
 
 | Provider | Built-in Model Options | Language Support | Realtime Support | Speed | Recommendation | Current Integration |
 | --- | --- | --- | --- | --- | --- | --- |
-| OpenAI Whisper / Transcribe | `whisper-1`, `gpt-4o-mini-transcribe`, `gpt-4o-transcribe`, plus custom OpenAI-compatible model IDs | Multilingual | Partial. Voxt currently uses file-based transcription, with optional chunked pseudo-realtime preview | Medium | High | OpenAI-compatible `audio/transcriptions` |
+| OpenAI Transcribe | `gpt-4o-mini-transcribe`, `gpt-4o-transcribe`, `gpt-4o-transcribe-diarize`, `whisper-1`, plus custom OpenAI-compatible model IDs | Multilingual | Partial. Voxt currently uses file-based transcription, with optional chunked pseudo-realtime preview | Medium | High | OpenAI-compatible `audio/transcriptions` |
 | Doubao ASR | `volc.seedasr.sauc.duration`, `volc.bigasr.sauc.duration`, meeting: `volc.bigasr.auc_turbo` | Chinese-first, well suited to mixed Chinese/English usage | Yes for normal transcription, meeting uses chunk/file mode | Fast | High | WebSocket ASR for normal transcription, HTTP flash/file ASR for meetings |
 | GLM ASR | `glm-asr-2512`, `glm-asr-1` | Officially positioned for broad scenarios and accents; Voxt currently integrates it as standard upload-based transcription | No (current implementation is upload transcription) | Medium | Medium-high | HTTP transcription endpoint |
 | Aliyun Bailian ASR | `qwen3-asr-flash-realtime`, `fun-asr-realtime`, `paraformer-realtime-*`, meeting: `qwen3-asr-flash-filetrans`, `fun-asr`, `paraformer-v2` | Depends on model family: Qwen3 ASR is multilingual, Fun/Paraformer cover Chinese-English or broader multilingual use | Yes for normal transcription, meeting uses chunk/file mode | Fast | High | Realtime WebSocket ASR plus meeting-specific async/file ASR |
 
 Meeting Notes has a separate `Meeting ASR` model slot for `Doubao ASR` and `Aliyun Bailian ASR`.
 
-`OpenAI Whisper / Transcribe` in Voxt also works as the generic slot for OpenAI-compatible transcription services when they accept `Bearer` auth plus multipart upload to an `audio/transcriptions` endpoint.
+`OpenAI Transcribe` in Voxt also works as the generic slot for OpenAI-compatible transcription services when they accept `Bearer` auth plus multipart upload to an `audio/transcriptions` endpoint.
 
-- Custom endpoint support currently applies to the `OpenAI Whisper / Transcribe` provider only.
+- Custom endpoint support currently applies to the `OpenAI Transcribe` provider only.
 - Enter the full transcription endpoint, not just the API root.
 - Example compatible services:
   - MOSI Studio: endpoint `https://studio.mosi.cn/api/v1/audio/transcriptions`; model `moss-transcribe` or `moss-transcribe-diarize`
@@ -260,7 +260,7 @@ Common remote ASR errors / states:
 | --- | --- | --- | --- | --- |
 | Anthropic | `claude-sonnet-4-6` | Native Anthropic | Enhancement / translation / rewrite | Integrated |
 | Google | `gemini-2.5-pro` | Native Gemini | Enhancement / translation / rewrite | Integrated |
-| OpenAI | `gpt-5.2` | OpenAI-compatible | Enhancement / translation / rewrite | Integrated |
+| OpenAI | `gpt-5.5` | Responses API | Enhancement / translation / rewrite | Integrated |
 | Ollama | `qwen2.5` | OpenAI-compatible | Local or self-hosted LLM gateway | Integrated |
 | oMLX | `qwen3` | OpenAI-compatible | Local MLX model server on Apple Silicon | Integrated |
 | DeepSeek | `deepseek-chat` | OpenAI-compatible | Enhancement / translation / rewrite | Integrated |

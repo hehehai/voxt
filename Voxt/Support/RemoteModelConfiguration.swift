@@ -16,7 +16,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .openAIWhisper:
-            return AppLocalization.localizedString("OpenAI Whisper")
+            return AppLocalization.localizedString("OpenAI Transcribe")
         case .doubaoASR:
             return AppLocalization.localizedString("Doubao ASR")
         case .glmASR:
@@ -29,7 +29,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
     var suggestedModel: String {
         switch self {
         case .openAIWhisper:
-            return "whisper-1"
+            return "gpt-4o-mini-transcribe"
         case .doubaoASR:
             return DoubaoASRConfiguration.modelV2
         case .glmASR:
@@ -43,9 +43,10 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
         switch self {
         case .openAIWhisper:
             return [
-                RemoteModelOption(id: "whisper-1", title: "Whisper-1"),
                 RemoteModelOption(id: "gpt-4o-mini-transcribe", title: "GPT-4o Mini Transcribe"),
-                RemoteModelOption(id: "gpt-4o-transcribe", title: "GPT-4o Transcribe")
+                RemoteModelOption(id: "gpt-4o-transcribe", title: "GPT-4o Transcribe"),
+                RemoteModelOption(id: "gpt-4o-transcribe-diarize", title: "GPT-4o Transcribe Diarize"),
+                RemoteModelOption(id: "whisper-1", title: "Whisper-1")
             ]
         case .doubaoASR:
             return [
@@ -100,7 +101,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
 
     nonisolated var usesResponsesAPI: Bool {
         switch self {
-        case .volcengine, .aliyunBailian:
+        case .openAI, .volcengine, .aliyunBailian:
             return true
         default:
             return false
@@ -184,7 +185,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
         case .google:
             return "gemini-2.5-pro"
         case .openAI:
-            return "gpt-5.2"
+            return "gpt-5.5"
         case .ollama:
             return "qwen2.5"
         case .omlx:
@@ -234,17 +235,16 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             ]
         case .openAI:
             return [
+                RemoteModelOption(id: "gpt-5.5", title: "GPT-5.5"),
+                RemoteModelOption(id: "gpt-5.5-pro", title: "GPT-5.5 pro"),
+                RemoteModelOption(id: "gpt-5.4", title: "GPT-5.4"),
+                RemoteModelOption(id: "gpt-5.4-pro", title: "GPT-5.4 pro"),
+                RemoteModelOption(id: "gpt-5.4-mini", title: "GPT-5.4 mini"),
+                RemoteModelOption(id: "gpt-5.4-nano", title: "GPT-5.4 nano"),
                 RemoteModelOption(id: "gpt-5.2", title: "GPT-5.2"),
-                RemoteModelOption(id: "gpt-5.2-chat-latest", title: "GPT-5.2 Chat"),
                 RemoteModelOption(id: "gpt-5.2-pro", title: "GPT-5.2 pro"),
-                RemoteModelOption(id: "gpt-5.1", title: "GPT-5.1"),
-                RemoteModelOption(id: "gpt-5.1-chat-latest", title: "GPT-5.1 Chat"),
-                RemoteModelOption(id: "gpt-5.1-codex", title: "GPT-5.1 Codex"),
-                RemoteModelOption(id: "gpt-5.1-codex-mini", title: "GPT-5.1 Codex mini"),
-                RemoteModelOption(id: "gpt-5-pro", title: "GPT-5 pro"),
-                RemoteModelOption(id: "gpt-5-codex", title: "GPT-5 Codex"),
                 RemoteModelOption(id: "gpt-5", title: "GPT-5"),
-                RemoteModelOption(id: "gpt-5-chat-latest", title: "GPT-5 Chat"),
+                RemoteModelOption(id: "gpt-5-pro", title: "GPT-5 pro"),
                 RemoteModelOption(id: "gpt-5-mini", title: "GPT-5 mini"),
                 RemoteModelOption(id: "gpt-5-nano", title: "GPT-5 nano")
             ]
@@ -344,13 +344,10 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             ]
         case .openAI:
             return [
+                RemoteModelOption(id: "gpt-4.1", title: "GPT-4.1"),
+                RemoteModelOption(id: "gpt-4.1-mini", title: "GPT-4.1 mini"),
                 RemoteModelOption(id: "gpt-4o-mini", title: "GPT-4o mini"),
-                RemoteModelOption(id: "gpt-4o-mini-search-preview", title: "GPT-4o mini Search Preview"),
-                RemoteModelOption(id: "gpt-4.1-nano", title: "GPT-4.1 nano"),
-                RemoteModelOption(id: "gpt-3.5-turbo", title: "GPT-3.5 Turbo"),
-                RemoteModelOption(id: "gpt-3.5-turbo-0125", title: "GPT-3.5 Turbo 0125"),
-                RemoteModelOption(id: "gpt-3.5-turbo-1106", title: "GPT-3.5 Turbo 1106"),
-                RemoteModelOption(id: "gpt-3.5-turbo-instruct", title: "GPT-3.5 Turbo Instruct")
+                RemoteModelOption(id: "gpt-4o", title: "GPT-4o")
             ]
         case .ollama:
             return [
@@ -429,23 +426,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             ]
         case .openAI:
             return [
-                RemoteModelOption(id: "o4-mini", title: "o4-mini"),
-                RemoteModelOption(id: "o4-mini-deep-research", title: "o4-mini Deep Research"),
-                RemoteModelOption(id: "o3-pro", title: "o3-pro"),
-                RemoteModelOption(id: "o3", title: "o3"),
-                RemoteModelOption(id: "o3-deep-research", title: "o3 Deep Research"),
-                RemoteModelOption(id: "o3-mini", title: "o3-mini"),
-                RemoteModelOption(id: "o1-pro", title: "o1-pro"),
-                RemoteModelOption(id: "o1", title: "o1"),
-                RemoteModelOption(id: "gpt-4.1", title: "GPT-4.1"),
-                RemoteModelOption(id: "gpt-4.1-mini", title: "GPT-4.1 mini"),
-                RemoteModelOption(id: "gpt-4o", title: "GPT-4o"),
-                RemoteModelOption(id: "gpt-4o-search-preview", title: "GPT-4o Search Preview"),
-                RemoteModelOption(id: "gpt-4o-2024-11-20", title: "GPT-4o 1120"),
-                RemoteModelOption(id: "gpt-4o-2024-05-13", title: "GPT-4o 0513"),
-                RemoteModelOption(id: "gpt-4-turbo", title: "GPT-4 Turbo"),
-                RemoteModelOption(id: "gpt-4", title: "GPT-4"),
-                RemoteModelOption(id: "gpt-4-0613", title: "GPT-4 0613")
+                RemoteModelOption(id: "gpt-4", title: "GPT-4")
             ]
         case .ollama:
             return [

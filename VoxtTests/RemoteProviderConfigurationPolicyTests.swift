@@ -22,9 +22,10 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
                 configuredModel: "whisper-1"
             ),
             [
-                "whisper-1",
                 "gpt-4o-mini-transcribe",
                 "gpt-4o-transcribe",
+                "gpt-4o-transcribe-diarize",
+                "whisper-1",
                 RemoteProviderConfigurationPolicy.customModelOptionID
             ]
         )
@@ -36,19 +37,19 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         XCTAssertEqual(
             RemoteProviderConfigurationPolicy.resolvedSelection(
                 target: target,
-                selectedProviderModel: "gpt-5.2",
+                selectedProviderModel: "gpt-5.5",
                 configuredModel: "custom-model"
             ),
-            "gpt-5.2"
+            "gpt-5.5"
         )
 
         XCTAssertEqual(
             RemoteProviderConfigurationPolicy.resolvedSelection(
                 target: target,
                 selectedProviderModel: "unknown",
-                configuredModel: "gpt-5.2"
+                configuredModel: "gpt-5.5"
             ),
-            "gpt-5.2"
+            "gpt-5.5"
         )
     }
 

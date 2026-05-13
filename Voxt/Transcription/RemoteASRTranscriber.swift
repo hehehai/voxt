@@ -580,7 +580,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         hintPayload: ResolvedASRHintPayload
     ) async throws -> String {
         let boundary = "Boundary-\(UUID().uuidString)"
-        let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "whisper-1" : model
+        let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? RemoteASRProvider.openAIWhisper.suggestedModel
+            : model
         var extraFields: [String: String] = [
             "response_format": "json",
             "stream": "false"
@@ -588,7 +590,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
             extraFields["language"] = language
         }
-        if let prompt = hintPayload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
+        if effectiveModel != "gpt-4o-transcribe-diarize",
+           let prompt = hintPayload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
             extraFields["prompt"] = prompt
         }
         let body = try makeMultipartBody(
@@ -2478,7 +2482,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         extraFields: [String: String]
     ) async throws -> String {
         let boundary = "Boundary-\(UUID().uuidString)"
-        let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "whisper-1" : model
+        let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? RemoteASRProvider.glmASR.suggestedModel
+            : model
         let body = try makeMultipartBody(
             fileURL: fileURL,
             boundary: boundary,
