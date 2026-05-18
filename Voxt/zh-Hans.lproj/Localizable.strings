@@ -344,6 +344,7 @@
 "MLX model is not downloaded. Open Settings > Model to install it." = "MLX 模型尚未下载，请在设置 > 模型中安装。";
 "MLX model is still downloading. Wait for installation to finish and try again." = "MLX 模型仍在下载中，请等待安装完成后再试。";
 "MLX model is unavailable. Open Settings > Model to fix it." = "MLX 模型当前不可用，请在设置 > 模型中修复。";
+"Reason:" = "原因：";
 "Whisper (On-device)" = "Whisper 本地转录";
 "Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding." = "使用本地 WhisperKit 语音模型，支持多个 Whisper 模型和可配置解码参数。";
 "Transcribe" = "转录";

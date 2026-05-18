@@ -344,6 +344,7 @@
 "MLX model is not downloaded. Open Settings > Model to install it." = "MLX model is not downloaded. Open Settings > Model to install it.";
 "MLX model is still downloading. Wait for installation to finish and try again." = "MLX model is still downloading. Wait for installation to finish and try again.";
 "MLX model is unavailable. Open Settings > Model to fix it." = "MLX model is unavailable. Open Settings > Model to fix it.";
+"Reason:" = "Reason:";
 "Whisper (On-device)" = "Whisper (On-device)";
 "Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding." = "Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding.";
 "Transcribe" = "Transcribe";

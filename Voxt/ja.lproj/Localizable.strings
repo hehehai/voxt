@@ -342,6 +342,7 @@
 "MLX model is not downloaded. Open Settings > Model to install it." = "MLX モデルが未ダウンロードです。設定 > モデルでインストールしてください。";
 "MLX model is unavailable. Open Settings > Model to fix it." = "MLX モデルが利用できません。設定 > モデルで修正してください。";
 "MLX model is still downloading. Wait for installation to finish and try again." = "MLX モデルはまだダウンロード中です。インストール完了後に再試行してください。";
+"Reason:" = "理由：";
 "Whisper (On-device)" = "Whisper オンデバイス";
 "Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding." = "WhisperKit の音声モデルをローカル実行します。複数の Whisper モデルとデコード設定に対応します。";
 "Transcribe" = "文字起こし";

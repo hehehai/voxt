@@ -3,10 +3,10 @@ import Foundation
 enum RecordingStartBlockReason: Equatable {
     case mlxModelNotInstalled
     case mlxModelDownloading
-    case mlxModelUnavailable
+    case mlxModelUnavailable(detail: String?)
     case whisperModelNotInstalled
     case whisperModelDownloading
-    case whisperModelUnavailable
+    case whisperModelUnavailable(detail: String?)
 
     var userMessage: String {
         switch self {
@@ -14,14 +14,20 @@ enum RecordingStartBlockReason: Equatable {
             return String(localized: "MLX model is not downloaded. Open Settings > Model to install it.")
         case .mlxModelDownloading:
             return String(localized: "MLX model is still downloading. Wait for installation to finish and try again.")
-        case .mlxModelUnavailable:
-            return String(localized: "MLX model is unavailable. Open Settings > Model to fix it.")
+        case .mlxModelUnavailable(let detail):
+            return Self.appendingDetail(
+                base: String(localized: "MLX model is unavailable. Open Settings > Model to fix it."),
+                detail: detail
+            )
         case .whisperModelNotInstalled:
             return String(localized: "Whisper model is not downloaded. Open Settings > Model to install it.")
         case .whisperModelDownloading:
             return String(localized: "Whisper model is still downloading. Wait for installation to finish and try again.")
-        case .whisperModelUnavailable:
-            return String(localized: "Whisper model is unavailable. Open Settings > Model to fix it.")
+        case .whisperModelUnavailable(let detail):
+            return Self.appendingDetail(
+                base: String(localized: "Whisper model is unavailable. Open Settings > Model to fix it."),
+                detail: detail
+            )
         }
     }
 
@@ -31,15 +37,23 @@ enum RecordingStartBlockReason: Equatable {
             return "MLX Audio model is not downloaded."
         case .mlxModelDownloading:
             return "MLX Audio model download is still in progress."
-        case .mlxModelUnavailable:
-            return "MLX Audio model is unavailable."
+        case .mlxModelUnavailable(let detail):
+            return Self.appendingDetail(base: "MLX Audio model is unavailable.", detail: detail)
         case .whisperModelNotInstalled:
             return "Whisper model is not downloaded."
         case .whisperModelDownloading:
             return "Whisper model download is still in progress."
-        case .whisperModelUnavailable:
-            return "Whisper model is unavailable."
+        case .whisperModelUnavailable(let detail):
+            return Self.appendingDetail(base: "Whisper model is unavailable.", detail: detail)
         }
+    }
+
+    private static func appendingDetail(base: String, detail: String?) -> String {
+        guard let detail else { return base }
+        let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return base }
+        let prefix = String(localized: "Reason:")
+        return "\(base) \(prefix) \(trimmed)"
     }
 }
 
@@ -53,14 +67,14 @@ enum RecordingStartPlanner {
         case ready
         case notDownloaded
         case downloadingSelectedModel
-        case unavailable
+        case unavailable(detail: String?)
     }
 
     private enum DownloadStatePhase {
         case ready
         case notDownloaded
         case activeDownload
-        case unavailable
+        case unavailable(detail: String?)
     }
 
     static func resolve(
@@ -90,7 +104,7 @@ enum RecordingStartPlanner {
                 ),
                 notInstalledReason: .mlxModelNotInstalled,
                 downloadingReason: .mlxModelDownloading,
-                unavailableReason: .mlxModelUnavailable
+                unavailableReason: { detail in .mlxModelUnavailable(detail: detail) }
             )
         case .whisperKit:
             return decision(
@@ -103,7 +117,7 @@ enum RecordingStartPlanner {
                 ),
                 notInstalledReason: .whisperModelNotInstalled,
                 downloadingReason: .whisperModelDownloading,
-                unavailableReason: .whisperModelUnavailable
+                unavailableReason: { detail in .whisperModelUnavailable(detail: detail) }
             )
         }
     }
@@ -113,7 +127,7 @@ enum RecordingStartPlanner {
         availability: DownloadableModelAvailability,
         notInstalledReason: RecordingStartBlockReason,
         downloadingReason: RecordingStartBlockReason,
-        unavailableReason: RecordingStartBlockReason
+        unavailableReason: (String?) -> RecordingStartBlockReason
     ) -> RecordingStartDecision {
         switch availability {
         case .ready:
@@ -122,8 +136,8 @@ enum RecordingStartPlanner {
             return .blocked(notInstalledReason)
         case .downloadingSelectedModel:
             return .blocked(downloadingReason)
-        case .unavailable:
-            return .blocked(unavailableReason)
+        case .unavailable(let detail):
+            return .blocked(unavailableReason(detail))
         }
     }
 
@@ -208,8 +222,8 @@ enum RecordingStartPlanner {
                 return .downloadingSelectedModel
             }
             return isSelectedModelDownloaded ? .ready : .notDownloaded
-        case .unavailable:
-            return .unavailable
+        case .unavailable(let detail):
+            return .unavailable(detail: detail)
         }
     }
 
@@ -221,8 +235,8 @@ enum RecordingStartPlanner {
             return .notDownloaded
         case .downloading, .paused:
             return .activeDownload
-        case .error:
-            return .unavailable
+        case .error(let message):
+            return .unavailable(detail: message)
         }
     }
 
@@ -234,8 +248,8 @@ enum RecordingStartPlanner {
             return .notDownloaded
         case .downloading, .paused:
             return .activeDownload
-        case .error:
-            return .unavailable
+        case .error(let message):
+            return .unavailable(detail: message)
         }
     }
 

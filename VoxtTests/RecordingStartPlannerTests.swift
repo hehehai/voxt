@@ -19,7 +19,23 @@ final class RecordingStartPlannerTests: XCTestCase {
             whisperModelState: .notDownloaded
         )
 
-        XCTAssertEqual(decision, .blocked(.mlxModelUnavailable))
+        XCTAssertEqual(decision, .blocked(.mlxModelUnavailable(detail: "broken")))
+    }
+
+    func testMLXAudioErrorMessageIncludesUnderlyingDetail() {
+        let detail = "Model load failed: out of memory"
+        let reason = RecordingStartBlockReason.mlxModelUnavailable(detail: detail)
+
+        XCTAssertTrue(reason.userMessage.contains(detail))
+        XCTAssertTrue(reason.userMessage.contains("MLX model is unavailable"))
+        XCTAssertTrue(reason.logDescription.contains(detail))
+    }
+
+    func testMLXAudioErrorMessageOmitsEmptyDetail() {
+        let reason = RecordingStartBlockReason.mlxModelUnavailable(detail: "   ")
+
+        XCTAssertFalse(reason.userMessage.contains("Reason:"))
+        XCTAssertFalse(reason.logDescription.contains("Reason:"))
     }
 
     func testMLXAudioDownloadedStartsWithMLXAudio() {
@@ -117,7 +133,7 @@ final class RecordingStartPlannerTests: XCTestCase {
             whisperModelState: .error("broken")
         )
 
-        XCTAssertEqual(decision, .blocked(.whisperModelUnavailable))
+        XCTAssertEqual(decision, .blocked(.whisperModelUnavailable(detail: "broken")))
     }
 
     func testWhisperDownloadedStartsWithWhisperEngine() {
