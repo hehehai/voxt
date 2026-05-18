@@ -605,7 +605,11 @@ class MLXModelManager: ObservableObject {
         let loadingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let model = try await Self.loadSTTModel(for: repo)
-            guard !Task.isCancelled else { return }
+            // Throw on cancel so the outer awaiter can tell cancellation apart from
+            // a real load failure — otherwise we leave `loadedModel` unset and
+            // `readyModel(for:)` throws a misleading error that gets cached as
+            // `.error(…)` and wedges every later record attempt.
+            try Task.checkCancellation()
             guard self.loadingRepo == repo else { return }
             self.loadedModel = model
             self.loadedRepo = repo
@@ -621,6 +625,16 @@ class MLXModelManager: ObservableObject {
             let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
             VoxtLog.info("MLX Audio model load completed. repo=\(repo), elapsedMs=\(elapsedMs)")
             return model
+        } catch is CancellationError {
+            self.loadingTask = nil
+            self.loadingRepo = nil
+            // Reset to whatever the on-disk cache implies (`.downloaded` or
+            // `.notDownloaded`) so the next record attempt can retry instead of
+            // staying wedged behind a stale `.error(…)`.
+            checkExistingModel()
+            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+            VoxtLog.info("MLX Audio model load cancelled. repo=\(repo), elapsedMs=\(elapsedMs)")
+            throw CancellationError()
         } catch {
             self.loadingTask = nil
             self.loadingRepo = nil
