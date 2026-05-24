@@ -6,6 +6,38 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.11.9-beta.2] - 2026-05-24
+
+### English
+
+#### Changed
+- Refined permissions and feature settings pages with clearer cards, labels, and navigation details.
+- Improved app enhancement URL handling with cached site icons and more reliable model catalog refresh behavior.
+
+#### Fixed
+- Reduced unnecessary microphone input reconfiguration during active recording when hardware change events keep the same device selected.
+- Added model-debug-gated live capture diagnostics so local and remote transcription startup issues are easier to isolate.
+
+### 简体中文
+
+#### 改进
+- 优化权限和功能设置页面，带来更清晰的卡片、标签和导航细节。
+- 改善应用增强中的 URL 处理，加入站点图标缓存，并提升模型目录刷新稳定性。
+
+#### 修复
+- 在录音过程中遇到硬件变更但当前设备未变化时，减少不必要的麦克风输入重配置。
+- 补充受模型调试开关控制的 live capture 诊断日志，让本地和远程转录启动问题更容易定位。
+
+### 日本語
+
+#### 変更
+- 権限ページと機能設定ページを調整し、カード、ラベル、ナビゲーションの見通しを改善しました。
+- App Enhancement の URL 処理を改善し、サイトアイコンのキャッシュとモデルカタログ更新の安定性を高めました。
+
+#### 修正
+- 録音中に同じ入力デバイスが維持されている hardware change では、不必要なマイク入力再構成を減らしました。
+- モデルデバッグログで制御される live capture 診断ログを追加し、ローカル/リモート転写の起動問題を切り分けやすくしました。
+
 ## [1.11.9-beta.1] - 2026-05-24
 
 ### English
