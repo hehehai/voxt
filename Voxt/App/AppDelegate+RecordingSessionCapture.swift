@@ -320,10 +320,10 @@ extension AppDelegate {
         guard isSessionActive else { return }
 
         let sessionKind = RecordingSessionSupport.outputLabel(for: sessionOutputMode)
-        let remoteDebugState = remoteASRTranscriber.activeRealtimeDebugSummary() ?? "none"
-        VoxtLog.warning(
+        let captureDebugState = activeRecordingCaptureDebugSummary()
+        VoxtLog.model(
             """
-            Preferred input device changed during recording. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind), remoteState=\(remoteDebugState)
+            Preferred input device changed during recording. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind), captureState=\(captureDebugState)
             """
         )
 
@@ -333,15 +333,31 @@ extension AppDelegate {
                 AppLocalization.format("Switched microphone to %@.", currentDevice.name),
                 clearAfter: 1.8
             )
-            VoxtLog.warning(
-                "Preferred input device change applied during recording. reason=\(reason), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind)"
+            VoxtLog.model(
+                "Preferred input device change applied during recording. reason=\(reason), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind), captureState=\(activeRecordingCaptureDebugSummary())"
             )
         } catch {
+            VoxtLog.model(
+                "Recording microphone switch failed. reason=\(reason), error=\(error.localizedDescription), captureState=\(activeRecordingCaptureDebugSummary())"
+            )
             VoxtLog.error("Recording microphone switch failed: \(error.localizedDescription). reason=\(reason)")
             showOverlayReminder(
                 AppLocalization.format("Failed to switch microphone to %@.", currentDevice.name)
             )
             finishSession(after: 0)
+        }
+    }
+
+    func activeRecordingCaptureDebugSummary() -> String {
+        switch transcriptionEngine {
+        case .mlxAudio:
+            return "mlx{\(mlxTranscriber?.debugCaptureRuntimeSummary() ?? "inactive")}"
+        case .whisperKit:
+            return "whisper{\(whisperTranscriber?.debugCaptureStopSummary() ?? "inactive")}"
+        case .remote:
+            return remoteASRTranscriber.activeRealtimeDebugSummary() ?? "remote{inactive}"
+        case .dictation:
+            return "dictation{recording=\(speechTranscriber.isRecording)}"
         }
     }
 

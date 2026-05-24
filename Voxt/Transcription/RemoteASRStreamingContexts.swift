@@ -21,8 +21,17 @@ final class AliyunQwenStreamingContext {
     let responseState: AliyunQwenResponseState
     let generationID: UUID
     let kind: AliyunQwenRealtimeSessionKind
+    let createdAt = Date()
     var isClosed = false
     var didStartAudioStream = false
+    var audioCaptureStartCount = 0
+    var pcmCallbackCount = 0
+    var audioPacketCount = 0
+    var firstPCMCallbackAt: Date?
+    var lastPCMCallbackAt: Date?
+    var firstAudioPacketSentAt: Date?
+    var lastAudioPacketSentAt: Date?
+    var lastAudioCaptureStartReason = "not-started"
 
     init(
         session: URLSession,
@@ -36,6 +45,15 @@ final class AliyunQwenStreamingContext {
         self.responseState = responseState
         self.generationID = generationID
         self.kind = kind
+    }
+
+    func debugSummary(now: Date = Date()) -> String {
+        let age = String(format: "%.2f", now.timeIntervalSince(createdAt))
+        let sinceLastPCM = lastPCMCallbackAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
+        let sinceLastSent = lastAudioPacketSentAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
+        return """
+        kind=\(kind), ageSec=\(age), captureStarts=\(audioCaptureStartCount), captureReason=\(lastAudioCaptureStartReason), pcmCallbacks=\(pcmCallbackCount), audioPackets=\(audioPacketCount), sinceLastPCM=\(sinceLastPCM), sinceLastSent=\(sinceLastSent), isClosed=\(isClosed)
+        """
     }
 }
 
@@ -119,8 +137,17 @@ final class AliyunFunStreamingContext {
     let taskID: String
     let responseState: AliyunFunResponseState
     let generationID: UUID
+    let createdAt = Date()
     var isClosed = false
     var didStartAudioStream = false
+    var audioCaptureStartCount = 0
+    var pcmCallbackCount = 0
+    var audioPacketCount = 0
+    var firstPCMCallbackAt: Date?
+    var lastPCMCallbackAt: Date?
+    var firstAudioPacketSentAt: Date?
+    var lastAudioPacketSentAt: Date?
+    var lastAudioCaptureStartReason = "not-started"
 
     init(
         session: URLSession,
@@ -134,6 +161,15 @@ final class AliyunFunStreamingContext {
         self.taskID = taskID
         self.responseState = responseState
         self.generationID = generationID
+    }
+
+    func debugSummary(now: Date = Date()) -> String {
+        let age = String(format: "%.2f", now.timeIntervalSince(createdAt))
+        let sinceLastPCM = lastPCMCallbackAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
+        let sinceLastSent = lastAudioPacketSentAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
+        return """
+        taskID=\(taskID), ageSec=\(age), captureStarts=\(audioCaptureStartCount), captureReason=\(lastAudioCaptureStartReason), pcmCallbacks=\(pcmCallbackCount), audioPackets=\(audioPacketCount), sinceLastPCM=\(sinceLastPCM), sinceLastSent=\(sinceLastSent), isClosed=\(isClosed)
+        """
     }
 }
 

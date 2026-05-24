@@ -454,6 +454,19 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         removeCompletedAudioArchiveIfNeeded()
     }
 
+    func debugCaptureRuntimeSummary() -> String {
+        let sampleRate = Int(inputSampleRate)
+        let callbacks = sampleStore.callbacksReceived()
+        let samples = sampleStore.count()
+        let routing = activeCaptureUsesPreferredInputDevice ? "preferred" : "system-default"
+        let deviceID = activeCaptureUsesPreferredInputDevice
+            ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default")
+            : "system-default"
+        return """
+        repo=\(modelManager.currentModelRepo), recording=\(isRecording), modelInitializing=\(isModelInitializing), callbacks=\(callbacks), samples=\(samples), sampleRate=\(sampleRate), routing=\(routing), deviceID=\(deviceID)
+        """
+    }
+
     func startRecording() {
         guard !isRecording else { return }
 
@@ -515,6 +528,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             "MLX recording stop captured. callbacks=\(callbackCount), samples=\(sampleCount), sampleRate=\(Int(sampleRate)), capturedAudioSec=\(capturedAudioSec)",
             verbose: true
         )
+        VoxtLog.model("MLX recording stop requested. state=\(debugCaptureRuntimeSummary())")
 
         guard sampleCount > 0 else {
             isFinalizingTranscription = false
@@ -842,6 +856,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             guard let self else { return }
             sampleStore.noteCallback()
+            let callbackCount = sampleStore.callbacksReceived()
+            if callbackCount == 1 {
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    VoxtLog.model("MLX first PCM callback received. state=\(self.debugCaptureRuntimeSummary())")
+                }
+            }
 
             guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else {
                 if !self.loggedSampleExtractionFailure {
@@ -868,6 +889,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             "MLX audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
+        VoxtLog.model("MLX audio capture graph started. state=\(debugCaptureRuntimeSummary())")
     }
 
     private func cancelActiveTasks() {

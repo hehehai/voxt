@@ -9,6 +9,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private final class AudioSampleStore {
         private let lock = NSLock()
         private var samples: [Float] = []
+        private var callbackTotal = 0
+
+        func noteCallback() {
+            lock.lock()
+            defer { lock.unlock() }
+            callbackTotal += 1
+        }
 
         func append(_ newSamples: [Float]) {
             lock.lock()
@@ -26,6 +33,19 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             lock.lock()
             defer { lock.unlock() }
             samples.removeAll(keepingCapacity: false)
+            callbackTotal = 0
+        }
+
+        func sampleCount() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return samples.count
+        }
+
+        func callbackCount() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return callbackTotal
         }
     }
 
@@ -74,14 +94,18 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     func activeRealtimeDebugSummary() -> String? {
+        let localCallbacks = sampleStore.callbackCount()
+        let localSamples = sampleStore.sampleCount()
+        let sampleRate = Int(streamingInputSampleRate)
+        let preferredDevice = preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"
         if let context = doubaoStreamingContext {
-            return "doubao{\(context.debugSummary())}"
+            return "doubao{sampleRate=\(sampleRate), preferredDeviceID=\(preferredDevice), localCallbacks=\(localCallbacks), localSamples=\(localSamples), \(context.debugSummary())}"
         }
-        if aliyunStreamingContext != nil {
-            return "aliyun-fun{active=true}"
+        if let context = aliyunStreamingContext {
+            return "aliyun-fun{sampleRate=\(sampleRate), preferredDeviceID=\(preferredDevice), localCallbacks=\(localCallbacks), localSamples=\(localSamples), \(context.debugSummary())}"
         }
-        if aliyunQwenStreamingContext != nil {
-            return "aliyun-qwen{active=true}"
+        if let context = aliyunQwenStreamingContext {
+            return "aliyun-qwen{sampleRate=\(sampleRate), preferredDeviceID=\(preferredDevice), localCallbacks=\(localCallbacks), localSamples=\(localSamples), \(context.debugSummary())}"
         }
         return nil
     }
@@ -296,14 +320,26 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
 
         if let context = aliyunStreamingContext {
+            VoxtLog.model(
+                "Aliyun fun audio capture restart requested. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"), state=\(activeRealtimeDebugSummary() ?? "none")"
+            )
             stopAliyunAudioCapture()
             try startAliyunAudioCapture(context: context)
+            VoxtLog.model(
+                "Aliyun fun audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"), state=\(activeRealtimeDebugSummary() ?? "none")"
+            )
             return
         }
 
         if let context = aliyunQwenStreamingContext {
+            VoxtLog.model(
+                "Aliyun qwen audio capture restart requested. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"), state=\(activeRealtimeDebugSummary() ?? "none")"
+            )
             stopAliyunAudioCapture()
             try startAliyunQwenAudioCapture(context: context)
+            VoxtLog.model(
+                "Aliyun qwen audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"), state=\(activeRealtimeDebugSummary() ?? "none")"
+            )
             return
         }
 
@@ -356,7 +392,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         stopAliyunAudioCapture()
         guard !context.isClosed else { return }
         VoxtLog.model(
-            "Aliyun fun stop requested. taskID=\(context.taskID), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested)"
+            "Aliyun fun stop requested. taskID=\(context.taskID), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested), localCallbacks=\(sampleStore.callbackCount()), localSamples=\(sampleStore.sampleCount()), state=\(context.debugSummary())"
         )
 
         sendAliyunFunControl(action: "finish-task", through: context.ws, taskID: context.taskID) { error in
@@ -372,7 +408,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     private func stopAliyunQwenStreaming(_ context: AliyunQwenStreamingContext) {
         VoxtLog.model(
-            "Aliyun qwen stop requested. kind=\(context.kind), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested)"
+            "Aliyun qwen stop requested. kind=\(context.kind), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested), localCallbacks=\(sampleStore.callbackCount()), localSamples=\(sampleStore.sampleCount()), state=\(context.debugSummary())"
         )
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -1002,7 +1038,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let event = AliyunRemoteASRConfiguration.realtimeSocketEvent(from: object)
         let payload = object["payload"] as? [String: Any] ?? [:]
         VoxtLog.model(
-            "Aliyun fun socket event received. event=\(event), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested)"
+            "Aliyun fun socket event received. event=\(event), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested), state=\(context.debugSummary())"
         )
 
         if event == "task-failed" || event == "error" {
@@ -1020,7 +1056,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             do {
                 try startAliyunAudioCapture(context: context)
                 context.didStartAudioStream = true
-                VoxtLog.model("Aliyun fun task-started acknowledged. audio capture started.")
+                VoxtLog.model("Aliyun fun task-started acknowledged. audio capture started. state=\(context.debugSummary())")
             } catch {
                 throw error
             }
@@ -1045,7 +1081,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         if event == "task-finished" {
             context.isClosed = true
-            VoxtLog.model("Aliyun fun task-finished received.")
+            VoxtLog.model("Aliyun fun task-finished received. state=\(context.debugSummary())")
             await context.responseState.markTaskFinished()
             return
         }
@@ -1056,20 +1092,53 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
         streamingInputSampleRate = inputFormat.sampleRate
+        let usesPreferredInputDevice = preferredInputDeviceID != nil
+        VoxtLog.model(
+            "Aliyun fun audio capture start requested. taskID=\(context.taskID), sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount), routing=\(usesPreferredInputDevice ? "preferred" : "system-default"), deviceID=\(usesPreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default"), engineRunning=\(audioEngine.isRunning), state=\(context.debugSummary())"
+        )
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
+            self.sampleStore.noteCallback()
             guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
             if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
                 self.sampleStore.append(samples)
             }
+            let callbackCount = self.sampleStore.callbackCount()
             Task { @MainActor in
                 guard self.isRecording,
                       let ctx = self.aliyunStreamingContext,
                       !ctx.isClosed
                 else { return }
+                let now = Date()
+                ctx.pcmCallbackCount = callbackCount
+                if ctx.firstPCMCallbackAt == nil {
+                    ctx.firstPCMCallbackAt = now
+                }
+                ctx.lastPCMCallbackAt = now
+                if callbackCount == 1 {
+                    VoxtLog.model("Aliyun fun first PCM callback received. state=\(ctx.debugSummary(now: now))")
+                }
                 self.audioLevel = self.audioLevelFromPCM16(pcmData)
                 ctx.ws.send(.data(pcmData)) { error in
+                    if error == nil {
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            guard self.isCurrentGeneration(ctx.generationID),
+                                  self.aliyunStreamingContext === ctx,
+                                  !ctx.isClosed
+                            else { return }
+                            let sentAt = Date()
+                            ctx.audioPacketCount += 1
+                            if ctx.firstAudioPacketSentAt == nil {
+                                ctx.firstAudioPacketSentAt = sentAt
+                            }
+                            ctx.lastAudioPacketSentAt = sentAt
+                            if ctx.audioPacketCount == 1 {
+                                VoxtLog.model("Aliyun fun first audio packet queued. bytes=\(pcmData.count), state=\(ctx.debugSummary(now: sentAt))")
+                            }
+                        }
+                    }
                     if let error {
                         Task { [responseState = ctx.responseState] in
                             await responseState.markCompletedWithError(error)
@@ -1081,8 +1150,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         audioEngine.prepare()
         try audioEngine.start()
+        context.audioCaptureStartCount += 1
+        context.lastAudioCaptureStartReason = "task-started"
         isRecording = true
-        VoxtLog.model("Aliyun fun audio capture started. sampleRate=\(Int(streamingInputSampleRate))")
+        VoxtLog.model("Aliyun fun audio capture started. sampleRate=\(Int(streamingInputSampleRate)), state=\(context.debugSummary())")
     }
 
     private func stopAliyunAudioCapture() {
@@ -1213,7 +1284,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
         let type = (object["type"] as? String ?? "").lowercased()
         VoxtLog.model(
-            "Aliyun qwen socket event received. type=\(type), kind=\(context.kind), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested)"
+            "Aliyun qwen socket event received. type=\(type), kind=\(context.kind), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested), state=\(context.debugSummary())"
         )
         if type == "error" {
             let detail = (object["message"] as? String) ?? "Aliyun Qwen realtime ASR task failed."
@@ -1238,7 +1309,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             }
             try startAliyunQwenAudioCapture(context: context)
             context.didStartAudioStream = true
-            VoxtLog.model("Aliyun qwen session.updated acknowledged. audio capture started. kind=\(context.kind)")
+            VoxtLog.model("Aliyun qwen session.updated acknowledged. audio capture started. kind=\(context.kind), state=\(context.debugSummary())")
             return
         }
 
@@ -1270,7 +1341,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         if type == "session.finished" {
             context.isClosed = true
-            VoxtLog.model("Aliyun qwen session.finished received. kind=\(context.kind)")
+            VoxtLog.model("Aliyun qwen session.finished received. kind=\(context.kind), state=\(context.debugSummary())")
             await context.responseState.markSessionFinished()
             return
         }
@@ -1281,20 +1352,53 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
         streamingInputSampleRate = inputFormat.sampleRate
+        let usesPreferredInputDevice = preferredInputDeviceID != nil
+        VoxtLog.model(
+            "Aliyun qwen audio capture start requested. kind=\(context.kind), sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount), routing=\(usesPreferredInputDevice ? "preferred" : "system-default"), deviceID=\(usesPreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default"), engineRunning=\(audioEngine.isRunning), state=\(context.debugSummary())"
+        )
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
+            self.sampleStore.noteCallback()
             guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
             if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
                 self.sampleStore.append(samples)
             }
+            let callbackCount = self.sampleStore.callbackCount()
             Task { @MainActor in
                 guard self.isRecording,
                       let ctx = self.aliyunQwenStreamingContext,
                       !ctx.isClosed
                 else { return }
+                let now = Date()
+                ctx.pcmCallbackCount = callbackCount
+                if ctx.firstPCMCallbackAt == nil {
+                    ctx.firstPCMCallbackAt = now
+                }
+                ctx.lastPCMCallbackAt = now
+                if callbackCount == 1 {
+                    VoxtLog.model("Aliyun qwen first PCM callback received. state=\(ctx.debugSummary(now: now))")
+                }
                 self.audioLevel = self.audioLevelFromPCM16(pcmData)
                 self.sendAliyunQwenAudioAppend(pcmData, through: ctx.ws) { error in
+                    if error == nil {
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            guard self.isCurrentGeneration(ctx.generationID),
+                                  self.aliyunQwenStreamingContext === ctx,
+                                  !ctx.isClosed
+                            else { return }
+                            let sentAt = Date()
+                            ctx.audioPacketCount += 1
+                            if ctx.firstAudioPacketSentAt == nil {
+                                ctx.firstAudioPacketSentAt = sentAt
+                            }
+                            ctx.lastAudioPacketSentAt = sentAt
+                            if ctx.audioPacketCount == 1 {
+                                VoxtLog.model("Aliyun qwen first audio packet queued. bytes=\(pcmData.count), state=\(ctx.debugSummary(now: sentAt))")
+                            }
+                        }
+                    }
                     if let error {
                         Task { [responseState = ctx.responseState] in
                             await responseState.markCompletedWithError(error)
@@ -1305,8 +1409,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
         audioEngine.prepare()
         try audioEngine.start()
+        context.audioCaptureStartCount += 1
+        context.lastAudioCaptureStartReason = "session.updated"
         isRecording = true
-        VoxtLog.model("Aliyun qwen audio capture started. kind=\(context.kind), sampleRate=\(Int(streamingInputSampleRate))")
+        VoxtLog.model("Aliyun qwen audio capture started. kind=\(context.kind), sampleRate=\(Int(streamingInputSampleRate)), state=\(context.debugSummary())")
     }
 
     private func shouldIgnoreTrailingAliyunQwenGenericError(
@@ -2774,7 +2880,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let realtimeSummary = activeRealtimeDebugSummary() ?? "none"
         guard !samples.isEmpty else {
             VoxtLog.warning(
-                "Remote streaming audio archive export skipped because no local samples were captured. realtime=\(realtimeSummary)"
+                "Remote streaming audio archive export skipped because no local samples were captured. callbacks=\(sampleStore.callbackCount()), realtime=\(realtimeSummary)"
             )
             return
         }

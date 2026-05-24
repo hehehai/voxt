@@ -239,9 +239,9 @@ extension AppDelegate {
         }
 
         if (devicesChanged || selectionChanged), isSessionActive {
-            VoxtLog.warning(
+            VoxtLog.model(
                 """
-                Audio input change observed during active session. reason=\(reason), recordingActive=\(isSessionActive), previousSelected=\(previousSelectedUID ?? "none"), newSelected=\(resolvedState.activeUID ?? "none"), devicesChanged=\(devicesChanged), selectionChanged=\(selectionChanged), added=\(describeDevices(addedDevices)), removed=\(describeDevices(removedDevices))
+                Audio input change observed during active session. reason=\(reason), recordingActive=\(isSessionActive), previousSelected=\(previousSelectedUID ?? "none"), newSelected=\(resolvedState.activeUID ?? "none"), devicesChanged=\(devicesChanged), selectionChanged=\(selectionChanged), added=\(describeDevices(addedDevices)), removed=\(describeDevices(removedDevices)), captureState=\(activeRecordingCaptureDebugSummary())
                 """
             )
         }
@@ -281,8 +281,8 @@ extension AppDelegate {
         guard availableDevices.contains(where: { $0.uid == currentUID }) else { return nil }
 
         guard isSessionActive, recordingStoppedAt == nil else { return nil }
-        VoxtLog.info(
-            "Preserving active microphone during recording hardware change. uid=\(currentUID), output=\(sessionOutputMode)"
+        VoxtLog.model(
+            "Preserving active microphone during recording hardware change. uid=\(currentUID), output=\(sessionOutputMode), captureState=\(activeRecordingCaptureDebugSummary())"
         )
         return currentUID
     }
@@ -413,6 +413,17 @@ extension AppDelegate {
         to newState: MicrophoneResolvedState,
         reason: String
     ) {
+        if shouldIgnoreHardwareInputReconfigurationDuringRecording(
+            previousUID: previousState.activeUID,
+            newUID: newState.activeUID,
+            reason: reason
+        ) {
+            VoxtLog.model(
+                "Ignoring hardware change input reconfiguration during active recording. uid=\(newState.activeUID ?? "none"), output=\(sessionOutputMode), captureState=\(activeRecordingCaptureDebugSummary())"
+            )
+            return
+        }
+
         guard previousState.activeUID != newState.activeUID else {
             applyPreferredInputDevice()
             return

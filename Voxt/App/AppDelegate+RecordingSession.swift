@@ -397,4 +397,16 @@ extension AppDelegate {
             self.executeSessionEndPipeline(for: finishingSessionID, trigger: "finish")
         }
     }
+
+    func shouldIgnoreHardwareInputReconfigurationDuringRecording(
+        previousUID: String?,
+        newUID: String?,
+        reason: String
+    ) -> Bool {
+        guard reason == "hardware change" else { return false }
+        guard isSessionActive, recordingStoppedAt == nil else { return false }
+        guard previousUID == newUID else { return false }
+        guard let activeUID = newUID else { return false }
+        return inputDevicesSnapshot.contains(where: { $0.uid == activeUID })
+    }
 }
