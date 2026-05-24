@@ -469,6 +469,8 @@ struct FeatureModelCatalogBuilder {
             if RemoteASRRealtimeSupport.isAliyunRealtimeModel(configuration.model) {
                 tags.append(localized("Realtime"))
             }
+        case .stepFunASR:
+            tags.append(contentsOf: [localized("Accurate"), localized("Multilingual")])
         }
         return deduplicatedFeatureTags(tags)
     }

@@ -10,6 +10,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
     case doubaoASR
     case glmASR
     case aliyunBailianASR
+    case stepFunASR
 
     nonisolated var id: String { rawValue }
 
@@ -23,6 +24,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("GLM ASR")
         case .aliyunBailianASR:
             return AppLocalization.localizedString("Aliyun Bailian ASR")
+        case .stepFunASR:
+            return AppLocalization.localizedString("StepFun ASR")
         }
     }
 
@@ -36,6 +39,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return "glm-asr-1"
         case .aliyunBailianASR:
             return "fun-asr-realtime"
+        case .stepFunASR:
+            return "stepaudio-2.5-asr"
         }
     }
 
@@ -76,6 +81,10 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "paraformer-realtime-v1", title: "Paraformer Realtime V1"),
                 RemoteModelOption(id: "paraformer-realtime-8k-v2", title: "Paraformer Realtime 8k V2"),
                 RemoteModelOption(id: "paraformer-realtime-8k-v1", title: "Paraformer Realtime 8k V1")
+            ]
+        case .stepFunASR:
+            return [
+                RemoteModelOption(id: "stepaudio-2.5-asr", title: "StepAudio 2.5 ASR")
             ]
         }
     }

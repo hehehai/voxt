@@ -432,3 +432,49 @@ enum RemoteASREndpointSupport {
         return String(value.dropLast(oldSuffix.count)) + newSuffix
     }
 }
+
+enum StepFunSupport {
+    /// Extracts raw PCM data from a WAV file by walking RIFF chunks and
+    /// returning the contents of the "data" chunk.
+    static func extractPCMData(fromWAV wavData: Data) throws -> Data {
+        guard wavData.count > 44 else {
+            throw NSError(
+                domain: "Voxt.StepFun",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "WAV file too small for StepFun ASR."]
+            )
+        }
+
+        var offset = 12
+        while offset + 8 <= wavData.count {
+            let chunkID = String(data: wavData.subdata(in: offset..<offset + 4), encoding: .ascii) ?? ""
+            let chunkSize = wavData.withUnsafeBytes { ptr in
+                ptr.loadUnaligned(fromByteOffset: offset + 4, as: UInt32.self)
+            }
+            let size = Int(chunkSize)
+            if chunkID == "data" {
+                let dataStart = offset + 8
+                let dataEnd = min(dataStart + size, wavData.count)
+                guard dataEnd > dataStart else {
+                    throw NSError(
+                        domain: "Voxt.StepFun",
+                        code: -2,
+                        userInfo: [NSLocalizedDescriptionKey: "WAV data chunk is empty."]
+                    )
+                }
+                return wavData.subdata(in: dataStart..<dataEnd)
+            }
+            offset += 8 + size
+            if size % 2 != 0 { offset += 1 }
+        }
+
+        guard wavData.count > 44 else {
+            throw NSError(
+                domain: "Voxt.StepFun",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Cannot locate WAV data chunk."]
+            )
+        }
+        return wavData.subdata(in: 44..<wavData.count)
+    }
+}

@@ -63,7 +63,7 @@ enum RemoteProviderConfigurationPolicy {
             return true
         }
         if case .asr(let provider) = target {
-            return provider == .openAIWhisper
+            return provider == .openAIWhisper || provider == .stepFunASR
         }
         return false
     }
@@ -191,6 +191,8 @@ enum RemoteProviderConfigurationPolicy {
                 return endpointPresets(target: target, resolvedModel: resolvedModel).first?.url ?? "https://..."
             case .doubaoASR:
                 return "https://..."
+            case .stepFunASR:
+                return "https://api.stepfun.com/step_plan/v1/audio/asr/sse"
             }
         case .llm(let provider):
             return RemoteLLMRuntimeClient().resolvedLLMEndpoint(

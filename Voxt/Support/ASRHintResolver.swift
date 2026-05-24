@@ -95,6 +95,12 @@ enum ASRHintResolver {
                 prompt: nil,
                 otherLanguages: otherLanguages
             )
+        case .stepFunASR:
+            return ResolvedASRHintPayload(
+                language: usesExplicitSingleLanguageHint ? resolvedStepFunLanguage(mainLanguage) : nil,
+                prompt: nil,
+                otherLanguages: otherLanguages
+            )
         }
     }
 
@@ -280,6 +286,10 @@ enum ASRHintResolver {
 
         let deduped = mapped.filter { seen.insert($0).inserted }
         return Array(deduped.prefix(3))
+    }
+
+    private static func resolvedStepFunLanguage(_ language: UserMainLanguageOption) -> String {
+        language.baseLanguageCode
     }
 
     private static func resolvedMLXLanguage(mainLanguage: UserMainLanguageOption, modelRepo: String?) -> String? {

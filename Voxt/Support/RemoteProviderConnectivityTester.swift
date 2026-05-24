@@ -88,6 +88,20 @@ struct RemoteProviderConnectivityTester {
                 apiKey: configuration.apiKey,
                 model: model
             )
+        case .stepFunASR:
+            guard !configuration.apiKey.isEmpty else {
+                throw NSError(
+                    domain: "Voxt.Settings",
+                    code: -7,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("StepFun API Key is required for testing.")]
+                )
+            }
+            let endpoint = RemoteProviderConnectivityTestEndpoints.resolvedStepFunASREndpoint(configuration.endpoint)
+            return try await testStepFunReachability(
+                endpoint: endpoint,
+                token: configuration.apiKey,
+                model: configuration.model.isEmpty ? RemoteASRProvider.stepFunASR.suggestedModel : configuration.model
+            )
         }
     }
 
@@ -338,6 +352,52 @@ struct RemoteProviderConnectivityTester {
             domain: "Voxt.Settings",
             code: http.statusCode,
             userInfo: [NSLocalizedDescriptionKey: AppLocalization.format("Connection failed (HTTP %d). %@", http.statusCode, payload)]
+        )
+    }
+
+    private func testStepFunReachability(
+        endpoint: String,
+        token: String,
+        model: String
+    ) async throws -> String {
+        guard let url = URL(string: endpoint) else {
+            throw NSError(
+                domain: "Voxt.Settings",
+                code: -22,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid StepFun ASR endpoint URL.")]
+            )
+        }
+
+        let silentWAV = silentTestWavData()
+        let pcmData = (try? StepFunSupport.extractPCMData(fromWAV: silentWAV))
+            ?? silentWAV.subdata(in: 44..<silentWAV.count)
+        let base64Audio = pcmData.base64EncodedString()
+
+        let body: [String: Any] = [
+            "audio": [
+                "data": base64Audio,
+                "input": [
+                    "transcription": [
+                        "model": model,
+                        "language": "zh",
+                        "enable_itn": false
+                    ],
+                    "format": [
+                        "type": "pcm",
+                        "codec": "pcm_s16le",
+                        "rate": 16000,
+                        "bits": 16,
+                        "channel": 1
+                    ]
+                ]
+            ]
+        ]
+
+        return try await testJSONPOSTReachability(
+            endpoint: endpoint,
+            headers: ["Authorization": "Bearer \(token)"],
+            body: body,
+            successMessage: AppLocalization.localizedString("Connection test succeeded (StepFun ASR reachable).")
         )
     }
 

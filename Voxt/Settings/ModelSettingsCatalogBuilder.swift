@@ -268,6 +268,8 @@ struct ModelCatalogBuilder {
             if RemoteASRRealtimeSupport.isAliyunRealtimeModel(configuration.model) {
                 tags.append(localizedModelCatalog("Realtime"))
             }
+        case .stepFunASR:
+            tags.append(contentsOf: [localizedModelCatalog("Accurate"), localizedModelCatalog("Multilingual")])
         }
         return deduplicatedTags(tags)
     }

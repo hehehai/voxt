@@ -474,6 +474,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return try await transcribeDoubao(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
         case .aliyunBailianASR:
             return try await transcribeAliyunBailian(fileURL: fileURL, configuration: configuration)
+        case .stepFunASR:
+            return try await transcribeStepFun(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
         }
     }
 
@@ -693,6 +695,108 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             model: configuration.model,
             extraFields: extraFields
         )
+    }
+
+    private func transcribeStepFun(
+        fileURL: URL,
+        configuration: RemoteProviderConfiguration,
+        hintPayload: ResolvedASRHintPayload
+    ) async throws -> String {
+        let endpoint = URL(string: RemoteASREndpointSupport.normalizedEndpoint(
+            configuration.endpoint,
+            defaultValue: "https://api.stepfun.com/step_plan/v1/audio/asr/sse"
+        ))!
+
+        let token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -6,
+                userInfo: [NSLocalizedDescriptionKey: "StepFun API key is empty."]
+            )
+        }
+
+        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? RemoteASRProvider.stepFunASR.suggestedModel
+            : configuration.model
+
+        let wavData = try Data(contentsOf: fileURL)
+        let pcmData = try StepFunSupport.extractPCMData(fromWAV: wavData)
+        let base64Audio = pcmData.base64EncodedString()
+
+        let language = hintPayload.language ?? "zh"
+
+        let body: [String: Any] = [
+            "audio": [
+                "data": base64Audio,
+                "input": [
+                    "transcription": [
+                        "model": model,
+                        "language": language,
+                        "enable_itn": true
+                    ],
+                    "format": [
+                        "type": "pcm",
+                        "codec": "pcm_s16le",
+                        "rate": 16000,
+                        "bits": 16,
+                        "channel": 1
+                    ]
+                ]
+            ]
+        ]
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await VoxtNetworkSession.active.bytes(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -10,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response."]
+            )
+        }
+
+        if !(200...299).contains(http.statusCode) {
+            let payload = try await RemoteASRTextSupport.collectText(from: bytes)
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(payload)"]
+            )
+        }
+
+        var aggregate = ""
+        for try await rawLine in bytes.lines {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+
+            let line: String
+            if trimmed.hasPrefix("data:") {
+                line = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                line = trimmed
+            }
+
+            if line == "[DONE]" { break }
+
+            if let fragment = RemoteASRTextSupport.extractTextFragment(fromLine: line),
+               !fragment.isEmpty {
+                aggregate = RemoteASRTextSupport.mergeStreamFragment(current: aggregate, incoming: fragment)
+                await MainActor.run {
+                    self.publishIntermediateTranscription(aggregate)
+                }
+            }
+        }
+
+        if aggregate.isEmpty { return transcribedText }
+        return aggregate
     }
 
     private func transcribeDoubao(
