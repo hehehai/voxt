@@ -6,6 +6,35 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.11.9-beta.4] - 2026-05-25
+
+### English
+
+#### Changed
+- Turned microphone auto switch off by default for new or unset configurations, and refined the microphone priority dialog header layout to avoid control overlap.
+
+#### Fixed
+- Added finer temporary live capture diagnostics around MLX microphone graph startup to narrow down capture stalls on affected Macs.
+- Reduced hardware-change interference during local capture startup by ignoring microphone input reconfiguration while MLX or Whisper is still initializing.
+
+### 简体中文
+
+#### 改进
+- 将麦克风自动切换的默认值调整为关闭，并优化麦克风优先级弹窗头部布局，避免控件与关闭按钮重叠。
+
+#### 修复
+- 在 MLX 本地录音启动链路中补充更细的临时诊断日志，进一步缩小部分机器上的采集卡住问题范围。
+- 在 MLX 或 Whisper 仍处于启动阶段时，忽略录音中的麦克风输入重配置，减少 hardware change 对本地采集启动的干扰。
+
+### 日本語
+
+#### 変更
+- 新規または未設定の構成ではマイク自動切替をデフォルトでオフにし、マイク優先順位ダイアログのヘッダー配置を調整してコントロールの重なりを解消しました。
+
+#### 修正
+- 一部の Mac で発生する収録開始時の停止を切り分けやすくするため、MLX ローカル録音起動経路の一時診断ログをさらに細かく追加しました。
+- MLX または Whisper の初期化中は録音中のマイク入力再構成を無視し、hardware change がローカル収録起動へ与える干渉を減らしました。
+
 ## [1.11.9-beta.3] - 2026-05-25
 
 ### English
