@@ -87,4 +87,20 @@ final class RemoteProviderConnectivityTesterTests: XCTestCase {
         XCTAssertNotNil(body["messages"])
         XCTAssertNil(body["prompt"])
     }
+
+    func testStepFunReachabilityHeadersRequestSSE() {
+        let tester = RemoteProviderConnectivityTester(testTarget: .asr(.stepFunASR))
+
+        let headers = tester.stepFunReachabilityHeaders(token: "step-token")
+
+        XCTAssertEqual(headers["Accept"], "text/event-stream")
+        XCTAssertEqual(headers["Authorization"], "Bearer step-token")
+    }
+
+    func testStepFunReachabilityDefaultEndpointUsesDocumentedSSEPath() {
+        XCTAssertEqual(
+            RemoteProviderConnectivityTestEndpoints.resolvedStepFunASREndpoint(""),
+            "https://api.stepfun.com/v1/audio/asr/sse"
+        )
+    }
 }

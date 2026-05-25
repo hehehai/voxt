@@ -33,4 +33,96 @@ final class RemoteASRSupportTests: XCTestCase {
         XCTAssertNil(fields["prompt"])
         XCTAssertNil(fields["stream"])
     }
+
+    func testExtractStreamErrorMessageReadsNestedErrorPayload() {
+        let message = RemoteASRTextSupport.extractStreamErrorMessage(
+            fromLine: #"{"error":{"code":"invalid_api_key","message":"API key is invalid"}}"#
+        )
+
+        XCTAssertEqual(message, "API key is invalid")
+    }
+
+    func testExtractStreamErrorMessageReadsErrorEventPayload() {
+        let message = RemoteASRTextSupport.extractStreamErrorMessage(
+            fromLine: #"{"event":"error","message":"model is required"}"#
+        )
+
+        XCTAssertEqual(message, "model is required")
+    }
+
+    func testExtractStreamErrorMessageIgnoresNormalTextPayload() {
+        let message = RemoteASRTextSupport.extractStreamErrorMessage(
+            fromLine: #"{"text":"hello world"}"#
+        )
+
+        XCTAssertNil(message)
+    }
+
+    func testStepFunTranscriptionPayloadIncludesLanguageAndHotwords() {
+        let payload = StepFunPayloadSupport.transcriptionPayload(
+            model: "stepaudio-2.5-asr",
+            hintPayload: ResolvedASRHintPayload(
+                language: "zh",
+                contextualPhrases: ["Voxt", "FireRed"]
+            )
+        )
+
+        XCTAssertEqual(payload["model"] as? String, "stepaudio-2.5-asr")
+        XCTAssertEqual(payload["language"] as? String, "zh")
+        XCTAssertEqual(payload["enable_itn"] as? Bool, true)
+        XCTAssertEqual(payload["hotwords"] as? [String], ["Voxt", "FireRed"])
+        XCTAssertNil(payload["enable_timestamp"])
+        XCTAssertNil(payload["prompt"])
+        XCTAssertFalse(StepFunPayloadSupport.supportsSSEPrompt(model: "stepaudio-2.5-asr"))
+    }
+
+    func testStepFunProTranscriptionPayloadCanIncludePrompt() {
+        let payload = StepFunPayloadSupport.transcriptionPayload(
+            model: "stepaudio-2-asr-pro",
+            hintPayload: ResolvedASRHintPayload(
+                language: "zh",
+                prompt: "Prefer these terms.\nVoxt",
+                contextualPhrases: ["Voxt"]
+            ),
+            includePrompt: StepFunPayloadSupport.supportsSSEPrompt(model: "stepaudio-2-asr-pro")
+        )
+
+        XCTAssertEqual(payload["model"] as? String, "stepaudio-2-asr-pro")
+        XCTAssertEqual(payload["prompt"] as? String, "Prefer these terms.\nVoxt")
+        XCTAssertEqual(payload["hotwords"] as? [String], ["Voxt"])
+        XCTAssertTrue(StepFunPayloadSupport.supportsSSEPrompt(model: "stepaudio-2-asr-pro"))
+    }
+
+    func testStepFunRealtimeSessionUpdateUsesWebSocketShape() throws {
+        let payload = StepFunPayloadSupport.sessionUpdatePayload(
+            model: "step-asr-1.1-stream",
+            hintPayload: ResolvedASRHintPayload(
+                language: "zh",
+                prompt: "Prefer these terms.\nVoxt",
+                contextualPhrases: ["Voxt"]
+            ),
+            useServerVAD: true
+        )
+
+        XCTAssertEqual(payload["type"] as? String, "session.update")
+        let session = try XCTUnwrap(payload["session"] as? [String: Any])
+        let audio = try XCTUnwrap(session["audio"] as? [String: Any])
+        let input = try XCTUnwrap(audio["input"] as? [String: Any])
+        let transcription = try XCTUnwrap(input["transcription"] as? [String: Any])
+        let format = try XCTUnwrap(input["format"] as? [String: Any])
+
+        XCTAssertEqual(transcription["model"] as? String, "step-asr-1.1-stream")
+        XCTAssertEqual(transcription["prompt"] as? String, "Prefer these terms.\nVoxt")
+        XCTAssertNil(transcription["hotwords"])
+        XCTAssertEqual(transcription["full_rerun_on_commit"] as? Bool, true)
+        XCTAssertEqual(format["codec"] as? String, "pcm_s16le")
+        XCTAssertNotNil(input["turn_detection"])
+    }
+
+    func testStepFunRealtimeEndpointRemapsSSEEndpoint() {
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedStepFunRealtimeEndpoint("https://api.stepfun.com/v1/audio/asr/sse"),
+            "wss://api.stepfun.com/v1/realtime/asr/stream"
+        )
+    }
 }

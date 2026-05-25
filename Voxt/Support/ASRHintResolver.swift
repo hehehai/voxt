@@ -7,6 +7,7 @@ struct ResolvedASRHintPayload {
     var prompt: String?
     var otherLanguages: [String] = []
     var multilingualContext: String?
+    var contextualPhrases: [String] = []
 }
 
 struct ResolvedDictationSettings: Equatable {
@@ -37,6 +38,7 @@ enum ASRHintResolver {
             dictionaryTerms: dictionaryTerms
         )
         let otherLanguages = otherLanguageOptions.map(\.promptName)
+        let contextualPhrases = ASRHintSettingsStore.contextualPhrases(from: settings)
         let usesExplicitSingleLanguageHint = settings.followsUserMainLanguage && otherLanguageOptions.isEmpty
         let mlxResolvedLanguage = settings.followsUserMainLanguage
             ? resolvedMLXLanguageHint(
@@ -98,8 +100,12 @@ enum ASRHintResolver {
         case .stepFunASR:
             return ResolvedASRHintPayload(
                 language: usesExplicitSingleLanguageHint ? resolvedStepFunLanguage(mainLanguage) : nil,
-                prompt: nil,
-                otherLanguages: otherLanguages
+                prompt: resolvedStepFunPrompt(
+                    contextualPhrases: contextualPhrases,
+                    dictionaryTerms: dictionaryTerms
+                ),
+                otherLanguages: otherLanguages,
+                contextualPhrases: contextualPhrases
             )
         }
     }
@@ -237,6 +243,34 @@ enum ASRHintResolver {
             Other frequently used languages: \(otherLanguagesSummary)
             Mixed-language speech may appear. Preserve names, brands, URLs, and code-like text exactly as spoken.
             """
+    }
+
+    private static func resolvedStepFunPrompt(
+        contextualPhrases: [String],
+        dictionaryTerms: String
+    ) -> String? {
+        let terms = mergedTermLines(
+            contextualPhrases + dictionaryTerms.components(separatedBy: .newlines)
+        )
+        guard !terms.isEmpty else { return nil }
+
+        return """
+            Prefer these terms when they match the audio. Preserve names, product terms, technical terms, URLs, and code-like text exactly as spoken. Do not translate them.
+            \(terms.joined(separator: "\n"))
+            """
+    }
+
+    private static func mergedTermLines(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 
     private static func resolvedOpenAILanguage(_ language: UserMainLanguageOption) -> String {

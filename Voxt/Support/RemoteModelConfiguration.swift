@@ -84,7 +84,9 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             ]
         case .stepFunASR:
             return [
-                RemoteModelOption(id: "stepaudio-2.5-asr", title: "StepAudio 2.5 ASR")
+                RemoteModelOption(id: "stepaudio-2.5-asr", title: "StepAudio 2.5 ASR (SSE)"),
+                RemoteModelOption(id: "stepaudio-2-asr-pro", title: "StepAudio 2 ASR Pro (SSE)"),
+                RemoteModelOption(id: "step-asr-1.1-stream", title: "Step ASR 1.1 Stream (WebSocket)")
             ]
         }
     }

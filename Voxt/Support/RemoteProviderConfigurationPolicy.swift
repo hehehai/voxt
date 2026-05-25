@@ -14,6 +14,10 @@ enum RemoteASRRealtimeSupport {
             || normalized.hasPrefix("fun-asr")
             || normalized.hasPrefix("paraformer-realtime")
     }
+
+    static func isStepFunRealtimeModel(_ model: String) -> Bool {
+        model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "step-asr-1.1-stream"
+    }
 }
 
 enum RemoteProviderConfigurationPolicy {
@@ -192,7 +196,7 @@ enum RemoteProviderConfigurationPolicy {
             case .doubaoASR:
                 return "https://..."
             case .stepFunASR:
-                return "https://api.stepfun.com/step_plan/v1/audio/asr/sse"
+                return "https://api.stepfun.com/v1/audio/asr/sse"
             }
         case .llm(let provider):
             return RemoteLLMRuntimeClient().resolvedLLMEndpoint(

@@ -122,7 +122,7 @@ enum RemoteProviderConnectivityTestEndpoints {
     static func resolvedStepFunASREndpoint(_ endpoint: String) -> String {
         RemoteASREndpointSupport.normalizedEndpoint(
             endpoint,
-            defaultValue: "https://api.stepfun.com/step_plan/v1/audio/asr/sse"
+            defaultValue: "https://api.stepfun.com/v1/audio/asr/sse"
         )
     }
 

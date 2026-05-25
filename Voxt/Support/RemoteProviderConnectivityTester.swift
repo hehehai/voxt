@@ -395,10 +395,17 @@ struct RemoteProviderConnectivityTester {
 
         return try await testJSONPOSTReachability(
             endpoint: endpoint,
-            headers: ["Authorization": "Bearer \(token)"],
+            headers: stepFunReachabilityHeaders(token: token),
             body: body,
             successMessage: AppLocalization.localizedString("Connection test succeeded (StepFun ASR reachable).")
         )
+    }
+
+    func stepFunReachabilityHeaders(token: String) -> [String: String] {
+        [
+            "Accept": "text/event-stream",
+            "Authorization": "Bearer \(token)"
+        ]
     }
 
     private func makeASRTestMultipartBody(boundary: String, model: String) -> Data {
