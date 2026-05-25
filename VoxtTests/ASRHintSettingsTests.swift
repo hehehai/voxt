@@ -131,7 +131,7 @@ final class ASRHintSettingsTests: XCTestCase {
         )
 
         XCTAssertEqual(payload.language, "zh")
-        XCTAssertEqual(payload.contextualPhrases, ["Voxt", "FireRed", "Voxt"])
+        XCTAssertEqual(payload.contextualPhrases, ["Voxt", "FireRed", "Codex"])
         XCTAssertNotNil(payload.prompt)
         XCTAssertContains(payload.prompt ?? "", "Preserve names")
         XCTAssertContains(payload.prompt ?? "", "Voxt")

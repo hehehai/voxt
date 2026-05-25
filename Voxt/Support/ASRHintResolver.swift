@@ -98,14 +98,15 @@ enum ASRHintResolver {
                 otherLanguages: otherLanguages
             )
         case .stepFunASR:
+            let terms = resolvedStepFunTerms(
+                contextualPhrases: contextualPhrases,
+                dictionaryTerms: dictionaryTerms
+            )
             return ResolvedASRHintPayload(
                 language: usesExplicitSingleLanguageHint ? resolvedStepFunLanguage(mainLanguage) : nil,
-                prompt: resolvedStepFunPrompt(
-                    contextualPhrases: contextualPhrases,
-                    dictionaryTerms: dictionaryTerms
-                ),
+                prompt: resolvedStepFunPrompt(terms: terms),
                 otherLanguages: otherLanguages,
-                contextualPhrases: contextualPhrases
+                contextualPhrases: terms
             )
         }
     }
@@ -245,13 +246,18 @@ enum ASRHintResolver {
             """
     }
 
-    private static func resolvedStepFunPrompt(
+    private static func resolvedStepFunTerms(
         contextualPhrases: [String],
         dictionaryTerms: String
-    ) -> String? {
-        let terms = mergedTermLines(
+    ) -> [String] {
+        mergedTermLines(
             contextualPhrases + dictionaryTerms.components(separatedBy: .newlines)
         )
+    }
+
+    private static func resolvedStepFunPrompt(
+        terms: [String]
+    ) -> String? {
         guard !terms.isEmpty else { return nil }
 
         return """
