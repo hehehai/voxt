@@ -6,6 +6,35 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.11.9-beta.3] - 2026-05-25
+
+### English
+
+#### Changed
+- Expanded the built-in log viewer to show and export the latest 2000 lines with appended app metadata for debugging.
+
+#### Fixed
+- Switched the log viewer preview to a more stable native text view to prevent blank or frozen previews when opening large logs.
+- Added broader model-debug-gated live capture diagnostics across local and remote transcription startup paths.
+
+### 简体中文
+
+#### 改进
+- 扩展内置日志查看器，支持预览和导出最新 2000 行日志，并继续在末尾附带应用元数据，方便排查问题。
+
+#### 修复
+- 将日志预览切换为更稳定的原生文本视图，避免打开大日志时出现空白或卡死。
+- 在本地与远程转录启动链路中补充更完整的、受模型调试开关控制的 live capture 诊断日志。
+
+### 日本語
+
+#### 変更
+- 内蔵ログビューアーを拡張し、最新 2000 行の表示と書き出し、および末尾へのアプリメタデータ付与に対応しました。
+
+#### 修正
+- ログプレビューをより安定したネイティブテキストビューに切り替え、大きなログを開いたときの空白表示やフリーズを防ぎました。
+- ローカル/リモート転写の起動経路に、モデルデバッグログで制御される live capture 診断ログをさらに追加しました。
+
 ## [1.11.9-beta.2] - 2026-05-24
 
 ### English
