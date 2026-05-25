@@ -1612,7 +1612,13 @@ struct RemoteLLMRuntimeClient {
         responseFormat: OpenAICompatibleResponseFormat?
     ) throws {
         let settings = configuration.effectiveGenerationSettings(provider: provider)
-        payload["max_tokens"] = settings.maxOutputTokens.map { max(1, $0) } ?? tuning.maxTokens
+        if let maxOutputTokens = settings.maxOutputTokens {
+            payload["max_tokens"] = max(1, maxOutputTokens)
+        } else if shouldOmitDefaultMaxTokens(provider: provider, model: configuration.model) {
+            payload.removeValue(forKey: "max_tokens")
+        } else {
+            payload["max_tokens"] = tuning.maxTokens
+        }
         if let temperature = settings.temperature {
             payload["temperature"] = temperature
         }
@@ -1664,6 +1670,18 @@ struct RemoteLLMRuntimeClient {
             settings: settings,
             fieldName: AppLocalization.localizedString("Extra Body JSON")
         )
+    }
+
+    func shouldOmitDefaultMaxTokens(provider: RemoteLLMProvider, model: String) -> Bool {
+        guard provider == .stepFun else { return false }
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return [
+            "step-3.5-flash",
+            "step-3.5-flash-2603",
+            "step-3",
+            "step-r1-v-mini",
+            "step-router-v1"
+        ].contains(normalizedModel)
     }
 
     func applyOpenAICompatibleThinkingSettings(
@@ -1852,8 +1870,9 @@ struct RemoteLLMRuntimeClient {
         let proxySettings = VoxtNetworkSession.currentProxySettings
         let proxyRoute = request.url.map { resolvedProxyRoute(for: $0, settings: proxySettings) } ?? "unavailable"
         let networkMode = VoxtNetworkSession.modeDescription
+        let requestMaxTokens = requestMaxTokensDescription(from: request) ?? "\(tuning.maxTokens)"
         VoxtLog.llm(
-            "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), url=\(request.url?.absoluteString ?? endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(tuning.maxTokens), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
+            "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), url=\(request.url?.absoluteString ?? endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(requestMaxTokens), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
         )
         VoxtLog.llm(
             """
@@ -1866,6 +1885,23 @@ struct RemoteLLMRuntimeClient {
             \(VoxtLog.llmPreview(userPrompt))
             """
         )
+    }
+
+    private func requestMaxTokensDescription(from request: URLRequest) -> String? {
+        guard
+            let body = request.httpBody,
+            let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else {
+            return nil
+        }
+
+        if let maxTokens = payload["max_tokens"] {
+            return "\(maxTokens)"
+        }
+        if let maxCompletionTokens = payload["max_completion_tokens"] {
+            return "\(maxCompletionTokens)"
+        }
+        return "auto"
     }
 
     private func completeStreaming(

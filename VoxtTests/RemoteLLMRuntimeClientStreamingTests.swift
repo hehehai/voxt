@@ -1484,6 +1484,7 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
             responseFormat: nil
         )
 
+        XCTAssertNil(payload["max_tokens"])
         XCTAssertNil(payload["reasoning_effort"])
     }
 
@@ -1510,7 +1511,34 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
             responseFormat: nil
         )
 
+        XCTAssertNil(payload["max_tokens"])
         XCTAssertNil(payload["reasoning_effort"])
+    }
+
+    func testStepFunTextModelKeepsDefaultMaxTokens() throws {
+        let client = RemoteLLMRuntimeClient()
+        var payload = client.openAICompatiblePayload(
+            model: "step-2-mini",
+            systemPrompt: "",
+            userPrompt: "hi",
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            streamingEnabled: false
+        )
+
+        try client.applyOpenAICompatibleGenerationSettings(
+            to: &payload,
+            provider: .stepFun,
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.stepFun.rawValue,
+                model: "step-2-mini",
+                endpoint: "",
+                apiKey: ""
+            ),
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            responseFormat: nil
+        )
+
+        XCTAssertEqual(payload["max_tokens"] as? Int, 256)
     }
 
     func testOMLXGenerationSettingsMapSchemaAndExtraBody() throws {
