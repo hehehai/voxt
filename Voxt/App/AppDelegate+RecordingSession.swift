@@ -418,6 +418,10 @@ extension AppDelegate {
     ) -> Bool {
         guard reason == "hardware change" else { return false }
         guard isSessionActive, recordingStoppedAt == nil else { return false }
+        if activeRecordingCaptureStartupInProgress() {
+            guard let activeUID = previousUID ?? newUID else { return false }
+            return inputDevicesSnapshot.contains(where: { $0.uid == activeUID })
+        }
         guard previousUID == newUID else { return false }
         guard let activeUID = newUID else { return false }
         return inputDevicesSnapshot.contains(where: { $0.uid == activeUID })

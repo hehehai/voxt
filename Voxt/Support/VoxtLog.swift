@@ -267,7 +267,7 @@ enum VoxtLog {
         lines.append("hotkeyDebugLoggingEnabled: \(defaults.bool(forKey: AppPreferenceKey.hotkeyDebugLoggingEnabled))")
         lines.append("modelDebugLoggingEnabled: \(defaults.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled))")
         lines.append("activeInputDeviceUID: \(nonEmptyOrPlaceholder(defaults.string(forKey: AppPreferenceKey.activeInputDeviceUID)))")
-        lines.append("microphoneAutoSwitchEnabled: \(defaults.object(forKey: AppPreferenceKey.microphoneAutoSwitchEnabled) as? Bool ?? true)")
+        lines.append("microphoneAutoSwitchEnabled: \(defaults.object(forKey: AppPreferenceKey.microphoneAutoSwitchEnabled) as? Bool ?? false)")
         lines.append("muteSystemAudioWhileRecording: \(defaults.bool(forKey: AppPreferenceKey.muteSystemAudioWhileRecording))")
         lines.append("interactionSoundsEnabled: \(defaults.object(forKey: AppPreferenceKey.interactionSoundsEnabled) as? Bool ?? true)")
         lines.append("interactionSoundPreset: \(interactionSoundPreset.rawValue) [\(interactionSoundPreset.title)]")

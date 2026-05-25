@@ -50,7 +50,7 @@ struct MicrophoneResolvedState: Sendable {
         entries: [],
         priorityUIDs: [],
         activeUID: nil,
-        autoSwitchEnabled: true
+        autoSwitchEnabled: false
     )
 
     var hasAvailableDevices: Bool {

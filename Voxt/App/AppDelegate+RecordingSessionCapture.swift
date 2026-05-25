@@ -501,6 +501,19 @@ extension AppDelegate {
         """
     }
 
+    func activeRecordingCaptureStartupInProgress() -> Bool {
+        switch transcriptionEngine {
+        case .mlxAudio:
+            guard let mlxTranscriber else { return false }
+            return mlxTranscriber.isModelInitializing && !mlxTranscriber.isRecording
+        case .whisperKit:
+            guard let whisperTranscriber else { return false }
+            return whisperTranscriber.isModelInitializing && !whisperTranscriber.isRecording
+        case .remote, .dictation:
+            return false
+        }
+    }
+
     func startSilenceMonitoringIfNeeded() {
         cancelActiveRecordingTasks()
 

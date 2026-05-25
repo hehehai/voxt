@@ -80,26 +80,27 @@ struct MicrophonePriorityDialog: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(localized("Microphone Priority"))
-                        .font(.headline)
-                    Text(state.activeDevice?.name ?? String(localized: "No available microphone devices"))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(localized("Microphone Priority"))
+                    .font(.headline)
+                Text(state.activeDevice?.name ?? String(localized: "No available microphone devices"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
-                Spacer()
+            HStack(alignment: .center, spacing: 12) {
+                Text(localized("Drag to set the preferred microphone order."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 12)
 
                 Toggle(localized("Auto Switch"), isOn: autoSwitchBinding)
                     .toggleStyle(.switch)
                     .controlSize(.small)
             }
-
-            Text(localized("Drag to set the preferred microphone order."))
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
+        .padding(.trailing, 44)
     }
 
     private var autoSwitchBinding: Binding<Bool> {

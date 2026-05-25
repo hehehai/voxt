@@ -416,13 +416,17 @@ extension AppDelegate {
         to newState: MicrophoneResolvedState,
         reason: String
     ) {
+        let startupCaptureInProgress = activeRecordingCaptureStartupInProgress()
         if shouldIgnoreHardwareInputReconfigurationDuringRecording(
             previousUID: previousState.activeUID,
             newUID: newState.activeUID,
             reason: reason
         ) {
             VoxtLog.model(
-                "Ignoring hardware change input reconfiguration during active recording. uid=\(newState.activeUID ?? "none"), output=\(sessionOutputMode), captureState=\(activeRecordingCaptureDebugSummary())"
+                "Ignoring hardware change input reconfiguration during active recording. startupInProgress=\(startupCaptureInProgress), previousUID=\(previousState.activeUID ?? "none"), newUID=\(newState.activeUID ?? "none"), output=\(sessionOutputMode), captureState=\(activeRecordingCaptureDebugSummary())"
+            )
+            VoxtLog.tempModel(
+                "Ignoring hardware change input reconfiguration during active recording. startupInProgress=\(startupCaptureInProgress), previousUID=\(previousState.activeUID ?? "none"), newUID=\(newState.activeUID ?? "none"), output=\(sessionOutputMode), captureState=\(activeRecordingCaptureDebugSummary())"
             )
             return
         }

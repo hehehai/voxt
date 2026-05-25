@@ -864,17 +864,24 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         audioEngine.reset()
 
         let inputNode = audioEngine.inputNode
+        VoxtLog.tempModel("MLX startAudioCaptureGraph before removeTap. bus=0, summary=\(temporaryCaptureDebugSummary())")
         inputNode.removeTap(onBus: 0)
+        VoxtLog.tempModel("MLX startAudioCaptureGraph after removeTap. bus=0, summary=\(temporaryCaptureDebugSummary())")
 
         let shouldUsePreferredInputDevice = usePreferredInputDevice ?? activeCaptureUsesPreferredInputDevice
         activeCaptureUsesPreferredInputDevice = shouldUsePreferredInputDevice
         if shouldUsePreferredInputDevice {
+            VoxtLog.tempModel("MLX startAudioCaptureGraph before applyPreferredInputDevice. requestedDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), summary=\(temporaryCaptureDebugSummary())")
             applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+            VoxtLog.tempModel("MLX startAudioCaptureGraph after applyPreferredInputDevice. requestedDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), summary=\(temporaryCaptureDebugSummary())")
         }
+        VoxtLog.tempModel("MLX startAudioCaptureGraph before outputFormat. bus=0, summary=\(temporaryCaptureDebugSummary())")
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        VoxtLog.tempModel("MLX startAudioCaptureGraph after outputFormat. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved)")
         inputSampleRate = recordingFormat.sampleRate
         let sampleStore = self.sampleStore
 
+        VoxtLog.tempModel("MLX startAudioCaptureGraph before installTap. bufferSize=1024, summary=\(temporaryCaptureDebugSummary())")
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             guard let self else { return }
             sampleStore.noteCallback()
@@ -907,8 +914,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 self?.audioLevel = normalized
             }
         }
+        VoxtLog.tempModel("MLX startAudioCaptureGraph after installTap. summary=\(temporaryCaptureDebugSummary())")
 
+        VoxtLog.tempModel("MLX startAudioCaptureGraph before prepare. summary=\(temporaryCaptureDebugSummary())")
         audioEngine.prepare()
+        VoxtLog.tempModel("MLX startAudioCaptureGraph after prepare. summary=\(temporaryCaptureDebugSummary())")
         VoxtLog.tempModel(
             "MLX startAudioCaptureGraph before audioEngine.start. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")"
         )

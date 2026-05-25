@@ -230,7 +230,7 @@ enum ConfigurationTransferManager {
             let decodedManualUID = try legacyContainer.decodeIfPresent(String.self, forKey: .manualSelectedInputDeviceUID)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             activeInputDeviceUID = !decodedActiveUID.isEmpty ? decodedActiveUID : (decodedManualUID.isEmpty ? nil : decodedManualUID)
-            microphoneAutoSwitchEnabled = try container.decodeIfPresent(Bool.self, forKey: .microphoneAutoSwitchEnabled) ?? true
+            microphoneAutoSwitchEnabled = try container.decodeIfPresent(Bool.self, forKey: .microphoneAutoSwitchEnabled) ?? false
             microphonePriorityUIDs = try container.decodeIfPresent([String].self, forKey: .microphonePriorityUIDs) ?? []
             trackedMicrophoneRecords = try container.decodeIfPresent([TrackedMicrophoneRecord].self, forKey: .trackedMicrophoneRecords) ?? []
             modelStorageRootPath = try container.decodeIfPresent(String.self, forKey: .modelStorageRootPath) ?? ""

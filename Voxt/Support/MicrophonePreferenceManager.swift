@@ -114,7 +114,7 @@ enum MicrophonePreferenceManager {
     }
 
     static func autoSwitchEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: AppPreferenceKey.microphoneAutoSwitchEnabled) as? Bool ?? true
+        defaults.object(forKey: AppPreferenceKey.microphoneAutoSwitchEnabled) as? Bool ?? false
     }
 
     static func trackedRecords(defaults: UserDefaults = .standard) -> [TrackedMicrophoneRecord] {
@@ -248,7 +248,7 @@ enum MicrophonePreferenceManager {
         availableDevices: [AudioInputDevice]
     ) {
         if defaults.object(forKey: AppPreferenceKey.microphoneAutoSwitchEnabled) == nil {
-            defaults.set(true, forKey: AppPreferenceKey.microphoneAutoSwitchEnabled)
+            defaults.set(false, forKey: AppPreferenceKey.microphoneAutoSwitchEnabled)
         }
 
         if defaults.object(forKey: AppPreferenceKey.activeInputDeviceUID) == nil,
