@@ -119,7 +119,11 @@ final class StepFunStreamingContext {
     let responseState: StepFunResponseState
     let generationID: UUID
     var isClosed = false
+    var isSessionUpdated = false
     var didStartAudioStream = false
+    var shouldCommitAfterSessionUpdate = false
+    var pendingAudioChunks: [Data] = []
+    var pendingAudioByteCount = 0
 
     init(
         session: URLSession,

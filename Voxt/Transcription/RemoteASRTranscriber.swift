@@ -69,6 +69,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private var doubaoCaptureUsesPreferredInputDevice = false
     private let doubaoCaptureStartupWatchdogDelay: Duration = .seconds(1.2)
     private let aliyunRealtimeStopDrainDelay: Duration = .milliseconds(180)
+    private let stepFunPendingAudioByteLimit = 1_024_000
 
     func setPreferredInputDevice(_ deviceID: AudioDeviceID?) {
         preferredInputDeviceID = deviceID
@@ -459,7 +460,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
             self.isRecording = false
             self.stopStepFunAudioCapture()
-            self.sendStepFunCommit(context)
+            if context.isSessionUpdated {
+                self.flushPendingStepFunAudio(context)
+                self.sendStepFunCommit(context)
+            } else {
+                context.shouldCommitAfterSessionUpdate = true
+                VoxtLog.model(
+                    "StepFun realtime stop deferred until session.updated. bufferedBytes=\(context.pendingAudioByteCount)"
+                )
+            }
         }
     }
 
@@ -922,6 +931,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
         stepFunStreamingContext = context
         receiveStepFunMessages(context)
+        try startStepFunAudioCapture(context: context)
+        context.didStartAudioStream = true
+        VoxtLog.model("StepFun realtime audio capture started while waiting for session.updated.")
 
         let payload = StepFunPayloadSupport.sessionUpdatePayload(
             model: model,
@@ -978,17 +990,24 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let type = (dict["type"] as? String) ?? ""
         switch type {
         case "session.updated":
-            guard !context.didStartAudioStream else { return }
-            guard !stopRequested else {
-                VoxtLog.info("StepFun session.updated ignored because stop was already requested.", verbose: true)
-                return
+            guard !context.isSessionUpdated else { return }
+            context.isSessionUpdated = true
+            if !context.didStartAudioStream, !stopRequested {
+                do {
+                    try startStepFunAudioCapture(context: context)
+                    context.didStartAudioStream = true
+                } catch {
+                    await context.responseState.markCompletedWithError(error)
+                    return
+                }
             }
-            do {
-                try startStepFunAudioCapture(context: context)
-                context.didStartAudioStream = true
-                VoxtLog.model("StepFun session.updated acknowledged. audio capture started.")
-            } catch {
-                await context.responseState.markCompletedWithError(error)
+            flushPendingStepFunAudio(context)
+            VoxtLog.model(
+                "StepFun session.updated acknowledged. didStartAudioStream=\(context.didStartAudioStream), pendingCommit=\(context.shouldCommitAfterSessionUpdate)"
+            )
+            if context.shouldCommitAfterSessionUpdate {
+                context.shouldCommitAfterSessionUpdate = false
+                sendStepFunCommit(context)
             }
         case "conversation.item.input_audio_transcription.delta":
             let value = (dict["text"] as? String) ?? (dict["delta"] as? String) ?? ""
@@ -1079,6 +1098,51 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     private func sendStepFunAudio(_ pcmData: Data, context: StepFunStreamingContext) {
         guard !pcmData.isEmpty, !context.isClosed else { return }
+        guard context.isSessionUpdated else {
+            queuePendingStepFunAudio(pcmData, context: context)
+            return
+        }
+        sendStepFunAudioChunk(pcmData, context: context)
+    }
+
+    private func queuePendingStepFunAudio(_ pcmData: Data, context: StepFunStreamingContext) {
+        context.pendingAudioChunks.append(pcmData)
+        context.pendingAudioByteCount += pcmData.count
+
+        var droppedBytes = 0
+        var droppedChunks = 0
+        while context.pendingAudioByteCount > stepFunPendingAudioByteLimit,
+              !context.pendingAudioChunks.isEmpty {
+            let dropped = context.pendingAudioChunks.removeFirst()
+            context.pendingAudioByteCount -= dropped.count
+            droppedBytes += dropped.count
+            droppedChunks += 1
+        }
+
+        if droppedChunks > 0 {
+            VoxtLog.warning(
+                "StepFun startup audio buffer exceeded limit; dropped oldest chunks. droppedChunks=\(droppedChunks), droppedBytes=\(droppedBytes)"
+            )
+        }
+    }
+
+    private func flushPendingStepFunAudio(_ context: StepFunStreamingContext) {
+        guard context.isSessionUpdated, !context.isClosed else { return }
+        let chunks = context.pendingAudioChunks
+        let byteCount = context.pendingAudioByteCount
+        context.pendingAudioChunks.removeAll(keepingCapacity: false)
+        context.pendingAudioByteCount = 0
+
+        guard !chunks.isEmpty else { return }
+        VoxtLog.model(
+            "StepFun realtime flushing buffered startup audio. chunks=\(chunks.count), bytes=\(byteCount)"
+        )
+        for chunk in chunks {
+            sendStepFunAudioChunk(chunk, context: context)
+        }
+    }
+
+    private func sendStepFunAudioChunk(_ pcmData: Data, context: StepFunStreamingContext) {
         let payload: [String: Any] = [
             "event_id": UUID().uuidString.lowercased(),
             "type": "input_audio_buffer.append",
