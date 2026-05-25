@@ -35,6 +35,12 @@ enum VoxtLog {
         log(message(), level: .info)
     }
 
+    /// Temporary diagnostics gated by the model-debug logging switch.
+    /// Remove these call sites after the live capture investigation is complete.
+    nonisolated static func tempModel(_ message: @autoclosure () -> String) {
+        model("TEMP-DIAG \(message())")
+    }
+
     nonisolated static func llmPreview(_ text: String, limit: Int = 1200) -> String {
         let normalized = text
             .replacingOccurrences(of: "\r\n", with: "\n")
@@ -64,7 +70,7 @@ enum VoxtLog {
         }
     }
 
-    nonisolated static func latestLogExportPayload(limit: Int = 1000) -> ExportPayload {
+    nonisolated static func latestLogExportPayload(limit: Int = 2000) -> ExportPayload {
         lock.lock()
         defer { lock.unlock() }
         loadCacheIfNeeded()
@@ -77,14 +83,14 @@ enum VoxtLog {
         return ExportPayload(filename: filename, content: content)
     }
 
-    nonisolated static func latestLogDisplayText(limit: Int = 1000) -> String {
+    nonisolated static func latestLogDisplayText(limit: Int = 2000) -> String {
         lock.lock()
         defer { lock.unlock() }
         loadCacheIfNeeded()
         return composedLogContent(limit: limit)
     }
 
-    nonisolated static func exportLatestLogs(limit: Int = 1000) throws -> URL {
+    nonisolated static func exportLatestLogs(limit: Int = 2000) throws -> URL {
         let payload = latestLogExportPayload(limit: limit)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(payload.filename)
         try payload.content.write(to: url, atomically: true, encoding: .utf8)

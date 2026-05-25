@@ -24,6 +24,9 @@ extension AppDelegate {
     func startMLXRecordingSession() {
         let mlx = mlxTranscriber ?? MLXTranscriber(modelManager: mlxModelManager)
         mlxTranscriber = mlx
+        VoxtLog.tempModel(
+            "AppDelegate startMLXRecordingSession enter. sessionID=\(activeRecordingSessionID.uuidString), pipeline=\(transcriptionCapturePipeline.rawValue), summary=\(activeRecordingCaptureDebugSummary())"
+        )
         mlx.dictionaryEntryProvider = { [weak self] in
             guard let self else { return [] }
             return self.dictionaryStore.activeEntriesForRemoteRequest(
@@ -48,12 +51,16 @@ extension AppDelegate {
             state: overlayState,
             position: overlayPosition
         )
+        VoxtLog.tempModel("AppDelegate startMLXRecordingSession before mlx.startRecording(). summary=\(activeRecordingCaptureDebugSummary())")
         mlx.startRecording()
+        VoxtLog.tempModel("AppDelegate startMLXRecordingSession after mlx.startRecording(). summary=\(activeRecordingCaptureDebugSummary())")
         guard mlx.isRecording else {
             VoxtLog.warning("MLX recording session did not enter recording state.")
+            VoxtLog.tempModel("AppDelegate startMLXRecordingSession guard mlx.isRecording failed. summary=\(activeRecordingCaptureDebugSummary())")
             resetSessionAfterFailedStart()
             return
         }
+        VoxtLog.tempModel("AppDelegate startMLXRecordingSession completed. summary=\(activeRecordingCaptureDebugSummary())")
     }
 
     func startSpeechRecordingSession() {
@@ -173,6 +180,9 @@ extension AppDelegate {
     func startRemoteRecordingSession() {
         Task { [weak self] in
             guard let self else { return }
+            VoxtLog.tempModel(
+                "AppDelegate startRemoteRecordingSession enter. sessionID=\(self.activeRecordingSessionID.uuidString), pipeline=\(self.transcriptionCapturePipeline.rawValue), summary=\(self.activeRecordingCaptureDebugSummary())"
+            )
             let granted = await self.remoteASRTranscriber.requestPermissions()
             guard granted else {
                 self.handleRecordingPermissionDenied()
@@ -196,10 +206,12 @@ extension AppDelegate {
             }
             self.remoteASRTranscriber.onStartFailure = { [weak self] message in
                 guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
+                VoxtLog.tempModel("AppDelegate remote onStartFailure. message=\(message), summary=\(self.activeRecordingCaptureDebugSummary())")
                 self.handleRecordingStartFailure(message, autoHideAfter: 3.6)
             }
             self.remoteASRTranscriber.onRuntimeFailure = { [weak self] message in
                 guard let self, self.shouldHandleCallbacks(for: sessionID), self.isSessionActive else { return }
+                VoxtLog.tempModel("AppDelegate remote onRuntimeFailure. message=\(message), summary=\(self.activeRecordingCaptureDebugSummary())")
                 self.showOverlayStatus(message, clearAfter: 4.8)
             }
             self.overlayState.bind(to: self.remoteASRTranscriber)
@@ -207,7 +219,9 @@ extension AppDelegate {
                 state: self.overlayState,
                 position: self.overlayPosition
             )
+            VoxtLog.tempModel("AppDelegate startRemoteRecordingSession before remote.startRecording(). summary=\(self.activeRecordingCaptureDebugSummary())")
             self.remoteASRTranscriber.startRecording()
+            VoxtLog.tempModel("AppDelegate startRemoteRecordingSession after remote.startRecording(). summary=\(self.activeRecordingCaptureDebugSummary())")
         }
     }
 
@@ -305,6 +319,9 @@ extension AppDelegate {
         newUID: String?,
         reason: String
     ) {
+        VoxtLog.tempModel(
+            "AppDelegate handlePreferredInputDeviceChange enter. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), summary=\(activeRecordingCaptureDebugSummary())"
+        )
         applyPreferredInputDevice()
 
         guard previousUID != newUID else { return }
@@ -329,6 +346,9 @@ extension AppDelegate {
 
         do {
             try restartCurrentRecordingCaptureForPreferredInputDevice()
+            VoxtLog.tempModel(
+                "AppDelegate handlePreferredInputDeviceChange restart succeeded. reason=\(reason), summary=\(activeRecordingCaptureDebugSummary())"
+            )
             showOverlayStatus(
                 AppLocalization.format("Switched microphone to %@.", currentDevice.name),
                 clearAfter: 1.8
@@ -341,23 +361,13 @@ extension AppDelegate {
                 "Recording microphone switch failed. reason=\(reason), error=\(error.localizedDescription), captureState=\(activeRecordingCaptureDebugSummary())"
             )
             VoxtLog.error("Recording microphone switch failed: \(error.localizedDescription). reason=\(reason)")
+            VoxtLog.tempModel(
+                "AppDelegate handlePreferredInputDeviceChange restart failed. reason=\(reason), error=\(error.localizedDescription), summary=\(activeRecordingCaptureDebugSummary())"
+            )
             showOverlayReminder(
                 AppLocalization.format("Failed to switch microphone to %@.", currentDevice.name)
             )
             finishSession(after: 0)
-        }
-    }
-
-    func activeRecordingCaptureDebugSummary() -> String {
-        switch transcriptionEngine {
-        case .mlxAudio:
-            return "mlx{\(mlxTranscriber?.debugCaptureRuntimeSummary() ?? "inactive")}"
-        case .whisperKit:
-            return "whisper{\(whisperTranscriber?.debugCaptureStopSummary() ?? "inactive")}"
-        case .remote:
-            return remoteASRTranscriber.activeRealtimeDebugSummary() ?? "remote{inactive}"
-        case .dictation:
-            return "dictation{recording=\(speechTranscriber.isRecording)}"
         }
     }
 
@@ -442,22 +452,53 @@ extension AppDelegate {
     }
 
     private func restartCurrentRecordingCaptureForPreferredInputDevice() throws {
+        VoxtLog.tempModel("AppDelegate restartCurrentRecordingCaptureForPreferredInputDevice enter. engine=\(transcriptionEngine.rawValue), summary=\(activeRecordingCaptureDebugSummary())")
         if transcriptionEngine == .mlxAudio {
             try mlxTranscriber?.restartCaptureForPreferredInputDevice()
+            VoxtLog.tempModel("AppDelegate restartCurrentRecordingCaptureForPreferredInputDevice completed for MLX. summary=\(activeRecordingCaptureDebugSummary())")
             return
         }
 
         if transcriptionEngine == .whisperKit {
             try whisperTranscriber?.restartCaptureForPreferredInputDevice()
+            VoxtLog.tempModel("AppDelegate restartCurrentRecordingCaptureForPreferredInputDevice completed for Whisper. summary=\(activeRecordingCaptureDebugSummary())")
             return
         }
 
         if transcriptionEngine == .remote {
             try remoteASRTranscriber.restartCaptureForPreferredInputDevice()
+            VoxtLog.tempModel("AppDelegate restartCurrentRecordingCaptureForPreferredInputDevice completed for Remote. summary=\(activeRecordingCaptureDebugSummary())")
             return
         }
 
         try speechTranscriber.restartCaptureForPreferredInputDevice()
+        VoxtLog.tempModel("AppDelegate restartCurrentRecordingCaptureForPreferredInputDevice completed for Speech. summary=\(activeRecordingCaptureDebugSummary())")
+    }
+
+    func activeRecordingCaptureDebugSummary() -> String {
+        let mlxSummary = mlxTranscriber?.temporaryCaptureDebugSummary() ?? "mlx{uninitialized}"
+        let whisperSummary: String
+        if let whisperTranscriber {
+            whisperSummary = "whisper{recording=\(whisperTranscriber.isRecording), modelInitializing=\(whisperTranscriber.isModelInitializing), \(whisperTranscriber.debugCaptureStopSummary())}"
+        } else {
+            whisperSummary = "whisper{uninitialized}"
+        }
+        let remoteSummary = remoteASRTranscriber.temporaryCaptureDebugSummary()
+        let speechSummary = "speech{recording=\(speechTranscriber.isRecording)}"
+        let currentSummary: String
+        switch transcriptionEngine {
+        case .mlxAudio:
+            currentSummary = mlxSummary
+        case .whisperKit:
+            currentSummary = whisperSummary
+        case .remote:
+            currentSummary = remoteSummary
+        case .dictation:
+            currentSummary = speechSummary
+        }
+        return """
+        engine=\(transcriptionEngine.rawValue), current=\(currentSummary), mlx=\(mlxSummary), whisper=\(whisperSummary), remote=\(remoteSummary), speech=\(speechSummary)
+        """
     }
 
     func startSilenceMonitoringIfNeeded() {

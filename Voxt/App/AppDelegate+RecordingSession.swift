@@ -187,6 +187,9 @@ extension AppDelegate {
             isSelectedWhisperModelDownloaded: localASRStartContext.isSelectedWhisperModelDownloaded,
             whisperModelState: localASRStartContext.whisperModelState
         )
+        VoxtLog.tempModel(
+            "Begin recording planning resolved. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), engine=\(transcriptionEngine.rawValue), startDecision=\(String(describing: startDecision)), selectedInputDeviceID=\(selectedInputDeviceID.map(String.init(describing:)) ?? "default"), captureState=\(activeRecordingCaptureDebugSummary())"
+        )
         guard case .start(let recordingEngine) = startDecision else {
             if case .blocked(let reason) = startDecision {
                 VoxtLog.warning("Recording start blocked: \(reason.logDescription)")
@@ -243,6 +246,9 @@ extension AppDelegate {
         VoxtLog.info(
             "Recording started. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), engine=\(recordingEngine.rawValue), pipeline=\(transcriptionCapturePipeline.rawValue)"
         )
+        VoxtLog.tempModel(
+            "Recording session activated. sessionID=\(activeRecordingSessionID.uuidString), output=\(RecordingSessionSupport.outputLabel(for: outputMode)), engine=\(recordingEngine.rawValue), pipeline=\(transcriptionCapturePipeline.rawValue), captureState=\(activeRecordingCaptureDebugSummary())"
+        )
         if outputMode == .rewrite {
             VoxtLog.info(
                 "Rewrite focused input check at session start. hasWritableFocusedInput=\(rewriteSessionHadWritableFocusedInput)"
@@ -289,15 +295,20 @@ extension AppDelegate {
         }
 
         startRecordingCapture(using: recordingEngine)
+        VoxtLog.tempModel(
+            "startRecordingCapture dispatched. sessionID=\(activeRecordingSessionID.uuidString), engine=\(recordingEngine.rawValue), captureState=\(activeRecordingCaptureDebugSummary())"
+        )
     }
 
     func endRecording() {
         guard isSessionActive else { return }
         guard recordingStoppedAt == nil else {
             VoxtLog.hotkey("Recording stop ignored: session is already stopping.")
+            VoxtLog.tempModel("endRecording ignored because recordingStoppedAt already set. captureState=\(activeRecordingCaptureDebugSummary())")
             return
         }
         VoxtLog.info("Recording stop requested.")
+        VoxtLog.tempModel("endRecording enter. sessionID=\(activeRecordingSessionID.uuidString), captureState=\(activeRecordingCaptureDebugSummary())")
 
         if pendingWhisperStartupTask != nil, whisperTranscriber?.isRecording != true {
             pendingWhisperStartupTask?.cancel()
@@ -320,6 +331,7 @@ extension AppDelegate {
         voiceEndCommandState.lastDetectedCommand = false
         enhancementContextSnapshot = captureEnhancementContextSnapshot()
         stopActiveRecordingTranscriber()
+        VoxtLog.tempModel("endRecording delegated stop to active transcriber. captureState=\(activeRecordingCaptureDebugSummary())")
 
         // Safety fallback: some engine/device combinations may occasionally fail to
         // report completion. Ensure the session/UI can always recover.
@@ -333,6 +345,7 @@ extension AppDelegate {
     func cancelActiveRecordingSession() {
         guard isSessionActive else { return }
         VoxtLog.info("Recording cancelled by Escape key.")
+        VoxtLog.tempModel("cancelActiveRecordingSession enter. sessionID=\(activeRecordingSessionID.uuidString), captureState=\(activeRecordingCaptureDebugSummary())")
 
         if pendingWhisperStartupTask != nil, whisperTranscriber?.isRecording != true {
             pendingWhisperStartupTask?.cancel()

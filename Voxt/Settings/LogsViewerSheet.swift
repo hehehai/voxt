@@ -10,6 +10,53 @@ private func logsViewerLocalizedKey(_ key: String) -> LocalizedStringKey {
     LocalizedStringKey(logsViewerLocalized(key))
 }
 
+private struct LogsViewerTextView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = true
+        textView.minSize = .zero
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.frame = .zero
+        textView.autoresizingMask = []
+        textView.textContainerInset = NSSize(width: 6, height: 10)
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.heightTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
+        textView.string = text
+
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        if textView.string != text {
+            textView.string = text
+        }
+        textView.scroll(NSPoint(x: 0, y: 0))
+    }
+}
+
 struct LogsViewerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var latestLogsText = ""
@@ -27,7 +74,7 @@ struct LogsViewerSheet: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
 
-                Text(logsViewerLocalized("Latest 1000"))
+                Text(logsViewerLocalized("Latest 2000"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
@@ -70,14 +117,7 @@ struct LogsViewerSheet: View {
                     .padding(.horizontal, 20)
             }
 
-            ScrollView([.vertical, .horizontal]) {
-                Text(latestLogsText)
-                    .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-                    .foregroundStyle(.primary.opacity(0.86))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(12)
-            }
+            LogsViewerTextView(text: latestLogsText)
             .frame(maxWidth: .infinity, minHeight: 420, idealHeight: 440, maxHeight: 440)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -100,7 +140,7 @@ struct LogsViewerSheet: View {
             switch result {
             case .success:
                 logsStatusMessage = ""
-                showToast(logsViewerLocalized("Exported latest 1000 log lines."))
+                showToast(logsViewerLocalized("Exported latest 2000 log lines."))
             case .failure(let error):
                 logsStatusMessage = AppLocalization.format(
                     "Log export failed: %@",
@@ -124,7 +164,7 @@ struct LogsViewerSheet: View {
     }
 
     private func refreshLogs() {
-        latestLogsText = VoxtLog.latestLogDisplayText(limit: 1000)
+        latestLogsText = VoxtLog.latestLogDisplayText(limit: 2000)
         logsStatusMessage = ""
     }
 
@@ -137,7 +177,7 @@ struct LogsViewerSheet: View {
     }
 
     private func prepareLogExport() {
-        let payload = VoxtLog.latestLogExportPayload(limit: 1000)
+        let payload = VoxtLog.latestLogExportPayload(limit: 2000)
         logExportDocument = LogExportDocument(text: payload.content)
         logExportFilename = payload.filename
         isExportingLogs = true

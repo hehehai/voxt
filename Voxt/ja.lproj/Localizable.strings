@@ -1227,8 +1227,8 @@
 "Collapse All" = "すべて折りたたむ";
 "Export Logs" = "ログを書き出す";
 "Export TXT" = "TXT を書き出す";
-"Exported latest 1000 log lines." = "最新 1000 行のログを書き出しました。";
-"Latest 1000" = "最新 1000 行";
+"Exported latest 2000 log lines." = "最新 2000 行のログを書き出しました。";
+"Latest 2000" = "最新 2000 行";
 "Latest 500" = "最新 500 行";
 "Latest 500 log lines with app meta" = "最新 500 行のログとアプリメタ情報";
 "Log export failed: %@" = "ログの書き出しに失敗しました: %@";

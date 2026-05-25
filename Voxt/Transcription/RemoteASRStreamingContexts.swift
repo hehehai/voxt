@@ -27,10 +27,13 @@ final class AliyunQwenStreamingContext {
     var audioCaptureStartCount = 0
     var pcmCallbackCount = 0
     var audioPacketCount = 0
+    var serverEventCount = 0
     var firstPCMCallbackAt: Date?
     var lastPCMCallbackAt: Date?
     var firstAudioPacketSentAt: Date?
     var lastAudioPacketSentAt: Date?
+    var firstServerEventAt: Date?
+    var lastServerEventAt: Date?
     var lastAudioCaptureStartReason = "not-started"
 
     init(
@@ -49,10 +52,11 @@ final class AliyunQwenStreamingContext {
 
     func debugSummary(now: Date = Date()) -> String {
         let age = String(format: "%.2f", now.timeIntervalSince(createdAt))
-        let sinceLastPCM = lastPCMCallbackAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
-        let sinceLastSent = lastAudioPacketSentAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
+        let sinceLastPCM = firstPCMCallbackAt == nil ? "never" : String(format: "%.2f", now.timeIntervalSince(lastPCMCallbackAt ?? now))
+        let sinceLastSent = firstAudioPacketSentAt == nil ? "never" : String(format: "%.2f", now.timeIntervalSince(lastAudioPacketSentAt ?? now))
+        let sinceLastServer = firstServerEventAt == nil ? "never" : String(format: "%.2f", now.timeIntervalSince(lastServerEventAt ?? now))
         return """
-        kind=\(kind), ageSec=\(age), captureStarts=\(audioCaptureStartCount), captureReason=\(lastAudioCaptureStartReason), pcmCallbacks=\(pcmCallbackCount), audioPackets=\(audioPacketCount), sinceLastPCM=\(sinceLastPCM), sinceLastSent=\(sinceLastSent), isClosed=\(isClosed)
+        kind=\(kind), didStartAudioStream=\(didStartAudioStream), ageSec=\(age), captureStarts=\(audioCaptureStartCount), captureReason=\(lastAudioCaptureStartReason), pcmCallbacks=\(pcmCallbackCount), audioPackets=\(audioPacketCount), serverEvents=\(serverEventCount), sinceLastPCM=\(sinceLastPCM), sinceLastSent=\(sinceLastSent), sinceLastServer=\(sinceLastServer), isClosed=\(isClosed)
         """
     }
 }
@@ -143,10 +147,13 @@ final class AliyunFunStreamingContext {
     var audioCaptureStartCount = 0
     var pcmCallbackCount = 0
     var audioPacketCount = 0
+    var serverEventCount = 0
     var firstPCMCallbackAt: Date?
     var lastPCMCallbackAt: Date?
     var firstAudioPacketSentAt: Date?
     var lastAudioPacketSentAt: Date?
+    var firstServerEventAt: Date?
+    var lastServerEventAt: Date?
     var lastAudioCaptureStartReason = "not-started"
 
     init(
@@ -165,10 +172,11 @@ final class AliyunFunStreamingContext {
 
     func debugSummary(now: Date = Date()) -> String {
         let age = String(format: "%.2f", now.timeIntervalSince(createdAt))
-        let sinceLastPCM = lastPCMCallbackAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
-        let sinceLastSent = lastAudioPacketSentAt.map { String(format: "%.2f", now.timeIntervalSince($0)) } ?? "none"
+        let sinceLastPCM = firstPCMCallbackAt == nil ? "never" : String(format: "%.2f", now.timeIntervalSince(lastPCMCallbackAt ?? now))
+        let sinceLastSent = firstAudioPacketSentAt == nil ? "never" : String(format: "%.2f", now.timeIntervalSince(lastAudioPacketSentAt ?? now))
+        let sinceLastServer = firstServerEventAt == nil ? "never" : String(format: "%.2f", now.timeIntervalSince(lastServerEventAt ?? now))
         return """
-        taskID=\(taskID), ageSec=\(age), captureStarts=\(audioCaptureStartCount), captureReason=\(lastAudioCaptureStartReason), pcmCallbacks=\(pcmCallbackCount), audioPackets=\(audioPacketCount), sinceLastPCM=\(sinceLastPCM), sinceLastSent=\(sinceLastSent), isClosed=\(isClosed)
+        taskID=\(taskID), didStartAudioStream=\(didStartAudioStream), ageSec=\(age), captureStarts=\(audioCaptureStartCount), captureReason=\(lastAudioCaptureStartReason), pcmCallbacks=\(pcmCallbackCount), audioPackets=\(audioPacketCount), serverEvents=\(serverEventCount), sinceLastPCM=\(sinceLastPCM), sinceLastSent=\(sinceLastSent), sinceLastServer=\(sinceLastServer), isClosed=\(isClosed)
         """
     }
 }

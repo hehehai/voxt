@@ -47,6 +47,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             defer { lock.unlock() }
             return callbackTotal
         }
+
+        func count() -> Int { sampleCount() }
+
+        func callbacksReceived() -> Int { callbackCount() }
     }
 
     @Published var isRecording = false
@@ -110,6 +114,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         return nil
     }
 
+    func temporaryCaptureDebugSummary() -> String {
+        let provider = activeProvider?.rawValue ?? selectedProvider.rawValue
+        let realtime = activeRealtimeDebugSummary() ?? "none"
+        let preferredDeviceText = preferredInputDeviceID.map(String.init(describing:)) ?? "default"
+        return """
+        remote{provider=\(provider), recording=\(isRecording), stopRequested=\(stopRequested), callbacks=\(sampleStore.callbacksReceived()), samples=\(sampleStore.count()), sampleRate=\(Int(streamingInputSampleRate)), preferredDeviceID=\(preferredDeviceText), realtime=\(realtime)}
+        """
+    }
+
     func requestPermissions() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
@@ -168,12 +181,17 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         VoxtLog.model(
             "Remote ASR recording requested. provider=\(provider.rawValue), model=\(resolvedModel), endpoint=\(resolvedEndpoint.isEmpty ? "<default>" : resolvedEndpoint), route=\(routeSummary), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), pseudoRealtime=\(configuration.openAIChunkPseudoRealtimeEnabled), language=\(hintPayload.language ?? "auto"), languageHints=\(hintPayload.languageHints.count), promptChars=\(hintPayload.prompt?.count ?? 0)"
         )
+        VoxtLog.tempModel(
+            "Remote startRecording enter. generationID=\(recordingGenerationID.uuidString), route=\(routeSummary), summary=\(temporaryCaptureDebugSummary())"
+        )
 
         if provider == .doubaoASR {
             do {
+                VoxtLog.tempModel("Remote startRecording routing to Doubao streaming. summary=\(temporaryCaptureDebugSummary())")
                 try startDoubaoStreaming(configuration: configuration, hintPayload: hintPayload)
             } catch {
                 VoxtLog.error("Doubao streaming setup failed: \(error.localizedDescription)")
+                VoxtLog.tempModel("Remote startRecording Doubao setup failed. error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
                 cleanupRecorderState()
                 cleanupDoubaoStreamingState()
                 activeProvider = nil
@@ -184,6 +202,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         if provider == .aliyunBailianASR {
             do {
+                VoxtLog.tempModel("Remote startRecording routing to Aliyun realtime. summary=\(temporaryCaptureDebugSummary())")
                 if let kind = RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: configuration.model) {
                     try startAliyunQwenRealtimeStreaming(
                         configuration: configuration,
@@ -195,6 +214,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 }
             } catch {
                 VoxtLog.error("Aliyun realtime streaming setup failed: \(error.localizedDescription)")
+                VoxtLog.tempModel("Remote startRecording Aliyun setup failed. error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
                 cleanupRecorderState()
                 cleanupAliyunStreamingState()
                 activeProvider = nil
@@ -204,6 +224,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
 
         do {
+            VoxtLog.tempModel("Remote startRecording routing to file recorder mode. summary=\(temporaryCaptureDebugSummary())")
             try startFileRecordingMode()
             if provider == .openAIWhisper,
                configuration.openAIChunkPseudoRealtimeEnabled,
@@ -212,6 +233,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             }
         } catch {
             VoxtLog.error("Remote ASR recorder setup failed: \(error.localizedDescription)")
+            VoxtLog.tempModel("Remote startRecording file recorder setup failed. error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
             cleanupRecorderState()
             activeProvider = nil
             notifyStartFailure(error)
@@ -226,6 +248,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         guard isRecording || hasPendingRealtimeSession || recorder != nil else { return }
         stopRequested = true
         let generationID = recordingGenerationID
+        VoxtLog.tempModel(
+            "Remote stopRecording enter. generationID=\(generationID.uuidString), hasPendingRealtime=\(hasPendingRealtimeSession), summary=\(temporaryCaptureDebugSummary())"
+        )
 
         if activeProvider == .doubaoASR, let context = doubaoStreamingContext {
             isRequesting = true
@@ -303,6 +328,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     func restartCaptureForPreferredInputDevice() throws {
+        VoxtLog.tempModel(
+            "Remote restartCaptureForPreferredInputDevice requested. summary=\(temporaryCaptureDebugSummary())"
+        )
         if let context = doubaoStreamingContext {
             VoxtLog.warning(
                 "Doubao audio capture restart requested. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
@@ -328,6 +356,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             VoxtLog.model(
                 "Aliyun fun audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"), state=\(activeRealtimeDebugSummary() ?? "none")"
             )
+            VoxtLog.tempModel("Remote Aliyun fun capture restart completed. summary=\(temporaryCaptureDebugSummary())")
             return
         }
 
@@ -340,6 +369,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             VoxtLog.model(
                 "Aliyun qwen audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"), state=\(activeRealtimeDebugSummary() ?? "none")"
             )
+            VoxtLog.tempModel("Remote Aliyun qwen capture restart completed. summary=\(temporaryCaptureDebugSummary())")
             return
         }
 
@@ -965,6 +995,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
         aliyunStreamingContext = context
         receiveAliyunFunMessages(context)
+        VoxtLog.tempModel("Aliyun fun realtime context created. state=\(context.debugSummary())")
         VoxtLog.model(
             "Aliyun fun streaming socket ready. taskID=\(taskID), model=\(model), endpoint=\(endpoint), language=\(hintPayload.language ?? "auto"), languageHints=\(hintPayload.languageHints.joined(separator: ","))"
         )
@@ -1037,9 +1068,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
         let event = AliyunRemoteASRConfiguration.realtimeSocketEvent(from: object)
         let payload = object["payload"] as? [String: Any] ?? [:]
+        let now = Date()
+        context.serverEventCount += 1
+        if context.firstServerEventAt == nil {
+            context.firstServerEventAt = now
+        }
+        context.lastServerEventAt = now
         VoxtLog.model(
             "Aliyun fun socket event received. event=\(event), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested), state=\(context.debugSummary())"
         )
+        VoxtLog.tempModel("Aliyun fun socket event processed. event=\(event), state=\(context.debugSummary(now: now))")
 
         if event == "task-failed" || event == "error" {
             let errorText = AliyunRemoteASRConfiguration.realtimeSocketErrorMessage(from: object)
@@ -1054,10 +1092,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 return
             }
             do {
+                context.lastAudioCaptureStartReason = "task-started"
                 try startAliyunAudioCapture(context: context)
                 context.didStartAudioStream = true
                 VoxtLog.model("Aliyun fun task-started acknowledged. audio capture started. state=\(context.debugSummary())")
+                VoxtLog.tempModel("Aliyun fun task-started started capture. state=\(context.debugSummary())")
             } catch {
+                VoxtLog.tempModel("Aliyun fun task-started failed to start capture. error=\(error.localizedDescription), state=\(context.debugSummary())")
                 throw error
             }
             return
@@ -1088,6 +1129,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func startAliyunAudioCapture(context: AliyunFunStreamingContext) throws {
+        context.audioCaptureStartCount += 1
+        VoxtLog.tempModel(
+            "Aliyun fun startAudioCapture enter. startCount=\(context.audioCaptureStartCount), preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
+        )
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.reset()
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
@@ -1118,8 +1167,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 ctx.lastPCMCallbackAt = now
                 if callbackCount == 1 {
                     VoxtLog.model("Aliyun fun first PCM callback received. state=\(ctx.debugSummary(now: now))")
+                    VoxtLog.tempModel(
+                        "Aliyun fun first PCM callback received. frameLength=\(buffer.frameLength), sampleRate=\(Int(buffer.format.sampleRate)), channels=\(buffer.format.channelCount), state=\(ctx.debugSummary(now: now)), summary=\(self.temporaryCaptureDebugSummary())"
+                    )
                 }
                 self.audioLevel = self.audioLevelFromPCM16(pcmData)
+                if ctx.firstAudioPacketSentAt == nil {
+                    let sendNow = Date()
+                    ctx.firstAudioPacketSentAt = sendNow
+                    VoxtLog.tempModel(
+                        "Aliyun fun first audio packet queued. bytes=\(pcmData.count), state=\(ctx.debugSummary(now: sendNow)), summary=\(self.temporaryCaptureDebugSummary())"
+                    )
+                } else {
+                    ctx.lastAudioPacketSentAt = Date()
+                }
                 ctx.ws.send(.data(pcmData)) { error in
                     if error == nil {
                         Task { @MainActor [weak self] in
@@ -1150,10 +1211,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         audioEngine.prepare()
         try audioEngine.start()
-        context.audioCaptureStartCount += 1
-        context.lastAudioCaptureStartReason = "task-started"
         isRecording = true
         VoxtLog.model("Aliyun fun audio capture started. sampleRate=\(Int(streamingInputSampleRate)), state=\(context.debugSummary())")
+        VoxtLog.tempModel("Aliyun fun startAudioCapture completed. summary=\(temporaryCaptureDebugSummary())")
     }
 
     private func stopAliyunAudioCapture() {
@@ -1229,6 +1289,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
         aliyunQwenStreamingContext = context
         receiveAliyunQwenMessages(context)
+        VoxtLog.tempModel("Aliyun qwen realtime context created. state=\(context.debugSummary())")
         VoxtLog.model(
             "Aliyun qwen realtime socket ready. kind=\(kind), model=\(model), endpoint=\(endpoint), language=\(hintPayload.language ?? "auto"), languageHints=\(hintPayload.languageHints.joined(separator: ","))"
         )
@@ -1283,9 +1344,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return
         }
         let type = (object["type"] as? String ?? "").lowercased()
+        let now = Date()
+        context.serverEventCount += 1
+        if context.firstServerEventAt == nil {
+            context.firstServerEventAt = now
+        }
+        context.lastServerEventAt = now
         VoxtLog.model(
             "Aliyun qwen socket event received. type=\(type), kind=\(context.kind), didStartAudioStream=\(context.didStartAudioStream), stopRequested=\(stopRequested), state=\(context.debugSummary())"
         )
+        VoxtLog.tempModel("Aliyun qwen socket event processed. type=\(type), state=\(context.debugSummary(now: now))")
         if type == "error" {
             let detail = (object["message"] as? String) ?? "Aliyun Qwen realtime ASR task failed."
             if await shouldIgnoreTrailingAliyunQwenGenericError(
@@ -1310,6 +1378,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             try startAliyunQwenAudioCapture(context: context)
             context.didStartAudioStream = true
             VoxtLog.model("Aliyun qwen session.updated acknowledged. audio capture started. kind=\(context.kind), state=\(context.debugSummary())")
+            VoxtLog.tempModel("Aliyun qwen session.updated started capture. state=\(context.debugSummary())")
             return
         }
 
@@ -1348,6 +1417,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func startAliyunQwenAudioCapture(context: AliyunQwenStreamingContext) throws {
+        context.audioCaptureStartCount += 1
+        VoxtLog.tempModel(
+            "Aliyun qwen startAudioCapture enter. kind=\(context.kind), startCount=\(context.audioCaptureStartCount), preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
+        )
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.reset()
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
@@ -1378,8 +1455,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 ctx.lastPCMCallbackAt = now
                 if callbackCount == 1 {
                     VoxtLog.model("Aliyun qwen first PCM callback received. state=\(ctx.debugSummary(now: now))")
+                    VoxtLog.tempModel(
+                        "Aliyun qwen first PCM callback received. kind=\(ctx.kind), state=\(ctx.debugSummary(now: now)), summary=\(self.temporaryCaptureDebugSummary())"
+                    )
                 }
                 self.audioLevel = self.audioLevelFromPCM16(pcmData)
+                if ctx.firstAudioPacketSentAt == nil {
+                    let sendNow = Date()
+                    ctx.firstAudioPacketSentAt = sendNow
+                    VoxtLog.tempModel(
+                        "Aliyun qwen first audio packet queued. kind=\(ctx.kind), bytes=\(pcmData.count), state=\(ctx.debugSummary(now: sendNow)), summary=\(self.temporaryCaptureDebugSummary())"
+                    )
+                } else {
+                    ctx.lastAudioPacketSentAt = Date()
+                }
                 self.sendAliyunQwenAudioAppend(pcmData, through: ctx.ws) { error in
                     if error == nil {
                         Task { @MainActor [weak self] in
@@ -1409,10 +1498,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
         audioEngine.prepare()
         try audioEngine.start()
-        context.audioCaptureStartCount += 1
-        context.lastAudioCaptureStartReason = "session.updated"
         isRecording = true
         VoxtLog.model("Aliyun qwen audio capture started. kind=\(context.kind), sampleRate=\(Int(streamingInputSampleRate)), state=\(context.debugSummary())")
+        VoxtLog.tempModel("Aliyun qwen startAudioCapture completed. summary=\(temporaryCaptureDebugSummary())")
     }
 
     private func shouldIgnoreTrailingAliyunQwenGenericError(
@@ -1925,9 +2013,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
-        guard let preferredInputDeviceID else { return }
-        guard let audioUnit = inputNode.audioUnit else { return }
+    func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
+        guard let preferredInputDeviceID else {
+            VoxtLog.tempModel("Remote applyPreferredInputDevice skipped: no preferred device. summary=\(temporaryCaptureDebugSummary())")
+            return
+        }
+        guard let audioUnit = inputNode.audioUnit else {
+            VoxtLog.tempModel("Remote applyPreferredInputDevice skipped: inputNode audioUnit unavailable. summary=\(temporaryCaptureDebugSummary())")
+            return
+        }
         var deviceID = preferredInputDeviceID
         let status = AudioUnitSetProperty(
             audioUnit,
@@ -1939,6 +2033,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
         if status != noErr {
             VoxtLog.warning("Remote ASR failed to switch preferred input device. status=\(status)")
+            VoxtLog.tempModel("Remote applyPreferredInputDevice failed. status=\(status), requestedDeviceID=\(preferredInputDeviceID), summary=\(temporaryCaptureDebugSummary())")
+        } else {
+            VoxtLog.tempModel("Remote applyPreferredInputDevice succeeded. requestedDeviceID=\(preferredInputDeviceID), summary=\(temporaryCaptureDebugSummary())")
         }
     }
 
@@ -2772,6 +2869,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func cleanupRecorderState() {
+        VoxtLog.tempModel("Remote cleanupRecorderState. summaryBefore=\(temporaryCaptureDebugSummary())")
         recorder?.stop()
         recorder = nil
         recordingFileURL = nil
@@ -2812,11 +2910,17 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     private func cleanupAliyunStreamingState() {
         if let context = aliyunStreamingContext {
+            VoxtLog.tempModel("Aliyun fun cleanup state. state=\(context.debugSummary())")
+        }
+        if let context = aliyunStreamingContext {
             context.isClosed = true
             context.ws.cancel(with: .normalClosure, reason: nil)
             context.session.invalidateAndCancel()
         }
         aliyunStreamingContext = nil
+        if let context = aliyunQwenStreamingContext {
+            VoxtLog.tempModel("Aliyun qwen cleanup state. state=\(context.debugSummary())")
+        }
         if let context = aliyunQwenStreamingContext {
             context.isClosed = true
             context.ws.cancel(with: .normalClosure, reason: nil)
@@ -3007,6 +3111,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private func notifyStartFailure(_ error: Error) {
         let message = userVisibleRemoteErrorMessage(for: error)
         guard !message.isEmpty else { return }
+        VoxtLog.tempModel("Remote notifyStartFailure. message=\(message), error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
         onStartFailure?(message)
     }
 
@@ -3014,6 +3119,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let message = userVisibleRemoteErrorMessage(for: error)
         guard !message.isEmpty, message != lastPresentedRuntimeErrorMessage else { return }
         lastPresentedRuntimeErrorMessage = message
+        VoxtLog.tempModel("Remote notifyRuntimeFailure. message=\(message), error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
         onRuntimeFailure?(message)
     }
 

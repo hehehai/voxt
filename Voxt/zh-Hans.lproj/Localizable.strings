@@ -1198,8 +1198,8 @@
 "Collapse All" = "折叠全部";
 "Export Logs" = "导出日志";
 "Export TXT" = "导出 TXT";
-"Exported latest 1000 log lines." = "已导出最新 1000 条日志。";
-"Latest 1000" = "最新 1000 行";
+"Exported latest 2000 log lines." = "已导出最新 2000 条日志。";
+"Latest 2000" = "最新 2000 行";
 "Latest 500" = "最新 500 行";
 "Latest 500 log lines with app meta" = "最新 500 条日志与应用元信息";
 "Log export failed: %@" = "导出日志失败：%@";

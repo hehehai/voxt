@@ -1198,8 +1198,8 @@
 "Collapse All" = "Collapse All";
 "Export Logs" = "Export Logs";
 "Export TXT" = "Export TXT";
-"Exported latest 1000 log lines." = "Exported latest 1000 log lines.";
-"Latest 1000" = "Latest 1000";
+"Exported latest 2000 log lines." = "Exported latest 2000 log lines.";
+"Latest 2000" = "Latest 2000";
 "Latest 500" = "Latest 500";
 "Latest 500 log lines with app meta" = "Latest 500 log lines with app meta";
 "Log export failed: %@" = "Log export failed: %@";

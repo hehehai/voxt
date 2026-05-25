@@ -284,6 +284,9 @@ extension AppDelegate {
         VoxtLog.model(
             "Preserving active microphone during recording hardware change. uid=\(currentUID), output=\(sessionOutputMode), captureState=\(activeRecordingCaptureDebugSummary())"
         )
+        VoxtLog.tempModel(
+            "Preserving active microphone during recording hardware change. uid=\(currentUID), output=\(sessionOutputMode), captureState=\(activeRecordingCaptureDebugSummary())"
+        )
         return currentUID
     }
 
@@ -425,6 +428,18 @@ extension AppDelegate {
         }
 
         guard previousState.activeUID != newState.activeUID else {
+            if isSessionActive {
+                VoxtLog.tempModel(
+                    "Resolved microphone unchanged during state refresh. reason=\(reason), activeUID=\(newState.activeUID ?? "none"), captureState=\(activeRecordingCaptureDebugSummary())"
+                )
+            }
+            let isActiveHardwareChange = reason == "hardware change" && isSessionActive && recordingStoppedAt == nil
+            if isActiveHardwareChange {
+                VoxtLog.tempModel(
+                    "Skipping preferred input reapply because hardware change kept the same active device. activeUID=\(newState.activeUID ?? "none"), captureState=\(activeRecordingCaptureDebugSummary())"
+                )
+                return
+            }
             applyPreferredInputDevice()
             return
         }

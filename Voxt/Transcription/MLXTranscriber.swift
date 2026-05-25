@@ -450,6 +450,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         return url
     }
 
+    func temporaryCaptureDebugSummary() -> String {
+        let preferredDeviceText = preferredInputDeviceID.map(String.init(describing:)) ?? "default"
+        return """
+        mlx{repo=\(modelManager.currentModelRepo), recording=\(isRecording), modelInitializing=\(isModelInitializing), finalizing=\(isFinalizingTranscription), callbacks=\(sampleStore.callbacksReceived()), samples=\(sampleStore.count()), sampleRate=\(Int(inputSampleRate)), routing=\(activeCaptureUsesPreferredInputDevice ? "preferred" : "system-default"), deviceID=\(preferredDeviceText), modelState=\(String(describing: modelManager.state))}
+        """
+    }
+
     func discardCompletedAudioArchive() {
         removeCompletedAudioArchiveIfNeeded()
     }
@@ -482,12 +489,19 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), modelState=\(String(describing: modelManager.state))",
             verbose: true
         )
+        VoxtLog.tempModel(
+            "MLX startRecording enter. revision=\(revision), preloadOnStart=\(activeSessionBehavior.preloadsOnRecordingStart), summary=\(temporaryCaptureDebugSummary())"
+        )
 
         do {
+            VoxtLog.tempModel("MLX startRecording before startAudioCaptureGraph. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
             try startAudioCaptureGraph()
+            VoxtLog.tempModel("MLX startRecording after startAudioCaptureGraph. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
             isRecording = true
+            VoxtLog.tempModel("MLX startRecording marked recording=true. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
             scheduleCaptureStartupWatchdog(revision: revision)
             startModelPreloadIfNeeded(revision: revision)
+            VoxtLog.tempModel("MLX startRecording launched startup tasks. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
 
             if activeSessionBehavior.runsIntermediateCorrections {
                 correctionLoopTask = Task { [weak self] in
@@ -500,12 +514,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 )
             }
         } catch {
+            VoxtLog.tempModel("MLX startRecording failed. revision=\(revision), error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
             VoxtLog.error("MLXTranscriber start recording failed: \(error)")
         }
     }
 
     func stopRecording() {
         guard isRecording else { return }
+        VoxtLog.tempModel("MLX stopRecording enter. summary=\(temporaryCaptureDebugSummary())")
 
         stopAudioEngine()
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -529,6 +545,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             verbose: true
         )
         VoxtLog.model("MLX recording stop requested. state=\(debugCaptureRuntimeSummary())")
+        VoxtLog.tempModel("MLX stopRecording captured audio. summary=\(temporaryCaptureDebugSummary())")
 
         guard sampleCount > 0 else {
             isFinalizingTranscription = false
@@ -566,8 +583,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     func restartCaptureForPreferredInputDevice() throws {
         guard isRecording else { return }
+        VoxtLog.tempModel("MLX restartCaptureForPreferredInputDevice enter. summary=\(temporaryCaptureDebugSummary())")
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         try startAudioCaptureGraph(usePreferredInputDevice: activeCaptureUsesPreferredInputDevice)
+        VoxtLog.tempModel("MLX restartCaptureForPreferredInputDevice completed. summary=\(temporaryCaptureDebugSummary())")
     }
 
     private func runIntermediateCorrectionLoop(revision: Int) async {
@@ -836,6 +855,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func startAudioCaptureGraph(usePreferredInputDevice: Bool? = nil) throws {
+        VoxtLog.tempModel(
+            "MLX startAudioCaptureGraph enter. audioEngineRunning=\(audioEngine.isRunning), requestedPreferred=\(usePreferredInputDevice.map(String.init(describing:)) ?? "nil"), currentSummary=\(temporaryCaptureDebugSummary())"
+        )
         if audioEngine.isRunning {
             audioEngine.stop()
         }
@@ -862,6 +884,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     guard let self else { return }
                     VoxtLog.model("MLX first PCM callback received. state=\(self.debugCaptureRuntimeSummary())")
                 }
+                VoxtLog.tempModel(
+                    "MLX first PCM callback received. sampleRate=\(Int(buffer.format.sampleRate)), channels=\(buffer.format.channelCount), interleaved=\(buffer.format.isInterleaved), summary=\(self.temporaryCaptureDebugSummary())"
+                )
             }
 
             guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else {
@@ -884,12 +909,16 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         audioEngine.prepare()
+        VoxtLog.tempModel(
+            "MLX startAudioCaptureGraph before audioEngine.start. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")"
+        )
         try audioEngine.start()
         VoxtLog.info(
             "MLX audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
         VoxtLog.model("MLX audio capture graph started. state=\(debugCaptureRuntimeSummary())")
+        VoxtLog.tempModel("MLX startAudioCaptureGraph completed. summary=\(temporaryCaptureDebugSummary())")
     }
 
     private func cancelActiveTasks() {
@@ -945,18 +974,22 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private func startModelPreloadIfNeeded(revision: Int) {
         guard activeSessionBehavior.preloadsOnRecordingStart else {
             isModelInitializing = false
+            VoxtLog.tempModel("MLX preload skipped: behavior disables preload. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
             return
         }
         guard modelManager.state != .ready else {
             isModelInitializing = false
+            VoxtLog.tempModel("MLX preload skipped: model already ready. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
             return
         }
 
+        VoxtLog.tempModel("MLX preload scheduled. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
         preloadTask?.cancel()
         preloadTask = Task { [weak self] in
             guard let self else { return }
             let startedAt = Date()
             do {
+                VoxtLog.tempModel("MLX preload task begin loadModel. revision=\(revision), repo=\(self.modelManager.currentModelRepo), summary=\(self.temporaryCaptureDebugSummary())")
                 self.modelManager.beginActiveUse()
                 defer { self.modelManager.endActiveUse() }
                 _ = try await self.modelManager.loadModel()
@@ -969,18 +1002,21 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     "MLX transcription preload completed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs)",
                     verbose: true
                 )
+                VoxtLog.tempModel("MLX preload completed. revision=\(revision), elapsedMs=\(elapsedMs), summary=\(self.temporaryCaptureDebugSummary())")
             } catch {
                 guard !Task.isCancelled else { return }
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
                 VoxtLog.warning(
                     "MLX transcription preload failed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)"
                 )
+                VoxtLog.tempModel("MLX preload failed. revision=\(revision), elapsedMs=\(elapsedMs), error=\(error.localizedDescription), summary=\(self.temporaryCaptureDebugSummary())")
             }
         }
     }
 
     private func scheduleCaptureStartupWatchdog(revision: Int) {
         captureWatchdogTask?.cancel()
+        VoxtLog.tempModel("MLX capture watchdog armed. revision=\(revision), delaySec=1.2, summary=\(temporaryCaptureDebugSummary())")
         captureWatchdogTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: .seconds(1.2))
@@ -998,6 +1034,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         didRetryCaptureStartup = true
         let shouldFallbackToSystemDefault = preferredInputDeviceID != nil && activeCaptureUsesPreferredInputDevice
+        VoxtLog.tempModel(
+            "MLX capture watchdog fired. revision=\(revision), fallbackToSystemDefault=\(shouldFallbackToSystemDefault), summary=\(temporaryCaptureDebugSummary())"
+        )
         if shouldFallbackToSystemDefault {
             VoxtLog.warning(
                 "MLX audio capture produced no initial callbacks. Retrying once with system default input instead of the preferred device."
@@ -1009,8 +1048,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         do {
             try startAudioCaptureGraph(usePreferredInputDevice: shouldFallbackToSystemDefault ? false : activeCaptureUsesPreferredInputDevice)
             scheduleCaptureStartupWatchdog(revision: revision)
+            VoxtLog.tempModel("MLX capture watchdog retry completed. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
         } catch {
             VoxtLog.error("MLX audio capture recovery failed: \(error)")
+            VoxtLog.tempModel("MLX capture watchdog retry failed. revision=\(revision), error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
         }
     }
 
@@ -1539,8 +1580,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
-        guard let preferredInputDeviceID else { return }
-        guard let audioUnit = inputNode.audioUnit else { return }
+        guard let preferredInputDeviceID else {
+            VoxtLog.tempModel("MLX applyPreferredInputDevice skipped: no preferred device. summary=\(temporaryCaptureDebugSummary())")
+            return
+        }
+        guard let audioUnit = inputNode.audioUnit else {
+            VoxtLog.tempModel("MLX applyPreferredInputDevice skipped: inputNode audioUnit unavailable. summary=\(temporaryCaptureDebugSummary())")
+            return
+        }
         var deviceID = preferredInputDeviceID
         let status = AudioUnitSetProperty(
             audioUnit,
@@ -1552,6 +1599,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         )
         if status != noErr {
             VoxtLog.warning("Unable to switch input device. status=\(status)")
+            VoxtLog.tempModel("MLX applyPreferredInputDevice failed. status=\(status), requestedDeviceID=\(preferredInputDeviceID), summary=\(temporaryCaptureDebugSummary())")
+        } else {
+            VoxtLog.tempModel("MLX applyPreferredInputDevice succeeded. requestedDeviceID=\(preferredInputDeviceID), summary=\(temporaryCaptureDebugSummary())")
         }
     }
 }
