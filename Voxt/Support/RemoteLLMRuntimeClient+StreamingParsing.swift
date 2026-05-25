@@ -39,8 +39,8 @@ extension RemoteLLMRuntimeClient {
                     return text
                 }
             }
-            if let choices = dict["choices"] as? [[String: Any]],
-               let first = choices.first {
+            if let choices = dict["choices"] as? [Any],
+               let first = choices.first as? [String: Any] {
                 if let message = first["message"] as? [String: Any] {
                     if isReasoningContainer(message) {
                         return nil
@@ -48,6 +48,10 @@ extension RemoteLLMRuntimeClient {
                     if let value = extractMessageContent(from: message["content"]) {
                         return value
                     }
+                }
+                if let delta = first["delta"] as? [String: Any],
+                   let value = extractStreamingMessageContent(from: delta["content"]) {
+                    return value
                 }
                 if let text = first["text"] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return text
@@ -630,5 +634,22 @@ extension RemoteLLMRuntimeClient {
         }
 
         return nil
+    }
+
+    func responsePayloadPreview(from data: Data, limit: Int = 1200) -> String {
+        let decoded = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16)
+            ?? String(data: data, encoding: .utf16LittleEndian)
+            ?? String(data: data, encoding: .utf16BigEndian)
+            ?? String(data: data, encoding: .isoLatin1)
+
+        guard let decoded else {
+            let hex = data.prefix(48)
+                .map { String(format: "%02x", $0) }
+                .joined(separator: " ")
+            return "<non-text bytes: \(hex)>"
+        }
+
+        return String(decoded.prefix(limit))
     }
 }

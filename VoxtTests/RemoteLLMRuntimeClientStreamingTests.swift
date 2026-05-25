@@ -350,6 +350,24 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(client.extractPrimaryText(from: payload), "这是数组 content 返回")
     }
 
+    func testExtractPrimaryTextParsesChoiceDeltaContentFallback() {
+        let client = RemoteLLMRuntimeClient()
+        let payload: [String: Any] = [
+            "object": "chat.completion.chunk",
+            "choices": [
+                [
+                    "delta": [
+                        "role": "assistant",
+                        "content": "这是 chunk 形状返回"
+                    ],
+                    "finish_reason": "stop"
+                ]
+            ]
+        ]
+
+        XCTAssertEqual(client.extractPrimaryText(from: payload), "这是 chunk 形状返回")
+    }
+
     func testExtractPrimaryTextParsesGeminiCandidatesParts() {
         let client = RemoteLLMRuntimeClient()
         let payload: [String: Any] = [
