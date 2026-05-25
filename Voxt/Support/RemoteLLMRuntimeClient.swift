@@ -1610,7 +1610,7 @@ struct RemoteLLMRuntimeClient {
         if !settings.stop.isEmpty {
             payload["stop"] = settings.stop
         }
-        if let presencePenalty = settings.presencePenalty {
+        if provider != .stepFun, let presencePenalty = settings.presencePenalty {
             payload["presence_penalty"] = presencePenalty
         }
         if let frequencyPenalty = settings.frequencyPenalty {
@@ -1641,7 +1641,8 @@ struct RemoteLLMRuntimeClient {
         applyOpenAICompatibleThinkingSettings(
             to: &payload,
             provider: provider,
-            settings: settings
+            settings: settings,
+            model: configuration.model
         )
         try applyCommonExtraBody(
             to: &payload,
@@ -1653,7 +1654,8 @@ struct RemoteLLMRuntimeClient {
     func applyOpenAICompatibleThinkingSettings(
         to payload: inout [String: Any],
         provider: RemoteLLMProvider,
-        settings: LLMGenerationSettings
+        settings: LLMGenerationSettings,
+        model: String
     ) {
         switch provider {
         case .openrouter:
@@ -1722,6 +1724,14 @@ struct RemoteLLMRuntimeClient {
             }
         case .grok:
             if settings.thinking.mode == .effort, let effort = settings.thinking.effort {
+                payload["reasoning_effort"] = effort
+            }
+        case .stepFun:
+            let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if settings.thinking.mode == .effort,
+               let effort = settings.thinking.effort,
+               normalizedModel == "step-3.5-flash-2603",
+               ["low", "high"].contains(effort) {
                 payload["reasoning_effort"] = effort
             }
         case .kimi:

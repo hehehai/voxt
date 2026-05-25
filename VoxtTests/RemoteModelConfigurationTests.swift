@@ -559,6 +559,45 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertTrue(allIDs.contains("deepseek-reasoner"))
     }
 
+    func testStepFunUsesChatCompletionModelCatalogAndCapabilities() {
+        XCTAssertEqual(RemoteLLMProvider.stepFun.suggestedModel, "step-3.5-flash")
+        XCTAssertFalse(RemoteLLMProvider.stepFun.usesResponsesAPI)
+        XCTAssertFalse(RemoteLLMProvider.stepFun.supportsHostedSearch)
+
+        let ids = RemoteLLMProvider.stepFun.modelOptions.map(\.id)
+        XCTAssertTrue(ids.contains("step-3.5-flash"))
+        XCTAssertTrue(ids.contains("step-3.5-flash-2603"))
+        XCTAssertTrue(ids.contains("step-2-mini"))
+        XCTAssertTrue(ids.contains("step-1-32k"))
+        XCTAssertTrue(ids.contains("step-router-v1"))
+
+        let capabilities = LLMProviderCapabilityRegistry.capabilities(for: .stepFun)
+        XCTAssertTrue(capabilities.supportsThinkingEffort)
+        XCTAssertFalse(capabilities.supportsThinkingBudget)
+        XCTAssertTrue(capabilities.supportsResponseFormat)
+    }
+
+    func testStepFunLLMConfigurationDefaultsThinkingToOff() {
+        let resolved = RemoteModelConfigurationStore.resolvedLLMConfiguration(
+            provider: .stepFun,
+            stored: [:]
+        )
+
+        XCTAssertEqual(resolved.generationSettings.thinking.mode, .off)
+        XCTAssertEqual(resolved.effectiveGenerationSettings(provider: .stepFun).thinking.mode, .off)
+    }
+
+    func testStepFunLegacyConfigurationDoesNotInheritOpenAIReasoningEffort() {
+        let configuration = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteLLMProvider.stepFun.rawValue,
+            model: "step-3.5-flash-2603",
+            openAIReasoningEffort: OpenAIReasoningEffort.high.rawValue
+        )
+
+        XCTAssertEqual(configuration.generationSettings.thinking.mode, .off)
+        XCTAssertNil(configuration.generationSettings.thinking.effort)
+    }
+
     func testResolvedAliyunLLMConfigurationDefaultsSearchToEnabled() {
         let resolved = RemoteModelConfigurationStore.resolvedLLMConfiguration(
             provider: .aliyunBailian,
