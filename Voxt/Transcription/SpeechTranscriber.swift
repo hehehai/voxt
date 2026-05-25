@@ -49,6 +49,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     var sessionReportsPartialResultsOverride: Bool?
 
     var onTranscriptionFinished: ((String) -> Void)?
+    var onCaptureFormatResolved: ((RecordingAudioFormatSnapshot) -> Void)?
     private(set) var lastStartFailureMessage: String?
 
     init() {
@@ -220,7 +221,9 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
 
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        inputSampleRate = inputNode.outputFormat(forBus: 0).sampleRate
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: inputFormat))
+        inputSampleRate = inputFormat.sampleRate
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             self.recognitionRequest?.append(buffer)

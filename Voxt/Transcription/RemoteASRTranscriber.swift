@@ -64,6 +64,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     var onTranscriptionFinished: ((String) -> Void)?
     var onStartFailure: ((String) -> Void)?
     var onRuntimeFailure: ((String) -> Void)?
+    var onCaptureFormatResolved: ((RecordingAudioFormatSnapshot) -> Void)?
     var dictionaryEntryProvider: (() -> [DictionaryEntry])?
     var doubaoDictionaryEntryProvider: (() -> [DictionaryEntry])?
 
@@ -79,6 +80,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private var recordingFileURL: URL?
     private var completedAudioArchiveURL: URL?
     private let sampleStore = AudioSampleStore()
+    private let canonicalAudioConverter = CanonicalAudioStreamConverter()
     private var streamingInputSampleRate: Double = HistoryAudioArchiveSupport.targetSampleRate
     private var transcribeTask: Task<Void, Never>?
     private var stopRequested = false
@@ -145,6 +147,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
         sampleStore.clear()
+        canonicalAudioConverter.reset()
         streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         transcribedText = ""
         audioLevel = 0
@@ -553,6 +556,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsFloatKey: false
         ]
+        onCaptureFormatResolved?(
+            RecordingAudioFormatSnapshot(
+                sampleRate: 16_000,
+                channelCount: 1,
+                commonFormatRawValue: UInt32(AVAudioCommonFormat.pcmFormatInt16.rawValue),
+                isInterleaved: false
+            )
+        )
 
         let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
         recorder.isMeteringEnabled = true
@@ -1140,19 +1151,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
-        streamingInputSampleRate = inputFormat.sampleRate
+        onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: inputFormat))
+        streamingInputSampleRate = CanonicalAudioStreamConverter.sampleRate
+        canonicalAudioConverter.reset()
         let usesPreferredInputDevice = preferredInputDeviceID != nil
         VoxtLog.model(
             "Aliyun fun audio capture start requested. taskID=\(context.taskID), sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount), routing=\(usesPreferredInputDevice ? "preferred" : "system-default"), deviceID=\(usesPreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default"), engineRunning=\(audioEngine.isRunning), state=\(context.debugSummary())"
         )
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             self.sampleStore.noteCallback()
-            guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
+            guard let samples = self.canonicalAudioConverter.monoFloat16kSamples(from: buffer), !samples.isEmpty else { return }
+            self.sampleStore.append(samples)
+            let pcmData = CanonicalAudioStreamConverter.pcm16Data(from: samples)
             let callbackCount = self.sampleStore.callbackCount()
             Task { @MainActor in
                 guard self.isRecording,
@@ -1428,19 +1440,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let inputNode = audioEngine.inputNode
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
-        streamingInputSampleRate = inputFormat.sampleRate
+        onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: inputFormat))
+        streamingInputSampleRate = CanonicalAudioStreamConverter.sampleRate
+        canonicalAudioConverter.reset()
         let usesPreferredInputDevice = preferredInputDeviceID != nil
         VoxtLog.model(
             "Aliyun qwen audio capture start requested. kind=\(context.kind), sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount), routing=\(usesPreferredInputDevice ? "preferred" : "system-default"), deviceID=\(usesPreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default"), engineRunning=\(audioEngine.isRunning), state=\(context.debugSummary())"
         )
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             self.sampleStore.noteCallback()
-            guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
+            guard let samples = self.canonicalAudioConverter.monoFloat16kSamples(from: buffer), !samples.isEmpty else { return }
+            self.sampleStore.append(samples)
+            let pcmData = CanonicalAudioStreamConverter.pcm16Data(from: samples)
             let callbackCount = self.sampleStore.callbackCount()
             Task { @MainActor in
                 guard self.isRecording,
@@ -1918,14 +1931,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         }
         let inputFormat = inputNode.outputFormat(forBus: 0)
-        streamingInputSampleRate = inputFormat.sampleRate
+        onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: inputFormat))
+        streamingInputSampleRate = CanonicalAudioStreamConverter.sampleRate
+        canonicalAudioConverter.reset()
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
-            guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
+            guard let samples = self.canonicalAudioConverter.monoFloat16kSamples(from: buffer), !samples.isEmpty else { return }
+            self.sampleStore.append(samples)
+            let pcmData = CanonicalAudioStreamConverter.pcm16Data(from: samples)
             Task { @MainActor in
                 guard self.isRecording,
                       let context = self.doubaoStreamingContext,
@@ -1990,20 +2004,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         guard !didRetryDoubaoCaptureStartup else { return }
 
         didRetryDoubaoCaptureStartup = true
-        let shouldFallbackToSystemDefault = preferredInputDeviceID != nil && doubaoCaptureUsesPreferredInputDevice
-        if shouldFallbackToSystemDefault {
-            VoxtLog.warning(
-                "Doubao audio capture produced no initial callbacks. Retrying once with system default input instead of the preferred device. state=\(context.debugSummary())"
-            )
-        } else {
-            VoxtLog.warning(
-                "Doubao audio capture produced no initial callbacks. Restarting input graph once. state=\(context.debugSummary())"
-            )
-        }
+        VoxtLog.warning(
+            "Doubao audio capture produced no initial callbacks. Restarting input graph once with the frozen input device. state=\(context.debugSummary())"
+        )
 
         do {
             try startDoubaoAudioCapture(
-                usePreferredInputDevice: shouldFallbackToSystemDefault ? false : doubaoCaptureUsesPreferredInputDevice
+                usePreferredInputDevice: doubaoCaptureUsesPreferredInputDevice
             )
             context.audioCaptureStartCount += 1
             context.lastAudioCaptureStartReason = "startup-watchdog"

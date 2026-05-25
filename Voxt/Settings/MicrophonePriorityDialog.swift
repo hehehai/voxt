@@ -100,7 +100,6 @@ struct MicrophonePriorityDialog: View {
                     .controlSize(.small)
             }
         }
-        .padding(.trailing, 44)
     }
 
     private var autoSwitchBinding: Binding<Bool> {

@@ -148,11 +148,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var workspaceSessionDidBecomeActiveObserver: NSObjectProtocol?
     var workspaceSessionDidResignActiveObserver: NSObjectProtocol?
     var audioInputDevicesObserver: AudioInputDeviceObserver?
+    var activeRecordingInputDeviceObserver: AudioInputDeviceRuntimeObserver?
     var globalEscapeKeyMonitor: Any?
     var localEscapeKeyMonitor: Any?
     var inputDevicesRefreshTask: Task<Void, Never>?
+    var pendingInputDeviceRecoveryTask: Task<Void, Never>?
     var inputDevicesSnapshot: [AudioInputDevice] = []
     var microphoneResolvedState = MicrophoneResolvedState.empty
+    var activeRecordingInputDeviceSnapshot: RecordingInputDeviceSnapshot?
+    var activeRecordingInputDeviceDirtyChanges: [RecordingInputDeviceRuntimeChange] = []
 
     var isSessionActive = false
     var pendingSessionFinishTask: Task<Void, Never>?

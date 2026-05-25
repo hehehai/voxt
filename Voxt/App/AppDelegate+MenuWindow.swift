@@ -246,6 +246,20 @@ extension AppDelegate {
             )
         }
 
+        if reason == "hardware change",
+           isSessionActive,
+           recordingStoppedAt == nil,
+           let frozenSnapshot = activeRecordingInputDeviceSnapshot,
+           let refreshedDevice = devices.first(where: { $0.uid == frozenSnapshot.uid }),
+           refreshedDevice.id != frozenSnapshot.id {
+            activeRecordingInputDeviceSnapshot = frozenSnapshot.replacingDevice(refreshedDevice)
+            startObservingActiveRecordingInputDevice(frozenSnapshot.replacingDevice(refreshedDevice))
+            VoxtLog.model(
+                "Frozen recording microphone device ID changed. uid=\(frozenSnapshot.uid), previousID=\(frozenSnapshot.id), currentID=\(refreshedDevice.id), captureState=\(activeRecordingCaptureDebugSummary())"
+            )
+            scheduleActiveRecordingInputRecovery(reason: "hardware-device-id-change")
+        }
+
         guard devicesChanged || selectionChanged else { return }
 
         if devicesChanged {
@@ -277,7 +291,13 @@ extension AppDelegate {
         reason: String
     ) -> String? {
         guard reason == "hardware change" else { return nil }
-        guard let currentUID = previousResolvedState.activeUID else { return nil }
+        let currentUID: String?
+        if activeRecordingInputDeviceSnapshot?.uid == previousResolvedState.activeUID {
+            currentUID = activeRecordingInputDeviceSnapshot?.uid
+        } else {
+            currentUID = previousResolvedState.activeUID
+        }
+        guard let currentUID else { return nil }
         guard availableDevices.contains(where: { $0.uid == currentUID }) else { return nil }
 
         guard isSessionActive, recordingStoppedAt == nil else { return nil }
@@ -416,6 +436,31 @@ extension AppDelegate {
         to newState: MicrophoneResolvedState,
         reason: String
     ) {
+        if reason == "hardware change",
+           isSessionActive,
+           recordingStoppedAt == nil,
+           let frozenSnapshot = activeRecordingInputDeviceSnapshot,
+           !newState.entries.contains(where: { $0.uid == frozenSnapshot.uid && $0.device != nil }) {
+            VoxtLog.warning(
+                "Frozen recording microphone is unavailable after hardware change. uid=\(frozenSnapshot.uid), name=\(frozenSnapshot.name)"
+            )
+            showOverlayReminder(
+                AppLocalization.format("Microphone %@ is no longer available.", frozenSnapshot.name)
+            )
+            finishSession(after: 0)
+            return
+        }
+
+        if isSessionActive,
+           recordingStoppedAt == nil,
+           let frozenSnapshot = activeRecordingInputDeviceSnapshot,
+           newState.activeUID != frozenSnapshot.uid {
+            VoxtLog.model(
+                "Deferring microphone preference change until the next recording. reason=\(reason), frozenUID=\(frozenSnapshot.uid), requestedUID=\(newState.activeUID ?? "none"), captureState=\(activeRecordingCaptureDebugSummary())"
+            )
+            return
+        }
+
         let startupCaptureInProgress = activeRecordingCaptureStartupInProgress()
         if shouldIgnoreHardwareInputReconfigurationDuringRecording(
             previousUID: previousState.activeUID,

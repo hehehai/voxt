@@ -1,4 +1,5 @@
 import XCTest
+import CoreAudio
 @testable import Voxt
 
 final class AudioInputDeviceManagerTests: XCTestCase {
@@ -89,6 +90,44 @@ final class AudioInputDeviceManagerTests: XCTestCase {
                 uid: "BuiltInMicrophoneDevice",
                 name: "MacBook Air麦克风"
             )
+        )
+    }
+
+    func testRecordingInputSnapshotPreservesFormatWhenDeviceIDChangesForSameUID() {
+        let initialFormat = RecordingAudioFormatSnapshot(
+            sampleRate: 48_000,
+            channelCount: 2,
+            commonFormatRawValue: 1,
+            isInterleaved: false
+        )
+        let snapshot = RecordingInputDeviceSnapshot(
+            uid: "usb-high",
+            id: 10,
+            name: "USB Mic",
+            initialFormat: initialFormat
+        )
+
+        let refreshed = snapshot.replacingDevice(
+            AudioInputDevice(id: 22, uid: "usb-high", name: "USB Mic")
+        )
+
+        XCTAssertEqual(refreshed.uid, "usb-high")
+        XCTAssertEqual(refreshed.id, 22)
+        XCTAssertEqual(refreshed.initialFormat, initialFormat)
+    }
+
+    func testRecordingInputRuntimeChangeClassifiesFormatSelectorsAsRecoveryWorthy() {
+        XCTAssertTrue(
+            RecordingInputDeviceRuntimeChange(selector: kAudioDevicePropertyNominalSampleRate)
+                .requiresCaptureRecovery
+        )
+        XCTAssertTrue(
+            RecordingInputDeviceRuntimeChange(selector: kAudioDevicePropertyStreamConfiguration)
+                .requiresCaptureRecovery
+        )
+        XCTAssertFalse(
+            RecordingInputDeviceRuntimeChange(selector: kAudioObjectPropertyName)
+                .requiresCaptureRecovery
         )
     }
 }

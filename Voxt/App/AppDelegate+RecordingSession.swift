@@ -140,6 +140,7 @@ extension AppDelegate {
         mlxTranscriber?.stopRecording()
         whisperTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
+        clearRecordingInputDeviceSnapshot(reason: reason)
         if preservePendingHistoryAudio {
             VoxtLog.info("Preserving pending history audio during residual resource release. reason=\(reason)", verbose: true)
         } else {
@@ -258,6 +259,7 @@ extension AppDelegate {
             )
         }
 
+        freezeRecordingInputDeviceSnapshotForSession()
         applyPreferredInputDevice()
         if isContinuingRewriteConversation {
             overlayState.clearPendingConversationUserPrompt()

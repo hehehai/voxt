@@ -320,12 +320,14 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
     var onTranscriptionFinished: ((String) -> Void)?
     var onPartialTranscription: ((String) -> Void)?
+    var onCaptureFormatResolved: ((RecordingAudioFormatSnapshot) -> Void)?
     var dictionaryEntryProvider: (() -> [DictionaryEntry])?
     private(set) var lastStartFailureMessage: String?
     private(set) var latestWordTimings: [WhisperHistoryWordTiming] = []
 
     private let audioEngine = AVAudioEngine()
     private let sampleStore = AudioSampleStore()
+    private let canonicalAudioConverter = CanonicalAudioStreamConverter()
     private let modelManager: WhisperKitModelManager
     private var preferredInputDeviceID: AudioDeviceID?
     private var inputSampleRate: Double = 16000
@@ -1263,6 +1265,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         realtimeCommittedSampleCount = 0
         realtimeWasRecentlySpeaking = false
         realtimeDidFlushCurrentSilence = false
+        canonicalAudioConverter.reset()
     }
 
     private func stopAudioEngine() {
@@ -1315,25 +1318,17 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputSampleRate = recordingFormat.sampleRate
+        onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: recordingFormat))
+        inputSampleRate = CanonicalAudioStreamConverter.sampleRate
+        canonicalAudioConverter.reset()
         let sampleStore = self.sampleStore
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             sampleStore.noteCallback()
-            guard let channelData = buffer.floatChannelData?[0] else { return }
-
-            let frameLength = Int(buffer.frameLength)
-            guard frameLength > 0 else { return }
-            let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+            guard let samples = self.canonicalAudioConverter.monoFloat16kSamples(from: buffer), !samples.isEmpty else { return }
             sampleStore.append(samples)
-
-            var rms: Float = 0
-            for index in 0..<frameLength {
-                rms += channelData[index] * channelData[index]
-            }
-            rms = sqrt(rms / Float(frameLength))
-            let normalized = min(rms * 20, 1.0)
+            let normalized = AudioLevelMeter.normalizedLevel(fromSamples: samples)
             Task { @MainActor [weak self] in
                 self?.audioLevel = normalized
             }
@@ -1342,7 +1337,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         audioEngine.prepare()
         try audioEngine.start()
         VoxtLog.info(
-            "Whisper audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), mode=offline",
+            "Whisper audio capture started. hardwareSampleRate=\(Int(recordingFormat.sampleRate)), canonicalSampleRate=\(Int(CanonicalAudioStreamConverter.sampleRate)), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), mode=offline",
             verbose: true
         )
     }

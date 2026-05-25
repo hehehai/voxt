@@ -38,7 +38,10 @@ extension AppDelegate {
         overlayState.statusMessage = ""
         mlx.transcribedText = ""
         mlx.sessionAllowsRealtimeTextDisplay = transcriptionCapturePipeline.usesLiveDisplay
-        mlx.setPreferredInputDevice(selectedInputDeviceID)
+        mlx.setPreferredInputDevice(activeRecordingInputDeviceSnapshot?.id ?? selectedInputDeviceID)
+        mlx.onCaptureFormatResolved = { [weak self] format in
+            self?.recordActiveRecordingInputFormat(format, source: "mlx")
+        }
         mlx.onPartialTranscription = { [weak self] text in
             self?.handleLiveASRPartialTranscription(text, sessionID: sessionID)
         }
@@ -76,6 +79,9 @@ extension AppDelegate {
             let sessionID = self.activeRecordingSessionID
             self.speechTranscriber.transcribedText = ""
             self.speechTranscriber.sessionReportsPartialResultsOverride = self.transcriptionCapturePipeline.usesLiveDisplay
+            self.speechTranscriber.onCaptureFormatResolved = { [weak self] format in
+                self?.recordActiveRecordingInputFormat(format, source: "speech")
+            }
             self.speechTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.stashPendingCompletedHistoryAudioArchive(self?.speechTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
@@ -116,7 +122,10 @@ extension AppDelegate {
         whisper.transcribedText = ""
         whisper.sessionAllowsRealtimeTextDisplay = transcriptionCapturePipeline.usesLiveDisplay
         whisper.isModelInitializing = needsModelInitialization
-        whisper.setPreferredInputDevice(selectedInputDeviceID)
+        whisper.setPreferredInputDevice(activeRecordingInputDeviceSnapshot?.id ?? selectedInputDeviceID)
+        whisper.onCaptureFormatResolved = { [weak self] format in
+            self?.recordActiveRecordingInputFormat(format, source: "whisper")
+        }
         whisper.onPartialTranscription = { [weak self] text in
             self?.handleLiveASRPartialTranscription(text, sessionID: sessionID)
         }
@@ -200,6 +209,9 @@ extension AppDelegate {
             }
             self.remoteASRTranscriber.transcribedText = ""
             self.remoteASRTranscriber.sessionAllowsRealtimeTextDisplay = self.transcriptionCapturePipeline.usesLiveDisplay
+            self.remoteASRTranscriber.onCaptureFormatResolved = { [weak self] format in
+                self?.recordActiveRecordingInputFormat(format, source: "remote")
+            }
             self.remoteASRTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.stashPendingCompletedHistoryAudioArchive(self?.remoteASRTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
@@ -277,6 +289,7 @@ extension AppDelegate {
         resetVoxtNoteSessionRuntimeState()
         overlayState.reset()
         overlayWindow.hide()
+        clearRecordingInputDeviceSnapshot(reason: "failed-start")
     }
 
     func preflightPermissionsForRecording(engine: TranscriptionEngine) -> Bool {
@@ -308,10 +321,141 @@ extension AppDelegate {
     }
 
     func applyPreferredInputDevice() {
-        speechTranscriber.setPreferredInputDevice(selectedInputDeviceID)
-        mlxTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
-        whisperTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
-        remoteASRTranscriber.setPreferredInputDevice(selectedInputDeviceID)
+        let deviceID = activeRecordingInputDeviceSnapshot?.id ?? selectedInputDeviceID
+        speechTranscriber.setPreferredInputDevice(deviceID)
+        mlxTranscriber?.setPreferredInputDevice(deviceID)
+        whisperTranscriber?.setPreferredInputDevice(deviceID)
+        remoteASRTranscriber.setPreferredInputDevice(deviceID)
+    }
+
+    func freezeRecordingInputDeviceSnapshotForSession() {
+        guard let activeDevice = microphoneResolvedState.activeDevice else {
+            activeRecordingInputDeviceSnapshot = nil
+            activeRecordingInputDeviceDirtyChanges.removeAll(keepingCapacity: false)
+            stopObservingActiveRecordingInputDevice()
+            VoxtLog.warning("Recording input device snapshot unavailable at session start.")
+            return
+        }
+
+        let snapshot = RecordingInputDeviceSnapshot(device: activeDevice)
+        activeRecordingInputDeviceSnapshot = snapshot
+        activeRecordingInputDeviceDirtyChanges.removeAll(keepingCapacity: false)
+        startObservingActiveRecordingInputDevice(snapshot)
+        VoxtLog.model(
+            "Recording input device frozen. uid=\(snapshot.uid), id=\(snapshot.id), name=\(snapshot.name)"
+        )
+    }
+
+    func clearRecordingInputDeviceSnapshot(reason: String) {
+        if let snapshot = activeRecordingInputDeviceSnapshot {
+            VoxtLog.info(
+                "Recording input device snapshot cleared. reason=\(reason), uid=\(snapshot.uid), id=\(snapshot.id)",
+                verbose: true
+            )
+        }
+        activeRecordingInputDeviceSnapshot = nil
+        activeRecordingInputDeviceDirtyChanges.removeAll(keepingCapacity: false)
+        pendingInputDeviceRecoveryTask?.cancel()
+        pendingInputDeviceRecoveryTask = nil
+        stopObservingActiveRecordingInputDevice()
+    }
+
+    func recordActiveRecordingInputFormat(
+        _ format: RecordingAudioFormatSnapshot,
+        source: String
+    ) {
+        guard var snapshot = activeRecordingInputDeviceSnapshot else { return }
+        guard snapshot.initialFormat == nil else { return }
+        snapshot = snapshot.withInitialFormat(format)
+        activeRecordingInputDeviceSnapshot = snapshot
+        VoxtLog.model(
+            "Recording input format frozen. source=\(source), uid=\(snapshot.uid), id=\(snapshot.id), sampleRate=\(Int(format.sampleRate)), channels=\(format.channelCount), format=\(format.commonFormatRawValue), interleaved=\(format.isInterleaved)"
+        )
+    }
+
+    func startObservingActiveRecordingInputDevice(_ snapshot: RecordingInputDeviceSnapshot) {
+        stopObservingActiveRecordingInputDevice()
+        activeRecordingInputDeviceObserver = AudioInputDeviceRuntimeObserver(
+            deviceID: snapshot.id,
+            uid: snapshot.uid
+        ) { [weak self] change in
+            Task { @MainActor [weak self] in
+                self?.handleActiveRecordingInputDeviceRuntimeChange(change)
+            }
+        }
+    }
+
+    private func stopObservingActiveRecordingInputDevice() {
+        activeRecordingInputDeviceObserver = nil
+    }
+
+    private func handleActiveRecordingInputDeviceRuntimeChange(_ change: RecordingInputDeviceRuntimeChange) {
+        guard isSessionActive, recordingStoppedAt == nil else { return }
+        guard let snapshot = activeRecordingInputDeviceSnapshot else { return }
+
+        activeRecordingInputDeviceDirtyChanges.append(change)
+        VoxtLog.model(
+            "Recording input device marked dirty. change=\(change.description), uid=\(snapshot.uid), id=\(snapshot.id), captureState=\(activeRecordingCaptureDebugSummary())"
+        )
+
+        guard change.requiresCaptureRecovery else { return }
+        scheduleActiveRecordingInputRecovery(reason: "device-\(change.description)")
+    }
+
+    func scheduleActiveRecordingInputRecovery(reason: String) {
+        pendingInputDeviceRecoveryTask?.cancel()
+        pendingInputDeviceRecoveryTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return
+            }
+            await MainActor.run {
+                self?.recoverActiveRecordingInputDeviceIfNeeded(reason: reason)
+            }
+        }
+    }
+
+    func recoverActiveRecordingInputDeviceIfNeeded(reason: String) {
+        guard isSessionActive, recordingStoppedAt == nil else { return }
+        guard let snapshot = activeRecordingInputDeviceSnapshot else { return }
+        guard !activeRecordingCaptureStartupInProgress() else {
+            scheduleActiveRecordingInputRecovery(reason: reason)
+            return
+        }
+
+        let devices = AudioInputDeviceManager.snapshotAvailableInputDevices()
+        guard let refreshedDevice = devices.first(where: { $0.uid == snapshot.uid }) else {
+            VoxtLog.warning(
+                "Recording input device disappeared during active session. reason=\(reason), uid=\(snapshot.uid), name=\(snapshot.name)"
+            )
+            showOverlayReminder(
+                AppLocalization.format("Microphone %@ is no longer available.", snapshot.name)
+            )
+            finishSession(after: 0)
+            return
+        }
+
+        let refreshedSnapshot = snapshot.replacingDevice(refreshedDevice)
+        activeRecordingInputDeviceSnapshot = refreshedSnapshot
+        if refreshedSnapshot.id != snapshot.id {
+            startObservingActiveRecordingInputDevice(refreshedSnapshot)
+        }
+        applyPreferredInputDevice()
+
+        do {
+            try restartCurrentRecordingCaptureForPreferredInputDevice()
+            activeRecordingInputDeviceDirtyChanges.removeAll(keepingCapacity: false)
+            VoxtLog.model(
+                "Recording input recovery completed. reason=\(reason), uid=\(refreshedSnapshot.uid), previousID=\(snapshot.id), currentID=\(refreshedSnapshot.id), captureState=\(activeRecordingCaptureDebugSummary())"
+            )
+        } catch {
+            VoxtLog.error("Recording input recovery failed: \(error.localizedDescription). reason=\(reason)")
+            showOverlayReminder(
+                AppLocalization.format("Failed to recover microphone %@.", refreshedSnapshot.name)
+            )
+            finishSession(after: 0)
+        }
     }
 
     func handlePreferredInputDeviceChange(

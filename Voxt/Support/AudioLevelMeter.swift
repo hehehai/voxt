@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 
-enum AudioLevelMeter {
+nonisolated enum AudioLevelMeter {
     private static let defaultNoiseGate: Float = 0.010
     private static let defaultGain: Float = 8.5
     private static let defaultExponent: Float = 0.88
@@ -171,5 +171,98 @@ enum AudioLevelMeter {
         default:
             return nil
         }
+    }
+}
+
+nonisolated final class CanonicalAudioStreamConverter {
+    static let sampleRate: Double = 16_000
+
+    private var nextSourceFrameOffset: Double = 0
+    private var lastInputSampleRate: Double?
+
+    func reset() {
+        nextSourceFrameOffset = 0
+        lastInputSampleRate = nil
+    }
+
+    func monoFloat16kSamples(from buffer: AVAudioPCMBuffer) -> [Float]? {
+        guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else {
+            return nil
+        }
+        return monoFloat16kSamples(from: samples, inputSampleRate: buffer.format.sampleRate)
+    }
+
+    func pcm16Mono16kData(from buffer: AVAudioPCMBuffer) -> Data? {
+        guard let samples = monoFloat16kSamples(from: buffer), !samples.isEmpty else {
+            return nil
+        }
+        return Self.pcm16Data(from: samples)
+    }
+
+    func monoFloat16kSamples(from samples: [Float], inputSampleRate: Double) -> [Float] {
+        guard !samples.isEmpty, inputSampleRate > 0 else { return [] }
+
+        if let lastInputSampleRate, abs(lastInputSampleRate - inputSampleRate) > 1 {
+            nextSourceFrameOffset = 0
+        }
+        lastInputSampleRate = inputSampleRate
+
+        guard abs(inputSampleRate - Self.sampleRate) > 1 else {
+            nextSourceFrameOffset = 0
+            return samples
+        }
+
+        let step = inputSampleRate / Self.sampleRate
+        var position = max(0, nextSourceFrameOffset)
+        var output: [Float] = []
+        output.reserveCapacity(max(Int(Double(samples.count) / step), 1))
+
+        while position < Double(samples.count) {
+            let sourceIndex = min(Int(position.rounded(.down)), samples.count - 1)
+            output.append(samples[sourceIndex])
+            position += step
+        }
+
+        nextSourceFrameOffset = position - Double(samples.count)
+        return output
+    }
+
+    static func monoFloat16kSamples(from buffer: AVAudioPCMBuffer) -> [Float]? {
+        guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else {
+            return nil
+        }
+        return monoFloat16kSamples(from: samples, inputSampleRate: buffer.format.sampleRate)
+    }
+
+    static func monoFloat16kSamples(from samples: [Float], inputSampleRate: Double) -> [Float] {
+        guard !samples.isEmpty, inputSampleRate > 0 else { return [] }
+        guard abs(inputSampleRate - sampleRate) > 1 else { return samples }
+
+        let ratio = sampleRate / inputSampleRate
+        let outputCount = max(Int(Double(samples.count) * ratio), 1)
+        return (0..<outputCount).map { index in
+            let sourcePosition = Double(index) / ratio
+            let sourceIndex = min(Int(sourcePosition.rounded(.down)), samples.count - 1)
+            return samples[sourceIndex]
+        }
+    }
+
+    static func pcm16Mono16kData(from buffer: AVAudioPCMBuffer) -> Data? {
+        guard let samples = monoFloat16kSamples(from: buffer), !samples.isEmpty else {
+            return nil
+        }
+        return pcm16Data(from: samples)
+    }
+
+    static func pcm16Data(from samples: [Float]) -> Data {
+        var data = Data(count: samples.count * MemoryLayout<Int16>.size)
+        data.withUnsafeMutableBytes { rawBuffer in
+            let output = rawBuffer.bindMemory(to: Int16.self)
+            for (index, sample) in samples.enumerated() {
+                let clamped = max(-1.0, min(1.0, sample))
+                output[index] = Int16(clamped * Float(Int16.max))
+            }
+        }
+        return data
     }
 }

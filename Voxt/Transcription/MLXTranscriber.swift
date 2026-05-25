@@ -388,10 +388,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     var onTranscriptionFinished: ((String) -> Void)?
     var onPartialTranscription: ((String) -> Void)?
+    var onCaptureFormatResolved: ((RecordingAudioFormatSnapshot) -> Void)?
     var dictionaryEntryProvider: (() -> [DictionaryEntry])?
 
     private let audioEngine = AVAudioEngine()
     private let sampleStore = AudioSampleStore()
+    private let canonicalAudioConverter = CanonicalAudioStreamConverter()
     private var inputSampleRate: Double = 16000
     private var completedAudioArchiveURL: URL?
     private let modelManager: MLXModelManager
@@ -830,6 +832,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         nextCorrectionAtSeconds = currentCorrectionIntervalSeconds
         loggedSampleExtractionFailure = false
         lastCaptureMetrics = nil
+        canonicalAudioConverter.reset()
     }
 
     private var currentCorrectionIntervalSeconds: Double {
@@ -877,12 +880,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
         VoxtLog.tempModel("MLX startAudioCaptureGraph before outputFormat. bus=0, summary=\(temporaryCaptureDebugSummary())")
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: recordingFormat))
         VoxtLog.tempModel("MLX startAudioCaptureGraph after outputFormat. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved)")
-        inputSampleRate = recordingFormat.sampleRate
+        inputSampleRate = CanonicalAudioStreamConverter.sampleRate
+        canonicalAudioConverter.reset()
         let sampleStore = self.sampleStore
 
         VoxtLog.tempModel("MLX startAudioCaptureGraph before installTap. bufferSize=1024, summary=\(temporaryCaptureDebugSummary())")
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             sampleStore.noteCallback()
             let callbackCount = sampleStore.callbacksReceived()
@@ -896,7 +901,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 )
             }
 
-            guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else {
+            guard let samples = self.canonicalAudioConverter.monoFloat16kSamples(from: buffer), !samples.isEmpty else {
                 if !self.loggedSampleExtractionFailure {
                     self.loggedSampleExtractionFailure = true
                     VoxtLog.warning(
@@ -920,11 +925,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         audioEngine.prepare()
         VoxtLog.tempModel("MLX startAudioCaptureGraph after prepare. summary=\(temporaryCaptureDebugSummary())")
         VoxtLog.tempModel(
-            "MLX startAudioCaptureGraph before audioEngine.start. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")"
+            "MLX startAudioCaptureGraph before audioEngine.start. hardwareSampleRate=\(Int(recordingFormat.sampleRate)), canonicalSampleRate=\(Int(CanonicalAudioStreamConverter.sampleRate)), channels=\(recordingFormat.channelCount), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")"
         )
         try audioEngine.start()
         VoxtLog.info(
-            "MLX audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
+            "MLX audio capture started. hardwareSampleRate=\(Int(recordingFormat.sampleRate)), canonicalSampleRate=\(Int(CanonicalAudioStreamConverter.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
         VoxtLog.model("MLX audio capture graph started. state=\(debugCaptureRuntimeSummary())")
@@ -1043,20 +1048,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         guard !didRetryCaptureStartup else { return }
 
         didRetryCaptureStartup = true
-        let shouldFallbackToSystemDefault = preferredInputDeviceID != nil && activeCaptureUsesPreferredInputDevice
         VoxtLog.tempModel(
-            "MLX capture watchdog fired. revision=\(revision), fallbackToSystemDefault=\(shouldFallbackToSystemDefault), summary=\(temporaryCaptureDebugSummary())"
+            "MLX capture watchdog fired. revision=\(revision), summary=\(temporaryCaptureDebugSummary())"
         )
-        if shouldFallbackToSystemDefault {
-            VoxtLog.warning(
-                "MLX audio capture produced no initial callbacks. Retrying once with system default input instead of the preferred device."
-            )
-        } else {
-            VoxtLog.warning("MLX audio capture produced no initial callbacks. Restarting input graph once.")
-        }
+        VoxtLog.warning("MLX audio capture produced no initial callbacks. Restarting input graph once with the frozen input device.")
 
         do {
-            try startAudioCaptureGraph(usePreferredInputDevice: shouldFallbackToSystemDefault ? false : activeCaptureUsesPreferredInputDevice)
+            try startAudioCaptureGraph(usePreferredInputDevice: activeCaptureUsesPreferredInputDevice)
             scheduleCaptureStartupWatchdog(revision: revision)
             VoxtLog.tempModel("MLX capture watchdog retry completed. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
         } catch {

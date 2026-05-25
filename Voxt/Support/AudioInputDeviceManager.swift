@@ -1,5 +1,6 @@
 import Foundation
 import CoreAudio
+import AVFoundation
 
 struct AudioInputDevice: Identifiable, Hashable, Sendable {
     let id: AudioDeviceID
@@ -7,6 +8,124 @@ struct AudioInputDevice: Identifiable, Hashable, Sendable {
     let name: String
 
     var identifier: String { uid }
+}
+
+nonisolated struct RecordingAudioFormatSnapshot: Equatable, Sendable {
+    let sampleRate: Double
+    let channelCount: UInt32
+    let commonFormatRawValue: UInt32
+    let isInterleaved: Bool
+
+    init(
+        sampleRate: Double,
+        channelCount: UInt32,
+        commonFormatRawValue: UInt32,
+        isInterleaved: Bool
+    ) {
+        self.sampleRate = sampleRate
+        self.channelCount = channelCount
+        self.commonFormatRawValue = commonFormatRawValue
+        self.isInterleaved = isInterleaved
+    }
+
+    init(format: AVAudioFormat) {
+        self.init(
+            sampleRate: format.sampleRate,
+            channelCount: format.channelCount,
+            commonFormatRawValue: UInt32(format.commonFormat.rawValue),
+            isInterleaved: format.isInterleaved
+        )
+    }
+}
+
+nonisolated struct RecordingInputDeviceSnapshot: Equatable, Sendable {
+    let uid: String
+    let id: AudioDeviceID
+    let name: String
+    var initialFormat: RecordingAudioFormatSnapshot?
+
+    init(device: AudioInputDevice, initialFormat: RecordingAudioFormatSnapshot? = nil) {
+        uid = device.uid
+        id = device.id
+        name = device.name
+        self.initialFormat = initialFormat
+    }
+
+    init(
+        uid: String,
+        id: AudioDeviceID,
+        name: String,
+        initialFormat: RecordingAudioFormatSnapshot? = nil
+    ) {
+        self.uid = uid
+        self.id = id
+        self.name = name
+        self.initialFormat = initialFormat
+    }
+
+    func replacingDevice(_ device: AudioInputDevice) -> RecordingInputDeviceSnapshot {
+        RecordingInputDeviceSnapshot(
+            uid: device.uid,
+            id: device.id,
+            name: device.name,
+            initialFormat: initialFormat
+        )
+    }
+
+    func withInitialFormat(_ format: RecordingAudioFormatSnapshot) -> RecordingInputDeviceSnapshot {
+        var copy = self
+        if copy.initialFormat == nil {
+            copy.initialFormat = format
+        }
+        return copy
+    }
+}
+
+nonisolated enum RecordingInputDeviceRuntimeChange: Equatable, Sendable {
+    case alive
+    case running
+    case nominalSampleRate
+    case streamConfiguration
+    case unknown(AudioObjectPropertySelector)
+
+    var requiresCaptureRecovery: Bool {
+        switch self {
+        case .alive, .running, .nominalSampleRate, .streamConfiguration:
+            return true
+        case .unknown:
+            return false
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .alive:
+            return "alive"
+        case .running:
+            return "running"
+        case .nominalSampleRate:
+            return "nominalSampleRate"
+        case .streamConfiguration:
+            return "streamConfiguration"
+        case .unknown(let selector):
+            return "unknown(\(selector))"
+        }
+    }
+
+    init(selector: AudioObjectPropertySelector) {
+        switch selector {
+        case kAudioDevicePropertyDeviceIsAlive:
+            self = .alive
+        case kAudioDevicePropertyDeviceIsRunningSomewhere:
+            self = .running
+        case kAudioDevicePropertyNominalSampleRate:
+            self = .nominalSampleRate
+        case kAudioDevicePropertyStreamConfiguration:
+            self = .streamConfiguration
+        default:
+            self = .unknown(selector)
+        }
+    }
 }
 
 enum AudioInputDeviceManager {
@@ -155,6 +274,14 @@ enum AudioInputDeviceManager {
             return "devices"
         case kAudioHardwarePropertyDefaultInputDevice:
             return "defaultInputDevice"
+        case kAudioDevicePropertyDeviceIsAlive:
+            return "deviceIsAlive"
+        case kAudioDevicePropertyDeviceIsRunningSomewhere:
+            return "deviceIsRunningSomewhere"
+        case kAudioDevicePropertyNominalSampleRate:
+            return "nominalSampleRate"
+        case kAudioDevicePropertyStreamConfiguration:
+            return "streamConfiguration"
         default:
             return String(selector)
         }
@@ -274,5 +401,96 @@ final class AudioInputDeviceObserver {
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &devicesAddress, queue, block)
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &defaultInputAddress, queue, block)
         VoxtLog.info("Audio input device observer removed.", verbose: true)
+    }
+}
+
+nonisolated final class AudioInputDeviceRuntimeObserver {
+    private let deviceID: AudioDeviceID
+    private let queue: DispatchQueue
+    private let onChange: @Sendable (RecordingInputDeviceRuntimeChange) -> Void
+    private let block: AudioObjectPropertyListenerBlock
+    private var registeredAddresses: [AudioObjectPropertyAddress] = []
+
+    init(
+        deviceID: AudioDeviceID,
+        uid: String,
+        onChange: @escaping @Sendable (RecordingInputDeviceRuntimeChange) -> Void
+    ) {
+        self.deviceID = deviceID
+        self.queue = DispatchQueue(label: "com.voxt.audio-input-device-runtime.\(deviceID)")
+        self.onChange = onChange
+        self.block = { numberAddresses, addresses in
+            let changes = UnsafeBufferPointer(start: addresses, count: Int(numberAddresses)).map {
+                RecordingInputDeviceRuntimeChange(selector: $0.mSelector)
+            }
+            let descriptions = changes.map(\.description).joined(separator: ",")
+            VoxtLog.info(
+                "Active audio input device observer fired. uid=\(uid), deviceID=\(deviceID), changes=\(descriptions.isEmpty ? "unknown" : descriptions)",
+                verbose: true
+            )
+            for change in changes {
+                onChange(change)
+            }
+        }
+
+        register(
+            AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyDeviceIsAlive,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+        )
+        register(
+            AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+        )
+        register(
+            AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyNominalSampleRate,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+        )
+        register(
+            AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyStreamConfiguration,
+                mScope: kAudioObjectPropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain
+            )
+        )
+
+        VoxtLog.info(
+            "Active audio input device observer registered. uid=\(uid), deviceID=\(deviceID), properties=\(registeredAddresses.count)",
+            verbose: true
+        )
+    }
+
+    deinit {
+        for var address in registeredAddresses {
+            AudioObjectRemovePropertyListenerBlock(deviceID, &address, queue, block)
+        }
+        if !registeredAddresses.isEmpty {
+            VoxtLog.info("Active audio input device observer removed. deviceID=\(deviceID)", verbose: true)
+        }
+    }
+
+    private func register(_ address: AudioObjectPropertyAddress) {
+        var mutableAddress = address
+        let status = AudioObjectAddPropertyListenerBlock(
+            deviceID,
+            &mutableAddress,
+            queue,
+            block
+        )
+        if status == noErr {
+            registeredAddresses.append(mutableAddress)
+        } else {
+            VoxtLog.warning(
+                "Failed to register active audio input device observer property. deviceID=\(deviceID), selector=\(AudioInputDeviceManager.selectorDescription(address.mSelector)), status=\(status)"
+            )
+        }
     }
 }
