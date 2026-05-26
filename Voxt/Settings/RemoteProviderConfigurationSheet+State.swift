@@ -18,6 +18,15 @@ extension RemoteProviderConfigurationSheet {
         llmProviderForPicker == .codex
     }
 
+    var isStepFunLLMProvider: Bool {
+        llmProviderForPicker == .stepFun
+    }
+
+    var supportsStepFunReasoningEffort: Bool {
+        isStepFunLLMProvider &&
+            resolvedModelValue().trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "step-3.5-flash-2603"
+    }
+
     var usesOpenAIResponsesOptions: Bool {
         isOpenAILLMProvider
     }
@@ -143,9 +152,12 @@ extension RemoteProviderConfigurationSheet {
     }
 
     var shouldShowGenerationThinking: Bool {
+        if isStepFunLLMProvider {
+            return generationThinkingModeMenuOptions.count > 1
+        }
         guard let capabilities = generationCapabilities else { return false }
         return capabilities.supportsThinkingToggle ||
-            capabilities.supportsThinkingEffort ||
+            (capabilities.supportsThinkingEffort && (!isStepFunLLMProvider || supportsStepFunReasoningEffort)) ||
             capabilities.supportsThinkingBudget
     }
 
@@ -165,13 +177,20 @@ extension RemoteProviderConfigurationSheet {
     }
 
     var generationThinkingModeMenuOptions: [SettingsMenuOption<String>] {
+        if isStepFunLLMProvider {
+            var options = [SettingsMenuOption(value: LLMThinkingMode.off.rawValue, title: AppLocalization.localizedString("Off"))]
+            if supportsStepFunReasoningEffort {
+                options.append(SettingsMenuOption(value: LLMThinkingMode.effort.rawValue, title: AppLocalization.localizedString("Effort")))
+            }
+            return options
+        }
         guard let capabilities = generationCapabilities else { return [] }
         var options = [SettingsMenuOption(value: LLMThinkingMode.providerDefault.rawValue, title: AppLocalization.localizedString("Default"))]
         if capabilities.supportsThinkingToggle {
             options.append(SettingsMenuOption(value: LLMThinkingMode.off.rawValue, title: AppLocalization.localizedString("Off")))
             options.append(SettingsMenuOption(value: LLMThinkingMode.on.rawValue, title: AppLocalization.localizedString("On")))
         }
-        if capabilities.supportsThinkingEffort {
+        if capabilities.supportsThinkingEffort && (!isStepFunLLMProvider || supportsStepFunReasoningEffort) {
             options.append(SettingsMenuOption(value: LLMThinkingMode.effort.rawValue, title: AppLocalization.localizedString("Effort")))
         }
         if capabilities.supportsThinkingBudget {
@@ -182,12 +201,15 @@ extension RemoteProviderConfigurationSheet {
 
     var generationThinkingModeSelectedTitle: String {
         generationThinkingModeMenuOptions.first(where: { $0.value == generationThinkingMode })?.title
-            ?? AppLocalization.localizedString("Default")
+            ?? (isStepFunLLMProvider ? AppLocalization.localizedString("Off") : AppLocalization.localizedString("Default"))
     }
 
     var sanitizedGenerationThinkingMode: LLMThinkingMode {
         let mode = LLMThinkingMode(rawValue: generationThinkingMode) ?? .providerDefault
         let supportedValues = Set(generationThinkingModeMenuOptions.map(\.value))
+        if isStepFunLLMProvider, !supportedValues.contains(mode.rawValue) {
+            return .off
+        }
         return supportedValues.contains(mode.rawValue) ? mode : .providerDefault
     }
 
@@ -197,6 +219,8 @@ extension RemoteProviderConfigurationSheet {
             values = OpenAIReasoningEffort.supportedCases(forModel: resolvedModelValue())
                 .filter { $0 != .automatic }
                 .map(\.rawValue)
+        } else if isStepFunLLMProvider {
+            values = supportsStepFunReasoningEffort ? ["low", "high"] : []
         } else if isOllamaLLMProvider {
             values = [
                 OllamaThinkMode.low.rawValue,
@@ -273,6 +297,9 @@ extension RemoteProviderConfigurationSheet {
         }
         let capabilities = LLMProviderCapabilityRegistry.capabilities(for: provider)
         var settings = LLMGenerationSettings()
+        if isStepFunLLMProvider {
+            settings.thinking = .off
+        }
         settings.maxOutputTokens = capabilities.supportsMaxOutputTokens ? parsedOptionalInt(generationMaxOutputTokensText) : nil
         settings.temperature = capabilities.supportsTemperature ? parsedOptionalDouble(generationTemperatureText) : nil
         settings.topP = capabilities.supportsTopP ? parsedOptionalDouble(generationTopPText) : nil
@@ -281,9 +308,11 @@ extension RemoteProviderConfigurationSheet {
         settings.seed = capabilities.supportsSeed ? parsedOptionalInt(generationSeedText) : nil
         settings.stop = capabilities.supportsStopSequences ? parsedStopSequences() : []
         if capabilities.supportsPenalties {
-            settings.presencePenalty = parsedOptionalDouble(generationPresencePenaltyText)
             settings.frequencyPenalty = parsedOptionalDouble(generationFrequencyPenaltyText)
-            settings.repetitionPenalty = parsedOptionalDouble(generationRepetitionPenaltyText)
+            if !isStepFunLLMProvider {
+                settings.presencePenalty = parsedOptionalDouble(generationPresencePenaltyText)
+                settings.repetitionPenalty = parsedOptionalDouble(generationRepetitionPenaltyText)
+            }
         }
         if capabilities.supportsLogprobs {
             settings.logprobs = generationLogprobsEnabled
@@ -653,9 +682,11 @@ extension RemoteProviderConfigurationSheet {
             doubleFields.append((generationMinPText, AppLocalization.localizedString("Min P")))
         }
         if capabilities.supportsPenalties {
-            doubleFields.append((generationPresencePenaltyText, AppLocalization.localizedString("Presence Penalty")))
             doubleFields.append((generationFrequencyPenaltyText, AppLocalization.localizedString("Frequency Penalty")))
-            doubleFields.append((generationRepetitionPenaltyText, AppLocalization.localizedString("Repetition Penalty")))
+            if !isStepFunLLMProvider {
+                doubleFields.append((generationPresencePenaltyText, AppLocalization.localizedString("Presence Penalty")))
+                doubleFields.append((generationRepetitionPenaltyText, AppLocalization.localizedString("Repetition Penalty")))
+            }
         }
         for (text, fieldName) in doubleFields where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             guard Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) != nil else {

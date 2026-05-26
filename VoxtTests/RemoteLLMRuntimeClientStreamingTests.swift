@@ -131,6 +131,55 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         )
     }
 
+    func testResolvedLLMEndpointBuildsStepFunChatCompletionsFromOfficialBaseURL() {
+        let client = RemoteLLMRuntimeClient()
+
+        XCTAssertEqual(
+            client.providerDefaultEndpoint(.stepFun),
+            "https://api.stepfun.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .stepFun,
+                endpoint: "",
+                model: "step-3.5-flash"
+            ),
+            "https://api.stepfun.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .stepFun,
+                endpoint: "https://api.stepfun.com",
+                model: "step-3.5-flash"
+            ),
+            "https://api.stepfun.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .stepFun,
+                endpoint: "https://api.stepfun.com/v1/models",
+                model: "step-3.5-flash"
+            ),
+            "https://api.stepfun.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .stepFun,
+                endpoint: "",
+                model: "step-router-v1"
+            ),
+            "https://api.stepfun.com/step_plan/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .stepFun,
+                endpoint: "https://api.stepfun.com/step_plan/v1/chat/completions",
+                model: "step-router-v1"
+            ),
+            "https://api.stepfun.com/step_plan/v1/chat/completions"
+        )
+    }
+
     func testResolvedLLMEndpointDefaultsOllamaToBaseEndpoint() {
         let client = RemoteLLMRuntimeClient()
 
@@ -299,6 +348,24 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         ]
 
         XCTAssertEqual(client.extractPrimaryText(from: payload), "这是数组 content 返回")
+    }
+
+    func testExtractPrimaryTextParsesChoiceDeltaContentFallback() {
+        let client = RemoteLLMRuntimeClient()
+        let payload: [String: Any] = [
+            "object": "chat.completion.chunk",
+            "choices": [
+                [
+                    "delta": [
+                        "role": "assistant",
+                        "content": "这是 chunk 形状返回"
+                    ],
+                    "finish_reason": "stop"
+                ]
+            ]
+        ]
+
+        XCTAssertEqual(client.extractPrimaryText(from: payload), "这是 chunk 形状返回")
     }
 
     func testExtractPrimaryTextParsesGeminiCandidatesParts() {
@@ -1339,6 +1406,139 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(responseFormat["type"] as? String, "json_object")
         let provider = try XCTUnwrap(payload["provider"] as? [String: Any])
         XCTAssertEqual(provider["order"] as? [String], ["openai"])
+    }
+
+    func testStepFunGenerationSettingsMapDocumentedChatCompletionFields() throws {
+        let client = RemoteLLMRuntimeClient()
+        var payload = client.openAICompatiblePayload(
+            model: "step-3.5-flash-2603",
+            systemPrompt: "",
+            userPrompt: "hi",
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            streamingEnabled: false
+        )
+
+        try client.applyOpenAICompatibleGenerationSettings(
+            to: &payload,
+            provider: .stepFun,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.stepFun.rawValue,
+                model: "step-3.5-flash-2603",
+                generationSettings: LLMGenerationSettings(
+                    maxOutputTokens: 333,
+                    temperature: 0.4,
+                    topP: 0.6,
+                    stop: ["STOP"],
+                    presencePenalty: 0.2,
+                    frequencyPenalty: 0.1,
+                    responseFormat: .json,
+                    thinking: LLMThinkingSettings(
+                        mode: .effort,
+                        effort: "high",
+                        budgetTokens: nil,
+                        exposeReasoning: false
+                    )
+                )
+            ),
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            responseFormat: nil
+        )
+
+        XCTAssertEqual(payload["max_tokens"] as? Int, 333)
+        XCTAssertEqual(payload["temperature"] as? Double, 0.4)
+        XCTAssertEqual(payload["top_p"] as? Double, 0.6)
+        XCTAssertEqual(payload["stop"] as? [String], ["STOP"])
+        XCTAssertNil(payload["presence_penalty"])
+        XCTAssertEqual(payload["frequency_penalty"] as? Double, 0.1)
+        XCTAssertEqual(payload["reasoning_effort"] as? String, "high")
+        let responseFormat = try XCTUnwrap(payload["response_format"] as? [String: Any])
+        XCTAssertEqual(responseFormat["type"] as? String, "json_object")
+    }
+
+    func testStepFunReasoningEffortOnlySentForSupportedModel() throws {
+        let client = RemoteLLMRuntimeClient()
+        var payload = client.openAICompatiblePayload(
+            model: "step-3.5-flash",
+            systemPrompt: "",
+            userPrompt: "hi",
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            streamingEnabled: false
+        )
+
+        try client.applyOpenAICompatibleGenerationSettings(
+            to: &payload,
+            provider: .stepFun,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.stepFun.rawValue,
+                model: "step-3.5-flash",
+                generationSettings: LLMGenerationSettings(
+                    thinking: LLMThinkingSettings(
+                        mode: .effort,
+                        effort: "high",
+                        budgetTokens: nil,
+                        exposeReasoning: false
+                    )
+                )
+            ),
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            responseFormat: nil
+        )
+
+        XCTAssertNil(payload["max_tokens"])
+        XCTAssertNil(payload["reasoning_effort"])
+    }
+
+    func testStepFunDefaultThinkingDoesNotSendReasoningEffort() throws {
+        let client = RemoteLLMRuntimeClient()
+        var payload = client.openAICompatiblePayload(
+            model: "step-3.5-flash-2603",
+            systemPrompt: "",
+            userPrompt: "hi",
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            streamingEnabled: false
+        )
+
+        try client.applyOpenAICompatibleGenerationSettings(
+            to: &payload,
+            provider: .stepFun,
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.stepFun.rawValue,
+                model: "step-3.5-flash-2603",
+                endpoint: "",
+                apiKey: ""
+            ),
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            responseFormat: nil
+        )
+
+        XCTAssertNil(payload["max_tokens"])
+        XCTAssertNil(payload["reasoning_effort"])
+    }
+
+    func testStepFunTextModelKeepsDefaultMaxTokens() throws {
+        let client = RemoteLLMRuntimeClient()
+        var payload = client.openAICompatiblePayload(
+            model: "step-2-mini",
+            systemPrompt: "",
+            userPrompt: "hi",
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            streamingEnabled: false
+        )
+
+        try client.applyOpenAICompatibleGenerationSettings(
+            to: &payload,
+            provider: .stepFun,
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.stepFun.rawValue,
+                model: "step-2-mini",
+                endpoint: "",
+                apiKey: ""
+            ),
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            responseFormat: nil
+        )
+
+        XCTAssertEqual(payload["max_tokens"] as? Int, 256)
     }
 
     func testOMLXGenerationSettingsMapSchemaAndExtraBody() throws {

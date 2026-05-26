@@ -537,6 +537,9 @@
 "Connection test succeeded (Doubao WebSocket reachable)." = "连接测试成功（豆包 WebSocket 可达）。";
 "OpenAI API Key is required for testing." = "测试需要填写 OpenAI API Key。";
 "GLM API Key is required for testing." = "测试需要填写 GLM API Key。";
+"StepFun API Key is required for testing." = "测试需要填写 StepFun API Key。";
+"Invalid StepFun ASR endpoint URL." = "阶跃星辰 ASR 端点 URL 无效。";
+"Connection test succeeded (StepFun ASR reachable)." = "连接测试成功（阶跃星辰 ASR 可达）。";
 "Invalid ASR endpoint URL." = "ASR 端点 URL 无效。";
 "Invalid server response." = "服务器响应无效。";
 "Connection test succeeded (HTTP %d)." = "连接测试成功（HTTP %d）。";
@@ -573,6 +576,7 @@
 "OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "豆包 ASR";
 "GLM ASR" = "GLM ASR";
+"StepFun ASR" = "阶跃星辰 ASR";
 "Anthropic" = "Anthropic";
 "Google" = "Google";
 "OpenAI" = "OpenAI";
@@ -585,6 +589,7 @@
 "Kimi" = "Kimi";
 "LM Studio" = "LM Studio";
 "MiniMax" = "MiniMax";
+"StepFun" = "阶跃星辰";
 
 "Supported variable: {{RAW_TRANSCRIPTION}}" = "支持变量：{{RAW_TRANSCRIPTION}}";
 
@@ -840,6 +845,7 @@
 "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt." = "GLM ASR 使用简短的 prompt 偏置，Voxt 中不使用 hotwords。";
 "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically." = "Doubao ASR 使用语言提示。中文输出会自动跟随你选择的简体或繁体主语言。";
 "Aliyun ASR uses language hints derived from your selected user languages." = "Aliyun ASR 使用根据你选择的用户语言生成的语言提示。";
+"StepFun ASR uses language hints derived from your selected user languages." = "阶跃星辰 ASR 使用根据你选择的用户语言生成的语言提示。";
 "Current model" = "当前模型";
 "Prefer On-Device Recognition" = "优先使用本地识别";
 "Add Punctuation" = "添加标点";

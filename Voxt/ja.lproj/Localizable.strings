@@ -531,6 +531,9 @@
 "Connection test succeeded (Doubao WebSocket reachable)." = "接続テストに成功しました（Doubao WebSocket 到達可能）。";
 "OpenAI API Key is required for testing." = "テストには OpenAI API キーが必要です。";
 "GLM API Key is required for testing." = "テストには GLM API キーが必要です。";
+"StepFun API Key is required for testing." = "テストには StepFun API キーが必要です。";
+"Invalid StepFun ASR endpoint URL." = "StepFun ASR エンドポイント URL が無効です。";
+"Connection test succeeded (StepFun ASR reachable)." = "接続テスト成功（StepFun ASR 到達可能）。";
 "Invalid ASR endpoint URL." = "ASR エンドポイント URL が無効です。";
 "Invalid server response." = "サーバー応答が無効です。";
 "Connection test succeeded (HTTP %d)." = "接続テストに成功しました（HTTP %d）。";
@@ -567,6 +570,7 @@
 "OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "Doubao ASR";
 "GLM ASR" = "GLM ASR";
+"StepFun ASR" = "StepFun ASR";
 "Anthropic" = "Anthropic";
 "Google" = "Google";
 "OpenAI" = "OpenAI";
@@ -579,6 +583,7 @@
 "Kimi" = "Kimi";
 "LM Studio" = "LM Studio";
 "MiniMax" = "MiniMax";
+"StepFun" = "StepFun";
 
 "Supported variable: {{RAW_TRANSCRIPTION}}" = "サポート変数: {{RAW_TRANSCRIPTION}}";
 
@@ -849,6 +854,7 @@
 "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt." = "GLM ASR は短い prompt バイアスを使います。Voxt では hotwords は使いません。";
 "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically." = "Doubao ASR は言語ヒントを使います。中国語出力は、選択した簡体字または繁体字の主言語に自動追従します。";
 "Aliyun ASR uses language hints derived from your selected user languages." = "Aliyun ASR は選択したユーザー言語から生成された言語ヒントを使います。";
+"StepFun ASR uses language hints derived from your selected user languages." = "StepFun ASR は選択したユーザー言語から生成された言語ヒントを使います。";
 "Current model" = "現在のモデル";
 "Prefer On-Device Recognition" = "オンデバイス認識を優先";
 "Add Punctuation" = "句読点を追加";

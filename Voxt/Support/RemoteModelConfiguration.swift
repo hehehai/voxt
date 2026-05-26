@@ -10,6 +10,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
     case doubaoASR
     case glmASR
     case aliyunBailianASR
+    case stepFunASR
 
     nonisolated var id: String { rawValue }
 
@@ -23,6 +24,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("GLM ASR")
         case .aliyunBailianASR:
             return AppLocalization.localizedString("Aliyun Bailian ASR")
+        case .stepFunASR:
+            return AppLocalization.localizedString("StepFun ASR")
         }
     }
 
@@ -36,6 +39,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return "glm-asr-1"
         case .aliyunBailianASR:
             return "fun-asr-realtime"
+        case .stepFunASR:
+            return "stepaudio-2.5-asr"
         }
     }
 
@@ -77,6 +82,12 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "paraformer-realtime-8k-v2", title: "Paraformer Realtime 8k V2"),
                 RemoteModelOption(id: "paraformer-realtime-8k-v1", title: "Paraformer Realtime 8k V1")
             ]
+        case .stepFunASR:
+            return [
+                RemoteModelOption(id: "stepaudio-2.5-asr", title: "StepAudio 2.5 ASR (SSE)"),
+                RemoteModelOption(id: "stepaudio-2-asr-pro", title: "StepAudio 2 ASR Pro (SSE)"),
+                RemoteModelOption(id: "step-asr-1.1-stream", title: "Step ASR 1.1 Stream (WebSocket)")
+            ]
         }
     }
 }
@@ -97,6 +108,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
     case lmStudio
     case minimax
     case aliyunBailian
+    case stepFun
 
     var id: String { rawValue }
 
@@ -178,6 +190,8 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("MiniMax")
         case .aliyunBailian:
             return AppLocalization.localizedString("Aliyun Bailian")
+        case .stepFun:
+            return AppLocalization.localizedString("StepFun")
         }
     }
 
@@ -213,6 +227,8 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             return "MiniMax-M2.5"
         case .aliyunBailian:
             return "qwen-plus-latest"
+        case .stepFun:
+            return "step-3.5-flash"
         }
     }
 
@@ -340,6 +356,12 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "qwen-plus-latest", title: "Qwen Plus Latest"),
                 RemoteModelOption(id: "qwen-turbo-latest", title: "Qwen Turbo Latest")
             ]
+        case .stepFun:
+            return [
+                RemoteModelOption(id: "step-3.5-flash", title: "Step 3.5 Flash"),
+                RemoteModelOption(id: "step-3.5-flash-2603", title: "Step 3.5 Flash 2603"),
+                RemoteModelOption(id: "stepaudio-2.5-chat", title: "StepAudio 2.5 Chat")
+            ]
         }
     }
 
@@ -426,6 +448,12 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "qwen-plus", title: "Qwen Plus"),
                 RemoteModelOption(id: "qwen-turbo", title: "Qwen Turbo")
             ]
+        case .stepFun:
+            return [
+                RemoteModelOption(id: "step-2-mini", title: "Step 2 Mini"),
+                RemoteModelOption(id: "step-2-16k", title: "Step 2 16K"),
+                RemoteModelOption(id: "step-1-8k", title: "Step 1 8K")
+            ]
         }
     }
 
@@ -496,6 +524,12 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             return [
                 RemoteModelOption(id: "qwen-max", title: "Qwen Max"),
                 RemoteModelOption(id: "qwq-plus", title: "QwQ Plus")
+            ]
+        case .stepFun:
+            return [
+                RemoteModelOption(id: "step-2-16k-exp", title: "Step 2 16K Exp"),
+                RemoteModelOption(id: "step-1-32k", title: "Step 1 32K"),
+                RemoteModelOption(id: "step-router-v1", title: "Step Router V1 (Step Plan)")
             ]
         }
     }

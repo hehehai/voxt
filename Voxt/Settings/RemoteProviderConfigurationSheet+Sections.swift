@@ -501,23 +501,31 @@ extension RemoteProviderConfigurationSheet {
 
     var generationPenaltyFields: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                generationNumericField(
-                    title: AppLocalization.localizedString("Presence Penalty"),
-                    placeholder: "0",
-                    text: $generationPresencePenaltyText
-                )
+            if isStepFunLLMProvider {
                 generationNumericField(
                     title: AppLocalization.localizedString("Frequency Penalty"),
                     placeholder: "0",
                     text: $generationFrequencyPenaltyText
                 )
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    generationNumericField(
+                        title: AppLocalization.localizedString("Presence Penalty"),
+                        placeholder: "0",
+                        text: $generationPresencePenaltyText
+                    )
+                    generationNumericField(
+                        title: AppLocalization.localizedString("Frequency Penalty"),
+                        placeholder: "0",
+                        text: $generationFrequencyPenaltyText
+                    )
+                }
+                generationNumericField(
+                    title: AppLocalization.localizedString("Repetition Penalty"),
+                    placeholder: "1.1",
+                    text: $generationRepetitionPenaltyText
+                )
             }
-            generationNumericField(
-                title: AppLocalization.localizedString("Repetition Penalty"),
-                placeholder: "1.1",
-                text: $generationRepetitionPenaltyText
-            )
         }
     }
 

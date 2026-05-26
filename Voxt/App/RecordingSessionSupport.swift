@@ -180,7 +180,7 @@ enum RecordingSessionSupport {
             break
         }
         switch remoteProvider {
-        case .openAIWhisper, .glmASR:
+        case .openAIWhisper, .glmASR, .stepFunASR:
             return 60
         case .doubaoASR, .aliyunBailianASR:
             return 8

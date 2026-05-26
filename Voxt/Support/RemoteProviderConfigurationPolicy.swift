@@ -14,6 +14,10 @@ enum RemoteASRRealtimeSupport {
             || normalized.hasPrefix("fun-asr")
             || normalized.hasPrefix("paraformer-realtime")
     }
+
+    static func isStepFunRealtimeModel(_ model: String) -> Bool {
+        model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "step-asr-1.1-stream"
+    }
 }
 
 enum RemoteProviderConfigurationPolicy {
@@ -63,7 +67,7 @@ enum RemoteProviderConfigurationPolicy {
             return true
         }
         if case .asr(let provider) = target {
-            return provider == .openAIWhisper
+            return provider == .openAIWhisper || provider == .stepFunASR
         }
         return false
     }
@@ -169,6 +173,15 @@ enum RemoteProviderConfigurationPolicy {
                 return [
                     RemoteEndpointPreset(id: "volcengine-llm-cn-beijing", title: AppLocalization.localizedString("Beijing"), url: "https://ark.cn-beijing.volces.com/api/v3/responses")
                 ]
+            case .stepFun:
+                if resolvedModel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "step-router-v1" {
+                    return [
+                        RemoteEndpointPreset(id: "stepfun-llm-step-plan", title: "Step Plan", url: "https://api.stepfun.com/step_plan/v1/chat/completions")
+                    ]
+                }
+                return [
+                    RemoteEndpointPreset(id: "stepfun-llm-chat-completions", title: AppLocalization.localizedString("Default"), url: "https://api.stepfun.com/v1/chat/completions")
+                ]
             case .codex:
                 return [
                     RemoteEndpointPreset(id: "codex-chatgpt", title: AppLocalization.localizedString("ChatGPT Codex"), url: "https://chatgpt.com/backend-api/codex/responses")
@@ -191,6 +204,8 @@ enum RemoteProviderConfigurationPolicy {
                 return endpointPresets(target: target, resolvedModel: resolvedModel).first?.url ?? "https://..."
             case .doubaoASR:
                 return "https://..."
+            case .stepFunASR:
+                return "https://api.stepfun.com/v1/audio/asr/sse"
             }
         case .llm(let provider):
             return RemoteLLMRuntimeClient().resolvedLLMEndpoint(
@@ -221,7 +236,15 @@ enum RemoteProviderConfigurationPolicy {
         if newPresetURLs.contains(trimmedEndpoint) {
             return trimmedEndpoint
         }
-        guard oldPresetURLs.contains(trimmedEndpoint) || hostMatchesAnyPreset(trimmedEndpoint, presets: oldPresets) else {
+        let allowsHostPresetRemap: Bool
+        switch target {
+        case .llm(.stepFun):
+            allowsHostPresetRemap = false
+        default:
+            allowsHostPresetRemap = true
+        }
+
+        guard oldPresetURLs.contains(trimmedEndpoint) || (allowsHostPresetRemap && hostMatchesAnyPreset(trimmedEndpoint, presets: oldPresets)) else {
             return currentEndpoint
         }
 

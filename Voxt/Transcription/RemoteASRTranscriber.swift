@@ -6,7 +6,7 @@ import zlib
 
 @MainActor
 class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
-    private final class AudioSampleStore {
+    final class AudioSampleStore {
         private let lock = NSLock()
         private var samples: [Float] = []
         private var callbackTotal = 0
@@ -69,31 +69,33 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     var doubaoDictionaryEntryProvider: (() -> [DictionaryEntry])?
 
     private var recorder: AVAudioRecorder?
-    private let audioEngine = AVAudioEngine()
+    let audioEngine = AVAudioEngine()
     private var doubaoStreamingContext: DoubaoStreamingContext?
     private var aliyunStreamingContext: AliyunFunStreamingContext?
     private var aliyunQwenStreamingContext: AliyunQwenStreamingContext?
+    var stepFunStreamingContext: StepFunStreamingContext?
     private var meterTimer: Timer?
     private var openAIPreviewTask: Task<Void, Never>?
     private var openAIPreviewInFlight = false
     private var openAIPreviewLastText = ""
     private var recordingFileURL: URL?
     private var completedAudioArchiveURL: URL?
-    private let sampleStore = AudioSampleStore()
+    let sampleStore = AudioSampleStore()
     private let canonicalAudioConverter = CanonicalAudioStreamConverter()
-    private var streamingInputSampleRate: Double = HistoryAudioArchiveSupport.targetSampleRate
+    var streamingInputSampleRate: Double = HistoryAudioArchiveSupport.targetSampleRate
     private var transcribeTask: Task<Void, Never>?
-    private var stopRequested = false
+    var stopRequested = false
     private var activeProvider: RemoteASRProvider?
-    private var preferredInputDeviceID: AudioDeviceID?
+    var preferredInputDeviceID: AudioDeviceID?
     private let streamingFinalWaitTimeout: TimeInterval = 20
     private var lastPresentedRuntimeErrorMessage = ""
-    private var recordingGenerationID = UUID()
+    var recordingGenerationID = UUID()
     private var doubaoCaptureStartupWatchdogTask: Task<Void, Never>?
     private var didRetryDoubaoCaptureStartup = false
     private var doubaoCaptureUsesPreferredInputDevice = false
     private let doubaoCaptureStartupWatchdogDelay: Duration = .seconds(1.2)
-    private let aliyunRealtimeStopDrainDelay: Duration = .milliseconds(180)
+    let aliyunRealtimeStopDrainDelay: Duration = .milliseconds(180)
+    let stepFunPendingAudioByteLimit = 1_024_000
 
     func setPreferredInputDevice(_ deviceID: AudioDeviceID?) {
         preferredInputDeviceID = deviceID
@@ -112,6 +114,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
         if let context = aliyunQwenStreamingContext {
             return "aliyun-qwen{sampleRate=\(sampleRate), preferredDeviceID=\(preferredDevice), localCallbacks=\(localCallbacks), localSamples=\(localSamples), \(context.debugSummary())}"
+        }
+        if stepFunStreamingContext != nil {
+            return "stepfun{active=true}"
         }
         return nil
     }
@@ -146,6 +151,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupActiveUploadTask()
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
+        cleanupStepFunStreamingState()
         sampleStore.clear()
         canonicalAudioConverter.reset()
         streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
@@ -178,6 +184,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             } else {
                 routeSummary = "aliyun-unknown"
             }
+        } else if provider == .stepFunASR,
+                  RemoteASRRealtimeSupport.isStepFunRealtimeModel(resolvedModel) {
+            routeSummary = "stepfun-realtime"
         } else {
             routeSummary = provider.rawValue
         }
@@ -226,6 +235,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return
         }
 
+        if provider == .stepFunASR,
+           RemoteASRRealtimeSupport.isStepFunRealtimeModel(resolvedModel) {
+            do {
+                try startStepFunStreaming(configuration: configuration, hintPayload: hintPayload)
+            } catch {
+                VoxtLog.error("StepFun realtime streaming setup failed: \(error.localizedDescription)")
+                cleanupRecorderState()
+                cleanupStepFunStreamingState()
+                activeProvider = nil
+                notifyStartFailure(error)
+            }
+            return
+        }
+
         do {
             VoxtLog.tempModel("Remote startRecording routing to file recorder mode. summary=\(temporaryCaptureDebugSummary())")
             try startFileRecordingMode()
@@ -247,7 +270,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let hasPendingRealtimeSession =
             doubaoStreamingContext != nil ||
             aliyunStreamingContext != nil ||
-            aliyunQwenStreamingContext != nil
+            aliyunQwenStreamingContext != nil ||
+            stepFunStreamingContext != nil
         guard isRecording || hasPendingRealtimeSession || recorder != nil else { return }
         stopRequested = true
         let generationID = recordingGenerationID
@@ -293,6 +317,21 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             scheduleStreamingCompletion(generationID: generationID) {
                 await self.resolveStreamingResult(
                     warningMessage: "Aliyun qwen realtime final result wait failed"
+                ) {
+                    try await context.responseState.waitForFinalResult(timeoutSeconds: self.streamingFinalWaitTimeout)
+                } fallback: {
+                    await context.responseState.currentText()
+                }
+            }
+            return
+        }
+
+        if activeProvider == .stepFunASR, let context = stepFunStreamingContext {
+            isRequesting = true
+            stopStepFunStreaming(context)
+            scheduleStreamingCompletion(generationID: generationID) {
+                await self.resolveStreamingResult(
+                    warningMessage: "StepFun realtime final result wait failed"
                 ) {
                     try await context.responseState.waitForFinalResult(timeoutSeconds: self.streamingFinalWaitTimeout)
                 } fallback: {
@@ -373,6 +412,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 "Aliyun qwen audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "system-default"), state=\(activeRealtimeDebugSummary() ?? "none")"
             )
             VoxtLog.tempModel("Remote Aliyun qwen capture restart completed. summary=\(temporaryCaptureDebugSummary())")
+            return
+        }
+
+        if let context = stepFunStreamingContext {
+            guard context.didStartAudioStream else { return }
+            stopStepFunAudioCapture()
+            try startStepFunAudioCapture(context: context)
             return
         }
 
@@ -543,6 +589,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return try await transcribeDoubao(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
         case .aliyunBailianASR:
             return try await transcribeAliyunBailian(fileURL: fileURL, configuration: configuration)
+        case .stepFunASR:
+            return try await transcribeStepFun(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
         }
     }
 
@@ -770,6 +818,126 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             model: configuration.model,
             extraFields: extraFields
         )
+    }
+
+    private func transcribeStepFun(
+        fileURL: URL,
+        configuration: RemoteProviderConfiguration,
+        hintPayload: ResolvedASRHintPayload
+    ) async throws -> String {
+        let endpoint = URL(string: RemoteASREndpointSupport.normalizedEndpoint(
+            configuration.endpoint,
+            defaultValue: "https://api.stepfun.com/v1/audio/asr/sse"
+        ))!
+
+        let token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -6,
+                userInfo: [NSLocalizedDescriptionKey: "StepFun API key is empty."]
+            )
+        }
+
+        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? RemoteASRProvider.stepFunASR.suggestedModel
+            : configuration.model
+
+        let wavData = try Data(contentsOf: fileURL)
+        let pcmData = try StepFunSupport.extractPCMData(fromWAV: wavData)
+        let base64Audio = pcmData.base64EncodedString()
+
+        let body: [String: Any] = [
+            "audio": [
+                "data": base64Audio,
+                "input": [
+                    "transcription": StepFunPayloadSupport.transcriptionPayload(
+                        model: model,
+                        hintPayload: hintPayload,
+                        includePrompt: StepFunPayloadSupport.supportsSSEPrompt(model: model)
+                    ),
+                    "format": StepFunPayloadSupport.audioFormatPayload()
+                ]
+            ]
+        ]
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await VoxtNetworkSession.active.bytes(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -10,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response."]
+            )
+        }
+
+        if !(200...299).contains(http.statusCode) {
+            let payload = try await RemoteASRTextSupport.collectText(from: bytes)
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(payload)"]
+            )
+        }
+
+        var aggregate = ""
+        var sseEvent: String?
+        for try await rawLine in bytes.lines {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+
+            if trimmed.hasPrefix("event:") {
+                sseEvent = String(trimmed.dropFirst(6))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                continue
+            }
+
+            let line: String
+            if trimmed.hasPrefix("data:") {
+                line = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                line = trimmed
+            }
+
+            if line == "[DONE]" { break }
+
+            if sseEvent == "error" {
+                let message = RemoteASRTextSupport.extractStreamErrorMessage(fromLine: line) ?? line
+                throw NSError(
+                    domain: "Voxt.RemoteASR",
+                    code: -11,
+                    userInfo: [NSLocalizedDescriptionKey: "StepFun ASR stream error: \(message)"]
+                )
+            }
+
+            if let message = RemoteASRTextSupport.extractStreamErrorMessage(fromLine: line) {
+                throw NSError(
+                    domain: "Voxt.RemoteASR",
+                    code: -11,
+                    userInfo: [NSLocalizedDescriptionKey: "StepFun ASR stream error: \(message)"]
+                )
+            }
+
+            if let fragment = RemoteASRTextSupport.extractTextFragment(fromLine: line),
+               !fragment.isEmpty {
+                aggregate = RemoteASRTextSupport.mergeStreamFragment(current: aggregate, incoming: fragment)
+                await MainActor.run {
+                    self.publishIntermediateTranscription(aggregate)
+                }
+            }
+            sseEvent = nil
+        }
+
+        if aggregate.isEmpty { return transcribedText }
+        return aggregate
     }
 
     private func transcribeDoubao(
@@ -2453,7 +2621,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func audioLevelFromPCM16(_ data: Data) -> Float {
+    func audioLevelFromPCM16(_ data: Data) -> Float {
         guard data.count >= 2 else { return 0 }
         var sum: Float = 0
         var count: Float = 0
@@ -2470,7 +2638,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         return min(max(rms * 2.4, 0), 1)
     }
 
-    private nonisolated static func makeDoubaoPCM16MonoData(from buffer: AVAudioPCMBuffer) -> Data? {
+    nonisolated static func makeDoubaoPCM16MonoData(from buffer: AVAudioPCMBuffer) -> Data? {
         let frameCount = Int(buffer.frameLength)
         guard frameCount > 0 else { return nil }
 
@@ -2937,6 +3105,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         stopAliyunAudioCapture()
     }
 
+    private func cleanupStepFunStreamingState() {
+        if let context = stepFunStreamingContext {
+            context.isClosed = true
+            context.ws.cancel(with: .normalClosure, reason: nil)
+            context.session.invalidateAndCancel()
+        }
+        stepFunStreamingContext = nil
+        stopStepFunAudioCapture()
+    }
+
     private func cleanupActiveUploadTask() {
         transcribeTask?.cancel()
         transcribeTask = nil
@@ -2951,6 +3129,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupRecorderState()
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
+        cleanupStepFunStreamingState()
         activeProvider = nil
         stopRequested = false
         lastPresentedRuntimeErrorMessage = ""
@@ -3066,7 +3245,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func publishIntermediateTranscription(_ text: String) {
+    func publishIntermediateTranscription(_ text: String) {
         guard sessionAllowsRealtimeTextDisplay else { return }
         let visibleText = RecordingSessionSupport.textAfterSuppressingPromptEcho(text)
         guard !visibleText.isEmpty else {
@@ -3106,12 +3285,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupRecorderState()
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
+        cleanupStepFunStreamingState()
         activeProvider = nil
         lastPresentedRuntimeErrorMessage = ""
         onTranscriptionFinished?(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    private func isCurrentGeneration(_ generationID: UUID) -> Bool {
+    func isCurrentGeneration(_ generationID: UUID) -> Bool {
         recordingGenerationID == generationID
     }
 
@@ -3122,7 +3302,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         onStartFailure?(message)
     }
 
-    private func notifyRuntimeFailure(_ error: Error) {
+    func notifyRuntimeFailure(_ error: Error) {
         let message = userVisibleRemoteErrorMessage(for: error)
         guard !message.isEmpty, message != lastPresentedRuntimeErrorMessage else { return }
         lastPresentedRuntimeErrorMessage = message

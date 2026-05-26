@@ -537,6 +537,9 @@
 "Connection test succeeded (Doubao WebSocket reachable)." = "Connection test succeeded (Doubao WebSocket reachable).";
 "OpenAI API Key is required for testing." = "OpenAI API Key is required for testing.";
 "GLM API Key is required for testing." = "GLM API Key is required for testing.";
+"StepFun API Key is required for testing." = "StepFun API Key is required for testing.";
+"Invalid StepFun ASR endpoint URL." = "Invalid StepFun ASR endpoint URL.";
+"Connection test succeeded (StepFun ASR reachable)." = "Connection test succeeded (StepFun ASR reachable).";
 "Invalid ASR endpoint URL." = "Invalid ASR endpoint URL.";
 "Invalid server response." = "Invalid server response.";
 "Connection test succeeded (HTTP %d)." = "Connection test succeeded (HTTP %d).";
@@ -573,6 +576,7 @@
 "OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "Doubao ASR";
 "GLM ASR" = "GLM ASR";
+"StepFun ASR" = "StepFun ASR";
 "Anthropic" = "Anthropic";
 "Google" = "Google";
 "OpenAI" = "OpenAI";
@@ -585,6 +589,7 @@
 "Kimi" = "Kimi";
 "LM Studio" = "LM Studio";
 "MiniMax" = "MiniMax";
+"StepFun" = "StepFun";
 
 "Supported variable: {{RAW_TRANSCRIPTION}}" = "Supported variable: {{RAW_TRANSCRIPTION}}";
 
@@ -840,6 +845,7 @@
 "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt." = "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt.";
 "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically." = "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically.";
 "Aliyun ASR uses language hints derived from your selected user languages." = "Aliyun ASR uses language hints derived from your selected user languages.";
+"StepFun ASR uses language hints derived from your selected user languages." = "StepFun ASR uses language hints derived from your selected user languages.";
 "Current model" = "Current model";
 "Prefer On-Device Recognition" = "Prefer On-Device Recognition";
 "Add Punctuation" = "Add Punctuation";

@@ -660,7 +660,7 @@ struct RemoteLLMRuntimeClient {
             throw NSError(domain: "Voxt.RemoteLLM", code: -305, userInfo: [NSLocalizedDescriptionKey: "Invalid remote LLM response."])
         }
         guard (200...299).contains(http.statusCode) else {
-            let payload = String(data: data.prefix(260), encoding: .utf8) ?? ""
+            let payload = responsePayloadPreview(from: data, limit: 260)
             throw NSError(
                 domain: "Voxt.RemoteLLM",
                 code: http.statusCode,
@@ -673,7 +673,7 @@ struct RemoteLLMRuntimeClient {
         do {
             object = try decodeResponsesObject(from: data, response: http)
         } catch {
-            let payloadPreview = String(data: data.prefix(1200), encoding: .utf8) ?? "<non-utf8>"
+            let payloadPreview = responsePayloadPreview(from: data)
             VoxtLog.warning(
                 "Remote LLM Responses response rejected. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payload=\(VoxtLog.llmPreview(payloadPreview)), detail=\(error.localizedDescription)"
             )
@@ -686,8 +686,16 @@ struct RemoteLLMRuntimeClient {
             onResponseID?(responseID)
         }
 
+        if let errorMessage = extractStreamingErrorMessage(from: object) ?? responsesErrorMessage(from: object) {
+            throw NSError(
+                domain: "Voxt.RemoteLLM",
+                code: -307,
+                userInfo: [NSLocalizedDescriptionKey: errorMessage]
+            )
+        }
+
         guard let content = extractPrimaryText(from: object), !content.isEmpty else {
-            let payloadPreview = String(data: data.prefix(1200), encoding: .utf8) ?? "<non-utf8>"
+            let payloadPreview = responsePayloadPreview(from: data)
             VoxtLog.warning(
                 "Remote LLM Responses response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payload=\(VoxtLog.llmPreview(payloadPreview))"
             )
@@ -976,7 +984,7 @@ struct RemoteLLMRuntimeClient {
                     throw NSError(domain: "Voxt.RemoteLLM", code: -305, userInfo: [NSLocalizedDescriptionKey: "Invalid remote LLM response."])
                 }
                 guard (200...299).contains(http.statusCode) else {
-                    let payload = String(data: data.prefix(260), encoding: .utf8) ?? ""
+                    let payload = responsePayloadPreview(from: data, limit: 260)
                     throw NSError(
                         domain: "Voxt.RemoteLLM",
                         code: http.statusCode,
@@ -989,6 +997,13 @@ struct RemoteLLMRuntimeClient {
                 let decodeElapsedMs = Int(Date().timeIntervalSince(decodeStartedAt) * 1000)
                 let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
                 let attempt = index + 1
+                if let errorMessage = extractStreamingErrorMessage(from: object) {
+                    throw NSError(
+                        domain: "Voxt.RemoteLLM",
+                        code: -307,
+                        userInfo: [NSLocalizedDescriptionKey: errorMessage]
+                    )
+                }
                 if let content = extractPrimaryText(from: object), !content.isEmpty {
                     let guardedContent = guardRepeatedOutputIfNeeded(
                         content,
@@ -1010,7 +1025,7 @@ struct RemoteLLMRuntimeClient {
                 }
 
                 VoxtLog.warning(
-                    "Remote LLM response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs), payload=\(VoxtLog.llmPreview(String(data: data.prefix(1200), encoding: .utf8) ?? "<non-utf8>"))"
+                    "Remote LLM response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs), payload=\(VoxtLog.llmPreview(responsePayloadPreview(from: data)))"
                 )
                 throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
             } catch {
@@ -1597,7 +1612,13 @@ struct RemoteLLMRuntimeClient {
         responseFormat: OpenAICompatibleResponseFormat?
     ) throws {
         let settings = configuration.effectiveGenerationSettings(provider: provider)
-        payload["max_tokens"] = settings.maxOutputTokens.map { max(1, $0) } ?? tuning.maxTokens
+        if let maxOutputTokens = settings.maxOutputTokens {
+            payload["max_tokens"] = max(1, maxOutputTokens)
+        } else if shouldOmitDefaultMaxTokens(provider: provider, model: configuration.model) {
+            payload.removeValue(forKey: "max_tokens")
+        } else {
+            payload["max_tokens"] = tuning.maxTokens
+        }
         if let temperature = settings.temperature {
             payload["temperature"] = temperature
         }
@@ -1610,7 +1631,7 @@ struct RemoteLLMRuntimeClient {
         if !settings.stop.isEmpty {
             payload["stop"] = settings.stop
         }
-        if let presencePenalty = settings.presencePenalty {
+        if provider != .stepFun, let presencePenalty = settings.presencePenalty {
             payload["presence_penalty"] = presencePenalty
         }
         if let frequencyPenalty = settings.frequencyPenalty {
@@ -1641,7 +1662,8 @@ struct RemoteLLMRuntimeClient {
         applyOpenAICompatibleThinkingSettings(
             to: &payload,
             provider: provider,
-            settings: settings
+            settings: settings,
+            model: configuration.model
         )
         try applyCommonExtraBody(
             to: &payload,
@@ -1650,10 +1672,23 @@ struct RemoteLLMRuntimeClient {
         )
     }
 
+    func shouldOmitDefaultMaxTokens(provider: RemoteLLMProvider, model: String) -> Bool {
+        guard provider == .stepFun else { return false }
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return [
+            "step-3.5-flash",
+            "step-3.5-flash-2603",
+            "step-3",
+            "step-r1-v-mini",
+            "step-router-v1"
+        ].contains(normalizedModel)
+    }
+
     func applyOpenAICompatibleThinkingSettings(
         to payload: inout [String: Any],
         provider: RemoteLLMProvider,
-        settings: LLMGenerationSettings
+        settings: LLMGenerationSettings,
+        model: String
     ) {
         switch provider {
         case .openrouter:
@@ -1722,6 +1757,14 @@ struct RemoteLLMRuntimeClient {
             }
         case .grok:
             if settings.thinking.mode == .effort, let effort = settings.thinking.effort {
+                payload["reasoning_effort"] = effort
+            }
+        case .stepFun:
+            let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if settings.thinking.mode == .effort,
+               let effort = settings.thinking.effort,
+               normalizedModel == "step-3.5-flash-2603",
+               ["low", "high"].contains(effort) {
                 payload["reasoning_effort"] = effort
             }
         case .kimi:
@@ -1827,8 +1870,9 @@ struct RemoteLLMRuntimeClient {
         let proxySettings = VoxtNetworkSession.currentProxySettings
         let proxyRoute = request.url.map { resolvedProxyRoute(for: $0, settings: proxySettings) } ?? "unavailable"
         let networkMode = VoxtNetworkSession.modeDescription
+        let requestMaxTokens = requestMaxTokensDescription(from: request) ?? "\(tuning.maxTokens)"
         VoxtLog.llm(
-            "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), url=\(request.url?.absoluteString ?? endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(tuning.maxTokens), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
+            "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), url=\(request.url?.absoluteString ?? endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(requestMaxTokens), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
         )
         VoxtLog.llm(
             """
@@ -1841,6 +1885,23 @@ struct RemoteLLMRuntimeClient {
             \(VoxtLog.llmPreview(userPrompt))
             """
         )
+    }
+
+    private func requestMaxTokensDescription(from request: URLRequest) -> String? {
+        guard
+            let body = request.httpBody,
+            let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else {
+            return nil
+        }
+
+        if let maxTokens = payload["max_tokens"] {
+            return "\(maxTokens)"
+        }
+        if let maxCompletionTokens = payload["max_completion_tokens"] {
+            return "\(maxCompletionTokens)"
+        }
+        return "auto"
     }
 
     private func completeStreaming(

@@ -122,6 +122,25 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(payload.language, "zh")
     }
 
+    func testResolveStepFunBuildsPromptFromTerms() {
+        let payload = ASRHintResolver.resolve(
+            target: .stepFunASR,
+            settings: ASRHintSettings(contextualPhrasesText: "Voxt\nFireRed\nVoxt"),
+            userLanguageCodes: ["zh-Hans"],
+            dictionaryTerms: "Codex\nFireRed"
+        )
+
+        XCTAssertEqual(payload.language, "zh")
+        XCTAssertEqual(payload.contextualPhrases, ["Voxt", "FireRed", "Codex"])
+        XCTAssertNotNil(payload.prompt)
+        XCTAssertContains(payload.prompt ?? "", "Preserve names")
+        XCTAssertContains(payload.prompt ?? "", "Voxt")
+        XCTAssertContains(payload.prompt ?? "", "FireRed")
+        XCTAssertContains(payload.prompt ?? "", "Codex")
+        XCTAssertEqual(payload.prompt?.components(separatedBy: "Voxt").count, 2)
+        XCTAssertEqual(payload.prompt?.components(separatedBy: "FireRed").count, 2)
+    }
+
     func testResolveMLXUsesPromptNameForQwenModel() {
         let payload = ASRHintResolver.resolve(
             target: .mlxAudio,

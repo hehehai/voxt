@@ -119,6 +119,13 @@ enum RemoteProviderConnectivityTestEndpoints {
         DoubaoASRConfiguration.resolvedStreamingEndpoint(endpoint, model: model)
     }
 
+    static func resolvedStepFunASREndpoint(_ endpoint: String) -> String {
+        RemoteASREndpointSupport.normalizedEndpoint(
+            endpoint,
+            defaultValue: "https://api.stepfun.com/v1/audio/asr/sse"
+        )
+    }
+
     private static func replacingPathSuffix(in value: String, oldSuffix: String, newSuffix: String) -> String {
         guard value.lowercased().hasSuffix(oldSuffix) else { return value }
         return String(value.dropLast(oldSuffix.count)) + newSuffix

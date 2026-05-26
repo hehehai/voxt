@@ -102,6 +102,16 @@ enum RemoteASRTextSupport {
         return normalizedTextFragment(trimmed)
     }
 
+    static func extractStreamErrorMessage(fromLine line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return nil
+        }
+        return extractStreamErrorMessage(in: object)
+    }
+
     static func extractLooseTextField(from line: String) -> String? {
         let patterns = [
             #"(?:["']?text["']?\s*:\s*["'])([^"']+)(?:["'])"#,
@@ -259,6 +269,65 @@ enum RemoteASRTextSupport {
         return nil
     }
 
+    private static func extractStreamErrorMessage(in object: Any) -> String? {
+        if let dict = object as? [String: Any] {
+            if let value = dict["error"],
+               let message = extractStreamErrorDescription(from: value) {
+                return message
+            }
+
+            let markerKeys = ["event", "type", "status"]
+            let isErrorPayload = markerKeys.contains { key in
+                guard let value = dict[key] as? String else { return false }
+                let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return ["error", "failed", "failure"].contains(normalized)
+            }
+            if isErrorPayload {
+                let messageKeys = ["message", "msg", "error_message", "detail", "code"]
+                for key in messageKeys {
+                    if let value = dict[key],
+                       let message = extractStreamErrorDescription(from: value) {
+                        return message
+                    }
+                }
+                return "StepFun ASR stream returned an error event."
+            }
+        }
+
+        return nil
+    }
+
+    private static func extractStreamErrorDescription(from object: Any) -> String? {
+        if let text = object as? String {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        if let number = object as? NSNumber {
+            return number.stringValue
+        }
+
+        if let dict = object as? [String: Any] {
+            let preferredKeys = ["message", "msg", "error_message", "detail", "code"]
+            for key in preferredKeys {
+                if let value = dict[key],
+                   let message = extractStreamErrorDescription(from: value) {
+                    return message
+                }
+            }
+        }
+
+        if let array = object as? [Any] {
+            for item in array {
+                if let message = extractStreamErrorDescription(from: item) {
+                    return message
+                }
+            }
+        }
+
+        return nil
+    }
+
     static func mergeStreamFragment(current: String, incoming: String) -> String {
         let fragment = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !fragment.isEmpty else { return current }
@@ -292,6 +361,85 @@ enum RemoteASRTextSupport {
             if chunks.count >= 6 { break }
         }
         return chunks.joined(separator: " | ")
+    }
+}
+
+enum StepFunPayloadSupport {
+    static func supportsSSEPrompt(model: String) -> Bool {
+        model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "stepaudio-2-asr-pro"
+    }
+
+    static func transcriptionPayload(
+        model: String,
+        hintPayload: ResolvedASRHintPayload,
+        includeTimestamp: Bool = false,
+        includePrompt: Bool = false,
+        includeHotwords: Bool = true,
+        fullRerunOnCommit: Bool? = nil
+    ) -> [String: Any] {
+        var payload: [String: Any] = [
+            "model": model,
+            "language": hintPayload.language ?? "zh",
+            "enable_itn": true
+        ]
+        if includeTimestamp {
+            payload["enable_timestamp"] = true
+        }
+        if includeHotwords, !hintPayload.contextualPhrases.isEmpty {
+            payload["hotwords"] = hintPayload.contextualPhrases
+        }
+        if includePrompt,
+           let prompt = hintPayload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            payload["prompt"] = prompt
+        }
+        if let fullRerunOnCommit {
+            payload["full_rerun_on_commit"] = fullRerunOnCommit
+        }
+        return payload
+    }
+
+    static func audioFormatPayload() -> [String: Any] {
+        [
+            "type": "pcm",
+            "codec": "pcm_s16le",
+            "rate": 16000,
+            "bits": 16,
+            "channel": 1
+        ]
+    }
+
+    static func sessionUpdatePayload(
+        model: String,
+        hintPayload: ResolvedASRHintPayload,
+        useServerVAD: Bool
+    ) -> [String: Any] {
+        var input: [String: Any] = [
+            "format": audioFormatPayload(),
+            "transcription": transcriptionPayload(
+                model: model,
+                hintPayload: hintPayload,
+                includePrompt: true,
+                includeHotwords: false,
+                fullRerunOnCommit: true
+            )
+        ]
+        if useServerVAD {
+            input["turn_detection"] = [
+                "type": "server_vad",
+                "silence_duration_ms": 800,
+                "threshold": 0.5
+            ]
+        }
+        return [
+            "event_id": UUID().uuidString.lowercased(),
+            "type": "session.update",
+            "session": [
+                "audio": [
+                    "input": input
+                ]
+            ]
+        ]
     }
 }
 
@@ -406,6 +554,39 @@ enum RemoteASREndpointSupport {
         return trimmed
     }
 
+    static func resolvedStepFunSSEEndpoint(_ endpoint: String) -> String {
+        normalizedEndpoint(endpoint, defaultValue: "https://api.stepfun.com/v1/audio/asr/sse")
+    }
+
+    static func resolvedStepFunRealtimeEndpoint(_ endpoint: String) -> String {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "wss://api.stepfun.com/v1/realtime/asr/stream"
+        }
+        guard var components = URLComponents(string: trimmed) else {
+            return trimmed
+        }
+        let normalizedPath = components.path.lowercased()
+        if normalizedPath.hasSuffix("/v1/realtime/asr/stream") {
+            components.scheme = "wss"
+            return components.string ?? trimmed
+        }
+        if normalizedPath.hasSuffix("/v1/audio/asr/sse") ||
+            normalizedPath.hasSuffix("/step_plan/v1/audio/asr/sse") {
+            components.scheme = "wss"
+            components.path = "/v1/realtime/asr/stream"
+            components.queryItems = nil
+            return components.string ?? trimmed
+        }
+        if normalizedPath.hasSuffix("/v1") {
+            components.scheme = "wss"
+            components.path = appendingPath(components.path, suffix: "/realtime/asr/stream")
+            components.queryItems = nil
+            return components.string ?? trimmed
+        }
+        return trimmed
+    }
+
     static func normalizedEndpoint(_ value: String, defaultValue: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? defaultValue : trimmed
@@ -430,5 +611,51 @@ enum RemoteASREndpointSupport {
     private static func replacingPathSuffix(in value: String, oldSuffix: String, newSuffix: String) -> String {
         guard value.lowercased().hasSuffix(oldSuffix) else { return value }
         return String(value.dropLast(oldSuffix.count)) + newSuffix
+    }
+}
+
+enum StepFunSupport {
+    /// Extracts raw PCM data from a WAV file by walking RIFF chunks and
+    /// returning the contents of the "data" chunk.
+    static func extractPCMData(fromWAV wavData: Data) throws -> Data {
+        guard wavData.count > 44 else {
+            throw NSError(
+                domain: "Voxt.StepFun",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "WAV file too small for StepFun ASR."]
+            )
+        }
+
+        var offset = 12
+        while offset + 8 <= wavData.count {
+            let chunkID = String(data: wavData.subdata(in: offset..<offset + 4), encoding: .ascii) ?? ""
+            let chunkSize = wavData.withUnsafeBytes { ptr in
+                ptr.loadUnaligned(fromByteOffset: offset + 4, as: UInt32.self)
+            }
+            let size = Int(chunkSize)
+            if chunkID == "data" {
+                let dataStart = offset + 8
+                let dataEnd = min(dataStart + size, wavData.count)
+                guard dataEnd > dataStart else {
+                    throw NSError(
+                        domain: "Voxt.StepFun",
+                        code: -2,
+                        userInfo: [NSLocalizedDescriptionKey: "WAV data chunk is empty."]
+                    )
+                }
+                return wavData.subdata(in: dataStart..<dataEnd)
+            }
+            offset += 8 + size
+            if size % 2 != 0 { offset += 1 }
+        }
+
+        guard wavData.count > 44 else {
+            throw NSError(
+                domain: "Voxt.StepFun",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Cannot locate WAV data chunk."]
+            )
+        }
+        return wavData.subdata(in: 44..<wavData.count)
     }
 }

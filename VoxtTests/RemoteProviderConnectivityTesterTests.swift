@@ -87,4 +87,41 @@ final class RemoteProviderConnectivityTesterTests: XCTestCase {
         XCTAssertNotNil(body["messages"])
         XCTAssertNil(body["prompt"])
     }
+
+    func testStepFunReachabilityBodyUsesChatCompletionsShape() async throws {
+        let tester = RemoteProviderConnectivityTester(testTarget: .llm(.stepFun))
+
+        let body = try await tester.openAICompatibleReachabilityBody(
+            provider: .stepFun,
+            endpoint: "https://api.stepfun.com/v1/chat/completions",
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.stepFun.rawValue,
+                model: "step-3.5-flash"
+            ),
+            model: "step-3.5-flash"
+        )
+
+        XCTAssertEqual(body["model"] as? String, "step-3.5-flash")
+        XCTAssertEqual(body["stream"] as? Bool, false)
+        let messages = try XCTUnwrap(body["messages"] as? [[String: String]])
+        XCTAssertEqual(messages.first?["role"], "user")
+        XCTAssertEqual(messages.first?["content"], "ping")
+        XCTAssertNil(body["max_output_tokens"])
+    }
+
+    func testStepFunReachabilityHeadersRequestSSE() {
+        let tester = RemoteProviderConnectivityTester(testTarget: .asr(.stepFunASR))
+
+        let headers = tester.stepFunReachabilityHeaders(token: "step-token")
+
+        XCTAssertEqual(headers["Accept"], "text/event-stream")
+        XCTAssertEqual(headers["Authorization"], "Bearer step-token")
+    }
+
+    func testStepFunReachabilityDefaultEndpointUsesDocumentedSSEPath() {
+        XCTAssertEqual(
+            RemoteProviderConnectivityTestEndpoints.resolvedStepFunASREndpoint(""),
+            "https://api.stepfun.com/v1/audio/asr/sse"
+        )
+    }
 }

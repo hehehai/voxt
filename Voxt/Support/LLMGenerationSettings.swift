@@ -37,6 +37,13 @@ struct LLMThinkingSettings: Codable, Hashable {
         budgetTokens: nil,
         exposeReasoning: false
     )
+
+    static let off = LLMThinkingSettings(
+        mode: .off,
+        effort: nil,
+        budgetTokens: nil,
+        exposeReasoning: false
+    )
 }
 
 struct LLMGenerationSettings: Codable, Hashable {
@@ -180,6 +187,12 @@ enum LLMProviderCapabilityRegistry {
                 supportsLogprobs: true,
                 supportsResponseFormat: true
             )
+        case .stepFun:
+            return LLMProviderCapabilities(
+                supportsThinkingEffort: true,
+                supportsPenalties: true,
+                supportsResponseFormat: true
+            )
         case .openrouter, .grok, .kimi:
             return LLMProviderCapabilities(
                 supportsThinkingEffort: true,
@@ -317,10 +330,13 @@ enum CustomLLMGenerationSettingsStore {
 
 extension RemoteProviderConfiguration {
     func effectiveGenerationSettings(provider: RemoteLLMProvider) -> LLMGenerationSettings {
-        guard provider == .codex else {
-            return generationSettings
-        }
         var settings = generationSettings
+        if provider == .stepFun, settings.thinking.mode == .providerDefault {
+            settings.thinking = .off
+        }
+        guard provider == .codex else {
+            return settings
+        }
         let capabilities = LLMProviderCapabilityRegistry.capabilities(for: provider)
         if !capabilities.supportsMaxOutputTokens {
             settings.maxOutputTokens = nil
@@ -388,7 +404,8 @@ extension LLMGenerationSettings {
             settings.maxOutputTokens = openAIMaxOutputTokens
         }
 
-        if let effort = OpenAIReasoningEffort(rawValue: openAIReasoningEffort),
+        if providerID != RemoteLLMProvider.stepFun.rawValue,
+           let effort = OpenAIReasoningEffort(rawValue: openAIReasoningEffort),
            effort != .automatic {
             settings.thinking = LLMThinkingSettings(
                 mode: .effort,
@@ -418,6 +435,10 @@ extension LLMGenerationSettings {
                 settings.responseFormat = responseFormat
             }
             settings.extraBodyJSON = omlxExtraBodyJSON
+        }
+        if providerID == RemoteLLMProvider.stepFun.rawValue,
+           settings.thinking.mode == .providerDefault {
+            settings.thinking = .off
         }
 
         return settings

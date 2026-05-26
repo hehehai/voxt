@@ -34,6 +34,8 @@ extension RemoteLLMRuntimeClient {
             return "https://api.minimax.chat/v1/text/chatcompletion_v2"
         case .aliyunBailian:
             return "https://dashscope.aliyuncs.com/compatible-mode/v1/responses"
+        case .stepFun:
+            return "https://api.stepfun.com/v1/chat/completions"
         }
     }
 
@@ -81,7 +83,11 @@ extension RemoteLLMRuntimeClient {
 
     nonisolated func resolvedLLMEndpoint(provider: RemoteLLMProvider, endpoint: String, model: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = trimmed.isEmpty ? providerDefaultEndpoint(provider) : trimmed
+        let usesStepFunStepPlan = provider == .stepFun &&
+            model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "step-router-v1"
+        let base = trimmed.isEmpty && usesStepFunStepPlan
+            ? "https://api.stepfun.com/step_plan/v1/chat/completions"
+            : (trimmed.isEmpty ? providerDefaultEndpoint(provider) : trimmed)
         guard let url = URL(string: base) else { return base }
         let path = url.path.lowercased()
 
@@ -158,7 +164,7 @@ extension RemoteLLMRuntimeClient {
             if path.hasSuffix("/v1") { return appendingPath(base, suffix: "/chat/completions") }
             if path.isEmpty || path == "/" { return base }
             return base
-        case .omlx, .deepseek, .openrouter, .grok, .zai, .kimi, .lmStudio:
+        case .omlx, .deepseek, .openrouter, .grok, .zai, .kimi, .lmStudio, .stepFun:
             if path.hasSuffix("/v1/chat/completions") || path.hasSuffix("/chat/completions") {
                 return base
             }

@@ -337,6 +337,78 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         )
     }
 
+    func testStepFunSheetUsesDocumentedEffortControls() {
+        let sheet = makeSheet(
+            target: .llm(.stepFun),
+            model: "step-3.5-flash-2603"
+        )
+
+        XCTAssertEqual(
+            sheet.generationThinkingModeMenuOptions.map(\.value),
+            [LLMThinkingMode.off.rawValue, LLMThinkingMode.effort.rawValue]
+        )
+        XCTAssertTrue(sheet.shouldShowGenerationThinking)
+        XCTAssertEqual(
+            sheet.generationThinkingEffortMenuOptions.map(\.value),
+            ["low", "high"]
+        )
+    }
+
+    func testStepFunSheetHidesEffortControlsForUnsupportedModels() {
+        let sheet = makeSheet(
+            target: .llm(.stepFun),
+            model: "step-3.5-flash"
+        )
+
+        XCTAssertEqual(
+            sheet.generationThinkingModeMenuOptions.map(\.value),
+            [LLMThinkingMode.off.rawValue]
+        )
+        XCTAssertFalse(sheet.shouldShowGenerationThinking)
+        XCTAssertTrue(sheet.generationThinkingEffortMenuOptions.isEmpty)
+    }
+
+    func testStepFunSheetDefaultsThinkingSnapshotToOff() {
+        let sheet = makeSheet(
+            target: .llm(.stepFun),
+            model: "step-3.5-flash-2603"
+        )
+
+        XCTAssertEqual(sheet.currentGenerationSettingsSnapshot().thinking.mode, .off)
+    }
+
+    func testStepFunRouterModelUsesStepPlanEndpointPreset() {
+        let presets = RemoteProviderConfigurationPolicy.endpointPresets(
+            target: .llm(.stepFun),
+            resolvedModel: "step-router-v1"
+        )
+
+        XCTAssertEqual(
+            presets.map(\.url),
+            ["https://api.stepfun.com/step_plan/v1/chat/completions"]
+        )
+
+        let endpoint = RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+            target: .llm(.stepFun),
+            previousModel: "step-3.5-flash",
+            newModel: "step-router-v1",
+            currentEndpoint: "https://api.stepfun.com/v1/chat/completions"
+        )
+
+        XCTAssertEqual(endpoint, "https://api.stepfun.com/step_plan/v1/chat/completions")
+    }
+
+    func testStepFunEndpointRemapLeavesCustomAPIPathUntouched() {
+        let endpoint = RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+            target: .llm(.stepFun),
+            previousModel: "step-3.5-flash",
+            newModel: "step-router-v1",
+            currentEndpoint: "https://api.stepfun.com/custom/chat"
+        )
+
+        XCTAssertEqual(endpoint, "https://api.stepfun.com/custom/chat")
+    }
+
     func testEndpointPlaceholderShowsResolvedProviderDefault() {
         XCTAssertEqual(
             RemoteProviderConfigurationPolicy.endpointPlaceholder(
