@@ -6,6 +6,44 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.11.9-beta.5] - 2026-05-26
+
+### English
+
+#### Added
+- Added StepFun realtime ASR configuration, routing, connectivity checks, and model catalog support.
+
+#### Changed
+- Improved remote provider setup flows and onboarding data so new realtime ASR options are easier to discover and configure.
+
+#### Fixed
+- Changed local and remote live audio capture taps to use the input node's native format, which targets the MLX startup hang seen on affected Macs.
+- Preserved the current recording microphone more reliably during runtime device changes while keeping richer live capture diagnostics for follow-up logs.
+
+### 简体中文
+
+#### 新增
+- 新增 StepFun 实时 ASR 的配置、路由、连通性检测和模型目录支持。
+
+#### 改进
+- 优化远程提供商配置流程和 onboarding 数据，让新的实时 ASR 选项更容易发现和配置。
+
+#### 修复
+- 将本地与远程 live 录音链路的音频 tap 调整为使用输入节点的原生格式，针对部分 Mac 上 MLX 启动卡住的问题做修复。
+- 在运行时设备变化期间更稳定地保持当前录音麦克风，并继续保留更完整的 live capture 诊断日志，方便后续排查。
+
+### 日本語
+
+#### 追加
+- StepFun リアルタイム ASR の設定、ルーティング、接続確認、モデルカタログ対応を追加しました。
+
+#### 変更
+- リモートプロバイダの設定導線とオンボーディングデータを改善し、新しいリアルタイム ASR オプションを見つけて設定しやすくしました。
+
+#### 修正
+- ローカル/リモートの live 録音タップを入力ノードのネイティブ形式へ切り替え、一部の Mac で発生していた MLX 起動時のハング修正を狙いました。
+- 実行中のデバイス変化中でも現在の録音マイクをより安定して維持しつつ、追加の live capture 診断ログも引き続き保持しました。
+
 ## [1.11.9-beta.4] - 2026-05-25
 
 ### English
