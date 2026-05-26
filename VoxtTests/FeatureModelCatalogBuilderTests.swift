@@ -260,31 +260,31 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
     }
 
     private func makeFeatureSettings(
-        transcriptionASR: FeatureModelSelectionID = .dictation,
-        transcriptionLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
-        translationASR: FeatureModelSelectionID = .dictation,
-        translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
+        transcriptionASR: FeatureModelSelectionID? = nil,
+        transcriptionLLM: FeatureModelSelectionID? = nil,
+        translationASR: FeatureModelSelectionID? = nil,
+        translationModel: FeatureModelSelectionID? = nil,
         translationTarget: TranslationTargetLanguage = .english,
-        rewriteASR: FeatureModelSelectionID = .dictation,
-        rewriteLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
+        rewriteASR: FeatureModelSelectionID? = nil,
+        rewriteLLM: FeatureModelSelectionID? = nil
     ) -> FeatureSettings {
         FeatureSettings(
             transcription: .init(
-                asrSelectionID: transcriptionASR,
+                asrSelectionID: transcriptionASR ?? .dictation,
                 llmEnabled: true,
-                llmSelectionID: transcriptionLLM,
+                llmSelectionID: transcriptionLLM ?? .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultEnhancementPrompt
             ),
             translation: .init(
-                asrSelectionID: translationASR,
-                modelSelectionID: translationModel,
+                asrSelectionID: translationASR ?? .dictation,
+                modelSelectionID: translationModel ?? .localLLM(CustomLLMModelManager.defaultModelRepo),
                 targetLanguageRawValue: translationTarget.rawValue,
                 prompt: AppPreferenceKey.defaultTranslationPrompt,
                 replaceSelectedText: true
             ),
             rewrite: .init(
-                asrSelectionID: rewriteASR,
-                llmSelectionID: rewriteLLM,
+                asrSelectionID: rewriteASR ?? .dictation,
+                llmSelectionID: rewriteLLM ?? .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultRewritePrompt,
                 appEnhancementEnabled: true
             )

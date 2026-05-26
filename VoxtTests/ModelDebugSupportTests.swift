@@ -97,7 +97,7 @@ final class ModelDebugSupportTests: XCTestCase {
     }
 
     func testBuiltInPresetsApplySessionPromptOverridesWhenProvided() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             defaults.set("global enhancement prompt", forKey: AppPreferenceKey.enhancementSystemPrompt)
             defaults.set("global translation prompt", forKey: AppPreferenceKey.translationSystemPrompt)
             defaults.set("global rewrite prompt", forKey: AppPreferenceKey.rewriteSystemPrompt)
@@ -127,7 +127,7 @@ final class ModelDebugSupportTests: XCTestCase {
     }
 
     func testBuiltInPresetsUseFeatureSettingsPromptsWhenLegacyKeysAreEmpty() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
             settings.transcription.prompt = "feature enhancement prompt"
             settings.translation.prompt = "feature translation prompt"

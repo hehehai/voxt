@@ -6,6 +6,7 @@ final class MicrophonePreferenceManagerTests: XCTestCase {
     func testInitialSelectionPrefersHighestTrackedAvailableDevice() {
         let defaults = TestDoubles.makeUserDefaults()
         defaults.set(["usb-high", "builtin"], forKey: AppPreferenceKey.microphonePriorityUIDs)
+        defaults.set(0, forKey: AppPreferenceKey.selectedInputDeviceID)
 
         let state = MicrophonePreferenceManager.syncState(
             defaults: defaults,
@@ -16,7 +17,7 @@ final class MicrophonePreferenceManagerTests: XCTestCase {
         )
 
         XCTAssertEqual(state.activeUID, "usb-high")
-        XCTAssertTrue(state.autoSwitchEnabled)
+        XCTAssertFalse(state.autoSwitchEnabled)
     }
 
     func testFocusedDeviceStaysSelectedDuringRegularRefresh() {
@@ -47,6 +48,7 @@ final class MicrophonePreferenceManagerTests: XCTestCase {
         let defaults = TestDoubles.makeUserDefaults()
         defaults.set(["usb-high", "builtin"], forKey: AppPreferenceKey.microphonePriorityUIDs)
         defaults.set("builtin", forKey: AppPreferenceKey.activeInputDeviceUID)
+        defaults.set(true, forKey: AppPreferenceKey.microphoneAutoSwitchEnabled)
 
         let state = MicrophonePreferenceManager.syncState(
             defaults: defaults,

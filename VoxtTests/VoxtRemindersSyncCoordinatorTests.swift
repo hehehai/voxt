@@ -239,7 +239,7 @@ private final class FakeVoxtRemindersSyncBackend: VoxtRemindersSyncBackend {
     }
 
     func dropReminder(identifier: String) {
-        lock.withLock {
+        _ = lock.withLock {
             remindersByIdentifier.removeValue(forKey: identifier)
         }
     }

@@ -40,6 +40,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
     private let sampleStore = AudioSampleStore()
+    private let canonicalAudioConverter = CanonicalAudioStreamConverter()
     private var preferredInputDeviceID: AudioDeviceID?
     private var inputSampleRate: Double = 16000
     private var completedAudioArchiveURL: URL?
@@ -171,6 +172,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         isRecording = false
         clearRecognitionPipeline(cancelTask: true)
         sampleStore.clear()
+        canonicalAudioConverter.reset()
     }
 
     private func stopAudioCapture() {
@@ -223,25 +225,17 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
         onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: inputFormat))
-        inputSampleRate = inputFormat.sampleRate
+        inputSampleRate = CanonicalAudioStreamConverter.sampleRate
+        canonicalAudioConverter.reset()
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             self.recognitionRequest?.append(buffer)
 
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
-
-            guard let channelData = buffer.floatChannelData?[0] else { return }
-            let frameLength = Int(buffer.frameLength)
-            if frameLength == 0 { return }
-
-            var rms: Float = 0
-            for i in 0..<frameLength {
-                rms += channelData[i] * channelData[i]
-            }
-            rms = sqrt(rms / Float(frameLength))
-            let normalized = min(rms * 20, 1.0)
+            guard let samples = self.canonicalAudioConverter.monoFloat16kSamples(from: buffer),
+                  !samples.isEmpty
+            else { return }
+            self.sampleStore.append(samples)
+            let normalized = AudioLevelMeter.normalizedLevel(fromSamples: samples)
 
             Task { @MainActor [weak self] in
                 self?.audioLevel = normalized

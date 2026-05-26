@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class RecordingStartPlannerTests: XCTestCase {
     func testMLXAudioNotDownloadedBlocksRecordingStart() {
         let decision = RecordingStartPlanner.resolve(

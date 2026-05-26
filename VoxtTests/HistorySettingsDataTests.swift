@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class HistorySettingsDataTests: XCTestCase {
     func testFilteredEntriesUsesSelectedHistoryTab() {
         let entries = [

@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class TranscriptionDoubleTapRewriteResolverTests: XCTestCase {
     func testRewriteDoubleTapWakeForcesTapTriggerMode() {
         let suiteName = UUID().uuidString

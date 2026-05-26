@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
     func testMLXPhaseIgnoresProgressPayloadChanges() {
         let phaseA = ModelSettingsManagerRefreshSupport.phase(

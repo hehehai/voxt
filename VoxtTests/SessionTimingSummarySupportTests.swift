@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class SessionTimingSummarySupportTests: XCTestCase {
     private var fixtureURL: URL {
         URL(fileURLWithPath: #filePath)

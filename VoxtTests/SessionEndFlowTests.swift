@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class SessionEndFlowTests: XCTestCase {
     func testSessionCallbackHandlingDecisionAcceptsActiveNonCancelledSession() {
         let sessionID = UUID()

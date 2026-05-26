@@ -450,19 +450,19 @@ final class ModelCatalogBuilderTests: XCTestCase {
     }
 
     private func makeFeatureSettings(
-        transcriptionASR: FeatureModelSelectionID = .dictation,
-        translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
+        transcriptionASR: FeatureModelSelectionID? = nil,
+        translationModel: FeatureModelSelectionID? = nil
     ) -> FeatureSettings {
         FeatureSettings(
             transcription: .init(
-                asrSelectionID: transcriptionASR,
+                asrSelectionID: transcriptionASR ?? .dictation,
                 llmEnabled: false,
                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultEnhancementPrompt
             ),
             translation: .init(
                 asrSelectionID: .dictation,
-                modelSelectionID: translationModel,
+                modelSelectionID: translationModel ?? .localLLM(CustomLLMModelManager.defaultModelRepo),
                 targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
                 prompt: AppPreferenceKey.defaultTranslationPrompt,
                 replaceSelectedText: true

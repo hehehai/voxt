@@ -545,7 +545,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testStateForUnknownRepoDefaultsToNotDownloaded() async {
-        await withIsolatedModelStorageRoot { _ in
+        withIsolatedModelStorageRoot { _ in
             let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
             let unknownRepo = "mlx-community/some-unknown-repo"
 
@@ -557,7 +557,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testStateForRepoReturnsDownloadedWhenValidModelDirExists() async throws {
-        try await withIsolatedModelStorageRoot { root in
+        try withIsolatedModelStorageRoot { root in
             let otherRepo = "mlx-community/parakeet-tdt-0.6b-v3"
             try seedValidMLXModelDirectory(repo: otherRepo, root: root)
 
@@ -568,7 +568,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testCancelDownloadForUnknownRepoIsSafeAndDoesNotMutateCurrent() async {
-        await withIsolatedModelStorageRoot { _ in
+        withIsolatedModelStorageRoot { _ in
             let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
             let stateBefore = manager.state
 
@@ -579,7 +579,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testCancelDownloadForNonActiveRepoCleansUpPartialArtifacts() async throws {
-        try await withIsolatedModelStorageRoot { root in
+        try withIsolatedModelStorageRoot { root in
             let staleRepo = "mlx-community/parakeet-tdt-0.6b-v3"
             let staleDir = root
                 .appendingPathComponent("mlx-audio")
@@ -596,14 +596,14 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testActiveDownloadReposIsEmptyWhenNothingIsRunning() async {
-        await withIsolatedModelStorageRoot { _ in
+        withIsolatedModelStorageRoot { _ in
             let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
             XCTAssertTrue(manager.activeDownloadRepos.isEmpty)
         }
     }
 
     func testDeleteModelForNonCurrentRepoClearsStoredPerRepoState() async throws {
-        try await withIsolatedModelStorageRoot { root in
+        try withIsolatedModelStorageRoot { root in
             let otherRepo = "mlx-community/parakeet-tdt-0.6b-v3"
             try seedValidMLXModelDirectory(repo: otherRepo, root: root)
 
@@ -621,7 +621,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testQwen3LoadPreparationCreatesWritableShadowDirectoryWhenTokenizerIsMissing() async throws {
-        try await withIsolatedModelStorageRoot { writableRoot in
+        try withIsolatedModelStorageRoot { writableRoot in
             let repo = "mlx-community/Qwen3-ASR-0.6B-4bit"
             let sourceDirectory = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -650,7 +650,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testQwen3LoadPreparationPreservesWritablePartialDownloadDirectory() async throws {
-        try await withIsolatedModelStorageRoot { writableRoot in
+        try withIsolatedModelStorageRoot { writableRoot in
             let repo = "mlx-community/Qwen3-ASR-0.6B-4bit"
             let sourceDirectory = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -679,7 +679,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testDeleteModelRemovesQwen3ShadowDirectory() async throws {
-        try await withIsolatedModelStorageRoot { writableRoot in
+        try withIsolatedModelStorageRoot { writableRoot in
             let repo = "mlx-community/Qwen3-ASR-0.6B-4bit"
             try seedValidMLXModelDirectory(repo: repo, root: writableRoot)
             let sourceDirectory = writableRoot
@@ -707,7 +707,7 @@ final class MLXModelManagerTests: XCTestCase {
         let previousPath = defaults.string(forKey: AppPreferenceKey.modelStorageRootPath)
         let previousBookmark = defaults.data(forKey: AppPreferenceKey.modelStorageRootBookmark)
 
-        try await withIsolatedModelStorageRoot { originalRoot in
+        try withIsolatedModelStorageRoot { originalRoot in
             let otherRepo = "mlx-community/parakeet-tdt-0.6b-v3"
             try seedValidMLXModelDirectory(repo: otherRepo, root: originalRoot)
 

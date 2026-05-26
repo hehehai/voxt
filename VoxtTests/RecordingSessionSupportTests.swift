@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class RecordingSessionSupportTests: XCTestCase {
     func testFallbackInjectBundleIDRejectsOwnAppBundleID() {
         XCTAssertNil(

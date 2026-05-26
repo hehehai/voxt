@@ -126,6 +126,10 @@ final class AudioInputDeviceManagerTests: XCTestCase {
                 .requiresCaptureRecovery
         )
         XCTAssertFalse(
+            RecordingInputDeviceRuntimeChange(selector: kAudioDevicePropertyDeviceIsRunningSomewhere)
+                .requiresCaptureRecovery
+        )
+        XCTAssertFalse(
             RecordingInputDeviceRuntimeChange(selector: kAudioObjectPropertyName)
                 .requiresCaptureRecovery
         )

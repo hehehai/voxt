@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class EnhancementPromptResolverTests: XCTestCase {
     func testDisabledAppBranchFallsBackToGlobalPrompt() {
         let output = EnhancementPromptResolver.resolve(

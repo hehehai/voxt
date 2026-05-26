@@ -90,9 +90,9 @@ nonisolated enum RecordingInputDeviceRuntimeChange: Equatable, Sendable {
 
     var requiresCaptureRecovery: Bool {
         switch self {
-        case .alive, .running, .nominalSampleRate, .streamConfiguration:
+        case .alive, .nominalSampleRate, .streamConfiguration:
             return true
-        case .unknown:
+        case .running, .unknown:
             return false
         }
     }

@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class CustomLLMModelDownloadSupportTests: XCTestCase {
     private let resumableTestPolicy = ResumableDownloadPolicy(
         resumeThresholdBytes: 1,

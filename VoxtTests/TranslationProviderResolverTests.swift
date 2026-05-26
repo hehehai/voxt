@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class TranslationProviderResolverTests: XCTestCase {
     func testWhisperDirectTranslationRequiresWhisperASRAndEnglish() {
         let resolution = TranslationProviderResolver.resolve(

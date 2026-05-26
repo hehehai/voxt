@@ -348,7 +348,7 @@ final class SettingsTypesTests: XCTestCase {
     }
 
     func testOnboardingStepStatusResolverMatchesExpectedRules() {
-        let readySnapshot = OnboardingStepStatusSnapshot(
+        _ = OnboardingStepStatusSnapshot(
             hasModelIssues: false,
             hasRecordingMicrophone: true,
             hasRecordingPermissions: true,

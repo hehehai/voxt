@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class MLXModelPerRepoStateSupportTests: XCTestCase {
     func testResolvedStatePrefersStoredState() {
         let state = MLXModelPerRepoStateSupport.resolvedState(

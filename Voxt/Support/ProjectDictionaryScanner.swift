@@ -213,7 +213,7 @@ enum ProjectDictionaryScanner {
         return nullCount * 20 > sample.count
     }
 
-    private static func isHanScalar(_ scalar: UnicodeScalar) -> Bool {
+    private nonisolated static func isHanScalar(_ scalar: UnicodeScalar) -> Bool {
         (0x4E00...0x9FFF).contains(scalar.value)
     }
 

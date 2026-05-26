@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class MLXTranscriptionPlanningTests: XCTestCase {
     func testIntermediateSchedulingSkipsWhenAnotherPassIsInFlight() {
         let decision = MLXTranscriptionPlanning.correctionPassSchedulingDecision(

@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class HistoryValueResolverTests: XCTestCase {
     func testResolvedDurationHandlesNilAndNegativeValues() {
         let start = Date(timeIntervalSince1970: 10)

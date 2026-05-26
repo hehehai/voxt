@@ -1,6 +1,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class FeatureSettingsStoreTests: XCTestCase {
     private func withEphemeralDefaults(
         _ body: (UserDefaults) throws -> Void
@@ -18,7 +19,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
     }
 
     func testMigrateIfNeededRemovesObsoleteLatencyProfileKeys() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             defaults.set("instant", forKey: "enhancementLatencyProfile")
             defaults.set("quality", forKey: "translationLatencyProfile")
             defaults.set("balanced", forKey: "rewriteLatencyProfile")
@@ -33,7 +34,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
     }
 
     func testLoadRemovesObsoleteLatencyProfileKeysAndDerivesSettings() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             defaults.set("quality", forKey: "enhancementLatencyProfile")
             defaults.set(EnhancementMode.customLLM.rawValue, forKey: AppPreferenceKey.enhancementMode)
             defaults.set("mlx-community/Qwen3.5-2B-4bit", forKey: AppPreferenceKey.customLLMModelRepo)
@@ -50,7 +51,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
     }
 
     func testSaveRemovesObsoleteLatencyProfileKeysWithoutAffectingStoredSettings() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             defaults.set("instant", forKey: "enhancementLatencyProfile")
             defaults.set("balanced", forKey: "translationLatencyProfile")
             defaults.set("quality", forKey: "rewriteLatencyProfile")
@@ -67,7 +68,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
     }
 
     func testSaveKeepsAppEnhancementEnabledForMenuVisibility() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
             settings.rewrite.appEnhancementEnabled = true
 
@@ -85,7 +86,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
     }
 
     func testPromptSpecificSaveHelpersPersistLatestPromptText() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             let transcriptionPrompt = "Clean this transcript, keep it compact."
             let translationPrompt = "Translate into {{TARGET_LANGUAGE}} and keep product names in English."
             let rewritePrompt = "Rewrite the text to sound polite and concise."
@@ -106,7 +107,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
     }
 
     func testSaveSyncsLegacyPromptKeysFromFeatureSettingsPayload() throws {
-        try withEphemeralDefaults { defaults in
+        withEphemeralDefaults { defaults in
             var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
             settings.transcription.prompt = "Enhance with my custom cleanup rules."
             settings.translation.prompt = "Translate to {{TARGET_LANGUAGE}} and preserve app names."
