@@ -4,6 +4,7 @@ import Combine
 import MLX
 import MLXLLM
 import MLXLMCommon
+import MLXNN
 import Tokenizers
 
 private struct LocalTokenizerBridge: MLXLMCommon.Tokenizer {
@@ -54,6 +55,181 @@ private struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         let tokenizer = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
         return LocalTokenizerBridge(tokenizer)
+    }
+}
+
+nonisolated private enum CustomLLMPromptLookupConfiguration {
+    static let minimumDraftCharacters = 120
+    static let minimumDraftTokens = 24
+    static let maxSuffixTokens = 16
+    static let numDraftTokens = 4
+    static let maximumLogitsCacheEntries = 64
+}
+
+private struct CustomLLMPromptLookupGenerationResult: Sendable {
+    let text: String
+    let info: GenerateCompletionInfo
+    let metrics: CustomLLMPromptLookupMetrics
+}
+
+private struct CustomLLMPromptLookupMetrics: Sendable {
+    let draftTokenCount: Int
+    let proposedTokenCount: Int
+    let longestMatchedSuffix: Int
+    let fallbackReason: String?
+}
+
+private struct CustomLLMPromptLookupEventStream: Sendable {
+    let stream: AsyncThrowingStream<Generation, Error>
+    let metrics: CustomLLMPromptLookupMetricsBox
+}
+
+private final class CustomLLMPromptLookupMetricsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending: CustomLLMPromptLookupMetrics?
+
+    func put(_ metrics: CustomLLMPromptLookupMetrics) {
+        lock.lock()
+        pending = metrics
+        lock.unlock()
+    }
+
+    func take() -> CustomLLMPromptLookupMetrics? {
+        lock.lock()
+        let metrics = pending
+        pending = nil
+        lock.unlock()
+        return metrics
+    }
+}
+
+nonisolated private final class CustomLLMPromptLookupDraftModel: Module, LanguageModel, @unchecked Sendable {
+    private let draftTokens: [Int]
+    private let maxSuffixTokens: Int
+    private let fallbackToken: Int
+    private let lock = NSLock()
+
+    private var vocabularySize: Int
+    private var observedTokens: [Int] = []
+    private var didConsumePrompt = false
+    private var proposedTokenCount = 0
+    private var longestMatchedSuffix = 0
+    private var logitsCache: [Int: MLXArray] = [:]
+
+    nonisolated init(draftTokens: [Int], maxSuffixTokens: Int) {
+        self.draftTokens = draftTokens
+        self.maxSuffixTokens = max(1, maxSuffixTokens)
+        self.vocabularySize = max(1, (draftTokens.max() ?? 0) + 1)
+        self.fallbackToken = draftTokens.first ?? 0
+        super.init()
+    }
+
+    func prepare(_ input: LMInput, cache: [KVCache], windowSize: Int?) throws -> PrepareResult {
+        let promptTokens = input.text.tokens.asArray(Int.self)
+        lock.lock()
+        vocabularySize = max(vocabularySize, (promptTokens.max() ?? 0) + 1)
+        observedTokens = []
+        didConsumePrompt = false
+        proposedTokenCount = 0
+        longestMatchedSuffix = 0
+        logitsCache.removeAll(keepingCapacity: true)
+        lock.unlock()
+        return .tokens(input.text)
+    }
+
+    func callAsFunction(_ input: LMInput.Text, cache: [KVCache]?, state: LMOutput.State?) -> LMOutput {
+        let inputTokens = input.tokens.asArray(Int.self)
+        lock.lock()
+        expandVocabularyIfNeeded(for: inputTokens)
+        if didConsumePrompt {
+            observedTokens.append(contentsOf: inputTokens)
+        } else {
+            didConsumePrompt = true
+        }
+        let nextToken = nextDraftToken(after: observedTokens)
+        let logitsVocabularySize = vocabularySize
+        proposedTokenCount += 1
+        let logits = cachedLogits(for: nextToken, vocabularySize: logitsVocabularySize)
+        lock.unlock()
+        return LMOutput(logits: logits)
+    }
+
+    func callAsFunction(_ inputs: MLXArray, cache: [KVCache]?) -> MLXArray {
+        callAsFunction(LMInput.Text(tokens: inputs), cache: cache, state: nil).logits
+    }
+
+    func newCache(parameters: GenerateParameters?) -> [KVCache] {
+        []
+    }
+
+    func metricsSnapshot() -> CustomLLMPromptLookupMetrics {
+        lock.lock()
+        let metrics = CustomLLMPromptLookupMetrics(
+            draftTokenCount: draftTokens.count,
+            proposedTokenCount: proposedTokenCount,
+            longestMatchedSuffix: longestMatchedSuffix,
+            fallbackReason: nil
+        )
+        lock.unlock()
+        return metrics
+    }
+
+    private func nextDraftToken(after generatedTokens: [Int]) -> Int {
+        guard !draftTokens.isEmpty else { return fallbackToken }
+        guard !generatedTokens.isEmpty else { return draftTokens[0] }
+
+        let suffixLimit = min(maxSuffixTokens, generatedTokens.count, draftTokens.count)
+        if suffixLimit > 0 {
+            for suffixLength in stride(from: suffixLimit, through: 1, by: -1) {
+                let suffix = Array(generatedTokens.suffix(suffixLength))
+                guard let matchStart = lastIndex(of: suffix, in: draftTokens) else { continue }
+                let nextIndex = matchStart + suffixLength
+                guard nextIndex < draftTokens.count else { continue }
+                longestMatchedSuffix = max(longestMatchedSuffix, suffixLength)
+                return draftTokens[nextIndex]
+            }
+        }
+
+        let sequentialIndex = min(generatedTokens.count, draftTokens.count - 1)
+        return draftTokens[sequentialIndex]
+    }
+
+    private func lastIndex(of needle: [Int], in haystack: [Int]) -> Int? {
+        guard !needle.isEmpty, needle.count <= haystack.count else { return nil }
+        var index = haystack.count - needle.count
+        while index >= 0 {
+            if Array(haystack[index ..< index + needle.count]) == needle {
+                return index
+            }
+            index -= 1
+        }
+        return nil
+    }
+
+    private func expandVocabularyIfNeeded(for tokens: [Int]) {
+        let requiredSize = (tokens.max() ?? 0) + 1
+        guard requiredSize > vocabularySize else { return }
+        vocabularySize = requiredSize
+        logitsCache.removeAll(keepingCapacity: true)
+    }
+
+    private func cachedLogits(for token: Int, vocabularySize: Int) -> MLXArray {
+        let safeToken = max(0, min(token, vocabularySize - 1))
+        if let cached = logitsCache[safeToken] {
+            return cached
+        }
+        if logitsCache.count >= CustomLLMPromptLookupConfiguration.maximumLogitsCacheEntries {
+            logitsCache.removeAll(keepingCapacity: true)
+        }
+        let logits = logits(for: safeToken, vocabularySize: vocabularySize)
+        logitsCache[safeToken] = logits
+        return logits
+    }
+
+    private func logits(for token: Int, vocabularySize: Int) -> MLXArray {
+        var values = Array(repeating: Float32(-1_000_000), count: vocabularySize)
+        values[token] = 1_000_000
+        return MLXArray(values, [1, 1, vocabularySize])
     }
 }
 
@@ -439,13 +615,23 @@ class CustomLLMModelManager: ObservableObject {
             var aggregated = ""
             var firstChunkLatencyMs: Int?
             var completionInfo: GenerateCompletionInfo?
+            var promptLookupMetrics: CustomLLMPromptLookupMetrics?
             var repetitionStop: LLMOutputRepetition?
             let repetitionGuard = LLMOutputRepetitionGuard()
-            for try await event in session.streamDetails(
+            let promptLookupEventStream = try await promptLookupEventStreamIfEligible(
+                request: request,
+                container: container,
+                params: params,
+                behavior: behavior,
+                settings: settings
+            )
+            let eventStream = promptLookupEventStream?.stream ?? session.streamDetails(
                 to: request.prompt,
                 images: [],
                 videos: []
-            ) {
+            )
+
+            for try await event in eventStream {
                 switch event {
                 case .chunk(let chunk):
                     if firstChunkLatencyMs == nil, !chunk.isEmpty {
@@ -468,6 +654,9 @@ class CustomLLMModelManager: ObservableObject {
                     }
                 case .info(let info):
                     completionInfo = info
+                    if let metrics = promptLookupEventStream?.metrics.take() {
+                        promptLookupMetrics = metrics
+                    }
                 case .toolCall:
                     continue
                 }
@@ -538,6 +727,17 @@ class CustomLLMModelManager: ObservableObject {
                     "Custom LLM \(request.kind.logLabel) metrics. repo=\(request.repo), containerSource=\(containerSnapshot.source.rawValue), containerLoadMs=\(containerSnapshot.elapsedMs), setupMs=\(max(0, setupMs)), firstChunkMs=\(firstChunkText), overallFirstChunkMs=\(diagnostics.overallFirstChunkMs.map(String.init) ?? "n/a"), promptTokens=\(completionInfo.promptTokenCount), generationTokens=\(completionInfo.generationTokenCount), prefillMs=\(prefillMs), generationMs=\(generationMs), modelOverheadMs=\(modelOverheadMs), totalOverheadMs=\(totalOverheadMs), promptTPS=\(promptTPS), generationTPS=\(generationTPS), stopReason=\(completionInfo.stopReason)"
                 )
             }
+            if let promptLookupMetrics {
+                diagnostics.promptLookupDraftTokens = promptLookupMetrics.draftTokenCount
+                diagnostics.promptLookupProposedTokens = promptLookupMetrics.proposedTokenCount
+                diagnostics.promptLookupAcceptedTokens = nil
+                diagnostics.promptLookupAcceptanceRatio = nil
+                diagnostics.promptLookupFallbackReason = promptLookupMetrics.fallbackReason
+                let fallback = promptLookupMetrics.fallbackReason ?? "none"
+                VoxtLog.llm(
+                    "Custom LLM \(request.kind.logLabel) prompt lookup metrics. repo=\(request.repo), draftTokens=\(promptLookupMetrics.draftTokenCount), proposedTokens=\(promptLookupMetrics.proposedTokenCount), longestSuffix=\(promptLookupMetrics.longestMatchedSuffix), fallback=\(fallback)"
+                )
+            }
             lastRunDiagnostics = diagnostics
             VoxtLog.llm(
                 """
@@ -548,6 +748,185 @@ class CustomLLMModelManager: ObservableObject {
             )
             return cleaned.isEmpty ? request.resultFallback : cleaned
         }
+    }
+
+    private func promptLookupEventStreamIfEligible(
+        request: CustomLLMRequestPlan,
+        container: ModelContainer,
+        params: GenerateParameters,
+        behavior: CustomLLMModelBehavior,
+        settings: LLMGenerationSettings
+    ) async throws -> CustomLLMPromptLookupEventStream? {
+        guard generationTuning.promptLookupEnabledOverride != false else { return nil }
+        guard request.kind == .enhancement else { return nil }
+        guard let draftText = request.promptLookupDraftText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              draftText.count >= CustomLLMPromptLookupConfiguration.minimumDraftCharacters
+        else {
+            return nil
+        }
+
+        let additionalContext = localThinkingAdditionalContext(
+            behavior: behavior,
+            settings: settings
+        )
+
+        let metricsBox = CustomLLMPromptLookupMetricsBox()
+        let stream: AsyncThrowingStream<Generation, Error> = AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let result = try await runPromptLookupGeneration(
+                        container: container,
+                        instructions: request.instructions,
+                        prompt: request.prompt,
+                        params: params,
+                        draftText: draftText,
+                        additionalContext: additionalContext
+                    )
+                    metricsBox.put(result.metrics)
+                    if !result.text.isEmpty {
+                        continuation.yield(.chunk(result.text))
+                    }
+                    continuation.yield(.info(result.info))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+        return CustomLLMPromptLookupEventStream(stream: stream, metrics: metricsBox)
+    }
+
+    private func runPromptLookupGeneration(
+        container: ModelContainer,
+        instructions: String,
+        prompt: String,
+        params: GenerateParameters,
+        draftText: String,
+        additionalContext: [String: any Sendable]?
+    ) async throws -> CustomLLMPromptLookupGenerationResult {
+        try await container.perform { context in
+            var messages: [Chat.Message] = []
+            let trimmedInstructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedInstructions.isEmpty {
+                messages.append(.system(trimmedInstructions))
+            }
+            messages.append(.user(prompt))
+
+            let input = try await context.processor.prepare(
+                input: UserInput(
+                    chat: messages,
+                    additionalContext: additionalContext
+                )
+            )
+            let draftTokens = context.tokenizer.encode(text: draftText)
+            guard draftTokens.count >= CustomLLMPromptLookupConfiguration.minimumDraftTokens else {
+                let metrics = CustomLLMPromptLookupMetrics(
+                    draftTokenCount: draftTokens.count,
+                    proposedTokenCount: 0,
+                    longestMatchedSuffix: 0,
+                    fallbackReason: "draftTooShort"
+                )
+                return try await runStandardGenerationInContext(
+                    input: input,
+                    params: params,
+                    context: context,
+                    metrics: metrics
+                )
+            }
+
+            let draftModel = CustomLLMPromptLookupDraftModel(
+                draftTokens: draftTokens,
+                maxSuffixTokens: CustomLLMPromptLookupConfiguration.maxSuffixTokens
+            )
+            let stream: AsyncStream<Generation>
+            do {
+                stream = try MLXLMCommon.generate(
+                    input: input,
+                    parameters: params,
+                    context: context,
+                    draftModel: draftModel,
+                    numDraftTokens: CustomLLMPromptLookupConfiguration.numDraftTokens
+                )
+            } catch {
+                let snapshot = draftModel.metricsSnapshot()
+                let metrics = CustomLLMPromptLookupMetrics(
+                    draftTokenCount: snapshot.draftTokenCount,
+                    proposedTokenCount: snapshot.proposedTokenCount,
+                    longestMatchedSuffix: snapshot.longestMatchedSuffix,
+                    fallbackReason: "speculativeUnavailable"
+                )
+                return try await runStandardGenerationInContext(
+                    input: input,
+                    params: params,
+                    context: context,
+                    metrics: metrics
+                )
+            }
+            var text = ""
+            var info: GenerateCompletionInfo?
+            for await event in stream {
+                switch event {
+                case .chunk(let chunk):
+                    text += chunk
+                case .info(let completion):
+                    info = completion
+                case .toolCall:
+                    continue
+                }
+            }
+
+            return CustomLLMPromptLookupGenerationResult(
+                text: text,
+                info: info ?? GenerateCompletionInfo(
+                    promptTokenCount: input.text.tokens.size,
+                    generationTokenCount: 0,
+                    promptTime: 0,
+                    generationTime: 0,
+                    stopReason: .cancelled
+                ),
+                metrics: draftModel.metricsSnapshot()
+            )
+        }
+    }
+
+    private func runStandardGenerationInContext(
+        input: LMInput,
+        params: GenerateParameters,
+        context: ModelContext,
+        metrics: CustomLLMPromptLookupMetrics
+    ) async throws -> CustomLLMPromptLookupGenerationResult {
+        let stream = try MLXLMCommon.generate(
+            input: input,
+            parameters: params,
+            context: context
+        )
+        var text = ""
+        var info: GenerateCompletionInfo?
+        for await event in stream {
+            switch event {
+            case .chunk(let chunk):
+                text += chunk
+            case .info(let completion):
+                info = completion
+            case .toolCall:
+                continue
+            }
+        }
+        return CustomLLMPromptLookupGenerationResult(
+            text: text,
+            info: info ?? GenerateCompletionInfo(
+                promptTokenCount: input.text.tokens.size,
+                generationTokenCount: 0,
+                promptTime: 0,
+                generationTime: 0,
+                stopReason: .cancelled
+            ),
+            metrics: metrics
+        )
     }
 
     private func startLogMessage(

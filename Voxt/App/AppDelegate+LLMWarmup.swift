@@ -208,11 +208,20 @@ extension AppDelegate {
                     verbose: true
                 )
             } catch {
-                VoxtLog.warning(
-                    "Remote LLM warmup failed. provider=\(context.provider.rawValue), model=\(context.configuration.model), reason=\(reason), error=\(error.localizedDescription)"
-                )
+                let message = "Remote LLM warmup failed. provider=\(context.provider.rawValue), model=\(context.configuration.model), reason=\(reason), error=\(error.localizedDescription)"
+                if Self.shouldLogRemoteWarmupFailureAsVerboseInfo(error, reason: reason) {
+                    VoxtLog.info(message, verbose: true)
+                } else {
+                    VoxtLog.warning(message)
+                }
             }
         }
+    }
+
+    private nonisolated static func shouldLogRemoteWarmupFailureAsVerboseInfo(_ error: Error, reason: String) -> Bool {
+        guard reason == "idle" else { return false }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
     }
 
     private func cancelRemoteLLMWarmupTasks(except keysToKeep: [String]) {

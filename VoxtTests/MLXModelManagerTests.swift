@@ -458,6 +458,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertNil(plan.logMode)
         XCTAssertEqual(plan.contentLogSections.map(\.label), ["system_prompt", "input", "request_content"])
         XCTAssertEqual(plan.contentLogSections.last?.content, "Clean up this transcription while preserving meaning and style.\nINPUT:hello world")
+        XCTAssertEqual(plan.promptLookupDraftText, #"{"resultText":"hello world"}"#)
     }
 
     func testCustomLLMRequestPlanBuilderBuildsUserPromptEnhancementRequest() {
@@ -472,6 +473,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(plan.logMode, "userMessage")
         XCTAssertEqual(plan.contentLogSections.map(\.label), ["system_prompt", "input"])
         XCTAssertEqual(plan.contentLogSections.first?.content, "<empty>")
+        XCTAssertNil(plan.promptLookupDraftText)
     }
 
     func testCustomLLMRequestPlanBuilderBuildsTranslationRequest() {
@@ -488,6 +490,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(plan.inputCharacterCount, 7)
         XCTAssertEqual(plan.contentLogSections.map(\.label), ["system_prompt", "input", "request_content"])
         XCTAssertEqual(plan.contentLogSections.last?.content, "Process the input according to the instructions. => bonjour")
+        XCTAssertNil(plan.promptLookupDraftText)
     }
 
     func testCustomLLMRequestPlanBuilderBuildsRewriteRequest() {
@@ -505,6 +508,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(plan.prompt.contains("Produce the final text to insert according to the instructions."))
         XCTAssertTrue(plan.contentLogSections[1].content.contains("Spoken instruction:"))
         XCTAssertTrue(plan.contentLogSections[1].content.contains("Selected source text:"))
+        XCTAssertNil(plan.promptLookupDraftText)
     }
 
     func testCustomLLMCompiledPlanPreservesOutputTokenBudgetHint() {
@@ -527,6 +531,17 @@ final class MLXModelManagerTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.maxTokensOverride, 321)
+        XCTAssertEqual(plan.promptLookupDraftText, "input")
+    }
+
+    func testCustomLLMPromptLookupDraftBuilderTrimsBlankInput() {
+        XCTAssertNil(CustomLLMPromptLookupDraftBuilder.plainTextDraft(from: " \n "))
+        XCTAssertEqual(CustomLLMPromptLookupDraftBuilder.plainTextDraft(from: " hello "), "hello")
+        XCTAssertNil(CustomLLMPromptLookupDraftBuilder.structuredResultTextDraft(from: "\t"))
+        XCTAssertEqual(
+            CustomLLMPromptLookupDraftBuilder.structuredResultTextDraft(from: " hello "),
+            #"{"resultText":"hello"}"#
+        )
     }
 
     func testCustomLLMNormalizeResultTextStripsThinkBlocksAndMarkers() {

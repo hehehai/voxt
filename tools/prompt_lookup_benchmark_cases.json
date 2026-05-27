@@ -1,0 +1,102 @@
+[
+  {
+    "id": "qwen-short-en-exact",
+    "origin": "Qwen-Audio official sample reference text",
+    "text": "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+  },
+  {
+    "id": "qwen-short-zh-chongqing-exact",
+    "origin": "Qwen-Audio official sample reference text",
+    "text": "对了我还想提议我们可以租一些自行车骑行一下既锻炼身体又心情愉悦"
+  },
+  {
+    "id": "qwen-short-zh-relaxed-exact",
+    "origin": "Qwen-Audio official sample reference text",
+    "text": "你没事吧"
+  },
+  {
+    "id": "qwen-short-zh-negative-exact",
+    "origin": "Qwen-Audio official sample reference text",
+    "text": "你没事吧"
+  },
+  {
+    "id": "qwen-long-en-composite",
+    "origin": "Derived from repeated Qwen-Audio official English sample",
+    "text": "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel. mister quilter is the apostle of the middle classes and we are glad to welcome his gospel. mister quilter is the apostle of the middle classes and we are glad to welcome his gospel. mister quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+  },
+  {
+    "id": "qwen-long-zh-composite",
+    "origin": "Derived from repeated Qwen-Audio official Chinese samples",
+    "text": "对了我还想提议我们可以租一些自行车骑行一下既锻炼身体又心情愉悦。你没事吧。你没事吧。对了我还想提议我们可以租一些自行车骑行一下既锻炼身体又心情愉悦。你没事吧。你没事吧。"
+  },
+  {
+    "id": "meeting-product-flow",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "今天我们主要讨论一下产品的语音输入流程，包括录音开始、实时转写、结束检测，以及后续的文本润色处理。原始转写一般已经比较接近用户想表达的内容，所以增强模型主要保留原文本结构。呃，我们只修正标点、错别字和少量语序的问题。"
+  },
+  {
+    "id": "self-correction-shopping",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "嗯你帮我买一些水果吧，比如苹果香蕉梨，还有一些甘蔗。啊不不不甘蔗不用了，帮我带一点枇杷，再买两瓶无糖酸奶，晚上六点之前送到公司前台。"
+  },
+  {
+    "id": "numbers-and-time",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "这个项目的完成率大概是百分之七十，我们需要在下午两点十五分之前完成第一轮验收，晚上七点半之前把数据报表发给产品和运营团队，手机号码是一三八零零一三八零零零。"
+  },
+  {
+    "id": "mixed-language-tech",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "我们今天要检查 Redis cache 的命中率，还有 Kubernetes pod 的重启次数。API endpoint 是 https://api.example.com/v1/transcriptions，记得不要改 JWT secret 和 DATABASE_URL。"
+  },
+  {
+    "id": "ordered-list",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "今天的待办有三个，第一整理昨天的用户反馈，第二把语音转写的错误样本分类，第三和设计确认设置页面里的模型选择说明。完成之后发到飞书群里。"
+  },
+  {
+    "id": "long-office-note",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "我刚才和客户沟通了一下，他们主要关心三个问题。第一个是本地模型启动速度，第二个是远程模型在弱网情况下的失败提示，第三个是转写结果进入历史记录之后能不能继续编辑。我们先把启动速度和失败提示排到这个版本，历史编辑放到下一个版本。"
+  },
+  {
+    "id": "punctuation-words",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "请帮我记录这句话冒号今天的发布计划已经确认逗号后端服务会在下午三点升级逗号桌面客户端会在下午五点发布句号如果发现登录失败逗号请先检查网络代理和账号权限句号"
+  },
+  {
+    "id": "email-and-path",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "麻烦把日志文件发给 support@example.com，路径是 slash users slash guanwei slash library slash application support slash voxt slash logs slash voxt dot log，同时附上当前使用的模型名字和系统版本。"
+  },
+  {
+    "id": "casual-correction",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "我明天不对是后天上午十点去上海，先和销售团队开会，然后下午两点去拜访客户。晚上如果还有时间，我会把会议纪要整理出来发给大家。"
+  },
+  {
+    "id": "dictionary-learning",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "自动词典学习这块我们要观察用户粘贴之后有没有手动修改，如果用户把敬业限制改成竞业限制，或者把十五分钟改成15分钟，我们应该记录这个候选纠错。"
+  },
+  {
+    "id": "asr-quality-review",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "这段录音的识别质量整体还可以，但是中间有两个地方需要注意。一个是结束检测被识别成检索检测，另一个是实时转写后面的停顿被错误地合并到了下一句话里。"
+  },
+  {
+    "id": "translation-intent-but-transcription",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "我现在不是要翻译这段话，只是想把中文原文整理得更清楚一点。请保留里面的英文产品名，比如 OpenAI、ChatGPT、WhisperKit 和 MLX，不要把它们翻译成中文。"
+  },
+  {
+    "id": "long-project-update",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "本周的项目进展分成四部分。第一，录音链路已经完成基本稳定性测试。第二，实时转写在短句场景下表现比较稳定，但是长句仍然需要继续观察。第三，增强模型的延迟主要集中在 prefill 和 generation 两个阶段。第四，我们需要用真实样本判断 prompt lookup decoding 是否值得默认开启。"
+  },
+  {
+    "id": "long-mixed-meeting",
+    "origin": "Representative post-ASR Voxt transcription case",
+    "text": "The main action item is to compare baseline generation with prompt lookup decoding on the same ASR transcripts. 我们需要记录 total elapsed milliseconds, prefill milliseconds, generation milliseconds, prompt tokens, completion tokens, draft tokens, proposed tokens, and fallback reason. 最后输出一个平均速度提升比例。"
+  }
+]

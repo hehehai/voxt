@@ -57,6 +57,7 @@ extension AppDelegate {
                 .lowercased()
         )
         let prefillStepOverride = Int(environment["VOXT_LLM_SMOKE_PREFILL_STEP"] ?? "")
+        let promptLookupOverride = parseSmokeBool(environment["VOXT_LLM_SMOKE_PROMPT_LOOKUP"])
         let translationTargetLanguage = resolvedSmokeTranslationTargetLanguage(
             environment["VOXT_LLM_SMOKE_TARGET_LANGUAGE"]
         ) ?? .english
@@ -166,7 +167,8 @@ extension AppDelegate {
                 let originalTuning = self.customLLMManager.generationTuning
                 self.customLLMManager.generationTuning = CustomLLMGenerationTuning(
                     prefillStepSizeOverride: prefillStepOverride,
-                    maxTokensOverride: nil
+                    maxTokensOverride: nil,
+                    promptLookupEnabledOverride: promptLookupOverride
                 )
                 defer {
                     self.customLLMManager.generationTuning = originalTuning
@@ -201,6 +203,7 @@ extension AppDelegate {
                 print("[VOXT_SMOKE] iterations=\(iterations)")
                 print("[VOXT_SMOKE] prewarm=\(shouldPrewarm)")
                 print("[VOXT_SMOKE] prefillStepOverride=\(prefillStepOverride.map(String.init) ?? "auto")")
+                print("[VOXT_SMOKE] promptLookupOverride=\(promptLookupOverride.map(String.init) ?? "auto")")
                 print("[VOXT_SMOKE] delivery=\(String(describing: plan.delivery))")
                 print("[VOXT_SMOKE] promptChars=\(plan.promptCharacterCount)")
                 print("[VOXT_SMOKE] inputChars=\(plan.primaryInputCharacterCount)")
@@ -255,6 +258,11 @@ extension AppDelegate {
         print("\(prefix) generationMs=\(diagnostics.generationMs.map(String.init) ?? "n/a")")
         print("\(prefix) modelOverheadMs=\(diagnostics.modelOverheadMs.map(String.init) ?? "n/a")")
         print("\(prefix) totalOverheadMs=\(diagnostics.totalOverheadMs.map(String.init) ?? "n/a")")
+        print("\(prefix) promptLookupDraftTokens=\(diagnostics.promptLookupDraftTokens.map(String.init) ?? "n/a")")
+        print("\(prefix) promptLookupProposedTokens=\(diagnostics.promptLookupProposedTokens.map(String.init) ?? "n/a")")
+        print("\(prefix) promptLookupAcceptedTokens=\(diagnostics.promptLookupAcceptedTokens.map(String.init) ?? "n/a")")
+        print("\(prefix) promptLookupAcceptanceRatio=\(diagnostics.promptLookupAcceptanceRatio.map { String($0) } ?? "n/a")")
+        print("\(prefix) promptLookupFallback=\(diagnostics.promptLookupFallbackReason ?? "n/a")")
     }
 
     private func printAggregateMetrics(_ results: [LLMSmokeIterationResult]) {
@@ -279,6 +287,8 @@ extension AppDelegate {
         printOptionalAverageSummary(results, label: "totalOverheadMs") { $0.totalOverheadMs }
         printOptionalAverageSummary(results, label: "promptTokens") { $0.promptTokens }
         printOptionalAverageSummary(results, label: "completionTokens") { $0.completionTokens }
+        printOptionalAverageSummary(results, label: "promptLookupDraftTokens") { $0.promptLookupDraftTokens }
+        printOptionalAverageSummary(results, label: "promptLookupProposedTokens") { $0.promptLookupProposedTokens }
     }
 
     private func printAverageSummary(
@@ -309,6 +319,20 @@ extension AppDelegate {
         guard !values.isEmpty else { return 0 }
         let total = values.reduce(0, +)
         return Int((Double(total) / Double(values.count)).rounded())
+    }
+
+    private func parseSmokeBool(_ rawValue: String?) -> Bool? {
+        let normalized = rawValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard let normalized, !normalized.isEmpty else { return nil }
+        if ["1", "true", "yes", "on", "enabled"].contains(normalized) {
+            return true
+        }
+        if ["0", "false", "no", "off", "disabled"].contains(normalized) {
+            return false
+        }
+        return nil
     }
 
     private func resolvedSmokeTranslationTargetLanguage(_ rawValue: String?) -> TranslationTargetLanguage? {

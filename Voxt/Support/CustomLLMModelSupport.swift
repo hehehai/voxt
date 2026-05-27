@@ -145,13 +145,29 @@ struct CustomLLMRunDiagnostics: Equatable {
     let generationMs: Int?
     let modelOverheadMs: Int?
     let totalOverheadMs: Int?
+    var promptLookupDraftTokens: Int? = nil
+    var promptLookupProposedTokens: Int? = nil
+    var promptLookupAcceptedTokens: Int? = nil
+    var promptLookupAcceptanceRatio: Double? = nil
+    var promptLookupFallbackReason: String? = nil
 }
 
 struct CustomLLMGenerationTuning: Equatable {
     let prefillStepSizeOverride: Int?
     let maxTokensOverride: Int?
+    let promptLookupEnabledOverride: Bool?
 
-    static let `default` = CustomLLMGenerationTuning(prefillStepSizeOverride: nil, maxTokensOverride: nil)
+    init(
+        prefillStepSizeOverride: Int? = nil,
+        maxTokensOverride: Int? = nil,
+        promptLookupEnabledOverride: Bool? = nil
+    ) {
+        self.prefillStepSizeOverride = prefillStepSizeOverride
+        self.maxTokensOverride = maxTokensOverride
+        self.promptLookupEnabledOverride = promptLookupEnabledOverride
+    }
+
+    static let `default` = CustomLLMGenerationTuning()
 }
 
 struct LLMOutputRepetition: Equatable {
@@ -223,6 +239,7 @@ struct CustomLLMRequestPlan: Equatable {
     let contentLogSections: [CustomLLMLogSection]
     let resultFallback: String
     let responseExtractionMode: CustomLLMResponseExtractionMode
+    var promptLookupDraftText: String? = nil
 }
 
 enum CustomLLMResponseExtractionMode: Equatable {
@@ -272,7 +289,10 @@ enum CustomLLMRequestPlanBuilder {
             logMode: usesUserMessageMode ? "userMessage" : nil,
             contentLogSections: sections,
             resultFallback: request.fallbackText,
-            responseExtractionMode: .textResultPayloadOrNormalizedText
+            responseExtractionMode: .textResultPayloadOrNormalizedText,
+            promptLookupDraftText: kind == .enhancement
+                ? CustomLLMPromptLookupDraftBuilder.plainTextDraft(from: request.debugInput)
+                : nil
         )
     }
 
@@ -301,7 +321,8 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "request_content", content: prompt)
             ],
             resultFallback: resultFallback,
-            responseExtractionMode: .textResultPayloadOrNormalizedText
+            responseExtractionMode: .textResultPayloadOrNormalizedText,
+            promptLookupDraftText: CustomLLMPromptLookupDraftBuilder.structuredResultTextDraft(from: input)
         )
     }
 
@@ -457,6 +478,29 @@ enum CustomLLMRequestPlanBuilder {
             responseExtractionMode: .normalizedRawText
         )
     }
+}
+
+enum CustomLLMPromptLookupDraftBuilder {
+    static func plainTextDraft(from text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    static func structuredResultTextDraft(from text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let payload = CustomLLMStructuredResultTextDraft(resultText: trimmed)
+        guard let data = try? JSONEncoder().encode(payload),
+              let encoded = String(data: data, encoding: .utf8)
+        else {
+            return trimmed
+        }
+        return encoded
+    }
+}
+
+private struct CustomLLMStructuredResultTextDraft: Encodable {
+    let resultText: String
 }
 
 enum CustomLLMModelFamily: Equatable {
