@@ -39,6 +39,9 @@ extension AppDelegate {
         mlx.transcribedText = ""
         mlx.sessionAllowsRealtimeTextDisplay = transcriptionCapturePipeline.usesLiveDisplay
         mlx.setPreferredInputDevice(activeRecordingInputDeviceSnapshot?.id ?? selectedInputDeviceID)
+        mlx.onCaptureInputDeviceResolved = { [weak self] device in
+            self?.syncActiveRecordingInputDeviceSnapshot(with: device, source: "mlx")
+        }
         mlx.onCaptureFormatResolved = { [weak self] format in
             self?.recordActiveRecordingInputFormat(format, source: "mlx")
         }
@@ -58,9 +61,11 @@ extension AppDelegate {
         mlx.startRecording()
         VoxtLog.tempModel("AppDelegate startMLXRecordingSession after mlx.startRecording(). summary=\(activeRecordingCaptureDebugSummary())")
         guard mlx.isRecording else {
-            VoxtLog.warning("MLX recording session did not enter recording state.")
+            let failureMessage = mlx.lastStartFailureMessage
+                ?? String(localized: "MLX failed to start recording.")
+            VoxtLog.warning("MLX recording session did not enter recording state. reason=\(failureMessage)")
             VoxtLog.tempModel("AppDelegate startMLXRecordingSession guard mlx.isRecording failed. summary=\(activeRecordingCaptureDebugSummary())")
-            resetSessionAfterFailedStart()
+            handleRecordingStartFailure(failureMessage, autoHideAfter: 3.6)
             return
         }
         VoxtLog.tempModel("AppDelegate startMLXRecordingSession completed. summary=\(activeRecordingCaptureDebugSummary())")
@@ -252,7 +257,7 @@ extension AppDelegate {
         startSilenceMonitoringIfNeeded()
     }
 
-    func resetSessionAfterFailedStart() {
+    func resetSessionAfterFailedStart(hideOverlay: Bool = true) {
         cancelSessionControlTasks()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
         if transcriptionEngine == .remote {
@@ -288,7 +293,9 @@ extension AppDelegate {
         resetSessionTranslationState()
         resetVoxtNoteSessionRuntimeState()
         overlayState.reset()
-        overlayWindow.hide()
+        if hideOverlay {
+            overlayWindow.hide()
+        }
         clearRecordingInputDeviceSnapshot(reason: "failed-start")
     }
 
@@ -373,6 +380,24 @@ extension AppDelegate {
         )
     }
 
+    func syncActiveRecordingInputDeviceSnapshot(with device: AudioInputDevice, source: String) {
+        let previousSnapshot = activeRecordingInputDeviceSnapshot
+        let updatedSnapshot: RecordingInputDeviceSnapshot
+        if let previousSnapshot {
+            updatedSnapshot = previousSnapshot.replacingDevice(device)
+        } else {
+            updatedSnapshot = RecordingInputDeviceSnapshot(device: device)
+        }
+
+        activeRecordingInputDeviceSnapshot = updatedSnapshot
+        if previousSnapshot?.id != updatedSnapshot.id || previousSnapshot?.uid != updatedSnapshot.uid {
+            startObservingActiveRecordingInputDevice(updatedSnapshot)
+            VoxtLog.model(
+                "Recording input device synchronized to active capture route. source=\(source), uid=\(updatedSnapshot.uid), id=\(updatedSnapshot.id), name=\(updatedSnapshot.name)"
+            )
+        }
+    }
+
     func startObservingActiveRecordingInputDevice(_ snapshot: RecordingInputDeviceSnapshot) {
         stopObservingActiveRecordingInputDevice()
         activeRecordingInputDeviceObserver = AudioInputDeviceRuntimeObserver(
@@ -444,7 +469,7 @@ extension AppDelegate {
         applyPreferredInputDevice()
 
         do {
-            try restartCurrentRecordingCaptureForPreferredInputDevice()
+            try restartCurrentRecordingCapturePreservingRoute()
             activeRecordingInputDeviceDirtyChanges.removeAll(keepingCapacity: false)
             VoxtLog.model(
                 "Recording input recovery completed. reason=\(reason), uid=\(refreshedSnapshot.uid), previousID=\(snapshot.id), currentID=\(refreshedSnapshot.id), captureState=\(activeRecordingCaptureDebugSummary())"
@@ -466,53 +491,30 @@ extension AppDelegate {
         VoxtLog.tempModel(
             "AppDelegate handlePreferredInputDeviceChange enter. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), summary=\(activeRecordingCaptureDebugSummary())"
         )
-        applyPreferredInputDevice()
-
-        guard previousUID != newUID else { return }
-
-        guard let currentDevice = microphoneResolvedState.activeDevice else {
-            if isSessionActive {
-                showOverlayReminder(String(localized: "No available microphone devices."))
-                finishSession(after: 0)
-            }
+        guard previousUID != newUID else {
+            applyPreferredInputDevice()
             return
         }
 
-        guard isSessionActive else { return }
-
-        let sessionKind = RecordingSessionSupport.outputLabel(for: sessionOutputMode)
-        let captureDebugState = activeRecordingCaptureDebugSummary()
-        VoxtLog.model(
-            """
-            Preferred input device changed during recording. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind), captureState=\(captureDebugState)
-            """
-        )
-
-        do {
-            try restartCurrentRecordingCaptureForPreferredInputDevice()
+        if isSessionActive, recordingStoppedAt == nil {
+            let sessionKind = RecordingSessionSupport.outputLabel(for: sessionOutputMode)
+            let captureDebugState = activeRecordingCaptureDebugSummary()
+            VoxtLog.model(
+                """
+                Deferring preferred input device change until the next recording. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind), captureState=\(captureDebugState)
+                """
+            )
             VoxtLog.tempModel(
-                "AppDelegate handlePreferredInputDeviceChange restart succeeded. reason=\(reason), summary=\(activeRecordingCaptureDebugSummary())"
+                "AppDelegate handlePreferredInputDeviceChange deferred during active recording. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), summary=\(activeRecordingCaptureDebugSummary())"
             )
             showOverlayStatus(
-                AppLocalization.format("Switched microphone to %@.", currentDevice.name),
+                String(localized: "Microphone change will apply on the next recording."),
                 clearAfter: 1.8
             )
-            VoxtLog.model(
-                "Preferred input device change applied during recording. reason=\(reason), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind), captureState=\(activeRecordingCaptureDebugSummary())"
-            )
-        } catch {
-            VoxtLog.model(
-                "Recording microphone switch failed. reason=\(reason), error=\(error.localizedDescription), captureState=\(activeRecordingCaptureDebugSummary())"
-            )
-            VoxtLog.error("Recording microphone switch failed: \(error.localizedDescription). reason=\(reason)")
-            VoxtLog.tempModel(
-                "AppDelegate handlePreferredInputDeviceChange restart failed. reason=\(reason), error=\(error.localizedDescription), summary=\(activeRecordingCaptureDebugSummary())"
-            )
-            showOverlayReminder(
-                AppLocalization.format("Failed to switch microphone to %@.", currentDevice.name)
-            )
-            finishSession(after: 0)
+            return
         }
+
+        applyPreferredInputDevice()
     }
 
     func stopActiveRecordingTranscriber() {
@@ -591,8 +593,8 @@ extension AppDelegate {
         autoHideAfter seconds: TimeInterval = 2.4
     ) {
         releaseResidualRecordingResources(reason: "recording-start-failure")
+        resetSessionAfterFailedStart(hideOverlay: false)
         showOverlayReminder(message, autoHideAfter: seconds)
-        resetSessionAfterFailedStart()
     }
 
     private func restartCurrentRecordingCaptureForPreferredInputDevice() throws {
@@ -617,6 +619,17 @@ extension AppDelegate {
 
         try speechTranscriber.restartCaptureForPreferredInputDevice()
         VoxtLog.tempModel("AppDelegate restartCurrentRecordingCaptureForPreferredInputDevice completed for Speech. summary=\(activeRecordingCaptureDebugSummary())")
+    }
+
+    private func restartCurrentRecordingCapturePreservingRoute() throws {
+        VoxtLog.tempModel("AppDelegate restartCurrentRecordingCapturePreservingRoute enter. engine=\(transcriptionEngine.rawValue), summary=\(activeRecordingCaptureDebugSummary())")
+        if transcriptionEngine == .mlxAudio {
+            try mlxTranscriber?.restartCapturePreservingCurrentRoute()
+            VoxtLog.tempModel("AppDelegate restartCurrentRecordingCapturePreservingRoute completed for MLX. summary=\(activeRecordingCaptureDebugSummary())")
+            return
+        }
+
+        try restartCurrentRecordingCaptureForPreferredInputDevice()
     }
 
     func activeRecordingCaptureDebugSummary() -> String {

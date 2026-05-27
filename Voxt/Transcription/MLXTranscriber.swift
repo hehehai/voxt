@@ -389,7 +389,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     var onTranscriptionFinished: ((String) -> Void)?
     var onPartialTranscription: ((String) -> Void)?
     var onCaptureFormatResolved: ((RecordingAudioFormatSnapshot) -> Void)?
+    var onCaptureInputDeviceResolved: ((AudioInputDevice) -> Void)?
     var dictionaryEntryProvider: (() -> [DictionaryEntry])?
+    private(set) var lastStartFailureMessage: String?
 
     private let audioEngine = AVAudioEngine()
     private let sampleStore = AudioSampleStore()
@@ -486,6 +488,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let revision = sessionRevision
         activeSessionBehavior = modelManager.currentTranscriptionBehavior
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
+        lastStartFailureMessage = nil
         isModelInitializing = modelManager.state != .ready
         VoxtLog.info(
             "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), modelState=\(String(describing: modelManager.state))",
@@ -497,7 +500,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         do {
             VoxtLog.tempModel("MLX startRecording before startAudioCaptureGraph. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
-            try startAudioCaptureGraph()
+            try startAudioCaptureGraphWithFallbackIfNeeded()
             VoxtLog.tempModel("MLX startRecording after startAudioCaptureGraph. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
             isRecording = true
             VoxtLog.tempModel("MLX startRecording marked recording=true. revision=\(revision), summary=\(temporaryCaptureDebugSummary())")
@@ -516,8 +519,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 )
             }
         } catch {
+            isModelInitializing = false
+            lastStartFailureMessage = captureStartFailureMessage(for: error)
             VoxtLog.tempModel("MLX startRecording failed. revision=\(revision), error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())")
             VoxtLog.error("MLXTranscriber start recording failed: \(error)")
+            cleanupAfterFailedCaptureStartup()
         }
     }
 
@@ -587,8 +593,15 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         guard isRecording else { return }
         VoxtLog.tempModel("MLX restartCaptureForPreferredInputDevice enter. summary=\(temporaryCaptureDebugSummary())")
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
-        try startAudioCaptureGraph(usePreferredInputDevice: activeCaptureUsesPreferredInputDevice)
+        try startAudioCaptureGraphWithFallbackIfNeeded()
         VoxtLog.tempModel("MLX restartCaptureForPreferredInputDevice completed. summary=\(temporaryCaptureDebugSummary())")
+    }
+
+    func restartCapturePreservingCurrentRoute() throws {
+        guard isRecording else { return }
+        VoxtLog.tempModel("MLX restartCapturePreservingCurrentRoute enter. summary=\(temporaryCaptureDebugSummary())")
+        try startAudioCaptureGraphWithFallbackIfNeeded()
+        VoxtLog.tempModel("MLX restartCapturePreservingCurrentRoute completed. summary=\(temporaryCaptureDebugSummary())")
     }
 
     private func runIntermediateCorrectionLoop(revision: Int) async {
@@ -880,6 +893,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
         VoxtLog.tempModel("MLX startAudioCaptureGraph before outputFormat. bus=0, summary=\(temporaryCaptureDebugSummary())")
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        if let activeInputDevice = resolvedActiveCaptureInputDevice(
+            usePreferredInputDevice: shouldUsePreferredInputDevice
+        ) {
+            onCaptureInputDeviceResolved?(activeInputDevice)
+        }
         onCaptureFormatResolved?(RecordingAudioFormatSnapshot(format: recordingFormat))
         VoxtLog.tempModel("MLX startAudioCaptureGraph after outputFormat. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved)")
         inputSampleRate = CanonicalAudioStreamConverter.sampleRate
@@ -934,6 +952,82 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         )
         VoxtLog.model("MLX audio capture graph started. state=\(debugCaptureRuntimeSummary())")
         VoxtLog.tempModel("MLX startAudioCaptureGraph completed. summary=\(temporaryCaptureDebugSummary())")
+    }
+
+    private func startAudioCaptureGraphWithFallbackIfNeeded() throws {
+        let requestedPreferredInputDevice = activeCaptureUsesPreferredInputDevice
+        do {
+            try startAudioCaptureGraph(usePreferredInputDevice: requestedPreferredInputDevice)
+        } catch {
+            guard shouldRetryCaptureStartupWithoutPreferredInputDevice(
+                after: error,
+                attemptedPreferredInputDevice: requestedPreferredInputDevice
+            ) else {
+                throw error
+            }
+            let preferredDeviceText = preferredInputDeviceID.map(String.init(describing:)) ?? "default"
+            VoxtLog.warning(
+                "MLX preferred microphone startup failed. Retrying capture with system default input. requestedDeviceID=\(preferredDeviceText), error=\(error.localizedDescription)"
+            )
+            VoxtLog.tempModel(
+                "MLX startAudioCaptureGraph retrying with system default input. requestedDeviceID=\(preferredDeviceText), summary=\(temporaryCaptureDebugSummary())"
+            )
+            do {
+                try startAudioCaptureGraph(usePreferredInputDevice: false)
+                VoxtLog.warning(
+                    "MLX capture startup recovered by falling back to system default input. requestedDeviceID=\(preferredDeviceText)"
+                )
+                VoxtLog.model(
+                    "MLX capture startup fallback succeeded. state=\(debugCaptureRuntimeSummary())"
+                )
+            } catch {
+                VoxtLog.tempModel(
+                    "MLX startAudioCaptureGraph fallback to system default failed. requestedDeviceID=\(preferredDeviceText), error=\(error.localizedDescription), summary=\(temporaryCaptureDebugSummary())"
+                )
+                throw error
+            }
+        }
+    }
+
+    private func shouldRetryCaptureStartupWithoutPreferredInputDevice(
+        after error: Error,
+        attemptedPreferredInputDevice: Bool
+    ) -> Bool {
+        guard attemptedPreferredInputDevice else { return false }
+        let nsError = error as NSError
+        return nsError.code == -10868
+    }
+
+    private func cleanupAfterFailedCaptureStartup() {
+        stopAudioEngine()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.reset()
+    }
+
+    private func captureStartFailureMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        if activeCaptureUsesPreferredInputDevice && nsError.code == -10868 {
+            return String(
+                localized: "Voxt couldn't start recording with the selected microphone. Try switching the microphone to System Default and try again."
+            )
+        }
+        return String(localized: "MLX failed to start recording.")
+    }
+
+    private func resolvedActiveCaptureInputDevice(usePreferredInputDevice: Bool) -> AudioInputDevice? {
+        let devices = AudioInputDeviceManager.snapshotAvailableInputDevices()
+        if usePreferredInputDevice,
+           let preferredInputDeviceID,
+           let device = devices.first(where: { $0.id == preferredInputDeviceID }) {
+            return device
+        }
+
+        if let defaultDeviceID = AudioInputDeviceManager.defaultInputDeviceID(),
+           let device = devices.first(where: { $0.id == defaultDeviceID }) {
+            return device
+        }
+
+        return devices.first
     }
 
     private func cancelActiveTasks() {

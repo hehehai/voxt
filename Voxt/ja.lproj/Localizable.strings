@@ -387,6 +387,9 @@
 "Whisper failed to load the selected model." = "選択した Whisper モデルの読み込みに失敗しました。";
 "Whisper is not ready yet. Open Settings > Model and try again." = "Whisper はまだ準備できていません。設定 > モデルを開いて再試行してください。";
 "Whisper failed to start recording." = "Whisper の録音開始に失敗しました。";
+"MLX failed to start recording." = "MLX の録音開始に失敗しました。";
+"Voxt couldn't start recording with the selected microphone. Try switching the microphone to System Default and try again." = "選択したマイクで録音を開始できませんでした。マイクをシステム設定に切り替えてから、もう一度お試しください。";
+"Microphone change will apply on the next recording." = "マイクの変更は次回の録音から適用されます。";
 "Whisper Timestamps" = "Whisper タイムスタンプ";
 "Custom LLM model is not installed. Open Settings > Model to install it." = "カスタム LLM モデルが未インストールです。設定 > モデルでインストールしてください。";
 "Version %@ is skipped." = "バージョン %@ はスキップ済みです。";

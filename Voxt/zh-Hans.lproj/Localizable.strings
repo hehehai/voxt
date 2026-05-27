@@ -392,6 +392,9 @@
 "Whisper failed to load the selected model." = "Whisper 加载所选模型失败。";
 "Whisper is not ready yet. Open Settings > Model and try again." = "Whisper 尚未准备就绪，请打开 设置 > 模型 后重试。";
 "Whisper failed to start recording." = "Whisper 启动录音失败。";
+"MLX failed to start recording." = "MLX 启动录音失败。";
+"Voxt couldn't start recording with the selected microphone. Try switching the microphone to System Default and try again." = "Voxt 无法使用当前选中的麦克风开始录音。请将麦克风切换为跟随系统后重试。";
+"Microphone change will apply on the next recording." = "麦克风切换将在下一次录音时生效。";
 "Whisper Timestamps" = "Whisper 时间戳";
 "MLX model is unavailable. Open Settings > Model to fix it." = "MLX 模型不可用，请在设置 > 模型中修复。";
 "Custom LLM model is not installed. Open Settings > Model to install it." = "自定义 LLM 模型尚未安装，请在设置 > 模型中安装。";

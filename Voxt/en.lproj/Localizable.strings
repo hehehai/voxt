@@ -392,6 +392,9 @@
 "Whisper failed to load the selected model." = "Whisper failed to load the selected model.";
 "Whisper is not ready yet. Open Settings > Model and try again." = "Whisper is not ready yet. Open Settings > Model and try again.";
 "Whisper failed to start recording." = "Whisper failed to start recording.";
+"MLX failed to start recording." = "MLX failed to start recording.";
+"Voxt couldn't start recording with the selected microphone. Try switching the microphone to System Default and try again." = "Voxt couldn't start recording with the selected microphone. Try switching the microphone to System Default and try again.";
+"Microphone change will apply on the next recording." = "Microphone change will apply on the next recording.";
 "Whisper Timestamps" = "Whisper Timestamps";
 "MLX model is unavailable. Open Settings > Model to fix it." = "MLX model is unavailable. Open Settings > Model to fix it.";
 "Custom LLM model is not installed. Open Settings > Model to install it." = "Custom LLM model is not installed. Open Settings > Model to install it.";
