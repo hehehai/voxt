@@ -3,7 +3,7 @@ import CFNetwork
 import Network
 import Darwin
 
-enum VoxtNetworkSession {
+nonisolated enum VoxtNetworkSession {
     private enum SecureField: String {
         case customProxyUsername
         case customProxyPassword

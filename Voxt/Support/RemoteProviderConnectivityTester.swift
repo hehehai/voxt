@@ -360,7 +360,7 @@ struct RemoteProviderConnectivityTester {
         token: String,
         model: String
     ) async throws -> String {
-        guard let url = URL(string: endpoint) else {
+        guard URL(string: endpoint) != nil else {
             throw NSError(
                 domain: "Voxt.Settings",
                 code: -22,

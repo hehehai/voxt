@@ -16,6 +16,7 @@ final class EnhancementStrategyResolverTests: XCTestCase {
         XCTAssertEqual(strategy.contextBudgetPolicy, .standard)
         XCTAssertNil(strategy.outputTokenBudgetHint)
         XCTAssertFalse(strategy.truncationGuard.isEnabled)
+        XCTAssertTrue(strategy.promptLookupEligibility.isEligible)
     }
 
     func testLongTranslationWithTightModelLimitUsesSegmentedMode() {
@@ -46,6 +47,52 @@ final class EnhancementStrategyResolverTests: XCTestCase {
 
         XCTAssertEqual(strategy.mode, .singlePass)
         XCTAssertFalse(strategy.truncationGuard.isEnabled)
+        XCTAssertTrue(strategy.promptLookupEligibility.isEligible)
+    }
+
+    func testPromptLookupDisabledForSpokenOrderedListTranscription() {
+        let rawText = """
+        本周的项目进展分成四部分。第一，录音链路已经完成基本稳定性测试。第二，实时转写在短句场景下表现比较稳定，但是长句仍然需要继续观察。第三，增强模型的延迟主要集中在 prefill 和 generation 两个阶段。第四，我们需要用真实样本判断 prompt lookup decoding 是否值得默认开启。
+        """
+        let strategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .transcriptionEnhancement,
+            rawText: rawText,
+            promptCharacterCount: 120,
+            baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.enhancement.selectionPolicy,
+            capabilities: .unknown
+        )
+
+        XCTAssertEqual(strategy.promptLookupEligibility, .ineligible(reason: "structureSensitiveInput"))
+    }
+
+    func testPromptLookupRemainsEligibleForMixedLanguageCleanup() {
+        let rawText = """
+        我们今天要检查 Redis cache 的命中率，还有 Kubernetes pod 的重启次数。API endpoint 是 https://api.example.com/v1/transcriptions，记得不要改 JWT secret 和 DATABASE_URL。
+        """
+        let strategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .transcriptionEnhancement,
+            rawText: rawText,
+            promptCharacterCount: 120,
+            baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.enhancement.selectionPolicy,
+            capabilities: .unknown
+        )
+
+        XCTAssertTrue(strategy.promptLookupEligibility.isEligible)
+    }
+
+    func testPromptLookupDisabledForDenseEnumerationCleanup() {
+        let rawText = """
+        The main action item is to compare baseline generation with prompt lookup decoding on the same ASR transcripts. 我们需要记录 total elapsed milliseconds, prefill milliseconds, generation milliseconds, prompt tokens, completion tokens, draft tokens, proposed tokens, and fallback reason. 最后输出一个平均速度提升比例。
+        """
+        let strategy = TaskLLMStrategyResolver.resolve(
+            taskKind: .transcriptionEnhancement,
+            rawText: rawText,
+            promptCharacterCount: 120,
+            baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.enhancement.selectionPolicy,
+            capabilities: .unknown
+        )
+
+        XCTAssertEqual(strategy.promptLookupEligibility, .ineligible(reason: "structureSensitiveInput"))
     }
 
     func testTruncationGuardFallsBackForPrefixLikeOutput() {

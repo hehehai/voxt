@@ -59,7 +59,7 @@ struct TranscriptSummaryModelOption: Identifiable, Hashable, Sendable {
     let subtitle: String
 }
 
-enum TranscriptSummarySupport {
+nonisolated enum TranscriptSummarySupport {
     static let transcriptRecordTemplateVariable = "{{TRANSCRIPT_RECORD}}"
     static let promptTemplateVariables = [
         AppPreferenceKey.asrUserMainLanguageTemplateVariable,

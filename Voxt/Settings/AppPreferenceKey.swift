@@ -1,6 +1,6 @@
 import Foundation
 
-enum AppPreferenceKey {
+nonisolated enum AppPreferenceKey {
     static let transcriptionEngine = "transcriptionEngine"
     static let enhancementMode = "enhancementMode"
     static let enhancementSystemPrompt = "enhancementSystemPrompt"

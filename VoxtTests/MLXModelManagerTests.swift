@@ -544,6 +544,53 @@ final class MLXModelManagerTests: XCTestCase {
         )
     }
 
+    func testCustomLLMPromptLookupProposalBuilderStartsFromDraftPrefix() {
+        let proposal = CustomLLMPromptLookupProposalBuilder.proposal(
+            generatedTokens: [],
+            draftTokens: [10, 11, 12, 13],
+            maxSuffixTokens: 16,
+            maxDraftTokens: 3
+        )
+
+        XCTAssertEqual(
+            proposal,
+            CustomLLMPromptLookupProposal(
+                startIndex: 0,
+                matchedSuffixLength: 0,
+                tokens: [10, 11, 12]
+            )
+        )
+    }
+
+    func testCustomLLMPromptLookupProposalBuilderUsesLongestRecentSuffix() {
+        let proposal = CustomLLMPromptLookupProposalBuilder.proposal(
+            generatedTokens: [90, 91, 92],
+            draftTokens: [10, 11, 90, 91, 92, 93, 94],
+            maxSuffixTokens: 16,
+            maxDraftTokens: 2
+        )
+
+        XCTAssertEqual(
+            proposal,
+            CustomLLMPromptLookupProposal(
+                startIndex: 5,
+                matchedSuffixLength: 3,
+                tokens: [93, 94]
+            )
+        )
+    }
+
+    func testCustomLLMPromptLookupProposalBuilderReturnsNilWhenNoMatchExists() {
+        let proposal = CustomLLMPromptLookupProposalBuilder.proposal(
+            generatedTokens: [50, 51],
+            draftTokens: [10, 11, 12, 13],
+            maxSuffixTokens: 16,
+            maxDraftTokens: 4
+        )
+
+        XCTAssertNil(proposal)
+    }
+
     func testCustomLLMNormalizeResultTextStripsThinkBlocksAndMarkers() {
         let output = """
         <think>

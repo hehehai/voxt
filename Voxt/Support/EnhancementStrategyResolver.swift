@@ -27,6 +27,38 @@ enum TaskLLMContextBudgetPolicy: String, Equatable {
     case reducedForLongInput
 }
 
+enum TaskPromptLookupEligibility: Equatable {
+    case eligible
+    case ineligible(reason: String)
+
+    var isEligible: Bool {
+        switch self {
+        case .eligible:
+            return true
+        case .ineligible:
+            return false
+        }
+    }
+
+    var reason: String? {
+        switch self {
+        case .eligible:
+            return nil
+        case .ineligible(let reason):
+            return reason
+        }
+    }
+
+    var logLabel: String {
+        switch self {
+        case .eligible:
+            return "eligible"
+        case .ineligible(let reason):
+            return "ineligible:\(reason)"
+        }
+    }
+}
+
 struct LLMProviderModelCapabilities: Equatable {
     let maxContextTokens: Int?
     let maxOutputTokens: Int?
@@ -61,6 +93,7 @@ struct TaskLLMExecutionStrategy: Equatable {
     let outputTokenBudgetHint: Int?
     let segmentationCharacterLimit: Int?
     let truncationGuard: TaskLLMTruncationGuardPolicy
+    let promptLookupEligibility: TaskPromptLookupEligibility
 
     var logLabel: String {
         [
@@ -71,7 +104,8 @@ struct TaskLLMExecutionStrategy: Equatable {
             "contextBudget=\(contextBudgetPolicy.rawValue)",
             "outputBudgetHint=\(outputTokenBudgetHint.map(String.init) ?? "n/a")",
             "segmentLimit=\(segmentationCharacterLimit.map(String.init) ?? "n/a")",
-            "truncationGuard=\(truncationGuard.isEnabled)"
+            "truncationGuard=\(truncationGuard.isEnabled)",
+            "promptLookup=\(promptLookupEligibility.logLabel)"
         ].joined(separator: ",")
     }
 }
@@ -122,8 +156,43 @@ enum TaskLLMStrategyResolver {
             segmentationCharacterLimit: mode == .segmented ? max(longTextThreshold, 280) : nil,
             truncationGuard: isLongText
                 ? truncationGuardPolicy(for: taskKind)
-                : .disabled
+                : .disabled,
+            promptLookupEligibility: promptLookupEligibility(
+                taskKind: taskKind,
+                rawText: rawText
+            )
         )
+    }
+
+    static func promptLookupEligibility(
+        taskKind: TaskLLMKind,
+        rawText: String
+    ) -> TaskPromptLookupEligibility {
+        guard taskKind == .transcriptionEnhancement else {
+            return .ineligible(reason: "nonEnhancementTask")
+        }
+
+        let normalized = normalizedComparableText(rawText).lowercased()
+        guard !normalized.isEmpty else {
+            return .ineligible(reason: "emptyInput")
+        }
+
+        let orderedListSignalCount = orderedListSignalCount(in: normalized)
+        let sectionOutlineSignalCount = sectionOutlineSignalCount(in: normalized)
+        if orderedListSignalCount + sectionOutlineSignalCount >= 2 {
+            return .ineligible(reason: "structureSensitiveInput")
+        }
+
+        if denseEnumerationDelimiterCount(in: rawText) >= 4 {
+            return .ineligible(reason: "structureSensitiveInput")
+        }
+
+        if orderedListSignalCount >= 1,
+           normalized.contains("待办") || normalized.contains("todo") || normalized.contains("清单") {
+            return .ineligible(reason: "structureSensitiveInput")
+        }
+
+        return .eligible
     }
 
     static func applyTruncationGuard(
@@ -262,5 +331,43 @@ enum TaskLLMStrategyResolver {
         text
             .replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func orderedListSignalCount(in text: String) -> Int {
+        let patterns = [
+            #"第[一二三四五六七八九十0-9]+[个项点部分]"#,
+            #"(?:^|[。；;!！?？\s])(第一|第二|第三|第四|第五|第六|第七|第八|第九|第十)(?:[，。；;:：\s]|$)"#,
+            #"(?:^|[\s,.，。;；:：])(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|finally|next)(?:[\s,.，。;；:：]|$)"#
+        ]
+        return patterns.reduce(into: 0) { total, pattern in
+            total += regexMatchCount(pattern, in: text)
+        }
+    }
+
+    private static func sectionOutlineSignalCount(in text: String) -> Int {
+        let patterns = [
+            #"分成[一二三四五六七八九十0-9]+(部分|块|项|点)"#,
+            #"有[一二三四五六七八九十0-9]+(个)?(待办|任务|问题|部分|步骤|项)"#,
+            #"(?:^|[。；;!！?？\s])(首先|其次|最后|一是|二是|三是|四是)(?:[，。；;:：\s]|$)"#
+        ]
+        return patterns.reduce(into: 0) { total, pattern in
+            total += regexMatchCount(pattern, in: text)
+        }
+    }
+
+    private static func regexMatchCount(_ pattern: String, in text: String) -> Int {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return 0
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.numberOfMatches(in: text, options: [], range: range)
+    }
+
+    private static func denseEnumerationDelimiterCount(in text: String) -> Int {
+        text.reduce(into: 0) { total, character in
+            if [",", "，", "、", ";", "；"].contains(character) {
+                total += 1
+            }
+        }
     }
 }

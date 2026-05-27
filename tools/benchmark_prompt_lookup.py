@@ -93,6 +93,14 @@ def parse_metric(output, name):
         return value
 
 
+def parse_output_block(output):
+    marker = "[VOXT_SMOKE][output]\n"
+    index = output.rfind(marker)
+    if index < 0:
+        return None
+    return output[index + len(marker):].rstrip("\n")
+
+
 def parse_smoke_output(output):
     metric = {
         "avgElapsedMs": parse_metric(output, "avgElapsedMs"),
@@ -105,7 +113,10 @@ def parse_smoke_output(output):
         "avgCompletionTokens": parse_metric(output, "avgCompletionTokens"),
         "avgPromptLookupDraftTokens": parse_metric(output, "avgPromptLookupDraftTokens"),
         "avgPromptLookupProposedTokens": parse_metric(output, "avgPromptLookupProposedTokens"),
+        "avgPromptLookupAcceptedTokens": parse_metric(output, "avgPromptLookupAcceptedTokens"),
+        "avgPromptLookupAcceptanceRatio": parse_metric(output, "avgPromptLookupAcceptanceRatio"),
         "promptLookupFallback": parse_metric(output, "promptLookupFallback"),
+        "finalOutput": parse_output_block(output),
     }
     elapsed = metric["hotAvgElapsedMs"] or metric["avgElapsedMs"]
     metric["elapsedMs"] = elapsed
@@ -142,6 +153,13 @@ def load_cases(path, limit):
     return cases
 
 
+def filter_cases_by_category(cases, categories):
+    if not categories:
+        return cases
+    requested = {category.strip() for category in categories if category.strip()}
+    return [case for case in cases if case.get("category") in requested]
+
+
 def percent_delta(baseline, candidate):
     if not baseline or not candidate:
         return None
@@ -155,13 +173,19 @@ def main():
     parser.add_argument("--configuration", default="Debug")
     parser.add_argument("--iterations", type=int, default=2)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--category", action="append")
     parser.add_argument("--prefill-step", type=int)
     parser.add_argument("--app-binary", type=Path)
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--csv", type=Path)
     args = parser.parse_args()
 
-    cases = load_cases(args.cases, args.limit)
+    cases = filter_cases_by_category(
+        load_cases(args.cases, args.limit),
+        args.category,
+    )
+    if not cases:
+        raise RuntimeError("No benchmark cases matched the requested filters.")
     if args.app_binary:
         binary = args.app_binary
     else:
@@ -177,7 +201,7 @@ def main():
     rows = []
     print(f"binary={binary}")
     print(f"repo={args.repo} cases={len(cases)} iterations={args.iterations}")
-    print("case,chars,off_ms,on_ms,speedup_pct,on_draft_tokens,on_proposed_tokens,on_fallback")
+    print("case,category,chars,off_ms,on_ms,speedup_pct,output_match,on_draft_tokens,on_proposed_tokens,on_accepted_tokens,on_acceptance_ratio,on_fallback")
 
     for case in cases:
         off = run_smoke(
@@ -197,27 +221,33 @@ def main():
             prefill_step=args.prefill_step,
         )
         speedup = percent_delta(off["elapsedMs"], on["elapsedMs"])
+        output_match = off["finalOutput"] == on["finalOutput"]
         row = {
             "id": case["id"],
             "origin": case.get("origin", ""),
+            "category": case.get("category", ""),
             "chars": len(case["text"]),
             "off_elapsed_ms": off["elapsedMs"],
             "on_elapsed_ms": on["elapsedMs"],
             "speedup_pct": None if speedup is None else round(speedup, 2),
+            "output_match": output_match,
             "off_prefill_ms": off["hotAvgPrefillMs"] or off["avgPrefillMs"],
             "on_prefill_ms": on["hotAvgPrefillMs"] or on["avgPrefillMs"],
             "off_generation_ms": off["hotAvgGenerationMs"] or off["avgGenerationMs"],
             "on_generation_ms": on["hotAvgGenerationMs"] or on["avgGenerationMs"],
             "on_draft_tokens": on["avgPromptLookupDraftTokens"],
             "on_proposed_tokens": on["avgPromptLookupProposedTokens"],
+            "on_accepted_tokens": on["avgPromptLookupAcceptedTokens"],
+            "on_acceptance_ratio": on["avgPromptLookupAcceptanceRatio"],
             "on_fallback": on["promptLookupFallback"] or "",
         }
         rows.append(row)
         speedup_text = "n/a" if speedup is None else f"{speedup:.2f}"
         print(
-            f"{row['id']},{row['chars']},{row['off_elapsed_ms']},"
-            f"{row['on_elapsed_ms']},{speedup_text},{row['on_draft_tokens']},"
-            f"{row['on_proposed_tokens']},{row['on_fallback']}"
+            f"{row['id']},{row['category']},{row['chars']},{row['off_elapsed_ms']},"
+            f"{row['on_elapsed_ms']},{speedup_text},{str(output_match).lower()},{row['on_draft_tokens']},"
+            f"{row['on_proposed_tokens']},{row['on_accepted_tokens']},"
+            f"{row['on_acceptance_ratio']},{row['on_fallback']}"
         )
 
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
@@ -233,6 +263,17 @@ def main():
         print(f"summary_avg_off_ms={avg_off:.1f}")
         print(f"summary_avg_on_ms={avg_on:.1f}")
         print(f"summary_speedup_pct={avg_speedup:.2f}")
+        categories = sorted({row["category"] for row in valid if row.get("category")})
+        for category in categories:
+            category_rows = [row for row in valid if row.get("category") == category]
+            category_avg_off = sum(row["off_elapsed_ms"] for row in category_rows) / len(category_rows)
+            category_avg_on = sum(row["on_elapsed_ms"] for row in category_rows) / len(category_rows)
+            category_speedup = percent_delta(category_avg_off, category_avg_on)
+            output_matches = sum(1 for row in category_rows if row["output_match"])
+            print(
+                f"summary_category={category} cases={len(category_rows)} output_match={output_matches}/{len(category_rows)} "
+                f"avg_off_ms={category_avg_off:.1f} avg_on_ms={category_avg_on:.1f} speedup_pct={category_speedup:.2f}"
+            )
     print(f"csv={csv_path}")
 
 

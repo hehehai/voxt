@@ -289,6 +289,8 @@ extension AppDelegate {
         printOptionalAverageSummary(results, label: "completionTokens") { $0.completionTokens }
         printOptionalAverageSummary(results, label: "promptLookupDraftTokens") { $0.promptLookupDraftTokens }
         printOptionalAverageSummary(results, label: "promptLookupProposedTokens") { $0.promptLookupProposedTokens }
+        printOptionalAverageSummary(results, label: "promptLookupAcceptedTokens") { $0.promptLookupAcceptedTokens }
+        printOptionalDoubleAverageSummary(results, label: "promptLookupAcceptanceRatio") { $0.promptLookupAcceptanceRatio }
     }
 
     private func printAverageSummary(
@@ -319,6 +321,26 @@ extension AppDelegate {
         guard !values.isEmpty else { return 0 }
         let total = values.reduce(0, +)
         return Int((Double(total) / Double(values.count)).rounded())
+    }
+
+    private func printOptionalDoubleAverageSummary(
+        _ results: [LLMSmokeIterationResult],
+        label: String,
+        value: (CustomLLMRunDiagnostics) -> Double?
+    ) {
+        let values = results.compactMap(\.diagnostics).compactMap(value)
+        guard !values.isEmpty else { return }
+        print("[VOXT_SMOKE][summary] avg\(label.prefix(1).uppercased())\(label.dropFirst())=\(average(values))")
+        let hotValues = Array(values.dropFirst())
+        if !hotValues.isEmpty {
+            print("[VOXT_SMOKE][summary] hotAvg\(label.prefix(1).uppercased())\(label.dropFirst())=\(average(hotValues))")
+        }
+    }
+
+    private func average(_ values: [Double]) -> String {
+        guard !values.isEmpty else { return "0" }
+        let total = values.reduce(0, +)
+        return String(format: "%.4f", total / Double(values.count))
     }
 
     private func parseSmokeBool(_ rawValue: String?) -> Bool? {

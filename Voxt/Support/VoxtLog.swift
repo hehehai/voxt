@@ -64,7 +64,7 @@ enum VoxtLog {
         }
     }
 
-    nonisolated static func latestLogExportPayload(limit: Int = 1000) -> ExportPayload {
+    static func latestLogExportPayload(limit: Int = 1000) -> ExportPayload {
         lock.lock()
         defer { lock.unlock() }
         loadCacheIfNeeded()
@@ -77,14 +77,14 @@ enum VoxtLog {
         return ExportPayload(filename: filename, content: content)
     }
 
-    nonisolated static func latestLogDisplayText(limit: Int = 1000) -> String {
+    static func latestLogDisplayText(limit: Int = 1000) -> String {
         lock.lock()
         defer { lock.unlock() }
         loadCacheIfNeeded()
         return composedLogContent(limit: limit)
     }
 
-    nonisolated static func exportLatestLogs(limit: Int = 1000) throws -> URL {
+    static func exportLatestLogs(limit: Int = 1000) throws -> URL {
         let payload = latestLogExportPayload(limit: limit)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(payload.filename)
         try payload.content.write(to: url, atomically: true, encoding: .utf8)
@@ -167,7 +167,7 @@ enum VoxtLog {
         }
     }
 
-    private nonisolated static func composedLogContent(limit: Int) -> String {
+    private static func composedLogContent(limit: Int) -> String {
         let resolvedLimit = max(1, limit)
         let selectedLines = Array(logLines.suffix(resolvedLimit))
         let logText = selectedLines.isEmpty
@@ -180,7 +180,7 @@ enum VoxtLog {
         ].joined(separator: "\n\n")
     }
 
-    private nonisolated static func diagnosticsMetadataText(defaults: UserDefaults = .standard) -> String {
+    private static func diagnosticsMetadataText(defaults: UserDefaults = .standard) -> String {
         let featureSettings = FeatureSettingsStore.load(defaults: defaults)
         let proxySettings = VoxtNetworkSession.currentProxySettings
         let systemProxyStatus = VoxtNetworkSession.currentSystemProxyStatus
@@ -321,7 +321,7 @@ enum VoxtLog {
         return lines.joined(separator: "\n")
     }
 
-    private nonisolated static func bundleVersionText() -> String {
+    private static func bundleVersionText() -> String {
         let bundle = Bundle.main
         let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -339,7 +339,7 @@ enum VoxtLog {
         }
     }
 
-    private nonisolated static func machineSummary() -> String {
+    private static func machineSummary() -> String {
         let model = sysctlString(named: "hw.model")
         let machine = sysctlString(named: "hw.machine")
         if model == machine {
@@ -348,7 +348,7 @@ enum VoxtLog {
         return "\(model) / \(machine)"
     }
 
-    private nonisolated static func sysctlString(named name: String) -> String {
+    private static func sysctlString(named name: String) -> String {
         var size = 0
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else {
             return "unknown"
@@ -361,7 +361,7 @@ enum VoxtLog {
         return value.isEmpty ? "unknown" : value
     }
 
-    private nonisolated static func proxyRouteSummary(
+    private static func proxyRouteSummary(
         settings: VoxtNetworkSession.ProxySettings,
         systemStatus: VoxtNetworkSession.SystemProxyStatus
     ) -> String {
@@ -378,7 +378,7 @@ enum VoxtLog {
         }
     }
 
-    private nonisolated static func remoteASRConfigurationSummary(
+    private static func remoteASRConfigurationSummary(
         provider: RemoteASRProvider,
         configuration: RemoteProviderConfiguration
     ) -> String {
@@ -399,7 +399,7 @@ enum VoxtLog {
         return extras.joined(separator: ", ")
     }
 
-    private nonisolated static func remoteLLMConfigurationSummary(
+    private static func remoteLLMConfigurationSummary(
         provider: RemoteLLMProvider,
         configuration: RemoteProviderConfiguration
     ) -> String {
@@ -418,7 +418,7 @@ enum VoxtLog {
         return extras.joined(separator: ", ")
     }
 
-    private nonisolated static func aliyunASRRouteSummary(for model: String) -> String {
+    private static func aliyunASRRouteSummary(for model: String) -> String {
         if let kind = RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: model) {
             switch kind {
             case .qwenASR:
@@ -436,16 +436,16 @@ enum VoxtLog {
         return "unknown"
     }
 
-    private nonisolated static func resolvedProviderSummary(_ provider: RemoteLLMProvider?) -> String {
+    private static func resolvedProviderSummary(_ provider: RemoteLLMProvider?) -> String {
         guard let provider else { return "<unset>" }
         return "\(provider.rawValue) [\(provider.title)]"
     }
 
-    private nonisolated static func shortcutSummary(_ shortcut: FeatureShortcutSettings) -> String {
+    private static func shortcutSummary(_ shortcut: FeatureShortcutSettings) -> String {
         "keyCode=\(shortcut.keyCode), modifiers=\(shortcut.modifiers.rawValue), sidedModifiers=\(shortcut.sidedModifiers.rawValue)"
     }
 
-    private nonisolated static func nonEmptyOrPlaceholder(_ value: String?, placeholder: String = "<empty>") -> String {
+    private static func nonEmptyOrPlaceholder(_ value: String?, placeholder: String = "<empty>") -> String {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? placeholder : trimmed
     }

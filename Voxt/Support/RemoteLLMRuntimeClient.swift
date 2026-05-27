@@ -1556,7 +1556,7 @@ struct RemoteLLMRuntimeClient {
         switch settings.thinking.mode {
         case .budget:
             guard let budget = settings.thinking.budgetTokens else { break }
-            var thinking: [String: Any] = [
+            let thinking: [String: Any] = [
                 "type": "enabled",
                 "budget_tokens": budget,
                 "display": "omitted"

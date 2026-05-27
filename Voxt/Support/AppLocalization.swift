@@ -1,7 +1,7 @@
 import Foundation
 
-enum AppLocalization {
-    private struct LanguageSnapshot {
+nonisolated enum AppLocalization {
+    private nonisolated struct LanguageSnapshot {
         let language: AppInterfaceLanguage
         let localeIdentifier: String
         let locale: Locale

@@ -1,6 +1,6 @@
 import Foundation
 
-enum AppPromptKind: CaseIterable {
+nonisolated enum AppPromptKind: CaseIterable {
     case enhancement
     case translation
     case rewrite
@@ -13,7 +13,7 @@ enum AppPromptKind: CaseIterable {
     case whisperASRHint
 }
 
-enum AppPromptDefaults {
+nonisolated enum AppPromptDefaults {
     private static let transcriptPromptCurrentToken = TranscriptSummarySupport.transcriptRecordTemplateVariable
     private static let transcriptPromptLegacyToken = "{{MEETING_RECORD}}"
 

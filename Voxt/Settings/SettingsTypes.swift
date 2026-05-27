@@ -1,6 +1,6 @@
 import SwiftUI
 
-extension Notification.Name {
+nonisolated extension Notification.Name {
     static let voxtSettingsSelectTab = Notification.Name("voxt.settings.selectTab")
     static let voxtSettingsNavigate = Notification.Name("voxt.settings.navigate")
     static let voxtInterfaceLanguageDidChange = Notification.Name("voxt.interfaceLanguage.didChange")
@@ -12,7 +12,7 @@ extension Notification.Name {
     static let voxtFeatureSettingsDidChange = Notification.Name("voxt.feature-settings.did-change")
 }
 
-enum AppInterfaceLanguage: String, CaseIterable, Identifiable {
+nonisolated enum AppInterfaceLanguage: String, CaseIterable, Identifiable {
     case system
     case english = "en"
     case chineseSimplified = "zh-Hans"

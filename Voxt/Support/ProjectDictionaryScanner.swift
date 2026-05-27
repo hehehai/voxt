@@ -5,7 +5,7 @@ struct ProjectDictionaryDiscovery: Equatable {
     let terms: [String]
 }
 
-enum ProjectDictionaryScanner {
+nonisolated enum ProjectDictionaryScanner {
     private static let contentCharacterLimit = 32_768
     private static let maxScannedFiles = 240
     private static let maxReturnedTerms = 64
@@ -230,12 +230,12 @@ enum ProjectDictionaryScanner {
     }
 }
 
-private extension String {
+nonisolated private extension String {
     var hasProjectDictionaryDecoration: Bool {
         contains(where: { $0.isUppercase || ProjectDictionaryScannerDecorations.characters.contains($0) })
     }
 }
 
-private enum ProjectDictionaryScannerDecorations {
+nonisolated private enum ProjectDictionaryScannerDecorations {
     static let characters = "._+-/"
 }

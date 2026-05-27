@@ -240,6 +240,7 @@ struct CustomLLMRequestPlan: Equatable {
     let resultFallback: String
     let responseExtractionMode: CustomLLMResponseExtractionMode
     var promptLookupDraftText: String? = nil
+    var promptLookupSkipReason: String? = nil
 }
 
 enum CustomLLMResponseExtractionMode: Equatable {
@@ -248,6 +249,21 @@ enum CustomLLMResponseExtractionMode: Equatable {
 }
 
 enum CustomLLMRequestPlanBuilder {
+    private static func promptLookupDraftPlan(for input: String) -> (draftText: String?, skipReason: String?) {
+        switch TaskLLMStrategyResolver.promptLookupEligibility(
+            taskKind: .transcriptionEnhancement,
+            rawText: input
+        ) {
+        case .eligible:
+            return (
+                CustomLLMPromptLookupDraftBuilder.structuredResultTextDraft(from: input),
+                nil
+            )
+        case .ineligible(let reason):
+            return (nil, reason)
+        }
+    }
+
     static func compiled(
         request: LLMCompiledRequest,
         repo: String
@@ -278,6 +294,9 @@ enum CustomLLMRequestPlanBuilder {
                 content: request.prompt
             )
         )
+        let promptLookupPlan = kind == .enhancement
+            ? promptLookupDraftPlan(for: request.debugInput)
+            : (nil, "nonEnhancementTask")
 
         return CustomLLMRequestPlan(
             kind: kind,
@@ -290,9 +309,8 @@ enum CustomLLMRequestPlanBuilder {
             contentLogSections: sections,
             resultFallback: request.fallbackText,
             responseExtractionMode: .textResultPayloadOrNormalizedText,
-            promptLookupDraftText: kind == .enhancement
-                ? CustomLLMPromptLookupDraftBuilder.plainTextDraft(from: request.debugInput)
-                : nil
+            promptLookupDraftText: promptLookupPlan.draftText,
+            promptLookupSkipReason: kind == .enhancement ? promptLookupPlan.skipReason : nil
         )
     }
 
@@ -303,6 +321,7 @@ enum CustomLLMRequestPlanBuilder {
         resultFallback: String,
         structuredOutputPrompt: (String, String) -> String
     ) -> CustomLLMRequestPlan {
+        let promptLookupPlan = promptLookupDraftPlan(for: input)
         let prompt = structuredOutputPrompt(
             "Clean up this transcription while preserving meaning and style.",
             input
@@ -322,7 +341,8 @@ enum CustomLLMRequestPlanBuilder {
             ],
             resultFallback: resultFallback,
             responseExtractionMode: .textResultPayloadOrNormalizedText,
-            promptLookupDraftText: CustomLLMPromptLookupDraftBuilder.structuredResultTextDraft(from: input)
+            promptLookupDraftText: promptLookupPlan.draftText,
+            promptLookupSkipReason: promptLookupPlan.skipReason
         )
     }
 
@@ -496,6 +516,65 @@ enum CustomLLMPromptLookupDraftBuilder {
             return trimmed
         }
         return encoded
+    }
+}
+
+struct CustomLLMPromptLookupProposal: Equatable {
+    let startIndex: Int
+    let matchedSuffixLength: Int
+    let tokens: [Int]
+}
+
+nonisolated enum CustomLLMPromptLookupProposalBuilder {
+    static func proposal(
+        generatedTokens: [Int],
+        draftTokens: [Int],
+        maxSuffixTokens: Int,
+        maxDraftTokens: Int
+    ) -> CustomLLMPromptLookupProposal? {
+        guard !draftTokens.isEmpty, maxDraftTokens > 0 else { return nil }
+
+        if generatedTokens.isEmpty {
+            let tokens = Array(draftTokens.prefix(maxDraftTokens))
+            guard !tokens.isEmpty else { return nil }
+            return CustomLLMPromptLookupProposal(
+                startIndex: 0,
+                matchedSuffixLength: 0,
+                tokens: tokens
+            )
+        }
+
+        let suffixLimit = min(max(1, maxSuffixTokens), generatedTokens.count, draftTokens.count)
+        guard suffixLimit > 0 else { return nil }
+
+        for suffixLength in stride(from: suffixLimit, through: 1, by: -1) {
+            let suffix = Array(generatedTokens.suffix(suffixLength))
+            guard let matchStart = lastIndex(of: suffix, in: draftTokens) else { continue }
+            let proposalStart = matchStart + suffixLength
+            guard proposalStart < draftTokens.count else { continue }
+            let proposalEnd = min(draftTokens.count, proposalStart + maxDraftTokens)
+            let tokens = Array(draftTokens[proposalStart ..< proposalEnd])
+            guard !tokens.isEmpty else { continue }
+            return CustomLLMPromptLookupProposal(
+                startIndex: proposalStart,
+                matchedSuffixLength: suffixLength,
+                tokens: tokens
+            )
+        }
+
+        return nil
+    }
+
+    private static func lastIndex(of needle: [Int], in haystack: [Int]) -> Int? {
+        guard !needle.isEmpty, needle.count <= haystack.count else { return nil }
+        var index = haystack.count - needle.count
+        while index >= 0 {
+            if Array(haystack[index ..< index + needle.count]) == needle {
+                return index
+            }
+            index -= 1
+        }
+        return nil
     }
 }
 
