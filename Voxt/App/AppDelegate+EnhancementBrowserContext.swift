@@ -116,12 +116,12 @@ extension AppDelegate {
 
     func scriptsForCustomBrowser(bundleID: String, displayName: String) -> [String] {
         [
-            "tell application id \"\(bundleID)\" to get URL of front document",
-            "tell application id \"\(bundleID)\" to get URL of current tab of front window",
             "tell application id \"\(bundleID)\" to get the URL of active tab of front window",
             "tell application id \"\(bundleID)\" to get the URL of active tab of window 1",
-            "tell application \"\(displayName)\" to get URL of front document",
-            "tell application \"\(displayName)\" to get the URL of active tab of front window"
+            "tell application \"\(displayName)\" to get the URL of active tab of front window",
+            "tell application id \"\(bundleID)\" to get URL of front document",
+            "tell application id \"\(bundleID)\" to get URL of current tab of front window",
+            "tell application \"\(displayName)\" to get URL of front document"
         ]
     }
 
