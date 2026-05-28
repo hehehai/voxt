@@ -6,6 +6,29 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.11.9-beta.6] - 2026-05-28
+
+### English
+
+#### Fixed
+- Added a startup fallback for local MLX recording so Voxt can retry with the system default microphone when a selected microphone fails to start.
+- Locked the active microphone for the full recording session and deferred microphone changes until the next recording to avoid mid-session capture instability.
+- Kept recording failure reminders visible when local MLX startup fails, instead of flashing the overlay and immediately dismissing it.
+
+### 简体中文
+
+#### 修复
+- 为本地 MLX 录音新增启动兜底：当选中的麦克风无法启动时，Voxt 会自动回退到系统默认麦克风重试。
+- 在整段录音会话期间锁定当前实际使用的麦克风，并将麦克风切换延后到下一次录音，避免会话中途采集不稳定。
+- 修复本地 MLX 启动失败时提示一闪而过的问题，保留明确的失败提醒，而不是让 overlay 立刻消失。
+
+### 日本語
+
+#### 修正
+- 選択したマイクでローカル MLX 録音を開始できない場合に、システムのデフォルトマイクへ自動でフォールバックして再試行するようにしました。
+- 録音セッション中は実際に使っているマイクを固定し、マイク変更は次回録音まで遅延させることで、セッション途中のキャプチャ不安定化を防ぐようにしました。
+- ローカル MLX の起動失敗時にオーバーレイが一瞬で消える問題を修正し、失敗メッセージを確認できるようにしました。
+
 ## [1.11.9-beta.5] - 2026-05-26
 
 ### English
