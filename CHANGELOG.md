@@ -6,6 +6,23 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.11.9-beta.7] - 2026-05-28
+
+### English
+
+#### Added
+- Added deeper live capture startup diagnostics for local and remote ASR so failed recording sessions now report the requested route, default microphone, input and output formats, and visible input devices.
+
+### 简体中文
+
+#### 新增
+- 为本地和远程 ASR 的实时录音启动补充了更细的诊断日志，录音失败时会记录请求路由、系统默认麦克风、输入输出格式和当前可见输入设备。
+
+### 日本語
+
+#### 追加
+- ローカル ASR とリモート ASR のライブ録音起動に、より詳細な診断ログを追加しました。録音失敗時に、要求されたルート、システムのデフォルトマイク、入力/出力フォーマット、利用可能な入力デバイスを記録します。
+
 ## [1.11.9-beta.6] - 2026-05-28
 
 ### English
