@@ -121,6 +121,9 @@ extension AppDelegate {
             realtimeTextDisplayEnabled: realtimeTextDisplayEnabled,
             captureSessionMode: transcriptionCaptureSessionMode
         )
+        VoxtLog.tempModel(
+            "Resolved transcription capture pipeline. realtimeTextDisplayEnabled=\(realtimeTextDisplayEnabled), captureSessionMode=\(String(describing: transcriptionCaptureSessionMode)), pipeline=\(transcriptionCapturePipeline.rawValue), usesLiveDisplay=\(transcriptionCapturePipeline.usesLiveDisplay)"
+        )
     }
 
     func currentSessionRawTranscribedText() -> String {

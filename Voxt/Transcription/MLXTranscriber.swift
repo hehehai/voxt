@@ -478,6 +478,42 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         """
     }
 
+    private func captureStartupHardwareSnapshot(
+        inputNode: AVAudioInputNode,
+        requestedPreferred: Bool
+    ) -> String {
+        let devices = AudioInputDeviceManager.snapshotAvailableInputDevices()
+        let defaultDeviceID = AudioInputDeviceManager.defaultInputDeviceID()
+        let defaultDevice = defaultDeviceID.flatMap { id in devices.first(where: { $0.id == id }) }
+        let preferredDevice = preferredInputDeviceID.flatMap { id in devices.first(where: { $0.id == id }) }
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        let outputFormat = inputNode.outputFormat(forBus: 0)
+        let deviceList = devices.map { device in
+            "\(device.name){id=\(device.id),uid=\(device.uid)}"
+        }.joined(separator: ", ")
+        let preferredText: String
+        if let preferredInputDeviceID {
+            if let preferredDevice {
+                preferredText = "\(preferredDevice.name){id=\(preferredInputDeviceID),uid=\(preferredDevice.uid)}"
+            } else {
+                preferredText = "missing{id=\(preferredInputDeviceID)}"
+            }
+        } else {
+            preferredText = "none"
+        }
+        let defaultText: String
+        if let defaultDevice {
+            defaultText = "\(defaultDevice.name){id=\(defaultDevice.id),uid=\(defaultDevice.uid)}"
+        } else if let defaultDeviceID {
+            defaultText = "unknown{id=\(defaultDeviceID)}"
+        } else {
+            defaultText = "none"
+        }
+        return """
+        requestedPreferred=\(requestedPreferred), activeRouting=\(activeCaptureUsesPreferredInputDevice ? "preferred" : "system-default"), preferred=\(preferredText), default=\(defaultText), engineRunning=\(audioEngine.isRunning), inputFormat={sampleRate=\(Int(inputFormat.sampleRate)),channels=\(inputFormat.channelCount),format=\(inputFormat.commonFormat.rawValue),interleaved=\(inputFormat.isInterleaved)}, outputFormat={sampleRate=\(Int(outputFormat.sampleRate)),channels=\(outputFormat.channelCount),format=\(outputFormat.commonFormat.rawValue),interleaved=\(outputFormat.isInterleaved)}, devices=[\(deviceList)]
+        """
+    }
+
     func startRecording() {
         guard !isRecording else { return }
 
@@ -891,6 +927,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
             VoxtLog.tempModel("MLX startAudioCaptureGraph after applyPreferredInputDevice. requestedDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), summary=\(temporaryCaptureDebugSummary())")
         }
+        VoxtLog.tempModel(
+            "MLX capture startup hardware snapshot. \(captureStartupHardwareSnapshot(inputNode: inputNode, requestedPreferred: shouldUsePreferredInputDevice))"
+        )
         VoxtLog.tempModel("MLX startAudioCaptureGraph before outputFormat. bus=0, summary=\(temporaryCaptureDebugSummary())")
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         if let activeInputDevice = resolvedActiveCaptureInputDevice(
@@ -945,7 +984,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         VoxtLog.tempModel(
             "MLX startAudioCaptureGraph before audioEngine.start. hardwareSampleRate=\(Int(recordingFormat.sampleRate)), canonicalSampleRate=\(Int(CanonicalAudioStreamConverter.sampleRate)), channels=\(recordingFormat.channelCount), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")"
         )
-        try audioEngine.start()
+        do {
+            try audioEngine.start()
+        } catch {
+            VoxtLog.tempModel(
+                "MLX audioEngine.start failed. error=\(error.localizedDescription), \(captureStartupHardwareSnapshot(inputNode: inputNode, requestedPreferred: shouldUsePreferredInputDevice)), summary=\(temporaryCaptureDebugSummary())"
+            )
+            throw error
+        }
         VoxtLog.info(
             "MLX audio capture started. hardwareSampleRate=\(Int(recordingFormat.sampleRate)), canonicalSampleRate=\(Int(CanonicalAudioStreamConverter.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
