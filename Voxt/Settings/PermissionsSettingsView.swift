@@ -706,7 +706,7 @@ struct PermissionsSettingsView: View {
 
     private func browserTargetPreflight(_ target: BrowserAutomationTarget) -> BrowserTargetPreflight {
         let appPath = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleID)?.path
-        BrowserTargetPreflight(
+        return BrowserTargetPreflight(
             appPath: appPath,
             appNotFoundError: appPath == nil
                 ? AppLocalization.localizedString("Browser app could not be found. Reinstall or add the browser again.")
