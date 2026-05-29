@@ -60,6 +60,10 @@ struct PermissionsSettingsView: View {
         let isRunning: Bool
     }
 
+    // Remember browsers that have already granted Automation permission so the
+    // Settings UI does not fall back to "disabled" just because the browser is
+    // currently closed. We still prefer a live re-check whenever macOS can give
+    // us a definitive answer.
     private static let knownAuthorizedBrowserBundleIDsStorageKey = "voxt.permissions.knownAuthorizedBrowserBundleIDs"
 
     @State private var states: [SettingsPermissionKind: PermissionState] = [:]
@@ -544,6 +548,10 @@ struct PermissionsSettingsView: View {
         browserAutomationRefreshTask?.cancel()
         let targets = targets ?? browserTargets
         let knownAuthorizedBrowserBundleIDs = loadKnownAuthorizedBrowserBundleIDs()
+        // Browser Automation checks can block on AppleScript / Apple Events, so
+        // refresh them off the main actor. When the user is actively pressing
+        // Request or Test, skip that row here so an older refresh result does
+        // not overwrite the newer user-triggered state.
         browserAutomationRefreshTask = Task.detached(priority: .userInitiated) {
             for target in targets {
                 guard !Task.isCancelled else { return }
@@ -585,6 +593,12 @@ struct PermissionsSettingsView: View {
                     failureMessage: nil
                 )
             } else {
+                // Request and Test have different goals:
+                // - Request should confirm / trigger Automation permission.
+                // - Test should verify that URL reading works right now.
+                // If the browser is already running and a script succeeds, we
+                // can treat that as permission already working without showing
+                // an extra macOS prompt.
                 let initialProbe = preflight.isRunning
                     ? Self.runAppleScriptCandidates(target.scripts)
                     : ScriptProbeResult(success: false, permissionDenied: false, appNotRunning: true, lastErrorCode: nil)
@@ -674,6 +688,10 @@ struct PermissionsSettingsView: View {
         knownAuthorizedBrowserBundleIDs: Set<String>
     ) -> PermissionState {
         if target.isCustom {
+            // Custom browsers are less consistent than Safari / Chrome: some do
+            // not answer the low-level permission API reliably, especially when
+            // the app is not running. For them we combine three signals:
+            // installation, running state, and remembered authorization.
             let isRememberedAuthorized = knownAuthorizedBrowserBundleIDs.contains(target.bundleID)
             guard isApplicationInstalled(bundleID: target.bundleID) else {
                 return .disabled
@@ -774,6 +792,10 @@ struct PermissionsSettingsView: View {
                 } else if scriptProbe.appNotRunning {
                     showPermissionToast(AppLocalization.localizedString("Browser URL read test failed: browser is not running."))
                 } else if target.isCustom, scriptProbe.lastErrorCode == -1728 {
+                    // For several Chromium-like custom browsers, -1728 often
+                    // means "the current page has no readable URL yet" (for
+                    // example a New Tab / welcome page), not that the browser
+                    // is permanently unsupported.
                     showPermissionToast(AppLocalization.localizedString("Browser URL read test failed: open a webpage in the browser and try again."))
                 } else if let lastErrorCode = scriptProbe.lastErrorCode {
                     showPermissionToast(AppLocalization.format("Browser URL read test failed (error: %@).", String(lastErrorCode)))
