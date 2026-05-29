@@ -115,7 +115,7 @@ extension AppDelegate {
     }
 
     func scriptsForCustomBrowser(bundleID: String, displayName: String) -> [String] {
-        BrowserAutomationScriptBuilder.customBrowserScripts(
+        BrowserAutomationScriptBuilder.customBrowserRuntimeScripts(
             bundleID: bundleID,
             displayName: displayName
         )
