@@ -1,6 +1,11 @@
 import Foundation
 import HuggingFace
 
+enum MLXLiveMode: Equatable {
+    case batchPreview
+    case nativeQwenLive
+}
+
 struct MLXModelCatalog {
     struct Option: Identifiable, Hashable {
         let id: String
@@ -158,14 +163,14 @@ struct MLXModelCatalog {
     ]
 
     nonisolated private static let presentationByRepo: [String: PresentationMetadata] = [
-        "mlx-community/Qwen3-ASR-0.6B-4bit": PresentationMetadata(ratingText: "4.4", tagKeys: ["Multilingual", "Fast"]),
-        "mlx-community/Qwen3-ASR-0.6B-6bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Balanced"]),
-        "mlx-community/Qwen3-ASR-0.6B-8bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Balanced"]),
-        "mlx-community/Qwen3-ASR-0.6B-bf16": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Accurate"]),
-        "mlx-community/Qwen3-ASR-1.7B-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Balanced"]),
-        "mlx-community/Qwen3-ASR-1.7B-6bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
-        "mlx-community/Qwen3-ASR-1.7B-8bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
-        "mlx-community/Qwen3-ASR-1.7B-bf16": PresentationMetadata(ratingText: "4.9", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/Qwen3-ASR-0.6B-4bit": PresentationMetadata(ratingText: "4.4", tagKeys: ["Multilingual", "Realtime", "Fast"]),
+        "mlx-community/Qwen3-ASR-0.6B-6bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
+        "mlx-community/Qwen3-ASR-0.6B-8bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
+        "mlx-community/Qwen3-ASR-0.6B-bf16": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
+        "mlx-community/Qwen3-ASR-1.7B-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
+        "mlx-community/Qwen3-ASR-1.7B-6bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
+        "mlx-community/Qwen3-ASR-1.7B-8bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
+        "mlx-community/Qwen3-ASR-1.7B-bf16": PresentationMetadata(ratingText: "4.9", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Realtime", "Fast"]),
         "mlx-community/Voxtral-Mini-4B-Realtime-6bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
@@ -224,6 +229,14 @@ struct MLXModelCatalog {
 
     nonisolated static func isRealtimeCapableModelRepo(_ repo: String) -> Bool {
         realtimeCapableModelRepos.contains(canonicalModelRepo(repo))
+    }
+
+    nonisolated static func liveMode(for repo: String) -> MLXLiveMode {
+        let canonicalRepo = canonicalModelRepo(repo)
+        if canonicalRepo.localizedCaseInsensitiveContains("qwen3-asr") {
+            return .nativeQwenLive
+        }
+        return .batchPreview
     }
 
     nonisolated static func ratingText(for repo: String) -> String {

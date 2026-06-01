@@ -225,6 +225,20 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
     }
 
+    func testQwen3SelectorShowsRealtimeTag() throws {
+        let repo = "mlx-community/Qwen3-ASR-0.6B-4bit"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo))
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .transcriptionASR)
+                .first(where: { $0.selectionID == .mlx(repo) })
+        )
+
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Realtime")))
+    }
+
     func testWhisperSelectorUsesCuratedRatingAndTags() throws {
         let modelID = "medium"
         let builder = makeBuilder(

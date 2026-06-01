@@ -29,6 +29,48 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         XCTAssertEqual(decision, .waitForInFlightPass)
     }
 
+    func testQuickStopPassDisabledForNativeQwenLiveMode() {
+        let plan = MLXFinalizationPlan(durationSeconds: 30, quickPassSampleCount: 16000 * 30)
+
+        XCTAssertFalse(
+            MLXTranscriptionPlanning.shouldRunQuickStopPass(
+                plan: plan,
+                sessionAllowsRealtimeTextDisplay: true,
+                liveMode: .nativeQwenLive
+            )
+        )
+        XCTAssertTrue(
+            MLXTranscriptionPlanning.shouldRunQuickStopPass(
+                plan: plan,
+                sessionAllowsRealtimeTextDisplay: true,
+                liveMode: .batchPreview
+            )
+        )
+    }
+
+    func testNativeLiveVisiblePreviewSuppressesSilentCollapseWhenConfirmedIsUnchanged() {
+        XCTAssertNil(
+            MLXTranscriptionPlanning.resolvedNativeLiveVisiblePreview(
+                previousPreview: "hello world",
+                previousConfirmedText: "hello",
+                confirmedText: "hello",
+                provisionalText: ""
+            )
+        )
+    }
+
+    func testNativeLiveVisiblePreviewAllowsNewCombinedText() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.resolvedNativeLiveVisiblePreview(
+                previousPreview: "hello",
+                previousConfirmedText: "hello",
+                confirmedText: "hello",
+                provisionalText: " world"
+            ),
+            "hello world"
+        )
+    }
+
     func testMergedHiddenPostStopPreviewKeepsLongerBaseWhenCandidateIsContained() {
         let base = "文档目录结构都能被读取。你可以在文档列表中复制一份或多份文档，直接发起对话。"
         let candidate = "你可以在文档列表中复制一份或多份文档"

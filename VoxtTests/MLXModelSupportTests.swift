@@ -29,6 +29,30 @@ final class MLXModelSupportTests: XCTestCase {
         )
     }
 
+    func testLiveModeUsesNativeSessionOnlyForQwen3ASR() {
+        XCTAssertEqual(
+            MLXModelCatalog.liveMode(for: "mlx-community/Qwen3-ASR-0.6B-4bit"),
+            .nativeQwenLive
+        )
+        XCTAssertEqual(
+            MLXModelCatalog.liveMode(for: "mlx-community/Qwen3-ASR-1.7B-6bit"),
+            .nativeQwenLive
+        )
+        XCTAssertEqual(
+            MLXModelCatalog.liveMode(for: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"),
+            .batchPreview
+        )
+    }
+
+    func testQwen3CatalogTagsExposeRealtimeBadge() {
+        XCTAssertTrue(
+            MLXModelCatalog.catalogTagKeys(for: "mlx-community/Qwen3-ASR-0.6B-4bit").contains("Realtime")
+        )
+        XCTAssertTrue(
+            MLXModelCatalog.catalogTagKeys(for: "mlx-community/Qwen3-ASR-1.7B-6bit").contains("Realtime")
+        )
+    }
+
     func testFallbackRemoteSizeSupportsLegacyAndCuratedRepos() {
         XCTAssertEqual(
             MLXModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/FireRedASR2"),

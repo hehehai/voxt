@@ -91,6 +91,40 @@ enum MLXTranscriptionPlanning {
         )
     }
 
+    static func shouldRunQuickStopPass(
+        plan: MLXFinalizationPlan,
+        sessionAllowsRealtimeTextDisplay: Bool,
+        liveMode: MLXLiveMode
+    ) -> Bool {
+        guard sessionAllowsRealtimeTextDisplay else { return false }
+        guard liveMode != .nativeQwenLive else { return false }
+        return plan.shouldRunQuickPass
+    }
+
+    static func resolvedNativeLiveVisiblePreview(
+        previousPreview: String,
+        previousConfirmedText: String,
+        confirmedText: String,
+        provisionalText: String
+    ) -> String? {
+        let normalizedConfirmed = confirmedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasProvisionalContent = !provisionalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let combined = (confirmedText + provisionalText).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !combined.isEmpty else { return nil }
+        guard combined != previousPreview else { return nil }
+
+        if normalizedConfirmed == previousConfirmedText,
+           !hasProvisionalContent,
+           !previousPreview.isEmpty,
+           previousPreview.hasPrefix(normalizedConfirmed),
+           previousPreview.count > combined.count {
+            return nil
+        }
+
+        return combined
+    }
+
     static func correctionPassSchedulingDecision(
         requestedPass: MLXCorrectionPassKind,
         inFlightPass: MLXCorrectionPassKind?
@@ -358,6 +392,15 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             return samples.count
         }
 
+        func samples(from startIndex: Int) -> (samples: [Float], nextIndex: Int) {
+            lock.lock()
+            defer { lock.unlock() }
+
+            let clampedStart = max(0, min(startIndex, samples.count))
+            guard clampedStart < samples.count else { return ([], samples.count) }
+            return (Array(samples[clampedStart...]), samples.count)
+        }
+
         func callbacksReceived() -> Int {
             lock.lock()
             defer { lock.unlock() }
@@ -408,15 +451,27 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private let liveQuickPassContextWindowSeconds: Double = 30.0
     private let hiddenQuickPassContextWindowSeconds: Double = 18.0
     private let quickPassMinimumDurationSeconds: Double = 14.0
+    private let qwenLiveFeedPollInterval: Duration = .milliseconds(100)
+    private let qwenLiveEndedTimeoutSeconds: Double = 0.35
 
     private var sessionRevision = 0
     private var correctionLoopTask: Task<Void, Never>?
     private var finalizationTask: Task<Void, Never>?
     private var preloadTask: Task<Void, Never>?
     private var captureWatchdogTask: Task<Void, Never>?
+    private var liveSessionSetupTask: Task<Void, Never>?
     private var activeCorrectionPassID: UUID?
     private var activeCorrectionPassTask: Task<String?, Never>?
     private var activeCorrectionPassKind: MLXCorrectionPassKind?
+    private var activeLiveMode = MLXModelManager.liveMode(for: MLXModelManager.defaultModelRepo)
+    private var qwenStreamingSession: StreamingInferenceSession?
+    private var qwenStreamingEventTask: Task<Void, Never>?
+    private var qwenStreamingFeedTask: Task<Void, Never>?
+    private var qwenLiveModelPinned = false
+    private var qwenFeedCursor = 0
+    private var latestNativeLiveConfirmedText = ""
+    private var latestNativeLivePreviewText = ""
+    private var latestNativeLiveEndedText = ""
     var sessionAllowsRealtimeTextDisplay = true
     private var didRetryCaptureStartup = false
     private var activeCaptureUsesPreferredInputDevice = false
@@ -463,10 +518,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         sessionRevision += 1
         let revision = sessionRevision
         activeSessionBehavior = modelManager.currentTranscriptionBehavior
+        activeLiveMode = resolvedSessionLiveMode()
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         isModelInitializing = modelManager.state != .ready
         VoxtLog.info(
-            "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), modelState=\(String(describing: modelManager.state))",
+            "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), liveMode=\(String(describing: activeLiveMode)), modelState=\(String(describing: modelManager.state))",
             verbose: true
         )
 
@@ -476,7 +532,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             scheduleCaptureStartupWatchdog(revision: revision)
             startModelPreloadIfNeeded(revision: revision)
 
-            if activeSessionBehavior.runsIntermediateCorrections {
+            if activeLiveMode == .nativeQwenLive {
+                startNativeQwenLiveSession(revision: revision)
+            } else if activeSessionBehavior.runsIntermediateCorrections {
                 correctionLoopTask = Task { [weak self] in
                     await self?.runIntermediateCorrectionLoop(revision: revision)
                 }
@@ -500,6 +558,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         correctionLoopTask?.cancel()
         correctionLoopTask = nil
+        liveSessionSetupTask?.cancel()
+        liveSessionSetupTask = nil
+        qwenStreamingFeedTask?.cancel()
+        qwenStreamingFeedTask = nil
+        drainPendingSamplesIntoQwenLiveSession()
+        qwenStreamingSession?.stop()
 
         let revision = sessionRevision
         let sampleRate = inputSampleRate
@@ -523,6 +587,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     "MLX recording stopped with audio callbacks but no extracted samples. sampleRate=\(Int(sampleRate))"
                 )
             }
+            releaseNativeLiveSession(cancelSession: false)
             onTranscriptionFinished?("")
             return
         }
@@ -537,7 +602,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     /// Triggers an intermediate transcription pass while recording.
     /// Used to improve responsiveness during short pauses in speech.
     func forceIntermediateTranscription() {
-        guard isRecording, activeSessionBehavior.runsIntermediateCorrections else { return }
+        guard isRecording,
+              activeSessionBehavior.runsIntermediateCorrections,
+              activeLiveMode != .nativeQwenLive
+        else { return }
         let revision = sessionRevision
         let sampleRate = inputSampleRate
         Task { [weak self] in
@@ -596,6 +664,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         let snapshot = sampleStore.snapshot()
         guard !snapshot.isEmpty else {
+            releaseNativeLiveSession(cancelSession: false)
             onTranscriptionFinished?("")
             sampleStore.clear()
             return
@@ -608,7 +677,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             quickPassMinimumDurationSeconds: quickPassMinimumDurationSeconds,
             quickPassContextWindowSeconds: currentQuickPassContextWindowSeconds
         )
-        let shouldRunQuickPass = sessionAllowsRealtimeTextDisplay && plan.shouldRunQuickPass
+        if activeLiveMode == .nativeQwenLive {
+            await waitForNativeLiveEndedPreviewIfNeeded(revision: revision)
+        }
+        let shouldRunQuickPass = MLXTranscriptionPlanning.shouldRunQuickStopPass(
+            plan: plan,
+            sessionAllowsRealtimeTextDisplay: sessionAllowsRealtimeTextDisplay,
+            liveMode: activeLiveMode
+        )
         VoxtLog.info(
             "MLX finalization started. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), quickPass=\(shouldRunQuickPass)",
             verbose: true
@@ -641,7 +717,15 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         guard revision == sessionRevision else { return }
         stageCompletedAudioArchive(samples: snapshot, sampleRate: sampleRate)
-        let resolved = normalizeText(finalText ?? quickText ?? transcribedText)
+        let fallbackText: String
+        if !latestNativeLiveEndedText.isEmpty {
+            fallbackText = latestNativeLiveEndedText
+        } else if !latestNativeLivePreviewText.isEmpty {
+            fallbackText = latestNativeLivePreviewText
+        } else {
+            fallbackText = transcribedText
+        }
+        let resolved = normalizeText(finalText ?? quickText ?? fallbackText)
         transcribedText = resolved
         publishPartial(resolved)
         onTranscriptionFinished?(resolved)
@@ -650,6 +734,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             verbose: true
         )
         sampleStore.clear()
+        releaseNativeLiveSession(cancelSession: false)
     }
 
     private func runManagedCorrectionPass(
@@ -797,6 +882,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         nextCorrectionAtSeconds = currentCorrectionIntervalSeconds
         loggedSampleExtractionFailure = false
         lastCaptureMetrics = nil
+        qwenFeedCursor = 0
+        latestNativeLiveConfirmedText = ""
+        latestNativeLivePreviewText = ""
+        latestNativeLiveEndedText = ""
     }
 
     private var currentCorrectionIntervalSeconds: Double {
@@ -875,6 +964,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         correctionLoopTask = nil
         finalizationTask?.cancel()
         finalizationTask = nil
+        liveSessionSetupTask?.cancel()
+        liveSessionSetupTask = nil
         activeCorrectionPassTask?.cancel()
         activeCorrectionPassTask = nil
         activeCorrectionPassID = nil
@@ -884,6 +975,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         preloadTask = nil
         captureWatchdogTask?.cancel()
         captureWatchdogTask = nil
+        releaseNativeLiveSession(cancelSession: true)
     }
 
     private func stageCompletedAudioArchive(samples: [Float], sampleRate: Double) {
@@ -918,6 +1010,215 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private func publishPartial(_ text: String) {
         guard sessionAllowsRealtimeTextDisplay else { return }
         onPartialTranscription?(text)
+    }
+
+    private func resolvedSessionLiveMode() -> MLXLiveMode {
+        guard sessionAllowsRealtimeTextDisplay else { return .batchPreview }
+        return MLXModelManager.liveMode(for: modelManager.currentModelRepo)
+    }
+
+    private func startNativeQwenLiveSession(revision: Int) {
+        liveSessionSetupTask?.cancel()
+        liveSessionSetupTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let startedAt = Date()
+            var shouldReleaseModel = false
+            defer {
+                if shouldReleaseModel {
+                    self.modelManager.endActiveUse()
+                }
+            }
+
+            do {
+                self.modelManager.beginActiveUse()
+                shouldReleaseModel = true
+                let loadedModel = try await self.modelManager.loadModel()
+                guard !Task.isCancelled,
+                      revision == self.sessionRevision,
+                      self.isRecording,
+                      self.activeLiveMode == .nativeQwenLive
+                else { return }
+                guard let qwenModel = loadedModel as? Qwen3ASRModel else {
+                    VoxtLog.warning(
+                        "MLX native live requested for non-Qwen model. repo=\(self.modelManager.currentModelRepo)"
+                    )
+                    return
+                }
+
+                self.installNativeQwenLiveSession(qwenModel, revision: revision)
+                self.isModelInitializing = false
+                shouldReleaseModel = false
+                let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                VoxtLog.info(
+                    "MLX native Qwen live session ready. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs)",
+                    verbose: true
+                )
+            } catch {
+                guard !Task.isCancelled else { return }
+                let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                self.isModelInitializing = false
+                VoxtLog.warning(
+                    "MLX native Qwen live session setup failed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
+    private func installNativeQwenLiveSession(_ model: Qwen3ASRModel, revision: Int) {
+        releaseNativeLiveSession(cancelSession: true)
+        let session = StreamingInferenceSession(
+            model: model,
+            config: StreamingConfig(
+                language: resolvedNativeQwenLiveLanguage(),
+                temperature: 0.0,
+                maxTokensPerPass: 1024
+            )
+        )
+        qwenStreamingSession = session
+        qwenLiveModelPinned = true
+        qwenFeedCursor = 0
+        latestNativeLiveConfirmedText = ""
+        latestNativeLivePreviewText = ""
+        latestNativeLiveEndedText = ""
+        let feedPollInterval = qwenLiveFeedPollInterval
+
+        qwenStreamingEventTask = Task { [weak self, session] in
+            for await event in session.events {
+                await self?.handleNativeQwenLiveEvent(event, revision: revision)
+            }
+        }
+
+        qwenStreamingFeedTask = Task { [weak self, session] in
+            while true {
+                let chunk = await self?.drainPendingSamplesForQwenLiveFeed(revision: revision) ?? []
+                if !chunk.isEmpty {
+                    session.feedAudio(samples: chunk)
+                }
+
+                let shouldContinue = await self?.shouldContinueQwenLiveFeed(revision: revision) ?? false
+                if !shouldContinue {
+                    return
+                }
+
+                do {
+                    try await Task.sleep(for: feedPollInterval)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func releaseNativeLiveSession(cancelSession: Bool) {
+        qwenStreamingFeedTask?.cancel()
+        qwenStreamingFeedTask = nil
+        qwenStreamingEventTask?.cancel()
+        qwenStreamingEventTask = nil
+        if cancelSession {
+            qwenStreamingSession?.cancel()
+        }
+        qwenStreamingSession = nil
+        if qwenLiveModelPinned {
+            qwenLiveModelPinned = false
+            modelManager.endActiveUse()
+        }
+    }
+
+    private func resolvedNativeQwenLiveLanguage() -> String {
+        let hintPayload = resolvedHintPayload()
+        if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !language.isEmpty {
+            return language
+        }
+
+        let selectedCodes = UserMainLanguageOption.storedSelection(
+            from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
+        )
+        let mainLanguage = ASRHintResolver.selectedLanguageOptions(selectedCodes).first
+            ?? UserMainLanguageOption.fallbackOption()
+        return mainLanguage.promptName
+    }
+
+    private func drainPendingSamplesForQwenLiveFeed(revision: Int) -> [Float] {
+        guard revision == sessionRevision, isRecording, activeLiveMode == .nativeQwenLive else { return [] }
+        let pending = sampleStore.samples(from: qwenFeedCursor)
+        qwenFeedCursor = pending.nextIndex
+        guard !pending.samples.isEmpty else { return [] }
+
+        do {
+            return try prepareInputSamples(pending.samples, sampleRate: inputSampleRate)
+        } catch {
+            VoxtLog.warning("MLX native Qwen live sample prepare failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func shouldContinueQwenLiveFeed(revision: Int) -> Bool {
+        revision == sessionRevision && isRecording && activeLiveMode == .nativeQwenLive && qwenStreamingSession != nil
+    }
+
+    private func drainPendingSamplesIntoQwenLiveSession() {
+        guard let session = qwenStreamingSession else { return }
+        let pending = sampleStore.samples(from: qwenFeedCursor)
+        qwenFeedCursor = pending.nextIndex
+        guard !pending.samples.isEmpty else { return }
+
+        do {
+            let prepared = try prepareInputSamples(pending.samples, sampleRate: inputSampleRate)
+            if !prepared.isEmpty {
+                session.feedAudio(samples: prepared)
+            }
+        } catch {
+            VoxtLog.warning("MLX native Qwen live stop-drain prepare failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleNativeQwenLiveEvent(_ event: TranscriptionEvent, revision: Int) {
+        guard revision == sessionRevision else { return }
+
+        switch event {
+        case .displayUpdate(let confirmedText, let provisionalText):
+            guard let combined = MLXTranscriptionPlanning.resolvedNativeLiveVisiblePreview(
+                previousPreview: latestNativeLivePreviewText,
+                previousConfirmedText: latestNativeLiveConfirmedText,
+                confirmedText: confirmedText,
+                provisionalText: provisionalText
+            ) else { return }
+            latestNativeLiveConfirmedText = normalizeText(confirmedText)
+            internalTranscribedText = combined
+            transcribedText = combined
+            latestNativeLivePreviewText = combined
+            publishPartial(combined)
+        case .ended(let fullText):
+            let normalized = normalizeText(fullText)
+            latestNativeLiveConfirmedText = normalized
+            latestNativeLiveEndedText = normalized
+            if !normalized.isEmpty {
+                internalTranscribedText = normalized
+                transcribedText = normalized
+                latestNativeLivePreviewText = normalized
+                publishPartial(normalized)
+            }
+        case .confirmed, .provisional, .stats:
+            break
+        }
+    }
+
+    private func waitForNativeLiveEndedPreviewIfNeeded(revision: Int) async {
+        guard activeLiveMode == .nativeQwenLive else { return }
+        guard latestNativeLiveEndedText.isEmpty else { return }
+
+        let startedAt = Date()
+        while revision == sessionRevision,
+              latestNativeLiveEndedText.isEmpty,
+              Date().timeIntervalSince(startedAt) < qwenLiveEndedTimeoutSeconds
+        {
+            do {
+                try await Task.sleep(for: .milliseconds(25))
+            } catch {
+                return
+            }
+        }
     }
 
     private func startModelPreloadIfNeeded(revision: Int) {

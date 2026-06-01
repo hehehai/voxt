@@ -2,6 +2,14 @@ import SwiftUI
 import Foundation
 import AppKit
 
+private struct TranscriptWidthPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct WaveformView: View {
     @AppStorage(AppPreferenceKey.overlayCardOpacity) private var overlayCardOpacity = 82
     @AppStorage(AppPreferenceKey.overlayCardCornerRadius) private var overlayCardCornerRadius = 24
@@ -79,6 +87,7 @@ struct WaveformView: View {
     private let barAreaHeight: CGFloat = 28
     private let waveformSlotWidth: CGFloat = Self.defaultWaveformSlotWidth
     private let sessionLanguagePickerWidth: CGFloat = Self.defaultSessionLanguagePickerWidth
+    private let transcriptAnimationGrowthThreshold: CGFloat = 6
     private let barCount = 16
     private let basePhases: [Double] = (0..<16).map { Double($0) * 0.4 }
     private let baseTravelPhase = 0.0
@@ -89,6 +98,7 @@ struct WaveformView: View {
     @State private var currentAnimationInterval: TimeInterval?
     @State private var appeared = false
     @State private var textScrollID = UUID()
+    @State private var measuredTranscriptWidth: CGFloat = 0
     @State private var didCopyAnswer = false
     @State private var copyFeedbackToken = UUID()
     @StateObject private var waveformState = RecentAudioWaveformState(
@@ -273,6 +283,14 @@ struct WaveformView: View {
                                 .foregroundStyle(.white.opacity(0.85))
                                 .lineLimit(1)
                                 .fixedSize(horizontal: true, vertical: false)
+                                .background(
+                                    GeometryReader { geometry in
+                                        Color.clear.preference(
+                                            key: TranscriptWidthPreferenceKey.self,
+                                            value: geometry.size.width
+                                        )
+                                    }
+                                )
                                 .id(textScrollID)
 
                             Spacer().frame(width: 4)
@@ -293,11 +311,15 @@ struct WaveformView: View {
                             Color.white
                         }
                     )
+                    .onPreferenceChange(TranscriptWidthPreferenceKey.self) { width in
+                        measuredTranscriptWidth = width
+                    }
                     .onChange(of: displayText) {
+                        let previousWidth = measuredTranscriptWidth
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                proxy.scrollTo(textScrollID, anchor: .trailing)
-                            }
+                            let grew = measuredTranscriptWidth > previousWidth + transcriptAnimationGrowthThreshold
+                            let shouldAnimate = previousWidth > 0 && grew
+                            scrollTranscriptToTrailing(proxy, animated: shouldAnimate)
                         }
                     }
                 }
@@ -759,5 +781,15 @@ struct WaveformView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+    }
+
+    private func scrollTranscriptToTrailing(_ proxy: ScrollViewProxy, animated: Bool) {
+        if animated {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(textScrollID, anchor: .trailing)
+            }
+        } else {
+            proxy.scrollTo(textScrollID, anchor: .trailing)
+        }
     }
 }

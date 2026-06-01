@@ -290,6 +290,10 @@ class MLXModelManager: ObservableObject {
         MLXModelCatalog.isRealtimeCapableModelRepo(repo)
     }
 
+    nonisolated static func liveMode(for repo: String) -> MLXLiveMode {
+        MLXModelCatalog.liveMode(for: repo)
+    }
+
     nonisolated static func transcriptionBehavior(for repo: String) -> TranscriptionBehavior {
         let canonicalRepo = canonicalModelRepo(repo)
         if canonicalRepo.localizedCaseInsensitiveContains("firered") {

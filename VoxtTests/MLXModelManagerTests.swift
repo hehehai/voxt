@@ -89,6 +89,17 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertFalse(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Qwen3-ASR-0.6B-4bit"))
     }
 
+    func testLiveModeRoutesQwen3ToNativeSessionOnly() {
+        XCTAssertEqual(
+            MLXModelManager.liveMode(for: "mlx-community/Qwen3-ASR-0.6B-4bit"),
+            .nativeQwenLive
+        )
+        XCTAssertEqual(
+            MLXModelManager.liveMode(for: "mlx-community/Voxtral-Mini-4B-Realtime-6bit"),
+            .batchPreview
+        )
+    }
+
     func testTranscriptionBehaviorUsesFinalizationOnlyModeForFireRed() {
         let behavior = MLXModelManager.transcriptionBehavior(for: "mlx-community/FireRedASR2")
 
