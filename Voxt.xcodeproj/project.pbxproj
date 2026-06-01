@@ -913,10 +913,10 @@
 		};
 		D1E2F3A4B5C60718293A4B5E /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.17.0;
+				version = 1.0.0;
 			};
 		};
 		E2A1C3B4D5F60718293A4B70 /* XCRemoteSwiftPackageReference "PermissionFlow" */ = {

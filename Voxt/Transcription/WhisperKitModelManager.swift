@@ -5,6 +5,7 @@ import WhisperKit
 
 @MainActor
 final class WhisperKitModelManager: ObservableObject {
+    // The runtime package now comes from argmax-oss-swift, but model artifacts still live in whisperkit-coreml.
     private static let repo = "argmaxinc/whisperkit-coreml"
     private static let hubUserAgent = "Voxt/1.0 (WhisperKit)"
 
@@ -57,6 +58,11 @@ final class WhisperKitModelManager: ObservableObject {
         case cancel
     }
 
+    private enum LoadErrorCode {
+        static let modelNotInstalled = 1001
+        static let runtimeUnavailable = 1002
+    }
+
     nonisolated static let defaultModelID = WhisperKitModelCatalog.defaultModelID
 
     nonisolated static let availableModels = WhisperKitModelCatalog.availableModels
@@ -74,7 +80,7 @@ final class WhisperKitModelManager: ObservableObject {
     private var hubBaseURL: URL
     private var loadedWhisper: WhisperKit?
     private var loadedModelID: String?
-    private var loadingTask: Task<WhisperKit, Error>?
+    private var loadingTask: Task<Void, Error>?
     private var downloadTask: Task<Void, Never>?
     private var downloadStopAction: DownloadStopAction?
     private var sizeTask: Task<Void, Never>?
@@ -94,7 +100,7 @@ final class WhisperKitModelManager: ObservableObject {
     }
 
     var currentModelID: String { modelID }
-    var isCurrentModelLoaded: Bool { loadedWhisper != nil && loadedModelID == modelID }
+    var isCurrentModelLoaded: Bool { preparedWhisper() != nil }
 
     nonisolated static func canonicalModelID(_ modelID: String) -> String {
         WhisperKitModelCatalog.canonicalModelID(modelID)
@@ -119,8 +125,7 @@ final class WhisperKitModelManager: ObservableObject {
         loadingTask?.cancel()
         loadingTask = nil
         modelID = canonicalModelID
-        loadedWhisper = nil
-        loadedModelID = nil
+        clearLoadedWhisperState()
         activeUseCount = 0
         checkExistingModel()
     }
@@ -149,8 +154,7 @@ final class WhisperKitModelManager: ObservableObject {
 
         cancelIdleUnloadTask()
         await loadedWhisper?.unloadModels()
-        loadedWhisper = nil
-        loadedModelID = nil
+        clearLoadedWhisperState()
         checkExistingModel()
         VoxtLog.info("Whisper model released. reason=\(reason)", verbose: true)
     }
@@ -168,20 +172,20 @@ final class WhisperKitModelManager: ObservableObject {
 
     func loadWhisper() async throws -> WhisperKit {
         cancelIdleUnloadTask()
-        if let loadedWhisper, loadedModelID == modelID {
+        if let loadedWhisper = preparedWhisper() {
             return loadedWhisper
         }
         if let loadingTask {
-            return try await loadingTask.value
+            try await loadingTask.value
+            if let loadedWhisper = preparedWhisper() {
+                return loadedWhisper
+            }
+            throw Self.runtimeUnavailableError()
         }
 
         guard let modelFolder = modelDirectoryURL(id: modelID) else {
             state = .notDownloaded
-            throw NSError(
-                domain: "WhisperKitModelManager",
-                code: 1001,
-                userInfo: [NSLocalizedDescriptionKey: "Whisper model is not installed locally."]
-            )
+            throw Self.modelNotInstalledError()
         }
 
         state = .loading
@@ -189,8 +193,8 @@ final class WhisperKitModelManager: ObservableObject {
         let targetHubBaseURL = hubBaseURL
         let targetDownloadBase = downloadRootURL()
         let targetModelFolder = modelFolder.path
-        let loadingTask = Task<WhisperKit, Error> {
-            try await WhisperKit(
+        let loadingTask = Task {
+            let whisper = try await WhisperKit(
                 WhisperKitConfig(
                     model: targetModelID,
                     downloadBase: targetDownloadBase,
@@ -202,22 +206,28 @@ final class WhisperKitModelManager: ObservableObject {
                     download: false
                 )
             )
-        }
-        self.loadingTask = loadingTask
-        do {
-            let whisper = try await loadingTask.value
-            self.loadingTask = nil
+            guard !Task.isCancelled else { return }
             loadedWhisper = whisper
             loadedModelID = targetModelID
             state = .ready
-            return whisper
+        }
+        self.loadingTask = loadingTask
+        do {
+            try await loadingTask.value
+            self.loadingTask = nil
+            if let loadedWhisper = preparedWhisper(for: targetModelID) {
+                return loadedWhisper
+            }
+            throw Self.runtimeUnavailableError()
         } catch {
             self.loadingTask = nil
+            if error is CancellationError {
+                throw error
+            }
             if WhisperModelArtifacts.isCorruptLoadFailure(error),
                let invalidFolder = writableRawModelDirectoryURL(id: targetModelID) {
                 try? FileManager.default.removeItem(at: invalidFolder)
-                loadedWhisper = nil
-                loadedModelID = nil
+                clearLoadedWhisperState()
                 downloadErrorByID[targetModelID] = String(localized: "Installed Whisper model is incomplete. Please download it again.")
                 state = .notDownloaded
             } else {
@@ -225,6 +235,33 @@ final class WhisperKitModelManager: ObservableObject {
             }
             throw error
         }
+    }
+
+    private func preparedWhisper(for expectedModelID: String? = nil) -> WhisperKit? {
+        let expectedModelID = expectedModelID ?? modelID
+        guard loadedModelID == expectedModelID else { return nil }
+        return loadedWhisper
+    }
+
+    private func clearLoadedWhisperState() {
+        loadedWhisper = nil
+        loadedModelID = nil
+    }
+
+    private static func modelNotInstalledError() -> NSError {
+        NSError(
+            domain: "WhisperKitModelManager",
+            code: LoadErrorCode.modelNotInstalled,
+            userInfo: [NSLocalizedDescriptionKey: "Whisper model is not installed locally."]
+        )
+    }
+
+    private static func runtimeUnavailableError() -> NSError {
+        NSError(
+            domain: "WhisperKitModelManager",
+            code: LoadErrorCode.runtimeUnavailable,
+            userInfo: [NSLocalizedDescriptionKey: "Whisper model finished loading without preparing a runtime."]
+        )
     }
 
     func downloadModel(id: String) async {
