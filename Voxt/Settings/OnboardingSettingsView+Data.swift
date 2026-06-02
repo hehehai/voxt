@@ -68,7 +68,8 @@ extension OnboardingSettingsView {
     var currentPermissionContext: OnboardingPermissionRequirementContext {
         OnboardingPermissionRequirementContext(
             selectedEngine: selectedEngine,
-            muteSystemAudioWhileRecording: muteSystemAudioWhileRecording
+            muteSystemAudioWhileRecording: muteSystemAudioWhileRecording,
+            rewriteScreenshotContextEnabled: featureSettings.rewrite.appContext.screenshotEnabled
         )
     }
 

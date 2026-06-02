@@ -1,9 +1,11 @@
 import Foundation
 import HuggingFace
 import Combine
+import CoreImage
 import MLX
 import MLXLLM
 import MLXLMCommon
+import MLXVLM
 import Tokenizers
 
 private struct LocalTokenizerBridge: MLXLMCommon.Tokenizer {
@@ -430,6 +432,7 @@ class CustomLLMModelManager: ObservableObject {
             )
             let params = generationParameters(for: request, behavior: behavior, settings: settings)
             session.generateParameters = params
+            let inputImages = userInputImages(from: request.attachments)
 
             let modelStartedAt = Date()
             let setupMs = Int(modelStartedAt.timeIntervalSince(overallStartedAt) * 1000) - containerSnapshot.elapsedMs
@@ -443,7 +446,7 @@ class CustomLLMModelManager: ObservableObject {
             let repetitionGuard = LLMOutputRepetitionGuard()
             for try await event in session.streamDetails(
                 to: request.prompt,
-                images: [],
+                images: inputImages,
                 videos: []
             ) {
                 switch event {
@@ -617,6 +620,9 @@ class CustomLLMModelManager: ObservableObject {
                 token: token
             )
         }
+        if CustomLLMModelCatalog.supportsImageInput(repo: repo) {
+            _ = MLXVLM.TrampolineModelFactory.modelFactory()
+        }
         let container = try await loadModelContainer(
             from: directory,
             using: LocalTokenizerLoader()
@@ -624,6 +630,25 @@ class CustomLLMModelManager: ObservableObject {
         inferenceContainer = container
         inferenceModelRepo = repo
         return container
+    }
+
+    private func userInputImages(from attachments: [LLMInputAttachment]) -> [UserInput.Image] {
+        attachments.compactMap { attachment in
+            switch attachment {
+            case .image(let imageAttachment):
+                return userInputImage(from: imageAttachment)
+            }
+        }
+    }
+
+    private func userInputImage(from attachment: LLMImageAttachment) -> UserInput.Image? {
+        guard let image = CIImage(data: attachment.data, options: [.applyOrientationProperty: true]) else {
+            VoxtLog.warning(
+                "Custom LLM could not decode image attachment '\(attachment.filename)' for local VLM input."
+            )
+            return nil
+        }
+        return .ciImage(image)
     }
 
     func displayTitle(for repo: String) -> String {

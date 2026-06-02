@@ -25,6 +25,23 @@ enum LLMContextBlockKind: String, Equatable {
     case app
 }
 
+enum LLMImageAttachmentDetail: String, Equatable {
+    case auto
+    case low
+    case high
+}
+
+struct LLMImageAttachment: Equatable {
+    let data: Data
+    let mimeType: String
+    let detail: LLMImageAttachmentDetail
+    let filename: String
+}
+
+enum LLMInputAttachment: Equatable {
+    case image(LLMImageAttachment)
+}
+
 struct LLMContextBlock: Equatable {
     let kind: LLMContextBlockKind
     let title: String
@@ -51,6 +68,7 @@ struct LLMExecutionPlan: Equatable {
     let executionStrategy: TaskLLMExecutionStrategy
     let outputTokenBudgetHint: Int?
     let contextBlocks: [LLMContextBlock]
+    let attachments: [LLMInputAttachment]
     let conversationHistory: [RewriteConversationPromptTurn]
     let previousResponseID: String?
     let responseFormat: RemoteLLMRuntimeClient.OpenAICompatibleResponseFormat?
@@ -90,6 +108,7 @@ struct LLMCompiledRequest: Equatable {
     let fallbackText: String
     let inputCharacterCount: Int
     let outputTokenBudgetHint: Int?
+    let attachments: [LLMInputAttachment]
     let conversationHistory: [RewriteConversationPromptTurn]
     let previousResponseID: String?
     let responseFormat: RemoteLLMRuntimeClient.OpenAICompatibleResponseFormat?

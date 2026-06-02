@@ -337,6 +337,13 @@ struct PermissionsSettingsView: View {
                     PermissionGuidance.openSettings(for: kind)
                 }
             }
+        case .screenCapture:
+            let granted = ScreenCapturePermission.requestAccess()
+            if !granted {
+                Task { @MainActor in
+                    PermissionGuidance.openSettings(for: kind)
+                }
+            }
         case .systemAudioCapture:
             SystemAudioCapturePermission.requestAccess { granted in
                 guard !granted else { return }

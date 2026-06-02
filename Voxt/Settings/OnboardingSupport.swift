@@ -47,6 +47,7 @@ enum OnboardingContextualPermission: Hashable {
     case speechRecognition
     case accessibility
     case inputMonitoring
+    case screenCapture
     case systemAudioCapture
 
     var titleKey: LocalizedStringKey {
@@ -59,6 +60,8 @@ enum OnboardingContextualPermission: Hashable {
             return "Accessibility Permission"
         case .inputMonitoring:
             return "Input Monitoring Permission"
+        case .screenCapture:
+            return "Screen Recording Permission"
         case .systemAudioCapture:
             return "System Audio Recording Permission"
         }
@@ -74,6 +77,8 @@ enum OnboardingContextualPermission: Hashable {
             return "Required to paste transcription text into other apps."
         case .inputMonitoring:
             return "Required for reliable global modifier hotkeys (such as fn)."
+        case .screenCapture:
+            return "Required only when Screenshot Context is enabled for rewrite app context."
         case .systemAudioCapture:
             return "Required for transcript capture and for muting other apps' media audio during recording."
         }
@@ -83,6 +88,17 @@ enum OnboardingContextualPermission: Hashable {
 struct OnboardingPermissionRequirementContext {
     let selectedEngine: TranscriptionEngine
     let muteSystemAudioWhileRecording: Bool
+    let rewriteScreenshotContextEnabled: Bool
+
+    init(
+        selectedEngine: TranscriptionEngine,
+        muteSystemAudioWhileRecording: Bool,
+        rewriteScreenshotContextEnabled: Bool = false
+    ) {
+        self.selectedEngine = selectedEngine
+        self.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
+        self.rewriteScreenshotContextEnabled = rewriteScreenshotContextEnabled
+    }
 }
 
 enum OnboardingPermissionRequirementResolver {
@@ -104,7 +120,9 @@ enum OnboardingPermissionRequirementResolver {
                 permissions.append(.systemAudioCapture)
             }
             return permissions
-        case .language, .model, .translation, .rewrite, .appEnhancement, .finish:
+        case .rewrite:
+            return context.rewriteScreenshotContextEnabled ? [.screenCapture] : []
+        case .language, .model, .translation, .appEnhancement, .finish:
             return []
         }
     }
@@ -124,6 +142,8 @@ enum OnboardingPermissionGrantResolver {
                 return CGPreflightListenEventAccess()
             }
             return true
+        case .screenCapture:
+            return ScreenCapturePermission.isGranted()
         case .systemAudioCapture:
             return SystemAudioCapturePermission.authorizationStatus() == .authorized
         }

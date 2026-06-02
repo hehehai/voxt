@@ -59,6 +59,7 @@ extension AppDelegate {
     func buildEnhancementExecutionPlan(
         rawText: String,
         promptResolution: EnhancementPromptResolution,
+        appContextCapture: TranscriptionAppContextCapture? = nil,
         providerOverride: LLMExecutionProvider? = nil,
         executionStrategy: TaskLLMExecutionStrategy
     ) -> LLMExecutionPlan? {
@@ -91,8 +92,17 @@ extension AppDelegate {
                     content: rawText,
                     isStablePrefixCandidate: false
                 ),
+                appContextCapture.map {
+                    LLMContextBlock(
+                        kind: .app,
+                        title: "Active app context",
+                        content: $0.textContext,
+                        isStablePrefixCandidate: false
+                    )
+                },
                 glossaryContextBlock(promptResolution.dictionaryGlossary, purpose: .enhancement)
             ]),
+            attachments: appContextCapture?.attachments ?? [],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil
@@ -139,6 +149,7 @@ extension AppDelegate {
                 ),
                 glossaryContextBlock(promptResolution.dictionaryGlossary, purpose: .translation)
             ]),
+            attachments: [],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil
@@ -150,6 +161,7 @@ extension AppDelegate {
         sourceText: String,
         promptResolution: VariablePromptResolution,
         modelProvider: RewriteModelProvider,
+        appContextCapture: TranscriptionAppContextCapture? = nil,
         conversationHistory: [RewriteConversationPromptTurn],
         previousResponseID: String?,
         structuredAnswerOutput: Bool,
@@ -205,9 +217,18 @@ extension AppDelegate {
                         content: sourceText,
                         isStablePrefixCandidate: false
                     ),
+                appContextCapture.map {
+                    LLMContextBlock(
+                        kind: .app,
+                        title: "Active app context",
+                        content: $0.textContext,
+                        isStablePrefixCandidate: false
+                    )
+                },
                 glossaryContextBlock(promptResolution.dictionaryGlossary, purpose: .rewrite),
                 rewriteConversationContextBlock(conversationHistory)
             ]),
+            attachments: appContextCapture?.attachments ?? [],
             conversationHistory: conversationHistory,
             previousResponseID: previousResponseID,
             responseFormat: responseFormat
@@ -279,6 +300,43 @@ extension AppDelegate {
         case .remote:
             return .unknown
         }
+    }
+
+    func captureTranscriptionAppContextIfNeeded(
+        for provider: LLMExecutionProvider
+    ) async -> TranscriptionAppContextCapture? {
+        await captureAppContextIfNeeded(
+            for: provider,
+            settings: transcriptionFeatureSettings.appContext
+        )
+    }
+
+    func captureRewriteAppContextIfNeeded(
+        for provider: LLMExecutionProvider
+    ) async -> TranscriptionAppContextCapture? {
+        await captureAppContextIfNeeded(
+            for: provider,
+            settings: rewriteFeatureSettings.appContext
+        )
+    }
+
+    private func captureAppContextIfNeeded(
+        for provider: LLMExecutionProvider,
+        settings: TranscriptionAppContextSettings
+    ) async -> TranscriptionAppContextCapture? {
+        guard settings.enabled else { return nil }
+        guard let snapshot = enhancementContextSnapshot else { return nil }
+        let capabilities = TranscriptionAppContextCapabilityResolver.capabilities(for: provider)
+        return await TranscriptionAppContextCaptureService.capture(
+            snapshot: snapshot,
+            modelCapabilities: capabilities,
+            settings: settings,
+            browserURLResolver: { [weak self] bundleID in
+                guard let self else { return nil }
+                guard self.isBrowserBundleID(bundleID) else { return nil }
+                return self.activeBrowserTabURL(frontmostBundleID: bundleID)
+            }
+        )
     }
 
     private func executeSingleLLMExecutionPlan(
@@ -427,6 +485,7 @@ extension AppDelegate {
             executionStrategy: plan.executionStrategy,
             outputTokenBudgetHint: plan.outputTokenBudgetHint,
             contextBlocks: segmentedBlocks,
+            attachments: plan.attachments,
             conversationHistory: plan.conversationHistory,
             previousResponseID: plan.previousResponseID,
             responseFormat: plan.responseFormat

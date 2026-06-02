@@ -519,6 +519,14 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testCustomLLMCompiledPlanPreservesOutputTokenBudgetHint() {
+        let attachment = LLMInputAttachment.image(
+            LLMImageAttachment(
+                data: Data([0xFF, 0xD8, 0xFF]),
+                mimeType: "image/jpeg",
+                detail: .high,
+                filename: "capture.jpg"
+            )
+        )
         let compiled = LLMCompiledRequest(
             taskLabel: "enhancement",
             instructions: "system",
@@ -527,6 +535,7 @@ final class MLXModelManagerTests: XCTestCase {
             fallbackText: "fallback",
             inputCharacterCount: 5,
             outputTokenBudgetHint: 321,
+            attachments: [attachment],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil
@@ -538,6 +547,7 @@ final class MLXModelManagerTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.maxTokensOverride, 321)
+        XCTAssertEqual(plan.attachments, [attachment])
     }
 
     func testCustomLLMNormalizeResultTextStripsThinkBlocksAndMarkers() {

@@ -19,6 +19,7 @@ enum LLMExecutionPlanCompiler {
                 fallbackText: plan.fallbackText,
                 inputCharacterCount: plan.primaryInputCharacterCount,
                 outputTokenBudgetHint: plan.outputTokenBudgetHint,
+                attachments: plan.attachments,
                 conversationHistory: plan.conversationHistory,
                 previousResponseID: plan.previousResponseID,
                 responseFormat: plan.responseFormat
@@ -34,6 +35,7 @@ enum LLMExecutionPlanCompiler {
                 fallbackText: plan.fallbackText,
                 inputCharacterCount: plan.primaryInputCharacterCount,
                 outputTokenBudgetHint: plan.outputTokenBudgetHint,
+                attachments: plan.attachments,
                 conversationHistory: plan.conversationHistory,
                 previousResponseID: plan.previousResponseID,
                 responseFormat: plan.responseFormat

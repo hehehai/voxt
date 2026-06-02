@@ -46,6 +46,19 @@ final class OnboardingSupportTests: XCTestCase {
         XCTAssertTrue(OnboardingPermissionRequirementResolver.requiredPermissions(for: .finish, context: context).isEmpty)
     }
 
+    func testRewritePermissionsIncludeScreenCaptureWhenRewriteScreenshotContextIsEnabled() {
+        let context = OnboardingPermissionRequirementContext(
+            selectedEngine: .mlxAudio,
+            muteSystemAudioWhileRecording: false,
+            rewriteScreenshotContextEnabled: true
+        )
+
+        XCTAssertEqual(
+            OnboardingPermissionRequirementResolver.requiredPermissions(for: .rewrite, context: context),
+            [.screenCapture]
+        )
+    }
+
     func testFeatureSelectionResolverMapsASRSelections() {
         XCTAssertEqual(
             OnboardingFeatureSelectionResolver.asrSelectionID(

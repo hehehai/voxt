@@ -1,6 +1,53 @@
 import Foundation
 
 extension RemoteLLMRuntimeClient {
+    func dataURL(for image: LLMImageAttachment) -> String {
+        "data:\(image.mimeType);base64,\(image.data.base64EncodedString())"
+    }
+
+    func responsesContentBlocks(
+        text: String,
+        attachments: [LLMInputAttachment]
+    ) -> [[String: Any]] {
+        var blocks: [[String: Any]] = []
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedText.isEmpty {
+            blocks.append([
+                "type": "input_text",
+                "text": text
+            ])
+        }
+
+        for attachment in attachments {
+            switch attachment {
+            case .image(let image):
+                blocks.append([
+                    "type": "input_image",
+                    "image_url": dataURL(for: image),
+                    "detail": image.detail.rawValue
+                ])
+            }
+        }
+
+        return blocks
+    }
+
+    func responsesUserInputPayload(
+        text: String,
+        attachments: [LLMInputAttachment]
+    ) -> Any {
+        guard !attachments.isEmpty else { return text }
+        return [
+            [
+                "role": "user",
+                "content": responsesContentBlocks(
+                    text: text,
+                    attachments: attachments
+                )
+            ]
+        ]
+    }
+
     func openAICompatibleMessages(systemPrompt: String, userPrompt: String) -> [[String: String]] {
         let trimmedSystem = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedSystem.isEmpty {
@@ -341,6 +388,7 @@ extension RemoteLLMRuntimeClient {
 
     func responsesInputMessages(
         currentUserInput: String,
+        currentAttachments: [LLMInputAttachment],
         conversationHistory: [RewriteConversationPromptTurn]
     ) -> [[String: Any]] {
         var messages: [[String: Any]] = []
@@ -368,7 +416,12 @@ extension RemoteLLMRuntimeClient {
 
         messages.append([
             "role": "user",
-            "content": currentUserInput
+            "content": currentAttachments.isEmpty
+                ? currentUserInput
+                : responsesContentBlocks(
+                    text: currentUserInput,
+                    attachments: currentAttachments
+                )
         ])
         return messages
     }

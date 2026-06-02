@@ -219,6 +219,7 @@ struct CustomLLMRequestPlan: Equatable {
     let prompt: String
     let inputCharacterCount: Int
     let maxTokensOverride: Int?
+    let attachments: [LLMInputAttachment]
     let logMode: String?
     let contentLogSections: [CustomLLMLogSection]
     let resultFallback: String
@@ -269,6 +270,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: request.prompt,
             inputCharacterCount: request.inputCharacterCount,
             maxTokensOverride: request.outputTokenBudgetHint,
+            attachments: request.attachments,
             logMode: usesUserMessageMode ? "userMessage" : nil,
             contentLogSections: sections,
             resultFallback: request.fallbackText,
@@ -294,6 +296,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: prompt,
             inputCharacterCount: input.count,
             maxTokensOverride: nil,
+            attachments: [],
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: systemPrompt),
@@ -316,6 +319,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: prompt,
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
+            attachments: [],
             logMode: "userMessage",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -343,6 +347,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: prompt,
             inputCharacterCount: text.count,
             maxTokensOverride: nil,
+            attachments: [],
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: instructions),
@@ -366,6 +371,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: prompt,
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
+            attachments: [],
             logMode: "userMessage",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -401,6 +407,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: prompt,
             inputCharacterCount: combinedInput.count,
             maxTokensOverride: nil,
+            attachments: [],
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: instructions),
@@ -424,6 +431,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: prompt,
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
+            attachments: [],
             logMode: "userMessage",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -447,6 +455,7 @@ enum CustomLLMRequestPlanBuilder {
             prompt: requestPrompt,
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
+            attachments: [],
             logMode: "dictionaryHistoryScan",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -572,6 +581,13 @@ struct CustomLLMModelCatalog {
             releaseStatus: .standard
         ),
         Option(
+            id: "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+            title: "Qwen2.5 VL 3B Instruct (4bit)",
+            description: "Compact Qwen vision-language model for local text-and-image context.",
+            visibility: .visible,
+            releaseStatus: .new
+        ),
+        Option(
             id: "mlx-community/Qwen3-0.6B-4bit",
             title: "Qwen3 0.6B (4bit)",
             description: "Smallest official Qwen3 local model for fast low-memory prompts.",
@@ -598,6 +614,13 @@ struct CustomLLMModelCatalog {
             description: "Higher-quality Qwen3 model for stronger enhancement results.",
             visibility: .visible,
             releaseStatus: .standard
+        ),
+        Option(
+            id: "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit",
+            title: "Qwen3 VL 4B Instruct (4bit)",
+            description: "Recommended Qwen3 multimodal model for local app screenshots and text context.",
+            visibility: .visible,
+            releaseStatus: .new
         ),
         Option(
             id: "mlx-community/Qwen3.5-2B-4bit",
@@ -714,14 +737,14 @@ struct CustomLLMModelCatalog {
         Option(
             id: "mlx-community/gemma-4-e2b-it-4bit",
             title: "Gemma 4 E2B IT (4bit)",
-            description: "Official Gemma 4 compact text model with stronger newer prompting behavior.",
+            description: "Official Gemma 4 compact multimodal model that can use both text and image context.",
             visibility: .visible,
             releaseStatus: .new
         ),
         Option(
             id: "mlx-community/gemma-4-e4b-it-4bit",
             title: "Gemma 4 E4B IT (4bit)",
-            description: "Higher-capacity Gemma 4 option for stronger local text generation quality.",
+            description: "Higher-capacity Gemma 4 multimodal option for stronger local text-and-image generation quality.",
             visibility: .visible,
             releaseStatus: .new
         ),
@@ -800,10 +823,12 @@ struct CustomLLMModelCatalog {
     nonisolated private static let presentationByRepo: [String: PresentationMetadata] = [
         "Qwen/Qwen2-1.5B-Instruct": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
         "Qwen/Qwen2.5-3B-Instruct": PresentationMetadata(ratingText: "4.3", tagKeys: ["Balanced"]),
+        "mlx-community/Qwen2.5-VL-3B-Instruct-4bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Balanced", "Vision"]),
         "mlx-community/Qwen3-0.6B-4bit": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
         "mlx-community/Qwen3-1.7B-4bit": PresentationMetadata(ratingText: "4.2", tagKeys: ["Fast"]),
         "mlx-community/Qwen3-4B-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Balanced"]),
         "mlx-community/Qwen3-8B-4bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Accurate"]),
+        "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Balanced", "Vision"]),
         "mlx-community/Qwen3.5-2B-4bit": PresentationMetadata(ratingText: "4.3", tagKeys: ["Fast"]),
         "mlx-community/Qwen3.5-4B-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Balanced"]),
         "mlx-community/Qwen3.5-0.8B-4bit-OptiQ": PresentationMetadata(ratingText: "4.1", tagKeys: ["Fast"]),
@@ -820,8 +845,8 @@ struct CustomLLMModelCatalog {
         "mlx-community/Mistral-Nemo-Instruct-2407-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
         "mlx-community/gemma-2-2b-it-4bit": PresentationMetadata(ratingText: "4.1", tagKeys: ["Fast"]),
         "mlx-community/gemma-2-9b-it-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
-        "mlx-community/gemma-4-e2b-it-4bit": PresentationMetadata(ratingText: "4.3", tagKeys: ["Fast"]),
-        "mlx-community/gemma-4-e4b-it-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Balanced"]),
+        "mlx-community/gemma-4-e2b-it-4bit": PresentationMetadata(ratingText: "4.3", tagKeys: ["Fast", "Vision"]),
+        "mlx-community/gemma-4-e4b-it-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Balanced", "Vision"]),
         "mlx-community/Phi-3.5-mini-instruct-4bit": PresentationMetadata(ratingText: "4.2", tagKeys: ["Fast"]),
         "mlx-community/internlm2_5-7b-chat-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
         "mlx-community/MiniCPM4-8B-4bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Accurate"]),
@@ -836,8 +861,10 @@ struct CustomLLMModelCatalog {
     nonisolated private static let knownRemoteSizeBytesByRepo: [String: Int64] = [
         "Qwen/Qwen2-1.5B-Instruct": 3_098_962_420,
         "Qwen/Qwen2.5-3B-Instruct": 6_183_464_935,
+        "mlx-community/Qwen2.5-VL-3B-Instruct-4bit": 3_900_000_000,
         "mlx-community/Qwen3-4B-4bit": 2_278_972_183,
         "mlx-community/Qwen3-8B-4bit": 4_623_784_971,
+        "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit": 4_900_000_000,
         "mlx-community/Qwen3.5-0.8B-4bit-OptiQ": 598_000_000,
         "mlx-community/Qwen3.5-4B-4bit": 3_060_000_000,
         "mlx-community/Qwen3.5-4B-OptiQ-4bit": 2_970_000_000,
@@ -895,6 +922,40 @@ struct CustomLLMModelCatalog {
 
     nonisolated static func isSupportedModelRepo(_ repo: String) -> Bool {
         option(for: repo) != nil
+    }
+
+    nonisolated static func supportsImageInput(repo: String) -> Bool {
+        let normalized = canonicalModelRepo(repo)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        if normalized.contains("qwen2-vl")
+            || normalized.contains("qwen2.5-vl")
+            || normalized.contains("qwen3-vl")
+            || normalized.contains("paligemma")
+            || normalized.contains("pixtral")
+            || normalized.contains("idefics")
+            || normalized.contains("smolvlm")
+            || normalized.contains("fastvlm")
+            || normalized.contains("llava")
+            || normalized.contains("lfm2-vl")
+            || normalized.contains("lfm2.5-vl")
+            || normalized.contains("glm-ocr")
+            || normalized.contains("qvq")
+            || normalized.contains("minicpm-v") {
+            return true
+        }
+
+        if normalized.contains("gemma-3-") || normalized.contains("gemma-4-") {
+            return true
+        }
+
+        if normalized.contains("ministral-3") || normalized.contains("mistral-3") {
+            return true
+        }
+
+        return false
     }
 
     nonisolated static func releaseStatus(for repo: String) -> ReleaseStatus {

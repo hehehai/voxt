@@ -9,6 +9,8 @@ func featureSettingsLocalizedKey(_ key: String) -> LocalizedStringKey {
 }
 
 extension FeatureSettingsView {
+    static let scrollBottomAnchorID = "feature-settings-scroll-bottom-anchor"
+
     func promptBinding(
         get: @escaping () -> String,
         set: @escaping (String) -> Void,
@@ -92,25 +94,38 @@ extension FeatureSettingsView {
         systemImageName: String? = nil,
         pills: [FeatureSummaryPill],
         showsHeroHeader: Bool = true,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                if showsHeroHeader || !pills.isEmpty {
-                    FeatureHeroCard(
-                        title: showsHeroHeader ? title : "",
-                        subtitle: showsHeroHeader ? subtitle : "",
-                        iconKind: showsHeroHeader ? iconKind : nil,
-                        systemImageName: showsHeroHeader ? systemImageName : nil,
-                        pills: pills
-                    )
-                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if showsHeroHeader || !pills.isEmpty {
+                        FeatureHeroCard(
+                            title: showsHeroHeader ? title : "",
+                            subtitle: showsHeroHeader ? subtitle : "",
+                            iconKind: showsHeroHeader ? iconKind : nil,
+                            systemImageName: showsHeroHeader ? systemImageName : nil,
+                            pills: pills
+                        )
+                    }
 
-                content()
+                    content()
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.scrollBottomAnchorID)
+                }
+                .padding(.top, 2)
+                .padding(.bottom, 12)
+                .padding(.trailing, SettingsUIStyle.contentScrollTrailingGutter)
             }
-            .padding(.top, 2)
-            .padding(.bottom, 12)
-            .padding(.trailing, SettingsUIStyle.contentScrollTrailingGutter)
+            .onChange(of: scrollToBottomRequestRevision) { _, _ in
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        proxy.scrollTo(Self.scrollBottomAnchorID, anchor: .bottom)
+                    }
+                }
+            }
         }
         .padding(.trailing, -SettingsUIStyle.contentScrollIndicatorOutset)
         .background(SettingsUIStyle.groupedFillColor.opacity(0.001))

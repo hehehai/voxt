@@ -514,6 +514,10 @@ struct LLMDebugResultCard: View {
                     .textSelection(.enabled)
             }
 
+            if let metadata = result.requestMetadata {
+                LLMDebugRequestMetadataView(metadata: metadata)
+            }
+
             ScrollView {
                 Text(result.isError ? (result.errorText ?? "") : (result.outputText.isEmpty ? modelDebugLocalized("No output.") : result.outputText))
                     .font(.body)
@@ -538,6 +542,86 @@ struct LLMDebugResultCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(result.isError ? Color.red.opacity(0.22) : DetailPanelUIStyle.borderColor, lineWidth: 1)
+        )
+    }
+}
+
+private struct LLMDebugRequestMetadataView: View {
+    let metadata: LLMDebugRequestMetadata
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !metadata.spokenInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                LLMDebugMetadataRow(
+                    title: modelDebugLocalized("Spoken Instruction"),
+                    value: metadata.spokenInstruction
+                )
+            }
+
+            if !metadata.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                LLMDebugMetadataRow(
+                    title: modelDebugLocalized("Selected Source Text"),
+                    value: metadata.sourceText
+                )
+            }
+
+            HStack(spacing: 8) {
+                LLMDebugMetadataBadge(
+                    title: modelDebugLocalized("App Context"),
+                    value: "\(metadata.appContextCharacterCount) chars"
+                )
+                LLMDebugMetadataBadge(
+                    title: modelDebugLocalized("Image"),
+                    value: metadata.imageAttachmentCount > 0
+                        ? modelDebugLocalized("Attached")
+                        : modelDebugLocalized("Not Attached")
+                )
+            }
+        }
+    }
+}
+
+private struct LLMDebugMetadataRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption)
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct LLMDebugMetadataBadge: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .background(
+            Capsule(style: .continuous)
+                .fill(DetailPanelUIStyle.controlFillColor)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(DetailPanelUIStyle.borderColor, lineWidth: 1)
         )
     }
 }

@@ -54,7 +54,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     struct EnhancementContextSnapshot {
+        let appName: String?
         let bundleID: String?
+        let pid: pid_t?
         let capturedAt: Date
     }
 

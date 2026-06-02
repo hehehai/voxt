@@ -112,6 +112,8 @@ final class CustomLLMModelSupportTests: XCTestCase {
     func testCatalogIncludesNewRecommendedHomeMacModels() {
         let modelIDs = Set(CustomLLMModelCatalog.availableModels.map(\.id))
 
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen2.5-VL-3B-Instruct-4bit"))
+        XCTAssertTrue(modelIDs.contains("lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3.5-0.8B-4bit-OptiQ"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3.5-4B-4bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3.5-4B-OptiQ-4bit"))
@@ -122,6 +124,14 @@ final class CustomLLMModelSupportTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("mlx-community/GLM-Z1-9B-0414-4bit"))
         XCTAssertFalse(modelIDs.contains("mlx-community/Qwen3-30B-A3B-4bit"))
         XCTAssertFalse(modelIDs.contains("mlx-community/GLM-4.7-Flash-4bit"))
+    }
+
+    func testCatalogDetectsVisionCapableRepos() {
+        XCTAssertTrue(CustomLLMModelCatalog.supportsImageInput(repo: "mlx-community/gemma-4-e2b-it-4bit"))
+        XCTAssertTrue(CustomLLMModelCatalog.supportsImageInput(repo: "mlx-community/Qwen2.5-VL-3B-Instruct-4bit"))
+        XCTAssertTrue(CustomLLMModelCatalog.supportsImageInput(repo: "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit"))
+        XCTAssertTrue(CustomLLMModelCatalog.supportsImageInput(repo: "mlx-community/paligemma-3b-mix-448-8bit"))
+        XCTAssertFalse(CustomLLMModelCatalog.supportsImageInput(repo: "mlx-community/Qwen3-8B-4bit"))
     }
 
     func testStorageSupportBuildsExpectedCacheDirectory() {

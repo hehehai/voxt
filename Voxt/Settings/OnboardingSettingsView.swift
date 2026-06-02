@@ -536,6 +536,14 @@ struct OnboardingSettingsView: View {
                     PermissionGuidance.openSettings(for: permission)
                 }
             }
+        case .screenCapture:
+            let granted = ScreenCapturePermission.requestAccess()
+            Task { @MainActor in
+                self.permissionRefreshRevision += 1
+                if !granted {
+                    PermissionGuidance.openSettings(for: permission)
+                }
+            }
         case .systemAudioCapture:
             SystemAudioCapturePermission.requestAccess { granted in
                 Task { @MainActor in

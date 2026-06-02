@@ -575,8 +575,9 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
 
     func testResponsesInputMessagesBuildsConversationHistoryAndCurrentTurn() {
         let client = RemoteLLMRuntimeClient()
-        let input = client.responsesInputMessages(
+        let input: [[String: Any]] = client.responsesInputMessages(
             currentUserInput: "看一下大同的经纬度。",
+            currentAttachments: [],
             conversationHistory: [
                 RewriteConversationPromptTurn(
                     userPromptText: "",
@@ -587,9 +588,110 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         )
 
         XCTAssertEqual(input.count, 2)
-        XCTAssertEqual(input.first?["role"] as? String, "assistant")
-        XCTAssertEqual(input.last?["role"] as? String, "user")
-        XCTAssertEqual(input.last?["content"] as? String, "看一下大同的经纬度。")
+        let firstRole = input.first?["role"] as? String
+        let lastRole = input.last?["role"] as? String
+        let lastContent = input.last?["content"] as? String
+        XCTAssertEqual(firstRole, "assistant")
+        XCTAssertEqual(lastRole, "user")
+        XCTAssertEqual(lastContent, "看一下大同的经纬度。")
+    }
+
+    func testResponsesUserInputPayloadEncodesImageAttachmentsAsInputBlocks() throws {
+        let client = RemoteLLMRuntimeClient()
+        let payload = client.responsesUserInputPayload(
+            text: "看一下这个界面。",
+            attachments: [
+                .image(
+                    LLMImageAttachment(
+                        data: Data([0x01, 0x02, 0x03]),
+                        mimeType: "image/jpeg",
+                        detail: .high,
+                        filename: "capture.jpg"
+                    )
+                )
+            ]
+        )
+
+        let messages = try XCTUnwrap(payload as? [[String: Any]])
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertEqual(messages.first?["role"] as? String, "user")
+
+        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
+        XCTAssertEqual(content.count, 2)
+        XCTAssertEqual(content.first?["type"] as? String, "input_text")
+        XCTAssertEqual(content.first?["text"] as? String, "看一下这个界面。")
+        XCTAssertEqual(content.last?["type"] as? String, "input_image")
+        XCTAssertEqual(content.last?["detail"] as? String, "high")
+        XCTAssertEqual(
+            content.last?["image_url"] as? String,
+            "data:image/jpeg;base64,AQID"
+        )
+    }
+
+    func testTranscriptionAppContextCapabilityResolverDetectsSupportedVisionInputs() {
+        let openAIVisionProvider = LLMExecutionProvider.remote(
+            provider: .openAI,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.openAI.rawValue,
+                model: "gpt-5"
+            )
+        )
+        let openAIGPT41Provider = LLMExecutionProvider.remote(
+            provider: .openAI,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.openAI.rawValue,
+                model: "gpt-4.1"
+            )
+        )
+        let openAITextOnlyProvider = LLMExecutionProvider.remote(
+            provider: .openAI,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.openAI.rawValue,
+                model: "gpt-4"
+            )
+        )
+        let volcengineVisionProvider = LLMExecutionProvider.remote(
+            provider: .volcengine,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.volcengine.rawValue,
+                model: "doubao-seed-2-0-pro-260215"
+            )
+        )
+        let customVisionProvider = LLMExecutionProvider.customLLM(
+            repo: "mlx-community/gemma-4-e4b-it-4bit"
+        )
+
+        let openAIVisionCapabilities = TranscriptionAppContextCapabilityResolver.capabilities(
+            for: openAIVisionProvider
+        )
+        let openAIGPT41Capabilities = TranscriptionAppContextCapabilityResolver.capabilities(
+            for: openAIGPT41Provider
+        )
+        let openAITextOnlyCapabilities = TranscriptionAppContextCapabilityResolver.capabilities(
+            for: openAITextOnlyProvider
+        )
+        let volcengineCapabilities = TranscriptionAppContextCapabilityResolver.capabilities(
+            for: volcengineVisionProvider
+        )
+        let customTextOnlyCapabilities = TranscriptionAppContextCapabilityResolver.capabilities(
+            for: .customLLM(repo: "mlx-community/Qwen3-8B-4bit")
+        )
+        let customVisionCapabilities = TranscriptionAppContextCapabilityResolver.capabilities(
+            for: customVisionProvider
+        )
+
+        XCTAssertTrue(openAIVisionCapabilities.supportsTextContext)
+        XCTAssertTrue(openAIVisionCapabilities.supportsImageInput)
+        XCTAssertTrue(openAIGPT41Capabilities.supportsTextContext)
+        XCTAssertTrue(openAIGPT41Capabilities.supportsImageInput)
+        XCTAssertTrue(openAITextOnlyCapabilities.supportsTextContext)
+        XCTAssertFalse(openAITextOnlyCapabilities.supportsImageInput)
+        XCTAssertTrue(volcengineCapabilities.supportsTextContext)
+        XCTAssertTrue(volcengineCapabilities.supportsImageInput)
+        XCTAssertTrue(customTextOnlyCapabilities.supportsTextContext)
+        XCTAssertFalse(customTextOnlyCapabilities.supportsImageInput)
+        XCTAssertTrue(customVisionCapabilities.supportsTextContext)
+        XCTAssertTrue(customVisionCapabilities.supportsImageInput)
     }
 
     func testResponsesResponseIDParsesNestedAndTopLevelForms() {

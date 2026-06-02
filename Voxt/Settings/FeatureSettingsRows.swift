@@ -127,6 +127,74 @@ struct FeatureEmbeddedFieldGroup<Content: View>: View {
     }
 }
 
+struct FeatureDisclosureSection<Content: View>: View {
+    let title: String
+    var badgeText: String? = nil
+    let detail: String
+    let embeddedSpacing: CGFloat = 12
+    var onExpand: (() -> Void)? = nil
+    @ViewBuilder let content: Content
+
+    @State private var isExpanded: Bool
+
+    init(
+        title: String,
+        badgeText: String? = nil,
+        detail: String = "",
+        onExpand: (() -> Void)? = nil,
+        initiallyExpanded: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.badgeText = badgeText
+        self.detail = detail
+        self.onExpand = onExpand
+        self.content = content()
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(action: toggleExpanded) {
+                FeatureRowScaffold(
+                    title: title,
+                    badgeText: badgeText,
+                    detail: detail,
+                    isEmbedded: false
+                ) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                }
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                FeatureEmbeddedFieldGroup(spacing: embeddedSpacing) {
+                    content
+                }
+                .clipped()
+                .transition(.opacity)
+            }
+        }
+        .clipped()
+    }
+
+    private func toggleExpanded() {
+        let shouldExpand = !isExpanded
+        withAnimation(.easeInOut(duration: 0.16)) {
+            isExpanded.toggle()
+        }
+        guard shouldExpand else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            onExpand?()
+        }
+    }
+}
+
 struct FeatureNoteSoundPresetRow<PickerContent: View>: View {
     let title: String
     let detail: String

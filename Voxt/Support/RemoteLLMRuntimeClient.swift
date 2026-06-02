@@ -155,18 +155,23 @@ struct RemoteLLMRuntimeClient {
         if provider.usesResponsesAPI {
             let trimmedPreviousResponseID = request.previousResponseID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let inputPayload: Any
+            let currentUserInputPayload = responsesUserInputPayload(
+                text: prompt,
+                attachments: request.attachments
+            )
 
             if usesResponsesConversation {
                 if !trimmedPreviousResponseID.isEmpty {
-                    inputPayload = prompt
+                    inputPayload = currentUserInputPayload
                 } else {
                     inputPayload = responsesInputMessages(
                         currentUserInput: prompt,
+                        currentAttachments: request.attachments,
                         conversationHistory: request.conversationHistory
                     )
                 }
             } else {
-                inputPayload = prompt
+                inputPayload = currentUserInputPayload
             }
 
             let result = try await completeResponses(
@@ -418,6 +423,7 @@ struct RemoteLLMRuntimeClient {
                 } else if !conversationHistory.isEmpty {
                     inputPayload = responsesInputMessages(
                         currentUserInput: dictatedPrompt,
+                        currentAttachments: [],
                         conversationHistory: conversationHistory
                     )
                     requestContentForLog = dictatedPrompt
@@ -508,6 +514,7 @@ struct RemoteLLMRuntimeClient {
             } else if !conversationHistory.isEmpty {
                 inputPayload = responsesInputMessages(
                     currentUserInput: input,
+                    currentAttachments: [],
                     conversationHistory: conversationHistory
                 )
             } else {

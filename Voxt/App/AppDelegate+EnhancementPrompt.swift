@@ -120,9 +120,16 @@ extension AppDelegate {
     }
 
     func captureEnhancementContextSnapshot() -> EnhancementContextSnapshot {
-        let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        let fallbackAppName = frontmostApplication?.localizedName
+        let fallbackBundleID = frontmostApplication?.bundleIdentifier
+        let fallbackPID = frontmostApplication?.processIdentifier
         return EnhancementContextSnapshot(
-            bundleID: frontmostBundleID,
+            appName: sessionTargetApplicationBundleID != nil
+                ? (NSRunningApplication(processIdentifier: sessionTargetApplicationPID ?? 0)?.localizedName ?? fallbackAppName)
+                : fallbackAppName,
+            bundleID: sessionTargetApplicationBundleID ?? fallbackBundleID,
+            pid: sessionTargetApplicationBundleID != nil ? sessionTargetApplicationPID : fallbackPID,
             capturedAt: Date()
         )
     }

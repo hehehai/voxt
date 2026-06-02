@@ -128,4 +128,66 @@ final class FeatureSettingsStoreTests: XCTestCase {
             )
         }
     }
+
+    func testLoadDefaultsRewriteAppContextToDisabled() throws {
+        try withEphemeralDefaults { defaults in
+            let settings = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertFalse(settings.rewrite.appContext.enabled)
+            XCTAssertFalse(settings.rewrite.appContext.textEnabled)
+            XCTAssertFalse(settings.rewrite.appContext.screenshotEnabled)
+        }
+    }
+
+    func testSavePersistsRewriteAppContextSubsettings() throws {
+        try withEphemeralDefaults { defaults in
+            var settings = FeatureSettingsStore.load(defaults: defaults)
+            settings.rewrite.appContext.textEnabled = true
+            settings.rewrite.appContext.screenshotEnabled = false
+
+            FeatureSettingsStore.save(settings, defaults: defaults)
+            let reloaded = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertTrue(reloaded.rewrite.appContext.enabled)
+            XCTAssertTrue(reloaded.rewrite.appContext.textEnabled)
+            XCTAssertFalse(reloaded.rewrite.appContext.screenshotEnabled)
+        }
+    }
+
+    func testLoadDoesNotBackfillRewriteAppContextFromTranscriptionSettings() throws {
+        try withEphemeralDefaults { defaults in
+            var settings = FeatureSettingsStore.load(defaults: defaults)
+            settings.transcription.appContext.enabled = true
+            settings.rewrite.appContext.enabled = false
+
+            FeatureSettingsStore.save(settings, defaults: defaults)
+            let reloaded = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertFalse(reloaded.rewrite.appContext.enabled)
+            XCTAssertFalse(reloaded.rewrite.appContext.textEnabled)
+            XCTAssertFalse(reloaded.rewrite.appContext.screenshotEnabled)
+        }
+    }
+
+    func testAppContextSettingsEnableToggleTurnsOnBothSubsettings() {
+        var settings = TranscriptionAppContextSettings()
+
+        settings.enabled = true
+
+        XCTAssertTrue(settings.textEnabled)
+        XCTAssertTrue(settings.screenshotEnabled)
+        XCTAssertTrue(settings.enabled)
+    }
+
+    func testAppContextSettingsDisableWhenBothSubsettingsAreOff() {
+        var settings = TranscriptionAppContextSettings(
+            textEnabled: true,
+            screenshotEnabled: true
+        )
+
+        settings.textEnabled = false
+        settings.screenshotEnabled = false
+
+        XCTAssertFalse(settings.enabled)
+    }
 }

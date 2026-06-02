@@ -420,6 +420,58 @@ final class ModelDebugSupportTests: XCTestCase {
 
         XCTAssertTrue(resolved.content.contains("write a short reply"))
         XCTAssertEqual(resolved.inputSummary, "write a short reply")
+        XCTAssertEqual(resolved.requestMetadata?.spokenInstruction, "write a short reply")
+        XCTAssertEqual(resolved.requestMetadata?.sourceText, "")
+    }
+
+    func testPromptResolverIncludesRewriteAppContextAndImageAttachmentInCompiledPreview() throws {
+        let preset = LLMDebugPresetOption(
+            id: "builtin:rewrite",
+            title: "Rewrite",
+            subtitle: "Built-in preset",
+            kind: .rewrite,
+            promptTemplate: AppPromptDefaults.text(for: .rewrite, language: .english),
+            variables: ModelSettingsPromptVariables.rewrite,
+            defaultValues: [:]
+        )
+        let payload = DebugRewriteAppContextPayload(
+            textContext: """
+            App: WeChat
+
+            Visible text:
+            - Alice: Can you send the update?
+            """,
+            attachments: [
+                .image(
+                    DebugRewriteImageAttachmentPayload(
+                        base64Data: Data("preview-image".utf8).base64EncodedString(),
+                        mimeType: "image/jpeg",
+                        detail: LLMImageAttachmentDetail.low.rawValue,
+                        filename: "wechat.jpg"
+                    )
+                )
+            ]
+        )
+        let payloadData = try XCTUnwrap(try? JSONEncoder().encode(payload))
+        let payloadString = try XCTUnwrap(String(data: payloadData, encoding: .utf8))
+
+        let resolved = ModelDebugPromptResolver.resolve(
+            preset: preset,
+            values: [
+                "{{DICTATED_PROMPT}}": "make it warmer",
+                "{{SOURCE_TEXT}}": "Can you send the update by 5?",
+                ModelDebugRuntimeValueKey.rewriteAppContextCapture: payloadString
+            ]
+        )
+
+        let compiled = try XCTUnwrap(resolved.compiledRequest)
+        XCTAssertContains(compiled.instructions, "### Active app context")
+        XCTAssertContains(compiled.instructions, "App: WeChat")
+        XCTAssertEqual(compiled.attachments.count, 1)
+        XCTAssertContains(resolved.content, "[attachments]")
+        XCTAssertContains(resolved.content, "wechat.jpg")
+        XCTAssertEqual(resolved.requestMetadata?.appContextCharacterCount, payload.textContext.count)
+        XCTAssertEqual(resolved.requestMetadata?.imageAttachmentCount, 1)
     }
 
     func testRemoteDebugModelCatalogFiltersUnavailableProviders() {

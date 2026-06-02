@@ -196,7 +196,10 @@ enum AppPreferenceKey {
         7. Preserve the original mixed-language structure. Do not translate, summarize, expand, explain, or change the writing style. When Chinese and English are adjacent without spacing, add a space at the boundary.
         8. If the content contains ordered-list wording, format it as a numbered list. If it contains a clear non-ordered parallel relationship, format it as an unordered list using "-". If there is a sublist, use Markdown nested-list formatting with 4 leading spaces or 1 tab before child items.
         9. Add line breaks in appropriate places so the content is clear and well structured.
-        10. If no meaningful content remains after cleanup, return an empty string.
+        10. If active app context or a screenshot is provided, use it only to resolve references, identify the current UI target, and correct obvious recognition mistakes. Do not mechanically repeat visible UI text in the final answer.
+        11. If the spoken content and the app context disagree, prefer the spoken content unless the app context clearly disambiguates a short reference such as "this one", "reply here", or "send this".
+        12. Do not infer details that are not clearly present in the speech, the text context, or the screenshot. If any screenshot detail is blurry, partial, or ambiguous, ignore it.
+        13. If no meaningful content remains after cleanup, return an empty string.
 
         Examples:
         - Input: "Um, buy apples and bananas, uh, and sugarcane. Ah no no, no sugarcane, get some loquats."
