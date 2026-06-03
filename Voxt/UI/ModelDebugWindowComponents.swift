@@ -577,7 +577,56 @@ private struct LLMDebugRequestMetadataView: View {
                         : modelDebugLocalized("Not Attached")
                 )
             }
+
+            if !metadata.imagePreviews.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(metadata.imagePreviews.enumerated()), id: \.offset) { _, preview in
+                            LLMDebugImagePreviewCard(preview: preview)
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+private struct LLMDebugImagePreviewCard: View {
+    let preview: LLMDebugImagePreview
+
+    private var image: NSImage? {
+        NSImage(data: preview.data)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Group {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Rectangle()
+                        .fill(DetailPanelUIStyle.controlFillColor)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
+                        )
+                }
+            }
+            .frame(width: 180, height: 110)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            Text(preview.filename)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+
+            Text("\(preview.mimeType) · \(preview.detail)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 180, alignment: .leading)
     }
 }
 

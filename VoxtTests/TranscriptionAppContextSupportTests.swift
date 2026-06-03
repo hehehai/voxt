@@ -19,7 +19,7 @@ final class TranscriptionAppContextSupportTests: XCTestCase {
 
         XCTAssertEqual(attachment.mimeType, "image/jpeg")
         XCTAssertEqual(attachment.filename, "My-App-context.jpg")
-        XCTAssertNotEqual(attachment.detail, .high)
+        XCTAssertEqual(attachment.detail, .auto)
         XCTAssertLessThanOrEqual(
             max(outputImage.width, outputImage.height),
             TranscriptionAppContextCaptureService.preferredImageAttachmentLongEdge
@@ -44,6 +44,32 @@ final class TranscriptionAppContextSupportTests: XCTestCase {
         XCTAssertEqual(outputImage.width, 800)
         XCTAssertEqual(outputImage.height, 600)
         XCTAssertEqual(attachment.detail, .low)
+    }
+
+    func testComposeTextContextAppliesBudgetWhilePreservingHighPrioritySections() {
+        let selectedText = String(repeating: "selected-", count: 320)
+        let visibleLines = (0 ..< 40).map { index in
+            "visible-line-\(index)-" + String(repeating: "content ", count: 24)
+        }
+
+        let context = TranscriptionAppContextCaptureService.composeTextContext(
+            appName: "Ghostty",
+            bundleID: "com.mitchellh.ghostty",
+            windowTitle: String(repeating: "terminal-window-", count: 24),
+            browserURL: nil,
+            focusedElementSummary: String(repeating: "AXTextArea summary ", count: 30),
+            selectedText: selectedText,
+            visibleLines: visibleLines
+        )
+
+        XCTAssertLessThanOrEqual(
+            context.count,
+            TranscriptionAppContextCaptureService.maxTextContextCharacters
+        )
+        XCTAssertTrue(context.contains("App: Ghostty"))
+        XCTAssertTrue(context.contains("Focused element:"))
+        XCTAssertTrue(context.contains("Selected text:"))
+        XCTAssertTrue(context.contains("Visible text:"))
     }
 
     private func decodeImage(from data: Data) -> CGImage? {

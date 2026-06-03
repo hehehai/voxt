@@ -74,9 +74,30 @@ enum TranscriptionAppContextCaptureService {
     nonisolated static let preferredImageAttachmentLongEdge = 1280
     nonisolated static let minimumImageAttachmentLongEdge = 768
     nonisolated static let maxImageAttachmentBytes = 700_000
+    nonisolated static let maxTextContextCharacters = 4_200
 
     private nonisolated static let imageAttachmentCompressionQualities: [CGFloat] = [0.72, 0.6, 0.5, 0.4]
     private nonisolated static let imageAttachmentLongEdgeFallbacks: [Int] = [1280, 1152, 1024, 896, 768]
+    private nonisolated static let maxMetadataFieldCharacters = 220
+    private nonisolated static let maxFocusedElementCharacters = 320
+    private nonisolated static let maxSelectedTextCharacters = 2_600
+    private nonisolated static let maxVisibleTextCharacters = 2_000
+    private nonisolated static let maxVisibleLineCharacters = 220
+
+    private enum ImageCaptureFailureReason: String {
+        case disabled
+        case modelUnsupported
+        case permissionDenied
+        case windowNotFound
+        case captureFailed
+        case attachmentEncodingFailed
+    }
+
+    private struct ImageCaptureAttemptResult {
+        let attachment: LLMImageAttachment?
+        let failureReason: ImageCaptureFailureReason?
+        let windowID: CGWindowID?
+    }
 
     static func capture(
         snapshot: AppDelegate.EnhancementContextSnapshot,
@@ -87,17 +108,24 @@ enum TranscriptionAppContextCaptureService {
         let allowsTextContext = settings.textEnabled && modelCapabilities.supportsTextContext
         let allowsImageInput = settings.screenshotEnabled && modelCapabilities.supportsImageInput
         guard allowsTextContext || allowsImageInput else { return nil }
-        guard let resolvedApp = resolvedRunningApp(from: snapshot) else { return nil }
+        guard let resolvedApp = resolvedRunningApp(from: snapshot) else {
+            VoxtLog.llm(
+                "App context capture skipped. reason=appUnavailable, bundleID=\(snapshot.bundleID ?? "unknown"), pid=\(snapshot.pid.map(String.init) ?? "nil")"
+            )
+            return nil
+        }
 
         let appElement = AXUIElementCreateApplication(resolvedApp.processIdentifier)
         let windowElement = focusedWindow(in: appElement) ?? mainWindow(in: appElement)
         let windowTitle = windowElement.flatMap { stringAttribute(kAXTitleAttribute as String, from: $0) } ?? ""
+        var visibleLineCount = 0
         let textContext: String
         if allowsTextContext {
             let browserURL = browserURLResolver?(resolvedApp.bundleIdentifier)
             let selectedText = focusedSelectedText(in: appElement)
             let focusedElementSummary = focusedElementSummary(in: appElement)
             let visibleLines = visibleTextLines(in: windowElement, limit: 32)
+            visibleLineCount = visibleLines.count
             textContext = composeTextContext(
                 appName: resolvedApp.localizedName ?? snapshot.appName ?? snapshot.bundleID ?? "Unknown App",
                 bundleID: resolvedApp.bundleIdentifier ?? snapshot.bundleID ?? "",
@@ -111,20 +139,24 @@ enum TranscriptionAppContextCaptureService {
             textContext = ""
         }
 
-        let attachments: [LLMInputAttachment]
-        if allowsImageInput,
-           let imageAttachment = await captureWindowImageAttachment(
-                for: resolvedApp.processIdentifier,
-                preferredWindowTitle: windowTitle
-           ) {
-            attachments = [.image(imageAttachment)]
-        } else {
-            attachments = []
-        }
+        let imageCaptureResult = await imageCaptureResultIfNeeded(
+            pid: resolvedApp.processIdentifier,
+            preferredWindowTitle: windowTitle,
+            screenshotEnabled: settings.screenshotEnabled,
+            modelSupportsImageInput: modelCapabilities.supportsImageInput
+        )
+        let attachments = imageCaptureResult.attachment.map { [LLMInputAttachment.image($0)] } ?? []
 
         guard !textContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty else {
+            VoxtLog.llm(
+                "App context capture produced no payload. bundleID=\(resolvedApp.bundleIdentifier ?? "unknown"), textChars=0, attachmentCount=0"
+            )
             return nil
         }
+
+        VoxtLog.llm(
+            "App context capture. bundleID=\(resolvedApp.bundleIdentifier ?? "unknown"), appName=\(resolvedApp.localizedName ?? "unknown"), textChars=\(textContext.count), visibleLines=\(visibleLineCount), image=\(imageCaptureSummary(for: imageCaptureResult))"
+        )
 
         return TranscriptionAppContextCapture(
             textContext: textContext,
@@ -146,7 +178,7 @@ enum TranscriptionAppContextCaptureService {
             .first { !$0.isTerminated }
     }
 
-    private static func composeTextContext(
+    static func composeTextContext(
         appName: String,
         bundleID: String,
         windowTitle: String,
@@ -156,32 +188,58 @@ enum TranscriptionAppContextCaptureService {
         visibleLines: [String]
     ) -> String {
         var sections: [String] = []
-        sections.append("App: \(appName)")
-        if !bundleID.isEmpty {
-            sections.append("Bundle ID: \(bundleID)")
+
+        appendInlineSection(
+            "App",
+            value: appName,
+            maxCharacters: maxMetadataFieldCharacters,
+            to: &sections
+        )
+        appendInlineSection(
+            "Bundle ID",
+            value: bundleID,
+            maxCharacters: maxMetadataFieldCharacters,
+            to: &sections
+        )
+        appendInlineSection(
+            "Window",
+            value: windowTitle,
+            maxCharacters: maxMetadataFieldCharacters,
+            to: &sections
+        )
+        appendInlineSection(
+            "Browser URL",
+            value: browserURL,
+            maxCharacters: maxMetadataFieldCharacters,
+            to: &sections
+        )
+
+        if let focusedElementSummary {
+            appendInlineSection(
+                "Focused element",
+                value: focusedElementSummary,
+                maxCharacters: maxFocusedElementCharacters,
+                to: &sections
+            )
         }
-        if !windowTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append("Window: \(windowTitle)")
+
+        if let selectedText {
+            appendBlockSection(
+                "Selected text",
+                content: selectedText,
+                maxCharacters: maxSelectedTextCharacters,
+                to: &sections
+            )
         }
-        if let browserURL, !browserURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append("Browser URL: \(browserURL)")
+
+        if let visibleTextSection = visibleTextSection(from: visibleLines) {
+            sections.append(visibleTextSection)
         }
-        if let focusedElementSummary, !focusedElementSummary.isEmpty {
-            sections.append("Focused element: \(focusedElementSummary)")
-        }
-        if let selectedText, !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append("""
-            Selected text:
-            \(selectedText)
-            """)
-        }
-        if !visibleLines.isEmpty {
-            sections.append("""
-            Visible text:
-            \(visibleLines.map { "- \($0)" }.joined(separator: "\n"))
-            """)
-        }
-        return sections.joined(separator: "\n\n")
+
+        return joinSectionsWithinBudget(
+            sections,
+            maxCharacters: maxTextContextCharacters
+        )
     }
 
     private static func focusedWindow(in appElement: AXUIElement) -> AXUIElement? {
@@ -258,16 +316,106 @@ enum TranscriptionAppContextCaptureService {
         return keys.compactMap { stringAttribute($0, from: element) }
     }
 
+    private static func appendInlineSection(
+        _ title: String,
+        value: String?,
+        maxCharacters: Int,
+        to sections: inout [String]
+    ) {
+        guard let value else { return }
+        let normalized = normalizeTextLine(value)
+        guard !normalized.isEmpty else { return }
+        sections.append("\(title): \(truncatedText(normalized, maxCharacters: maxCharacters))")
+    }
+
+    private static func appendBlockSection(
+        _ title: String,
+        content: String?,
+        maxCharacters: Int,
+        to sections: inout [String]
+    ) {
+        guard let content else { return }
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        sections.append("""
+        \(title):
+        \(truncatedText(normalized, maxCharacters: maxCharacters))
+        """)
+    }
+
+    private static func visibleTextSection(from visibleLines: [String]) -> String? {
+        var renderedLines: [String] = []
+        var consumedCharacters = 0
+
+        for line in visibleLines {
+            let normalized = normalizeTextLine(line)
+            guard !normalized.isEmpty else { continue }
+            let truncatedLine = truncatedText(normalized, maxCharacters: maxVisibleLineCharacters)
+            let bulletLine = "- \(truncatedLine)"
+            let additionalCharacters = renderedLines.isEmpty
+                ? bulletLine.count
+                : bulletLine.count + 1
+            guard consumedCharacters + additionalCharacters <= maxVisibleTextCharacters else { break }
+            renderedLines.append(bulletLine)
+            consumedCharacters += additionalCharacters
+        }
+
+        guard !renderedLines.isEmpty else { return nil }
+        return """
+        Visible text:
+        \(renderedLines.joined(separator: "\n"))
+        """
+    }
+
+    private static func joinSectionsWithinBudget(
+        _ sections: [String],
+        maxCharacters: Int
+    ) -> String {
+        var result = ""
+
+        for section in sections {
+            let trimmedSection = section.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedSection.isEmpty else { continue }
+
+            let candidate = result.isEmpty
+                ? trimmedSection
+                : result + "\n\n" + trimmedSection
+            if candidate.count <= maxCharacters {
+                result = candidate
+                continue
+            }
+
+            let remainingCharacters = maxCharacters - result.count - (result.isEmpty ? 0 : 2)
+            guard remainingCharacters > 0 else { break }
+            let truncatedSection = truncatedText(trimmedSection, maxCharacters: remainingCharacters)
+            guard !truncatedSection.isEmpty else { break }
+            result = result.isEmpty
+                ? truncatedSection
+                : result + "\n\n" + truncatedSection
+            break
+        }
+
+        return result
+    }
+
     private static func normalizeTextLine(_ value: String) -> String {
         value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 
+    private static func truncatedText(_ value: String, maxCharacters: Int) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard maxCharacters > 0 else { return "" }
+        guard normalized.count > maxCharacters else { return normalized }
+        guard maxCharacters > 3 else { return String(normalized.prefix(maxCharacters)) }
+        return String(normalized.prefix(maxCharacters - 3)) + "..."
+    }
+
     private nonisolated static func captureWindowImageAttachment(
         for pid: pid_t,
         preferredWindowTitle: String
-    ) async -> LLMImageAttachment? {
+    ) async -> ImageCaptureAttemptResult {
         await Task.detached(priority: .userInitiated) {
             captureWindowImageAttachmentSynchronously(
                 for: pid,
@@ -279,15 +427,73 @@ enum TranscriptionAppContextCaptureService {
     private nonisolated static func captureWindowImageAttachmentSynchronously(
         for pid: pid_t,
         preferredWindowTitle: String
-    ) -> LLMImageAttachment? {
-        guard CGPreflightScreenCaptureAccess() else { return nil }
+    ) -> ImageCaptureAttemptResult {
+        guard CGPreflightScreenCaptureAccess() else {
+            return ImageCaptureAttemptResult(
+                attachment: nil,
+                failureReason: .permissionDenied,
+                windowID: nil
+            )
+        }
         guard let windowInfo = preferredWindowInfo(for: pid, preferredWindowTitle: preferredWindowTitle) else {
-            return nil
+            return ImageCaptureAttemptResult(
+                attachment: nil,
+                failureReason: .windowNotFound,
+                windowID: nil
+            )
         }
         guard let imageData = captureWindowImageData(windowID: windowInfo.windowID) else {
-            return nil
+            return ImageCaptureAttemptResult(
+                attachment: nil,
+                failureReason: .captureFailed,
+                windowID: windowInfo.windowID
+            )
         }
-        return makeImageAttachment(from: imageData, appName: windowInfo.ownerName)
+        guard let attachment = makeImageAttachment(from: imageData, appName: windowInfo.ownerName) else {
+            return ImageCaptureAttemptResult(
+                attachment: nil,
+                failureReason: .attachmentEncodingFailed,
+                windowID: windowInfo.windowID
+            )
+        }
+        return ImageCaptureAttemptResult(
+            attachment: attachment,
+            failureReason: nil,
+            windowID: windowInfo.windowID
+        )
+    }
+
+    private static func imageCaptureResultIfNeeded(
+        pid: pid_t,
+        preferredWindowTitle: String,
+        screenshotEnabled: Bool,
+        modelSupportsImageInput: Bool
+    ) async -> ImageCaptureAttemptResult {
+        guard screenshotEnabled else {
+            return ImageCaptureAttemptResult(
+                attachment: nil,
+                failureReason: .disabled,
+                windowID: nil
+            )
+        }
+        guard modelSupportsImageInput else {
+            return ImageCaptureAttemptResult(
+                attachment: nil,
+                failureReason: .modelUnsupported,
+                windowID: nil
+            )
+        }
+        return await captureWindowImageAttachment(
+            for: pid,
+            preferredWindowTitle: preferredWindowTitle
+        )
+    }
+
+    private static func imageCaptureSummary(for result: ImageCaptureAttemptResult) -> String {
+        if let attachment = result.attachment {
+            return "attached(\(attachment.data.count)B,\(attachment.detail.rawValue))"
+        }
+        return "skipped(\(result.failureReason?.rawValue ?? "unknown"))"
     }
 
     private nonisolated static func preferredWindowInfo(
@@ -476,10 +682,13 @@ enum TranscriptionAppContextCaptureService {
 
     private nonisolated static func imageAttachmentDetail(
         forLongEdge longEdge: Int,
-        byteCount: Int
+        byteCount _: Int
     ) -> LLMImageAttachmentDetail {
-        if longEdge <= 1024 || byteCount <= 500_000 {
+        if longEdge <= 896 {
             return .low
+        }
+        if longEdge >= 1_536 {
+            return .high
         }
         return .auto
     }
@@ -518,7 +727,7 @@ enum TranscriptionAppContextCaptureService {
         else {
             return nil
         }
-        return unsafeBitCast(value, to: AXUIElement.self)
+        return (value as! AXUIElement)
     }
 
     private static func arrayAttribute(_ name: String, from element: AXUIElement) -> [AXUIElement]? {
@@ -532,7 +741,7 @@ enum TranscriptionAppContextCaptureService {
 
         return array.compactMap { item in
             guard CFGetTypeID(item as CFTypeRef) == AXUIElementGetTypeID() else { return nil }
-            return unsafeBitCast(item, to: AXUIElement.self)
+            return (item as! AXUIElement)
         }
     }
 }

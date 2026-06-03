@@ -465,6 +465,7 @@ final class ModelDebugSupportTests: XCTestCase {
         )
 
         let compiled = try XCTUnwrap(resolved.compiledRequest)
+        XCTAssertContains(compiled.instructions, "### App context usage rules")
         XCTAssertContains(compiled.instructions, "### Active app context")
         XCTAssertContains(compiled.instructions, "App: WeChat")
         XCTAssertEqual(compiled.attachments.count, 1)
@@ -472,6 +473,8 @@ final class ModelDebugSupportTests: XCTestCase {
         XCTAssertContains(resolved.content, "wechat.jpg")
         XCTAssertEqual(resolved.requestMetadata?.appContextCharacterCount, payload.textContext.count)
         XCTAssertEqual(resolved.requestMetadata?.imageAttachmentCount, 1)
+        XCTAssertEqual(resolved.requestMetadata?.imagePreviews.count, 1)
+        XCTAssertEqual(resolved.requestMetadata?.imagePreviews.first?.filename, "wechat.jpg")
     }
 
     func testRemoteDebugModelCatalogFiltersUnavailableProviders() {

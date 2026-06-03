@@ -167,6 +167,37 @@ final class LLMExecutionPlanCompilerTests: XCTestCase {
         XCTAssertEqual(compiled.attachments, plan.attachments)
     }
 
+    func testAttachmentPromptCharacterCostUsesDetailTier() {
+        let attachments: [LLMInputAttachment] = [
+            .image(
+                LLMImageAttachment(
+                    data: Data([0x01]),
+                    mimeType: "image/jpeg",
+                    detail: .low,
+                    filename: "low.jpg"
+                )
+            ),
+            .image(
+                LLMImageAttachment(
+                    data: Data([0x02]),
+                    mimeType: "image/jpeg",
+                    detail: .auto,
+                    filename: "auto.jpg"
+                )
+            ),
+            .image(
+                LLMImageAttachment(
+                    data: Data([0x03]),
+                    mimeType: "image/jpeg",
+                    detail: .high,
+                    filename: "high.jpg"
+                )
+            )
+        ]
+
+        XCTAssertEqual(attachments.estimatedPromptCharacterCost, 5_400)
+    }
+
     func testReducedLongInputGlossaryPolicyTightensBudget() {
         let standard = DictionaryGlossaryPurpose.rewrite.selectionPolicy
         let reduced = standard.reducedForLongInput()

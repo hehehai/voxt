@@ -1,14 +1,6 @@
 import SwiftUI
 import AppKit
 
-struct SessionTranslationSelectorBoundsPreferenceKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>?
-
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
-        value = nextValue() ?? value
-    }
-}
-
 struct RewriteConversationBottomVisibilityPreferenceKey: PreferenceKey {
     static var defaultValue = true
 
@@ -17,115 +9,367 @@ struct RewriteConversationBottomVisibilityPreferenceKey: PreferenceKey {
     }
 }
 
-struct AnswerSessionTranslationSelectorButton: View {
-    let selectedLanguage: TranslationTargetLanguage?
-    let isPickerPresented: Bool
-    let onToggle: () -> Void
+enum OverlayTranslationMenuStyle {
+    case answer
+    case compact
 
-    var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 6) {
-                Text(selectedLanguage?.title ?? "")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+    var height: CGFloat {
+        switch self {
+        case .answer:
+            return 24
+        case .compact:
+            return 28
+        }
+    }
 
-                Image(systemName: isPickerPresented ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.72))
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 24)
-            .background(
-                Capsule()
-                    .fill(.white.opacity(0.08))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(
-                        isPickerPresented ? Color.accentColor.opacity(0.28) : .white.opacity(0.12),
-                        lineWidth: 1
-                    )
-            )
+    var horizontalPadding: CGFloat {
+        switch self {
+        case .answer:
+            return 10
+        case .compact:
+            return 8
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(String(localized: "Target Language")))
-        .fixedSize(horizontal: true, vertical: false)
-        .anchorPreference(
-            key: SessionTranslationSelectorBoundsPreferenceKey.self,
-            value: .bounds
-        ) { anchor in
-            isPickerPresented ? anchor : nil
+    }
+
+    var textFontSize: CGFloat {
+        11
+    }
+
+    var indicatorFontSize: CGFloat {
+        switch self {
+        case .answer:
+            return 9
+        case .compact:
+            return 9
         }
-        .zIndex(isPickerPresented ? 1 : 0)
+    }
+
+    var titleMaxWidth: CGFloat {
+        switch self {
+        case .answer:
+            return 92
+        case .compact:
+            return 62
+        }
+    }
+
+    var backgroundColor: NSColor {
+        NSColor.white.withAlphaComponent(self == .answer ? 0.08 : 0.09)
+    }
+
+    var borderColor: NSColor {
+        NSColor.white.withAlphaComponent(self == .answer ? 0.12 : 0.14)
+    }
+
+    var hoverBorderColor: NSColor {
+        NSColor.controlAccentColor.withAlphaComponent(0.28)
+    }
+
+    var textColor: NSColor {
+        NSColor.white.withAlphaComponent(0.92)
+    }
+
+    var indicatorColor: NSColor {
+        NSColor.white.withAlphaComponent(0.72)
     }
 }
 
-struct AnswerSessionTranslationLanguagePicker: View {
-    private let pickerWidth: CGFloat = 198
-    private let pickerRowHeight: CGFloat = 30
-
+struct AnswerSessionTranslationMenuPicker: View {
     let selectedLanguage: TranslationTargetLanguage?
+    let isPresented: Bool
+    let onTogglePresentation: () -> Void
+    let onDismissPresentation: () -> Void
     let onSelectLanguage: (TranslationTargetLanguage) -> Void
+    var style: OverlayTranslationMenuStyle = .answer
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 3) {
-                ForEach(TranslationTargetLanguage.allCases) { language in
-                    Button {
-                        onSelectLanguage(language)
-                    } label: {
-                        sessionTranslationLanguageRow(for: language)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(5)
-        }
-        .frame(width: pickerWidth, alignment: .top)
-        .frame(maxHeight: 156, alignment: .top)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.black.opacity(0.96))
+        OverlayTranslationMenuPickerRepresentable(
+            selectedLanguage: selectedLanguage,
+            isPresented: isPresented,
+            style: style,
+            onTogglePresentation: onTogglePresentation,
+            onDismissPresentation: onDismissPresentation,
+            onSelectLanguage: onSelectLanguage
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        .frame(height: style.height)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel(Text(String(localized: "Target Language")))
+    }
+}
+
+private struct OverlayTranslationMenuPickerRepresentable: NSViewRepresentable {
+    let selectedLanguage: TranslationTargetLanguage?
+    let isPresented: Bool
+    let style: OverlayTranslationMenuStyle
+    let onTogglePresentation: () -> Void
+    let onDismissPresentation: () -> Void
+    let onSelectLanguage: (TranslationTargetLanguage) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            selectedLanguage: selectedLanguage,
+            onTogglePresentation: onTogglePresentation,
+            onDismissPresentation: onDismissPresentation,
+            onSelectLanguage: onSelectLanguage
         )
-        .shadow(color: .black.opacity(0.22), radius: 16, y: 10)
-        .accessibilityLabel(Text(String(localized: "Translation Language")))
     }
 
-    private func sessionTranslationLanguageRow(for language: TranslationTargetLanguage) -> some View {
-        let isSelected = selectedLanguage == language
-        let backgroundColor: Color = isSelected ? Color.accentColor.opacity(0.20) : .white.opacity(0.05)
-        let borderColor: Color = isSelected ? Color.accentColor.opacity(0.36) : .white.opacity(0.08)
-
-        return HStack(spacing: 10) {
-            Text(language.title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.92))
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.accentColor.opacity(0.95))
-            }
+    func makeNSView(context: Context) -> OverlayTranslationMenuHostView {
+        let view = OverlayTranslationMenuHostView()
+        view.onSelectLanguage = { [weak coordinator = context.coordinator] language in
+            coordinator?.select(language)
         }
-        .padding(.horizontal, 10)
-        .frame(height: pickerRowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(backgroundColor)
+        view.onTogglePresentation = { [weak coordinator = context.coordinator] in
+            coordinator?.togglePresentation()
+        }
+        view.onDismissPresentation = { [weak coordinator = context.coordinator] in
+            coordinator?.dismissPresentation()
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: OverlayTranslationMenuHostView, context: Context) {
+        context.coordinator.selectedLanguage = selectedLanguage
+        context.coordinator.isPresented = isPresented
+        nsView.onSelectLanguage = { [weak coordinator = context.coordinator] language in
+            coordinator?.select(language)
+        }
+        nsView.onTogglePresentation = { [weak coordinator = context.coordinator] in
+            coordinator?.togglePresentation()
+        }
+        nsView.onDismissPresentation = { [weak coordinator = context.coordinator] in
+            coordinator?.dismissPresentation()
+        }
+        nsView.update(
+            selectedLanguage: selectedLanguage,
+            isPresented: isPresented,
+            style: style
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(borderColor, lineWidth: 1)
+    }
+
+    final class Coordinator {
+        var selectedLanguage: TranslationTargetLanguage?
+        var isPresented: Bool
+        let onTogglePresentation: () -> Void
+        let onDismissPresentation: () -> Void
+        let onSelectLanguage: (TranslationTargetLanguage) -> Void
+
+        init(
+            selectedLanguage: TranslationTargetLanguage?,
+            onTogglePresentation: @escaping () -> Void,
+            onDismissPresentation: @escaping () -> Void,
+            onSelectLanguage: @escaping (TranslationTargetLanguage) -> Void
+        ) {
+            self.selectedLanguage = selectedLanguage
+            self.isPresented = false
+            self.onTogglePresentation = onTogglePresentation
+            self.onDismissPresentation = onDismissPresentation
+            self.onSelectLanguage = onSelectLanguage
+        }
+
+        func togglePresentation() {
+            onTogglePresentation()
+        }
+
+        func dismissPresentation() {
+            guard isPresented else { return }
+            isPresented = false
+            onDismissPresentation()
+        }
+
+        func select(_ language: TranslationTargetLanguage) {
+            guard selectedLanguage != language else { return }
+            selectedLanguage = language
+            onSelectLanguage(language)
+        }
+    }
+}
+
+private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
+    private let titleField = NSTextField(labelWithString: "")
+    private let indicatorView = NSImageView()
+    private let popupMenu = NSMenu()
+    private var trackingArea: NSTrackingArea?
+    private var currentStyle: OverlayTranslationMenuStyle = .answer
+    private var selectedLanguage: TranslationTargetLanguage?
+    private var isPresented = false
+    private var isHovered = false
+    private var isMenuOpen = false
+    private var isMenuPresentationScheduled = false
+    var onSelectLanguage: ((TranslationTargetLanguage) -> Void)?
+    var onTogglePresentation: (() -> Void)?
+    var onDismissPresentation: (() -> Void)?
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        popupMenu.delegate = self
+        popupMenu.autoenablesItems = false
+        popupMenu.showsStateColumn = true
+
+        titleField.translatesAutoresizingMaskIntoConstraints = false
+        titleField.lineBreakMode = .byTruncatingTail
+        titleField.maximumNumberOfLines = 1
+        titleField.alignment = .center
+        titleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        indicatorView.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(titleField)
+        addSubview(indicatorView)
+
+        NSLayoutConstraint.activate([
+            titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            titleField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            titleField.trailingAnchor.constraint(equalTo: indicatorView.leadingAnchor, constant: -6),
+            titleField.widthAnchor.constraint(lessThanOrEqualToConstant: 92),
+            indicatorView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            indicatorView.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let title = titleField.stringValue as NSString
+        let titleWidth = min(
+            ceil(title.size(withAttributes: [.font: titleField.font as Any]).width),
+            currentStyle.titleMaxWidth
         )
+        let indicatorWidth = currentStyle.indicatorFontSize + 4
+        let width = currentStyle.horizontalPadding +
+            titleWidth +
+            6 +
+            indicatorWidth +
+            currentStyle.horizontalPadding
+        return NSSize(width: width, height: currentStyle.height)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        trackingArea = area
+        addTrackingArea(area)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        updateAppearance()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        updateAppearance()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard !popupMenu.items.isEmpty else { return }
+        onTogglePresentation?()
+    }
+
+    func update(
+        selectedLanguage: TranslationTargetLanguage?,
+        isPresented: Bool,
+        style: OverlayTranslationMenuStyle
+    ) {
+        self.selectedLanguage = selectedLanguage
+        self.isPresented = isPresented
+        currentStyle = style
+        rebuildMenu()
+        titleField.stringValue = selectedLanguage?.title ?? ""
+        titleField.font = .systemFont(ofSize: style.textFontSize, weight: .semibold)
+        titleField.textColor = style.textColor
+        indicatorView.image = NSImage(
+            systemSymbolName: "chevron.down",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(.init(pointSize: style.indicatorFontSize, weight: .bold))
+        indicatorView.contentTintColor = style.indicatorColor
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+        updateAppearance()
+
+        if isPresented {
+            presentMenuIfNeeded()
+        } else if isMenuOpen {
+            popupMenu.cancelTracking()
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = bounds.height / 2
+    }
+
+    private func updateAppearance() {
+        guard let layer else { return }
+        layer.backgroundColor = currentStyle.backgroundColor.cgColor
+        layer.borderColor = (isHovered ? currentStyle.hoverBorderColor : currentStyle.borderColor).cgColor
+        layer.borderWidth = 1
+    }
+
+    private func presentMenuIfNeeded() {
+        guard isPresented, !isMenuOpen, !isMenuPresentationScheduled, !popupMenu.items.isEmpty else { return }
+        isMenuPresentationScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isMenuPresentationScheduled = false
+            guard self.isPresented, !self.isMenuOpen, self.window != nil else { return }
+            let selectedItem = self.selectedLanguage.flatMap { language in
+                self.popupMenu.items.first(where: { $0.representedObject as? String == language.rawValue })
+            }
+            _ = self.popupMenu.popUp(
+                positioning: selectedItem,
+                at: NSPoint(x: 0, y: self.bounds.height + 8),
+                in: self
+            )
+        }
+    }
+
+    private func rebuildMenu() {
+        popupMenu.removeAllItems()
+        for language in TranslationTargetLanguage.allCases {
+            let item = NSMenuItem(title: language.title, action: #selector(selectMenuItem(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = language.rawValue
+            item.state = language == selectedLanguage ? .on : .off
+            popupMenu.addItem(item)
+        }
+    }
+
+    @objc
+    private func selectMenuItem(_ sender: NSMenuItem) {
+        guard
+            let rawValue = sender.representedObject as? String,
+            let language = TranslationTargetLanguage(rawValue: rawValue)
+        else {
+            return
+        }
+        onSelectLanguage?(language)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === popupMenu else { return }
+        isMenuOpen = true
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === popupMenu else { return }
+        isMenuOpen = false
+        isMenuPresentationScheduled = false
+        onDismissPresentation?()
     }
 }
 

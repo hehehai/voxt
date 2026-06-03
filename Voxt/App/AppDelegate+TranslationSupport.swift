@@ -261,12 +261,14 @@ extension AppDelegate {
             providerOverride = .remote(provider: context.provider, configuration: context.configuration)
         }
         let appContextCapture = await captureRewriteAppContextIfNeeded(for: providerOverride)
+        let appContextAttachmentCost = appContextCapture?.attachments.estimatedPromptCharacterCost ?? 0
         let strategy = TaskLLMStrategyResolver.resolve(
             taskKind: .rewrite,
             rawText: directAnswerMode ? dictatedPrompt : sourceText,
             promptCharacterCount: promptResolution.content.count +
                 (promptResolution.dictionaryGlossary?.count ?? 0) +
-                (appContextCapture?.textContext.count ?? 0),
+                (appContextCapture?.textContext.count ?? 0) +
+                appContextAttachmentCost,
             baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.rewrite.selectionPolicy,
             capabilities: llmProviderModelCapabilities(for: providerOverride)
         )
@@ -488,7 +490,7 @@ extension AppDelegate {
     func toggleSessionTranslationTargetPicker() {
         guard overlayState.allowsSessionTranslationLanguageSwitching else { return }
         if overlayState.isSessionTranslationTargetPickerPresented {
-            dismissSessionTranslationTargetPicker()
+            overlayState.dismissSessionTranslationTargetPicker()
         } else {
             overlayState.presentSessionTranslationTargetPicker()
         }

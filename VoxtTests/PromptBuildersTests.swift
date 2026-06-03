@@ -16,6 +16,34 @@ final class PromptBuildersTests: XCTestCase {
         XCTAssertContains(prompt, "Return translated text only.")
     }
 
+    func testTranslationPromptBuilderAddsTraditionalChineseScriptConstraint() {
+        let prompt = TranslationPromptBuilder.build(
+            systemPrompt: "Translate {{SOURCE_TEXT}} to {{TARGET_LANGUAGE}}",
+            targetLanguage: .chineseTraditional,
+            sourceText: "你好",
+            userMainLanguagePromptValue: "English",
+            strict: true
+        )
+
+        XCTAssertContains(prompt, "Translate 你好 to Traditional Chinese")
+        XCTAssertContains(prompt, "Use Traditional Chinese characters only.")
+        XCTAssertContains(prompt, "Do not output Simplified Chinese characters.")
+    }
+
+    func testTranslationPromptBuilderAddsSimplifiedChineseScriptConstraint() {
+        let prompt = TranslationPromptBuilder.build(
+            systemPrompt: "Translate {{SOURCE_TEXT}} to {{TARGET_LANGUAGE}}",
+            targetLanguage: .chineseSimplified,
+            sourceText: "你好",
+            userMainLanguagePromptValue: "English",
+            strict: false
+        )
+
+        XCTAssertContains(prompt, "Translate 你好 to Simplified Chinese")
+        XCTAssertContains(prompt, "Use Simplified Chinese characters only.")
+        XCTAssertContains(prompt, "Do not output Traditional Chinese characters.")
+    }
+
     func testRewritePromptBuilderAppendsConstraintsInStableOrder() {
         let prompt = RewritePromptBuilder.build(
             systemPrompt: "Base {{DICTATED_PROMPT}} / {{SOURCE_TEXT}}",
@@ -108,5 +136,19 @@ final class PromptBuildersTests: XCTestCase {
         XCTAssertContains(prompt, "Return the next assistant reply as plain text only.")
         XCTAssertContains(prompt, "Do not return JSON, markdown fences, labels, or quotes.")
         XCTAssertContains(prompt, "A previous answer was empty or unusable.")
+    }
+
+    func testRewriteAppContextGuidancePrioritizesScreenshotsAndDirectAnswer() {
+        let guidance = RewriteAppContextGuidance.content(
+            hasTextContext: true,
+            imageAttachmentCount: 1,
+            directAnswerMode: true
+        )
+
+        let text = try! XCTUnwrap(guidance)
+        XCTAssertFalse(text.contains("App context usage rules:"))
+        XCTAssertContains(text, "When screenshots are attached, inspect them first")
+        XCTAssertContains(text, "Do not restate the user's request")
+        XCTAssertContains(text, "In direct-answer mode, generate the final reply")
     }
 }

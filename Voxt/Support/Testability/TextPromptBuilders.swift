@@ -18,6 +18,7 @@ struct TranslationPromptBuilder {
             ? """
             Mandatory translation rules:
             - Translate every linguistic token into \(targetLanguage.instructionName), including very short text.
+            \(targetLanguage.translationScriptConstraint.map { "- \($0)" } ?? "")
             - Do not copy source-language wording.
             - Keep proper nouns, product names, URLs, emails, and pure numbers unchanged when needed.
             - Return translated text only.
@@ -25,11 +26,17 @@ struct TranslationPromptBuilder {
             : """
             Mandatory translation rules:
             - Translate to \(targetLanguage.instructionName).
+            \(targetLanguage.translationScriptConstraint.map { "- \($0)" } ?? "")
             - Translate short linguistic text too.
             - Return translated text only.
             """
 
-        return "\(basePrompt)\n\(enforcement)"
+        let normalizedEnforcement = enforcement
+            .components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+
+        return "\(basePrompt)\n\(normalizedEnforcement)"
     }
 }
 
@@ -147,5 +154,33 @@ struct RewritePromptBuilder {
         Previous conversation:
         \(segments.joined(separator: "\n\n"))
         """
+    }
+}
+
+enum RewriteAppContextGuidance {
+    static func content(
+        hasTextContext: Bool,
+        imageAttachmentCount: Int,
+        directAnswerMode: Bool
+    ) -> String? {
+        guard hasTextContext || imageAttachmentCount > 0 else { return nil }
+
+        var lines = [
+            "- Active app context may include current app text and one or more screenshots.",
+            "- Use app context only to identify the user's target, resolve references like \"this\", \"that\", or \"the latest message\", and infer the current screen state.",
+            "- If app context reveals the target message or target UI content, answer based on that content instead of repeating the spoken instruction.",
+            "- Do not restate the user's request when the target can be identified from app context.",
+            "- If the target cannot be identified from app context, return a short, helpful fallback instead of inventing details."
+        ]
+
+        if imageAttachmentCount > 0 {
+            lines.append("- When screenshots are attached, inspect them first for the latest visible message or relevant UI content.")
+        }
+
+        if directAnswerMode {
+            lines.append("- In direct-answer mode, generate the final reply or text directly once the target is identified.")
+        }
+
+        return lines.joined(separator: "\n")
     }
 }

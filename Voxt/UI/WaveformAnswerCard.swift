@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct WaveformAnswerCard: View {
-    private let sessionTranslationPickerWidth: CGFloat = 198
-
     let title: String
     let content: String
     let answerInteractionMode: AnswerInteractionMode
@@ -64,21 +62,6 @@ struct WaveformAnswerCard: View {
                 .padding(.bottom, 10)
 
             bodyContent
-        }
-        .overlayPreferenceValue(SessionTranslationSelectorBoundsPreferenceKey.self) { anchor in
-            GeometryReader { proxy in
-                if showsSessionTranslationSelector,
-                   isSessionTranslationTargetPickerPresented,
-                   let anchor {
-                    let buttonFrame = proxy[anchor]
-                    sessionTranslationLanguagePicker
-                        .offset(
-                            x: buttonFrame.midX - (sessionTranslationPickerWidth / 2),
-                            y: buttonFrame.maxY + 8
-                        )
-                        .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .topLeading)))
-                }
-            }
         }
     }
 
@@ -188,16 +171,11 @@ struct WaveformAnswerCard: View {
     }
 
     private var sessionTranslationSelector: some View {
-        AnswerSessionTranslationSelectorButton(
+        AnswerSessionTranslationMenuPicker(
             selectedLanguage: selectedSessionTranslationLanguage,
-            isPickerPresented: isSessionTranslationTargetPickerPresented,
-            onToggle: onToggleSessionTranslationTargetPicker
-        )
-    }
-
-    private var sessionTranslationLanguagePicker: some View {
-        AnswerSessionTranslationLanguagePicker(
-            selectedLanguage: selectedSessionTranslationLanguage,
+            isPresented: isSessionTranslationTargetPickerPresented,
+            onTogglePresentation: onToggleSessionTranslationTargetPicker,
+            onDismissPresentation: onDismissSessionTranslationTargetPicker,
             onSelectLanguage: onSelectSessionTranslationTargetLanguage
         )
     }

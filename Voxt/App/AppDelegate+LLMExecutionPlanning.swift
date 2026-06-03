@@ -217,6 +217,18 @@ extension AppDelegate {
                         content: sourceText,
                         isStablePrefixCandidate: false
                     ),
+                RewriteAppContextGuidance.content(
+                    hasTextContext: !(appContextCapture?.textContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+                    imageAttachmentCount: appContextCapture?.attachments.count ?? 0,
+                    directAnswerMode: sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ).map {
+                    LLMContextBlock(
+                        kind: .metadata,
+                        title: "App context usage rules",
+                        content: $0,
+                        isStablePrefixCandidate: false
+                    )
+                },
                 appContextCapture.map {
                     LLMContextBlock(
                         kind: .app,
@@ -243,7 +255,7 @@ extension AppDelegate {
         let compiledRequest = LLMExecutionPlanCompiler.compile(plan)
         let executionStartedAt = Date()
         VoxtLog.llm(
-            "LLM execution plan. task=\(plan.taskLabel), provider=\(llmExecutionProviderLabel(plan.provider)), delivery=\(String(describing: plan.delivery)), promptChars=\(plan.promptCharacterCount), inputChars=\(plan.primaryInputCharacterCount), blocks=\(plan.contextBlocks.count), strategy=\(plan.executionStrategy.logLabel)"
+            "LLM execution plan. task=\(plan.taskLabel), provider=\(llmExecutionProviderLabel(plan.provider)), delivery=\(String(describing: plan.delivery)), promptChars=\(plan.promptCharacterCount), inputChars=\(plan.primaryInputCharacterCount), blocks=\(plan.contextBlocks.count), attachments=\(plan.attachments.count), strategy=\(plan.executionStrategy.logLabel)"
         )
 
         let output: String

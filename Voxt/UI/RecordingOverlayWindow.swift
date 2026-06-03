@@ -9,11 +9,8 @@ class RecordingOverlayWindow: NSPanel {
     private var hostingView: NSHostingView<OverlayContent>?
     private var visibilityToken: UInt64 = 0
     private var appearanceStateCancellable: AnyCancellable?
-    private var pickerStateCancellable: AnyCancellable?
     private var overlayAppearanceCancellable: AnyCancellable?
     private weak var observedState: OverlayState?
-    private var localClickMonitor: Any?
-    private var globalClickMonitor: Any?
     private var currentPosition: OverlayPosition = .bottom
     var onRequestClose: (() -> Void)?
     var onRequestInject: (() -> Void)?
@@ -121,7 +118,6 @@ class RecordingOverlayWindow: NSPanel {
         VoxtLog.info("Overlay hide requested. isVisible=\(isVisible)", verbose: true)
         observedState?.isPresented = false
         observedState?.audioLevel = 0
-        removeOutsideClickMonitors()
 
         guard isVisible else {
             orderOut(nil)
@@ -162,18 +158,6 @@ class RecordingOverlayWindow: NSPanel {
             guard let self, let state else { return }
             self.updateAppearance(for: state, animated: true)
         }
-
-        pickerStateCancellable = state.$isSessionTranslationTargetPickerPresented
-            .receive(on: RunLoop.main)
-            .sink { [weak self, weak state] isPresented in
-                guard let self, let state else { return }
-                if isPresented {
-                    self.installOutsideClickMonitors()
-                } else {
-                    self.removeOutsideClickMonitors()
-                }
-                self.updateMouseInteraction(for: state)
-            }
     }
 
     private func updateAppearance(for state: OverlayState, animated _: Bool) {
@@ -195,9 +179,12 @@ class RecordingOverlayWindow: NSPanel {
         case .recording, .processing:
             let allowsRealtimeText = UserDefaults.standard.object(forKey: AppPreferenceKey.realtimeTextDisplayEnabled) as? Bool ?? true
             let width: CGFloat = allowsRealtimeText ? 360 : 220
-            return CGSize(width: width, height: state.isSessionTranslationTargetPickerPresented ? 388 : 140)
+            return CGSize(width: width, height: 140)
         case .answer:
-            return CGSize(width: 560, height: state.isSessionTranslationTargetPickerPresented ? 540 : 340)
+            // Keep the answer window size stable while the translation language picker
+            // opens, otherwise AppKit re-lays out the hosting window mid-update and the
+            // whole overlay appears to jump upward.
+            return CGSize(width: 560, height: 340)
         }
     }
 
@@ -229,55 +216,6 @@ class RecordingOverlayWindow: NSPanel {
             state.displayMode == .answer ||
             (state.displayMode == .recording && state.allowsSessionTranslationLanguageSwitching)
         )
-    }
-
-    private func installOutsideClickMonitors() {
-        guard localClickMonitor == nil, globalClickMonitor == nil else { return }
-
-        localClickMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        ) { [weak self] event in
-            self?.handleOutsideClickIfNeeded(eventLocationInScreen: NSEvent.mouseLocation, sourceWindow: event.window)
-            return event
-        }
-
-        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.handleOutsideClickIfNeeded(eventLocationInScreen: NSEvent.mouseLocation, sourceWindow: nil)
-            }
-        }
-    }
-
-    private func removeOutsideClickMonitors() {
-        if let localClickMonitor {
-            NSEvent.removeMonitor(localClickMonitor)
-            self.localClickMonitor = nil
-        }
-        if let globalClickMonitor {
-            NSEvent.removeMonitor(globalClickMonitor)
-            self.globalClickMonitor = nil
-        }
-    }
-
-    private func handleOutsideClickIfNeeded(eventLocationInScreen: NSPoint, sourceWindow: NSWindow?) {
-        guard let state = observedState,
-              state.isSessionTranslationTargetPickerPresented
-        else {
-            return
-        }
-
-        if sourceWindow === self {
-            return
-        }
-
-        guard !frame.contains(eventLocationInScreen) else { return }
-        onRequestSessionTranslationTargetPickerDismiss?()
-    }
-
-    deinit {
-        removeOutsideClickMonitors()
     }
 }
 

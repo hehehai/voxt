@@ -107,6 +107,14 @@ struct LLMDebugRequestMetadata: Equatable {
     let sourceText: String
     let appContextCharacterCount: Int
     let imageAttachmentCount: Int
+    let imagePreviews: [LLMDebugImagePreview]
+}
+
+struct LLMDebugImagePreview: Equatable {
+    let filename: String
+    let mimeType: String
+    let detail: String
+    let data: Data
 }
 
 struct DebugAudioClip: Identifiable, Equatable {
@@ -535,6 +543,7 @@ enum ModelDebugPromptResolver {
                 directAnswerMode: sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 forceNonEmptyAnswer: false
             )
+            let appContextAttachmentCost = appContextCapture?.attachments.estimatedPromptCharacterCost ?? 0
             let plan = LLMExecutionPlan(
                 task: .rewrite(
                     dictatedPrompt: dictatedPrompt,
@@ -551,7 +560,9 @@ enum ModelDebugPromptResolver {
                 executionStrategy: TaskLLMStrategyResolver.resolve(
                     taskKind: .rewrite,
                     rawText: sourceText.isEmpty ? dictatedPrompt : sourceText,
-                    promptCharacterCount: resolvedPrompt.count,
+                    promptCharacterCount: resolvedPrompt.count +
+                        (appContextCapture?.textContext.count ?? 0) +
+                        appContextAttachmentCost,
                     baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.rewrite.selectionPolicy,
                     capabilities: .unknown
                 ),
@@ -571,6 +582,18 @@ enum ModelDebugPromptResolver {
                             content: sourceText,
                             isStablePrefixCandidate: false
                         ),
+                    RewriteAppContextGuidance.content(
+                        hasTextContext: !(appContextCapture?.textContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+                        imageAttachmentCount: appContextCapture?.attachments.count ?? 0,
+                        directAnswerMode: sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ).map {
+                        LLMContextBlock(
+                            kind: .metadata,
+                            title: "App context usage rules",
+                            content: $0,
+                            isStablePrefixCandidate: false
+                        )
+                    },
                     appContextCapture.map {
                         LLMContextBlock(
                             kind: .app,
@@ -594,7 +617,8 @@ enum ModelDebugPromptResolver {
                     spokenInstruction: dictatedPrompt,
                     sourceText: sourceText,
                     appContextCharacterCount: appContextCapture?.textContext.count ?? 0,
-                    imageAttachmentCount: appContextCapture?.attachments.count ?? 0
+                    imageAttachmentCount: appContextCapture?.attachments.count ?? 0,
+                    imagePreviews: debugImagePreviews(from: appContextCapture?.attachments ?? [])
                 )
             )
         case .transcriptSummary:
@@ -683,6 +707,20 @@ enum ModelDebugPromptResolver {
         [attachments]
         \(lines.joined(separator: "\n"))
         """
+    }
+
+    private static func debugImagePreviews(from attachments: [LLMInputAttachment]) -> [LLMDebugImagePreview] {
+        attachments.compactMap { attachment in
+            switch attachment {
+            case .image(let image):
+                return LLMDebugImagePreview(
+                    filename: image.filename,
+                    mimeType: image.mimeType,
+                    detail: image.detail.rawValue,
+                    data: image.data
+                )
+            }
+        }
     }
 
     private static func resolveEnhancementPrompt(
