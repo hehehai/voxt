@@ -1720,4 +1720,5 @@
 "Use the mirror for Hugging Face model downloads." = "下载 Hugging Face 模型时使用镜像。";
 "Used to decide which user corrections should become dictionary terms." = "用于决定哪些用户修正应转成词典词条。";
 "Voxt" = "Voxt";
+"App context may include sensitive app text or screenshots. If LLM debug logging is enabled, logs may include prompt content." = "上下文增强可能包含敏感的 App 文本或截图。如果已开启 LLM 调试日志，日志中可能会包含提示词内容。";
 "e.g. low" = "例如：low";

@@ -152,6 +152,17 @@ struct FeatureSettingsView: View {
     ) {
         refreshRemindersLists()
 
+        let appContextWasEnabled = previousSettings.rewrite.appContext.enabled
+        let appContextIsEnabled = currentSettings.rewrite.appContext.enabled
+        if !appContextWasEnabled, appContextIsEnabled {
+            showToast(
+                AppLocalization.localizedString(
+                    "App context may include sensitive app text or screenshots. If LLM debug logging is enabled, logs may include prompt content."
+                ),
+                duration: 3.8
+            )
+        }
+
         let screenshotContextWasEnabled = previousSettings.rewrite.appContext.screenshotEnabled
         let screenshotContextIsEnabled = currentSettings.rewrite.appContext.screenshotEnabled
         guard !screenshotContextWasEnabled, screenshotContextIsEnabled else { return }

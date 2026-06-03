@@ -615,7 +615,12 @@ struct RemoteLLMRuntimeClient {
                     systemPrompt: systemPrompt,
                     debugInput: debugInput,
                     userPrompt: requestContentForLog,
-                    tuning: tuning
+                    tuning: tuning,
+                    requestMaxTokensDescription: requestMaxTokensDescription(
+                        provider: provider,
+                        usesResponsesAPI: true,
+                        tuning: tuning
+                    )
                 )
                 return try await completeResponsesStreaming(
                     request: streamingRequest,
@@ -658,7 +663,12 @@ struct RemoteLLMRuntimeClient {
             systemPrompt: systemPrompt,
             debugInput: debugInput,
             userPrompt: requestContentForLog,
-            tuning: tuning
+            tuning: tuning,
+            requestMaxTokensDescription: requestMaxTokensDescription(
+                provider: provider,
+                usesResponsesAPI: true,
+                tuning: tuning
+            )
         )
 
         let (data, response) = try await VoxtNetworkSession.active.data(for: request)
@@ -936,7 +946,12 @@ struct RemoteLLMRuntimeClient {
                             systemPrompt: systemPrompt,
                             debugInput: debugInput,
                             userPrompt: userPrompt,
-                            tuning: tuning
+                            tuning: tuning,
+                            requestMaxTokensDescription: requestMaxTokensDescription(
+                                provider: provider,
+                                usesResponsesAPI: false,
+                                tuning: tuning
+                            )
                         )
                         let streamed = try await completeStreaming(
                             request: streamingRequest,
@@ -983,7 +998,12 @@ struct RemoteLLMRuntimeClient {
                     systemPrompt: systemPrompt,
                     debugInput: debugInput,
                     userPrompt: userPrompt,
-                    tuning: tuning
+                    tuning: tuning,
+                    requestMaxTokensDescription: requestMaxTokensDescription(
+                        provider: provider,
+                        usesResponsesAPI: false,
+                        tuning: tuning
+                    )
                 )
                 let (data, response) = try await VoxtNetworkSession.active.data(for: request)
                 let responseElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
@@ -1872,14 +1892,14 @@ struct RemoteLLMRuntimeClient {
         systemPrompt: String,
         debugInput: String,
         userPrompt: String,
-        tuning: GenerationTuning
+        tuning: GenerationTuning,
+        requestMaxTokensDescription: String
     ) {
         let proxySettings = VoxtNetworkSession.currentProxySettings
         let proxyRoute = request.url.map { resolvedProxyRoute(for: $0, settings: proxySettings) } ?? "unavailable"
         let networkMode = VoxtNetworkSession.modeDescription
-        let requestMaxTokens = requestMaxTokensDescription(from: request) ?? "\(tuning.maxTokens)"
         VoxtLog.llm(
-            "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), url=\(request.url?.absoluteString ?? endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(requestMaxTokens), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
+            "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), url=\(request.url?.absoluteString ?? endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(requestMaxTokensDescription), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
         )
         VoxtLog.llm(
             """
@@ -1894,21 +1914,15 @@ struct RemoteLLMRuntimeClient {
         )
     }
 
-    private func requestMaxTokensDescription(from request: URLRequest) -> String? {
-        guard
-            let body = request.httpBody,
-            let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
-        else {
-            return nil
+    private func requestMaxTokensDescription(
+        provider: RemoteLLMProvider,
+        usesResponsesAPI: Bool,
+        tuning: GenerationTuning
+    ) -> String {
+        if usesResponsesAPI && provider == .codex {
+            return "auto"
         }
-
-        if let maxTokens = payload["max_tokens"] {
-            return "\(maxTokens)"
-        }
-        if let maxCompletionTokens = payload["max_completion_tokens"] {
-            return "\(maxCompletionTokens)"
-        }
-        return "auto"
+        return "\(tuning.maxTokens)"
     }
 
     private func completeStreaming(

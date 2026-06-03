@@ -1664,4 +1664,5 @@
 "Use the mirror for Hugging Face model downloads." = "Hugging Face モデルのダウンロードにミラーを使用します。";
 "Used to decide which user corrections should become dictionary terms." = "どのユーザー修正を辞書用語として取り込むかを判断するために使います。";
 "Voxt" = "Voxt";
+"App context may include sensitive app text or screenshots. If LLM debug logging is enabled, logs may include prompt content." = "コンテキスト強化には機密性の高い App テキストやスクリーンショットが含まれる場合があります。LLM デバッグログを有効にしていると、ログにプロンプト内容が含まれる可能性があります。";
 "e.g. low" = "例: low";

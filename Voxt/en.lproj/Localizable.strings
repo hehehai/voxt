@@ -1718,4 +1718,5 @@
 "Use the mirror for Hugging Face model downloads." = "Use the mirror for Hugging Face model downloads.";
 "Used to decide which user corrections should become dictionary terms." = "Used to decide which user corrections should become dictionary terms.";
 "Voxt" = "Voxt";
+"App context may include sensitive app text or screenshots. If LLM debug logging is enabled, logs may include prompt content." = "App context may include sensitive app text or screenshots. If LLM debug logging is enabled, logs may include prompt content.";
 "e.g. low" = "e.g. low";
