@@ -1405,6 +1405,7 @@
 "Allow GLM to call its hosted web search tool for fresher answers. This may increase latency and usage." = "Allow GLM to call its hosted web search tool for fresher answers. This may increase latency and usage.";
 "Allow Qwen to use built-in web search. Enabled by default for Aliyun because it is available directly in the official compatible API." = "Allow Qwen to use built-in web search. Enabled by default for Aliyun because it is available directly in the official compatible API.";
 "Use provider-hosted web search when available. This may increase latency and usage." = "Use provider-hosted web search when available. This may increase latency and usage.";
+"Recommended" = "Recommended";
 "New" = "New";
 "即将删除" = "Removing Soon";
 "即将下线" = "Coming Soon";

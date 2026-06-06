@@ -163,7 +163,7 @@ extension ModelSettingsView {
         case .deprecatedSoon:
             return AppLocalization.localizedString("即将下线")
         case .new:
-            return AppLocalization.localizedString("New")
+            return nil
         case .standard:
             return nil
         }

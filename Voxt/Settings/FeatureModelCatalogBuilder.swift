@@ -134,7 +134,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
-                badgeText: nil,
+                badgeText: ModelCatalogBadgeSupport.recommendedBadgeText(forMLXRepo: model.id),
                 isSelectable: isInstalled,
                 disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
             )
@@ -203,7 +203,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: configuration.isConfigured ? localized("Configured") : localized("Not configured"),
                 usageLocations: usageLabels(for: selectionID),
-                badgeText: nil,
+                badgeText: ModelCatalogBadgeSupport.recommendedBadgeText(forRemoteASRProvider: provider),
                 isSelectable: configuration.isConfigured,
                 disabledReason: configuration.isConfigured ? nil : localized("Configure this provider in Model settings first.")
             )
@@ -269,7 +269,7 @@ struct FeatureModelCatalogBuilder {
                     case .deprecatedSoon:
                         return localized("即将下线")
                     case .new:
-                        return localized("New")
+                        return nil
                     case .standard:
                         return nil
                     }
@@ -314,7 +314,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: isConfigured ? localized("Configured") : localized("Not configured"),
                 usageLocations: usageLabels(for: selectionID),
-                badgeText: nil,
+                badgeText: ModelCatalogBadgeSupport.recommendedBadgeText(forRemoteLLMProvider: provider),
                 isSelectable: isConfigured,
                 disabledReason: isConfigured ? nil : localized("Configure this provider in Model settings first.")
             )

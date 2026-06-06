@@ -1349,6 +1349,7 @@
 "Allow GLM to call its hosted web search tool for fresher answers. This may increase latency and usage." = "GLM がホスト型 Web 検索ツールを呼び出して、より新しい回答を返せるようにします。遅延や利用量が増える場合があります。";
 "Allow Qwen to use built-in web search. Enabled by default for Aliyun because it is available directly in the official compatible API." = "Qwen が組み込み Web 検索を使えるようにします。公式互換 API で直接利用できるため、Alibaba Cloud ではデフォルトで有効です。";
 "Use provider-hosted web search when available. This may increase latency and usage." = "利用可能な場合はプロバイダー提供の Web 検索を使います。遅延や利用量が増える場合があります。";
+"Recommended" = "おすすめ";
 "New" = "New";
 "即将下线" = "提供終了予定";
 "Debug" = "デバッグ";
