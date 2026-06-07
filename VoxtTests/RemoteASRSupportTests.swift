@@ -116,6 +116,18 @@ final class RemoteASRSupportTests: XCTestCase {
         XCTAssertTrue(StepFunPayloadSupport.supportsSSEPrompt(model: "stepaudio-2-asr-pro"))
     }
 
+    func testStepFunSSEDoneTextIsParsedAsCompletedResult() {
+        let delta = StepFunPayloadSupport.parseSSEDataLine(
+            #"{"type":"transcript.text.delta","delta":"一二三四五。"}"#
+        )
+        let completed = StepFunPayloadSupport.parseSSEDataLine(
+            #"{"type":"transcript.text.done","text":"12345。"}"#
+        )
+
+        XCTAssertEqual(delta, .delta("一二三四五。"))
+        XCTAssertEqual(completed, .completed("12345。"))
+    }
+
     func testStepFunRealtimeSessionUpdateUsesWebSocketShape() throws {
         let payload = StepFunPayloadSupport.sessionUpdatePayload(
             model: "step-asr-1.1-stream",

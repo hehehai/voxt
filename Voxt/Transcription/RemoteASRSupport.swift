@@ -383,6 +383,14 @@ enum RemoteASRTextSupport {
     }
 }
 
+enum StepFunSSEDataPayload: Equatable {
+    case delta(String)
+    case completed(String)
+    case error(String)
+    case fragment(String)
+    case ignore
+}
+
 enum StepFunPayloadSupport {
     static func supportsSSEPrompt(model: String) -> Bool {
         model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "stepaudio-2-asr-pro"
@@ -459,6 +467,53 @@ enum StepFunPayloadSupport {
                 ]
             ]
         ]
+    }
+
+    static func parseSSEDataLine(_ line: String) -> StepFunSSEDataPayload {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .ignore }
+
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return .fragment(trimmed)
+        }
+
+        guard let dict = object as? [String: Any] else {
+            if let text = RemoteASRTextSupport.extractText(in: object),
+               let normalized = RemoteASRTextSupport.normalizedTextFragment(text) {
+                return .fragment(normalized)
+            }
+            return .ignore
+        }
+
+        let type = (dict["type"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        switch type {
+        case "transcript.text.delta":
+            guard let value = dict["delta"],
+                  let text = RemoteASRTextSupport.extractText(in: value),
+                  let normalized = RemoteASRTextSupport.normalizedTextFragment(text) else {
+                return .ignore
+            }
+            return .delta(normalized)
+        case "transcript.text.done":
+            guard let value = dict["text"],
+                  let text = RemoteASRTextSupport.extractText(in: value),
+                  let normalized = RemoteASRTextSupport.normalizedTextFragment(text) else {
+                return .ignore
+            }
+            return .completed(normalized)
+        default:
+            if type == "error" || type.hasSuffix(".error") {
+                return .error(RemoteASRTextSupport.extractStreamErrorMessage(fromLine: trimmed) ?? trimmed)
+            }
+        }
+
+        if let text = RemoteASRTextSupport.extractTextFragment(fromLine: trimmed) {
+            return .fragment(text)
+        }
+        return .ignore
     }
 }
 
