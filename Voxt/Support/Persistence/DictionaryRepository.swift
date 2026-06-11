@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 
 protocol DictionaryRepositoryProtocol: AnyObject, Sendable {
+    func allCategories() throws -> [DictionaryCategory]
     func allEntries() throws -> [DictionaryEntry]
     func allTerms(limit: Int?) throws -> [String]
     func entries(filter: DictionaryFilter, query: String, limit: Int, offset: Int) throws -> [DictionaryEntry]
@@ -9,8 +10,11 @@ protocol DictionaryRepositoryProtocol: AnyObject, Sendable {
     func matchingEntries(sourceText: String, activeGroupID: UUID?, limit: Int) throws -> [DictionaryEntry]
     func activeEntriesForRemoteRequest(activeGroupID: UUID?, limit: Int) throws -> [DictionaryEntry]
     func upsert(_ entry: DictionaryEntry) throws
+    func upsertCategory(_ category: DictionaryCategory) throws
     func replaceAll(_ entries: [DictionaryEntry]) throws
+    func replaceAll(entries: [DictionaryEntry], categories: [DictionaryCategory]) throws
     func delete(id: UUID) throws
+    func deleteCategory(id: UUID, moveEntriesTo category: DictionaryCategory?) throws
     func clearAll() throws
     func hasEntry(normalizedTerm: String, activeGroupID: UUID?) throws -> Bool
 }
@@ -32,6 +36,23 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
 
         if migrateLegacyJSON {
             migrateLegacyJSONIfNeeded()
+        }
+    }
+
+    func allCategories() throws -> [DictionaryCategory] {
+        try database.dbQueue.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM dictionary_categories
+                    ORDER BY isDefault DESC, sortOrder ASC, name COLLATE NOCASE ASC
+                    """
+            )
+            var categories = rows.compactMap(category(from:))
+            if !categories.contains(where: \.isDefault) {
+                categories.insert(DictionaryCategory.defaultCategory, at: 0)
+            }
+            return categories
         }
     }
 
@@ -241,12 +262,48 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
         }
     }
 
+    func upsertCategory(_ category: DictionaryCategory) throws {
+        try database.dbQueue.write { db in
+            try upsert(category, db: db)
+        }
+    }
+
     func replaceAll(_ entries: [DictionaryEntry]) throws {
         try database.dbQueue.write { db in
             try db.execute(sql: "DELETE FROM dictionary_search")
             try db.execute(sql: "DELETE FROM dictionary_observed_variants")
             try db.execute(sql: "DELETE FROM dictionary_replacement_terms")
             try db.execute(sql: "DELETE FROM dictionary_entries")
+            for entry in entries {
+                try upsert(entry, db: db)
+            }
+        }
+    }
+
+    func replaceAll(entries: [DictionaryEntry], categories: [DictionaryCategory]) throws {
+        try database.dbQueue.write { db in
+            try db.execute(sql: "DELETE FROM dictionary_search")
+            try db.execute(sql: "DELETE FROM dictionary_observed_variants")
+            try db.execute(sql: "DELETE FROM dictionary_replacement_terms")
+            try db.execute(sql: "DELETE FROM dictionary_entries")
+            try db.execute(sql: "DELETE FROM dictionary_categories WHERE isDefault = 0")
+
+            var categoriesByID = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
+            categoriesByID[DictionaryCategory.defaultID] = categoriesByID[DictionaryCategory.defaultID]
+                ?? DictionaryCategory.defaultCategory
+            for entry in entries where categoriesByID[entry.categoryID] == nil {
+                categoriesByID[entry.categoryID] = DictionaryCategory(
+                    id: entry.categoryID,
+                    name: entry.categoryNameSnapshot ?? DictionaryCategory.defaultName,
+                    isDefault: entry.categoryID == DictionaryCategory.defaultID,
+                    isExpanded: true,
+                    sortOrder: categoriesByID.count
+                )
+            }
+
+            for category in categoriesByID.values {
+                try upsert(category, db: db)
+            }
             for entry in entries {
                 try upsert(entry, db: db)
             }
@@ -265,6 +322,51 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
         try database.dbQueue.write { db in
             try db.execute(sql: "DELETE FROM dictionary_search WHERE entryID = ?", arguments: [id.uuidString])
             try db.execute(sql: "DELETE FROM dictionary_entries WHERE id = ?", arguments: [id.uuidString])
+        }
+    }
+
+    func deleteCategory(id: UUID, moveEntriesTo category: DictionaryCategory?) throws {
+        try database.dbQueue.write { db in
+            if let category {
+                let ids = try String.fetchAll(
+                    db,
+                    sql: "SELECT id FROM dictionary_entries WHERE categoryID = ?",
+                    arguments: [id.uuidString]
+                )
+                try db.execute(
+                    sql: """
+                        UPDATE dictionary_entries
+                        SET categoryID = ?, categoryNameSnapshot = ?, updatedAt = ?
+                        WHERE categoryID = ?
+                        """,
+                    arguments: [
+                        category.id.uuidString,
+                        category.name,
+                        Date().timeIntervalSince1970,
+                        id.uuidString
+                    ]
+                )
+                for entry in try entries(for: ids, db: db) {
+                    try refreshSearchContent(for: entry, db: db)
+                }
+            } else {
+                let ids = try String.fetchAll(
+                    db,
+                    sql: "SELECT id FROM dictionary_entries WHERE categoryID = ?",
+                    arguments: [id.uuidString]
+                )
+                if !ids.isEmpty {
+                    try db.execute(
+                        sql: "DELETE FROM dictionary_search WHERE entryID IN \(sqlPlaceholders(count: ids.count))",
+                        arguments: StatementArguments(ids)
+                    )
+                    try db.execute(
+                        sql: "DELETE FROM dictionary_entries WHERE id IN \(sqlPlaceholders(count: ids.count))",
+                        arguments: StatementArguments(ids)
+                    )
+                }
+            }
+            try db.execute(sql: "DELETE FROM dictionary_categories WHERE id = ?", arguments: [id.uuidString])
         }
     }
 
@@ -376,12 +478,15 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
         try db.execute(
             sql: """
                 INSERT INTO dictionary_entries (
-                    id, term, normalizedTerm, groupID, groupNameSnapshot, source, status,
+                    id, term, normalizedTerm, categoryID, categoryNameSnapshot,
+                    groupID, groupNameSnapshot, source, status,
                     createdAt, updatedAt, lastMatchedAt, matchCount
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     term = excluded.term,
                     normalizedTerm = excluded.normalizedTerm,
+                    categoryID = excluded.categoryID,
+                    categoryNameSnapshot = excluded.categoryNameSnapshot,
                     groupID = excluded.groupID,
                     groupNameSnapshot = excluded.groupNameSnapshot,
                     source = excluded.source,
@@ -395,6 +500,8 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
                 entry.id.uuidString,
                 entry.term,
                 entry.normalizedTerm,
+                entry.categoryID.uuidString,
+                entry.categoryNameSnapshot,
                 entry.groupID?.uuidString,
                 entry.groupNameSnapshot,
                 entry.source.rawValue,
@@ -455,6 +562,10 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
             )
         }
 
+        try refreshSearchContent(for: entry, db: db)
+    }
+
+    private func refreshSearchContent(for entry: DictionaryEntry, db: Database) throws {
         try db.execute(sql: "DELETE FROM dictionary_search WHERE entryID = ?", arguments: [entry.id.uuidString])
         try db.execute(
             sql: """
@@ -466,7 +577,37 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
                 entry.term,
                 entry.replacementTerms.map(\.text).joined(separator: " "),
                 entry.observedVariants.map(\.text).joined(separator: " "),
-                entry.groupNameSnapshot ?? ""
+                [entry.categoryNameSnapshot, entry.groupNameSnapshot]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                ])
+        )
+    }
+
+    private func upsert(_ category: DictionaryCategory, db: Database) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO dictionary_categories (
+                    id, name, normalizedName, isDefault, isExpanded, sortOrder, createdAt, updatedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    normalizedName = excluded.normalizedName,
+                    isDefault = excluded.isDefault,
+                    isExpanded = excluded.isExpanded,
+                    sortOrder = excluded.sortOrder,
+                    createdAt = excluded.createdAt,
+                    updatedAt = excluded.updatedAt
+                """,
+            arguments: VoxtDatabaseArguments.make([
+                category.id.uuidString,
+                category.name,
+                category.normalizedName,
+                category.isDefault ? 1 : 0,
+                category.isExpanded ? 1 : 0,
+                category.sortOrder,
+                category.createdAt.timeIntervalSince1970,
+                category.updatedAt.timeIntervalSince1970
             ])
         )
     }
@@ -488,6 +629,8 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
             id: UUID(uuidString: id) ?? UUID(),
             term: term,
             normalizedTerm: normalizedTerm,
+            categoryID: (row["categoryID"] as String?).flatMap(UUID.init(uuidString:)) ?? DictionaryCategory.defaultID,
+            categoryNameSnapshot: (row["categoryNameSnapshot"] as String?) ?? DictionaryCategory.defaultName,
             groupID: (row["groupID"] as String?).flatMap(UUID.init(uuidString:)),
             groupNameSnapshot: row["groupNameSnapshot"],
             source: DictionaryEntrySource(rawValue: source) ?? .manual,
@@ -498,6 +641,28 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
             status: DictionaryEntryStatus(rawValue: status) ?? .active,
             observedVariants: observedVariants,
             replacementTerms: replacementTerms
+        )
+    }
+
+    private func category(from row: Row) -> DictionaryCategory? {
+        let idText: String = row["id"]
+        guard let id = UUID(uuidString: idText) else { return nil }
+        let name: String = row["name"]
+        let normalizedName: String = row["normalizedName"]
+        let isDefault: Int = row["isDefault"]
+        let isExpanded: Int = row["isExpanded"]
+        let sortOrder: Int = row["sortOrder"]
+        let createdAt: Double = row["createdAt"]
+        let updatedAt: Double = row["updatedAt"]
+        return DictionaryCategory(
+            id: id,
+            name: name,
+            normalizedName: normalizedName,
+            isDefault: isDefault != 0,
+            isExpanded: isExpanded != 0,
+            sortOrder: sortOrder,
+            createdAt: Date(timeIntervalSince1970: createdAt),
+            updatedAt: Date(timeIntervalSince1970: updatedAt)
         )
     }
 
@@ -544,12 +709,70 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
             }
 
             let data = try Data(contentsOf: legacyJSONURL)
-            let entries = try VoxtPersistenceCoding.decoder.decode([DictionaryEntry].self, from: data)
+            let legacyEntries = try VoxtPersistenceCoding.decoder.decode([DictionaryEntry].self, from: data)
+            let (categories, entries) = categoriesAndEntriesForLegacyJSONMigration(legacyEntries)
+            for category in categories {
+                try upsertCategory(category)
+            }
             try replaceAll(entries)
             try backupLegacyJSON(at: legacyJSONURL)
         } catch {
             VoxtLog.warning("Dictionary SQLite migration skipped or failed: \(error.localizedDescription)")
         }
+    }
+
+    private func categoriesAndEntriesForLegacyJSONMigration(
+        _ entries: [DictionaryEntry]
+    ) -> (categories: [DictionaryCategory], entries: [DictionaryEntry]) {
+        var categoriesByID: [UUID: DictionaryCategory] = [
+            DictionaryCategory.defaultID: DictionaryCategory.defaultCategory
+        ]
+        var migratedEntries: [DictionaryEntry] = []
+        migratedEntries.reserveCapacity(entries.count)
+
+        for entry in entries {
+            guard entry.categoryID == DictionaryCategory.defaultID,
+                  let groupID = entry.groupID
+            else {
+                categoriesByID[entry.categoryID] = categoriesByID[entry.categoryID] ?? DictionaryCategory(
+                    id: entry.categoryID,
+                    name: entry.categoryNameSnapshot ?? DictionaryCategory.defaultName,
+                    isDefault: entry.categoryID == DictionaryCategory.defaultID
+                )
+                migratedEntries.append(entry)
+                continue
+            }
+
+            let groupName = entry.groupNameSnapshot?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let categoryName = (groupName?.isEmpty == false ? groupName : nil)
+                ?? AppLocalization.localizedString("Imported Category")
+            if categoriesByID[groupID] == nil {
+                categoriesByID[groupID] = DictionaryCategory(
+                    id: groupID,
+                    name: categoryName,
+                    normalizedName: DictionaryStore.normalizeTerm(categoryName),
+                    isDefault: false,
+                    isExpanded: true,
+                    sortOrder: categoriesByID.count
+                )
+            }
+
+            var migratedEntry = entry
+            migratedEntry.categoryID = groupID
+            migratedEntry.categoryNameSnapshot = categoryName
+            migratedEntries.append(migratedEntry)
+        }
+
+        let categories = categoriesByID.values.sorted {
+            if $0.isDefault != $1.isDefault {
+                return $0.isDefault && !$1.isDefault
+            }
+            if $0.sortOrder != $1.sortOrder {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        return (categories, migratedEntries)
     }
 
     private func backupLegacyJSON(at url: URL) throws {

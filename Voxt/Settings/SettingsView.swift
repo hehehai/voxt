@@ -1321,6 +1321,7 @@ private struct SettingsSidebarInfoBlock: View {
             }
             .buttonStyle(SettingsSidebarInfoIconButtonStyle())
             .accessibilityLabel(settingsLocalized("Feedback"))
+            .help(settingsLocalized("Feedback"))
 
             Button(action: onTapSettings) {
                 SettingsSidebarIconView(kind: .settings)
@@ -1328,6 +1329,7 @@ private struct SettingsSidebarInfoBlock: View {
             }
             .buttonStyle(SettingsSidebarInfoIconButtonStyle())
             .accessibilityLabel(settingsLocalized("Settings"))
+            .help(settingsLocalized("Settings"))
         }
         .padding(.vertical, 4)
     }

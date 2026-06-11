@@ -45,6 +45,11 @@ extension ConfigurationTransferManager {
     }
 
     static func loadDictionaryEntries(environment: FileEnvironment) -> [DictionaryEntry] {
+        if let repository = environment.dictionaryRepository(),
+           let entries = try? repository.allEntries() {
+            return entries
+        }
+
         guard let url = try? environment.dictionaryEntriesURL(),
               let data = try? Data(contentsOf: url),
               !data.isEmpty,
@@ -59,6 +64,15 @@ extension ConfigurationTransferManager {
         _ entries: [DictionaryEntry],
         environment: FileEnvironment
     ) {
+        if let repository = environment.dictionaryRepository() {
+            do {
+                try repository.replaceAll(entries)
+            } catch {
+                VoxtLog.error("Failed to persist dictionary entries during configuration import: \(error.localizedDescription)")
+            }
+            return
+        }
+
         guard let url = try? environment.dictionaryEntriesURL(),
               let data = try? JSONEncoder().encode(entries)
         else {
@@ -73,6 +87,50 @@ extension ConfigurationTransferManager {
         } catch {
             VoxtLog.error("Failed to persist dictionary entries during configuration import: \(error.localizedDescription)")
         }
+    }
+
+    static func loadDictionaryCategories(environment: FileEnvironment) -> [DictionaryCategory] {
+        if let repository = environment.dictionaryRepository(),
+           let categories = try? repository.allCategories() {
+            return categories
+        }
+
+        let entries = loadDictionaryEntries(environment: environment)
+        var categoriesByID: [UUID: DictionaryCategory] = [
+            DictionaryCategory.defaultID: DictionaryCategory.defaultCategory
+        ]
+        for entry in entries where categoriesByID[entry.categoryID] == nil {
+            categoriesByID[entry.categoryID] = DictionaryCategory(
+                id: entry.categoryID,
+                name: entry.categoryNameSnapshot ?? DictionaryCategory.defaultName,
+                isDefault: entry.categoryID == DictionaryCategory.defaultID,
+                isExpanded: true,
+                sortOrder: categoriesByID.count
+            )
+        }
+        return categoriesByID.values.sorted {
+            if $0.isDefault != $1.isDefault {
+                return $0.isDefault
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    static func persistDictionary(
+        entries: [DictionaryEntry],
+        categories: [DictionaryCategory],
+        environment: FileEnvironment
+    ) {
+        if let repository = environment.dictionaryRepository() {
+            do {
+                try repository.replaceAll(entries: entries, categories: categories)
+            } catch {
+                VoxtLog.error("Failed to persist dictionary during configuration import: \(error.localizedDescription)")
+            }
+            return
+        }
+
+        persistDictionaryEntries(entries, environment: environment)
     }
 
     static func loadDictionarySuggestions(environment: FileEnvironment) -> [DictionarySuggestion] {

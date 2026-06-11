@@ -207,7 +207,7 @@ struct HistorySettingsView: View {
                         Button {
                             showHistorySearchDialog = true
                         } label: {
-                            Image(systemName: "magnifyingglass")
+                            SettingsSearchIconView()
                         }
                         .buttonStyle(SettingsCompactIconButtonStyle())
                         .help(localized("Search History"))
@@ -227,6 +227,7 @@ struct HistorySettingsView: View {
                             Image(systemName: "gearshape")
                         }
                         .buttonStyle(SettingsCompactIconButtonStyle())
+                        .help(localized("History Audio Settings"))
                     }
 
                     if isSearchActive {

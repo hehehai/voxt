@@ -174,6 +174,72 @@ final class VoxtDatabase: @unchecked Sendable {
                 """)
         }
 
+        migrator.registerMigration("v6_dictionary_categories") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS dictionary_categories (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    name TEXT NOT NULL,
+                    normalizedName TEXT NOT NULL,
+                    isDefault INTEGER NOT NULL,
+                    isExpanded INTEGER NOT NULL,
+                    sortOrder INTEGER NOT NULL,
+                    createdAt REAL NOT NULL,
+                    updatedAt REAL NOT NULL
+                );
+
+                INSERT OR IGNORE INTO dictionary_categories (
+                    id, name, normalizedName, isDefault, isExpanded, sortOrder, createdAt, updatedAt
+                ) VALUES (
+                    '00000000-0000-0000-0000-000000000001',
+                    'Default',
+                    'default',
+                    1,
+                    1,
+                    0,
+                    strftime('%s', 'now'),
+                    strftime('%s', 'now')
+                );
+
+                ALTER TABLE dictionary_entries
+                    ADD COLUMN categoryID TEXT DEFAULT '00000000-0000-0000-0000-000000000001';
+                ALTER TABLE dictionary_entries
+                    ADD COLUMN categoryNameSnapshot TEXT DEFAULT 'Default';
+
+                INSERT OR IGNORE INTO dictionary_categories (
+                    id, name, normalizedName, isDefault, isExpanded, sortOrder, createdAt, updatedAt
+                )
+                SELECT
+                    groupID,
+                    COALESCE(NULLIF(groupNameSnapshot, ''), 'Imported Category'),
+                    lower(COALESCE(NULLIF(groupNameSnapshot, ''), 'Imported Category')),
+                    0,
+                    1,
+                    row_number() OVER (ORDER BY COALESCE(groupNameSnapshot, groupID)),
+                    strftime('%s', 'now'),
+                    strftime('%s', 'now')
+                FROM dictionary_entries
+                WHERE groupID IS NOT NULL
+                GROUP BY groupID;
+
+                UPDATE dictionary_entries
+                SET
+                    categoryID = groupID,
+                    categoryNameSnapshot = COALESCE(NULLIF(groupNameSnapshot, ''), 'Imported Category')
+                WHERE groupID IS NOT NULL;
+
+                UPDATE dictionary_entries
+                SET
+                    categoryID = '00000000-0000-0000-0000-000000000001',
+                    categoryNameSnapshot = 'Default'
+                WHERE categoryID IS NULL OR categoryID = '';
+
+                CREATE INDEX IF NOT EXISTS idx_dictionary_category_order
+                    ON dictionary_categories(isDefault DESC, sortOrder ASC, name COLLATE NOCASE ASC);
+                CREATE INDEX IF NOT EXISTS idx_dictionary_entries_category
+                    ON dictionary_entries(categoryID, updatedAt DESC);
+                """)
+        }
+
         return migrator
     }
 }

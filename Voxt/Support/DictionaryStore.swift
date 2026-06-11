@@ -51,6 +51,51 @@ enum DictionaryFilter: String, CaseIterable, Identifiable {
     }
 }
 
+struct DictionaryCategory: Identifiable, Codable, Hashable {
+    nonisolated static let defaultID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    nonisolated static let defaultName = "Default"
+
+    let id: UUID
+    var name: String
+    var normalizedName: String
+    var isDefault: Bool
+    var isExpanded: Bool
+    var sortOrder: Int
+    var createdAt: Date
+    var updatedAt: Date
+
+    nonisolated init(
+        id: UUID = UUID(),
+        name: String,
+        normalizedName: String? = nil,
+        isDefault: Bool = false,
+        isExpanded: Bool = true,
+        sortOrder: Int = 0,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.normalizedName = normalizedName ?? DictionaryStore.normalizeTerm(name)
+        self.isDefault = isDefault
+        self.isExpanded = isExpanded
+        self.sortOrder = sortOrder
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    nonisolated static var defaultCategory: DictionaryCategory {
+        DictionaryCategory(
+            id: defaultID,
+            name: defaultName,
+            normalizedName: DictionaryStore.normalizeTerm(defaultName),
+            isDefault: true,
+            isExpanded: true,
+            sortOrder: 0
+        )
+    }
+}
+
 struct ObservedVariant: Identifiable, Codable, Hashable {
     let id: UUID
     var text: String
@@ -96,6 +141,8 @@ struct DictionaryEntry: Identifiable, Codable, Hashable {
     let id: UUID
     var term: String
     var normalizedTerm: String
+    var categoryID: UUID
+    var categoryNameSnapshot: String?
     var groupID: UUID?
     var groupNameSnapshot: String?
     var source: DictionaryEntrySource
@@ -111,6 +158,8 @@ struct DictionaryEntry: Identifiable, Codable, Hashable {
         case id
         case term
         case normalizedTerm
+        case categoryID
+        case categoryNameSnapshot
         case groupID
         case groupNameSnapshot
         case source
@@ -127,6 +176,8 @@ struct DictionaryEntry: Identifiable, Codable, Hashable {
         id: UUID = UUID(),
         term: String,
         normalizedTerm: String,
+        categoryID: UUID = DictionaryCategory.defaultID,
+        categoryNameSnapshot: String? = DictionaryCategory.defaultName,
         groupID: UUID? = nil,
         groupNameSnapshot: String? = nil,
         source: DictionaryEntrySource,
@@ -141,6 +192,8 @@ struct DictionaryEntry: Identifiable, Codable, Hashable {
         self.id = id
         self.term = term
         self.normalizedTerm = normalizedTerm
+        self.categoryID = categoryID
+        self.categoryNameSnapshot = categoryNameSnapshot
         self.groupID = groupID
         self.groupNameSnapshot = groupNameSnapshot
         self.source = source
@@ -158,6 +211,8 @@ struct DictionaryEntry: Identifiable, Codable, Hashable {
         id = try container.decode(UUID.self, forKey: .id)
         term = try container.decode(String.self, forKey: .term)
         normalizedTerm = try container.decode(String.self, forKey: .normalizedTerm)
+        categoryID = try container.decodeIfPresent(UUID.self, forKey: .categoryID) ?? DictionaryCategory.defaultID
+        categoryNameSnapshot = try container.decodeIfPresent(String.self, forKey: .categoryNameSnapshot) ?? DictionaryCategory.defaultName
         groupID = try container.decodeIfPresent(UUID.self, forKey: .groupID)
         groupNameSnapshot = try container.decodeIfPresent(String.self, forKey: .groupNameSnapshot)
         source = try container.decode(DictionaryEntrySource.self, forKey: .source)
@@ -331,6 +386,8 @@ struct DictionaryProjectImportResult: Equatable {
 
 enum DictionaryStoreError: LocalizedError {
     case emptyTerm
+    case emptyCategoryName
+    case duplicateCategory
     case duplicateTerm
     case replacementMatchesDictionaryTerm
     case duplicateReplacementTerm(String)
@@ -339,6 +396,10 @@ enum DictionaryStoreError: LocalizedError {
         switch self {
         case .emptyTerm:
             return AppLocalization.localizedString("Dictionary term cannot be empty.")
+        case .emptyCategoryName:
+            return AppLocalization.localizedString("Dictionary category name cannot be empty.")
+        case .duplicateCategory:
+            return AppLocalization.localizedString("This dictionary category already exists.")
         case .duplicateTerm:
             return AppLocalization.localizedString("This term already exists in the dictionary.")
         case .replacementMatchesDictionaryTerm:
@@ -355,6 +416,7 @@ enum DictionaryStoreError: LocalizedError {
 @MainActor
 final class DictionaryStore: ObservableObject {
     @Published private(set) var entries: [DictionaryEntry] = []
+    @Published private(set) var categories: [DictionaryCategory] = [DictionaryCategory.defaultCategory]
 
     private let defaults: UserDefaults
     private let fileManager: FileManager
@@ -390,6 +452,7 @@ final class DictionaryStore: ObservableObject {
         do {
             if let repository {
                 let decoded = try repository.allEntries()
+                applyReloadedCategories(try repository.allCategories())
                 if !decoded.isEmpty || !legacyDictionaryFileExists() {
                     applyReloadedEntries(decoded)
                     return
@@ -427,6 +490,10 @@ final class DictionaryStore: ObservableObject {
             if let repository,
                let repositoryEntries = try? repository.allEntries(),
                !repositoryEntries.isEmpty || url.map({ !FileManager.default.fileExists(atPath: $0.path) }) == true {
+                let repositoryCategories = (try? repository.allCategories()) ?? [DictionaryCategory.defaultCategory]
+                DispatchQueue.main.async { [weak self] in
+                    self?.applyReloadedCategories(repositoryCategories)
+                }
                 decodedEntries = repositoryEntries
             } else if let url, FileManager.default.fileExists(atPath: url.path) {
                 do {
@@ -448,6 +515,120 @@ final class DictionaryStore: ObservableObject {
 
     func filteredEntries(for filter: DictionaryFilter) -> [DictionaryEntry] {
         filteredEntriesCache[filter] ?? entries
+    }
+
+    func entriesByCategory(
+        filter: DictionaryFilter,
+        query: String = ""
+    ) -> [(category: DictionaryCategory, entries: [DictionaryEntry])] {
+        let filtered = DictionaryEntryCollection.searchEntries(filteredEntries(for: filter), query: query)
+        let entriesByCategoryID = Dictionary(grouping: filtered, by: \.categoryID)
+        return resolvedCategories().map { category in
+            (
+                category,
+                DictionaryEntryCollection.sortedEntries(entriesByCategoryID[category.id] ?? [])
+            )
+        }
+    }
+
+    func categoryName(for categoryID: UUID) -> String {
+        resolvedCategories().first(where: { $0.id == categoryID })?.name
+            ?? entries.first(where: { $0.categoryID == categoryID })?.categoryNameSnapshot
+            ?? DictionaryCategory.defaultName
+    }
+
+    func createCategory(name: String) throws -> DictionaryCategory {
+        let preparedName = try prepareCategoryName(name)
+        let now = Date()
+        let category = DictionaryCategory(
+            name: preparedName.display,
+            normalizedName: preparedName.normalized,
+            isDefault: false,
+            isExpanded: true,
+            sortOrder: (categories.map(\.sortOrder).max() ?? 0) + 1,
+            createdAt: now,
+            updatedAt: now
+        )
+        try upsertPersistedCategory(category)
+        replaceCategories(categories + [category])
+        return category
+    }
+
+    func ensureCategory(id: UUID?, name: String?) -> DictionaryCategory {
+        guard let id else { return resolvedDefaultCategory() }
+        if let existing = categories.first(where: { $0.id == id }) {
+            return existing
+        }
+        let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (displayName?.isEmpty == false ? displayName : nil) ?? AppLocalization.localizedString("Imported Category")
+        let category = DictionaryCategory(
+            id: id,
+            name: resolvedName,
+            normalizedName: Self.normalizeTerm(resolvedName),
+            isDefault: false,
+            isExpanded: true,
+            sortOrder: (categories.map(\.sortOrder).max() ?? 0) + 1
+        )
+        try? upsertPersistedCategory(category)
+        replaceCategories(categories + [category])
+        return category
+    }
+
+    func updateCategory(id: UUID, name: String) throws {
+        guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
+        let preparedName = try prepareCategoryName(name, excluding: id)
+        var category = categories[index]
+        category.name = preparedName.display
+        category.normalizedName = preparedName.normalized
+        category.updatedAt = Date()
+        try upsertPersistedCategory(category)
+
+        var updatedCategories = categories
+        updatedCategories[index] = category
+        replaceCategories(updatedCategories)
+        refreshCategoryNameSnapshot(category)
+    }
+
+    func setCategoryExpanded(id: UUID, expanded: Bool) {
+        guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
+        var category = categories[index]
+        category.isExpanded = expanded
+        category.updatedAt = Date()
+        try? upsertPersistedCategory(category)
+        var updatedCategories = categories
+        updatedCategories[index] = category
+        replaceCategories(updatedCategories)
+    }
+
+    func deleteCategory(id: UUID, deleteEntries: Bool = false) {
+        guard id != DictionaryCategory.defaultID else { return }
+        let targetCategory = categories.first(where: { $0.id == id })
+        let fallback = resolvedDefaultCategory()
+        if deleteEntries {
+            let deletedIDs = Set(entries.filter { $0.categoryID == id }.map(\.id))
+            if let repository {
+                for entryID in deletedIDs {
+                    try? repository.delete(id: entryID)
+                }
+                try? repository.deleteCategory(id: id, moveEntriesTo: nil)
+            }
+            replaceEntries(entries.filter { !deletedIDs.contains($0.id) }, sort: false)
+        } else {
+            let movedEntries = entries.map { entry -> DictionaryEntry in
+                guard entry.categoryID == id else { return entry }
+                var updated = entry
+                updated.categoryID = fallback.id
+                updated.categoryNameSnapshot = fallback.name
+                updated.updatedAt = Date()
+                return updated
+            }
+            try? repository?.deleteCategory(id: id, moveEntriesTo: fallback)
+            replaceEntries(movedEntries)
+        }
+        replaceCategories(categories.filter { $0.id != id })
+        if let targetCategory {
+            VoxtLog.info("Dictionary category deleted. category=\(targetCategory.name), deleteEntries=\(deleteEntries)")
+        }
     }
 
     func entries(
@@ -545,12 +726,16 @@ final class DictionaryStore: ObservableObject {
     func createManualEntry(
         term: String,
         replacementTerms: [String] = [],
+        categoryID: UUID = DictionaryCategory.defaultID,
+        categoryNameSnapshot: String? = DictionaryCategory.defaultName,
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws {
         try createEntry(
             term: term,
             replacementTerms: replacementTerms,
+            categoryID: categoryID,
+            categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
             groupNameSnapshot: groupNameSnapshot,
             source: .manual
@@ -560,12 +745,16 @@ final class DictionaryStore: ObservableObject {
     func createOrReinforceManualEntry(
         term: String,
         replacementTerms: [String] = [],
+        categoryID: UUID = DictionaryCategory.defaultID,
+        categoryNameSnapshot: String? = DictionaryCategory.defaultName,
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws -> DictionaryEntryUpsertResult {
         try createOrReinforceEntry(
             term: term,
             replacementTerms: replacementTerms,
+            categoryID: categoryID,
+            categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
             groupNameSnapshot: groupNameSnapshot,
             source: .manual
@@ -575,12 +764,16 @@ final class DictionaryStore: ObservableObject {
     func createAutoEntry(
         term: String,
         replacementTerms: [String] = [],
+        categoryID: UUID = DictionaryCategory.defaultID,
+        categoryNameSnapshot: String? = DictionaryCategory.defaultName,
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws {
         try createEntry(
             term: term,
             replacementTerms: replacementTerms,
+            categoryID: categoryID,
+            categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
             groupNameSnapshot: groupNameSnapshot,
             source: .auto
@@ -590,12 +783,16 @@ final class DictionaryStore: ObservableObject {
     func createOrReinforceAutoEntry(
         term: String,
         replacementTerms: [String] = [],
+        categoryID: UUID = DictionaryCategory.defaultID,
+        categoryNameSnapshot: String? = DictionaryCategory.defaultName,
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws -> DictionaryEntryUpsertResult {
         try createOrReinforceEntry(
             term: term,
             replacementTerms: replacementTerms,
+            categoryID: categoryID,
+            categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
             groupNameSnapshot: groupNameSnapshot,
             source: .auto
@@ -605,6 +802,8 @@ final class DictionaryStore: ObservableObject {
     private func createEntry(
         term: String,
         replacementTerms: [String],
+        categoryID: UUID,
+        categoryNameSnapshot: String?,
         groupID: UUID?,
         groupNameSnapshot: String?,
         source: DictionaryEntrySource
@@ -618,6 +817,8 @@ final class DictionaryStore: ObservableObject {
         let entry = DictionaryEntry(
             term: prepared.display,
             normalizedTerm: prepared.normalized,
+            categoryID: categoryID,
+            categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
             groupNameSnapshot: groupNameSnapshot,
             source: source,
@@ -634,6 +835,8 @@ final class DictionaryStore: ObservableObject {
     private func createOrReinforceEntry(
         term: String,
         replacementTerms: [String],
+        categoryID: UUID,
+        categoryNameSnapshot: String?,
         groupID: UUID?,
         groupNameSnapshot: String?,
         source: DictionaryEntrySource
@@ -656,6 +859,8 @@ final class DictionaryStore: ObservableObject {
         try createEntry(
             term: term,
             replacementTerms: replacementTerms,
+            categoryID: categoryID,
+            categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
             groupNameSnapshot: groupNameSnapshot,
             source: source
@@ -671,6 +876,8 @@ final class DictionaryStore: ObservableObject {
         id: UUID,
         term: String,
         replacementTerms: [String] = [],
+        categoryID: UUID = DictionaryCategory.defaultID,
+        categoryNameSnapshot: String? = DictionaryCategory.defaultName,
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws {
@@ -684,6 +891,8 @@ final class DictionaryStore: ObservableObject {
         var updatedEntry = entries[index]
         updatedEntry.term = prepared.display
         updatedEntry.normalizedTerm = prepared.normalized
+        updatedEntry.categoryID = categoryID
+        updatedEntry.categoryNameSnapshot = categoryNameSnapshot
         updatedEntry.groupID = groupID
         updatedEntry.groupNameSnapshot = groupNameSnapshot
         updatedEntry.replacementTerms = prepared.replacementTerms
@@ -711,12 +920,12 @@ final class DictionaryStore: ObservableObject {
     }
 
     func exportTransferJSONString() throws -> String {
-        try DictionaryTransferManager.exportJSONString(entries: entries)
+        try DictionaryTransferManager.exportJSONString(entries: entries, categories: resolvedCategories())
     }
 
     func importTransferJSONString(_ json: String) throws -> DictionaryImportResult {
         let payload = try DictionaryTransferManager.importPayload(from: json)
-        return importTransferEntries(payload.entries)
+        return importTransferEntries(payload.entries, categories: payload.categories)
     }
 
     func importProjectTerms(_ terms: [String], source: DictionaryEntrySource) -> DictionaryProjectImportResult {
@@ -970,7 +1179,11 @@ final class DictionaryStore: ObservableObject {
         )
     }
 
-    private func importTransferEntries(_ transferEntries: [DictionaryTransferManager.Entry]) -> DictionaryImportResult {
+    private func importTransferEntries(
+        _ transferEntries: [DictionaryTransferManager.Entry],
+        categories transferCategories: [DictionaryCategory]
+    ) -> DictionaryImportResult {
+        importTransferCategories(transferCategories, entries: transferEntries)
         var mergedEntries = entries
         var importValidationIndex = validationIndex
         var addedCount = 0
@@ -988,6 +1201,8 @@ final class DictionaryStore: ObservableObject {
                 let entry = DictionaryEntry(
                     term: prepared.display,
                     normalizedTerm: prepared.normalized,
+                    categoryID: transferEntry.categoryID ?? categoryIDForImportedEntry(transferEntry),
+                    categoryNameSnapshot: transferEntry.categoryNameSnapshot ?? categoryNameForImportedEntry(transferEntry),
                     groupID: transferEntry.groupID,
                     groupNameSnapshot: transferEntry.groupNameSnapshot,
                     source: .manual,
@@ -1006,6 +1221,35 @@ final class DictionaryStore: ObservableObject {
         replaceEntries(mergedEntries)
         persist()
         return DictionaryImportResult(addedCount: addedCount, skippedCount: skippedCount)
+    }
+
+    private func importTransferCategories(
+        _ transferCategories: [DictionaryCategory],
+        entries transferEntries: [DictionaryTransferManager.Entry]
+    ) {
+        var mergedCategoriesByID = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
+        for category in transferCategories {
+            mergedCategoriesByID[category.id] = category
+        }
+
+        for entry in transferEntries {
+            let categoryID = entry.categoryID ?? categoryIDForImportedEntry(entry)
+            guard mergedCategoriesByID[categoryID] == nil else { continue }
+            mergedCategoriesByID[categoryID] = DictionaryCategory(
+                id: categoryID,
+                name: entry.categoryNameSnapshot ?? categoryNameForImportedEntry(entry),
+                isDefault: categoryID == DictionaryCategory.defaultID,
+                isExpanded: true,
+                sortOrder: mergedCategoriesByID.count
+            )
+        }
+
+        let mergedCategories = Array(mergedCategoriesByID.values)
+        replaceCategories(mergedCategories)
+        guard persistenceEnabled, let repository else { return }
+        for category in resolvedCategories() {
+            try? repository.upsertCategory(category)
+        }
     }
 
     private func existingTermIndex(normalizedTerm: String, groupID: UUID?) -> Int? {
@@ -1175,6 +1419,11 @@ final class DictionaryStore: ObservableObject {
         try repository.upsert(entry)
     }
 
+    private func upsertPersistedCategory(_ category: DictionaryCategory) throws {
+        guard persistenceEnabled, let repository else { return }
+        try repository.upsertCategory(category)
+    }
+
     private func persistEntries(_ updatedEntries: [DictionaryEntry]) {
         guard persistenceEnabled, let repository else { return }
         do {
@@ -1226,8 +1475,24 @@ final class DictionaryStore: ObservableObject {
         DictionaryEntryCollection.sortedEntries(values)
     }
 
+    private func sortCategories(_ values: [DictionaryCategory]) -> [DictionaryCategory] {
+        values.sorted {
+            if $0.isDefault != $1.isDefault {
+                return $0.isDefault
+            }
+            if $0.sortOrder != $1.sortOrder {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
     private func applyReloadedEntries(_ decodedEntries: [DictionaryEntry]) {
         replaceEntries(decodedEntries)
+    }
+
+    private func applyReloadedCategories(_ decodedCategories: [DictionaryCategory]) {
+        replaceCategories(decodedCategories)
     }
 
     private func replaceEntries(_ values: [DictionaryEntry], sort: Bool = true) {
@@ -1235,5 +1500,76 @@ final class DictionaryStore: ObservableObject {
         entries = resolvedEntries
         filteredEntriesCache = DictionaryEntryCollection.filteredEntriesCache(for: resolvedEntries)
         validationIndex = DictionaryValidationIndex(entries: resolvedEntries)
+    }
+
+    private func replaceCategories(_ values: [DictionaryCategory]) {
+        var resolved = values
+        if !resolved.contains(where: \.isDefault) {
+            resolved.append(DictionaryCategory.defaultCategory)
+        }
+        categories = sortCategories(resolved)
+    }
+
+    private func resolvedCategories() -> [DictionaryCategory] {
+        let knownIDs = Set(categories.map(\.id))
+        let missingCategories = entries
+            .filter { !knownIDs.contains($0.categoryID) }
+            .reduce(into: [UUID: DictionaryCategory]()) { partialResult, entry in
+                partialResult[entry.categoryID] = DictionaryCategory(
+                    id: entry.categoryID,
+                    name: entry.categoryNameSnapshot ?? DictionaryCategory.defaultName,
+                    isDefault: entry.categoryID == DictionaryCategory.defaultID,
+                    isExpanded: true,
+                    sortOrder: categories.count + partialResult.count + 1,
+                    createdAt: entry.createdAt,
+                    updatedAt: entry.updatedAt
+                )
+            }
+            .values
+        return sortCategories(categories + missingCategories)
+    }
+
+    private func resolvedDefaultCategory() -> DictionaryCategory {
+        categories.first(where: \.isDefault) ?? DictionaryCategory.defaultCategory
+    }
+
+    private func refreshCategoryNameSnapshot(_ category: DictionaryCategory) {
+        let updatedEntries = entries.map { entry -> DictionaryEntry in
+            guard entry.categoryID == category.id else { return entry }
+            var updated = entry
+            updated.categoryNameSnapshot = category.name
+            return updated
+        }
+        replaceEntries(updatedEntries)
+        persistEntries(updatedEntries.filter { $0.categoryID == category.id })
+    }
+
+    private func prepareCategoryName(
+        _ name: String,
+        excluding excludedID: UUID? = nil
+    ) throws -> (display: String, normalized: String) {
+        let display = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = Self.normalizeTerm(display)
+        guard !display.isEmpty, !normalized.isEmpty else {
+            throw DictionaryStoreError.emptyCategoryName
+        }
+        let duplicate = categories.contains {
+            $0.id != excludedID && $0.normalizedName == normalized
+        }
+        if duplicate {
+            throw DictionaryStoreError.duplicateCategory
+        }
+        return (display, normalized)
+    }
+
+    private func categoryIDForImportedEntry(_ entry: DictionaryTransferManager.Entry) -> UUID {
+        if let groupID = entry.groupID {
+            return groupID
+        }
+        return DictionaryCategory.defaultID
+    }
+
+    private func categoryNameForImportedEntry(_ entry: DictionaryTransferManager.Entry) -> String {
+        entry.groupNameSnapshot ?? DictionaryCategory.defaultName
     }
 }

@@ -23,11 +23,10 @@ struct DictionarySettingsView: View {
 
     @State private var selectedFilter: DictionaryFilter = .all
     @State private var dialog: DictionaryDialog?
-    @State private var availableGroups: [AppBranchGroup] = []
-    @State private var availableGroupNamesByID: [UUID: String] = [:]
+    @State private var categoryDialog: DictionaryCategoryDialog?
+    @State private var pendingDeleteCategory: DictionaryCategory?
     @State private var showDictionaryAdvancedSettings = false
     @State private var showDictionaryIngestDialog = false
-    @State private var showClearAllConfirmation = false
     @State private var suggestionFilterDraft = DictionarySuggestionFilterSettings.defaultValue
     @State private var automaticLearningPromptDraft = AppPromptDefaults.text(for: .dictionaryAutoLearning)
     @State private var historyScanModelOptions: [DictionaryHistoryScanModelOption] = []
@@ -58,14 +57,21 @@ struct DictionarySettingsView: View {
         historyScanModelOptions.first(where: { $0.id == selectedHistoryScanModelID })
     }
 
+    private var appBranchGroups: [AppBranchGroup] {
+        guard let data = UserDefaults.standard.data(forKey: AppPreferenceKey.appBranchGroups),
+              let groups = try? JSONDecoder().decode([AppBranchGroup].self, from: data)
+        else {
+            return []
+        }
+        return groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     private var historyScanProgress: DictionaryHistoryScanProgress {
         dictionarySuggestionStore.historyScanProgress
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            settingsCard
-                .settingsNavigationAnchor(.dictionarySettings)
             dictionaryListCard
                 .settingsNavigationAnchor(.dictionaryEntries)
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -83,6 +89,9 @@ struct DictionarySettingsView: View {
         .animation(.easeInOut(duration: 0.16), value: dictionaryToastMessage)
         .sheet(item: $dialog) { currentDialog in
             dialogView(for: currentDialog)
+        }
+        .sheet(item: $categoryDialog) { currentDialog in
+            categoryDialogView(for: currentDialog)
         }
         .sheet(isPresented: $showDictionaryAdvancedSettings) {
             DictionaryAdvancedSettingsDialog(
@@ -134,14 +143,32 @@ struct DictionarySettingsView: View {
             }
             reloadDictionaryEntries(reset: true)
         }
-        .alert(localized("Delete All Dictionary Terms?"), isPresented: $showClearAllConfirmation) {
-            Button(localized("Delete"), role: .destructive) {
-                dictionaryStore.clearAll()
+        .alert(
+            localized("Delete Dictionary Category?"),
+            isPresented: Binding(
+                get: { pendingDeleteCategory != nil },
+                set: { if !$0 { pendingDeleteCategory = nil } }
+            )
+        ) {
+            Button(localized("Move Terms to Default"), role: .destructive) {
+                if let pendingDeleteCategory {
+                    dictionaryStore.deleteCategory(id: pendingDeleteCategory.id, deleteEntries: false)
+                }
+                pendingDeleteCategory = nil
                 reloadDictionaryEntries(reset: true)
             }
-            Button(localized("Cancel"), role: .cancel) {}
+            Button(localized("Delete Terms Too"), role: .destructive) {
+                if let pendingDeleteCategory {
+                    dictionaryStore.deleteCategory(id: pendingDeleteCategory.id, deleteEntries: true)
+                }
+                pendingDeleteCategory = nil
+                reloadDictionaryEntries(reset: true)
+            }
+            Button(localized("Cancel"), role: .cancel) {
+                pendingDeleteCategory = nil
+            }
         } message: {
-            Text(localized("This will permanently delete all dictionary terms."))
+            Text(localized("You can move this category's terms to the default category or delete them together."))
         }
     }
 
@@ -165,30 +192,30 @@ struct DictionarySettingsView: View {
         pendingHistoryScanCount = historyStore.pendingDictionaryHistoryEntryCount(after: checkpoint)
     }
 
-    private var settingsCard: some View {
-        DictionarySettingsHeaderCard(
-            historyScanProgress: historyScanProgress,
-            suggestionActionMessage: suggestionActionMessage,
-            onOpenIngest: openDictionaryIngestDialog,
-            onOpenSettings: openDictionaryAdvancedSettings,
-            onImport: importDictionary,
-            onExport: exportDictionary,
-            historyScanSummaryText: historyScanSummaryText(lastRunAt:)
-        )
-    }
-
     private var dictionaryListCard: some View {
         DictionaryEntriesCard(
             selectedFilter: $selectedFilter,
-            visibleEntries: visibleEntries,
-            totalEntryCount: totalEntryCount,
+            categorizedEntries: dictionaryStore.entriesByCategory(
+                filter: selectedFilter,
+                query: dictionarySearchText
+            ),
+            totalEntryCount: dictionaryStore.entryCount(filter: selectedFilter, query: dictionarySearchText),
             searchText: dictionarySearchText,
             isLoadingEntries: isLoadingEntries,
             onSearch: { showDictionarySearchDialog = true },
             onClearSearch: { dictionarySearchText = "" },
-            onLoadMore: { reloadDictionaryEntries(reset: false) },
-            onCreate: { dialog = .create },
-            onClearAll: { showClearAllConfirmation = true },
+            onCreate: { dialog = .create(categoryID: nil) },
+            onCreateCategory: { categoryDialog = .create },
+            onOpenIngest: openDictionaryIngestDialog,
+            onOpenSettings: openDictionaryAdvancedSettings,
+            onImport: importDictionary,
+            onExport: exportDictionary,
+            onCreateInCategory: { category in dialog = .create(categoryID: category.id) },
+            onToggleCategory: { category in
+                dictionaryStore.setCategoryExpanded(id: category.id, expanded: !category.isExpanded)
+            },
+            onEditCategory: { category in categoryDialog = .edit(category) },
+            onDeleteCategory: { category in pendingDeleteCategory = category },
             onEdit: { entry in dialog = .edit(entry) },
             onDelete: deleteDictionaryEntry
         )
@@ -198,63 +225,91 @@ struct DictionarySettingsView: View {
     private func dialogView(for dialog: DictionaryDialog) -> some View {
         DictionaryTermDialogView(
             dialog: dialog,
-            availableGroups: availableGroups,
+            availableCategories: dictionaryStore.categories,
+            availableGroups: appBranchGroups,
             onCancel: {
                 self.dialog = nil
             },
-            onSave: { term, replacementTerms, selectedGroupID in
+            onSave: { terms, replacementTerms, selectedCategoryID, selectedGroupID in
                 try save(
                     dialog: dialog,
-                    term: term,
+                    terms: terms,
                     replacementTerms: replacementTerms,
+                    selectedCategoryID: selectedCategoryID,
                     selectedGroupID: selectedGroupID
                 )
                 self.dialog = nil
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func categoryDialogView(for dialog: DictionaryCategoryDialog) -> some View {
+        DictionaryCategoryDialogView(
+            dialog: dialog,
+            onCancel: {
+                categoryDialog = nil
             },
-            onSaveAndContinue: { term, replacementTerms, selectedGroupID in
-                try save(
-                    dialog: dialog,
-                    term: term,
-                    replacementTerms: replacementTerms,
-                    selectedGroupID: selectedGroupID
-                )
+            onSave: { name in
+                switch dialog {
+                case .create:
+                    _ = try dictionaryStore.createCategory(name: name)
+                case .edit(let category):
+                    try dictionaryStore.updateCategory(id: category.id, name: name)
+                }
+                categoryDialog = nil
             }
         )
     }
 
     private func save(
         dialog: DictionaryDialog,
-        term: String,
+        terms: [String],
         replacementTerms: [String],
+        selectedCategoryID: UUID,
         selectedGroupID: UUID?
     ) throws {
-        suppressedStoreEntryReloadCount += 1
+        let mutationCount = max(terms.count, 1)
+        suppressedStoreEntryReloadCount += mutationCount
+        let selectedGroupName = groupNameSnapshot(
+            for: selectedGroupID,
+            in: dialog
+        )
         do {
             switch dialog {
             case .create:
-                let result = try dictionaryStore.createOrReinforceManualEntry(
-                    term: term,
-                    replacementTerms: replacementTerms,
-                    groupID: selectedGroupID,
-                    groupNameSnapshot: selectedGroupName(for: selectedGroupID)
-                )
-                if !result.added {
-                    showDictionaryToast(AppLocalization.format(
-                        "Reinforced existing dictionary term: %@.",
-                        result.term
-                    ))
+                for term in terms {
+                    let result = try dictionaryStore.createOrReinforceManualEntry(
+                        term: term,
+                        replacementTerms: replacementTerms,
+                        categoryID: selectedCategoryID,
+                        categoryNameSnapshot: dictionaryStore.categoryName(for: selectedCategoryID),
+                        groupID: selectedGroupID,
+                        groupNameSnapshot: selectedGroupName
+                    )
+                    if !result.added {
+                        showDictionaryToast(AppLocalization.format(
+                            "Reinforced existing dictionary term: %@.",
+                            result.term
+                        ))
+                    }
                 }
             case .edit(let entry):
+                guard let term = terms.first else {
+                    throw DictionaryStoreError.emptyTerm
+                }
                 try dictionaryStore.updateEntry(
                     id: entry.id,
                     term: term,
                     replacementTerms: replacementTerms,
+                    categoryID: selectedCategoryID,
+                    categoryNameSnapshot: dictionaryStore.categoryName(for: selectedCategoryID),
                     groupID: selectedGroupID,
-                    groupNameSnapshot: selectedGroupName(for: selectedGroupID) ?? entry.groupNameSnapshot
+                    groupNameSnapshot: selectedGroupName
                 )
             }
         } catch {
-            suppressedStoreEntryReloadCount = max(0, suppressedStoreEntryReloadCount - 1)
+            suppressedStoreEntryReloadCount = max(0, suppressedStoreEntryReloadCount - mutationCount)
             throw error
         }
         refreshDictionaryEntriesAfterMutation()
@@ -319,7 +374,6 @@ struct DictionarySettingsView: View {
     }
 
     private func refreshLocalContentState() {
-        reloadGroups()
         historyScanModelOptions = availableHistoryScanModels()
         automaticLearningPromptDraft = AppPromptDefaults.resolvedStoredText(
             storedAutomaticLearningPrompt,
@@ -492,41 +546,39 @@ struct DictionarySettingsView: View {
         dictionaryToastMessage = ""
     }
 
-    private func reloadGroups() {
-        guard let data = UserDefaults.standard.data(forKey: AppPreferenceKey.appBranchGroups),
-              let groups = try? JSONDecoder().decode([AppBranchGroup].self, from: data)
-        else {
-            availableGroups = []
-            availableGroupNamesByID = [:]
-            return
-        }
-        let sortedGroups = groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        availableGroups = sortedGroups
-        availableGroupNamesByID = Dictionary(uniqueKeysWithValues: sortedGroups.map { ($0.id, $0.name) })
-    }
-
-    private func selectedGroupName(for selectedGroupID: UUID?) -> String? {
-        guard let selectedGroupID else { return nil }
-        return groupName(for: selectedGroupID)
-    }
-
-    private func groupName(for id: UUID?) -> String? {
-        guard let id else { return nil }
-        return availableGroupNamesByID[id]
-    }
-
     private func scopeLabel(for entry: DictionaryEntry) -> String {
-        guard let groupID = entry.groupID else {
+        guard entry.groupID != nil else {
             return AppLocalization.localizedString("Global")
         }
-        return groupName(for: groupID) ?? entry.groupNameSnapshot ?? AppLocalization.localizedString("Missing Group")
+        return entry.groupNameSnapshot ?? AppLocalization.localizedString("Missing Group")
     }
 
     private func suggestionScopeLabel(for suggestion: DictionarySuggestion) -> String {
-        guard let groupID = suggestion.groupID else {
+        guard suggestion.groupID != nil else {
             return AppLocalization.localizedString("Global")
         }
-        return groupName(for: groupID) ?? suggestion.groupNameSnapshot ?? AppLocalization.localizedString("Missing Group")
+        return suggestion.groupNameSnapshot ?? AppLocalization.localizedString("Missing Group")
+    }
+
+    private func groupName(for groupID: UUID?) -> String? {
+        guard let groupID else { return nil }
+        return appBranchGroups.first(where: { $0.id == groupID })?.name
+    }
+
+    private func groupNameSnapshot(
+        for groupID: UUID?,
+        in dialog: DictionaryDialog
+    ) -> String? {
+        guard let groupID else { return nil }
+        if let currentName = groupName(for: groupID) {
+            return currentName
+        }
+        guard case .edit(let entry) = dialog,
+              entry.groupID == groupID
+        else {
+            return nil
+        }
+        return entry.groupNameSnapshot
     }
 
     private var historyScanStatusText: String {
