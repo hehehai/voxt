@@ -55,7 +55,13 @@ final class FeatureSettingsStoreTests: XCTestCase {
             defaults.set("balanced", forKey: "translationLatencyProfile")
             defaults.set("quality", forKey: "rewriteLatencyProfile")
 
-            let settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+            var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+            settings.meeting.summaryModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
+            settings.meeting.summaryPrompt = AppPromptDefaults.resolvedStoredText(
+                "",
+                kind: .transcriptSummary,
+                defaults: defaults
+            )
             FeatureSettingsStore.save(settings, defaults: defaults)
             let reloaded = FeatureSettingsStore.load(defaults: defaults)
 

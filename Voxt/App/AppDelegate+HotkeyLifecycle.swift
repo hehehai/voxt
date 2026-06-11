@@ -48,6 +48,10 @@ extension AppDelegate {
             guard let self else { return }
             self.handleRewriteHotkeyUp()
         }
+        hotkeyManager.onMeetingKeyDown = { [weak self] in
+            guard let self else { return }
+            self.handleMeetingHotkeyDown()
+        }
         hotkeyManager.onCustomPasteKeyDown = { [weak self] in
             guard let self else { return }
             self.handleCustomPasteHotkeyDown()

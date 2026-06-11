@@ -27,6 +27,8 @@ struct FeatureSettingsView: View {
             switch selectedTab {
             case .transcription:
                 transcriptionContent
+            case .meeting:
+                meetingContent
             case .note:
                 noteContent
             case .translation:
@@ -210,6 +212,10 @@ struct FeatureSettingsView: View {
             return featureSettings.rewrite.asrSelectionID
         case .rewriteLLM:
             return featureSettings.rewrite.llmSelectionID
+        case .meetingASR:
+            return featureSettings.meeting.asrSelectionID
+        case .meetingSummary:
+            return featureSettings.meeting.summaryModelSelectionID
         }
     }
 
@@ -230,6 +236,10 @@ struct FeatureSettingsView: View {
                 settings.rewrite.asrSelectionID = selectionID
             case .rewriteLLM:
                 settings.rewrite.llmSelectionID = selectionID
+            case .meetingASR:
+                settings.meeting.asrSelectionID = selectionID
+            case .meetingSummary:
+                settings.meeting.summaryModelSelectionID = selectionID
             }
         }
         reloadFeatureSettings()

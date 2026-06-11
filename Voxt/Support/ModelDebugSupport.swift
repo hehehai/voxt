@@ -579,10 +579,43 @@ enum ModelDebugPromptResolver {
                 ),
                 userMainLanguage: mergedValues[AppPreferenceKey.asrUserMainLanguageTemplateVariable] ?? ""
             )
+            let transcriptCharacterCount = transcript.trimmingCharacters(in: .whitespacesAndNewlines).count
+            let strategy = TaskLLMExecutionStrategy(
+                taskKind: .transcriptSummary,
+                rawTextCharacterCount: transcriptCharacterCount,
+                promptCharacterCount: content.count,
+                mode: .singlePass,
+                contextBudgetPolicy: transcriptCharacterCount > TaskLLMStrategyResolver.longTextThreshold ? .reducedForLongInput : .standard,
+                glossarySelectionPolicy: DictionaryGlossarySelectionPolicy(maxTerms: 0, maxCharacters: 0),
+                outputTokenBudgetHint: nil,
+                segmentationCharacterLimit: nil,
+                truncationGuard: .disabled
+            )
+            let plan = LLMExecutionPlan(
+                task: .transcriptSummary(transcript: transcript, request: content),
+                provider: .customLLM(repo: CustomLLMModelManager.defaultModelRepo),
+                delivery: .userMessage,
+                promptContent: content,
+                fallbackText: "",
+                executionStrategy: strategy,
+                outputTokenBudgetHint: nil,
+                contextBlocks: compactBlocks([
+                    LLMContextBlock(
+                        kind: .input,
+                        title: "Transcript",
+                        content: transcript,
+                        isStablePrefixCandidate: false
+                    )
+                ]),
+                conversationHistory: [],
+                previousResponseID: nil,
+                responseFormat: nil
+            )
+            let compiledRequest = LLMExecutionPlanCompiler.compile(plan)
             return LLMDebugResolvedPrompt(
-                content: content,
+                content: compiledRequestPreview(compiledRequest),
                 inputSummary: transcript,
-                compiledRequest: nil
+                compiledRequest: compiledRequest
             )
         }
     }

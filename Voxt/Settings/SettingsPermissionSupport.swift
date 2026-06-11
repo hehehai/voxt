@@ -56,6 +56,16 @@ struct SettingsPermissionRequirementContext {
     let selectedEngine: TranscriptionEngine
     let muteSystemAudioWhileRecording: Bool
     let featureSettings: FeatureSettings?
+
+    init(
+        selectedEngine: TranscriptionEngine,
+        muteSystemAudioWhileRecording: Bool,
+        featureSettings: FeatureSettings?
+    ) {
+        self.selectedEngine = selectedEngine
+        self.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
+        self.featureSettings = featureSettings
+    }
 }
 
 enum SettingsPermissionRequirementResolver {
@@ -95,7 +105,8 @@ enum SettingsPermissionRequirementResolver {
         let featureSelections = [
             context.featureSettings?.transcription.asrSelectionID.asrSelection,
             context.featureSettings?.translation.asrSelectionID.asrSelection,
-            context.featureSettings?.rewrite.asrSelectionID.asrSelection
+            context.featureSettings?.rewrite.asrSelectionID.asrSelection,
+            context.featureSettings?.meeting.asrSelectionID.asrSelection
         ]
 
         let needsSpeechRecognition = context.selectedEngine == .dictation || featureSelections.contains { selection in
@@ -109,7 +120,7 @@ enum SettingsPermissionRequirementResolver {
             permissions.append(.speechRecognition)
         }
 
-        if context.muteSystemAudioWhileRecording {
+        if context.muteSystemAudioWhileRecording || context.featureSettings?.meeting != nil {
             permissions.append(.systemAudioCapture)
         }
 

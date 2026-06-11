@@ -272,12 +272,14 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
     case translation
     case rewrite
     case appEnhancement
+    case meeting
 
     var id: String { rawValue }
 
     var titleKey: LocalizedStringKey {
         switch self {
         case .transcription: return "Transcription"
+        case .meeting: return "Meeting"
         case .note: return "Notes"
         case .translation: return "Translation"
         case .rewrite: return "Rewrite"
@@ -292,6 +294,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
     private var rawTitleKey: String {
         switch self {
         case .transcription: return "Transcription"
+        case .meeting: return "Meeting"
         case .note: return "Notes"
         case .translation: return "Translation"
         case .rewrite: return "Rewrite"
@@ -302,6 +305,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .transcription: return "waveform.and.mic"
+        case .meeting: return "person.2.wave.2"
         case .note: return "note.text"
         case .translation: return "globe"
         case .rewrite: return "text.badge.star"

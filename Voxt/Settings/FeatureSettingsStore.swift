@@ -120,6 +120,18 @@ enum FeatureSettingsStore {
                 ),
                 appEnhancementEnabled: true,
                 continueShortcut: .defaultShortcut
+            ),
+            meeting: MeetingFeatureSettings(
+                asrSelectionID: supportedMeetingASRSelection(
+                    transcriptionASR,
+                    defaults: defaults
+                ),
+                summaryModelSelectionID: transcriptionText,
+                summaryPrompt: "",
+                summaryAutoGenerate: true,
+                realtimeTranslateEnabled: false,
+                realtimeTargetLanguageRawValue: defaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage) ?? "",
+                hideOverlayFromScreenSharing: defaults.object(forKey: AppPreferenceKey.hideMeetingOverlayFromScreenSharing) as? Bool ?? false
             )
         )
     }
@@ -141,6 +153,15 @@ enum FeatureSettingsStore {
         case .rewrite:
             syncLegacyASRSelection(settings.rewrite.asrSelectionID, defaults: defaults)
         }
+    }
+
+    static func prepareMeetingRuntime(
+        from settings: FeatureSettings,
+        defaults: UserDefaults = .standard
+    ) {
+        let sanitizedMeeting = sanitizedMeetingSettings(settings.meeting, defaults: defaults)
+        syncLegacyTranslation(settings.translation, defaults: defaults)
+        syncLegacyASRSelection(sanitizedMeeting.asrSelectionID, defaults: defaults)
     }
 
     private static func loadRaw(defaults: UserDefaults) -> String? {
@@ -275,6 +296,22 @@ enum FeatureSettingsStore {
                 ),
                 appEnhancementEnabled: true,
                 continueShortcut: sanitizedContinueShortcutSettings(settings.rewrite.continueShortcut)
+            ),
+            meeting: MeetingFeatureSettings(
+                asrSelectionID: supportedMeetingASRSelection(
+                    settings.meeting.asrSelectionID.asrSelection == nil ? fallback.meeting.asrSelectionID : settings.meeting.asrSelectionID,
+                    defaults: defaults
+                ),
+                summaryModelSelectionID: settings.meeting.summaryModelSelectionID.textSelection == nil ? fallback.meeting.summaryModelSelectionID : settings.meeting.summaryModelSelectionID,
+                summaryPrompt: AppPromptDefaults.resolvedStoredText(
+                    sanitizedPrompt(settings.meeting.summaryPrompt),
+                    kind: .transcriptSummary,
+                    defaults: defaults
+                ),
+                summaryAutoGenerate: settings.meeting.summaryAutoGenerate,
+                realtimeTranslateEnabled: settings.meeting.realtimeTranslateEnabled,
+                realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguage?.rawValue ?? "",
+                hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing
             )
         )
     }
@@ -301,6 +338,15 @@ enum FeatureSettingsStore {
                 prompt: AppPromptDefaults.canonicalStoredText(settings.rewrite.prompt, kind: .rewrite),
                 appEnhancementEnabled: true,
                 continueShortcut: settings.rewrite.continueShortcut
+            ),
+            meeting: MeetingFeatureSettings(
+                asrSelectionID: settings.meeting.asrSelectionID,
+                summaryModelSelectionID: settings.meeting.summaryModelSelectionID,
+                summaryPrompt: AppPromptDefaults.canonicalStoredText(settings.meeting.summaryPrompt, kind: .transcriptSummary),
+                summaryAutoGenerate: settings.meeting.summaryAutoGenerate,
+                realtimeTranslateEnabled: settings.meeting.realtimeTranslateEnabled,
+                realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguageRawValue,
+                hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing
             )
         )
     }
@@ -378,6 +424,38 @@ enum FeatureSettingsStore {
             modifiers: settings.modifiers,
             sidedModifiers: settings.sidedModifiers
         )
+    }
+
+    private static func sanitizedMeetingSettings(
+        _ settings: MeetingFeatureSettings,
+        defaults: UserDefaults
+    ) -> MeetingFeatureSettings {
+        MeetingFeatureSettings(
+            asrSelectionID: supportedMeetingASRSelection(settings.asrSelectionID, defaults: defaults),
+            summaryModelSelectionID: settings.summaryModelSelectionID,
+            summaryPrompt: settings.summaryPrompt,
+            summaryAutoGenerate: settings.summaryAutoGenerate,
+            realtimeTranslateEnabled: settings.realtimeTranslateEnabled,
+            realtimeTargetLanguageRawValue: settings.realtimeTargetLanguageRawValue,
+            hideOverlayFromScreenSharing: settings.hideOverlayFromScreenSharing
+        )
+    }
+
+    private static func supportedMeetingASRSelection(
+        _ selectionID: FeatureModelSelectionID,
+        defaults: UserDefaults
+    ) -> FeatureModelSelectionID {
+        let fallbackRepo = MLXModelManager.canonicalModelRepo(
+            defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
+        )
+        switch selectionID.asrSelection {
+        case .whisper:
+            return .mlx(fallbackRepo)
+        case .none:
+            return .mlx(fallbackRepo)
+        case .dictation, .mlx, .remote:
+            return selectionID
+        }
     }
 
     private static func legacyASRSelection(defaults: UserDefaults) -> FeatureModelSelectionID {

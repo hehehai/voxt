@@ -267,6 +267,8 @@ extension AppDelegate {
             return .translation
         case .rewrite:
             return .rewrite
+        case .transcriptSummary:
+            return .generic
         }
     }
 
@@ -358,6 +360,8 @@ extension AppDelegate {
         case .rewrite(_, let sourceText, _):
             guard !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
             text = sourceText
+        case .transcriptSummary(let transcript, _):
+            return [transcript]
         }
         return TextSegmentationSupport.segment(text: text, limit: limit)
     }
@@ -377,6 +381,11 @@ extension AppDelegate {
                 dictatedPrompt: dictatedPrompt,
                 sourceText: segment,
                 structuredAnswerOutput: structuredAnswerOutput
+            )
+        case .transcriptSummary(_, let request):
+            segmentedTask = .transcriptSummary(
+                transcript: segment,
+                request: request
             )
         }
 
@@ -415,6 +424,13 @@ extension AppDelegate {
                     )
                 }
                 return block
+            case .transcriptSummary:
+                return LLMContextBlock(
+                    kind: .input,
+                    title: "Transcript",
+                    content: segment,
+                    isStablePrefixCandidate: block.isStablePrefixCandidate
+                )
             }
         }
 

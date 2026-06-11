@@ -49,7 +49,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
         XCTAssertTrue(context.featureSettings?.transcription.notes.remindersSync.enabled == true)
     }
 
-    func testSidebarPermissionsExcludeSystemAudioWhenMuteIsDisabled() {
+    func testSidebarPermissionsIncludeSystemAudioForMeetingModeByDefault() {
         let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
             selectedEngine: .remote,
             muteSystemAudioWhileRecording: false,
@@ -58,7 +58,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
 
-        XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring])
+        XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture])
     }
 
     func testSidebarPermissionsIncludeSystemAudioWhenMuteDuringRecordingIsEnabled() {
@@ -86,7 +86,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .speechRecognition]
+            [.microphone, .accessibility, .inputMonitoring, .speechRecognition, .systemAudioCapture]
         )
     }
 
@@ -101,7 +101,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .reminders]
+            [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture, .reminders]
         )
     }
 
@@ -161,7 +161,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .reminders]
+            [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture, .reminders]
         )
     }
 }
