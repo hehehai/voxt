@@ -205,17 +205,20 @@ final class MeetingSessionCoordinator {
             let finalSegmentsBeforeSpeakerAnalysis = await MainActor.run {
                 self.finalizedSegments(from: self.overlayState.segments)
             }
-            let finalTranscriptionAssets = shouldFlushPendingAudio ? await self.audioArchive.finalTranscriptionAssets() : []
-            let speakerAnalysisAssets = shouldFlushPendingAudio ? await self.audioArchive.analysisAssets() : []
+            let finalTranscriptionDescriptors = shouldFlushPendingAudio ? await self.audioArchive.finalTranscriptionAssetDescriptors() : []
+            let speakerAnalysisDescriptors = shouldFlushPendingAudio ? await self.audioArchive.analysisAssetDescriptors() : []
             let finalTranscriptSegments = await self.optimizedFinalTranscriptSegments(
                 fallbackSegments: finalSegmentsBeforeSpeakerAnalysis,
-                finalTranscriptionAssets: finalTranscriptionAssets,
+                finalTranscriptionDescriptors: finalTranscriptionDescriptors,
                 shouldFlushPendingAudio: shouldFlushPendingAudio
             )
             let speakerAnalysisOptions = MeetingSpeakerDiarizationOptions.fromPreferences()
             let finalSegments = await MeetingSpeakerAnalysisPipeline.analyzedSegments(
                 from: finalTranscriptSegments,
-                assets: speakerAnalysisAssets,
+                descriptors: speakerAnalysisDescriptors,
+                loadAsset: { descriptor in
+                    await self.audioArchive.loadAsset(descriptor)
+                },
                 options: speakerAnalysisOptions
             )
             let result = MeetingSessionResult(
@@ -852,19 +855,22 @@ final class MeetingSessionCoordinator {
 
     private func optimizedFinalTranscriptSegments(
         fallbackSegments: [MeetingTranscriptSegment],
-        finalTranscriptionAssets: [MeetingAudioAsset],
+        finalTranscriptionDescriptors: [MeetingAudioAssetDescriptor],
         shouldFlushPendingAudio: Bool
     ) async -> [MeetingTranscriptSegment] {
         guard shouldFlushPendingAudio,
               MeetingFinalTranscriptOptimization.isEnabled(),
-              !finalTranscriptionAssets.isEmpty,
+              !finalTranscriptionDescriptors.isEmpty,
               let transcriber
         else {
             return MeetingTranscriptPostProcessor.process(fallbackSegments)
         }
 
         let optimizedSegments = await MeetingFinalTranscriptionPass.transcribe(
-            assets: finalTranscriptionAssets,
+            descriptors: finalTranscriptionDescriptors,
+            loadAsset: { descriptor in
+                await self.audioArchive.loadAsset(descriptor)
+            },
             transcriber: transcriber
         )
         guard !optimizedSegments.isEmpty else {

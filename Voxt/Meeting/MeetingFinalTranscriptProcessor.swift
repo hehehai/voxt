@@ -50,6 +50,29 @@ enum MeetingFinalTranscriptionPass {
         return MeetingTranscriptPostProcessor.process(segments)
     }
 
+    static func transcribe(
+        descriptors: [MeetingAudioAssetDescriptor],
+        loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
+        transcriber: any MeetingSegmentTranscribing,
+        options: Options = Options()
+    ) async -> [MeetingTranscriptSegment] {
+        var segments: [MeetingTranscriptSegment] = []
+        for descriptor in descriptors {
+            guard let asset = await loadAsset(descriptor) else { continue }
+            let chunks = chunks(for: asset, options: options)
+            for chunk in chunks {
+                guard let segment = await transcriber.transcribe(chunk: chunk) else { continue }
+                let cleaned = segment.updatingText(
+                    MeetingTranscriptTextPostProcessor.normalizedFinalText(segment.text)
+                )
+                if !cleaned.text.isEmpty {
+                    segments.append(cleaned)
+                }
+            }
+        }
+        return MeetingTranscriptPostProcessor.process(segments)
+    }
+
     static func chunks(
         for asset: MeetingAudioAsset,
         options: Options = Options()

@@ -167,12 +167,14 @@ struct TranscriptionDetailContentView: View {
                     optionalDetailLine(label: localized("URL Group"), value: viewModel.entry.matchedURLGroupName)
                 }
 
-                if playbackController.isAvailable {
-                    detailSection(title: localized("Audio")) {
+                detailSection(title: localized("Audio")) {
+                    if playbackController.isAvailable {
                         HistoryAudioPlayerView(
                             controller: playbackController,
                             compact: style == .popover
                         )
+                    } else {
+                        HistoryAudioUnavailableView(compact: style == .popover)
                     }
                 }
 

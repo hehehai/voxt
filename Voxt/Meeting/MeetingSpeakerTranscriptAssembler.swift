@@ -44,9 +44,10 @@ enum MeetingSpeakerTranscriptAssembler {
                 return lhs.startSeconds < rhs.startSeconds
             }
         guard !sortedTurns.isEmpty else { return segments }
+        let turnIndex = SpeakerTurnIndex(turns: sortedTurns)
 
         return segments.flatMap { segment in
-            assembledSegments(for: segment, speakerTurns: sortedTurns, options: options)
+            assembledSegments(for: segment, turnIndex: turnIndex, options: options)
         }
         .sorted { lhs, rhs in
             if lhs.startSeconds == rhs.startSeconds {
@@ -58,7 +59,7 @@ enum MeetingSpeakerTranscriptAssembler {
 
     private static func assembledSegments(
         for segment: MeetingTranscriptSegment,
-        speakerTurns: [MeetingSpeakerTurn],
+        turnIndex: SpeakerTurnIndex,
         options: Options
     ) -> [MeetingTranscriptSegment] {
         guard let segmentEnd = segment.endSeconds,
@@ -69,24 +70,18 @@ enum MeetingSpeakerTranscriptAssembler {
 
         let source = segment.audioSource ?? inferredAudioSource(for: segment.speaker)
         let segmentDuration = max(segmentEnd - segment.startSeconds, 0.001)
-        let overlappingTurns = speakerTurns.compactMap { turn -> (turn: MeetingSpeakerTurn, overlap: TimeInterval)? in
-            guard turn.source == .mixed || turn.source == source else { return nil }
-            let overlap = overlapDuration(
-                startA: segment.startSeconds,
-                endA: segmentEnd,
-                startB: turn.startSeconds,
-                endB: turn.endSeconds
-            )
-            guard overlap >= options.minimumTurnOverlapSeconds else { return nil }
-            return (turn, overlap)
-        }
+        let overlappingTurns = turnIndex.overlappingTurns(
+            source: source,
+            startSeconds: segment.startSeconds,
+            endSeconds: segmentEnd,
+            minimumOverlap: options.minimumTurnOverlapSeconds
+        )
 
         guard !overlappingTurns.isEmpty else {
-            if let nearestTurn = nearestCompatibleTurn(
+            if let nearestTurn = turnIndex.nearestCompatibleTurn(
                 to: segment,
                 segmentEnd: segmentEnd,
                 source: source,
-                speakerTurns: speakerTurns,
                 maximumGap: options.maximumNearestSpeakerTurnGapSeconds
             ) {
                 return [segment.applyingSpeakerTurn(nearestTurn)]
@@ -175,6 +170,115 @@ enum MeetingSpeakerTranscriptAssembler {
         let endSeconds: TimeInterval
     }
 
+    private struct SpeakerTurnIndex {
+        private let turnsBySource: [TranscriptAudioSource: [MeetingSpeakerTurn]]
+
+        init(turns: [MeetingSpeakerTurn]) {
+            turnsBySource = Dictionary(grouping: turns, by: \.source)
+        }
+
+        func overlappingTurns(
+            source: TranscriptAudioSource,
+            startSeconds: TimeInterval,
+            endSeconds: TimeInterval,
+            minimumOverlap: TimeInterval
+        ) -> [(turn: MeetingSpeakerTurn, overlap: TimeInterval)] {
+            var matches: [(turn: MeetingSpeakerTurn, overlap: TimeInterval)] = []
+            for turns in compatibleTurns(for: source) {
+                let startIndex = scanStartIndex(in: turns, startSeconds: startSeconds)
+                guard startIndex < turns.count else { continue }
+                var index = startIndex
+                while index < turns.count {
+                    let turn = turns[index]
+                    if turn.startSeconds >= endSeconds { break }
+                    let overlap = MeetingSpeakerTranscriptAssembler.overlapDuration(
+                        startA: startSeconds,
+                        endA: endSeconds,
+                        startB: turn.startSeconds,
+                        endB: turn.endSeconds
+                    )
+                    if overlap >= minimumOverlap {
+                        matches.append((turn, overlap))
+                    }
+                    index += 1
+                }
+            }
+            return matches
+        }
+
+        func nearestCompatibleTurn(
+            to segment: MeetingTranscriptSegment,
+            segmentEnd: TimeInterval,
+            source: TranscriptAudioSource,
+            maximumGap: TimeInterval
+        ) -> MeetingSpeakerTurn? {
+            guard maximumGap > 0 else { return nil }
+            let lowerBound = segment.startSeconds - maximumGap
+            let upperBound = segmentEnd + maximumGap
+            return compatibleTurns(for: source)
+                .flatMap { turns -> [(turn: MeetingSpeakerTurn, gap: TimeInterval)] in
+                    let startIndex = scanStartIndex(in: turns, startSeconds: lowerBound)
+                    guard startIndex < turns.count else { return [] }
+                    var output: [(turn: MeetingSpeakerTurn, gap: TimeInterval)] = []
+                    var index = startIndex
+                    while index < turns.count {
+                        let turn = turns[index]
+                        if turn.startSeconds > upperBound { break }
+                        let gap: TimeInterval
+                        if turn.endSeconds <= segment.startSeconds {
+                            gap = segment.startSeconds - turn.endSeconds
+                        } else if turn.startSeconds >= segmentEnd {
+                            gap = turn.startSeconds - segmentEnd
+                        } else {
+                            gap = 0
+                        }
+                        if gap <= maximumGap {
+                            output.append((turn, gap))
+                        }
+                        index += 1
+                    }
+                    return output
+                }
+                .min { lhs, rhs in
+                    if lhs.gap == rhs.gap {
+                        let lhsDistance = abs(lhs.turn.startSeconds - segment.startSeconds)
+                        let rhsDistance = abs(rhs.turn.startSeconds - segment.startSeconds)
+                        return lhsDistance < rhsDistance
+                    }
+                    return lhs.gap < rhs.gap
+                }?
+                .turn
+        }
+
+        private func compatibleTurns(for source: TranscriptAudioSource) -> [[MeetingSpeakerTurn]] {
+            [
+                turnsBySource[.mixed] ?? [],
+                source == .mixed ? [] : turnsBySource[source] ?? []
+            ]
+            .filter { !$0.isEmpty }
+        }
+
+        private func scanStartIndex(
+            in turns: [MeetingSpeakerTurn],
+            startSeconds: TimeInterval
+        ) -> Int {
+            var low = 0
+            var high = turns.count
+            while low < high {
+                let mid = (low + high) / 2
+                if turns[mid].startSeconds < startSeconds {
+                    low = mid + 1
+                } else {
+                    high = mid
+                }
+            }
+            while low > 0, turns[low - 1].endSeconds > startSeconds {
+                low -= 1
+            }
+            return low
+        }
+    }
+
     private static func coalescedBoundedTurns(
         _ turns: [BoundedSpeakerTurn],
         options: Options
@@ -253,42 +357,6 @@ enum MeetingSpeakerTranscriptAssembler {
         endB: TimeInterval
     ) -> TimeInterval {
         max(0, min(endA, endB) - max(startA, startB))
-    }
-
-    private static func nearestCompatibleTurn(
-        to segment: MeetingTranscriptSegment,
-        segmentEnd: TimeInterval,
-        source: TranscriptAudioSource,
-        speakerTurns: [MeetingSpeakerTurn],
-        maximumGap: TimeInterval
-    ) -> MeetingSpeakerTurn? {
-        guard maximumGap > 0 else { return nil }
-        return speakerTurns
-            .filter { turn in
-                guard turn.endSeconds > turn.startSeconds else { return false }
-                return turn.source == .mixed || turn.source == source
-            }
-            .compactMap { turn -> (turn: MeetingSpeakerTurn, gap: TimeInterval)? in
-                let gap: TimeInterval
-                if turn.endSeconds <= segment.startSeconds {
-                    gap = segment.startSeconds - turn.endSeconds
-                } else if turn.startSeconds >= segmentEnd {
-                    gap = turn.startSeconds - segmentEnd
-                } else {
-                    gap = 0
-                }
-                guard gap <= maximumGap else { return nil }
-                return (turn, gap)
-            }
-            .min { lhs, rhs in
-                if lhs.gap == rhs.gap {
-                    let lhsDistance = abs(lhs.turn.startSeconds - segment.startSeconds)
-                    let rhsDistance = abs(rhs.turn.startSeconds - segment.startSeconds)
-                    return lhsDistance < rhsDistance
-                }
-                return lhs.gap < rhs.gap
-            }?
-            .turn
     }
 
     private static func hasMeaningfulSecondarySpeaker(

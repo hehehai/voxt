@@ -83,6 +83,39 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertEqual(DoubaoASRConfiguration.finalStreamingSequence(nextAudioSequence: 16), -16)
     }
 
+    func testDoubaoParserRejectsOversizedCompressedPayload() {
+        let oversizedPayload = Data(
+            repeating: 0,
+            count: MeetingRemoteAudioSupport.maxDoubaoCompressedPayloadBytes + 1
+        )
+        let packet = MeetingRemoteAudioSupport.buildDoubaoPacket(
+            messageType: MeetingRemoteAudioSupport.DoubaoProtocol.messageTypeFullServerResponse,
+            messageFlags: MeetingRemoteAudioSupport.DoubaoProtocol.flagPositiveSequence,
+            serialization: MeetingRemoteAudioSupport.DoubaoProtocol.serializationJSON,
+            compression: MeetingRemoteAudioSupport.DoubaoProtocol.compressionGzip,
+            sequence: 1,
+            payload: oversizedPayload
+        )
+
+        XCTAssertThrowsError(try MeetingRemoteAudioSupport.parseDoubaoServerPacket(packet))
+    }
+
+    func testDoubaoParserRejectsHighExpansionGzipPayload() throws {
+        let largePlaintext = Data(repeating: 65, count: 1_048_577)
+        let encoded = try MeetingRemoteAudioSupport.encodeDoubaoPayload(largePlaintext)
+        XCTAssertEqual(encoded.compression, MeetingRemoteAudioSupport.DoubaoProtocol.compressionGzip)
+        let packet = MeetingRemoteAudioSupport.buildDoubaoPacket(
+            messageType: MeetingRemoteAudioSupport.DoubaoProtocol.messageTypeFullServerResponse,
+            messageFlags: MeetingRemoteAudioSupport.DoubaoProtocol.flagPositiveSequence,
+            serialization: MeetingRemoteAudioSupport.DoubaoProtocol.serializationJSON,
+            compression: encoded.compression,
+            sequence: 1,
+            payload: encoded.payload
+        )
+
+        XCTAssertThrowsError(try MeetingRemoteAudioSupport.parseDoubaoServerPacket(packet))
+    }
+
     func testAliyunASRModelOptionsIncludeOmniRealtimeModels() {
         let ids = Set(RemoteASRProvider.aliyunBailianASR.modelOptions.map(\.id))
         XCTAssertTrue(ids.contains("qwen3.5-omni-flash-realtime"))

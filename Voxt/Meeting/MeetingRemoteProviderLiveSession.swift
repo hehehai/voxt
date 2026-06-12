@@ -1220,7 +1220,7 @@ private enum MeetingAliyunRemoteSupport {
     }
 }
 
-private enum MeetingRemoteAudioSupport {
+enum MeetingRemoteAudioSupport {
     enum DoubaoProtocol {
         static let version: UInt8 = 0x1
         static let headerSize: UInt8 = 0x1
@@ -1239,6 +1239,10 @@ private enum MeetingRemoteAudioSupport {
         static let compressionNone: UInt8 = 0x0
         static let compressionGzip: UInt8 = 0x1
     }
+
+    static let maxDoubaoCompressedPayloadBytes = 2 * 1024 * 1024
+    static let maxDoubaoDecompressedPayloadBytes = 8 * 1024 * 1024
+    static let maxDoubaoCompressionRatio = 64
 
     static func makePCM16MonoData(from samples: [Float], inputSampleRate: Double) -> Data? {
         guard !samples.isEmpty, inputSampleRate > 0 else { return nil }
@@ -1373,7 +1377,14 @@ private enum MeetingRemoteAudioSupport {
         case DoubaoProtocol.compressionNone:
             payload = rawPayload
         case DoubaoProtocol.compressionGzip:
-            payload = (try? gunzip(rawPayload)) ?? rawPayload
+            guard rawPayload.count <= maxDoubaoCompressedPayloadBytes else {
+                throw NSError(
+                    domain: "Voxt.Meeting",
+                    code: -45,
+                    userInfo: [NSLocalizedDescriptionKey: "Doubao response payload is too large."]
+                )
+            }
+            payload = try gunzip(rawPayload)
         default:
             payload = rawPayload
         }
@@ -1458,6 +1469,8 @@ private enum MeetingRemoteAudioSupport {
 
     private static func gunzip(_ data: Data) throws -> Data {
         if data.isEmpty { return Data() }
+        let ratioBound = max(data.count * maxDoubaoCompressionRatio, 1 * 1024 * 1024)
+        let outputLimit = min(maxDoubaoDecompressedPayloadBytes, ratioBound)
         return try data.withUnsafeBytes { rawBuffer in
             guard let input = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
                 return data
@@ -1484,6 +1497,13 @@ private enum MeetingRemoteAudioSupport {
                 let used = out.count - Int(stream.avail_out)
                 if used > 0 {
                     output.append(contentsOf: out[0..<used])
+                    guard output.count <= outputLimit else {
+                        throw NSError(
+                            domain: "Voxt.Meeting",
+                            code: -46,
+                            userInfo: [NSLocalizedDescriptionKey: "Doubao response payload expands beyond the allowed size."]
+                        )
+                    }
                 }
                 status = statusCode
                 guard status == Z_OK || status == Z_STREAM_END else {

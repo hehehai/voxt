@@ -56,6 +56,24 @@ final class MeetingAudioArchiveTests: XCTestCase {
         XCTAssertEqual(assets[1].samples[800], 0.8, accuracy: 0.001)
     }
 
+    func testAssetDescriptorsLoadAudioOnDemand() async throws {
+        let archive = MeetingAudioArchive()
+        await archive.append(samples: [Float](repeating: 0.4, count: 1_600), sampleRate: 16_000, speaker: .me, startSeconds: 0)
+        await archive.append(samples: [Float](repeating: 0.8, count: 1_600), sampleRate: 16_000, speaker: .them, startSeconds: 0.1)
+
+        let analysisDescriptors = await archive.analysisAssetDescriptors()
+        let finalDescriptors = await archive.finalTranscriptionAssetDescriptors()
+
+        XCTAssertEqual(analysisDescriptors.count, 1)
+        XCTAssertEqual(finalDescriptors.map(\.source), [.microphone, .systemAudio])
+        let loadedMixedAsset = await archive.loadAsset(analysisDescriptors[0])
+        let mixedAsset = try XCTUnwrap(loadedMixedAsset)
+        XCTAssertEqual(mixedAsset.source, .mixed)
+        XCTAssertEqual(mixedAsset.durationSeconds, 0.2, accuracy: 0.001)
+        XCTAssertEqual(mixedAsset.samples[800], 0.2, accuracy: 0.001)
+        XCTAssertEqual(mixedAsset.samples[2_400], 0.4, accuracy: 0.001)
+    }
+
     private func decodeMono16BitWAVSamples(from url: URL) throws -> [Float] {
         let data = try Data(contentsOf: url)
         let dataRange = try findDataChunk(in: data)

@@ -16,6 +16,23 @@ struct MeetingAudioAsset: Sendable {
     }
 }
 
+struct MeetingAudioAssetDescriptor: Equatable, Sendable {
+    let source: TranscriptAudioSource
+    let sampleRate: Double
+    let startSample: Int
+    let sampleCount: Int
+
+    nonisolated var sessionStartOffset: TimeInterval {
+        guard sampleRate > 0 else { return 0 }
+        return TimeInterval(startSample) / sampleRate
+    }
+
+    nonisolated var durationSeconds: TimeInterval {
+        guard sampleRate > 0 else { return 0 }
+        return TimeInterval(sampleCount) / sampleRate
+    }
+}
+
 struct MeetingSpeakerTurn: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     let source: TranscriptAudioSource
@@ -249,32 +266,73 @@ enum MeetingSpeakerAnalysisPipeline {
                 )
                 turns.append(contentsOf: assetTurns)
             }
-            let rawTurns = turns
-            turns = confidenceFilteredTurns(from: turns, options: options)
-            let confidenceFilteredTurns = turns
-            turns = MeetingSpeakerTurnSmoother.smooth(turns, options: options.smoothing)
-            let smoothedTurns = turns
-            turns = MeetingSpeakerTurnLabeler.label(turns)
-            logDebug(
-                "Meeting speaker analysis pipeline summary. rawTurns=\(rawTurns.count), rawSpeakers=\(speakerCount(rawTurns)), confidenceFilteredTurns=\(confidenceFilteredTurns.count), confidenceFilteredSpeakers=\(speakerCount(confidenceFilteredTurns)), smoothedTurns=\(smoothedTurns.count), smoothedSpeakers=\(speakerCount(smoothedTurns)), confidenceThreshold=\(String(format: "%.2f", options.minimumSpeakerConfidence))",
-                options: options
-            )
-            guard !turns.isEmpty else { return segments }
-            let assembled = MeetingSpeakerTranscriptAssembler.assemble(
-                segments: segments,
-                speakerTurns: turns,
-                options: options.transcriptAssembly
-            )
-            let readableSegments = MeetingTranscriptPostProcessor.process(assembled)
-            logDebug(
-                "Meeting speaker analysis assembly summary. inputSegments=\(segments.count), assembledSegments=\(assembled.count), readableSegments=\(readableSegments.count), outputSpeakers=\(segmentSpeakerCount(readableSegments))",
-                options: options
-            )
-            return readableSegments
+            return assembledSegments(from: segments, turns: turns, options: options)
         } catch {
             VoxtLog.warning("Meeting speaker analysis failed: \(error.localizedDescription)")
             return segments
         }
+    }
+
+    static func analyzedSegments(
+        from segments: [MeetingTranscriptSegment],
+        descriptors: [MeetingAudioAssetDescriptor],
+        loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
+        options: MeetingSpeakerDiarizationOptions = MeetingSpeakerDiarizationOptions(),
+        engine: (any MeetingSpeakerDiarizationEngine)? = MeetingSpeakerDiarizationEngineFactory.makeDefault()
+    ) async -> [MeetingTranscriptSegment] {
+        guard !segments.isEmpty, !descriptors.isEmpty, let engine else {
+            return segments
+        }
+
+        do {
+            var turns: [MeetingSpeakerTurn] = []
+            logDebug(
+                "Meeting speaker analysis started. segments=\(segments.count), assets=\(descriptors.count), sensitivity=\(options.sensitivity.rawValue)",
+                options: options
+            )
+            for descriptor in descriptors where descriptor.durationSeconds >= options.minimumAudioDurationSeconds {
+                guard let asset = await loadAsset(descriptor) else { continue }
+                let assetTurns = try await engine.diarize(asset: asset, options: options)
+                logDebug(
+                    "Meeting speaker analysis asset raw turns. source=\(asset.source.rawValue), duration=\(String(format: "%.2f", asset.durationSeconds)), rawTurns=\(assetTurns.count), rawSpeakers=\(speakerCount(assetTurns))",
+                    options: options
+                )
+                turns.append(contentsOf: assetTurns)
+            }
+            return assembledSegments(from: segments, turns: turns, options: options)
+        } catch {
+            VoxtLog.warning("Meeting speaker analysis failed: \(error.localizedDescription)")
+            return segments
+        }
+    }
+
+    private static func assembledSegments(
+        from segments: [MeetingTranscriptSegment],
+        turns: [MeetingSpeakerTurn],
+        options: MeetingSpeakerDiarizationOptions
+    ) -> [MeetingTranscriptSegment] {
+        let rawTurns = turns
+        var turns = confidenceFilteredTurns(from: turns, options: options)
+        let confidenceFilteredTurns = turns
+        turns = MeetingSpeakerTurnSmoother.smooth(turns, options: options.smoothing)
+        let smoothedTurns = turns
+        turns = MeetingSpeakerTurnLabeler.label(turns)
+        logDebug(
+            "Meeting speaker analysis pipeline summary. rawTurns=\(rawTurns.count), rawSpeakers=\(speakerCount(rawTurns)), confidenceFilteredTurns=\(confidenceFilteredTurns.count), confidenceFilteredSpeakers=\(speakerCount(confidenceFilteredTurns)), smoothedTurns=\(smoothedTurns.count), smoothedSpeakers=\(speakerCount(smoothedTurns)), confidenceThreshold=\(String(format: "%.2f", options.minimumSpeakerConfidence))",
+            options: options
+        )
+        guard !turns.isEmpty else { return segments }
+        let assembled = MeetingSpeakerTranscriptAssembler.assemble(
+            segments: segments,
+            speakerTurns: turns,
+            options: options.transcriptAssembly
+        )
+        let readableSegments = MeetingTranscriptPostProcessor.process(assembled)
+        logDebug(
+            "Meeting speaker analysis assembly summary. inputSegments=\(segments.count), assembledSegments=\(assembled.count), readableSegments=\(readableSegments.count), outputSpeakers=\(segmentSpeakerCount(readableSegments))",
+            options: options
+        )
+        return readableSegments
     }
 
     private static func logDebug(_ message: @autoclosure () -> String, options: MeetingSpeakerDiarizationOptions) {

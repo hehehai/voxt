@@ -296,6 +296,7 @@ private struct MeetingDetailWindowView: View {
     @State private var speakerRenameGroupID: String?
     @State private var speakerRenameDraft = ""
     @State private var isScrubbing = false
+    @State private var speakerOrdinalByIdentityKey: [String: Int] = [:]
 
     init(viewModel: MeetingDetailViewModel) {
         self.viewModel = viewModel
@@ -323,6 +324,7 @@ private struct MeetingDetailWindowView: View {
             .ignoresSafeArea(.container, edges: .top)
             .onAppear {
                 viewModel.handleViewAppear()
+                refreshSpeakerOrdinalMap()
                 updateActiveSegment(for: playbackController.currentTime)
             }
 
@@ -343,6 +345,10 @@ private struct MeetingDetailWindowView: View {
         .ignoresSafeArea(.container, edges: .top)
         .sheet(isPresented: $viewModel.isSummarySettingsPresented) {
             MeetingDetailSummarySettingsDialog(viewModel: viewModel)
+        }
+        .onChange(of: viewModel.segments) { _, _ in
+            refreshSpeakerOrdinalMap()
+            updateActiveSegment(for: playbackController.currentTime)
         }
     }
 
@@ -901,9 +907,7 @@ private struct MeetingDetailWindowView: View {
                             .frame(width: 96, alignment: .trailing)
                     }
                 } else {
-                    Text(String(localized: "No playable audio is available for this meeting record yet."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HistoryAudioUnavailableView(compact: false)
                 }
             } else {
                 if viewModel.isFinalizing {
@@ -1052,8 +1056,26 @@ private struct MeetingDetailWindowView: View {
             activeSegmentID = nil
             return
         }
-        let newActiveSegment = viewModel.segments.last(where: { $0.startSeconds <= currentTime }) ?? viewModel.segments.first
+        let newActiveSegment = activeSegment(at: currentTime)
         activeSegmentID = newActiveSegment?.id
+    }
+
+    private func activeSegment(at currentTime: TimeInterval) -> MeetingTranscriptSegment? {
+        let segments = viewModel.segments
+        guard !segments.isEmpty else { return nil }
+
+        var low = 0
+        var high = segments.count
+        while low < high {
+            let mid = (low + high) / 2
+            if segments[mid].startSeconds <= currentTime {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        return low > 0 ? segments[low - 1] : segments.first
     }
 
     private func presentSpeakerRename(for group: SpeakerGroup) {
@@ -1089,7 +1111,7 @@ private struct MeetingDetailWindowView: View {
         return AppLocalization.format("Speaker %d", ordinal)
     }
 
-    private var speakerOrdinalByIdentityKey: [String: Int] {
+    private func refreshSpeakerOrdinalMap() {
         var ordinals: [String: Int] = [:]
         let sortedSegments = viewModel.segments.sorted { lhs, rhs in
             if lhs.startSeconds == rhs.startSeconds {
@@ -1103,7 +1125,7 @@ private struct MeetingDetailWindowView: View {
             guard ordinals[key] == nil else { continue }
             ordinals[key] = ordinals.count + 1
         }
-        return ordinals
+        speakerOrdinalByIdentityKey = ordinals
     }
 
     private func speakerTimelineIdentityKey(for segment: MeetingTranscriptSegment) -> String {
