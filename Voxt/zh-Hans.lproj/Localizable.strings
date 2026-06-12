@@ -286,6 +286,7 @@
 "Required to paste transcription text into other apps." = "用于将转录文本粘贴到其他应用。";
 "Required for reliable global modifier hotkeys (such as fn)." = "用于可靠捕获全局修饰键快捷键（如 fn）。";
 "Required to mute other apps' media audio during recording." = "用于在录制期间静音其他应用的媒体音频。";
+"Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording." = "用于会议记录采集系统音频，并在录制期间静音其他应用的媒体音频。";
 "fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut." = "fn+space 可能与 macOS 的 Globe 或输入法切换冲突。如果录入不稳定，请开启输入监控权限并改绑系统快捷键。";
 "Enabled" = "已开启";
 "Disabled" = "未开启";

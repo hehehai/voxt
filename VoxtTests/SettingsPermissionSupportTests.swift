@@ -58,7 +58,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
 
-        XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture])
+        XCTAssertEqual(permissions, [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring])
     }
 
     func testSidebarPermissionsIncludeSystemAudioWhenMuteDuringRecordingIsEnabled() {
@@ -70,7 +70,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
 
-        XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture])
+        XCTAssertEqual(permissions, [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring])
     }
 
     func testSidebarPermissionsIncludeSpeechRecognitionWhenFeatureUsesDictation() {
@@ -86,7 +86,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .speechRecognition, .systemAudioCapture]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .speechRecognition]
         )
     }
 
@@ -101,11 +101,11 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture, .reminders]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .reminders]
         )
     }
 
-    func testRequiredPermissionsDoNotIncludeConditionalItemsWhenFeaturesAreDisabled() {
+    func testRequiredPermissionsIncludeBaselineCapturePermissionsWhenFeaturesAreDisabled() {
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .mlxAudio,
@@ -116,7 +116,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring]
         )
     }
 
@@ -131,7 +131,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .speechRecognition]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .speechRecognition]
         )
     }
 
@@ -146,7 +146,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring]
         )
     }
 
@@ -161,7 +161,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture, .reminders]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .reminders]
         )
     }
 }

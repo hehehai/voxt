@@ -286,6 +286,7 @@
 "Required to paste transcription text into other apps." = "Required to paste transcription text into other apps.";
 "Required for reliable global modifier hotkeys (such as fn)." = "Required for reliable global modifier hotkeys (such as fn).";
 "Required to mute other apps' media audio during recording." = "Required to mute other apps' media audio during recording.";
+"Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording." = "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording.";
 "fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut." = "fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut.";
 "Enabled" = "Enabled";
 "Disabled" = "Disabled";

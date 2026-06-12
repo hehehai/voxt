@@ -281,6 +281,7 @@
 "Required to paste transcription text into other apps." = "他アプリへ文字起こし結果を貼り付けるために必要です。";
 "Required for reliable global modifier hotkeys (such as fn)." = "fn などのグローバル修飾キーの検出に必要です。";
 "Required to mute other apps' media audio during recording." = "録音中に他アプリのメディア音声をミュートするために必要です。";
+"Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording." = "Meeting Notes でシステム音声を取得し、録音中に他アプリのメディア音声をミュートするために必要です。";
 "fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut." = "fn+space は macOS の Globe または入力ソース切替と競合することがあります。取得が不安定な場合は、入力監視を有効にし、システムショートカットを再割り当てしてください。";
 "Enabled" = "有効";
 "Disabled" = "無効";

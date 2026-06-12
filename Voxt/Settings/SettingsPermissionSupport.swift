@@ -45,7 +45,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
         case .inputMonitoring:
             return "Required for reliable global modifier hotkeys (such as fn)."
         case .systemAudioCapture:
-            return "Required to mute other apps' media audio during recording."
+            return "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording."
         case .reminders:
             return "Required to sync Voxt notes into Apple Reminders."
         }
@@ -98,6 +98,7 @@ enum SettingsPermissionRequirementResolver {
     ) -> [SettingsPermissionKind] {
         var permissions: [SettingsPermissionKind] = [
             .microphone,
+            .systemAudioCapture,
             .accessibility,
             .inputMonitoring
         ]
@@ -118,10 +119,6 @@ enum SettingsPermissionRequirementResolver {
 
         if needsSpeechRecognition {
             permissions.append(.speechRecognition)
-        }
-
-        if context.muteSystemAudioWhileRecording || context.featureSettings?.meeting != nil {
-            permissions.append(.systemAudioCapture)
         }
 
         if context.featureSettings?.transcription.notes.remindersSync.enabled == true {
