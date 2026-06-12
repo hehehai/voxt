@@ -119,7 +119,8 @@ final class MeetingWhisperSegmentTranscriber: MeetingSegmentTranscribing {
                 speaker: chunk.speaker,
                 startSeconds: chunk.startSeconds,
                 endSeconds: chunk.endSeconds,
-                text: text
+                text: text,
+                preventsAdjacentMerge: chunk.preventsAdjacentMerge
             )
         } catch {
             await MainActor.run {
@@ -188,7 +189,8 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             speaker: chunk.speaker,
             startSeconds: chunk.startSeconds,
             endSeconds: chunk.endSeconds,
-            text: text
+            text: text,
+            preventsAdjacentMerge: chunk.preventsAdjacentMerge
         )
     }
 }
@@ -241,7 +243,8 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
                 speaker: chunk.speaker,
                 startSeconds: chunk.startSeconds,
                 endSeconds: chunk.endSeconds,
-                text: text
+                text: text,
+                preventsAdjacentMerge: chunk.preventsAdjacentMerge
             )
         } catch {
             try? FileManager.default.removeItem(at: tempURL)

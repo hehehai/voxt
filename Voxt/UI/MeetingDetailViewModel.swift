@@ -20,6 +20,13 @@ final class MeetingDetailViewModel: ObservableObject {
         var id: String { rawValue }
     }
 
+    enum TranscriptSpeakerDisplayMode: String, CaseIterable, Identifiable {
+        case source
+        case speaker
+
+        var id: String { rawValue }
+    }
+
     enum Mode {
         case history
         case live
@@ -29,6 +36,7 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published private(set) var subtitle: String
     @Published private(set) var segments: [MeetingTranscriptSegment]
     @Published private(set) var isPaused = false
+    @Published private(set) var isFinalizing = false
     @Published var translationEnabled: Bool
     @Published var isTranslationLanguagePickerPresented = false
     @Published var translationDraftLanguageRaw: String
@@ -44,6 +52,7 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published var summaryModelSelectionID: String
     @Published var summaryChatDraft = ""
     @Published var transcriptPresentationModeRaw = TranscriptPresentationMode.timeline.rawValue
+    @Published var transcriptSpeakerDisplayModeRaw = TranscriptSpeakerDisplayMode.source.rawValue
     @Published var isSearchPresented = false
     @Published var searchQuery = ""
     @Published var isSummaryCollapsed = false
@@ -61,6 +70,7 @@ final class MeetingDetailViewModel: ObservableObject {
     private let summaryPersistence: MeetingDetailWindowManager.SummaryPersistence?
     private let summaryChatAnswerer: MeetingDetailWindowManager.SummaryChatAnswerer?
     private let summaryChatPersistence: MeetingDetailWindowManager.SummaryChatPersistence?
+    private let transcriptSegmentsPersistence: MeetingDetailWindowManager.TranscriptSegmentsPersistence?
 
     private var cancellables = Set<AnyCancellable>()
     private var translationTasks: [UUID: Task<Void, Never>] = [:]
@@ -85,7 +95,8 @@ final class MeetingDetailViewModel: ObservableObject {
         summaryGenerator: @escaping MeetingDetailWindowManager.SummaryGenerator,
         summaryPersistence: @escaping MeetingDetailWindowManager.SummaryPersistence,
         summaryChatAnswerer: @escaping MeetingDetailWindowManager.SummaryChatAnswerer,
-        summaryChatPersistence: @escaping MeetingDetailWindowManager.SummaryChatPersistence
+        summaryChatPersistence: @escaping MeetingDetailWindowManager.SummaryChatPersistence,
+        transcriptSegmentsPersistence: @escaping MeetingDetailWindowManager.TranscriptSegmentsPersistence
     ) {
         self.mode = .history
         self.title = title
@@ -97,6 +108,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.segments = segments
         self.audioURL = audioURL
         self.isPaused = true
+        self.isFinalizing = false
         self.translationHandler = translationHandler
         self.summarySettingsProvider = summarySettingsProvider
         self.summaryModelOptionsProvider = summaryModelOptionsProvider
@@ -105,6 +117,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.summaryPersistence = summaryPersistence
         self.summaryChatAnswerer = summaryChatAnswerer
         self.summaryChatPersistence = summaryChatPersistence
+        self.transcriptSegmentsPersistence = transcriptSegmentsPersistence
 
         self.translationDraftLanguageRaw = Self.initialTranslationLanguageRaw()
         self.translationEnabled = Self.segmentsContainTranslations(segments)
@@ -143,6 +156,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.segments = liveState.segments
         self.audioURL = nil
         self.isPaused = liveState.isPaused
+        self.isFinalizing = liveState.isFinalizing
         self.translationHandler = translationHandler
         self.summarySettingsProvider = summarySettingsProvider
         self.summaryModelOptionsProvider = summaryModelOptionsProvider
@@ -151,6 +165,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.summaryPersistence = nil
         self.summaryChatAnswerer = nil
         self.summaryChatPersistence = nil
+        self.transcriptSegmentsPersistence = nil
 
         self.translationDraftLanguageRaw = Self.initialTranslationLanguageRaw()
         self.translationEnabled = liveState.realtimeTranslateEnabled || Self.segmentsContainTranslations(liveState.segments)
@@ -175,9 +190,7 @@ final class MeetingDetailViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] isPaused, isRecording in
                 self?.isPaused = isPaused
-                self?.subtitle = isPaused
-                    ? String(localized: "Meeting Paused")
-                    : (isRecording ? String(localized: "Meeting In Progress") : String(localized: "Meeting Ended"))
+                self?.updateLiveSubtitle(isPaused: isPaused, isRecording: isRecording)
             }
             .store(in: &cancellables)
 
@@ -188,6 +201,15 @@ final class MeetingDetailViewModel: ObservableObject {
                 if isEnabled {
                     self.translationEnabled = true
                 }
+            }
+            .store(in: &cancellables)
+
+        liveState.$isFinalizing
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isFinalizing in
+                guard let self else { return }
+                self.isFinalizing = isFinalizing
+                self.updateLiveSubtitle()
             }
             .store(in: &cancellables)
     }
@@ -205,6 +227,10 @@ final class MeetingDetailViewModel: ObservableObject {
         case .live:
             return isPaused && !segments.isEmpty
         }
+    }
+
+    var canEditSpeakers: Bool {
+        mode == .history && historyEntryID != nil && transcriptSegmentsPersistence != nil
     }
 
     var canRegenerateSummary: Bool {
@@ -254,6 +280,10 @@ final class MeetingDetailViewModel: ObservableObject {
 
     var transcriptPresentationMode: TranscriptPresentationMode {
         TranscriptPresentationMode(rawValue: transcriptPresentationModeRaw) ?? .timeline
+    }
+
+    var transcriptSpeakerDisplayMode: TranscriptSpeakerDisplayMode {
+        TranscriptSpeakerDisplayMode(rawValue: transcriptSpeakerDisplayModeRaw) ?? .source
     }
 
     func export() throws {
@@ -331,6 +361,10 @@ final class MeetingDetailViewModel: ObservableObject {
         transcriptPresentationModeRaw = mode.rawValue
     }
 
+    func setTranscriptSpeakerDisplayMode(_ mode: TranscriptSpeakerDisplayMode) {
+        transcriptSpeakerDisplayModeRaw = mode.rawValue
+    }
+
     func toggleSearchPresentation() {
         isSearchPresented.toggle()
         if !isSearchPresented {
@@ -340,6 +374,38 @@ final class MeetingDetailViewModel: ObservableObject {
 
     func toggleSummaryCollapsed() {
         isSummaryCollapsed.toggle()
+    }
+
+    func renameSpeaker(identityKey: String, displayName: String) {
+        guard canEditSpeakers, let historyEntryID else { return }
+
+        let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDisplayName = trimmedDisplayName.isEmpty ? nil : trimmedDisplayName
+
+        let updatedSegments = segments.map { segment in
+            guard speakerRenameIdentityMatches(segment, identityKey: identityKey) else { return segment }
+            return segment.updatingSpeakerDisplayName(normalizedDisplayName)
+        }
+
+        guard updatedSegments != segments else { return }
+        segments = updatedSegments
+        _ = transcriptSegmentsPersistence?(historyEntryID, updatedSegments)
+    }
+
+    private func speakerRenameIdentityMatches(_ segment: MeetingTranscriptSegment, identityKey: String) -> Bool {
+        if segment.speakerIdentityKey == identityKey {
+            return true
+        }
+
+        let displayPrefix = "display:"
+        guard identityKey.hasPrefix(displayPrefix) else { return false }
+        let expectedDisplayName = String(identityKey.dropFirst(displayPrefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expectedDisplayName.isEmpty else { return false }
+
+        let currentDisplayName = segment.speakerDisplayName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return currentDisplayName == expectedDisplayName
     }
 
     func presentSummarySettings() {
@@ -496,6 +562,22 @@ final class MeetingDetailViewModel: ObservableObject {
         segments = mergeSegmentsPreservingTranslationState(incomingSegments)
         if translationEnabled {
             translateEligibleSegmentsIfNeeded(targetLanguage: resolvedStoredTranslationLanguage())
+        }
+    }
+
+    private func updateLiveSubtitle(
+        isPaused: Bool? = nil,
+        isRecording: Bool? = nil
+    ) {
+        guard mode == .live else { return }
+        if isFinalizing {
+            subtitle = String(localized: "Preparing final meeting details")
+        } else if isPaused ?? self.isPaused {
+            subtitle = String(localized: "Meeting Paused")
+        } else if isRecording ?? false {
+            subtitle = String(localized: "Meeting In Progress")
+        } else {
+            subtitle = String(localized: "Meeting Ended")
         }
     }
 

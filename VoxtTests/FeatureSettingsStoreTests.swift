@@ -134,4 +134,89 @@ final class FeatureSettingsStoreTests: XCTestCase {
             )
         }
     }
+
+    func testMeetingChunkingModeDefaultsAndSyncsToRuntimePreference() throws {
+        try withEphemeralDefaults { defaults in
+            XCTAssertEqual(MeetingChunkingMode.stored(in: defaults), .quality)
+            XCTAssertEqual(MeetingServerVADMode.stored(in: defaults), .automatic)
+            XCTAssertEqual(MeetingSpeakerDiarizationSensitivity.stored(in: defaults), .balanced)
+            XCTAssertFalse(defaults.bool(forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled))
+
+            defaults.set(MeetingChunkingMode.quality.rawValue, forKey: AppPreferenceKey.meetingChunkingMode)
+            defaults.set(MeetingServerVADMode.stable.rawValue, forKey: AppPreferenceKey.meetingServerVADMode)
+            defaults.set(MeetingSpeakerDiarizationSensitivity.sensitive.rawValue, forKey: AppPreferenceKey.meetingSpeakerDiarizationSensitivity)
+            defaults.set(true, forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled)
+            defaults.set(false, forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled)
+
+            var settings = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertEqual(settings.meeting.chunkingMode, .quality)
+            XCTAssertEqual(settings.meeting.serverVADMode, .stable)
+            XCTAssertEqual(settings.meeting.speakerDiarizationSensitivity, .sensitive)
+            XCTAssertTrue(settings.meeting.speakerDiarizationDebugEnabled)
+            XCTAssertFalse(settings.meeting.finalTranscriptOptimizationEnabled)
+
+            settings.meeting.chunkingModeRawValue = MeetingChunkingMode.realtime.rawValue
+            settings.meeting.serverVADModeRawValue = MeetingServerVADMode.responsive.rawValue
+            settings.meeting.speakerDiarizationSensitivityRawValue = MeetingSpeakerDiarizationSensitivity.stable.rawValue
+            settings.meeting.speakerDiarizationDebugEnabled = false
+            settings.meeting.finalTranscriptOptimizationEnabled = false
+            FeatureSettingsStore.save(settings, defaults: defaults)
+            FeatureSettingsStore.prepareMeetingRuntime(from: settings, defaults: defaults)
+
+            XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingChunkingMode), MeetingChunkingMode.realtime.rawValue)
+            XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingServerVADMode), MeetingServerVADMode.responsive.rawValue)
+            XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingSpeakerDiarizationSensitivity), MeetingSpeakerDiarizationSensitivity.stable.rawValue)
+            XCTAssertFalse(defaults.bool(forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled))
+            XCTAssertFalse(defaults.bool(forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled))
+            XCTAssertEqual(FeatureSettingsStore.load(defaults: defaults).meeting.chunkingMode, .realtime)
+            XCTAssertEqual(FeatureSettingsStore.load(defaults: defaults).meeting.serverVADMode, .responsive)
+            XCTAssertEqual(FeatureSettingsStore.load(defaults: defaults).meeting.speakerDiarizationSensitivity, .stable)
+            XCTAssertFalse(FeatureSettingsStore.load(defaults: defaults).meeting.finalTranscriptOptimizationEnabled)
+        }
+    }
+
+    func testMeetingSettingsDecodeLegacyPayloadWithoutChunkingMode() throws {
+        let payload = """
+        {
+          "asrSelectionID": "mlx:mlx-community/SenseVoiceSmall",
+          "summaryModelSelectionID": "local-llm:mlx-community/Qwen3.5-2B-4bit",
+          "summaryPrompt": "",
+          "summaryAutoGenerate": true,
+          "realtimeTranslateEnabled": false,
+          "realtimeTargetLanguageRawValue": "",
+          "hideOverlayFromScreenSharing": false
+        }
+        """
+        let data = try XCTUnwrap(payload.data(using: .utf8))
+
+        let settings = try JSONDecoder().decode(MeetingFeatureSettings.self, from: data)
+
+        XCTAssertEqual(settings.chunkingMode, .quality)
+        XCTAssertEqual(settings.serverVADMode, .automatic)
+        XCTAssertEqual(settings.speakerDiarizationSensitivity, .balanced)
+        XCTAssertFalse(settings.speakerDiarizationDebugEnabled)
+        XCTAssertTrue(settings.finalTranscriptOptimizationEnabled)
+    }
+
+    func testMeetingSpeakerSensitivityBuildsRuntimeOptionsFromPreferences() throws {
+        try withEphemeralDefaults { defaults in
+            defaults.set(MeetingSpeakerDiarizationSensitivity.sensitive.rawValue, forKey: AppPreferenceKey.meetingSpeakerDiarizationSensitivity)
+            defaults.set(true, forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled)
+
+            let options = MeetingSpeakerDiarizationOptions.fromPreferences(defaults: defaults)
+
+            XCTAssertEqual(options.sensitivity, .sensitive)
+            XCTAssertTrue(options.debugLoggingEnabled)
+            XCTAssertLessThan(options.minimumSpeakerConfidence, MeetingSpeakerDiarizationSensitivity.stable.minimumSpeakerConfidence)
+            XCTAssertLessThan(
+                options.smoothing.minimumTurnDurationSeconds,
+                MeetingSpeakerDiarizationSensitivity.stable.smootherOptions.minimumTurnDurationSeconds
+            )
+            XCTAssertLessThan(
+                options.transcriptAssembly.minimumSecondarySpeakerOverlapSeconds,
+                MeetingSpeakerDiarizationSensitivity.stable.transcriptAssemblyOptions.minimumSecondarySpeakerOverlapSeconds
+            )
+        }
+    }
 }

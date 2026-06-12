@@ -18,6 +18,7 @@ struct FeatureSettingsView: View {
     @State var selectorSheet: FeatureModelSelectorSheet?
     @State var remindersListDescriptors: [RemindersListDescriptor] = []
     @State var isRemindersListSheetPresented = false
+    @State var isMeetingAdvancedSettingsExpanded = false
     @State var interactionSoundPlayer = InteractionSoundPlayer()
     @State private var toastMessage = ""
     @State private var toastDismissTask: Task<Void, Never>?

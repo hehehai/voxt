@@ -355,6 +355,8 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
 }
 
 struct MeetingFeatureSettings: Codable, Hashable, Sendable {
+    static let defaultFinalTranscriptOptimizationEnabled = true
+
     var asrSelectionID: FeatureModelSelectionID
     var summaryModelSelectionID: FeatureModelSelectionID
     var summaryPrompt: String
@@ -362,6 +364,11 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
     var realtimeTranslateEnabled: Bool
     var realtimeTargetLanguageRawValue: String
     var hideOverlayFromScreenSharing: Bool
+    var chunkingModeRawValue: String
+    var serverVADModeRawValue: String
+    var speakerDiarizationSensitivityRawValue: String
+    var speakerDiarizationDebugEnabled: Bool
+    var finalTranscriptOptimizationEnabled: Bool
 
     init(
         asrSelectionID: FeatureModelSelectionID,
@@ -370,7 +377,12 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         summaryAutoGenerate: Bool,
         realtimeTranslateEnabled: Bool,
         realtimeTargetLanguageRawValue: String,
-        hideOverlayFromScreenSharing: Bool
+        hideOverlayFromScreenSharing: Bool,
+        chunkingModeRawValue: String = MeetingChunkingMode.quality.rawValue,
+        serverVADModeRawValue: String = MeetingServerVADMode.automatic.rawValue,
+        speakerDiarizationSensitivityRawValue: String = MeetingSpeakerDiarizationSensitivity.balanced.rawValue,
+        speakerDiarizationDebugEnabled: Bool = false,
+        finalTranscriptOptimizationEnabled: Bool = MeetingFeatureSettings.defaultFinalTranscriptOptimizationEnabled
     ) {
         self.asrSelectionID = asrSelectionID
         self.summaryModelSelectionID = summaryModelSelectionID
@@ -379,11 +391,66 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         self.realtimeTranslateEnabled = realtimeTranslateEnabled
         self.realtimeTargetLanguageRawValue = realtimeTargetLanguageRawValue
         self.hideOverlayFromScreenSharing = hideOverlayFromScreenSharing
+        self.chunkingModeRawValue = chunkingModeRawValue
+        self.serverVADModeRawValue = serverVADModeRawValue
+        self.speakerDiarizationSensitivityRawValue = speakerDiarizationSensitivityRawValue
+        self.speakerDiarizationDebugEnabled = speakerDiarizationDebugEnabled
+        self.finalTranscriptOptimizationEnabled = finalTranscriptOptimizationEnabled
     }
 
     var realtimeTargetLanguage: TranslationTargetLanguage? {
         guard !realtimeTargetLanguageRawValue.isEmpty else { return nil }
         return TranslationTargetLanguage(rawValue: realtimeTargetLanguageRawValue)
+    }
+
+    var chunkingMode: MeetingChunkingMode {
+        MeetingChunkingMode(rawValue: chunkingModeRawValue) ?? .quality
+    }
+
+    var serverVADMode: MeetingServerVADMode {
+        MeetingServerVADMode(rawValue: serverVADModeRawValue) ?? .automatic
+    }
+
+    var speakerDiarizationSensitivity: MeetingSpeakerDiarizationSensitivity {
+        MeetingSpeakerDiarizationSensitivity(rawValue: speakerDiarizationSensitivityRawValue) ?? .balanced
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case asrSelectionID
+        case summaryModelSelectionID
+        case summaryPrompt
+        case summaryAutoGenerate
+        case realtimeTranslateEnabled
+        case realtimeTargetLanguageRawValue
+        case hideOverlayFromScreenSharing
+        case chunkingModeRawValue
+        case serverVADModeRawValue
+        case speakerDiarizationSensitivityRawValue
+        case speakerDiarizationDebugEnabled
+        case finalTranscriptOptimizationEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            asrSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .asrSelectionID),
+            summaryModelSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .summaryModelSelectionID),
+            summaryPrompt: try container.decode(String.self, forKey: .summaryPrompt),
+            summaryAutoGenerate: try container.decode(Bool.self, forKey: .summaryAutoGenerate),
+            realtimeTranslateEnabled: try container.decode(Bool.self, forKey: .realtimeTranslateEnabled),
+            realtimeTargetLanguageRawValue: try container.decode(String.self, forKey: .realtimeTargetLanguageRawValue),
+            hideOverlayFromScreenSharing: try container.decode(Bool.self, forKey: .hideOverlayFromScreenSharing),
+            chunkingModeRawValue: try container.decodeIfPresent(String.self, forKey: .chunkingModeRawValue)
+                ?? MeetingChunkingMode.quality.rawValue,
+            serverVADModeRawValue: try container.decodeIfPresent(String.self, forKey: .serverVADModeRawValue)
+                ?? MeetingServerVADMode.automatic.rawValue,
+            speakerDiarizationSensitivityRawValue: try container.decodeIfPresent(String.self, forKey: .speakerDiarizationSensitivityRawValue)
+                ?? MeetingSpeakerDiarizationSensitivity.balanced.rawValue,
+            speakerDiarizationDebugEnabled: try container.decodeIfPresent(Bool.self, forKey: .speakerDiarizationDebugEnabled)
+                ?? false,
+            finalTranscriptOptimizationEnabled: try container.decodeIfPresent(Bool.self, forKey: .finalTranscriptOptimizationEnabled)
+                ?? MeetingFeatureSettings.defaultFinalTranscriptOptimizationEnabled
+        )
     }
 }
 

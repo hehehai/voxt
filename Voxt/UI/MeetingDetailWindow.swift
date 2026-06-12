@@ -15,6 +15,7 @@ final class MeetingDetailWindowManager {
     typealias SummaryPersistence = @MainActor (UUID, MeetingSummarySnapshot?) -> TranscriptionHistoryEntry?
     typealias SummaryChatAnswerer = @MainActor (String, MeetingSummarySnapshot?, [MeetingSummaryChatMessage], String, MeetingSummarySettingsSnapshot) async throws -> String
     typealias SummaryChatPersistence = @MainActor (UUID, [MeetingSummaryChatMessage]) -> TranscriptionHistoryEntry?
+    typealias TranscriptSegmentsPersistence = @MainActor (UUID, [MeetingTranscriptSegment]) -> TranscriptionHistoryEntry?
 
     private var historyControllers: [UUID: MeetingDetailWindowController] = [:]
     private var liveController: MeetingDetailWindowController?
@@ -30,7 +31,8 @@ final class MeetingDetailWindowManager {
         summaryGenerator: @escaping SummaryGenerator,
         summaryPersistence: @escaping SummaryPersistence,
         summaryChatAnswerer: @escaping SummaryChatAnswerer,
-        summaryChatPersistence: @escaping SummaryChatPersistence
+        summaryChatPersistence: @escaping SummaryChatPersistence,
+        transcriptSegmentsPersistence: @escaping TranscriptSegmentsPersistence
     ) {
         if let controller = historyControllers[entry.id] {
             controller.refreshSummaryConfiguration(
@@ -61,7 +63,8 @@ final class MeetingDetailWindowManager {
             summaryGenerator: summaryGenerator,
             summaryPersistence: summaryPersistence,
             summaryChatAnswerer: summaryChatAnswerer,
-            summaryChatPersistence: summaryChatPersistence
+            summaryChatPersistence: summaryChatPersistence,
+            transcriptSegmentsPersistence: transcriptSegmentsPersistence
         )
         let controller = MeetingDetailWindowController(viewModel: viewModel) { [weak self] in
             self?.historyControllers[entry.id] = nil
@@ -290,6 +293,8 @@ private struct MeetingDetailWindowView: View {
     @ObservedObject var viewModel: MeetingDetailViewModel
     @StateObject private var playbackController: MeetingDetailPlaybackController
     @State private var activeSegmentID: UUID?
+    @State private var speakerRenameGroupID: String?
+    @State private var speakerRenameDraft = ""
     @State private var isScrubbing = false
 
     init(viewModel: MeetingDetailViewModel) {
@@ -325,6 +330,12 @@ private struct MeetingDetailWindowView: View {
                 dialogDimmingMask(opacity: 0.14)
 
                 translationLanguageDialog
+            }
+
+            if speakerRenameGroupID != nil {
+                dialogDimmingMask(opacity: 0.14)
+
+                speakerRenameDialog
             }
 
         }
@@ -363,6 +374,10 @@ private struct MeetingDetailWindowView: View {
                 .frame(width: 62, height: 1)
 
             transcriptTabPicker
+
+            if viewModel.transcriptPresentationMode == .timeline {
+                transcriptSpeakerDisplayModePicker
+            }
 
             Spacer(minLength: 8)
 
@@ -456,6 +471,56 @@ private struct MeetingDetailWindowView: View {
         }
     }
 
+    private var transcriptSpeakerDisplayModePicker: some View {
+        HStack(spacing: 2) {
+            ForEach(MeetingDetailViewModel.TranscriptSpeakerDisplayMode.allCases) { mode in
+                Button {
+                    viewModel.setTranscriptSpeakerDisplayMode(mode)
+                } label: {
+                    Text(transcriptSpeakerDisplayModeTitle(for: mode))
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .padding(.horizontal, 9)
+                        .frame(height: 26)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(
+                    viewModel.transcriptSpeakerDisplayMode == mode
+                        ? Color.primary
+                        : Color.secondary
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            viewModel.transcriptSpeakerDisplayMode == mode
+                                ? MeetingDetailUIStyle.windowFillColor
+                                : .clear
+                        )
+                )
+            }
+        }
+        .padding(2)
+        .fixedSize(horizontal: true, vertical: false)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(MeetingDetailUIStyle.controlFillColor.opacity(0.72))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(MeetingDetailUIStyle.borderColor.opacity(0.72), lineWidth: 1)
+        }
+    }
+
+    private func transcriptSpeakerDisplayModeTitle(
+        for mode: MeetingDetailViewModel.TranscriptSpeakerDisplayMode
+    ) -> String {
+        switch mode {
+        case .source:
+            return String(localized: "Audio Source")
+        case .speaker:
+            return String(localized: "Speaker")
+        }
+    }
+
     private var transcriptSearchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
@@ -487,6 +552,10 @@ private struct MeetingDetailWindowView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     transcriptCaption
 
+                    if viewModel.isFinalizing {
+                        meetingFinalizationBanner
+                    }
+
                     if displayedSegments.isEmpty {
                         transcriptEmptyState
                     } else if viewModel.transcriptPresentationMode == .timeline {
@@ -494,6 +563,7 @@ private struct MeetingDetailWindowView: View {
                             ForEach(displayedSegments) { segment in
                                 MeetingDetailSegmentRow(
                                     segment: segment,
+                                    speakerTitle: timelineSpeakerTitle(for: segment),
                                     isActive: activeSegmentID == segment.id,
                                     showsTranslation: viewModel.translationEnabled,
                                     isSearchMatch: segmentMatchesSearch(segment)
@@ -552,11 +622,24 @@ private struct MeetingDetailWindowView: View {
     private var transcriptEmptyState: some View {
         if viewModel.segments.isEmpty {
             VStack(spacing: 10) {
-                Text(String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts."))
+                if viewModel.isFinalizing {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Text(
+                    viewModel.isFinalizing
+                        ? String(localized: "Preparing final transcript…")
+                        : String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts.")
+                )
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.secondary)
 
-                Text(String(localized: "This panel stays focused on the detailed transcript and synced playback."))
+                Text(
+                    viewModel.isFinalizing
+                        ? String(localized: "Voxt is finishing audio flushing, final transcription, and speaker analysis.")
+                        : String(localized: "This panel stays focused on the detailed transcript and synced playback.")
+                )
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary.opacity(0.85))
             }
@@ -575,19 +658,50 @@ private struct MeetingDetailWindowView: View {
         }
     }
 
-    private var speakerMarksPane: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
-                speakerOverviewCard(for: .me)
-                speakerOverviewCard(for: .them)
+    private var meetingFinalizationBanner: some View {
+        HStack(alignment: .center, spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(String(localized: "Preparing final meeting details…"))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Text(String(localized: "Current transcript is available now. Final text, speaker labels, audio playback, and summary will update when processing finishes."))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            ForEach([MeetingSpeaker.me, MeetingSpeaker.them], id: \.rawValue) { speaker in
-                let segments = displayedSegments.filter { $0.speaker == speaker }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private var speakerMarksPane: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
+                ForEach(speakerGroups, id: \.id) { group in
+                    speakerOverviewCard(for: group)
+                }
+            }
+
+            ForEach(speakerGroups, id: \.id) { group in
+                let segments = group.segments
                 if !segments.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
-                            Text(speaker.displayTitle)
+                            Text(group.title)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.primary)
 
@@ -606,6 +720,7 @@ private struct MeetingDetailWindowView: View {
                             ForEach(segments) { segment in
                                 MeetingDetailSegmentRow(
                                     segment: segment,
+                                    speakerTitle: group.title,
                                     isActive: activeSegmentID == segment.id,
                                     showsTranslation: viewModel.translationEnabled,
                                     isSearchMatch: segmentMatchesSearch(segment)
@@ -618,16 +733,64 @@ private struct MeetingDetailWindowView: View {
         }
     }
 
-    private func speakerOverviewCard(for speaker: MeetingSpeaker) -> some View {
-        let segments = displayedSegments.filter { $0.speaker == speaker }
+    private struct SpeakerGroup {
+        let id: String
+        let title: String
+        let speaker: MeetingSpeaker
+        let segments: [MeetingTranscriptSegment]
+    }
+
+    private var speakerGroups: [SpeakerGroup] {
+        let grouped = Dictionary(grouping: displayedSegments, by: stableSpeakerIdentityKey)
+        return grouped.map { key, segments in
+            let sortedSegments = segments.sorted { $0.startSeconds < $1.startSeconds }
+            let representative = sortedSegments.first
+            return SpeakerGroup(
+                id: key,
+                title: representative.map(speakerTimelineTitle) ?? "",
+                speaker: representative?.speaker ?? .them,
+                segments: sortedSegments
+            )
+        }
+        .sorted { lhs, rhs in
+            guard let lhsStart = lhs.segments.first?.startSeconds,
+                  let rhsStart = rhs.segments.first?.startSeconds
+            else {
+                return lhs.title < rhs.title
+            }
+            return lhsStart < rhsStart
+        }
+    }
+
+    private func speakerOverviewCard(for group: SpeakerGroup) -> some View {
+        let segments = group.segments
         let totalWords = segments.reduce(0) { partialResult, segment in
             partialResult + segment.text.split(whereSeparator: \.isWhitespace).count
         }
 
         return VStack(alignment: .leading, spacing: 6) {
-            Text(speaker.displayTitle)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text(group.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 6)
+
+                if viewModel.canEditSpeakers {
+                    Button {
+                        presentSpeakerRename(for: group)
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help(String(localized: "Rename Speaker"))
+                }
+            }
 
             Text(AppLocalization.format("%d", segments.count))
                 .font(.system(size: 22, weight: .semibold))
@@ -646,6 +809,59 @@ private struct MeetingDetailWindowView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(MeetingDetailUIStyle.softBorderColor, lineWidth: 1)
+        )
+    }
+
+    private var speakerRenameDialog: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(String(localized: "Rename Speaker"))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Text(String(localized: "This name will be applied to all matching transcript segments."))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField(String(localized: "Speaker name"), text: $speakerRenameDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(MeetingDetailUIStyle.controlFillColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(MeetingDetailUIStyle.borderColor, lineWidth: 1)
+                )
+
+            HStack(spacing: 10) {
+                Button(String(localized: "Cancel")) {
+                    cancelSpeakerRename()
+                }
+                .buttonStyle(MeetingPillButtonStyle())
+
+                Spacer(minLength: 8)
+
+                Button(String(localized: "Save")) {
+                    commitSpeakerRename()
+                }
+                .buttonStyle(MeetingPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(SettingsUIStyle.dialogPadding)
+        .frame(width: 400)
+        .background(SettingsUIStyle.windowBackgroundColor)
+        .clipShape(
+            RoundedRectangle(cornerRadius: SettingsUIStyle.dialogCornerRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsUIStyle.dialogCornerRadius, style: .continuous)
+                .strokeBorder(SettingsUIStyle.dialogBorderColor, lineWidth: 0.7)
         )
     }
 
@@ -690,13 +906,24 @@ private struct MeetingDetailWindowView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Text(
-                    viewModel.canExport
-                        ? String(localized: "The meeting is paused. You can export the current record.")
-                        : String(localized: "The meeting is in progress. Pause it to export the current record.")
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                if viewModel.isFinalizing {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.small)
+
+                        Text(String(localized: "Audio playback will be available after the meeting is saved."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(
+                        viewModel.canExport
+                            ? String(localized: "The meeting is paused. You can export the current record.")
+                            : String(localized: "The meeting is in progress. Pause it to export the current record.")
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(16)
@@ -812,7 +1039,7 @@ private struct MeetingDetailWindowView: View {
         guard !query.isEmpty else { return true }
         return segment.text.localizedCaseInsensitiveContains(query)
             || (segment.translatedText?.localizedCaseInsensitiveContains(query) ?? false)
-            || segment.speaker.displayTitle.localizedCaseInsensitiveContains(query)
+            || timelineSpeakerTitle(for: segment).localizedCaseInsensitiveContains(query)
             || MeetingTranscriptFormatter.timestampString(for: segment.startSeconds).localizedCaseInsensitiveContains(query)
     }
 
@@ -829,10 +1056,95 @@ private struct MeetingDetailWindowView: View {
         activeSegmentID = newActiveSegment?.id
     }
 
+    private func presentSpeakerRename(for group: SpeakerGroup) {
+        speakerRenameGroupID = group.id
+        speakerRenameDraft = group.title
+    }
+
+    private func cancelSpeakerRename() {
+        speakerRenameGroupID = nil
+        speakerRenameDraft = ""
+    }
+
+    private func commitSpeakerRename() {
+        guard let speakerRenameGroupID else { return }
+        viewModel.renameSpeaker(identityKey: speakerRenameGroupID, displayName: speakerRenameDraft)
+        cancelSpeakerRename()
+    }
+
+    private func timelineSpeakerTitle(for segment: MeetingTranscriptSegment) -> String {
+        switch viewModel.transcriptSpeakerDisplayMode {
+        case .source:
+            return segment.speaker.displayTitle
+        case .speaker:
+            return speakerTimelineTitle(for: segment)
+        }
+    }
+
+    private func speakerTimelineTitle(for segment: MeetingTranscriptSegment) -> String {
+        if let displayName = speakerDisplayNameIfUserFacing(for: segment) {
+            return displayName
+        }
+        let ordinal = speakerOrdinalByIdentityKey[speakerTimelineIdentityKey(for: segment)] ?? 1
+        return AppLocalization.format("Speaker %d", ordinal)
+    }
+
+    private var speakerOrdinalByIdentityKey: [String: Int] {
+        var ordinals: [String: Int] = [:]
+        let sortedSegments = viewModel.segments.sorted { lhs, rhs in
+            if lhs.startSeconds == rhs.startSeconds {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.startSeconds < rhs.startSeconds
+        }
+
+        for segment in sortedSegments {
+            let key = stableSpeakerIdentityKey(for: segment)
+            guard ordinals[key] == nil else { continue }
+            ordinals[key] = ordinals.count + 1
+        }
+        return ordinals
+    }
+
+    private func speakerTimelineIdentityKey(for segment: MeetingTranscriptSegment) -> String {
+        stableSpeakerIdentityKey(for: segment)
+    }
+
+    private func stableSpeakerIdentityKey(for segment: MeetingTranscriptSegment) -> String {
+        segment.speakerIdentityKey
+    }
+
+    private func speakerDisplayNameIfUserFacing(for segment: MeetingTranscriptSegment) -> String? {
+        guard let displayName = segment.speakerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !displayName.isEmpty,
+              !isAudioSourceDisplayName(displayName)
+        else {
+            return nil
+        }
+        return displayName
+    }
+
+    private func isAudioSourceDisplayName(_ displayName: String) -> Bool {
+        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        if normalized == TranscriptSpeaker.me.displayTitle.lowercased()
+            || normalized == TranscriptSpeaker.them.displayTitle.lowercased() {
+            return true
+        }
+        if normalized.range(of: #"^me\s+\d+$"#, options: .regularExpression) != nil {
+            return true
+        }
+        if normalized.range(of: #"^them\s+\d+$"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
+    }
+
 }
 
 private struct MeetingDetailSegmentRow: View {
     let segment: MeetingTranscriptSegment
+    let speakerTitle: String
     let isActive: Bool
     let showsTranslation: Bool
     let isSearchMatch: Bool
@@ -844,7 +1156,7 @@ private struct MeetingDetailSegmentRow: View {
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary)
 
-                Text(segment.speaker.displayTitle)
+                Text(speakerTitle)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(segment.speaker == .me ? Color(red: 0.16, green: 0.47, blue: 0.88) : Color(red: 0.12, green: 0.58, blue: 0.32))
 

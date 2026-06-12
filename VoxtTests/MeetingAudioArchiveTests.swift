@@ -26,6 +26,36 @@ final class MeetingAudioArchiveTests: XCTestCase {
         XCTAssertEqual(samples[20_000], 0.25, accuracy: 0.02)
     }
 
+    func testAnalysisAssetsExposeMixedFullMeetingAudio() async {
+        let archive = MeetingAudioArchive()
+        await archive.append(samples: [Float](repeating: 0.4, count: 1_600), sampleRate: 16_000, speaker: .me, startSeconds: 0)
+        await archive.append(samples: [Float](repeating: 0.8, count: 1_600), sampleRate: 16_000, speaker: .them, startSeconds: 0.1)
+
+        let assets = await archive.analysisAssets()
+
+        XCTAssertEqual(assets.map(\.source), [.mixed])
+        XCTAssertEqual(assets[0].sampleRate, 16_000)
+        XCTAssertEqual(assets[0].durationSeconds, 0.2, accuracy: 0.001)
+        XCTAssertEqual(assets[0].samples[800], 0.2, accuracy: 0.001)
+        XCTAssertEqual(assets[0].samples[2_400], 0.4, accuracy: 0.001)
+    }
+
+    func testFinalTranscriptionAssetsPreserveAudioSources() async {
+        let archive = MeetingAudioArchive()
+        await archive.append(samples: [Float](repeating: 0.4, count: 1_600), sampleRate: 16_000, speaker: .me, startSeconds: 0)
+        await archive.append(samples: [Float](repeating: 0.8, count: 1_600), sampleRate: 16_000, speaker: .them, startSeconds: 0.1)
+
+        let assets = await archive.finalTranscriptionAssets()
+
+        XCTAssertEqual(assets.map(\.source), [.microphone, .systemAudio])
+        XCTAssertEqual(assets[0].durationSeconds, 0.1, accuracy: 0.001)
+        XCTAssertEqual(assets[1].durationSeconds, 0.1, accuracy: 0.001)
+        XCTAssertEqual(assets[0].sessionStartOffset, 0, accuracy: 0.001)
+        XCTAssertEqual(assets[1].sessionStartOffset, 0.1, accuracy: 0.001)
+        XCTAssertEqual(assets[0].samples[800], 0.4, accuracy: 0.001)
+        XCTAssertEqual(assets[1].samples[800], 0.8, accuracy: 0.001)
+    }
+
     private func decodeMono16BitWAVSamples(from url: URL) throws -> [Float] {
         let data = try Data(contentsOf: url)
         let dataRange = try findDataChunk(in: data)

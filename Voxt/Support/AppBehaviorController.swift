@@ -49,7 +49,18 @@ enum AppBehaviorController {
     }
 
     @MainActor
-    static func activateCurrentApp() {
+    static func activateCurrentApp(ignoringOtherApps: Bool = false) {
+        if ignoringOtherApps {
+            if #available(macOS 14.0, *) {
+                NSApp.activate()
+                return
+            }
+            var options: NSApplication.ActivationOptions = [.activateAllWindows]
+            options.insert(.activateIgnoringOtherApps)
+            _ = NSRunningApplication.current.activate(options: options)
+            return
+        }
+
         _ = NSRunningApplication.current.activate(options: [.activateAllWindows])
     }
 
@@ -60,6 +71,16 @@ enum AppBehaviorController {
             window.deminiaturize(nil)
         }
         activateCurrentApp()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    @MainActor
+    static func bringUserInvokedWindowToFront(_ window: NSWindow?) {
+        guard let window else { return }
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        activateCurrentApp(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
 }

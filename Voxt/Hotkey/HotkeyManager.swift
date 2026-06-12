@@ -54,6 +54,7 @@ class HotkeyManager {
     private var hasCustomPasteModifierTapCandidate = false
     private var sawNonModifierKeyDuringFunctionChord = false
     private var sawUnexpectedModifierDuringFunctionChord = false
+    private var shouldIgnoreNextFunctionTranscriptionRelease = false
     private var currentSidedModifiers: SidedModifierFlags = []
     private var suppressTranscriptionTapUntil = Date.distantPast
     private var pendingTranscriptionLongPressReleaseTask: Task<Void, Never>?
@@ -892,6 +893,7 @@ class HotkeyManager {
         hasMeetingModifierTapCandidate ||
         sawNonModifierKeyDuringFunctionChord ||
         sawUnexpectedModifierDuringFunctionChord ||
+        shouldIgnoreNextFunctionTranscriptionRelease ||
         !currentSidedModifiers.isEmpty
     }
 
@@ -981,6 +983,7 @@ class HotkeyManager {
             )
             if transition.shouldEmitConfirmedTap {
                 emitTranslationKeyDown()
+                shouldIgnoreNextFunctionTranscriptionRelease = true
             }
             // Consume translation combo transitions to avoid falling through
             // into transcription fn-only handling during release sequence.
@@ -1048,6 +1051,7 @@ class HotkeyManager {
             )
             if transition.shouldEmitConfirmedTap {
                 emitRewriteKeyDown()
+                shouldIgnoreNextFunctionTranscriptionRelease = true
             }
             return transition.handled
         }
@@ -1113,6 +1117,7 @@ class HotkeyManager {
             )
             if transition.shouldEmitConfirmedTap {
                 emitMeetingKeyDown()
+                shouldIgnoreNextFunctionTranscriptionRelease = true
             }
             return transition.handled
         }
@@ -1288,6 +1293,13 @@ class HotkeyManager {
                 keyCode == UInt16(kVK_Function) &&
                 !flags.contains(.maskSecondaryFn)
             if isFunctionReleaseEvent && !isKeyDown {
+                if shouldIgnoreNextFunctionTranscriptionRelease {
+                    VoxtLog.hotkey("Hotkey transcription fn-only release ignored after higher-priority modifier tap.")
+                    shouldIgnoreNextFunctionTranscriptionRelease = false
+                    sawNonModifierKeyDuringFunctionChord = false
+                    sawUnexpectedModifierDuringFunctionChord = false
+                    return true
+                }
                 if !sawNonModifierKeyDuringFunctionChord,
                    !sawUnexpectedModifierDuringFunctionChord,
                    !hasUnexpectedModifiers,
@@ -1531,6 +1543,7 @@ class HotkeyManager {
         hasCustomPasteModifierTapCandidate = false
         sawNonModifierKeyDuringFunctionChord = false
         sawUnexpectedModifierDuringFunctionChord = false
+        shouldIgnoreNextFunctionTranscriptionRelease = false
         currentSidedModifiers = []
         suppressTranscriptionTapUntil = .distantPast
         lastEventAt = Date()

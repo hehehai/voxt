@@ -178,6 +178,7 @@ final class MeetingSessionCoordinator {
         overlayState.isRecording = false
         overlayState.isPaused = false
         overlayState.isModelInitializing = false
+        overlayState.isFinalizing = shouldFlushPendingAudio
         overlayState.audioLevel = 0
         overlayState.waveformState.setActive(false)
 
@@ -201,9 +202,22 @@ final class MeetingSessionCoordinator {
 
             let duration = max(self.accumulatedRecordingDuration, 0)
             let archivedAudioURL = shouldFlushPendingAudio ? (try? await self.persistMeetingAudioArchive()) : nil
-            let finalSegments = await MainActor.run {
+            let finalSegmentsBeforeSpeakerAnalysis = await MainActor.run {
                 self.finalizedSegments(from: self.overlayState.segments)
             }
+            let finalTranscriptionAssets = shouldFlushPendingAudio ? await self.audioArchive.finalTranscriptionAssets() : []
+            let speakerAnalysisAssets = shouldFlushPendingAudio ? await self.audioArchive.analysisAssets() : []
+            let finalTranscriptSegments = await self.optimizedFinalTranscriptSegments(
+                fallbackSegments: finalSegmentsBeforeSpeakerAnalysis,
+                finalTranscriptionAssets: finalTranscriptionAssets,
+                shouldFlushPendingAudio: shouldFlushPendingAudio
+            )
+            let speakerAnalysisOptions = MeetingSpeakerDiarizationOptions.fromPreferences()
+            let finalSegments = await MeetingSpeakerAnalysisPipeline.analyzedSegments(
+                from: finalTranscriptSegments,
+                assets: speakerAnalysisAssets,
+                options: speakerAnalysisOptions
+            )
             let result = MeetingSessionResult(
                 transcriptionEngine: self.activeEngineContext?.engine ?? self.resolvedTranscriptionEngine(),
                 transcriptionModelDescription: self.activeEngineContext?.historyModelDescription ?? self.fallbackHistoryModelDescription(),
@@ -500,6 +514,7 @@ final class MeetingSessionCoordinator {
         liveSessionFactory = nil
         activeEngineContext = nil
         overlayState.isModelInitializing = false
+        overlayState.isFinalizing = false
         Task {
             await audioArchive.reset()
         }
@@ -791,29 +806,76 @@ final class MeetingSessionCoordinator {
             break
         }
 
-        let result = MeetingTranscriptAssembler.apply(event, to: overlayState.segments)
-        for segmentID in result.supersededSegmentIDs {
-            cancelTranslationTask(for: segmentID)
-        }
-        overlayState.segments = result.segments
+        var finalizedSegmentsForTranslation: [MeetingTranscriptSegment] = []
+        for normalizedEvent in normalizedTranscriptEvents(for: event) {
+            let result = MeetingTranscriptAssembler.apply(normalizedEvent, to: overlayState.segments)
+            for segmentID in result.supersededSegmentIDs {
+                cancelTranslationTask(for: segmentID)
+            }
+            overlayState.segments = result.segments
 
-        guard let finalizedSegmentID = result.finalizedSegmentID else { return }
-        guard let finalizedSegment = overlayState.segments.first(where: { $0.id == finalizedSegmentID }) else {
-            return
-        }
-        guard shouldTranslate(segment: finalizedSegment) else { return }
+            guard let finalizedSegmentID = result.finalizedSegmentID,
+                  let finalizedSegment = overlayState.segments.first(where: { $0.id == finalizedSegmentID }),
+                  shouldTranslate(segment: finalizedSegment)
+            else {
+                continue
+            }
 
-        let translationReadySegment = finalizedSegment.updatingTranslation(
-            translatedText: finalizedSegment.translatedText,
-            isTranslationPending: true
-        )
-        updateSegment(finalizedSegmentID) { _ in translationReadySegment }
-        queueRealtimeTranslation(for: translationReadySegment)
+            let translationReadySegment = finalizedSegment.updatingTranslation(
+                translatedText: finalizedSegment.translatedText,
+                isTranslationPending: true
+            )
+            updateSegment(finalizedSegmentID) { _ in translationReadySegment }
+            finalizedSegmentsForTranslation.append(translationReadySegment)
+        }
+
+        for segment in finalizedSegmentsForTranslation {
+            queueRealtimeTranslation(for: segment)
+        }
+    }
+
+    private func normalizedTranscriptEvents(for event: MeetingTranscriptEvent) -> [MeetingTranscriptEvent] {
+        guard case .final(let segment) = event else {
+            return [event]
+        }
+        let readableSegments = MeetingTranscriptPostProcessor.process([segment])
+        guard readableSegments.count > 1 else {
+            return [event]
+        }
+        return readableSegments.map(MeetingTranscriptEvent.final)
     }
 
     private func reconfigureAccumulators(for profile: MeetingChunkingProfile) {
         micAccumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: 0.012, profile: profile)
         systemAccumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: 0.025, profile: profile)
+    }
+
+    private func optimizedFinalTranscriptSegments(
+        fallbackSegments: [MeetingTranscriptSegment],
+        finalTranscriptionAssets: [MeetingAudioAsset],
+        shouldFlushPendingAudio: Bool
+    ) async -> [MeetingTranscriptSegment] {
+        guard shouldFlushPendingAudio,
+              MeetingFinalTranscriptOptimization.isEnabled(),
+              !finalTranscriptionAssets.isEmpty,
+              let transcriber
+        else {
+            return MeetingTranscriptPostProcessor.process(fallbackSegments)
+        }
+
+        let optimizedSegments = await MeetingFinalTranscriptionPass.transcribe(
+            assets: finalTranscriptionAssets,
+            transcriber: transcriber
+        )
+        guard !optimizedSegments.isEmpty else {
+            VoxtLog.info("Meeting final transcript optimization produced no segments; falling back to realtime transcript.", verbose: true)
+            return MeetingTranscriptPostProcessor.process(fallbackSegments)
+        }
+        VoxtLog.info(
+            "Meeting final transcript optimization succeeded. realtimeSegments=\(fallbackSegments.count), optimizedSegments=\(optimizedSegments.count)",
+            verbose: true
+        )
+        return optimizedSegments
     }
 
     private func resolvedTranscriptionEngine() -> TranscriptionEngine {
@@ -826,7 +888,7 @@ final class MeetingSessionCoordinator {
         let remoteSelection = resolvedRemoteASRSelection()
         let whisperRealtimeEnabled = UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
 
-        return MeetingASRSupport.resolveContext(
+        let automaticContext = MeetingASRSupport.resolveContext(
             transcriptionEngine: transcriptionEngine,
             whisperModelState: whisperModelManager.state,
             whisperCurrentModelID: whisperModelManager.currentModelID,
@@ -840,6 +902,8 @@ final class MeetingSessionCoordinator {
             remoteProvider: remoteSelection.provider,
             remoteConfiguration: remoteSelection.configuration
         )
+        let chunkingMode = MeetingChunkingMode.stored()
+        return automaticContext.resolvingChunkingMode(chunkingMode)
     }
 
     private func makeTranscriber(for context: MeetingASREngineContext) async throws -> any MeetingSegmentTranscribing {

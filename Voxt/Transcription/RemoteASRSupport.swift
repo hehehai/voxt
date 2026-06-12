@@ -26,7 +26,8 @@ enum AliyunQwenRealtimeSessionKind: Equatable {
 enum AliyunQwenRealtimePayloadSupport {
     static func sessionUpdatePayload(
         kind: AliyunQwenRealtimeSessionKind,
-        hintPayload: ResolvedASRHintPayload
+        hintPayload: ResolvedASRHintPayload,
+        serverVADMode: MeetingServerVADMode = MeetingServerVADMode.stored()
     ) -> [String: Any] {
         var transcriptionPayload: [String: Any] = [:]
         if let transcriptionModel = kind.transcriptionModel {
@@ -45,8 +46,8 @@ enum AliyunQwenRealtimePayloadSupport {
                 "input_audio_transcription": transcriptionPayload,
                 "turn_detection": [
                     "type": "server_vad",
-                    "threshold": 0.0,
-                    "silence_duration_ms": 400
+                    "threshold": serverVADMode.qwenThreshold,
+                    "silence_duration_ms": serverVADMode.qwenSilenceDurationMilliseconds
                 ]
             ]
         ]

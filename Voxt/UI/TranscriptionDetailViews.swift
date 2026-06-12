@@ -219,7 +219,7 @@ struct TranscriptionDetailContentView: View {
                     detailSection(title: localized("Transcript Segments")) {
                         ForEach(transcriptSegments) { segment in
                             detailLine(
-                                label: "\(TranscriptFormatter.timestampString(for: segment.startSeconds)) · \(segment.speaker.displayTitle)",
+                                label: "\(TranscriptFormatter.timestampString(for: segment.startSeconds)) · \(segment.displaySpeakerTitle)",
                                 value: segment.text
                             )
                         }

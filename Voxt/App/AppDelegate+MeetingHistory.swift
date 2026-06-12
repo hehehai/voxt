@@ -36,6 +36,9 @@ extension AppDelegate {
             },
             summaryChatPersistence: { @MainActor entryID, messages in
                 self.persistMeetingSummaryChatMessages(messages, for: entryID)
+            },
+            transcriptSegmentsPersistence: { @MainActor entryID, segments in
+                self.historyStore.updateTranscriptSegments(segments, for: entryID)
             }
         )
     }

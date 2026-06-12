@@ -10,6 +10,27 @@ struct BufferedMeetingChunk {
     let sampleRate: Double
     let samples: [Float]
     let isFinal: Bool
+    let preventsAdjacentMerge: Bool
+
+    init(
+        segmentID: UUID,
+        speaker: MeetingSpeaker,
+        startSeconds: TimeInterval,
+        endSeconds: TimeInterval,
+        sampleRate: Double,
+        samples: [Float],
+        isFinal: Bool,
+        preventsAdjacentMerge: Bool = false
+    ) {
+        self.segmentID = segmentID
+        self.speaker = speaker
+        self.startSeconds = startSeconds
+        self.endSeconds = endSeconds
+        self.sampleRate = sampleRate
+        self.samples = samples
+        self.isFinal = isFinal
+        self.preventsAdjacentMerge = preventsAdjacentMerge
+    }
 }
 
 enum MeetingChunkingProfile: Equatable, Sendable {
@@ -23,6 +44,120 @@ enum MeetingChunkingProfile: Equatable, Sendable {
         let partialEmitIntervalSeconds: TimeInterval?
     }
 
+}
+
+enum MeetingChunkingMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    case automatic
+    case quality
+    case realtime
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .automatic:
+            return AppLocalization.localizedString("Auto")
+        case .quality:
+            return AppLocalization.localizedString("Quality")
+        case .realtime:
+            return AppLocalization.localizedString("Realtime")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .automatic:
+            return AppLocalization.localizedString("Use the best available chunking mode for the selected meeting model.")
+        case .quality:
+            return AppLocalization.localizedString("Prefer longer chunks for better context and smoother transcripts.")
+        case .realtime:
+            return AppLocalization.localizedString("Prefer shorter chunks for lower latency.")
+        }
+    }
+
+    static func stored(in defaults: UserDefaults = .standard) -> MeetingChunkingMode {
+        let rawValue = defaults.string(forKey: AppPreferenceKey.meetingChunkingMode) ?? ""
+        return MeetingChunkingMode(rawValue: rawValue) ?? .quality
+    }
+
+    func resolvedProfile(automaticProfile: MeetingChunkingProfile) -> MeetingChunkingProfile {
+        switch self {
+        case .automatic:
+            return automaticProfile
+        case .quality:
+            return .quality
+        case .realtime:
+            return .realtime
+        }
+    }
+}
+
+enum MeetingServerVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    case automatic
+    case responsive
+    case balanced
+    case stable
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .automatic:
+            return AppLocalization.localizedString("Auto")
+        case .responsive:
+            return AppLocalization.localizedString("Responsive")
+        case .balanced:
+            return AppLocalization.localizedString("Balanced")
+        case .stable:
+            return AppLocalization.localizedString("Stable")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .automatic:
+            return AppLocalization.localizedString("Use the provider default tuned for meeting transcripts.")
+        case .responsive:
+            return AppLocalization.localizedString("Split sooner for lower latency, with a higher risk of fragmented sentences.")
+        case .balanced:
+            return AppLocalization.localizedString("Use moderate silence detection for smoother live meeting text.")
+        case .stable:
+            return AppLocalization.localizedString("Wait longer before splitting to favor coherent sentences.")
+        }
+    }
+
+    var qwenThreshold: Double {
+        switch self {
+        case .automatic, .balanced:
+            return 0.35
+        case .responsive:
+            return 0.18
+        case .stable:
+            return 0.45
+        }
+    }
+
+    var qwenSilenceDurationMilliseconds: Int {
+        switch self {
+        case .automatic, .balanced:
+            return 800
+        case .responsive:
+            return 500
+        case .stable:
+            return 1_100
+        }
+    }
+
+    static func stored(in defaults: UserDefaults = .standard) -> MeetingServerVADMode {
+        let rawValue = defaults.string(forKey: AppPreferenceKey.meetingServerVADMode) ?? ""
+        return MeetingServerVADMode(rawValue: rawValue) ?? .automatic
+    }
+}
+
+enum MeetingFinalTranscriptOptimization {
+    static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled) as? Bool ?? true
+    }
 }
 
 actor MeetingChunkAccumulator {

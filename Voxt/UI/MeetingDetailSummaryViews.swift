@@ -31,7 +31,9 @@ struct MeetingDetailSummarySidebar: View {
                     .foregroundStyle(.primary)
 
                 Text(
-                    viewModel.summaryState == .loading
+                    viewModel.isFinalizing
+                        ? AppLocalization.localizedString("Preparing saved meeting…")
+                        : viewModel.summaryState == .loading
                         ? AppLocalization.localizedString("Generating meeting summary…")
                         : viewModel.summary != nil
                         ? AppLocalization.localizedString("Saved summary")
@@ -278,7 +280,13 @@ struct MeetingDetailSummarySidebar: View {
             }
 
         case .idle:
-            if viewModel.mode == .live {
+            if viewModel.isFinalizing {
+                summaryEmptyState(
+                    icon: "clock.arrow.circlepath",
+                    title: String(localized: "Preparing Summary"),
+                    message: AppLocalization.localizedString("Voxt will start summary generation after the final meeting record is saved.")
+                )
+            } else if viewModel.mode == .live {
                 summaryEmptyState(
                     icon: "clock.arrow.circlepath",
                     title: String(localized: "Waiting For Saved Record"),

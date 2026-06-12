@@ -127,8 +127,8 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertEqual(transcription["model"] as? String, "qwen3-asr-flash-realtime")
         XCTAssertEqual(transcription["language"] as? String, "zh")
         XCTAssertEqual(turnDetection["type"] as? String, "server_vad")
-        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.0)
-        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, 400)
+        XCTAssertEqual(turnDetection["threshold"] as? Double, MeetingServerVADMode.automatic.qwenThreshold)
+        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, MeetingServerVADMode.automatic.qwenSilenceDurationMilliseconds)
     }
 
     func testAliyunOmniRealtimeDoesNotRequireManualCommitWhenUsingServerVAD() {

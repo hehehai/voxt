@@ -10,7 +10,11 @@ struct MeetingSessionResult {
     let archivedAudioURL: URL?
 
     var persistedSegments: [MeetingTranscriptSegment] {
-        MeetingTranscriptFormatter.mergedSegmentsForPersistence(
+        let primarySegments = MeetingTranscriptFormatter.meaningfulSegments(for: segments)
+        if !primarySegments.isEmpty {
+            return primarySegments
+        }
+        return MeetingTranscriptFormatter.mergedSegmentsForPersistence(
             primarySegments: segments,
             fallbackSegments: visibleSnapshotSegments
         )
@@ -103,6 +107,7 @@ final class MeetingOverlayState: ObservableObject {
     @Published var isPresented = false
     @Published var isRecording = false
     @Published var isModelInitializing = false
+    @Published var isFinalizing = false
     @Published var isPaused = false
     @Published var isCollapsed = false
     @Published var audioLevel: Float = 0
@@ -120,6 +125,7 @@ final class MeetingOverlayState: ObservableObject {
         isPresented = false
         isRecording = false
         isModelInitializing = false
+        isFinalizing = false
         isPaused = false
         isCollapsed = false
         audioLevel = 0

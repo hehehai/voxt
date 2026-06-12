@@ -13,9 +13,11 @@ struct MeetingTranscriptScrollView: View {
     let onCopySegment: (MeetingTranscriptSegment) -> Void
 
     @State private var bottomVisible = true
+    @State private var autoScrollPinnedToBottom = true
     @State private var hasUnreadAtBottom = false
     @State private var copiedSegmentID: UUID?
     @State private var copyFeedbackToken = UUID()
+    @State private var lastScrollContentSignature = ""
 
     var body: some View {
         GeometryReader { outerProxy in
@@ -69,28 +71,25 @@ struct MeetingTranscriptScrollView: View {
                     .onPreferenceChange(MeetingBottomVisibilityPreferenceKey.self) { isVisible in
                         bottomVisible = isVisible
                         if isVisible {
+                            autoScrollPinnedToBottom = true
                             hasUnreadAtBottom = false
+                        } else if scrollContentSignature == lastScrollContentSignature {
+                            autoScrollPinnedToBottom = false
                         }
                     }
-                    .onChange(of: segments.count) { _, _ in
-                        if bottomVisible {
-                            withAnimation(.easeOut(duration: 0.18)) {
-                                proxy.scrollTo("meeting-bottom-anchor", anchor: .bottom)
-                            }
-                        } else {
-                            hasUnreadAtBottom = true
-                        }
+                    .onChange(of: scrollContentSignature) { oldValue, newValue in
+                        guard oldValue != newValue else { return }
+                        handleTranscriptContentChange(proxy: proxy)
                     }
                     .onAppear {
-                        proxy.scrollTo("meeting-bottom-anchor", anchor: .bottom)
+                        lastScrollContentSignature = scrollContentSignature
+                        scrollToBottom(proxy: proxy, animated: false)
                     }
 
                     if hasUnreadAtBottom {
                         Button {
                             hasUnreadAtBottom = false
-                            withAnimation(.easeOut(duration: 0.18)) {
-                                proxy.scrollTo("meeting-bottom-anchor", anchor: .bottom)
-                            }
+                            scrollToBottom(proxy: proxy, animated: true)
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.down")
@@ -118,6 +117,44 @@ struct MeetingTranscriptScrollView: View {
             }
         }
     }
+
+    private var scrollContentSignature: String {
+        segments.map { segment in
+            [
+                segment.id.uuidString,
+                segment.text,
+                segment.translatedText ?? "",
+                segment.isTranslationPending ? "1" : "0"
+            ].joined(separator: "\u{1F}")
+        }
+        .joined(separator: "\u{1E}")
+    }
+
+    private func handleTranscriptContentChange(proxy: ScrollViewProxy) {
+        defer {
+            lastScrollContentSignature = scrollContentSignature
+        }
+
+        guard lastScrollContentSignature != scrollContentSignature else { return }
+        if bottomVisible || autoScrollPinnedToBottom {
+            autoScrollPinnedToBottom = true
+            scrollToBottom(proxy: proxy, animated: true)
+        } else {
+            hasUnreadAtBottom = true
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    proxy.scrollTo("meeting-bottom-anchor", anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo("meeting-bottom-anchor", anchor: .bottom)
+            }
+        }
+    }
 }
 
 private struct MeetingTranscriptRow: View {
@@ -134,7 +171,7 @@ private struct MeetingTranscriptRow: View {
                             .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.48))
 
-                        Text(segment.speaker.displayTitle)
+                        Text(segment.displaySpeakerTitle)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(segment.speaker == .me ? Color(red: 0.55, green: 0.78, blue: 1.0) : Color(red: 0.56, green: 0.93, blue: 0.72))
                     }

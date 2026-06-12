@@ -84,6 +84,65 @@ extension FeatureSettingsView {
                         set: { featureSettings.meeting.summaryAutoGenerate = $0 }
                     )
                 )
+
+                meetingAdvancedSettingsSection
+            }
+        }
+    }
+
+    var meetingAdvancedSettingsSection: some View {
+        GeneralAdvancedCard(isExpanded: $isMeetingAdvancedSettingsExpanded) {
+            FeatureSettingSection(title: "", detail: "") {
+                FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Segmentation Mode"),
+                    detail: meetingChunkingMode.wrappedValue.detail
+                ) {
+                    SettingsMenuPicker(
+                        selection: meetingChunkingMode,
+                        options: MeetingChunkingMode.allCases.map {
+                            SettingsMenuOption(value: $0, title: $0.title)
+                        },
+                        selectedTitle: meetingChunkingMode.wrappedValue.title,
+                        width: 220
+                    )
+                }
+
+                FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Server VAD"),
+                    detail: meetingServerVADMode.wrappedValue.detail
+                ) {
+                    SettingsMenuPicker(
+                        selection: meetingServerVADMode,
+                        options: MeetingServerVADMode.allCases.map {
+                            SettingsMenuOption(value: $0, title: $0.title)
+                        },
+                        selectedTitle: meetingServerVADMode.wrappedValue.title,
+                        width: 220
+                    )
+                }
+
+                FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Speaker Recognition"),
+                    detail: meetingSpeakerDiarizationSensitivity.wrappedValue.detail
+                ) {
+                    SettingsMenuPicker(
+                        selection: meetingSpeakerDiarizationSensitivity,
+                        options: MeetingSpeakerDiarizationSensitivity.allCases.map {
+                            SettingsMenuOption(value: $0, title: $0.title)
+                        },
+                        selectedTitle: meetingSpeakerDiarizationSensitivity.wrappedValue.title,
+                        width: 220
+                    )
+                }
+
+                FeatureToggleRow(
+                    title: featureSettingsLocalized("Speaker Analysis Debug Logs"),
+                    detail: featureSettingsLocalized("Log speaker analysis counts for debugging."),
+                    isOn: binding(
+                        get: { featureSettings.meeting.speakerDiarizationDebugEnabled },
+                        set: { featureSettings.meeting.speakerDiarizationDebugEnabled = $0 }
+                    )
+                )
             }
         }
     }
@@ -120,6 +179,42 @@ extension FeatureSettingsView {
             },
             set: { language in
                 featureSettings.meeting.realtimeTargetLanguageRawValue = language.rawValue
+                saveFeatureSettings()
+            }
+        )
+    }
+
+    var meetingChunkingMode: Binding<MeetingChunkingMode> {
+        Binding(
+            get: {
+                featureSettings.meeting.chunkingMode
+            },
+            set: { mode in
+                featureSettings.meeting.chunkingModeRawValue = mode.rawValue
+                saveFeatureSettings()
+            }
+        )
+    }
+
+    var meetingServerVADMode: Binding<MeetingServerVADMode> {
+        Binding(
+            get: {
+                featureSettings.meeting.serverVADMode
+            },
+            set: { mode in
+                featureSettings.meeting.serverVADModeRawValue = mode.rawValue
+                saveFeatureSettings()
+            }
+        )
+    }
+
+    var meetingSpeakerDiarizationSensitivity: Binding<MeetingSpeakerDiarizationSensitivity> {
+        Binding(
+            get: {
+                featureSettings.meeting.speakerDiarizationSensitivity
+            },
+            set: { sensitivity in
+                featureSettings.meeting.speakerDiarizationSensitivityRawValue = sensitivity.rawValue
                 saveFeatureSettings()
             }
         )

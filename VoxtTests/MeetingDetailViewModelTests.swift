@@ -59,7 +59,8 @@ final class MeetingDetailViewModelTests: XCTestCase {
                 return nil
             },
             summaryChatAnswerer: { _, _, _, _, _ in "" },
-            summaryChatPersistence: { _, _ in nil }
+            summaryChatPersistence: { _, _ in nil },
+            transcriptSegmentsPersistence: { _, _ in nil }
         )
 
         viewModel.handleViewAppear()
@@ -134,7 +135,8 @@ final class MeetingDetailViewModelTests: XCTestCase {
             },
             summaryPersistence: { _, _ in nil },
             summaryChatAnswerer: { _, _, _, _, _ in "" },
-            summaryChatPersistence: { _, _ in nil }
+            summaryChatPersistence: { _, _ in nil },
+            transcriptSegmentsPersistence: { _, _ in nil }
         )
 
         viewModel.handleViewAppear()
@@ -217,7 +219,8 @@ final class MeetingDetailViewModelTests: XCTestCase {
                 persisted.fulfill()
                 XCTAssertLessThanOrEqual(messages.count, 2)
                 return nil
-            }
+            },
+            transcriptSegmentsPersistence: { _, _ in nil }
         )
 
         viewModel.summaryChatDraft = "Who owns the release notes?"
@@ -276,7 +279,8 @@ final class MeetingDetailViewModelTests: XCTestCase {
             },
             summaryPersistence: { _, _ in nil },
             summaryChatAnswerer: { _, _, _, _, _ in "" },
-            summaryChatPersistence: { _, _ in nil }
+            summaryChatPersistence: { _, _ in nil },
+            transcriptSegmentsPersistence: { _, _ in nil }
         )
 
         XCTAssertFalse(viewModel.summaryAutoGenerate)
@@ -361,6 +365,207 @@ final class MeetingDetailViewModelTests: XCTestCase {
         }
     }
 
+    func testRenameSpeakerUpdatesMatchingSegmentsAndPersists() {
+        let entryID = UUID()
+        var persistedSegments: [MeetingTranscriptSegment]?
+        let viewModel = MeetingDetailViewModel(
+            title: "Meeting Details",
+            subtitle: "Today",
+            historyEntryID: entryID,
+            initialSummary: nil,
+            initialSummaryChatMessages: [],
+            initialSummarySettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Default summary prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            summaryModelOptions: [
+                MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")
+            ],
+            summarySettingsProvider: {
+                MeetingSummarySettingsSnapshot(
+                    autoGenerate: false,
+                    promptTemplate: "Default summary prompt",
+                    modelSelectionID: "custom-llm:test"
+                )
+            },
+            summaryModelOptionsProvider: {
+                [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")]
+            },
+            segments: [
+                MeetingTranscriptSegment(
+                    speaker: .them,
+                    speakerID: "S1",
+                    speakerDisplayName: "Speaker 1",
+                    audioSource: .systemAudio,
+                    startSeconds: 0,
+                    endSeconds: 1,
+                    text: "hello"
+                ),
+                MeetingTranscriptSegment(
+                    speaker: .them,
+                    speakerID: "S2",
+                    speakerDisplayName: "Speaker 2",
+                    audioSource: .systemAudio,
+                    startSeconds: 1,
+                    endSeconds: 2,
+                    text: "world"
+                )
+            ],
+            audioURL: nil,
+            translationHandler: { text, _ in text },
+            summaryStatusProvider: { _ in
+                MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
+            },
+            summaryGenerator: { _, settings in
+                MeetingSummarySnapshot(
+                    title: "Generated",
+                    body: "Body",
+                    todoItems: [],
+                    generatedAt: Date(),
+                    settingsSnapshot: settings
+                )
+            },
+            summaryPersistence: { _, _ in nil },
+            summaryChatAnswerer: { _, _, _, _, _ in "" },
+            summaryChatPersistence: { _, _ in nil },
+            transcriptSegmentsPersistence: { _, segments in
+                persistedSegments = segments
+                return nil
+            }
+        )
+
+        viewModel.renameSpeaker(identityKey: "systemAudio:S1", displayName: "Alice")
+
+        XCTAssertEqual(viewModel.segments[0].speakerDisplayName, "Alice")
+        XCTAssertEqual(viewModel.segments[1].speakerDisplayName, "Speaker 2")
+        XCTAssertEqual(persistedSegments?.first?.speakerDisplayName, "Alice")
+    }
+
+    func testRenameSpeakerAcceptsLegacyDisplayIdentityKey() {
+        let entryID = UUID()
+        var persistedSegments: [MeetingTranscriptSegment]?
+        let viewModel = MeetingDetailViewModel(
+            title: "Meeting Details",
+            subtitle: "Today",
+            historyEntryID: entryID,
+            initialSummary: nil,
+            initialSummaryChatMessages: [],
+            initialSummarySettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Default summary prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            summaryModelOptions: [
+                MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")
+            ],
+            summarySettingsProvider: {
+                MeetingSummarySettingsSnapshot(
+                    autoGenerate: false,
+                    promptTemplate: "Default summary prompt",
+                    modelSelectionID: "custom-llm:test"
+                )
+            },
+            summaryModelOptionsProvider: {
+                [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")]
+            },
+            segments: [
+                MeetingTranscriptSegment(
+                    speaker: .them,
+                    speakerID: "S1",
+                    speakerDisplayName: "Speaker 1",
+                    audioSource: .systemAudio,
+                    startSeconds: 0,
+                    endSeconds: 1,
+                    text: "hello"
+                ),
+                MeetingTranscriptSegment(
+                    speaker: .them,
+                    speakerID: "S2",
+                    speakerDisplayName: "Speaker 2",
+                    audioSource: .systemAudio,
+                    startSeconds: 1,
+                    endSeconds: 2,
+                    text: "world"
+                )
+            ],
+            audioURL: nil,
+            translationHandler: { text, _ in text },
+            summaryStatusProvider: { _ in
+                MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
+            },
+            summaryGenerator: { _, settings in
+                MeetingSummarySnapshot(
+                    title: "Generated",
+                    body: "Body",
+                    todoItems: [],
+                    generatedAt: Date(),
+                    settingsSnapshot: settings
+                )
+            },
+            summaryPersistence: { _, _ in nil },
+            summaryChatAnswerer: { _, _, _, _, _ in "" },
+            summaryChatPersistence: { _, _ in nil },
+            transcriptSegmentsPersistence: { _, segments in
+                persistedSegments = segments
+                return nil
+            }
+        )
+
+        viewModel.renameSpeaker(identityKey: "display:Speaker 1", displayName: "Alice")
+
+        XCTAssertEqual(viewModel.segments[0].speakerDisplayName, "Alice")
+        XCTAssertEqual(viewModel.segments[1].speakerDisplayName, "Speaker 2")
+        XCTAssertEqual(persistedSegments?.first?.speakerDisplayName, "Alice")
+    }
+
+    func testLiveViewModelTracksFinalizingState() async {
+        let liveState = MeetingOverlayState()
+        liveState.isPresented = true
+        liveState.isRecording = true
+        liveState.segments = [
+            MeetingTranscriptSegment(
+                speaker: .them,
+                startSeconds: 0,
+                endSeconds: 1,
+                text: "Live transcript"
+            )
+        ]
+
+        let viewModel = MeetingDetailViewModel(
+            liveState: liveState,
+            initialSummarySettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: true,
+                promptTemplate: "Default summary prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            summaryModelOptions: [
+                MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")
+            ],
+            summarySettingsProvider: {
+                MeetingSummarySettingsSnapshot(
+                    autoGenerate: true,
+                    promptTemplate: "Default summary prompt",
+                    modelSelectionID: "custom-llm:test"
+                )
+            },
+            summaryModelOptionsProvider: {
+                [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")]
+            },
+            translationHandler: { text, _ in text }
+        )
+
+        XCTAssertFalse(viewModel.isFinalizing)
+        XCTAssertEqual(viewModel.subtitle, String(localized: "Meeting In Progress"))
+
+        liveState.isRecording = false
+        liveState.isFinalizing = true
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertTrue(viewModel.isFinalizing)
+        XCTAssertEqual(viewModel.subtitle, String(localized: "Preparing final meeting details"))
+    }
+
     private func makeHistoryViewModel(
         initialSettings: MeetingSummarySettingsSnapshot,
         modelOptions: [MeetingSummaryModelOption]
@@ -392,7 +597,8 @@ final class MeetingDetailViewModelTests: XCTestCase {
             },
             summaryPersistence: { _, _ in nil },
             summaryChatAnswerer: { _, _, _, _, _ in "" },
-            summaryChatPersistence: { _, _ in nil }
+            summaryChatPersistence: { _, _ in nil },
+            transcriptSegmentsPersistence: { _, _ in nil }
         )
     }
 

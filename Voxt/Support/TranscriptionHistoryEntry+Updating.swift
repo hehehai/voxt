@@ -47,6 +47,16 @@ extension TranscriptionHistoryEntry {
         copy(transcriptSummaryChatMessages: .set(summaryChatMessages))
     }
 
+    func updatingTranscriptSegments(
+        _ transcriptSegments: [TranscriptSegment],
+        text: String
+    ) -> TranscriptionHistoryEntry {
+        copy(
+            text: text,
+            transcriptSegments: .set(transcriptSegments)
+        )
+    }
+
     func updatingTranscriptionChatMessages(_ transcriptionChatMessages: [TranscriptSummaryChatMessage]) -> TranscriptionHistoryEntry {
         copy(transcriptionChatMessages: .set(transcriptionChatMessages))
     }
@@ -94,6 +104,7 @@ extension TranscriptionHistoryEntry {
         audioRelativePath: HistoryEntryUpdate<String?> = .keep,
         whisperWordTimings: HistoryEntryUpdate<[WhisperHistoryWordTiming]?> = .keep,
         senseVoiceMetadata: HistoryEntryUpdate<SenseVoiceTranscriptMetadata?> = .keep,
+        transcriptSegments: HistoryEntryUpdate<[TranscriptSegment]?> = .keep,
         transcriptSummary: HistoryEntryUpdate<TranscriptSummarySnapshot?> = .keep,
         transcriptSummaryChatMessages: HistoryEntryUpdate<[TranscriptSummaryChatMessage]?> = .keep,
         transcriptionChatMessages: HistoryEntryUpdate<[TranscriptSummaryChatMessage]?> = .keep,
@@ -134,7 +145,7 @@ extension TranscriptionHistoryEntry {
             audioRelativePath: audioRelativePath.resolved(current: self.audioRelativePath),
             whisperWordTimings: whisperWordTimings.resolved(current: self.whisperWordTimings),
             senseVoiceMetadata: senseVoiceMetadata.resolved(current: self.senseVoiceMetadata),
-            transcriptSegments: transcriptSegments,
+            transcriptSegments: transcriptSegments.resolved(current: self.transcriptSegments),
             transcriptAudioRelativePath: transcriptAudioRelativePath,
             transcriptSummary: transcriptSummary.resolved(current: self.transcriptSummary),
             transcriptSummaryChatMessages: transcriptSummaryChatMessages.resolved(

@@ -32,6 +32,18 @@ struct MeetingASREngineContext: Equatable {
     var chunkingProfile: MeetingChunkingProfile {
         resolvedMode.chunkingProfile
     }
+
+    func resolvingChunkingMode(_ mode: MeetingChunkingMode) -> MeetingASREngineContext {
+        guard case .chunk(let automaticProfile) = resolvedMode else {
+            return self
+        }
+        return MeetingASREngineContext(
+            engine: engine,
+            historyModelDescription: historyModelDescription,
+            resolvedMode: .chunk(profile: mode.resolvedProfile(automaticProfile: automaticProfile)),
+            needsModelInitialization: needsModelInitialization
+        )
+    }
 }
 
 enum MeetingASRSupport {

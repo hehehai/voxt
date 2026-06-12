@@ -109,6 +109,7 @@ extension AppDelegate {
     func finishMeetingSessionAndOpenDetail() {
         guard meetingSessionCoordinator.isActive else { return }
         pendingMeetingSessionCompletionDisposition = .saveAndOpenDetail
+        showLiveMeetingDetailWindow()
         stopMeetingSession(closeOverlayImmediately: true, closeLiveDetailImmediately: false)
     }
 

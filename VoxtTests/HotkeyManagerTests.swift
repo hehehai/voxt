@@ -25,6 +25,11 @@ final class HotkeyManagerTests: XCTestCase {
         AppPreferenceKey.rewriteHotkeyModifiers,
         AppPreferenceKey.rewriteHotkeySidedModifiers,
         AppPreferenceKey.rewriteHotkeyActivationMode,
+        AppPreferenceKey.meetingHotkeyInputType,
+        AppPreferenceKey.meetingHotkeyKeyCode,
+        AppPreferenceKey.meetingHotkeyMouseButtonNumber,
+        AppPreferenceKey.meetingHotkeyModifiers,
+        AppPreferenceKey.meetingHotkeySidedModifiers,
         AppPreferenceKey.customPasteHotkeyEnabled,
         AppPreferenceKey.customPasteHotkeyInputType,
         AppPreferenceKey.customPasteHotkeyKeyCode,
@@ -456,6 +461,43 @@ final class HotkeyManagerTests: XCTestCase {
 
         XCTAssertEqual(transcriptionDownCount, 0)
         XCTAssertEqual(translationDownCount, 1)
+    }
+
+    func testDefaultMeetingModifierTapDoesNotFallBackToFnTranscriptionOnRelease() async {
+        let manager = makeManager()
+        var transcriptionDownCount = 0
+        var meetingDownCount = 0
+        manager.onKeyDown = { transcriptionDownCount += 1 }
+        let callbackExpectation = expectation(description: "meeting callback")
+        manager.onMeetingKeyDown = {
+            meetingDownCount += 1
+            callbackExpectation.fulfill()
+        }
+
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Function),
+            flags: .maskSecondaryFn
+        )
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Option),
+            flags: combinedFlags(.maskAlternate, .maskSecondaryFn)
+        )
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Option),
+            flags: .maskSecondaryFn
+        )
+        manager.testingHandleEvent(
+            type: .flagsChanged,
+            keyCode: UInt16(kVK_Function),
+            flags: []
+        )
+
+        await fulfillment(of: [callbackExpectation], timeout: 1.0)
+        XCTAssertEqual(meetingDownCount, 1)
+        XCTAssertEqual(transcriptionDownCount, 0)
     }
 
     func testTranslationTapCallbackCanReenterEventHandlingWithoutExclusivityViolation() async {

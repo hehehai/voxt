@@ -864,6 +864,19 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     @discardableResult
+    func updateTranscriptSegments(_ segments: [TranscriptSegment], for entryID: UUID) -> TranscriptionHistoryEntry? {
+        guard let existingEntry = entry(id: entryID) else { return nil }
+        let text = TranscriptFormatter.joinedText(for: segments)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let updatedEntry = existingEntry.updatingTranscriptSegments(segments, text: text)
+        cacheUpdatedEntry(updatedEntry)
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        persistEntry(updatedEntry)
+        return updatedEntry
+    }
+
+    @discardableResult
     func updateTranscriptionChatMessages(_ messages: [TranscriptSummaryChatMessage], for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let existingEntry = entry(id: entryID) else { return nil }
         let updatedEntry = existingEntry.updatingTranscriptionChatMessages(messages)

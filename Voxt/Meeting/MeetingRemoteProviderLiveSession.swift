@@ -78,6 +78,7 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
     private var transcriptState = MeetingLiveTranscriptState()
     private var lastFinalizedSegmentEndSeconds: TimeInterval?
     private let timelineOffsetSeconds: TimeInterval
+    let serverVADMode: MeetingServerVADMode
     private var hasLoggedFirstAudioPacket = false
     private var hasLoggedFirstServerPacket = false
     private var keepaliveTask: Task<Void, Never>?
@@ -101,6 +102,7 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
         self.speechThreshold = speechThreshold
         self.timelineOffsetSeconds = timelineOffsetSeconds
         self.policy = policy
+        self.serverVADMode = MeetingServerVADMode.stored()
     }
 
     func start(
@@ -934,6 +936,7 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
 private final class AliyunQwenMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession {
     private let endpoint: String
     private let token: String
+    private let sessionKind: AliyunQwenRealtimeSessionKind
 
     init(
         speaker: MeetingSpeaker,
@@ -947,6 +950,7 @@ private final class AliyunQwenMeetingRemoteLiveSession: BaseMeetingRemoteLiveSes
             : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
         self.token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.endpoint = MeetingAliyunRemoteSupport.resolvedQwenRealtimeEndpoint(configuration.endpoint, model: model)
+        self.sessionKind = RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: model) ?? .qwenASR
         super.init(
             speaker: speaker,
             configuration: configuration,
@@ -1020,26 +1024,11 @@ private final class AliyunQwenMeetingRemoteLiveSession: BaseMeetingRemoteLiveSes
     }
 
     private func sendSessionUpdate(on ws: URLSessionWebSocketTask) async throws {
-        var transcriptionPayload: [String: Any] = [:]
-        if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !language.isEmpty {
-            transcriptionPayload["language"] = language
-        }
-        let payload: [String: Any] = [
-            "event_id": UUID().uuidString.lowercased(),
-            "type": "session.update",
-            "session": [
-                "modalities": ["text"],
-                "input_audio_format": "pcm",
-                "sample_rate": 16000,
-                "input_audio_transcription": transcriptionPayload,
-                "turn_detection": [
-                    "type": "server_vad",
-                    "threshold": 0.0,
-                    "silence_duration_ms": 400
-                ]
-            ]
-        ]
+        let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
+            kind: sessionKind,
+            hintPayload: hintPayload,
+            serverVADMode: serverVADMode
+        )
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let text = String(data: data, encoding: .utf8) else {
             throw NSError(domain: "Voxt.Meeting", code: -34, userInfo: [NSLocalizedDescriptionKey: "Failed to encode Aliyun Qwen session update."])
