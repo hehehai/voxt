@@ -67,9 +67,7 @@ enum AppBehaviorController {
     @MainActor
     static func bringStandardWindowToFront(_ window: NSWindow?) {
         guard let window else { return }
-        if window.isMiniaturized {
-            window.deminiaturize(nil)
-        }
+        prepareWindowForActivation(window)
         activateCurrentApp()
         window.makeKeyAndOrderFront(nil)
     }
@@ -77,10 +75,28 @@ enum AppBehaviorController {
     @MainActor
     static func bringUserInvokedWindowToFront(_ window: NSWindow?) {
         guard let window else { return }
+        prepareWindowForActivation(window)
+        activateCurrentApp(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        reassertUserInvokedWindowActivation(window)
+    }
+
+    @MainActor
+    private static func prepareWindowForActivation(_ window: NSWindow) {
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
-        activateCurrentApp(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+    }
+
+    private static func reassertUserInvokedWindowActivation(_ window: NSWindow) {
+        for delay in [0.15, 0.35] {
+            Task { @MainActor [weak window] in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard let window, window.isVisible else { return }
+                prepareWindowForActivation(window)
+                activateCurrentApp(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 }
