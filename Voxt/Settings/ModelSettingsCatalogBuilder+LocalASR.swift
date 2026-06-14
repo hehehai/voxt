@@ -55,7 +55,7 @@ extension ModelCatalogBuilder {
                 displayTags: decoration.displayTags,
                 statusText: installSnapshot.statusText,
                 usageLocations: decoration.usageLocations,
-                badgeText: installSnapshot.badgeText,
+                badgeText: installSnapshot.badgeText ?? ModelCatalogBadgeSupport.recommendedBadgeText(forMLXRepo: repo),
                 primaryAction: catalogPrimaryAction(installSnapshot),
                 secondaryActions: catalogSecondaryActions(installSnapshot)
             )

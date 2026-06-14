@@ -285,6 +285,75 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
     }
 
+    func testCatalogShowsRecommendedBadgesForTargetedSingleEntriesAndProviders() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(
+                transcriptionASR: .mlx("mlx-community/SenseVoiceSmall"),
+                translationModel: .remoteLLM(.deepseek)
+            )
+        )
+
+        let senseVoice = try XCTUnwrap(
+            builder.asrEntries().first(where: { $0.id == "mlx:mlx-community/SenseVoiceSmall" })
+        )
+        let doubaoASR = try XCTUnwrap(
+            builder.asrEntries().first(where: { $0.id == "remote-asr:\(RemoteASRProvider.doubaoASR.rawValue)" })
+        )
+        let stepFunASR = try XCTUnwrap(
+            builder.asrEntries().first(where: { $0.id == "remote-asr:\(RemoteASRProvider.stepFunASR.rawValue)" })
+        )
+        let deepSeek = try XCTUnwrap(
+            builder.llmEntries().first(where: { $0.id == "remote-llm:\(RemoteLLMProvider.deepseek.rawValue)" })
+        )
+        let ollama = try XCTUnwrap(
+            builder.llmEntries().first(where: { $0.id == "remote-llm:\(RemoteLLMProvider.ollama.rawValue)" })
+        )
+        let omlx = try XCTUnwrap(
+            builder.llmEntries().first(where: { $0.id == "remote-llm:\(RemoteLLMProvider.omlx.rawValue)" })
+        )
+        let aliyun = try XCTUnwrap(
+            builder.llmEntries().first(where: { $0.id == "remote-llm:\(RemoteLLMProvider.aliyunBailian.rawValue)" })
+        )
+
+        let recommended = AppLocalization.localizedString("Recommended")
+        XCTAssertEqual(senseVoice.badgeText, recommended)
+        XCTAssertEqual(doubaoASR.badgeText, recommended)
+        XCTAssertEqual(stepFunASR.badgeText, recommended)
+        XCTAssertEqual(deepSeek.badgeText, recommended)
+        XCTAssertEqual(ollama.badgeText, recommended)
+        XCTAssertEqual(omlx.badgeText, recommended)
+        XCTAssertEqual(aliyun.badgeText, recommended)
+    }
+
+    func testCatalogShowsRecommendedBadgeForQwenASRAndGemmaGroups() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(
+                transcriptionASR: .mlx("mlx-community/Qwen3-ASR-0.6B-4bit"),
+                translationModel: .localLLM("mlx-community/gemma-2-2b-it-4bit")
+            )
+        )
+
+        let asrGroups = LocalModelSeriesGrouping.modelCatalogItems(from: builder.asrEntries())
+        let llmGroups = LocalModelSeriesGrouping.modelCatalogItems(from: builder.llmEntries())
+        let recommended = AppLocalization.localizedString("Recommended")
+
+        let qwenGroup = try XCTUnwrap(
+            asrGroups.compactMap { item -> ModelCatalogGroupSection? in
+                guard case .group(let group) = item, group.title == "Qwen3-ASR" else { return nil }
+                return group
+            }.first
+        )
+        let gemmaGroup = try XCTUnwrap(
+            llmGroups.compactMap { item -> ModelCatalogGroupSection? in
+                guard case .group(let group) = item, group.title == "Gemma" else { return nil }
+                return group
+            }.first
+        )
+
+        XCTAssertEqual(qwenGroup.badgeText, recommended)
+        XCTAssertEqual(gemmaGroup.badgeText, recommended)
+    }
+
     private func makeBuilder(
         featureSettings: FeatureSettings,
         remoteASRConfigurations: [String: RemoteProviderConfiguration] = [:],

@@ -8,6 +8,7 @@ private func localized(_ key: String) -> String {
 enum HistoryFilterTab: String, CaseIterable, Identifiable {
     case transcription
     case translation
+    case transcript
     case rewrite
     case note
 
@@ -19,6 +20,8 @@ enum HistoryFilterTab: String, CaseIterable, Identifiable {
             return localized("Transcription")
         case .translation:
             return localized("Translation")
+        case .transcript:
+            return localized("Meeting")
         case .rewrite:
             return localized("Rewrite")
         case .note:
@@ -32,6 +35,8 @@ enum HistoryFilterTab: String, CaseIterable, Identifiable {
             return entry.kind == .normal
         case .translation:
             return entry.kind == .translation
+        case .transcript:
+            return entry.kind == .transcript
         case .rewrite:
             return entry.kind == .rewrite
         case .note:

@@ -1,0 +1,185 @@
+import SwiftUI
+
+extension FeatureSettingsView {
+    var meetingContent: some View {
+        featurePage(
+            title: featureSettingsLocalized("Meeting"),
+            subtitle: featureSettingsLocalized("Capture microphone and system audio into a speaker-labelled transcript."),
+            titleBadge: featureSettingsLocalized("Beta"),
+            systemImageName: "person.2.wave.2",
+            pills: meetingPills
+        ) {
+            FeatureSettingsCard(title: "") {
+                FeatureSettingSection(title: "", detail: "") {
+                    FeatureSelectorRow(
+                        title: featureSettingsLocalized("Speech Model"),
+                        value: asrSelectionSummary(featureSettings.meeting.asrSelectionID),
+                        action: { selectorSheet = .meetingASR }
+                    )
+
+                    FeatureSelectorRow(
+                        title: featureSettingsLocalized("Summary Model"),
+                        value: llmSelectionSummary(featureSettings.meeting.summaryModelSelectionID),
+                        action: { selectorSheet = .meetingSummary }
+                    )
+                }
+
+                FeatureToggleRow(
+                    title: featureSettingsLocalized("Hide Floating Window from Screen Sharing"),
+                    detail: "",
+                    isOn: binding(
+                        get: { featureSettings.meeting.hideOverlayFromScreenSharing },
+                        set: { featureSettings.meeting.hideOverlayFromScreenSharing = $0 }
+                    )
+                )
+
+                FeatureToggleRow(
+                    title: featureSettingsLocalized("Auto-generate Summary"),
+                    detail: "",
+                    isOn: binding(
+                        get: { featureSettings.meeting.summaryAutoGenerate },
+                        set: { featureSettings.meeting.summaryAutoGenerate = $0 }
+                    )
+                )
+
+                meetingAdvancedSettingsSection
+            }
+        }
+    }
+
+    var meetingAdvancedSettingsSection: some View {
+        GeneralAdvancedCard(isExpanded: $isMeetingAdvancedSettingsExpanded) {
+            FeatureSettingSection(title: "", detail: "") {
+                FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Segmentation Mode"),
+                    detail: meetingChunkingMode.wrappedValue.detail
+                ) {
+                    SettingsMenuPicker(
+                        selection: meetingChunkingMode,
+                        options: MeetingChunkingMode.allCases.map {
+                            SettingsMenuOption(value: $0, title: $0.title)
+                        },
+                        selectedTitle: meetingChunkingMode.wrappedValue.title,
+                        width: 220
+                    )
+                }
+
+                FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Speaker Separation Model"),
+                    detail: meetingSpeakerDiarizationModelDetailText
+                ) {
+                    SettingsMenuPicker(
+                        selection: meetingSpeakerDiarizationModel,
+                        options: MeetingDiarizationMode.allCases.map {
+                            SettingsMenuOption(value: $0, title: $0.title)
+                        },
+                        selectedTitle: meetingSpeakerDiarizationModel.wrappedValue.title,
+                        width: 220,
+                        leadingAccessory: meetingSpeakerDiarizationModelLeadingAccessory,
+                        selectedStatusSystemImageName: meetingSpeakerDiarizationModelStatusIconName
+                    )
+                }
+            }
+        }
+    }
+
+    var meetingPills: [FeatureSummaryPill] {
+        [
+            FeatureSummaryPill(
+                title: featureSettingsLocalized("Audio Model"),
+                value: shortSummary(asrSelectionSummary(featureSettings.meeting.asrSelectionID), maxLength: 52)
+            ),
+            FeatureSummaryPill(
+                title: featureSettingsLocalized("Summary Model"),
+                value: shortSummary(llmSelectionSummary(featureSettings.meeting.summaryModelSelectionID), maxLength: 52)
+            ),
+            FeatureSummaryPill(
+                title: featureSettingsLocalized("Speakers"),
+                value: featureSettings.meeting.speakerDiarizationModel.title
+            )
+        ]
+    }
+
+    @ViewBuilder
+    var meetingSpeakerDiarizationModelDownloadControl: some View {
+        switch meetingDiarizationModelManager.state {
+        case .downloaded:
+            EmptyView()
+        case .notDownloaded:
+            ProgressView(value: 0)
+                .frame(width: 60)
+        case let .downloading(progress, _):
+            ProgressView(value: max(0, min(progress, 1)))
+                .frame(width: 60)
+        case .error:
+            Button(featureSettingsLocalized("Retry")) {
+                meetingDiarizationModelManager.downloadSelectedModel()
+            }
+            .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 9, height: 28))
+        }
+    }
+
+    var meetingSpeakerDiarizationModelDetailText: String {
+        switch meetingDiarizationModelManager.state {
+        case .downloaded:
+            return AppLocalization.format(
+                "%@ %@",
+                meetingSpeakerDiarizationModel.wrappedValue.title,
+                featureSettingsLocalized("model is ready.")
+            )
+        case .notDownloaded:
+            return AppLocalization.format(
+                "%@ %@",
+                meetingSpeakerDiarizationModel.wrappedValue.detail,
+                featureSettingsLocalized("Download the model before meeting details can use speaker separation.")
+            )
+        case let .downloading(_, detail):
+            return detail ?? featureSettingsLocalized("Installing speaker separation model...")
+        case let .error(message):
+            return AppLocalization.format("Download failed: %@", message)
+        }
+    }
+
+    var meetingSpeakerDiarizationModelStatusIconName: String? {
+        if case .downloaded = meetingDiarizationModelManager.state {
+            return "checkmark.circle.fill"
+        }
+        return nil
+    }
+
+    var meetingSpeakerDiarizationModelLeadingAccessory: AnyView? {
+        switch meetingDiarizationModelManager.state {
+        case .downloaded:
+            return nil
+        case .notDownloaded, .downloading, .error:
+            return AnyView(meetingSpeakerDiarizationModelDownloadControl)
+        }
+    }
+
+    var meetingChunkingMode: Binding<MeetingChunkingMode> {
+        Binding(
+            get: {
+                featureSettings.meeting.chunkingMode
+            },
+            set: { mode in
+                featureSettings.meeting.chunkingModeRawValue = mode.rawValue
+                saveFeatureSettings()
+            }
+        )
+    }
+
+    var meetingSpeakerDiarizationModel: Binding<MeetingDiarizationMode> {
+        Binding(
+            get: {
+                featureSettings.meeting.speakerDiarizationModel
+            },
+            set: { mode in
+                featureSettings.meeting.speakerDiarizationModelRawValue = mode.rawValue
+                saveFeatureSettings()
+                meetingDiarizationModelManager.refresh()
+                meetingDiarizationModelManager.ensureSelectedModelInstalled()
+            }
+        )
+    }
+
+}

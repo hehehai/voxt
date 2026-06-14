@@ -4,6 +4,52 @@ private func localized(_ key: String) -> String {
     AppLocalization.localizedString(key)
 }
 
+enum ModelCatalogBadgeSupport {
+    private static let recommendedMLXRepos: Set<String> = [
+        "mlx-community/SenseVoiceSmall"
+    ]
+
+    private static let recommendedRemoteASRProviders: Set<RemoteASRProvider> = [
+        .doubaoASR,
+        .stepFunASR
+    ]
+
+    private static let recommendedRemoteLLMProviders: Set<RemoteLLMProvider> = [
+        .deepseek,
+        .ollama,
+        .omlx,
+        .aliyunBailian
+    ]
+
+    static func recommendedBadgeText(forLocalSeriesDescriptor descriptor: LocalModelSeriesDescriptor) -> String? {
+        if descriptor.engine == localized("MLX Audio") && descriptor.title == "Qwen3-ASR" {
+            return localized("Recommended")
+        }
+        if descriptor.engine == localized("Local LLM") && descriptor.title == "Gemma" {
+            return localized("Recommended")
+        }
+        return nil
+    }
+
+    static func recommendedBadgeText(forMLXRepo repo: String) -> String? {
+        recommendedMLXRepos.contains(MLXModelManager.canonicalModelRepo(repo))
+            ? localized("Recommended")
+            : nil
+    }
+
+    static func recommendedBadgeText(forRemoteASRProvider provider: RemoteASRProvider) -> String? {
+        recommendedRemoteASRProviders.contains(provider)
+            ? localized("Recommended")
+            : nil
+    }
+
+    static func recommendedBadgeText(forRemoteLLMProvider provider: RemoteLLMProvider) -> String? {
+        recommendedRemoteLLMProviders.contains(provider)
+            ? localized("Recommended")
+            : nil
+    }
+}
+
 struct LocalModelSeriesDescriptor: Hashable {
     let id: String
     let title: String
@@ -93,7 +139,8 @@ enum LocalModelSeriesGrouping {
                         usageLocations: orderedUsageLocations(from: groupEntries.flatMap { $0.usageLocations }),
                         installedCount: groupEntries.filter { $0.filterTags.contains(localized("Installed")) }.count,
                         ratingText: averageRatingText(from: groupEntries.map { $0.ratingText }),
-                        badgeText: groupEntries.compactMap { $0.badgeText }.first,
+                        badgeText: ModelCatalogBadgeSupport.recommendedBadgeText(forLocalSeriesDescriptor: descriptor)
+                            ?? groupEntries.compactMap { $0.badgeText }.first,
                         entries: groupEntries,
                         defaultExpanded: groupEntries.contains(where: { !$0.usageLocations.isEmpty })
                     )
@@ -134,7 +181,8 @@ enum LocalModelSeriesGrouping {
                         usageLocations: orderedUsageLocations(from: groupEntries.flatMap { $0.usageLocations }),
                         installedCount: groupEntries.filter { $0.filterTags.contains(localized("Installed")) }.count,
                         ratingText: averageRatingText(from: groupEntries.map { $0.ratingText }),
-                        badgeText: groupEntries.compactMap { $0.badgeText }.first,
+                        badgeText: ModelCatalogBadgeSupport.recommendedBadgeText(forLocalSeriesDescriptor: descriptor)
+                            ?? groupEntries.compactMap { $0.badgeText }.first,
                         entries: groupEntries,
                         defaultExpanded: groupEntries.contains(where: {
                             $0.selectionID == selectedID || !$0.usageLocations.isEmpty

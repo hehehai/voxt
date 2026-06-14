@@ -3,6 +3,11 @@ import AppKit
 import CoreAudio
 
 extension AppDelegate {
+    private enum MainWindowActivationMode {
+        case standard
+        case statusMenuSelection
+    }
+
     private var mainWindowContentSize: NSSize {
         NSSize(width: 820, height: 560)
     }
@@ -303,31 +308,31 @@ extension AppDelegate {
 
     @objc private func openDashboardFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindow(target: SettingsNavigationTarget(tab: .report))
+            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .report))
         }
     }
 
     @objc private func openGeneralFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindow(target: SettingsNavigationTarget(tab: .general))
+            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .general))
         }
     }
 
     @objc private func openDictionarySettings() {
         performAfterStatusMenuDismissal {
-            self.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary))
+            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .dictionary))
         }
     }
 
     @objc private func openFeatureFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
+            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
         }
     }
 
     @objc private func openNotesFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
+            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
         }
     }
 
@@ -443,6 +448,17 @@ extension AppDelegate {
     }
 
     func openMainWindow(target: SettingsNavigationTarget) {
+        openMainWindow(target: target, activationMode: .standard)
+    }
+
+    private func openMainWindowFromStatusMenu(target: SettingsNavigationTarget) {
+        openMainWindow(target: target, activationMode: .statusMenuSelection)
+    }
+
+    private func openMainWindow(
+        target: SettingsNavigationTarget,
+        activationMode: MainWindowActivationMode
+    ) {
         let navigationRequest = SettingsNavigationRequest(target: target)
 
         if let window = mainWindowController?.window {
@@ -455,7 +471,7 @@ extension AppDelegate {
                 recenterMainWindowIfNeeded(window)
             }
             setMainWindowVisibility(true)
-            bringWindowToFront(window)
+            bringWindowToFront(window, activationMode: activationMode)
             return
         }
 
@@ -525,7 +541,7 @@ extension AppDelegate {
         repairMainWindowFrameIfNeeded(window)
         centerMainWindow(window, on: NSScreen.main)
         setMainWindowVisibility(true)
-        bringWindowToFront(window)
+        bringWindowToFront(window, activationMode: activationMode)
         scheduleTrafficLightButtonPositionUpdate(for: window)
     }
 
@@ -541,8 +557,16 @@ extension AppDelegate {
         return .normal
     }
 
-    private func bringWindowToFront(_ window: NSWindow) {
-        AppBehaviorController.bringStandardWindowToFront(window)
+    private func bringWindowToFront(
+        _ window: NSWindow,
+        activationMode: MainWindowActivationMode
+    ) {
+        switch activationMode {
+        case .standard:
+            AppBehaviorController.bringStandardWindowToFront(window)
+        case .statusMenuSelection:
+            AppBehaviorController.bringUserInvokedWindowToFront(window)
+        }
     }
 
     private func centerMainWindow(_ window: NSWindow, on screen: NSScreen?) {

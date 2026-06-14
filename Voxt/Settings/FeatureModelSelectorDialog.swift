@@ -360,15 +360,7 @@ private struct FeatureModelSelectorRow: View {
                         .font(.headline)
 
                     if let badgeText = entry.badgeText {
-                        Text(badgeText)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.orange)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.orange.opacity(0.14))
-                            )
+                        ModelBadgeView(badgeText: badgeText, showsCapsuleForText: true)
                     }
 
                     if showsEngine {
@@ -498,15 +490,7 @@ private struct FeatureModelSelectorGroupCard: View {
                             .font(.headline)
 
                         if let badgeText = group.badgeText {
-                            Text(badgeText)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.orange)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(Color.orange.opacity(0.14))
-                                )
+                            ModelBadgeView(badgeText: badgeText, showsCapsuleForText: true)
                         }
 
                         Text(group.engine)

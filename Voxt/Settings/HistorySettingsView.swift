@@ -163,6 +163,8 @@ struct HistorySettingsView: View {
             return localized("No transcription history yet")
         case .translation:
             return localized("No translation history yet")
+        case .transcript:
+            return localized("No meeting transcripts yet")
         case .rewrite:
             return localized("No rewrite history yet")
         case .note:
@@ -186,6 +188,11 @@ struct HistorySettingsView: View {
             return AppLocalization.format(
                 "Press %@ to try voice translation. Completed results will appear here.",
                 HotkeyPreference.displayString(for: HotkeyPreference.loadTranslation(), distinguishModifierSides: distinguishSides)
+            )
+        case .transcript:
+            return AppLocalization.format(
+                "Press %@ to start Meeting Mode. Saved transcripts will appear here.",
+                HotkeyPreference.displayString(for: HotkeyPreference.loadMeeting(), distinguishModifierSides: distinguishSides)
             )
         case .rewrite:
             return AppLocalization.format(
@@ -429,7 +436,7 @@ struct HistorySettingsView: View {
                         }
                     },
                     onShowInfo: {
-                        selectedHistoryInfoEntry = entry
+                        showHistoryDetail(for: entry)
                     },
                     onDelete: { deleteHistoryEntry(entry) }
                 )
@@ -566,6 +573,8 @@ struct HistorySettingsView: View {
             return .normal
         case .translation:
             return .translation
+        case .transcript:
+            return .transcript
         case .rewrite:
             return .rewrite
         case .note:
@@ -670,6 +679,14 @@ struct HistorySettingsView: View {
             )
         }
         refreshHistoryAudioStorageStats()
+    }
+
+    private func showHistoryDetail(for entry: TranscriptionHistoryEntry) {
+        guard entry.kind == .transcript, let appDelegate = AppDelegate.shared else {
+            selectedHistoryInfoEntry = entry
+            return
+        }
+        appDelegate.showMeetingDetailWindow(for: entry)
     }
 
     private func showCopyToast() {

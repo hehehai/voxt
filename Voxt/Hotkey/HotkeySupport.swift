@@ -278,6 +278,7 @@ struct HotkeyPreference {
         let transcription: Hotkey
         let translation: Hotkey
         let rewrite: Hotkey
+        let meeting: Hotkey
         let customPaste: Hotkey
         let triggerMode: TriggerMode
         let rewriteActivationMode: RewriteActivationMode
@@ -287,6 +288,7 @@ struct HotkeyPreference {
             transcription: Hotkey,
             translation: Hotkey,
             rewrite: Hotkey,
+            meeting: Hotkey,
             customPaste: Hotkey,
             triggerMode: TriggerMode = .tap,
             rewriteActivationMode: RewriteActivationMode = .dedicatedHotkey
@@ -295,6 +297,7 @@ struct HotkeyPreference {
             self.transcription = transcription
             self.translation = translation
             self.rewrite = rewrite
+            self.meeting = meeting
             self.customPaste = customPaste
             self.triggerMode = triggerMode
             self.rewriteActivationMode = rewriteActivationMode
@@ -308,6 +311,8 @@ struct HotkeyPreference {
     static let defaultTranslationModifiers: NSEvent.ModifierFlags = [.function, .shift]
     static let defaultRewriteKeyCode: UInt16 = modifierOnlyKeyCode
     static let defaultRewriteModifiers: NSEvent.ModifierFlags = [.function, .control]
+    static let defaultMeetingKeyCode: UInt16 = modifierOnlyKeyCode
+    static let defaultMeetingModifiers: NSEvent.ModifierFlags = [.function, .option]
     static let defaultCustomPasteKeyCode: UInt16 = UInt16(kVK_ANSI_V)
     static let defaultCustomPasteModifiers: NSEvent.ModifierFlags = [.control, .command]
     static let defaultTriggerMode: TriggerMode = .tap
@@ -333,6 +338,11 @@ struct HotkeyPreference {
             AppPreferenceKey.rewriteHotkeyMouseButtonNumber: middleMouseButtonNumber,
             AppPreferenceKey.rewriteHotkeyModifiers: Int(defaultRewriteModifiers.rawValue),
             AppPreferenceKey.rewriteHotkeySidedModifiers: 0,
+            AppPreferenceKey.meetingHotkeyInputType: Hotkey.Input.Kind.keyboard.rawValue,
+            AppPreferenceKey.meetingHotkeyKeyCode: Int(defaultMeetingKeyCode),
+            AppPreferenceKey.meetingHotkeyMouseButtonNumber: middleMouseButtonNumber,
+            AppPreferenceKey.meetingHotkeyModifiers: Int(defaultMeetingModifiers.rawValue),
+            AppPreferenceKey.meetingHotkeySidedModifiers: 0,
             AppPreferenceKey.customPasteHotkeyInputType: Hotkey.Input.Kind.keyboard.rawValue,
             AppPreferenceKey.customPasteHotkeyKeyCode: Int(defaultCustomPasteKeyCode),
             AppPreferenceKey.customPasteHotkeyMouseButtonNumber: middleMouseButtonNumber,
@@ -457,6 +467,37 @@ struct HotkeyPreference {
         )
     }
 
+    static func loadMeeting() -> Hotkey {
+        if let presetHotkey = resolvedPresetHotkeys()?.meeting {
+            return presetHotkey
+        }
+        return load(
+            inputTypeKey: AppPreferenceKey.meetingHotkeyInputType,
+            keyCodeKey: AppPreferenceKey.meetingHotkeyKeyCode,
+            mouseButtonKey: AppPreferenceKey.meetingHotkeyMouseButtonNumber,
+            modifiersKey: AppPreferenceKey.meetingHotkeyModifiers,
+            sidedModifiersKey: AppPreferenceKey.meetingHotkeySidedModifiers,
+            defaultKeyCode: defaultMeetingKeyCode,
+            defaultModifiers: defaultMeetingModifiers
+        )
+    }
+
+    static func saveMeeting(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, sidedModifiers: SidedModifierFlags) {
+        saveMeeting(.init(keyCode: keyCode, modifiers: modifiers, sidedModifiers: sidedModifiers))
+    }
+
+    static func saveMeeting(_ hotkey: Hotkey, defaults: UserDefaults = .standard) {
+        save(
+            hotkey,
+            inputTypeKey: AppPreferenceKey.meetingHotkeyInputType,
+            keyCodeKey: AppPreferenceKey.meetingHotkeyKeyCode,
+            mouseButtonKey: AppPreferenceKey.meetingHotkeyMouseButtonNumber,
+            modifiersKey: AppPreferenceKey.meetingHotkeyModifiers,
+            sidedModifiersKey: AppPreferenceKey.meetingHotkeySidedModifiers,
+            defaults: defaults
+        )
+    }
+
     static func loadCustomPaste() -> Hotkey {
         if let presetHotkey = resolvedPresetHotkeys()?.customPaste {
             return presetHotkey
@@ -555,6 +596,7 @@ struct HotkeyPreference {
         save(presetValues.transcription)
         saveTranslation(presetValues.translation)
         saveRewrite(presetValues.rewrite)
+        saveMeeting(presetValues.meeting)
         saveCustomPaste(presetValues.customPaste)
         saveRewriteActivationMode(presetValues.rewriteActivationMode)
         saveTriggerMode(presetValues.triggerMode)
@@ -615,6 +657,7 @@ struct HotkeyPreference {
                 transcription: Hotkey(keyCode: defaultKeyCode, modifiers: defaultModifiers, sidedModifiers: []),
                 translation: Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
                 rewrite: Hotkey(keyCode: defaultRewriteKeyCode, modifiers: defaultRewriteModifiers, sidedModifiers: []),
+                meeting: Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: []),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: [])
             )
         case .commandCombo:
@@ -623,6 +666,7 @@ struct HotkeyPreference {
                 transcription: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command], sidedModifiers: [.rightCommand]),
                 translation: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .shift], sidedModifiers: [.rightCommand, .rightShift]),
                 rewrite: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption]),
+                meeting: Hotkey(keyCode: UInt16(kVK_ANSI_L), modifiers: [.command], sidedModifiers: [.rightCommand]),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: [])
             )
         case .mouseMiddleFnShift:
@@ -631,6 +675,7 @@ struct HotkeyPreference {
                 transcription: Hotkey(mouseButtonNumber: middleMouseButtonNumber),
                 translation: Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
                 rewrite: Hotkey(mouseButtonNumber: middleMouseButtonNumber),
+                meeting: Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: []),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: []),
                 triggerMode: .tap,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey

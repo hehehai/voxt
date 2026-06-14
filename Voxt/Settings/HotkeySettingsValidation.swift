@@ -25,9 +25,26 @@ struct HotkeySettingsValidation {
     struct State {
         let transcriptionHotkey: HotkeyPreference.Hotkey
         let translationHotkey: HotkeyPreference.Hotkey
+        let meetingHotkey: HotkeyPreference.Hotkey?
         let rewriteHotkey: HotkeyPreference.Hotkey
         let shouldValidateRewriteHotkey: Bool
         let customPasteHotkey: HotkeyPreference.Hotkey?
+
+        init(
+            transcriptionHotkey: HotkeyPreference.Hotkey,
+            translationHotkey: HotkeyPreference.Hotkey,
+            meetingHotkey: HotkeyPreference.Hotkey? = nil,
+            rewriteHotkey: HotkeyPreference.Hotkey,
+            shouldValidateRewriteHotkey: Bool,
+            customPasteHotkey: HotkeyPreference.Hotkey?
+        ) {
+            self.transcriptionHotkey = transcriptionHotkey
+            self.translationHotkey = translationHotkey
+            self.meetingHotkey = meetingHotkey
+            self.rewriteHotkey = rewriteHotkey
+            self.shouldValidateRewriteHotkey = shouldValidateRewriteHotkey
+            self.customPasteHotkey = customPasteHotkey
+        }
     }
 
     struct Message: Identifiable, Equatable {
@@ -50,6 +67,14 @@ struct HotkeySettingsValidation {
             id: "conflict.translation",
             to: &messages
         )
+        if let meetingHotkey = state.meetingHotkey {
+            appendConflictMessage(
+                for: meetingHotkey,
+                formatKey: "Meeting shortcut: %@",
+                id: "conflict.meeting",
+                to: &messages
+            )
+        }
         if state.shouldValidateRewriteHotkey {
             appendConflictMessage(
                 for: state.rewriteHotkey,
@@ -73,6 +98,26 @@ struct HotkeySettingsValidation {
             textKey: "Transcription and translation shortcuts should be different.",
             to: &messages
         )
+        if let meetingHotkey = state.meetingHotkey {
+            appendEqualityMessage(
+                state.transcriptionHotkey == meetingHotkey,
+                id: "duplicate.transcription.meeting",
+                textKey: "Transcription and meeting shortcuts should be different.",
+                to: &messages
+            )
+            appendEqualityMessage(
+                state.translationHotkey == meetingHotkey,
+                id: "duplicate.translation.meeting",
+                textKey: "Translation and meeting shortcuts should be different.",
+                to: &messages
+            )
+            appendEqualityMessage(
+                state.shouldValidateRewriteHotkey && state.rewriteHotkey == meetingHotkey,
+                id: "duplicate.rewrite.meeting",
+                textKey: "Content rewrite and meeting shortcuts should be different.",
+                to: &messages
+            )
+        }
         appendEqualityMessage(
             state.shouldValidateRewriteHotkey && state.transcriptionHotkey == state.rewriteHotkey,
             id: "duplicate.transcription.rewrite",
@@ -99,6 +144,14 @@ struct HotkeySettingsValidation {
                 textKey: "Translation and custom paste shortcuts should be different.",
                 to: &messages
             )
+            if let meetingHotkey = state.meetingHotkey {
+                appendEqualityMessage(
+                    meetingHotkey == customPasteHotkey,
+                    id: "duplicate.meeting.customPaste",
+                    textKey: "Meeting and custom paste shortcuts should be different.",
+                    to: &messages
+                )
+            }
             appendEqualityMessage(
                 state.shouldValidateRewriteHotkey && state.rewriteHotkey == customPasteHotkey,
                 id: "duplicate.rewrite.customPaste",

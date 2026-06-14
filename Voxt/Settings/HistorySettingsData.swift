@@ -30,6 +30,8 @@ enum HistorySettingsData {
             return allEntries.filter { $0.kind == .normal }
         case .translation:
             return allEntries.filter { $0.kind == .translation }
+        case .transcript:
+            return allEntries.filter { $0.kind == .transcript }
         case .rewrite:
             return allEntries.filter { $0.kind == .rewrite }
         case .note:
