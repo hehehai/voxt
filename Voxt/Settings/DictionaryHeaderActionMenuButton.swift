@@ -42,7 +42,7 @@ struct DictionaryHeaderActionMenuButton: NSViewRepresentable {
 
 final class DictionaryHeaderActionMenuHostView: NSView {
     private let popupMenu = NSMenu()
-    private let iconView = NSImageView()
+    private let iconView = NSHostingView(rootView: SettingsMoreMenuIconView(size: 16))
     private var trackingAreaRef: NSTrackingArea?
     private var isHovered = false {
         didSet { updateAppearance() }
@@ -56,7 +56,7 @@ final class DictionaryHeaderActionMenuHostView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 28, height: 28)
+        NSSize(width: 32, height: 32)
     }
 
     override init(frame frameRect: NSRect) {
@@ -65,19 +65,14 @@ final class DictionaryHeaderActionMenuHostView: NSView {
         popupMenu.autoenablesItems = false
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.image = NSImage(
-            systemSymbolName: "ellipsis",
-            accessibilityDescription: nil
-        )?.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-        iconView.imageScaling = .scaleProportionallyDown
 
         addSubview(iconView)
 
         NSLayoutConstraint.activate([
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 12),
-            iconView.heightAnchor.constraint(equalToConstant: 12)
+            iconView.widthAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16)
         ])
 
         updateAppearance()
@@ -146,17 +141,25 @@ final class DictionaryHeaderActionMenuHostView: NSView {
 
     private func updateAppearance() {
         let fillColor: NSColor
+        let borderColor: NSColor
+        let iconColor: Color
         if isPressed {
-            fillColor = SettingsUIStyle.subtleFillNSColor.blended(withFraction: 0.18, of: .labelColor) ?? SettingsUIStyle.subtleFillNSColor
+            fillColor = SettingsUIStyle.sidebarItemPressedFillNSColor
+            borderColor = SettingsUIStyle.controlHoverBorderNSColor
+            iconColor = .secondary
         } else if isHovered {
-            fillColor = SettingsUIStyle.subtleFillNSColor.blended(withFraction: 0.08, of: .labelColor) ?? SettingsUIStyle.subtleFillNSColor
+            fillColor = SettingsUIStyle.sidebarItemFillNSColor
+            borderColor = SettingsUIStyle.controlHoverBorderNSColor
+            iconColor = .secondary
         } else {
             fillColor = SettingsUIStyle.subtleFillNSColor
+            borderColor = SettingsUIStyle.subtleBorderNSColor
+            iconColor = .secondary
         }
 
         layer?.backgroundColor = fillColor.cgColor
-        layer?.borderColor = SettingsUIStyle.subtleBorderNSColor.cgColor
+        layer?.borderColor = borderColor.cgColor
         layer?.borderWidth = 1
-        iconView.contentTintColor = isPressed ? .labelColor : .secondaryLabelColor
+        iconView.rootView = SettingsMoreMenuIconView(color: iconColor, size: 16)
     }
 }

@@ -726,7 +726,7 @@
 "Feedback Dialog Message" = "既定のブラウザでフィードバックページを開きますか？";
 "Dictionary" = "辞書";
 "All" = "すべて";
-"Manual" = "手動追加";
+"Manual" = "手動";
 "Automatic" = "自動追加";
 "Enable Dictionary Recognition" = "辞書認識を有効にする";
 "Enable Automatic Learning" = "自動学習を有効にする";
@@ -737,13 +737,17 @@
 "Create Dictionary Term" = "辞書用語を作成";
 "Edit Dictionary Term" = "辞書用語を編集";
 "Dictionary Term" = "辞書用語";
+"One dictionary term per line" = "1行に1つの辞書用語";
 "Confirm and Continue" = "確認して続行";
 "Replacement Match Terms" = "置換マッチ語";
 " (Optional. Without them, Voxt still uses normal dictionary matching and high-confidence correction.)" = "（任意。追加しなくても、Voxt は通常の辞書マッチングと高信頼補正を引き続き使用します）";
 "Replacement Match Term" = "置換マッチ語";
 "Add phrases that should always resolve to this dictionary term." = "追加した語句は常にこの辞書用語へ統一されます。";
 "No replacement match terms." = "置換マッチ語はまだありません。";
+"Category" = "カテゴリ";
 "Group" = "グループ";
+"Group (App Enhancement)" = "グループ（アプリ強化）";
+"Application Scope (App Enhancement)" = "適用範囲（アプリ強化）";
 "Global" = "グローバル";
 "Missing Group" = "削除済みグループ";
 "Matched %d times" = "%d 回一致";
@@ -1647,6 +1651,19 @@
 "Used to decide which user corrections should become dictionary terms." = "どのユーザー修正を辞書用語として取り込むかを判断するために使います。";
 "Voxt" = "Voxt";
 "e.g. low" = "例: low";
+"Category Name" = "カテゴリ名";
+"Create Category" = "カテゴリを作成";
+"Create Dictionary Category" = "辞書カテゴリを作成";
+"Delete Dictionary Category?" = "辞書カテゴリを削除しますか？";
+"Delete Terms Too" = "用語も削除";
+"Dictionary category name cannot be empty." = "辞書カテゴリ名を空にすることはできません。";
+"Edit Dictionary Category" = "辞書カテゴリを編集";
+"Imported Category" = "インポートカテゴリ";
+"Missing Category" = "不明なカテゴリ";
+"Move Terms to Default" = "用語を既定カテゴリへ移動";
+"This dictionary category already exists." = "この辞書カテゴリはすでに存在します。";
+"You can move this category's terms to the default category or delete them together." = "このカテゴリの用語を既定カテゴリへ移動するか、用語ごと削除できます。";
+"%d terms" = "%d 件の用語";
 
 /* Meeting Mode Restoration */
 "Meeting" = "会議";

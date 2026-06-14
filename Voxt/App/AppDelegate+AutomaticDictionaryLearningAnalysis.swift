@@ -186,6 +186,7 @@ extension AppDelegate {
         groupID: UUID?,
         groupNameSnapshot: String?
     ) -> AutomaticDictionaryLearningPersistResult {
+        let category = dictionaryStore.ensureCategory(id: groupID, name: groupNameSnapshot)
         var addedTerms: [String] = []
         var reinforcedTerms: [String] = []
         for term in scannedTerms {
@@ -197,6 +198,8 @@ extension AppDelegate {
             do {
                 let result = try dictionaryStore.createOrReinforceAutoEntry(
                     term: term,
+                    categoryID: category.id,
+                    categoryNameSnapshot: category.name,
                     groupID: groupID,
                     groupNameSnapshot: groupNameSnapshot
                 )

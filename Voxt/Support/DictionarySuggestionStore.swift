@@ -797,8 +797,11 @@ final class DictionarySuggestionStore: ObservableObject {
         guard !normalized.isEmpty else { return }
 
         if !dictionaryStore.hasEntry(normalizedTerm: normalized, activeGroupID: groupID) {
+            let category = dictionaryStore.ensureCategory(id: groupID, name: groupNameSnapshot)
             try? dictionaryStore.createAutoEntry(
                 term: term,
+                categoryID: category.id,
+                categoryNameSnapshot: category.name,
                 groupID: groupID,
                 groupNameSnapshot: groupNameSnapshot
             )
@@ -845,8 +848,14 @@ final class DictionarySuggestionStore: ObservableObject {
             }
 
             do {
+                let category = dictionaryStore.ensureCategory(
+                    id: suggestion.groupID,
+                    name: suggestion.groupNameSnapshot
+                )
                 try dictionaryStore.createAutoEntry(
                     term: suggestion.term,
+                    categoryID: category.id,
+                    categoryNameSnapshot: category.name,
                     groupID: suggestion.groupID,
                     groupNameSnapshot: suggestion.groupNameSnapshot
                 )
@@ -951,8 +960,14 @@ final class DictionarySuggestionStore: ObservableObject {
             }
 
             do {
+                let category = dictionaryStore.ensureCategory(
+                    id: candidate.groupID,
+                    name: candidate.groupNameSnapshot
+                )
                 try dictionaryStore.createAutoEntry(
                     term: candidate.term,
+                    categoryID: category.id,
+                    categoryNameSnapshot: category.name,
                     groupID: candidate.groupID,
                     groupNameSnapshot: candidate.groupNameSnapshot
                 )
