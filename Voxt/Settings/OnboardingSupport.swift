@@ -80,7 +80,7 @@ enum OnboardingContextualPermission: Hashable {
         case .screenCapture:
             return "Required only when Screenshot Context is enabled for rewrite app context."
         case .systemAudioCapture:
-            return "Required for transcript capture and for muting other apps' media audio during recording."
+            return "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording."
         }
     }
 }

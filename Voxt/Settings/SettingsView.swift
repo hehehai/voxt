@@ -1047,6 +1047,7 @@ private struct SettingsSidebarMenuPager: View {
                     iconKind: tab.sidebarIconKind,
                     systemImageName: tab.sidebarIconKind == nil ? tab.iconName : nil,
                     title: tab.titleKey,
+                    badgeText: tab == .meeting ? "Beta" : nil,
                     isActive: tab == selectedFeatureTab,
                     action: { onSelectFeatureTab(tab) }
                 )
@@ -1090,6 +1091,7 @@ private struct SettingsSidebarTabButton: View {
     let iconKind: SettingsSidebarIconKind?
     var systemImageName: String?
     let title: LocalizedStringKey
+    var badgeText: String? = nil
     let isActive: Bool
     let action: () -> Void
 
@@ -1111,6 +1113,20 @@ private struct SettingsSidebarTabButton: View {
                     .truncationMode(.tail)
                     .allowsTightening(true)
                     .layoutPriority(1)
+
+                if let badgeText {
+                    Text(settingsLocalized(badgeText))
+                        .font(.system(size: 9, weight: .semibold))
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.accentColor.opacity(isActive ? 0.20 : 0.12))
+                        )
+                        .foregroundStyle(Color.accentColor)
+                        .fixedSize()
+                }
 
                 Spacer(minLength: 0)
             }
@@ -1187,7 +1203,7 @@ private struct SettingsSidebarHeader: View {
     private var badgeContent: some View {
         HStack(spacing: 4) {
             if showsNewVersionTag {
-                Text("new")
+                Text(settingsLocalized("New"))
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Color.green)
                     .lineLimit(1)
@@ -1321,6 +1337,7 @@ private struct SettingsSidebarInfoBlock: View {
             }
             .buttonStyle(SettingsSidebarInfoIconButtonStyle())
             .accessibilityLabel(settingsLocalized("Feedback"))
+            .help(settingsLocalized("Feedback"))
 
             Button(action: onTapSettings) {
                 SettingsSidebarIconView(kind: .settings)
@@ -1328,6 +1345,7 @@ private struct SettingsSidebarInfoBlock: View {
             }
             .buttonStyle(SettingsSidebarInfoIconButtonStyle())
             .accessibilityLabel(settingsLocalized("Settings"))
+            .help(settingsLocalized("Settings"))
         }
         .padding(.vertical, 4)
     }

@@ -14,9 +14,28 @@ enum TranscriptSpeaker: String, Codable, Hashable, Sendable {
     }
 }
 
+enum TranscriptAudioSource: String, Codable, Hashable, Sendable {
+    case microphone
+    case systemAudio
+    case mixed
+
+    nonisolated var defaultSpeaker: TranscriptSpeaker {
+        switch self {
+        case .microphone:
+            return .me
+        case .systemAudio, .mixed:
+            return .them
+        }
+    }
+}
+
 struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let speaker: TranscriptSpeaker
+    let speakerID: String?
+    let speakerDisplayName: String?
+    let audioSource: TranscriptAudioSource?
+    let speakerConfidence: Double?
     let startSeconds: TimeInterval
     let endSeconds: TimeInterval?
     let text: String
@@ -27,6 +46,10 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     nonisolated init(
         id: UUID = UUID(),
         speaker: TranscriptSpeaker,
+        speakerID: String? = nil,
+        speakerDisplayName: String? = nil,
+        audioSource: TranscriptAudioSource? = nil,
+        speakerConfidence: Double? = nil,
         startSeconds: TimeInterval,
         endSeconds: TimeInterval?,
         text: String,
@@ -36,6 +59,10 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     ) {
         self.id = id
         self.speaker = speaker
+        self.speakerID = speakerID
+        self.speakerDisplayName = speakerDisplayName
+        self.audioSource = audioSource
+        self.speakerConfidence = speakerConfidence
         self.startSeconds = startSeconds
         self.endSeconds = endSeconds
         self.text = text
@@ -44,13 +71,17 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         self.preventsAdjacentMerge = preventsAdjacentMerge
     }
 
-    func updatingTranslation(
+    nonisolated func updatingTranslation(
         translatedText: String?,
         isTranslationPending: Bool
     ) -> TranscriptSegment {
         TranscriptSegment(
             id: id,
             speaker: speaker,
+            speakerID: speakerID,
+            speakerDisplayName: speakerDisplayName,
+            audioSource: audioSource,
+            speakerConfidence: speakerConfidence,
             startSeconds: startSeconds,
             endSeconds: endSeconds,
             text: text,
@@ -60,9 +91,68 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         )
     }
 
+    nonisolated func updatingSpeakerAnalysis(
+        speaker: TranscriptSpeaker? = nil,
+        speakerID: String?,
+        speakerDisplayName: String?,
+        audioSource: TranscriptAudioSource?,
+        speakerConfidence: Double?
+    ) -> TranscriptSegment {
+        TranscriptSegment(
+            id: id,
+            speaker: speaker ?? self.speaker,
+            speakerID: speakerID,
+            speakerDisplayName: speakerDisplayName,
+            audioSource: audioSource ?? self.audioSource,
+            speakerConfidence: speakerConfidence,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+            text: text,
+            translatedText: translatedText,
+            isTranslationPending: isTranslationPending,
+            preventsAdjacentMerge: preventsAdjacentMerge
+        )
+    }
+
+    nonisolated func updatingSpeakerDisplayName(_ displayName: String?) -> TranscriptSegment {
+        TranscriptSegment(
+            id: id,
+            speaker: speaker,
+            speakerID: speakerID,
+            speakerDisplayName: displayName,
+            audioSource: audioSource,
+            speakerConfidence: speakerConfidence,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+            text: text,
+            translatedText: translatedText,
+            isTranslationPending: isTranslationPending,
+            preventsAdjacentMerge: preventsAdjacentMerge
+        )
+    }
+
+    nonisolated var displaySpeakerTitle: String {
+        let trimmedName = speakerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedName, !trimmedName.isEmpty {
+            return trimmedName
+        }
+        return speaker.displayTitle
+    }
+
+    nonisolated var speakerIdentityKey: String {
+        if let speakerID, !speakerID.isEmpty {
+            return "\(audioSource?.rawValue ?? "unknown"):\(speakerID)"
+        }
+        return "speaker:\(speaker.rawValue)"
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case speaker
+        case speakerID
+        case speakerDisplayName
+        case audioSource
+        case speakerConfidence
         case startSeconds
         case endSeconds
         case text
@@ -74,6 +164,10 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         speaker = try container.decode(TranscriptSpeaker.self, forKey: .speaker)
+        speakerID = try container.decodeIfPresent(String.self, forKey: .speakerID)
+        speakerDisplayName = try container.decodeIfPresent(String.self, forKey: .speakerDisplayName)
+        audioSource = try container.decodeIfPresent(TranscriptAudioSource.self, forKey: .audioSource)
+        speakerConfidence = try container.decodeIfPresent(Double.self, forKey: .speakerConfidence)
         startSeconds = try container.decode(TimeInterval.self, forKey: .startSeconds)
         endSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .endSeconds)
         text = try container.decode(String.self, forKey: .text)
@@ -86,6 +180,10 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(speaker, forKey: .speaker)
+        try container.encodeIfPresent(speakerID, forKey: .speakerID)
+        try container.encodeIfPresent(speakerDisplayName, forKey: .speakerDisplayName)
+        try container.encodeIfPresent(audioSource, forKey: .audioSource)
+        try container.encodeIfPresent(speakerConfidence, forKey: .speakerConfidence)
         try container.encode(startSeconds, forKey: .startSeconds)
         try container.encodeIfPresent(endSeconds, forKey: .endSeconds)
         try container.encode(text, forKey: .text)
@@ -157,14 +255,14 @@ enum TranscriptFormatter {
             .compactMap { segment in
                 let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { return nil }
-                return "\(segment.speaker.displayTitle)：\(text)"
+                return "\(segment.displaySpeakerTitle)：\(text)"
             }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     nonisolated static func exportString(for segment: TranscriptSegment) -> String {
-        var lines = ["\(timestampString(for: segment.startSeconds)) \(segment.speaker.displayTitle) \(segment.text)"]
+        var lines = ["\(timestampString(for: segment.startSeconds)) \(segment.displaySpeakerTitle) \(segment.text)"]
         if let translatedText = segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines),
            !translatedText.isEmpty {
             lines.append("   -> \(translatedText)")
@@ -177,7 +275,7 @@ enum TranscriptFormatter {
         next: TranscriptSegment
     ) -> TranscriptSegment? {
         guard !previous.preventsAdjacentMerge, !next.preventsAdjacentMerge else { return nil }
-        guard previous.speaker == next.speaker else { return nil }
+        guard previous.speakerIdentityKey == next.speakerIdentityKey else { return nil }
         guard next.startSeconds >= previous.startSeconds else { return nil }
         let previousEnd = previous.endSeconds ?? previous.startSeconds
         guard next.startSeconds - previousEnd <= 2.0 else { return nil }
@@ -185,6 +283,12 @@ enum TranscriptFormatter {
         return TranscriptSegment(
             id: previous.id,
             speaker: previous.speaker,
+            speakerID: previous.speakerID,
+            speakerDisplayName: previous.speakerDisplayName,
+            audioSource: previous.audioSource,
+            speakerConfidence: [previous.speakerConfidence, next.speakerConfidence]
+                .compactMap { $0 }
+                .max(),
             startSeconds: previous.startSeconds,
             endSeconds: max(previousEnd, next.endSeconds ?? next.startSeconds),
             text: mergedText(previous.text, next.text),
@@ -221,6 +325,10 @@ enum TranscriptFormatter {
         return TranscriptSegment(
             id: preferred.id,
             speaker: preferred.speaker,
+            speakerID: preferred.speakerID ?? fallback.speakerID,
+            speakerDisplayName: preferred.speakerDisplayName ?? fallback.speakerDisplayName,
+            audioSource: preferred.audioSource ?? fallback.audioSource,
+            speakerConfidence: preferred.speakerConfidence ?? fallback.speakerConfidence,
             startSeconds: preferred.startSeconds,
             endSeconds: preferred.endSeconds ?? fallback.endSeconds,
             text: preferredText.isEmpty ? fallbackText : preferredText,

@@ -4,6 +4,7 @@ enum TaskLLMKind: String, Equatable {
     case transcriptionEnhancement
     case translation
     case rewrite
+    case transcriptSummary
 
     var logLabel: String { rawValue }
 
@@ -13,6 +14,8 @@ enum TaskLLMKind: String, Equatable {
             return 1.10
         case .translation, .rewrite:
             return 1.35
+        case .transcriptSummary:
+            return 0.45
         }
     }
 }
@@ -186,7 +189,7 @@ enum TaskLLMStrategyResolver {
 
     private static func truncationGuardPolicy(for taskKind: TaskLLMKind) -> TaskLLMTruncationGuardPolicy {
         switch taskKind {
-        case .transcriptionEnhancement:
+        case .transcriptionEnhancement, .transcriptSummary:
             return .disabled
         case .translation, .rewrite:
             return TaskLLMTruncationGuardPolicy(

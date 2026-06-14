@@ -48,6 +48,10 @@ extension AppDelegate {
             guard let self else { return }
             self.handleRewriteHotkeyUp()
         }
+        hotkeyManager.onMeetingKeyDown = { [weak self] in
+            guard let self else { return }
+            self.handleMeetingHotkeyDown()
+        }
         hotkeyManager.onCustomPasteKeyDown = { [weak self] in
             guard let self else { return }
             self.handleCustomPasteHotkeyDown()
@@ -173,6 +177,7 @@ extension AppDelegate {
     }
 
     func handleTranscriptionTapDown() {
+        guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "transcriptionTap") else { return }
         if isSessionActive {
             guard !shouldIgnoreTapStop() else { return }
             endRecording()
@@ -182,6 +187,7 @@ extension AppDelegate {
     }
 
     func handleTranslationTapDown() {
+        guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "translationTap") else { return }
         if isSessionActive {
             guard sessionOutputMode == .translation else {
                 VoxtLog.info("Tap translation down ignored: active session belongs to transcription.", verbose: true)
@@ -212,6 +218,7 @@ extension AppDelegate {
         VoxtLog.hotkey(
             "Trigger callback transcriptionDown. source=\(source), mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
         )
+        guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "\(source)TranscriptionDown") else { return }
         if allowsDoubleTapRewrite {
             let doubleTapRewriteAction = TranscriptionDoubleTapRewriteResolver.resolve(
                 state: TranscriptionDoubleTapRewriteResolver.State(
@@ -303,6 +310,7 @@ extension AppDelegate {
         VoxtLog.hotkey(
             "Trigger callback translationDown. source=\(source), mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
         )
+        guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "\(source)TranslationDown") else { return }
         let actions = HotkeyActionResolver.resolveTranslationDown(
             state: HotkeyActionResolver.State(
                 triggerMode: triggerMode,
@@ -375,6 +383,7 @@ extension AppDelegate {
         VoxtLog.hotkey(
             "Trigger callback rewriteDown. source=\(source), mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel), pendingStart=\(pendingTranscriptionStartTask != nil)",
         )
+        guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "\(source)RewriteDown") else { return }
 
         cancelPendingTranscriptionStart()
         if isSessionActive {
@@ -444,6 +453,7 @@ extension AppDelegate {
         reason: String,
         shouldStart: (() -> Bool)? = nil
     ) {
+        guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "pendingTranscriptionStart:\(reason)") else { return }
         VoxtLog.hotkey("Scheduling pending transcription start. delaySec=\(delay), reason=\(reason)")
         pendingTranscriptionStartTask?.cancel()
         pendingTranscriptionStartTask = Task { [weak self] in
@@ -456,6 +466,10 @@ extension AppDelegate {
             guard !Task.isCancelled else { return }
             guard !self.isSessionActive else {
                 VoxtLog.hotkey("Pending transcription start dropped: session already active.")
+                self.pendingTranscriptionStartTask = nil
+                return
+            }
+            guard !self.blockNonMeetingRecordingWhileMeetingIsActive(source: "pendingTranscriptionStartFire:\(reason)") else {
                 self.pendingTranscriptionStartTask = nil
                 return
             }

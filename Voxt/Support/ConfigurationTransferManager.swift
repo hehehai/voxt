@@ -32,11 +32,19 @@ enum ConfigurationTransferManager {
     struct FileEnvironment {
         let dictionaryEntriesURL: () throws -> URL
         let dictionarySuggestionsURL: () throws -> URL
+        let dictionaryRepository: () -> DictionaryRepositoryProtocol?
 
-        static let live = FileEnvironment(
-            dictionaryEntriesURL: { try ConfigurationTransferManager.dictionaryFileURL() },
-            dictionarySuggestionsURL: { try ConfigurationTransferManager.dictionarySuggestionsFileURL() }
-        )
+        init(
+            dictionaryEntriesURL: @escaping () throws -> URL = { try ConfigurationTransferManager.dictionaryFileURL() },
+            dictionarySuggestionsURL: @escaping () throws -> URL = { try ConfigurationTransferManager.dictionarySuggestionsFileURL() },
+            dictionaryRepository: @escaping () -> DictionaryRepositoryProtocol? = { DictionaryRepository() }
+        ) {
+            self.dictionaryEntriesURL = dictionaryEntriesURL
+            self.dictionarySuggestionsURL = dictionarySuggestionsURL
+            self.dictionaryRepository = dictionaryRepository
+        }
+
+        static let live = FileEnvironment()
     }
 
     struct ExportPayload: Codable {
@@ -537,6 +545,7 @@ enum ConfigurationTransferManager {
         var suggestionFilterSettings: DictionarySuggestionFilterSettings
         var suggestionIngestModelOptionID: String
         var historyScanCheckpoint: DictionaryHistoryScanCheckpoint?
+        var categories: [DictionaryCategory]
         var entries: [DictionaryEntry]
         var suggestions: [DictionarySuggestion]
 
@@ -548,6 +557,7 @@ enum ConfigurationTransferManager {
             case suggestionFilterSettings
             case suggestionIngestModelOptionID
             case historyScanCheckpoint
+            case categories
             case entries
             case suggestions
         }
@@ -560,6 +570,7 @@ enum ConfigurationTransferManager {
             suggestionFilterSettings: DictionarySuggestionFilterSettings,
             suggestionIngestModelOptionID: String,
             historyScanCheckpoint: DictionaryHistoryScanCheckpoint?,
+            categories: [DictionaryCategory],
             entries: [DictionaryEntry],
             suggestions: [DictionarySuggestion]
         ) {
@@ -570,6 +581,7 @@ enum ConfigurationTransferManager {
             self.suggestionFilterSettings = suggestionFilterSettings
             self.suggestionIngestModelOptionID = suggestionIngestModelOptionID
             self.historyScanCheckpoint = historyScanCheckpoint
+            self.categories = categories
             self.entries = entries
             self.suggestions = suggestions
         }
@@ -592,6 +604,7 @@ enum ConfigurationTransferManager {
                 DictionaryHistoryScanCheckpoint.self,
                 forKey: .historyScanCheckpoint
             )
+            categories = try container.decodeIfPresent([DictionaryCategory].self, forKey: .categories) ?? []
             entries = try container.decodeIfPresent([DictionaryEntry].self, forKey: .entries) ?? []
             suggestions = try container.decodeIfPresent([DictionarySuggestion].self, forKey: .suggestions) ?? []
         }
@@ -990,6 +1003,7 @@ enum ConfigurationTransferManager {
             suggestionFilterSettings: loadDictionarySuggestionFilterSettings(defaults: defaults),
             suggestionIngestModelOptionID: defaults.string(forKey: AppPreferenceKey.dictionarySuggestionIngestModelOptionID) ?? "",
             historyScanCheckpoint: loadDictionaryHistoryScanCheckpoint(defaults: defaults),
+            categories: loadDictionaryCategories(environment: environment),
             entries: loadDictionaryEntries(environment: environment),
             suggestions: loadDictionarySuggestions(environment: environment)
         )
@@ -1157,7 +1171,11 @@ enum ConfigurationTransferManager {
                 defaults.set(suggestionFilterData, forKey: AppPreferenceKey.dictionarySuggestionFilterSettings)
             }
             persistDictionaryHistoryScanCheckpoint(dictionary.historyScanCheckpoint, defaults: defaults)
-            persistDictionaryEntries(dictionary.entries, environment: environment)
+            persistDictionary(
+                entries: dictionary.entries,
+                categories: dictionary.categories,
+                environment: environment
+            )
             persistDictionarySuggestions(dictionary.suggestions, environment: environment)
         }
 

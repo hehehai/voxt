@@ -9,6 +9,7 @@ private func localized(_ key: String) -> String {
 enum HotkeyShortcutKind: String, CaseIterable {
     case transcription
     case translation
+    case meeting
     case rewrite
 
     var titleKey: LocalizedStringKey {
@@ -17,6 +18,8 @@ enum HotkeyShortcutKind: String, CaseIterable {
             return "Transcription"
         case .translation:
             return "Translation"
+        case .meeting:
+            return "Meeting"
         case .rewrite:
             return "Content Rewrite"
         }
@@ -25,7 +28,7 @@ enum HotkeyShortcutKind: String, CaseIterable {
 
 enum HotkeyShortcutVisibility {
     static func visibleKinds() -> [HotkeyShortcutKind] {
-        [.transcription, .translation, .rewrite]
+        [.transcription, .translation, .meeting, .rewrite]
     }
 }
 
@@ -33,6 +36,7 @@ struct HotkeySettingsView: View {
     private enum RecordingField {
         case transcription
         case translation
+        case meeting
         case rewrite
         case customPaste
     }
@@ -47,6 +51,11 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.translationHotkeyMouseButtonNumber) private var translationHotkeyMouseButtonNumber = HotkeyPreference.middleMouseButtonNumber
     @AppStorage(AppPreferenceKey.translationHotkeyModifiers) private var translationHotkeyModifiers = Int(HotkeyPreference.defaultTranslationModifiers.rawValue)
     @AppStorage(AppPreferenceKey.translationHotkeySidedModifiers) private var translationHotkeySidedModifiers = 0
+    @AppStorage(AppPreferenceKey.meetingHotkeyInputType) private var meetingHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
+    @AppStorage(AppPreferenceKey.meetingHotkeyKeyCode) private var meetingHotkeyKeyCode = Int(HotkeyPreference.defaultMeetingKeyCode)
+    @AppStorage(AppPreferenceKey.meetingHotkeyMouseButtonNumber) private var meetingHotkeyMouseButtonNumber = HotkeyPreference.middleMouseButtonNumber
+    @AppStorage(AppPreferenceKey.meetingHotkeyModifiers) private var meetingHotkeyModifiers = Int(HotkeyPreference.defaultMeetingModifiers.rawValue)
+    @AppStorage(AppPreferenceKey.meetingHotkeySidedModifiers) private var meetingHotkeySidedModifiers = 0
     @AppStorage(AppPreferenceKey.rewriteHotkeyInputType) private var rewriteHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
     @AppStorage(AppPreferenceKey.rewriteHotkeyKeyCode) private var rewriteHotkeyKeyCode = Int(HotkeyPreference.defaultRewriteKeyCode)
     @AppStorage(AppPreferenceKey.rewriteHotkeyMouseButtonNumber) private var rewriteHotkeyMouseButtonNumber = HotkeyPreference.middleMouseButtonNumber
@@ -155,6 +164,49 @@ struct HotkeySettingsView: View {
         Binding(
             get: { SidedModifierFlags(rawValue: translationHotkeySidedModifiers).filtered(by: translationModifierBinding.wrappedValue) },
             set: { translationHotkeySidedModifiers = $0.filtered(by: translationModifierBinding.wrappedValue).rawValue }
+        )
+    }
+
+    private var meetingHotkeyBinding: Binding<UInt16> {
+        Binding(
+            get: { UInt16(meetingHotkeyKeyCode) },
+            set: {
+                meetingHotkeyKeyCode = Int($0)
+                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+            }
+        )
+    }
+
+    private var meetingModifierBinding: Binding<NSEvent.ModifierFlags> {
+        Binding(
+            get: { NSEvent.ModifierFlags(rawValue: UInt(meetingHotkeyModifiers)).intersection(.hotkeyRelevant) },
+            set: {
+                meetingHotkeyModifiers = Int($0.rawValue)
+                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+            }
+        )
+    }
+
+    private var currentMeetingHotkey: HotkeyPreference.Hotkey {
+        HotkeyPreference.Hotkey(
+            input: meetingHotkeyInput,
+            modifiers: meetingModifierBinding.wrappedValue,
+            sidedModifiers: meetingSidedModifierBinding.wrappedValue
+        )
+    }
+
+    private var meetingHotkeyInput: HotkeyPreference.Hotkey.Input {
+        resolvedInput(
+            inputType: meetingHotkeyInputType,
+            keyCode: meetingHotkeyKeyCode,
+            mouseButtonNumber: meetingHotkeyMouseButtonNumber
+        )
+    }
+
+    private var meetingSidedModifierBinding: Binding<SidedModifierFlags> {
+        Binding(
+            get: { SidedModifierFlags(rawValue: meetingHotkeySidedModifiers).filtered(by: meetingModifierBinding.wrappedValue) },
+            set: { meetingHotkeySidedModifiers = $0.filtered(by: meetingModifierBinding.wrappedValue).rawValue }
         )
     }
 
@@ -282,6 +334,7 @@ struct HotkeySettingsView: View {
             for: .init(
                 transcriptionHotkey: currentHotkey,
                 translationHotkey: currentTranslationHotkey,
+                meetingHotkey: currentMeetingHotkey,
                 rewriteHotkey: currentRewriteHotkey,
                 shouldValidateRewriteHotkey: !isRewriteDoubleTapWakeEnabled,
                 customPasteHotkey: customPasteHotkeyEnabled ? currentCustomPasteHotkey : nil
@@ -381,6 +434,24 @@ struct HotkeySettingsView: View {
                             translationHotkeyBinding.wrappedValue = HotkeyPreference.defaultTranslationKeyCode
                             translationModifierBinding.wrappedValue = HotkeyPreference.defaultTranslationModifiers
                             translationSidedModifierBinding.wrappedValue = []
+                            hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+                        },
+                        onCancelPending: discardPendingCapture,
+                        onConfirmPending: confirmPendingCapture
+                    )
+
+                    SettingsShortcutCaptureField(
+                        title: "Meeting",
+                        hotkey: displayedHotkey(for: .meeting, current: currentMeetingHotkey),
+                        isRecording: recordingField == .meeting,
+                        isPendingConfirmation: isPendingConfirmation(for: .meeting),
+                        distinguishModifierSides: distinguishModifierSides,
+                        onFocus: { beginRecording(.meeting) },
+                        onReset: {
+                            meetingHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
+                            meetingHotkeyBinding.wrappedValue = HotkeyPreference.defaultMeetingKeyCode
+                            meetingModifierBinding.wrappedValue = HotkeyPreference.defaultMeetingModifiers
+                            meetingSidedModifierBinding.wrappedValue = []
                             hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
                         },
                         onCancelPending: discardPendingCapture,
@@ -580,6 +651,10 @@ struct HotkeySettingsView: View {
             assign(hotkey.input, inputType: &translationHotkeyInputType, keyCode: &translationHotkeyKeyCode, mouseButtonNumber: &translationHotkeyMouseButtonNumber)
             translationModifierBinding.wrappedValue = hotkey.modifiers
             translationSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        case .meeting:
+            assign(hotkey.input, inputType: &meetingHotkeyInputType, keyCode: &meetingHotkeyKeyCode, mouseButtonNumber: &meetingHotkeyMouseButtonNumber)
+            meetingModifierBinding.wrappedValue = hotkey.modifiers
+            meetingSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
         case .rewrite:
             assign(hotkey.input, inputType: &rewriteHotkeyInputType, keyCode: &rewriteHotkeyKeyCode, mouseButtonNumber: &rewriteHotkeyMouseButtonNumber)
             rewriteModifierBinding.wrappedValue = hotkey.modifiers

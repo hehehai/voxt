@@ -7,6 +7,7 @@ struct FeatureSettingsView: View {
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
+    @StateObject var meetingDiarizationModelManager = MeetingDiarizationModelManager()
 
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
     @AppStorage(AppPreferenceKey.remoteASRProviderConfigurations) var remoteASRProviderConfigurationsRaw = ""
@@ -18,6 +19,7 @@ struct FeatureSettingsView: View {
     @State var selectorSheet: FeatureModelSelectorSheet?
     @State var remindersListDescriptors: [RemindersListDescriptor] = []
     @State var isRemindersListSheetPresented = false
+    @State var isMeetingAdvancedSettingsExpanded = false
     @State var interactionSoundPlayer = InteractionSoundPlayer()
     @State private var toastMessage = ""
     @State private var toastDismissTask: Task<Void, Never>?
@@ -29,6 +31,8 @@ struct FeatureSettingsView: View {
             switch selectedTab {
             case .transcription:
                 transcriptionContent
+            case .meeting:
+                meetingContent
             case .note:
                 noteContent
             case .translation:
@@ -71,9 +75,13 @@ struct FeatureSettingsView: View {
         .onAppear {
             reloadFeatureSettings()
             refreshRemindersLists()
+            meetingDiarizationModelManager.refresh()
+            meetingDiarizationModelManager.ensureSelectedModelInstalled()
         }
         .onChange(of: featureSettingsRaw) { _, _ in
             handleFeatureSettingsStorageChange()
+            meetingDiarizationModelManager.refresh()
+            meetingDiarizationModelManager.ensureSelectedModelInstalled()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
             permissionRefreshRevision += 1
@@ -277,6 +285,10 @@ struct FeatureSettingsView: View {
             return featureSettings.rewrite.asrSelectionID
         case .rewriteLLM:
             return featureSettings.rewrite.llmSelectionID
+        case .meetingASR:
+            return featureSettings.meeting.asrSelectionID
+        case .meetingSummary:
+            return featureSettings.meeting.summaryModelSelectionID
         }
     }
 
@@ -297,6 +309,10 @@ struct FeatureSettingsView: View {
                 settings.rewrite.asrSelectionID = selectionID
             case .rewriteLLM:
                 settings.rewrite.llmSelectionID = selectionID
+            case .meetingASR:
+                settings.meeting.asrSelectionID = selectionID
+            case .meetingSummary:
+                settings.meeting.summaryModelSelectionID = selectionID
             }
         }
         reloadFeatureSettings()

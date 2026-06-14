@@ -163,6 +163,8 @@ struct HistorySettingsView: View {
             return localized("No transcription history yet")
         case .translation:
             return localized("No translation history yet")
+        case .transcript:
+            return localized("No meeting transcripts yet")
         case .rewrite:
             return localized("No rewrite history yet")
         case .note:
@@ -187,6 +189,11 @@ struct HistorySettingsView: View {
                 "Press %@ to try voice translation. Completed results will appear here.",
                 HotkeyPreference.displayString(for: HotkeyPreference.loadTranslation(), distinguishModifierSides: distinguishSides)
             )
+        case .transcript:
+            return AppLocalization.format(
+                "Press %@ to start Meeting Mode. Saved transcripts will appear here.",
+                HotkeyPreference.displayString(for: HotkeyPreference.loadMeeting(), distinguishModifierSides: distinguishSides)
+            )
         case .rewrite:
             return AppLocalization.format(
                 "Press %@ to rewrite selected text or spoken instructions.",
@@ -207,7 +214,7 @@ struct HistorySettingsView: View {
                         Button {
                             showHistorySearchDialog = true
                         } label: {
-                            Image(systemName: "magnifyingglass")
+                            SettingsSearchIconView()
                         }
                         .buttonStyle(SettingsCompactIconButtonStyle())
                         .help(localized("Search History"))
@@ -227,6 +234,7 @@ struct HistorySettingsView: View {
                             Image(systemName: "gearshape")
                         }
                         .buttonStyle(SettingsCompactIconButtonStyle())
+                        .help(localized("History Audio Settings"))
                     }
 
                     if isSearchActive {
@@ -429,7 +437,7 @@ struct HistorySettingsView: View {
                         }
                     },
                     onShowInfo: {
-                        selectedHistoryInfoEntry = entry
+                        showHistoryDetail(for: entry)
                     },
                     onDelete: { deleteHistoryEntry(entry) }
                 )
@@ -566,6 +574,8 @@ struct HistorySettingsView: View {
             return .normal
         case .translation:
             return .translation
+        case .transcript:
+            return .transcript
         case .rewrite:
             return .rewrite
         case .note:
@@ -670,6 +680,14 @@ struct HistorySettingsView: View {
             )
         }
         refreshHistoryAudioStorageStats()
+    }
+
+    private func showHistoryDetail(for entry: TranscriptionHistoryEntry) {
+        guard entry.kind == .transcript, let appDelegate = AppDelegate.shared else {
+            selectedHistoryInfoEntry = entry
+            return
+        }
+        appDelegate.showMeetingDetailWindow(for: entry)
     }
 
     private func showCopyToast() {

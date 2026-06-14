@@ -72,6 +72,9 @@ enum LLMExecutionPlanCompiler {
             Selected source text:
             \(sourceText)
             """
+
+        case .transcriptSummary(_, let request):
+            return request
         }
     }
 
@@ -88,6 +91,14 @@ enum LLMExecutionPlanCompiler {
 
             Selected source text:
             \(sourceText)
+            """
+        case .transcriptSummary(let transcript, let request):
+            return """
+            Request:
+            \(request)
+
+            Transcript:
+            \(transcript)
             """
         }
     }

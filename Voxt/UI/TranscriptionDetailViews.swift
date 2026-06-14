@@ -167,12 +167,14 @@ struct TranscriptionDetailContentView: View {
                     optionalDetailLine(label: localized("URL Group"), value: viewModel.entry.matchedURLGroupName)
                 }
 
-                if playbackController.isAvailable {
-                    detailSection(title: localized("Audio")) {
+                detailSection(title: localized("Audio")) {
+                    if playbackController.isAvailable {
                         HistoryAudioPlayerView(
                             controller: playbackController,
                             compact: style == .popover
                         )
+                    } else {
+                        HistoryAudioUnavailableView(compact: style == .popover)
                     }
                 }
 
@@ -219,7 +221,7 @@ struct TranscriptionDetailContentView: View {
                     detailSection(title: localized("Transcript Segments")) {
                         ForEach(transcriptSegments) { segment in
                             detailLine(
-                                label: "\(TranscriptFormatter.timestampString(for: segment.startSeconds)) · \(segment.speaker.displayTitle)",
+                                label: "\(TranscriptFormatter.timestampString(for: segment.startSeconds)) · \(segment.displaySpeakerTitle)",
                                 value: segment.text
                             )
                         }

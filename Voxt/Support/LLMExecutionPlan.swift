@@ -86,6 +86,7 @@ enum LLMExecutionTaskPayload: Equatable {
     case enhancement(rawText: String)
     case translation(sourceText: String, targetLanguage: TranslationTargetLanguage)
     case rewrite(dictatedPrompt: String, sourceText: String, structuredAnswerOutput: Bool)
+    case transcriptSummary(transcript: String, request: String)
 }
 
 struct LLMExecutionPlan: Equatable {
@@ -114,6 +115,8 @@ struct LLMExecutionPlan: Equatable {
             return sourceText.count
         case .rewrite(let dictatedPrompt, let sourceText, _):
             return dictatedPrompt.count + sourceText.count
+        case .transcriptSummary(let transcript, let request):
+            return transcript.count + request.count
         }
     }
 
@@ -125,6 +128,8 @@ struct LLMExecutionPlan: Equatable {
             return "translation"
         case .rewrite:
             return "rewrite"
+        case .transcriptSummary:
+            return "transcriptSummary"
         }
     }
 }

@@ -275,7 +275,7 @@ enum VoxtLog {
         lines.append("interactionSoundsEnabled: \(defaults.object(forKey: AppPreferenceKey.interactionSoundsEnabled) as? Bool ?? true)")
         lines.append("interactionSoundPreset: \(interactionSoundPreset.rawValue) [\(interactionSoundPreset.title)]")
         lines.append("historyEnabled: \(defaults.object(forKey: AppPreferenceKey.historyEnabled) as? Bool ?? true)")
-        lines.append("historyAudioStorageEnabled: \(defaults.bool(forKey: AppPreferenceKey.historyAudioStorageEnabled))")
+        lines.append("historyAudioStorageEnabled: \(defaults.object(forKey: AppPreferenceKey.historyAudioStorageEnabled) as? Bool ?? false)")
         lines.append("useHfMirror: \(defaults.bool(forKey: AppPreferenceKey.useHfMirror))")
         lines.append("localModelIdleUnloadDelaySeconds: \(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds(defaults: defaults))")
         lines.append("mlxModel: \(mlxModelRepo) [\(MLXModelCatalog.displayTitle(for: mlxModelRepo))]")

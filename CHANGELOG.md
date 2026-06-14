@@ -6,6 +6,44 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.12.0-beta.1] - 2026-06-04
+
+### English
+
+#### Added
+- Added native live preview support for local Qwen3 MLX ASR models.
+
+#### Changed
+- Refined ASR and model settings copy and layout so local model options are easier to understand and configure.
+- Improved SenseVoice integration and related ASR settings behavior across the app.
+
+#### Fixed
+- Fixed SenseVoice finalization so completed results and related settings flows are more reliable.
+
+### 简体中文
+
+#### 新增
+- 为本地 Qwen3 MLX ASR 模型新增原生实时预览支持。
+
+#### 改进
+- 优化 ASR 和模型设置的文案与布局，让本地模型选项更容易理解和配置。
+- 改进 SenseVoice 集成以及相关 ASR 设置在应用内的整体行为。
+
+#### 修复
+- 修复 SenseVoice 收尾流程，让最终结果和相关设置流程更加稳定。
+
+### 日本語
+
+#### 追加
+- ローカル Qwen3 MLX ASR モデル向けに、ネイティブのライブプレビュー対応を追加しました。
+
+#### 変更
+- ASR とモデル設定の文言とレイアウトを見直し、ローカルモデルの設定内容を把握しやすくしました。
+- SenseVoice の統合と関連する ASR 設定の挙動をアプリ全体で改善しました。
+
+#### 修正
+- SenseVoice の終了処理を修正し、最終結果と関連する設定フローの安定性を向上させました。
+
 ## [1.11.9] - 2026-05-30
 
 ### English

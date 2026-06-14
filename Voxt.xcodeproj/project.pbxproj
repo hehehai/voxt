@@ -20,6 +20,7 @@
 		E2A1C3B4D5F60718293A4B6C /* PermissionFlow in Frameworks */ = {isa = PBXBuildFile; productRef = E2A1C3B4D5F60718293A4B6D /* PermissionFlow */; };
 		E2A1C3B4D5F60718293A4B6E /* SystemSettingsKit in Frameworks */ = {isa = PBXBuildFile; productRef = E2A1C3B4D5F60718293A4B6F /* SystemSettingsKit */; };
 		F1A2B3C4D5E6F708090A0B0C /* FaviconFinder in Frameworks */ = {isa = PBXBuildFile; productRef = F1A2B3C4D5E6F708090A0B0D /* FaviconFinder */; };
+		F7A1B2C3D4E5F60718293A01 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = F7A1B2C3D4E5F60718293A02 /* FluidAudio */; };
 		FA11DBA0FA11DBA0FA11DBA0 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = FA11DBA1FA11DBA1FA11DBA1 /* GRDB */; };
 /* End PBXBuildFile section */
 
@@ -88,6 +89,7 @@
 				E2A1C3B4D5F60718293A4B6C /* PermissionFlow in Frameworks */,
 				E2A1C3B4D5F60718293A4B6E /* SystemSettingsKit in Frameworks */,
 				F1A2B3C4D5E6F708090A0B0C /* FaviconFinder in Frameworks */,
+				F7A1B2C3D4E5F60718293A01 /* FluidAudio in Frameworks */,
 				FA11DBA0FA11DBA0FA11DBA0 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -199,6 +201,7 @@
 				E2A1C3B4D5F60718293A4B6D /* PermissionFlow */,
 				E2A1C3B4D5F60718293A4B6F /* SystemSettingsKit */,
 				F1A2B3C4D5E6F708090A0B0D /* FaviconFinder */,
+				F7A1B2C3D4E5F60718293A02 /* FluidAudio */,
 				FA11DBA1FA11DBA1FA11DBA1 /* GRDB */,
 			);
 			productName = Voxt;
@@ -262,6 +265,7 @@
 				D1E2F3A4B5C60718293A4B5E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 				E2A1C3B4D5F60718293A4B70 /* XCRemoteSwiftPackageReference "PermissionFlow" */,
 				F1A2B3C4D5E6F708090A0B0E /* XCRemoteSwiftPackageReference "FaviconFinder" */,
+				F7A1B2C3D4E5F60718293A03 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				FA11DBA2FA11DBA2FA11DBA2 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -474,7 +478,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Voxt/Voxt.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 101100999;
+				CURRENT_PROJECT_VERSION = 101200001;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = NO;
@@ -494,7 +498,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.11.9;
+				MARKETING_VERSION = 1.12.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt.dev;
 				PRODUCT_MODULE_NAME = Voxt;
 				PRODUCT_NAME = "$(TARGET_NAME) Dev";
@@ -517,7 +521,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Voxt/Voxt.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 101100999;
+				CURRENT_PROJECT_VERSION = 101200001;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = NO;
@@ -537,8 +541,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.11.9;
-				"MARKETING_VERSION[sdk=macosx*]" = 1.11.9;
+				MARKETING_VERSION = 1.12.0;
+				"MARKETING_VERSION[sdk=macosx*]" = 1.12.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt;
 				PRODUCT_MODULE_NAME = Voxt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -561,7 +565,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Voxt/Voxt.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 101100999;
+				CURRENT_PROJECT_VERSION = 101200001;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = NO;
@@ -580,7 +584,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.11.9;
+				MARKETING_VERSION = 1.12.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt.testhost;
 				PRODUCT_MODULE_NAME = Voxt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -941,6 +945,14 @@
 				minimumVersion = 5.1.5;
 			};
 		};
+		F7A1B2C3D4E5F60718293A03 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = revision;
+				revision = ab29cead3c17304536c52c97eb1d93470e4d9afe;
+			};
+		};
 		FA11DBA2FA11DBA2FA11DBA2 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift.git";
@@ -1006,6 +1018,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F1A2B3C4D5E6F708090A0B0E /* XCRemoteSwiftPackageReference "FaviconFinder" */;
 			productName = FaviconFinder;
+		};
+		F7A1B2C3D4E5F60718293A02 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7A1B2C3D4E5F60718293A03 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 		FA11DBA1FA11DBA1FA11DBA1 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;

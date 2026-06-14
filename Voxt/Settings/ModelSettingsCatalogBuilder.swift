@@ -65,7 +65,9 @@ struct ModelCatalogBuilder {
                 displayTags: decoration.displayTags,
                 statusText: remoteASRStatusText(provider, configuration),
                 usageLocations: decoration.usageLocations,
-                badgeText: needsSetup ? localizedModelCatalog("Needs Setup") : nil,
+                badgeText: needsSetup
+                    ? localizedModelCatalog("Needs Setup")
+                    : ModelCatalogBadgeSupport.recommendedBadgeText(forRemoteASRProvider: provider),
                 primaryAction: ModelTableAction(title: localizedModelCatalog("Configure")) {
                     configureASRProvider(provider)
                 },
@@ -138,7 +140,8 @@ struct ModelCatalogBuilder {
                 displayTags: decoration.displayTags,
                 statusText: status,
                 usageLocations: decoration.usageLocations,
-                badgeText: remoteLLMBadgeText(provider),
+                badgeText: remoteLLMBadgeText(provider)
+                    ?? ModelCatalogBadgeSupport.recommendedBadgeText(forRemoteLLMProvider: provider),
                 primaryAction: ModelTableAction(title: localizedModelCatalog("Configure")) {
                     configureLLMProvider(provider)
                 },

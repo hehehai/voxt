@@ -293,7 +293,7 @@ private struct SettingsFieldSurfaceBody<Content: View>: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: alignment)
             .frame(width: width, alignment: alignment)
             .padding(.horizontal, horizontalPadding)
-            .frame(minHeight: minHeight)
+            .frame(minHeight: minHeight, alignment: alignment)
             .background(
                 RoundedRectangle(cornerRadius: SettingsUIStyle.controlCornerRadius, style: .continuous)
                     .fill(SettingsUIStyle.controlFillColor)

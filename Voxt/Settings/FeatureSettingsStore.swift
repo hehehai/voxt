@@ -37,6 +37,7 @@ enum FeatureSettingsStore {
         syncLegacyTranscription(storageReady.transcription, defaults: defaults)
         syncLegacyTranslation(storageReady.translation, defaults: defaults)
         syncLegacyRewrite(storageReady.rewrite, defaults: defaults)
+        syncLegacyMeeting(storageReady.meeting, defaults: defaults)
         NotificationCenter.default.post(name: .voxtFeatureSettingsDidChange, object: nil)
     }
 
@@ -122,6 +123,21 @@ enum FeatureSettingsStore {
                 appContext: .init(),
                 appEnhancementEnabled: true,
                 continueShortcut: .defaultShortcut
+            ),
+            meeting: MeetingFeatureSettings(
+                asrSelectionID: supportedMeetingASRSelection(
+                    transcriptionASR,
+                    defaults: defaults
+                ),
+                summaryModelSelectionID: transcriptionText,
+                summaryPrompt: "",
+                summaryAutoGenerate: true,
+                realtimeTranslateEnabled: false,
+                realtimeTargetLanguageRawValue: defaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage) ?? "",
+                hideOverlayFromScreenSharing: defaults.object(forKey: AppPreferenceKey.hideMeetingOverlayFromScreenSharing) as? Bool ?? false,
+                chunkingModeRawValue: MeetingChunkingMode.stored(in: defaults).rawValue,
+                speakerDiarizationModelRawValue: MeetingDiarizationMode.stored(in: defaults).rawValue,
+                finalTranscriptOptimizationEnabled: legacyFinalTranscriptOptimizationEnabled(defaults: defaults)
             )
         )
     }
@@ -143,6 +159,16 @@ enum FeatureSettingsStore {
         case .rewrite:
             syncLegacyASRSelection(settings.rewrite.asrSelectionID, defaults: defaults)
         }
+    }
+
+    static func prepareMeetingRuntime(
+        from settings: FeatureSettings,
+        defaults: UserDefaults = .standard
+    ) {
+        let sanitizedMeeting = sanitizedMeetingSettings(settings.meeting, defaults: defaults)
+        syncLegacyTranslation(settings.translation, defaults: defaults)
+        syncLegacyASRSelection(sanitizedMeeting.asrSelectionID, defaults: defaults)
+        syncLegacyMeeting(sanitizedMeeting, defaults: defaults)
     }
 
     private static func loadRaw(defaults: UserDefaults) -> String? {
@@ -239,6 +265,15 @@ enum FeatureSettingsStore {
         }
     }
 
+    private static func syncLegacyMeeting(_ settings: MeetingFeatureSettings, defaults: UserDefaults) {
+        defaults.set(settings.chunkingMode.rawValue, forKey: AppPreferenceKey.meetingChunkingMode)
+        defaults.set(settings.speakerDiarizationModel.rawValue, forKey: AppPreferenceKey.meetingSpeakerDiarizationModel)
+        defaults.set(
+            settings.finalTranscriptOptimizationEnabled,
+            forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled
+        )
+    }
+
     private static func sanitize(_ settings: FeatureSettings, defaults: UserDefaults) -> FeatureSettings {
         let fallback = deriveFromLegacy(defaults: defaults)
         return FeatureSettings(
@@ -279,6 +314,25 @@ enum FeatureSettingsStore {
                 appContext: settings.rewrite.appContext,
                 appEnhancementEnabled: true,
                 continueShortcut: sanitizedContinueShortcutSettings(settings.rewrite.continueShortcut)
+            ),
+            meeting: MeetingFeatureSettings(
+                asrSelectionID: supportedMeetingASRSelection(
+                    settings.meeting.asrSelectionID.asrSelection == nil ? fallback.meeting.asrSelectionID : settings.meeting.asrSelectionID,
+                    defaults: defaults
+                ),
+                summaryModelSelectionID: settings.meeting.summaryModelSelectionID.textSelection == nil ? fallback.meeting.summaryModelSelectionID : settings.meeting.summaryModelSelectionID,
+                summaryPrompt: AppPromptDefaults.resolvedStoredText(
+                    sanitizedPrompt(settings.meeting.summaryPrompt),
+                    kind: .transcriptSummary,
+                    defaults: defaults
+                ),
+                summaryAutoGenerate: settings.meeting.summaryAutoGenerate,
+                realtimeTranslateEnabled: settings.meeting.realtimeTranslateEnabled,
+                realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguage?.rawValue ?? "",
+                hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing,
+                chunkingModeRawValue: settings.meeting.chunkingMode.rawValue,
+                speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
+                finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
             )
         )
     }
@@ -307,6 +361,18 @@ enum FeatureSettingsStore {
                 appContext: settings.rewrite.appContext,
                 appEnhancementEnabled: true,
                 continueShortcut: settings.rewrite.continueShortcut
+            ),
+            meeting: MeetingFeatureSettings(
+                asrSelectionID: settings.meeting.asrSelectionID,
+                summaryModelSelectionID: settings.meeting.summaryModelSelectionID,
+                summaryPrompt: AppPromptDefaults.canonicalStoredText(settings.meeting.summaryPrompt, kind: .transcriptSummary),
+                summaryAutoGenerate: settings.meeting.summaryAutoGenerate,
+                realtimeTranslateEnabled: settings.meeting.realtimeTranslateEnabled,
+                realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguageRawValue,
+                hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing,
+                chunkingModeRawValue: settings.meeting.chunkingMode.rawValue,
+                speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
+                finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
             )
         )
     }
@@ -386,6 +452,41 @@ enum FeatureSettingsStore {
         )
     }
 
+    private static func sanitizedMeetingSettings(
+        _ settings: MeetingFeatureSettings,
+        defaults: UserDefaults
+    ) -> MeetingFeatureSettings {
+        MeetingFeatureSettings(
+            asrSelectionID: supportedMeetingASRSelection(settings.asrSelectionID, defaults: defaults),
+            summaryModelSelectionID: settings.summaryModelSelectionID,
+            summaryPrompt: settings.summaryPrompt,
+            summaryAutoGenerate: settings.summaryAutoGenerate,
+            realtimeTranslateEnabled: settings.realtimeTranslateEnabled,
+            realtimeTargetLanguageRawValue: settings.realtimeTargetLanguageRawValue,
+            hideOverlayFromScreenSharing: settings.hideOverlayFromScreenSharing,
+            chunkingModeRawValue: settings.chunkingMode.rawValue,
+            speakerDiarizationModelRawValue: settings.speakerDiarizationModel.rawValue,
+            finalTranscriptOptimizationEnabled: settings.finalTranscriptOptimizationEnabled
+        )
+    }
+
+    private static func supportedMeetingASRSelection(
+        _ selectionID: FeatureModelSelectionID,
+        defaults: UserDefaults
+    ) -> FeatureModelSelectionID {
+        let fallbackRepo = MLXModelManager.canonicalModelRepo(
+            defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
+        )
+        switch selectionID.asrSelection {
+        case .whisper:
+            return .mlx(fallbackRepo)
+        case .none:
+            return .mlx(fallbackRepo)
+        case .dictation, .mlx, .remote:
+            return selectionID
+        }
+    }
+
     private static func legacyASRSelection(defaults: UserDefaults) -> FeatureModelSelectionID {
         let engine = TranscriptionEngine(rawValue: defaults.string(forKey: AppPreferenceKey.transcriptionEngine) ?? "") ?? .mlxAudio
         switch engine {
@@ -438,6 +539,11 @@ enum FeatureSettingsStore {
             let selected = RemoteLLMProvider(rawValue: defaults.string(forKey: AppPreferenceKey.rewriteRemoteLLMProvider) ?? "") ?? fallback
             return .remoteLLM(selected)
         }
+    }
+
+    private static func legacyFinalTranscriptOptimizationEnabled(defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled) as? Bool
+            ?? MeetingFeatureSettings.defaultFinalTranscriptOptimizationEnabled
     }
 
 }

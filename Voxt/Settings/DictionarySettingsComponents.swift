@@ -14,14 +14,46 @@ struct DictionaryFilterPicker: View {
                     selectedFilter = filter
                 } label: {
                     Text(LocalizedStringKey(filter.titleKey))
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(SettingsSegmentedButtonStyle(isSelected: selectedFilter == filter))
+                .buttonStyle(DictionaryFilterSegmentedButtonStyle(isSelected: selectedFilter == filter))
             }
         }
         .padding(2)
-        .frame(width: 230)
         .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
+    }
+}
+
+private struct DictionaryFilterSegmentedButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        DictionaryFilterSegmentedButtonBody(configuration: configuration, isSelected: isSelected)
+    }
+}
+
+private struct DictionaryFilterSegmentedButtonBody: View {
+    let configuration: DictionaryFilterSegmentedButtonStyle.Configuration
+    let isSelected: Bool
+
+    @State private var isHovered = false
+
+    var body: some View {
+        configuration.label
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(isSelected || isHovered ? Color.accentColor : Color.secondary)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected || isHovered ? Color.accentColor.opacity(0.14) : .clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected || isHovered ? Color.accentColor.opacity(0.4) : .clear, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .onHover { isHovered = $0 }
     }
 }
 
@@ -122,13 +154,13 @@ struct DictionarySuggestionRow: View {
 }
 
 enum DictionaryDialog: Identifiable {
-    case create
+    case create(categoryID: UUID?)
     case edit(DictionaryEntry)
 
     var id: String {
         switch self {
-        case .create:
-            return "create"
+        case .create(let categoryID):
+            return "create-\(categoryID?.uuidString ?? "default")"
         case .edit(let entry):
             return "edit-\(entry.id.uuidString)"
         }
@@ -149,6 +181,109 @@ enum DictionaryDialog: Identifiable {
             return localized("Create")
         case .edit:
             return localized("Save")
+        }
+    }
+}
+
+enum DictionaryCategoryDialog: Identifiable {
+    case create
+    case edit(DictionaryCategory)
+
+    var id: String {
+        switch self {
+        case .create:
+            return "create-category"
+        case .edit(let category):
+            return "edit-category-\(category.id.uuidString)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .create:
+            return localized("Create Dictionary Category")
+        case .edit:
+            return localized("Edit Dictionary Category")
+        }
+    }
+
+    var confirmButtonTitle: String {
+        switch self {
+        case .create:
+            return localized("Create")
+        case .edit:
+            return localized("Save")
+        }
+    }
+}
+
+struct DictionaryCategoryDialogView: View {
+    let dialog: DictionaryCategoryDialog
+    let onCancel: () -> Void
+    let onSave: (String) throws -> Void
+
+    @State private var draftName: String
+    @State private var errorMessage: String?
+
+    init(
+        dialog: DictionaryCategoryDialog,
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (String) throws -> Void
+    ) {
+        self.dialog = dialog
+        self.onCancel = onCancel
+        self.onSave = onSave
+        switch dialog {
+        case .create:
+            _draftName = State(initialValue: "")
+        case .edit(let category):
+            _draftName = State(initialValue: category.name)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(verbatim: dialog.title)
+                .font(.title3.weight(.semibold))
+
+            TextField(
+                "",
+                text: $draftName,
+                prompt: Text(verbatim: localized("Category Name"))
+            )
+            .textFieldStyle(.plain)
+            .settingsFieldSurface()
+            .onSubmit(save)
+
+            if let errorMessage, !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            SettingsDialogActionRow {
+                Button(localized("Cancel")) {
+                    onCancel()
+                }
+                .buttonStyle(SettingsPillButtonStyle())
+                .keyboardShortcut(.cancelAction)
+
+                Button(dialog.confirmButtonTitle) {
+                    save()
+                }
+                .buttonStyle(SettingsPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .settingsDialogChrome(width: 420, onClose: onCancel)
+    }
+
+    private func save() {
+        do {
+            try onSave(draftName)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
