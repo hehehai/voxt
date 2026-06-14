@@ -9,6 +9,7 @@ struct FeatureSummaryPill: Identifiable {
 
 struct FeatureHeroCard: View {
     let title: String
+    var titleBadge: String? = nil
     let subtitle: String
     let iconKind: SettingsSidebarIconKind?
     let systemImageName: String?
@@ -22,8 +23,22 @@ struct FeatureHeroCard: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         if !title.isEmpty {
-                            Text(title)
-                                .font(.title2.weight(.semibold))
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(title)
+                                    .font(.title2.weight(.semibold))
+
+                                if let titleBadge, !titleBadge.isEmpty {
+                                    Text(titleBadge)
+                                        .font(.caption2.weight(.semibold))
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(
+                                            Capsule()
+                                                .fill(Color.accentColor.opacity(0.14))
+                                        )
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
                         }
                         if !subtitle.isEmpty {
                             Text(subtitle)

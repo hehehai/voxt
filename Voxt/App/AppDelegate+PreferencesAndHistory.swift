@@ -43,10 +43,21 @@ extension AppDelegate {
         featureSettings.rewrite
     }
 
+    var meetingFeatureSettings: MeetingFeatureSettings {
+        featureSettings.meeting
+    }
+
     func prepareLegacySettingsForSession(outputMode: SessionOutputMode) {
         FeatureSettingsStore.prepareLegacySession(
             from: featureSettings,
             outputMode: outputMode,
+            defaults: defaults
+        )
+    }
+
+    func prepareSettingsForMeetingRuntime() {
+        FeatureSettingsStore.prepareMeetingRuntime(
+            from: featureSettings,
             defaults: defaults
         )
     }
@@ -117,6 +128,10 @@ extension AppDelegate {
 
     var showSelectedTextTranslationResultWindow: Bool {
         defaults.object(forKey: AppPreferenceKey.showSelectedTextTranslationResultWindow) as? Bool ?? true
+    }
+
+    var meetingRealtimeTranslationTargetLanguage: TranslationTargetLanguage? {
+        resolvedMeetingRealtimeTranslationTargetLanguage()
     }
 
     var customPasteHotkeyEnabled: Bool {

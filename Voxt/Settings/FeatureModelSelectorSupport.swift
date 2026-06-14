@@ -12,6 +12,8 @@ enum FeatureModelSelectorSheet: String, Identifiable {
     case translationModel
     case rewriteASR
     case rewriteLLM
+    case meetingASR
+    case meetingSummary
 
     var id: String { rawValue }
 
@@ -24,6 +26,8 @@ enum FeatureModelSelectorSheet: String, Identifiable {
         case .translationModel: return localized("Choose Translation Model")
         case .rewriteASR: return localized("Choose Rewrite Audio Model")
         case .rewriteLLM: return localized("Choose Rewrite Enhancement Model")
+        case .meetingASR: return localized("Choose Meeting Audio Model")
+        case .meetingSummary: return localized("Choose Meeting Summary Model")
         }
     }
 }

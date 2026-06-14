@@ -45,6 +45,21 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         )
     }
 
+    func testMeetingASREntriesDisableWhisperModels() throws {
+        let builder = makeBuilder(featureSettings: makeFeatureSettings())
+
+        let whisperEntries = builder.entries(for: .meetingASR)
+            .filter { $0.selectionID.rawValue.hasPrefix("whisper:") }
+
+        XCTAssertFalse(whisperEntries.isEmpty)
+        XCTAssertTrue(whisperEntries.allSatisfy { !$0.isSelectable })
+        XCTAssertTrue(
+            whisperEntries.allSatisfy {
+                $0.disabledReason == AppLocalization.localizedString("Whisper is not available for Meeting mode.")
+            }
+        )
+    }
+
     func testConfiguredRemoteEntriesExposeUsageAndSelectionSummary() throws {
         let remoteASRConfigurations = RemoteModelConfigurationStore.saveConfigurations([
             RemoteASRProvider.aliyunBailianASR.rawValue: TestFactories.makeRemoteConfiguration(

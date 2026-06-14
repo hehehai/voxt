@@ -126,3 +126,31 @@ struct HistoryAudioPlayerView: View {
         return String(format: "%02d:%02d", minutes, remainingSeconds)
     }
 }
+
+struct HistoryAudioUnavailableView: View {
+    @AppStorage(AppPreferenceKey.historyAudioStorageEnabled) private var historyAudioStorageEnabled = false
+
+    let compact: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: compact ? 8 : 10) {
+            Image(systemName: "speaker.slash.fill")
+                .font(.system(size: compact ? 12 : 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: compact ? 18 : 20, height: compact ? 18 : 20)
+
+            Text(message)
+                .font(.system(size: compact ? 11 : 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var message: String {
+        if historyAudioStorageEnabled {
+            return String(localized: "No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed.")
+        }
+        return String(localized: "Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records.")
+    }
+}

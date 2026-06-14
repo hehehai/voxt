@@ -24,9 +24,13 @@ enum AliyunQwenRealtimeSessionKind: Equatable {
 }
 
 enum AliyunQwenRealtimePayloadSupport {
+    private static let balancedServerVADThreshold = 0.35
+    private static let balancedServerVADSilenceDurationMilliseconds = 800
+
     static func sessionUpdatePayload(
         kind: AliyunQwenRealtimeSessionKind,
-        hintPayload: ResolvedASRHintPayload
+        hintPayload: ResolvedASRHintPayload,
+        includesTurnDetection: Bool = true
     ) -> [String: Any] {
         var transcriptionPayload: [String: Any] = [:]
         if let transcriptionModel = kind.transcriptionModel {
@@ -35,20 +39,23 @@ enum AliyunQwenRealtimePayloadSupport {
         if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
             transcriptionPayload["language"] = language
         }
+        var session: [String: Any] = [
+            "modalities": ["text"],
+            "input_audio_format": "pcm",
+            "sample_rate": 16000,
+            "input_audio_transcription": transcriptionPayload
+        ]
+        if includesTurnDetection {
+            session["turn_detection"] = [
+                "type": "server_vad",
+                "threshold": balancedServerVADThreshold,
+                "silence_duration_ms": balancedServerVADSilenceDurationMilliseconds
+            ]
+        }
         return [
             "event_id": UUID().uuidString.lowercased(),
             "type": "session.update",
-            "session": [
-                "modalities": ["text"],
-                "input_audio_format": "pcm",
-                "sample_rate": 16000,
-                "input_audio_transcription": transcriptionPayload,
-                "turn_detection": [
-                    "type": "server_vad",
-                    "threshold": 0.0,
-                    "silence_duration_ms": 400
-                ]
-            ]
+            "session": session
         ]
     }
 }
@@ -383,6 +390,14 @@ enum RemoteASRTextSupport {
     }
 }
 
+enum StepFunSSEDataPayload: Equatable {
+    case delta(String)
+    case completed(String)
+    case error(String)
+    case fragment(String)
+    case ignore
+}
+
 enum StepFunPayloadSupport {
     static func supportsSSEPrompt(model: String) -> Bool {
         model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "stepaudio-2-asr-pro"
@@ -459,6 +474,53 @@ enum StepFunPayloadSupport {
                 ]
             ]
         ]
+    }
+
+    static func parseSSEDataLine(_ line: String) -> StepFunSSEDataPayload {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .ignore }
+
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return .fragment(trimmed)
+        }
+
+        guard let dict = object as? [String: Any] else {
+            if let text = RemoteASRTextSupport.extractText(in: object),
+               let normalized = RemoteASRTextSupport.normalizedTextFragment(text) {
+                return .fragment(normalized)
+            }
+            return .ignore
+        }
+
+        let type = (dict["type"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        switch type {
+        case "transcript.text.delta":
+            guard let value = dict["delta"],
+                  let text = RemoteASRTextSupport.extractText(in: value),
+                  let normalized = RemoteASRTextSupport.normalizedTextFragment(text) else {
+                return .ignore
+            }
+            return .delta(normalized)
+        case "transcript.text.done":
+            guard let value = dict["text"],
+                  let text = RemoteASRTextSupport.extractText(in: value),
+                  let normalized = RemoteASRTextSupport.normalizedTextFragment(text) else {
+                return .ignore
+            }
+            return .completed(normalized)
+        default:
+            if type == "error" || type.hasSuffix(".error") {
+                return .error(RemoteASRTextSupport.extractStreamErrorMessage(fromLine: trimmed) ?? trimmed)
+            }
+        }
+
+        if let text = RemoteASRTextSupport.extractTextFragment(fromLine: trimmed) {
+            return .fragment(text)
+        }
+        return .ignore
     }
 }
 

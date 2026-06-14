@@ -45,7 +45,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
         case .inputMonitoring:
             return "Required for reliable global modifier hotkeys (such as fn)."
         case .systemAudioCapture:
-            return "Required to mute other apps' media audio during recording."
+            return "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording."
         case .reminders:
             return "Required to sync Voxt notes into Apple Reminders."
         }
@@ -56,6 +56,16 @@ struct SettingsPermissionRequirementContext {
     let selectedEngine: TranscriptionEngine
     let muteSystemAudioWhileRecording: Bool
     let featureSettings: FeatureSettings?
+
+    init(
+        selectedEngine: TranscriptionEngine,
+        muteSystemAudioWhileRecording: Bool,
+        featureSettings: FeatureSettings?
+    ) {
+        self.selectedEngine = selectedEngine
+        self.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
+        self.featureSettings = featureSettings
+    }
 }
 
 enum SettingsPermissionRequirementResolver {
@@ -88,6 +98,7 @@ enum SettingsPermissionRequirementResolver {
     ) -> [SettingsPermissionKind] {
         var permissions: [SettingsPermissionKind] = [
             .microphone,
+            .systemAudioCapture,
             .accessibility,
             .inputMonitoring
         ]
@@ -95,7 +106,8 @@ enum SettingsPermissionRequirementResolver {
         let featureSelections = [
             context.featureSettings?.transcription.asrSelectionID.asrSelection,
             context.featureSettings?.translation.asrSelectionID.asrSelection,
-            context.featureSettings?.rewrite.asrSelectionID.asrSelection
+            context.featureSettings?.rewrite.asrSelectionID.asrSelection,
+            context.featureSettings?.meeting.asrSelectionID.asrSelection
         ]
 
         let needsSpeechRecognition = context.selectedEngine == .dictation || featureSelections.contains { selection in
@@ -107,10 +119,6 @@ enum SettingsPermissionRequirementResolver {
 
         if needsSpeechRecognition {
             permissions.append(.speechRecognition)
-        }
-
-        if context.muteSystemAudioWhileRecording {
-            permissions.append(.systemAudioCapture)
         }
 
         if context.featureSettings?.transcription.notes.remindersSync.enabled == true {

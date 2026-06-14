@@ -49,17 +49,54 @@ enum AppBehaviorController {
     }
 
     @MainActor
-    static func activateCurrentApp() {
+    static func activateCurrentApp(ignoringOtherApps: Bool = false) {
+        if ignoringOtherApps {
+            if #available(macOS 14.0, *) {
+                NSApp.activate()
+                return
+            }
+            var options: NSApplication.ActivationOptions = [.activateAllWindows]
+            options.insert(.activateIgnoringOtherApps)
+            _ = NSRunningApplication.current.activate(options: options)
+            return
+        }
+
         _ = NSRunningApplication.current.activate(options: [.activateAllWindows])
     }
 
     @MainActor
     static func bringStandardWindowToFront(_ window: NSWindow?) {
         guard let window else { return }
+        prepareWindowForActivation(window)
+        activateCurrentApp()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    @MainActor
+    static func bringUserInvokedWindowToFront(_ window: NSWindow?) {
+        guard let window else { return }
+        prepareWindowForActivation(window)
+        activateCurrentApp(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        reassertUserInvokedWindowActivation(window)
+    }
+
+    @MainActor
+    private static func prepareWindowForActivation(_ window: NSWindow) {
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
-        activateCurrentApp()
-        window.makeKeyAndOrderFront(nil)
+    }
+
+    private static func reassertUserInvokedWindowActivation(_ window: NSWindow) {
+        for delay in [0.15, 0.35] {
+            Task { @MainActor [weak window] in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard let window, window.isVisible else { return }
+                prepareWindowForActivation(window)
+                activateCurrentApp(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 }

@@ -85,6 +85,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
     let senseVoiceMetadata: SenseVoiceTranscriptMetadata?
     let transcriptSegments: [TranscriptSegment]?
     let transcriptAudioRelativePath: String?
+    let meetingCaptureMode: MeetingCaptureMode?
     let transcriptSummary: TranscriptSummarySnapshot?
     let transcriptSummaryChatMessages: [TranscriptSummaryChatMessage]?
     let displayTitle: String?
@@ -126,6 +127,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         case senseVoiceMetadata
         case transcriptSegments
         case transcriptAudioRelativePath
+        case meetingCaptureMode
         case transcriptSummary
         case transcriptSummaryChatMessages
         case displayTitle
@@ -168,6 +170,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         senseVoiceMetadata: SenseVoiceTranscriptMetadata? = nil,
         transcriptSegments: [TranscriptSegment]? = nil,
         transcriptAudioRelativePath: String? = nil,
+        meetingCaptureMode: MeetingCaptureMode? = nil,
         transcriptSummary: TranscriptSummarySnapshot? = nil,
         transcriptSummaryChatMessages: [TranscriptSummaryChatMessage]? = nil,
         displayTitle: String? = nil,
@@ -208,6 +211,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         self.senseVoiceMetadata = senseVoiceMetadata
         self.transcriptSegments = transcriptSegments
         self.transcriptAudioRelativePath = transcriptAudioRelativePath
+        self.meetingCaptureMode = meetingCaptureMode
         self.transcriptSummary = transcriptSummary
         self.transcriptSummaryChatMessages = transcriptSummaryChatMessages
         self.displayTitle = displayTitle
@@ -257,6 +261,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         senseVoiceMetadata = try container.decodeIfPresent(SenseVoiceTranscriptMetadata.self, forKey: .senseVoiceMetadata)
         transcriptSegments = try container.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments)
         transcriptAudioRelativePath = try container.decodeIfPresent(String.self, forKey: .transcriptAudioRelativePath)
+        meetingCaptureMode = try container.decodeIfPresent(MeetingCaptureMode.self, forKey: .meetingCaptureMode)
         audioRelativePath = decodedAudioRelativePath ?? transcriptAudioRelativePath
         transcriptSummary = try container.decodeIfPresent(TranscriptSummarySnapshot.self, forKey: .transcriptSummary)
         transcriptSummaryChatMessages = try container.decodeIfPresent([TranscriptSummaryChatMessage].self, forKey: .transcriptSummaryChatMessages)
@@ -301,6 +306,7 @@ struct TranscriptionHistoryEntry: Identifiable, Codable, Hashable {
         try container.encodeIfPresent(senseVoiceMetadata, forKey: .senseVoiceMetadata)
         try container.encodeIfPresent(transcriptSegments, forKey: .transcriptSegments)
         try container.encodeIfPresent(transcriptAudioRelativePath, forKey: .transcriptAudioRelativePath)
+        try container.encodeIfPresent(meetingCaptureMode, forKey: .meetingCaptureMode)
         try container.encodeIfPresent(transcriptSummary, forKey: .transcriptSummary)
         try container.encodeIfPresent(transcriptSummaryChatMessages, forKey: .transcriptSummaryChatMessages)
         try container.encodeIfPresent(displayTitle, forKey: .displayTitle)
@@ -562,6 +568,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         senseVoiceMetadata: SenseVoiceTranscriptMetadata? = nil,
         transcriptSegments: [TranscriptSegment]? = nil,
         transcriptAudioRelativePath: String? = nil,
+        meetingCaptureMode: MeetingCaptureMode? = nil,
         transcriptSummary: TranscriptSummarySnapshot? = nil,
         displayTitle: String? = nil,
         transcriptionChatMessages: [TranscriptSummaryChatMessage]? = nil,
@@ -605,6 +612,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             senseVoiceMetadata: senseVoiceMetadata,
             transcriptSegments: transcriptSegments,
             transcriptAudioRelativePath: transcriptAudioRelativePath,
+            meetingCaptureMode: meetingCaptureMode,
             transcriptSummary: transcriptSummary,
             displayTitle: displayTitle,
             transcriptionChatMessages: transcriptionChatMessages,
@@ -856,6 +864,19 @@ final class TranscriptionHistoryStore: ObservableObject {
     func updateSummaryChatMessages(_ messages: [TranscriptSummaryChatMessage], for entryID: UUID) -> TranscriptionHistoryEntry? {
         guard let existingEntry = entry(id: entryID) else { return nil }
         let updatedEntry = existingEntry.updatingSummaryChatMessages(messages)
+        cacheUpdatedEntry(updatedEntry)
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        persistEntry(updatedEntry)
+        return updatedEntry
+    }
+
+    @discardableResult
+    func updateTranscriptSegments(_ segments: [TranscriptSegment], for entryID: UUID) -> TranscriptionHistoryEntry? {
+        guard let existingEntry = entry(id: entryID) else { return nil }
+        let text = TranscriptFormatter.joinedText(for: segments)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let updatedEntry = existingEntry.updatingTranscriptSegments(segments, text: text)
         cacheUpdatedEntry(updatedEntry)
         refreshEntryIndexes()
         publishVisibleEntries()

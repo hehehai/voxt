@@ -59,6 +59,10 @@ enum TranscriptAssembler {
             segments[existingIndex] = TranscriptSegment(
                 id: existing.id,
                 speaker: segment.speaker,
+                speakerID: segment.speakerID ?? existing.speakerID,
+                speakerDisplayName: segment.speakerDisplayName ?? existing.speakerDisplayName,
+                audioSource: segment.audioSource ?? existing.audioSource,
+                speakerConfidence: segment.speakerConfidence ?? existing.speakerConfidence,
                 startSeconds: existing.startSeconds,
                 endSeconds: segment.endSeconds,
                 text: segment.text,

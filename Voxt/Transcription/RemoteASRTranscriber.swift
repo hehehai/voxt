@@ -810,7 +810,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             )
         }
 
-        var aggregate = ""
+        var previewText = ""
+        var finalText: String?
         var sseEvent: String?
         for try await rawLine in bytes.lines {
             let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -849,18 +850,33 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 )
             }
 
-            if let fragment = RemoteASRTextSupport.extractTextFragment(fromLine: line),
-               !fragment.isEmpty {
-                aggregate = RemoteASRTextSupport.mergeStreamFragment(current: aggregate, incoming: fragment)
+            switch StepFunPayloadSupport.parseSSEDataLine(line) {
+            case .delta(let fragment), .fragment(let fragment):
+                previewText = RemoteASRTextSupport.mergeStreamFragment(current: previewText, incoming: fragment)
                 await MainActor.run {
-                    self.publishIntermediateTranscription(aggregate)
+                    self.publishIntermediateTranscription(previewText)
                 }
+            case .completed(let text):
+                finalText = text
+                previewText = text
+                await MainActor.run {
+                    self.publishIntermediateTranscription(text)
+                }
+            case .error(let message):
+                throw NSError(
+                    domain: "Voxt.RemoteASR",
+                    code: -11,
+                    userInfo: [NSLocalizedDescriptionKey: "StepFun ASR stream error: \(message)"]
+                )
+            case .ignore:
+                break
             }
             sseEvent = nil
         }
 
-        if aggregate.isEmpty { return transcribedText }
-        return aggregate
+        if let finalText, !finalText.isEmpty { return finalText }
+        if !previewText.isEmpty { return previewText }
+        return transcribedText
     }
 
     private func transcribeDoubao(

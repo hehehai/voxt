@@ -88,6 +88,7 @@ extension FeatureSettingsView {
     func featurePage<Content: View>(
         title: String,
         subtitle: String,
+        titleBadge: String? = nil,
         iconKind: SettingsSidebarIconKind? = nil,
         systemImageName: String? = nil,
         pills: [FeatureSummaryPill],
@@ -99,6 +100,7 @@ extension FeatureSettingsView {
                 if showsHeroHeader || !pills.isEmpty {
                     FeatureHeroCard(
                         title: showsHeroHeader ? title : "",
+                        titleBadge: showsHeroHeader ? titleBadge : nil,
                         subtitle: showsHeroHeader ? subtitle : "",
                         iconKind: showsHeroHeader ? iconKind : nil,
                         systemImageName: showsHeroHeader ? systemImageName : nil,

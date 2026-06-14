@@ -28,9 +28,7 @@ struct TranscriptionDetailConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if playbackController.isAvailable {
-                audioPlayer
-            }
+            audioPane
             Divider()
                 .overlay(DetailPanelUIStyle.dividerColor)
             conversationBody
@@ -66,9 +64,13 @@ struct TranscriptionDetailConversationView: View {
         .padding(.bottom, 10)
     }
 
-    private var audioPlayer: some View {
+    private var audioPane: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HistoryAudioPlayerView(controller: playbackController, compact: false)
+            if playbackController.isAvailable {
+                HistoryAudioPlayerView(controller: playbackController, compact: false)
+            } else {
+                HistoryAudioUnavailableView(compact: false)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 12)
