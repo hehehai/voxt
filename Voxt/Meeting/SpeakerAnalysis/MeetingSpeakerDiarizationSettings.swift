@@ -290,12 +290,7 @@ struct MeetingSpeakerDiarizationOptions: Equatable, Sendable {
         self.debugLoggingEnabled = debugLoggingEnabled
     }
 
-    static func fromPreferences(defaults: UserDefaults = .standard) -> MeetingSpeakerDiarizationOptions {
-        let speakerCountHintRawValue = defaults.string(forKey: "meetingSpeakerCountHint") ?? ""
-        return MeetingSpeakerDiarizationOptions(
-            sensitivity: MeetingSpeakerDiarizationSensitivity.stored(in: defaults),
-            speakerCountHint: MeetingSpeakerCountHint(rawValue: speakerCountHintRawValue) ?? .auto,
-            debugLoggingEnabled: defaults.bool(forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled)
-        )
+    static func fromPreferences(defaults _: UserDefaults = .standard) -> MeetingSpeakerDiarizationOptions {
+        MeetingSpeakerDiarizationOptions()
     }
 }

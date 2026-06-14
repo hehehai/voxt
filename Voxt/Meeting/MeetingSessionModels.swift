@@ -2,13 +2,31 @@ import Foundation
 import Combine
 
 struct MeetingSessionResult {
-    let captureMode: MeetingCaptureMode = .meeting
+    let captureMode: MeetingCaptureMode
     let transcriptionEngine: TranscriptionEngine
     let transcriptionModelDescription: String
     let segments: [MeetingTranscriptSegment]
     let visibleSnapshotSegments: [MeetingTranscriptSegment]
     let audioDurationSeconds: TimeInterval
     let archivedAudioURL: URL?
+
+    init(
+        captureMode: MeetingCaptureMode = .meeting,
+        transcriptionEngine: TranscriptionEngine,
+        transcriptionModelDescription: String,
+        segments: [MeetingTranscriptSegment],
+        visibleSnapshotSegments: [MeetingTranscriptSegment],
+        audioDurationSeconds: TimeInterval,
+        archivedAudioURL: URL?
+    ) {
+        self.captureMode = captureMode
+        self.transcriptionEngine = transcriptionEngine
+        self.transcriptionModelDescription = transcriptionModelDescription
+        self.segments = segments
+        self.visibleSnapshotSegments = visibleSnapshotSegments
+        self.audioDurationSeconds = audioDurationSeconds
+        self.archivedAudioURL = archivedAudioURL
+    }
 
     var persistedSegments: [MeetingTranscriptSegment] {
         let primarySegments = MeetingTranscriptFormatter.meaningfulSegments(for: segments)
