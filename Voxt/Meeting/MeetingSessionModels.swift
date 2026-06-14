@@ -2,6 +2,7 @@ import Foundation
 import Combine
 
 struct MeetingSessionResult {
+    let captureMode: MeetingCaptureMode = .meeting
     let transcriptionEngine: TranscriptionEngine
     let transcriptionModelDescription: String
     let segments: [MeetingTranscriptSegment]
@@ -25,7 +26,7 @@ struct MeetingSessionResult {
     }
 }
 
-enum MeetingCaptureMode: String, CaseIterable, Identifiable, Sendable {
+enum MeetingCaptureMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case meeting
     case subtitles
     case recording
@@ -59,6 +60,10 @@ enum MeetingCaptureMode: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    nonisolated var capabilities: MeetingModeCapabilities {
+        MeetingModeCapabilities(mode: self)
+    }
+
     var title: String {
         switch self {
         case .meeting:
@@ -67,6 +72,17 @@ enum MeetingCaptureMode: String, CaseIterable, Identifiable, Sendable {
             return AppLocalization.localizedString("Subtitles")
         case .recording:
             return AppLocalization.localizedString("Recording")
+        }
+    }
+
+    var detailBadgeTitle: String {
+        switch self {
+        case .meeting:
+            return AppLocalization.localizedString("Meeting Mode")
+        case .subtitles:
+            return AppLocalization.localizedString("Subtitles Mode")
+        case .recording:
+            return AppLocalization.localizedString("Recording Mode")
         }
     }
 
@@ -99,6 +115,57 @@ enum MeetingCaptureMode: String, CaseIterable, Identifiable, Sendable {
 
     func persist(in defaults: UserDefaults = .standard) {
         defaults.set(rawValue, forKey: AppPreferenceKey.meetingCaptureMode)
+    }
+}
+
+struct MeetingModeCapabilities: Equatable, Sendable {
+    let mode: MeetingCaptureMode
+
+    nonisolated var allowsSpeakerFeatures: Bool {
+        switch mode {
+        case .meeting:
+            return true
+        case .subtitles, .recording:
+            return false
+        }
+    }
+
+    nonisolated var realtimeDiarizationSources: Set<TranscriptAudioSource> {
+        []
+    }
+
+    nonisolated var finalDiarizationSources: Set<TranscriptAudioSource> {
+        switch mode {
+        case .meeting:
+            return [.systemAudio]
+        case .subtitles, .recording:
+            return []
+        }
+    }
+
+    nonisolated func defaultSpeaker(for source: TranscriptAudioSource) -> MeetingSpeaker {
+        switch (mode, source) {
+        case (.meeting, .microphone):
+            return .me
+        case (.meeting, .systemAudio), (.meeting, .mixed):
+            return .them
+        case (.subtitles, _):
+            return .them
+        case (.recording, .microphone):
+            return .me
+        case (.recording, .mixed):
+            return .them
+        case (.recording, .systemAudio):
+            return .them
+        }
+    }
+
+    nonisolated func shouldRunRealtimeDiarization(for source: TranscriptAudioSource) -> Bool {
+        realtimeDiarizationSources.contains(source)
+    }
+
+    nonisolated func shouldRunFinalDiarization(for source: TranscriptAudioSource) -> Bool {
+        finalDiarizationSources.contains(source)
     }
 }
 

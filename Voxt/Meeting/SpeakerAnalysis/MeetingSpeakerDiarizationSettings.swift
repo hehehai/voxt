@@ -29,6 +29,11 @@ enum MeetingSpeakerDiarizationSensitivity: String, CaseIterable, Identifiable, C
         }
     }
 
+    nonisolated static func stored(in defaults: UserDefaults = .standard) -> MeetingSpeakerDiarizationSensitivity {
+        let rawValue = defaults.string(forKey: AppPreferenceKey.meetingSpeakerDiarizationSensitivity) ?? ""
+        return MeetingSpeakerDiarizationSensitivity(rawValue: rawValue) ?? .balanced
+    }
+
     nonisolated var minimumSpeakerConfidence: Double {
         switch self {
         case .stable:
@@ -285,7 +290,12 @@ struct MeetingSpeakerDiarizationOptions: Equatable, Sendable {
         self.debugLoggingEnabled = debugLoggingEnabled
     }
 
-    static func fromPreferences(defaults _: UserDefaults = .standard) -> MeetingSpeakerDiarizationOptions {
-        MeetingSpeakerDiarizationOptions()
+    static func fromPreferences(defaults: UserDefaults = .standard) -> MeetingSpeakerDiarizationOptions {
+        let speakerCountHintRawValue = defaults.string(forKey: "meetingSpeakerCountHint") ?? ""
+        return MeetingSpeakerDiarizationOptions(
+            sensitivity: MeetingSpeakerDiarizationSensitivity.stored(in: defaults),
+            speakerCountHint: MeetingSpeakerCountHint(rawValue: speakerCountHintRawValue) ?? .auto,
+            debugLoggingEnabled: defaults.bool(forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled)
+        )
     }
 }
