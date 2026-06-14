@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import WhisperKit
 
-struct BufferedMeetingChunk {
+struct BufferedMeetingChunk: Sendable {
     let segmentID: UUID
     let speaker: MeetingSpeaker
     let startSeconds: TimeInterval
@@ -12,7 +12,7 @@ struct BufferedMeetingChunk {
     let isFinal: Bool
     let preventsAdjacentMerge: Bool
 
-    init(
+    nonisolated init(
         segmentID: UUID,
         speaker: MeetingSpeaker,
         startSeconds: TimeInterval,
@@ -92,68 +92,6 @@ enum MeetingChunkingMode: String, CaseIterable, Identifiable, Codable, Hashable,
     }
 }
 
-enum MeetingServerVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
-    case automatic
-    case responsive
-    case balanced
-    case stable
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .automatic:
-            return AppLocalization.localizedString("Auto")
-        case .responsive:
-            return AppLocalization.localizedString("Responsive")
-        case .balanced:
-            return AppLocalization.localizedString("Balanced")
-        case .stable:
-            return AppLocalization.localizedString("Stable")
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .automatic:
-            return AppLocalization.localizedString("Use the provider default tuned for meeting transcripts.")
-        case .responsive:
-            return AppLocalization.localizedString("Split sooner for lower latency, with a higher risk of fragmented sentences.")
-        case .balanced:
-            return AppLocalization.localizedString("Use moderate silence detection for smoother live meeting text.")
-        case .stable:
-            return AppLocalization.localizedString("Wait longer before splitting to favor coherent sentences.")
-        }
-    }
-
-    var qwenThreshold: Double {
-        switch self {
-        case .automatic, .balanced:
-            return 0.35
-        case .responsive:
-            return 0.18
-        case .stable:
-            return 0.45
-        }
-    }
-
-    var qwenSilenceDurationMilliseconds: Int {
-        switch self {
-        case .automatic, .balanced:
-            return 800
-        case .responsive:
-            return 500
-        case .stable:
-            return 1_100
-        }
-    }
-
-    static func stored(in defaults: UserDefaults = .standard) -> MeetingServerVADMode {
-        let rawValue = defaults.string(forKey: AppPreferenceKey.meetingServerVADMode) ?? ""
-        return MeetingServerVADMode(rawValue: rawValue) ?? .automatic
-    }
-}
-
 enum MeetingFinalTranscriptOptimization {
     static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled) as? Bool ?? true
@@ -197,14 +135,16 @@ actor MeetingChunkAccumulator {
         samples: [Float],
         sampleRate: Double,
         level: Float,
+        voiceActivityIsSpeech: Bool? = nil,
         bufferEndSeconds: TimeInterval
     ) -> BufferedMeetingChunk? {
         guard !samples.isEmpty, sampleRate > 0 else { return nil }
+        let isSpeech = voiceActivityIsSpeech ?? (level >= speechThreshold)
         let bufferDuration = Double(samples.count) / sampleRate
         let bufferStartSeconds = max(bufferEndSeconds - bufferDuration, 0)
 
         if currentStartSeconds == nil {
-            guard level >= speechThreshold else { return nil }
+            guard isSpeech else { return nil }
             currentStartSeconds = bufferStartSeconds
             currentSampleRate = sampleRate
             currentSamples.removeAll(keepingCapacity: true)
@@ -213,13 +153,13 @@ actor MeetingChunkAccumulator {
         }
 
         if abs(currentSampleRate - sampleRate) > 1 {
-            if let flushed = flushCurrent(endSeconds: bufferStartSeconds) {
+            if let flushed = flushCurrent(endSeconds: bufferStartSeconds, reason: .sampleRateChange) {
                 currentStartSeconds = bufferStartSeconds
                 currentSampleRate = sampleRate
                 currentSamples = samples
                 currentSegmentID = UUID()
                 lastPartialEmissionDuration = 0
-                accumulatedSilenceSeconds = level >= speechThreshold ? 0 : bufferDuration
+                accumulatedSilenceSeconds = isSpeech ? 0 : bufferDuration
                 return flushed
             }
             currentStartSeconds = bufferStartSeconds
@@ -231,7 +171,7 @@ actor MeetingChunkAccumulator {
 
         currentSamples.append(contentsOf: samples)
 
-        if level >= speechThreshold {
+        if isSpeech {
             accumulatedSilenceSeconds = 0
         } else {
             accumulatedSilenceSeconds += bufferDuration
@@ -240,16 +180,16 @@ actor MeetingChunkAccumulator {
         let currentDuration = Double(currentSamples.count) / currentSampleRate
         let bufferEndSeconds = bufferStartSeconds + bufferDuration
 
-        if currentDuration >= config.maxChunkSeconds {
-            return flushCurrent(endSeconds: bufferEndSeconds)
+        if accumulatedSilenceSeconds >= config.silenceFlushSeconds {
+            return flushCurrent(endSeconds: bufferEndSeconds, reason: .pause)
         }
 
-        if accumulatedSilenceSeconds >= config.silenceFlushSeconds {
-            return flushCurrent(endSeconds: bufferEndSeconds)
+        if currentDuration >= config.maxChunkSeconds {
+            return flushCurrent(endSeconds: bufferEndSeconds, reason: .duration)
         }
 
         if let partialEmitIntervalSeconds = config.partialEmitIntervalSeconds,
-           level >= speechThreshold,
+           isSpeech,
            currentDuration >= config.minSpeechSeconds,
            currentDuration - lastPartialEmissionDuration >= partialEmitIntervalSeconds {
             lastPartialEmissionDuration = currentDuration
@@ -260,10 +200,13 @@ actor MeetingChunkAccumulator {
     }
 
     func finish(at endSeconds: TimeInterval) -> BufferedMeetingChunk? {
-        flushCurrent(endSeconds: endSeconds)
+        flushCurrent(endSeconds: endSeconds, reason: .finish)
     }
 
-    private func flushCurrent(endSeconds: TimeInterval) -> BufferedMeetingChunk? {
+    private func flushCurrent(
+        endSeconds: TimeInterval,
+        reason: MeetingChunkFlushReason
+    ) -> BufferedMeetingChunk? {
         guard let currentStartSeconds else { return nil }
         let duration = Double(currentSamples.count) / max(currentSampleRate, 1)
         defer {
@@ -280,7 +223,8 @@ actor MeetingChunkAccumulator {
             segmentID: currentSegmentID,
             startSeconds: currentStartSeconds,
             endSeconds: max(endSeconds, currentStartSeconds),
-            isFinal: true
+            isFinal: true,
+            preventsAdjacentMerge: reason.preventsAdjacentMerge
         )
     }
 
@@ -290,7 +234,8 @@ actor MeetingChunkAccumulator {
             segmentID: currentSegmentID,
             startSeconds: currentStartSeconds,
             endSeconds: max(endSeconds, currentStartSeconds),
-            isFinal: isFinal
+            isFinal: isFinal,
+            preventsAdjacentMerge: false
         )
     }
 
@@ -298,7 +243,8 @@ actor MeetingChunkAccumulator {
         segmentID: UUID,
         startSeconds: TimeInterval,
         endSeconds: TimeInterval,
-        isFinal: Bool
+        isFinal: Bool,
+        preventsAdjacentMerge: Bool
     ) -> BufferedMeetingChunk {
         BufferedMeetingChunk(
             segmentID: segmentID,
@@ -307,8 +253,25 @@ actor MeetingChunkAccumulator {
             endSeconds: endSeconds,
             sampleRate: currentSampleRate,
             samples: currentSamples,
-            isFinal: isFinal
+            isFinal: isFinal,
+            preventsAdjacentMerge: preventsAdjacentMerge
         )
+    }
+}
+
+private enum MeetingChunkFlushReason: Sendable {
+    case pause
+    case duration
+    case sampleRateChange
+    case finish
+
+    nonisolated var preventsAdjacentMerge: Bool {
+        switch self {
+        case .pause:
+            return true
+        case .duration, .sampleRateChange, .finish:
+            return false
+        }
     }
 }
 

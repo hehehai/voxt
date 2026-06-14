@@ -103,6 +103,36 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertTrue(result.segments[0].isTranslationPending)
     }
 
+    func testUpdatedSegmentPreservesSpeakerAnalysisMetadata() {
+        let id = UUID()
+        let existing = MeetingTranscriptSegment(
+            id: id,
+            speaker: .them,
+            speakerID: "speaker_a",
+            speakerDisplayName: "Speaker 1",
+            audioSource: .mixed,
+            speakerConfidence: 0.72,
+            startSeconds: 2,
+            endSeconds: 4,
+            text: "hello there"
+        )
+        let updated = MeetingTranscriptSegment(
+            id: id,
+            speaker: .them,
+            startSeconds: 2,
+            endSeconds: 5,
+            text: "hello there again"
+        )
+
+        let result = MeetingTranscriptAssembler.apply(.final(updated), to: [existing])
+
+        XCTAssertEqual(result.segments.count, 1)
+        XCTAssertEqual(result.segments[0].speakerID, "speaker_a")
+        XCTAssertEqual(result.segments[0].speakerDisplayName, "Speaker 1")
+        XCTAssertEqual(result.segments[0].audioSource, .mixed)
+        XCTAssertEqual(result.segments[0].speakerConfidence ?? -1, 0.72, accuracy: 0.001)
+    }
+
     func testUpdatedSegmentDoesNotEnterPendingStateWithoutExistingTranslation() {
         let id = UUID()
         let existing = MeetingTranscriptSegment(
@@ -244,8 +274,60 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertEqual(result.last?.endSeconds ?? -1, 60, accuracy: 0.001)
     }
 
+    func testLiveOverlayPostProcessorSplitsLongSegmentMoreAggressivelyThanDetailWithoutOverSplitting() {
+        let text = "第一句介绍当前模型选择和采集链路。第二句继续说明发言人识别的误差来源，以及短暂停顿不应该直接生成新的发言人。第三句讨论会议详情应该保持连续语义，同时实时浮层需要更快地给出可读段落和清晰反馈。第四句补充说明如果文本继续变长，实时显示仍然需要在自然句边界拆开，避免一整块内容压在同一个气泡里。"
+        let segment = MeetingTranscriptSegment(
+            speaker: .them,
+            speakerID: "S1",
+            speakerDisplayName: "Speaker 1",
+            audioSource: .systemAudio,
+            startSeconds: 0,
+            endSeconds: 24,
+            text: text
+        )
+
+        let detailResult = MeetingTranscriptPostProcessor.process([segment])
+        let overlayResult = MeetingTranscriptPostProcessor.process(
+            [segment],
+            options: .liveOverlay
+        )
+
+        XCTAssertEqual(detailResult.count, 1)
+        XCTAssertGreaterThan(overlayResult.count, 1)
+        XCTAssertTrue(overlayResult.allSatisfy(\.preventsAdjacentMerge))
+        XCTAssertTrue(overlayResult.allSatisfy { $0.text.count <= 130 })
+        XCTAssertEqual(overlayResult.map(\.text).joined(), text)
+    }
+
+    func testReadableChunksMergeShortTrailingOverlaySentences() {
+        let text = "只要给你无限的时间写，是不是？是总有机，肯定会出现重复的。就是写的这个牌的顺序完全重复，就像哎，他说。说这个女士，一个女士买了啊五百个。前面这部分继续补充一些上下文，确保实时浮层需要拆成多个可读片段。这里再补一段会议里的连续说明，用来模拟远端实时模型一次返回较长内容，但最后又带上几个非常短的句子。嗯嗯，上一千双鞋。给他一千年的时间搭。"
+        let segment = MeetingTranscriptSegment(
+            speaker: .them,
+            speakerID: "S1",
+            speakerDisplayName: "Speaker 1",
+            audioSource: .systemAudio,
+            startSeconds: 0,
+            endSeconds: 18,
+            text: text
+        )
+
+        let result = MeetingTranscriptPostProcessor.process(
+            [segment],
+            options: .liveOverlay
+        )
+        let chunks = result.map(\.text)
+
+        XCTAssertGreaterThan(chunks.count, 1)
+        XCTAssertFalse(chunks.contains("嗯嗯，上一千双鞋。"))
+        XCTAssertFalse(chunks.contains("给他一千年的时间搭。"))
+        XCTAssertTrue(chunks.contains { $0.contains("嗯嗯，上一千双鞋。给他一千年的时间搭。") })
+        XCTAssertTrue(chunks.allSatisfy { $0.count <= 130 })
+        XCTAssertEqual(chunks.joined(), MeetingTranscriptTextPostProcessor.normalizedFinalText(text))
+    }
+
     func testFinalPostProcessorSplitsRealMeetingExportSampleIntoReadableChunks() {
-        let exportedText = "哎。一些可能。不那么需要的。放在起，放进 C P U。好了，非常感谢万晨老师。我觉得我们也。可以到下一个环节了。我们啊，除了要推理方面的优化。阿西拉，相比于。啊，不一样的这个解解解决方案。我们也提供了这个。带领就。立马，我们就有了一个 R L 上的这个知识。相当于说。直接就可以拿你的数据在上面进行一些微调。啊，进行一些。标化。然后让让它能够适用在你的这个使用场。场景中。那么这里的话，我也邀请我们下一位同学。上来给我们。介绍一下这个 mouse 相关的啊，还是。Java开发。对。嗯，我觉得其实带领。二 L 这样事件本身。"
+        let exportedSample = "哎。一些可能。不那么需要的。放在起，放进 C P U。好了，非常感谢万晨老师。我觉得我们也。可以到下一个环节了。我们啊，除了要推理方面的优化。阿西拉，相比于。啊，不一样的这个解解解决方案。我们也提供了这个。带领就。立马，我们就有了一个 R L 上的这个知识。相当于说。直接就可以拿你的数据在上面进行一些微调。啊，进行一些。标化。然后让让它能够适用在你的这个使用场。场景中。那么这里的话，我也邀请我们下一位同学。上来给我们。介绍一下这个 mouse 相关的啊，还是。Java开发。对。嗯，我觉得其实带领。二 L 这样事件本身。"
+        let exportedText = "\(exportedSample)接下来我们继续确认第二部分内容。\(exportedSample)"
         let segment = MeetingTranscriptSegment(
             speaker: .them,
             speakerID: "S1",
@@ -259,11 +341,54 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         let result = MeetingTranscriptPostProcessor.process([segment])
 
         XCTAssertGreaterThan(result.count, 1)
-        XCTAssertTrue(result.allSatisfy { $0.text.count <= 140 })
+        XCTAssertTrue(result.allSatisfy { $0.text.count <= 260 })
         XCTAssertEqual(result.first?.id, segment.id)
         XCTAssertEqual(result.first?.startSeconds ?? -1, 4, accuracy: 0.001)
         XCTAssertEqual(result.last?.endSeconds ?? -1, 45, accuracy: 0.001)
         XCTAssertEqual(result.map(\.text).joined(), MeetingTranscriptTextPostProcessor.normalizedFinalText(exportedText))
+    }
+
+    func testMeetingTranscriptSanitizerSuppressesPromptEcho() {
+        let prompt = "The speaker's primary language is Simplified Chinese. Mixed-language speech is expected. Preserve names, product terms, URLs, and code-like text exactly as spoken."
+
+        XCTAssertEqual(
+            MeetingTranscriptSanitizer.sanitizedText(prompt, prompt: prompt),
+            ""
+        )
+    }
+
+    func testMeetingTranscriptSanitizerSuppressesHintOnlyEcho() {
+        let entries = [
+            DictionaryEntry(
+                term: "Qwen",
+                normalizedTerm: "qwen",
+                source: .manual,
+                status: .active
+            ),
+            DictionaryEntry(
+                term: "FluidAudio",
+                normalizedTerm: "fluidaudio",
+                source: .manual,
+                status: .active
+            )
+        ]
+
+        XCTAssertEqual(
+            MeetingTranscriptSanitizer.sanitizedText(
+                "Qwen, FluidAudio",
+                contextualPhrases: ["Silero VAD"],
+                dictionaryEntries: entries
+            ),
+            ""
+        )
+        XCTAssertEqual(
+            MeetingTranscriptSanitizer.sanitizedText(
+                "我们今天讨论 Qwen 的会议转写效果。",
+                contextualPhrases: ["Silero VAD"],
+                dictionaryEntries: entries
+            ),
+            "我们今天讨论 Qwen 的会议转写效果。"
+        )
     }
 
     func testFinalPostProcessorKeepsCoherentShortTextTogetherEvenWhenDurationIsLong() {
@@ -389,5 +514,56 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertEqual(chunks[1].startSeconds, 5.2, accuracy: 0.001)
         XCTAssertEqual(chunks[1].endSeconds, 6.4, accuracy: 0.001)
         XCTAssertTrue(chunks.allSatisfy(\.preventsAdjacentMerge))
+    }
+
+    func testBalancedSpeakerAssemblyKeepsContinuousSegmentTogetherAcrossShortSpeakerTurns() {
+        let segment = MeetingTranscriptSegment(
+            speaker: .them,
+            audioSource: .mixed,
+            startSeconds: 0,
+            endSeconds: 12,
+            text: "今天我们先确认采集链路和模型选择，然后继续讨论发言人识别在短句和停顿里的稳定性，最后再看会议详情里的段落阅读效果。"
+        )
+        let turns = [
+            MeetingSpeakerTurn(
+                source: .mixed,
+                speakerID: "speaker_a",
+                displayName: "Speaker 1",
+                startSeconds: 0,
+                endSeconds: 4.4,
+                confidence: 0.7
+            ),
+            MeetingSpeakerTurn(
+                source: .mixed,
+                speakerID: "speaker_b",
+                displayName: "Speaker 2",
+                startSeconds: 4.4,
+                endSeconds: 5.1,
+                confidence: 0.65
+            ),
+            MeetingSpeakerTurn(
+                source: .mixed,
+                speakerID: "speaker_a",
+                displayName: "Speaker 1",
+                startSeconds: 5.1,
+                endSeconds: 12,
+                confidence: 0.75
+            )
+        ]
+
+        let smoothedTurns = MeetingSpeakerTurnSmoother.smooth(
+            turns,
+            options: MeetingSpeakerDiarizationSensitivity.balanced.smootherOptions
+        )
+        let result = MeetingSpeakerTranscriptAssembler.assemble(
+            segments: [segment],
+            speakerTurns: smoothedTurns,
+            options: MeetingSpeakerDiarizationSensitivity.balanced.transcriptAssemblyOptions
+        )
+
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].text, segment.text)
+        XCTAssertEqual(result[0].speakerID, "speaker_a")
+        XCTAssertEqual(result[0].speakerDisplayName, "Speaker 1")
     }
 }

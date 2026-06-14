@@ -146,6 +146,7 @@ extension AppDelegate {
             whisperWordTimings: nil,
             transcriptSegments: persistedSegments,
             transcriptAudioRelativePath: audioRelativePath,
+            meetingCaptureMode: result.captureMode,
             dictionaryHitTerms: [],
             dictionaryCorrectedTerms: [],
             dictionarySuggestedTerms: []

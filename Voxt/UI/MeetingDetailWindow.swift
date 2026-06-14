@@ -57,6 +57,7 @@ final class MeetingDetailWindowManager {
             summarySettingsProvider: summarySettingsProvider,
             summaryModelOptionsProvider: summaryModelOptionsProvider,
             segments: entry.transcriptSegments ?? [],
+            captureMode: entry.meetingCaptureMode,
             audioURL: audioURL,
             translationHandler: translationHandler,
             summaryStatusProvider: summaryStatusProvider,
@@ -381,7 +382,8 @@ private struct MeetingDetailWindowView: View {
 
             transcriptTabPicker
 
-            if viewModel.transcriptPresentationMode == .timeline {
+            if viewModel.transcriptPresentationMode == .timeline,
+               viewModel.showsSpeakerDisplayModePicker {
                 transcriptSpeakerDisplayModePicker
             }
 
@@ -422,7 +424,7 @@ private struct MeetingDetailWindowView: View {
 
     private var transcriptTabPicker: some View {
         HStack(spacing: 2) {
-            ForEach(MeetingDetailViewModel.TranscriptPresentationMode.allCases) { mode in
+            ForEach(viewModel.availableTranscriptPresentationModes) { mode in
                 Button {
                     viewModel.setTranscriptPresentationMode(mode)
                 } label: {

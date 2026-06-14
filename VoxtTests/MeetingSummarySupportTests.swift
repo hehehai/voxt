@@ -260,6 +260,56 @@ final class MeetingSummarySupportTests: XCTestCase {
         XCTAssertEqual(decoded.transcriptSummaryChatMessages?.last?.role, .assistant)
     }
 
+    func testHistoryEntryRoundTripPersistsMeetingCaptureMode() throws {
+        let entry = TranscriptionHistoryEntry(
+            id: UUID(),
+            text: "Meeting text",
+            createdAt: Date(timeIntervalSinceReferenceDate: 456),
+            transcriptionEngine: "WhisperKit",
+            transcriptionModel: "small",
+            enhancementMode: "Remote LLM",
+            enhancementModel: "model-x",
+            kind: .transcript,
+            isTranslation: false,
+            audioDurationSeconds: 32,
+            transcriptionProcessingDurationSeconds: nil,
+            llmDurationSeconds: nil,
+            focusedAppName: "Calendar",
+            focusedAppBundleID: "com.apple.iCal",
+            matchedGroupID: nil,
+            matchedGroupName: nil,
+            matchedAppGroupName: nil,
+            matchedURLGroupName: nil,
+            remoteASRProvider: nil,
+            remoteASRModel: nil,
+            remoteASREndpoint: nil,
+            remoteLLMProvider: nil,
+            remoteLLMModel: nil,
+            remoteLLMEndpoint: nil,
+            whisperWordTimings: nil,
+            transcriptSegments: [
+                MeetingTranscriptSegment(
+                    speaker: .them,
+                    audioSource: .systemAudio,
+                    startSeconds: 0,
+                    endSeconds: 3,
+                    text: "Meeting mode should be read from history metadata."
+                )
+            ],
+            transcriptAudioRelativePath: nil,
+            meetingCaptureMode: .meeting,
+            transcriptSummary: nil,
+            dictionaryHitTerms: [],
+            dictionaryCorrectedTerms: [],
+            dictionarySuggestedTerms: []
+        )
+
+        let data = try JSONEncoder().encode(entry)
+        let decoded = try JSONDecoder().decode(TranscriptionHistoryEntry.self, from: data)
+
+        XCTAssertEqual(decoded.meetingCaptureMode, .meeting)
+    }
+
     func testMeetingSummarySnapshotDecodeIgnoresUnknownLengthAndStyleFields() throws {
         let payload = """
         {

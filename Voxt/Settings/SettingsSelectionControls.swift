@@ -13,6 +13,9 @@ struct SettingsMenuPicker<Value: Hashable>: View {
     let options: [SettingsMenuOption<Value>]
     let selectedTitle: String
     let width: CGFloat
+    var leadingAccessory: AnyView?
+    var selectedStatusSystemImageName: String?
+    var selectedStatusTintColor: NSColor = .systemGreen
     var allowsCompactWidth = false
     var isCompact = false
     var usesCompactInsets = false
@@ -26,15 +29,23 @@ struct SettingsMenuPicker<Value: Hashable>: View {
     }
 
     var body: some View {
-        SettingsNativeMenuPicker(
-            selection: $selection,
-            options: options,
-            selectedTitle: selectedTitle,
-            preferredWidth: resolvedWidth,
-            isCompact: isCompact,
-            usesCompactInsets: usesCompactInsets
-        )
-        .frame(width: resolvedWidth, height: resolvedHeight)
+        HStack(alignment: .center, spacing: 8) {
+            if let leadingAccessory {
+                leadingAccessory
+            }
+
+            SettingsNativeMenuPicker(
+                selection: $selection,
+                options: options,
+                selectedTitle: selectedTitle,
+                selectedStatusSystemImageName: selectedStatusSystemImageName,
+                selectedStatusTintColor: selectedStatusTintColor,
+                preferredWidth: resolvedWidth,
+                isCompact: isCompact,
+                usesCompactInsets: usesCompactInsets
+            )
+            .frame(width: resolvedWidth, height: resolvedHeight)
+        }
         .alignmentGuide(.firstTextBaseline) { dimensions in
             dimensions[VerticalAlignment.center]
         }
@@ -187,6 +198,8 @@ private struct SettingsNativeMenuPicker<Value: Hashable>: NSViewRepresentable {
     @Binding var selection: Value
     let options: [SettingsMenuOption<Value>]
     let selectedTitle: String
+    let selectedStatusSystemImageName: String?
+    let selectedStatusTintColor: NSColor
     let preferredWidth: CGFloat
     let isCompact: Bool
     let usesCompactInsets: Bool
@@ -199,6 +212,8 @@ private struct SettingsNativeMenuPicker<Value: Hashable>: NSViewRepresentable {
             },
             selectedValue: AnyHashable(selection),
             selectedTitle: selectedTitle,
+            selectedStatusSystemImageName: selectedStatusSystemImageName,
+            selectedStatusTintColor: selectedStatusTintColor,
             preferredWidth: preferredWidth,
             isCompact: isCompact,
             usesCompactInsets: usesCompactInsets,
@@ -248,6 +263,8 @@ private final class SettingsNativeMenuPickerCoordinator: NSObject {
                 titles: titles,
                 selectedIndex: selectedIndex,
                 fallbackTitle: state.options[selectedIndex].title,
+                statusSystemImageName: state.selectedStatusSystemImageName,
+                statusTintColor: state.selectedStatusTintColor,
                 preferredWidth: state.preferredWidth
             )
         } else if let firstOption = state.options.first {
@@ -256,6 +273,8 @@ private final class SettingsNativeMenuPickerCoordinator: NSObject {
                 titles: titles,
                 selectedIndex: 0,
                 fallbackTitle: firstOption.title,
+                statusSystemImageName: state.selectedStatusSystemImageName,
+                statusTintColor: state.selectedStatusTintColor,
                 preferredWidth: state.preferredWidth
             )
             if state.selectedValue != firstOption.value {
@@ -269,6 +288,8 @@ private final class SettingsNativeMenuPickerCoordinator: NSObject {
                 titles: [],
                 selectedIndex: nil,
                 fallbackTitle: state.selectedTitle,
+                statusSystemImageName: state.selectedStatusSystemImageName,
+                statusTintColor: state.selectedStatusTintColor,
                 preferredWidth: state.preferredWidth
             )
         }
@@ -284,6 +305,8 @@ private struct SettingsNativeMenuPickerState {
     let options: [SettingsNativeMenuPickerOption]
     let selectedValue: AnyHashable
     let selectedTitle: String
+    let selectedStatusSystemImageName: String?
+    let selectedStatusTintColor: NSColor
     let preferredWidth: CGFloat
     let isCompact: Bool
     let usesCompactInsets: Bool
@@ -297,10 +320,14 @@ private struct SettingsNativeMenuPickerOption {
 
 private final class SettingsMenuHostView: NSView {
     private let titleField = NSTextField(labelWithString: "")
+    private let statusImageView = NSImageView()
     private let indicatorView = NSImageView()
     private let popupMenu = NSMenu()
     private var titleLeadingConstraint: NSLayoutConstraint?
-    private var titleIndicatorConstraint: NSLayoutConstraint?
+    private var titleStatusConstraint: NSLayoutConstraint?
+    private var statusIndicatorConstraint: NSLayoutConstraint?
+    private var statusWidthConstraint: NSLayoutConstraint?
+    private var statusHeightConstraint: NSLayoutConstraint?
     private var indicatorTrailingConstraint: NSLayoutConstraint?
     private var indicatorWidthConstraint: NSLayoutConstraint?
     private var indicatorHeightConstraint: NSLayoutConstraint?
@@ -329,6 +356,10 @@ private final class SettingsMenuHostView: NSView {
         titleField.maximumNumberOfLines = 1
         titleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        statusImageView.translatesAutoresizingMaskIntoConstraints = false
+        statusImageView.isHidden = true
+        statusImageView.contentTintColor = .systemGreen
+
         indicatorView.translatesAutoresizingMaskIntoConstraints = false
         indicatorView.image = NSImage(
             systemSymbolName: "chevron.up.chevron.down",
@@ -337,18 +368,26 @@ private final class SettingsMenuHostView: NSView {
         indicatorView.contentTintColor = .secondaryLabelColor
 
         addSubview(titleField)
+        addSubview(statusImageView)
         addSubview(indicatorView)
 
         titleLeadingConstraint = titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12)
-        titleIndicatorConstraint = titleField.trailingAnchor.constraint(equalTo: indicatorView.leadingAnchor, constant: -8)
+        titleStatusConstraint = titleField.trailingAnchor.constraint(lessThanOrEqualTo: statusImageView.leadingAnchor, constant: -5)
+        statusIndicatorConstraint = statusImageView.trailingAnchor.constraint(equalTo: indicatorView.leadingAnchor, constant: -7)
+        statusWidthConstraint = statusImageView.widthAnchor.constraint(equalToConstant: 0)
+        statusHeightConstraint = statusImageView.heightAnchor.constraint(equalToConstant: 0)
         indicatorTrailingConstraint = indicatorView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10)
         indicatorWidthConstraint = indicatorView.widthAnchor.constraint(equalToConstant: 14)
         indicatorHeightConstraint = indicatorView.heightAnchor.constraint(equalToConstant: 14)
 
         NSLayoutConstraint.activate([
             titleLeadingConstraint!,
-            titleIndicatorConstraint!,
+            titleStatusConstraint!,
             titleField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            statusIndicatorConstraint!,
+            statusImageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            statusWidthConstraint!,
+            statusHeightConstraint!,
             indicatorTrailingConstraint!,
             indicatorView.centerYAnchor.constraint(equalTo: centerYAnchor),
             indicatorWidthConstraint!,
@@ -409,15 +448,24 @@ private final class SettingsMenuHostView: NSView {
             accessibilityDescription: nil
         )?.withSymbolConfiguration(.init(pointSize: compact ? 9 : 11, weight: .semibold))
         titleLeadingConstraint?.constant = shouldUseCompactInsets ? 8 : 12
-        titleIndicatorConstraint?.constant = shouldUseCompactInsets ? -4 : -8
+        titleStatusConstraint?.constant = shouldUseCompactInsets ? -3 : -5
+        statusIndicatorConstraint?.constant = shouldUseCompactInsets ? -4 : -7
         indicatorTrailingConstraint?.constant = shouldUseCompactInsets ? -7 : -10
         indicatorWidthConstraint?.constant = compact ? 10 : 14
         indicatorHeightConstraint?.constant = compact ? 10 : 14
+        updateStatusImageSize()
         titleField.alignment = compactInsets ? .right : .left
         needsLayout = true
     }
 
-    func updateMenu(titles: [String], selectedIndex: Int?, fallbackTitle: String, preferredWidth: CGFloat) {
+    func updateMenu(
+        titles: [String],
+        selectedIndex: Int?,
+        fallbackTitle: String,
+        statusSystemImageName: String?,
+        statusTintColor: NSColor,
+        preferredWidth: CGFloat
+    ) {
         let menuWidth = max(ceil(preferredWidth), 1)
         let needsRebuild = popupMenu.items.map(\.title) != titles || abs(currentMenuWidth - menuWidth) > 0.5
 
@@ -442,6 +490,32 @@ private final class SettingsMenuHostView: NSView {
 
         popupMenu.minimumWidth = menuWidth
         titleField.stringValue = fallbackTitle
+        updateStatusImage(systemImageName: statusSystemImageName, tintColor: statusTintColor)
+    }
+
+    private func updateStatusImage(systemImageName: String?, tintColor: NSColor) {
+        guard let systemImageName,
+              let image = NSImage(
+                systemSymbolName: systemImageName,
+                accessibilityDescription: nil
+              )?.withSymbolConfiguration(.init(pointSize: isCompact ? 9 : 11, weight: .semibold))
+        else {
+            statusImageView.image = nil
+            statusImageView.isHidden = true
+            statusWidthConstraint?.constant = 0
+            statusHeightConstraint?.constant = 0
+            return
+        }
+        statusImageView.image = image
+        statusImageView.contentTintColor = tintColor
+        statusImageView.isHidden = false
+        updateStatusImageSize()
+    }
+
+    private func updateStatusImageSize() {
+        guard !statusImageView.isHidden else { return }
+        statusWidthConstraint?.constant = isCompact ? 10 : 12
+        statusHeightConstraint?.constant = isCompact ? 10 : 12
     }
 
     private func applyMenuItemAppearance(_ item: NSMenuItem) {

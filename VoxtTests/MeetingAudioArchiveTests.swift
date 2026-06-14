@@ -72,6 +72,33 @@ final class MeetingAudioArchiveTests: XCTestCase {
         XCTAssertEqual(mixedAsset.durationSeconds, 0.2, accuracy: 0.001)
         XCTAssertEqual(mixedAsset.samples[800], 0.2, accuracy: 0.001)
         XCTAssertEqual(mixedAsset.samples[2_400], 0.4, accuracy: 0.001)
+
+        let loadedSystemAsset = await archive.loadAssetWindow(
+            source: TranscriptAudioSource.systemAudio,
+            startSeconds: 0.12,
+            endSeconds: 0.18,
+            paddingSeconds: 0.05
+        )
+        let asset = try XCTUnwrap(loadedSystemAsset)
+
+        XCTAssertEqual(asset.source, TranscriptAudioSource.systemAudio)
+        XCTAssertEqual(asset.sessionStartOffset, 0.07, accuracy: 0.001)
+        XCTAssertEqual(asset.durationSeconds, 0.16, accuracy: 0.001)
+        XCTAssertEqual(asset.samples[800], 0.8, accuracy: 0.001)
+    }
+
+    func testModeSpecificAnalysisDescriptorsRouteToExpectedSources() async {
+        let archive = MeetingAudioArchive()
+        await archive.append(samples: [Float](repeating: 0.4, count: 1_600), sampleRate: 16_000, speaker: .me, startSeconds: 0)
+        await archive.append(samples: [Float](repeating: 0.8, count: 1_600), sampleRate: 16_000, speaker: .them, startSeconds: 0.1)
+
+        let meetingDescriptors = await archive.analysisAssetDescriptors(for: .meeting)
+        let subtitlesDescriptors = await archive.analysisAssetDescriptors(for: .subtitles)
+        let recordingDescriptors = await archive.analysisAssetDescriptors(for: .recording)
+
+        XCTAssertEqual(meetingDescriptors.map(\.source), [.systemAudio])
+        XCTAssertTrue(subtitlesDescriptors.isEmpty)
+        XCTAssertTrue(recordingDescriptors.isEmpty)
     }
 
     private func decodeMono16BitWAVSamples(from url: URL) throws -> [Float] {

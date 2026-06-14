@@ -84,6 +84,24 @@ actor MeetingAudioArchive {
         return descriptors(source: .mixed, range: range)
     }
 
+    func analysisAssetDescriptors(for mode: MeetingCaptureMode) -> [MeetingAudioAssetDescriptor] {
+        let capabilities = mode.capabilities
+        guard !capabilities.finalDiarizationSources.isEmpty else { return [] }
+
+        var output: [MeetingAudioAssetDescriptor] = []
+        if capabilities.shouldRunFinalDiarization(for: .microphone), let meWrittenRange {
+            output.append(contentsOf: descriptors(source: .microphone, range: meWrittenRange))
+        }
+        if capabilities.shouldRunFinalDiarization(for: .systemAudio), let themWrittenRange {
+            output.append(contentsOf: descriptors(source: .systemAudio, range: themWrittenRange))
+        }
+
+        if output.isEmpty, let range = combinedWrittenRange() {
+            return descriptors(source: .mixed, range: range)
+        }
+        return output
+    }
+
     func finalTranscriptionAssetDescriptors() -> [MeetingAudioAssetDescriptor] {
         [
             meWrittenRange.map { descriptors(source: .microphone, range: $0) } ?? [],
@@ -117,6 +135,27 @@ actor MeetingAudioArchive {
             samples: samples,
             sampleRate: descriptor.sampleRate,
             sessionStartOffset: descriptor.sessionStartOffset
+        )
+    }
+
+    func loadAssetWindow(
+        source: TranscriptAudioSource,
+        startSeconds: TimeInterval,
+        endSeconds: TimeInterval,
+        paddingSeconds: TimeInterval = 0
+    ) -> MeetingAudioAsset? {
+        let lowerSeconds = max(startSeconds - paddingSeconds, 0)
+        let upperSeconds = max(endSeconds + paddingSeconds, lowerSeconds)
+        let startSample = max(Int((lowerSeconds * targetSampleRate).rounded()), 0)
+        let endSample = max(Int((upperSeconds * targetSampleRate).rounded()), startSample)
+        guard endSample > startSample else { return nil }
+        return loadAsset(
+            MeetingAudioAssetDescriptor(
+                source: source,
+                sampleRate: targetSampleRate,
+                startSample: startSample,
+                sampleCount: endSample - startSample
+            )
         )
     }
 

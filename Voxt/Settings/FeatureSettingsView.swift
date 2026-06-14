@@ -7,6 +7,7 @@ struct FeatureSettingsView: View {
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
+    @StateObject var meetingDiarizationModelManager = MeetingDiarizationModelManager()
 
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
     @AppStorage(AppPreferenceKey.remoteASRProviderConfigurations) var remoteASRProviderConfigurationsRaw = ""
@@ -72,10 +73,13 @@ struct FeatureSettingsView: View {
         .onAppear {
             reloadFeatureSettings()
             refreshRemindersLists()
+            meetingDiarizationModelManager.refresh()
+            meetingDiarizationModelManager.ensureSelectedModelInstalled()
         }
         .onChange(of: featureSettingsRaw) { _, _ in
             reloadFeatureSettings()
             refreshRemindersLists()
+            meetingDiarizationModelManager.refresh()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
             refreshRemindersLists()

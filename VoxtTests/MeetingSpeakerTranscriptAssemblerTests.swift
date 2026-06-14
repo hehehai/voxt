@@ -2,6 +2,22 @@ import XCTest
 @testable import Voxt
 
 final class MeetingSpeakerTranscriptAssemblerTests: XCTestCase {
+    func testSpeakerDisplayNameFormatterUsesInterfaceLanguagePreference() {
+        let suiteName = "MeetingSpeakerTranscriptAssemblerTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("en", forKey: "interfaceLanguage")
+        XCTAssertEqual(MeetingSpeakerDisplayNameFormatter.displayName(ordinal: 3, defaults: defaults), "Speaker 3")
+
+        defaults.set("zh-Hans", forKey: "interfaceLanguage")
+        XCTAssertEqual(MeetingSpeakerDisplayNameFormatter.displayName(ordinal: 3, defaults: defaults), "发言人 3")
+
+        defaults.set("ja", forKey: "interfaceLanguage")
+        XCTAssertEqual(MeetingSpeakerDisplayNameFormatter.displayName(ordinal: 3, defaults: defaults), "話者 3")
+    }
+
     func testDominantSpeakerTurnAnnotatesTranscriptSegment() {
         let segment = MeetingTranscriptSegment(
             speaker: .them,
@@ -502,6 +518,7 @@ final class MeetingSpeakerTranscriptAssemblerTests: XCTestCase {
             text: "We can move less-used data into CPU memory."
         )
         let result = MeetingSessionResult(
+            captureMode: .meeting,
             transcriptionEngine: .remote,
             transcriptionModelDescription: "Qwen",
             segments: [analyzedSegment],

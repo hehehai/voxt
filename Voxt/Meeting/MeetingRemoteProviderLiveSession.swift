@@ -78,7 +78,6 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
     private var transcriptState = MeetingLiveTranscriptState()
     private var lastFinalizedSegmentEndSeconds: TimeInterval?
     private let timelineOffsetSeconds: TimeInterval
-    let serverVADMode: MeetingServerVADMode
     private var hasLoggedFirstAudioPacket = false
     private var hasLoggedFirstServerPacket = false
     private var keepaliveTask: Task<Void, Never>?
@@ -102,7 +101,6 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
         self.speechThreshold = speechThreshold
         self.timelineOffsetSeconds = timelineOffsetSeconds
         self.policy = policy
-        self.serverVADMode = MeetingServerVADMode.stored()
     }
 
     func start(
@@ -245,7 +243,7 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
     func emitProviderPacket(_ packet: MeetingLiveProviderPacket) {
         if !packet.units.isEmpty {
             if let activeUnit = latestDisplayableUnit(from: packet.units) {
-                emitProviderUnit(activeUnit, forceFinal: false)
+                emitProviderUnit(activeUnit, forceFinal: packet.isFinal)
             }
             if packet.isFinal {
                 signalFinished()
@@ -298,7 +296,7 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
             text: normalizedText,
             preventsAdjacentMerge: true
         )
-        let shouldFinalizeNow = forceFinal
+        let shouldFinalizeNow = forceFinal || unit.isFinal
         eventHandler?(shouldFinalizeNow ? .final(segment) : .partial(segment))
         lastTranscriptEventAt = Date()
 
@@ -1027,7 +1025,7 @@ private final class AliyunQwenMeetingRemoteLiveSession: BaseMeetingRemoteLiveSes
         let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
             kind: sessionKind,
             hintPayload: hintPayload,
-            serverVADMode: serverVADMode
+            includesTurnDetection: false
         )
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let text = String(data: data, encoding: .utf8) else {

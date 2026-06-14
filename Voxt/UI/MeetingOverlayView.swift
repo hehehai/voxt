@@ -42,6 +42,8 @@ struct MeetingOverlayContainerView: View {
 
 private struct MeetingOverlayCard: View {
     private let captureModePickerWidth: CGFloat = 224
+    private let translationLanguageDialogMaxHeight: CGFloat = 300
+    private let translationLanguageListMaxHeight: CGFloat = 156
 
     @AppStorage(AppPreferenceKey.overlayCardOpacity) private var overlayCardOpacity = 82
     @AppStorage(AppPreferenceKey.overlayCardCornerRadius) private var overlayCardCornerRadius = 24
@@ -77,6 +79,7 @@ private struct MeetingOverlayCard: View {
                     transcriptContent
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, 18)
             .padding(.vertical, state.isCollapsed ? 10 : 14)
             .background(cardBackground)
@@ -172,7 +175,9 @@ private struct MeetingOverlayCard: View {
                         MeetingCaptureModeSelectorButton(
                             selection: state.captureMode,
                             isPickerPresented: state.isCaptureModePickerPresented,
-                            onToggle: onToggleCaptureModePicker
+                            onToggle: {
+                                onToggleCaptureModePicker()
+                            }
                         )
                     }
 
@@ -243,6 +248,11 @@ private struct MeetingOverlayCard: View {
             }
 
         }
+        .onChange(of: state.isCollapsed) { _, isCollapsed in
+            if isCollapsed {
+                onDismissCaptureModePicker()
+            }
+        }
     }
 
     private var transcriptContent: some View {
@@ -256,96 +266,13 @@ private struct MeetingOverlayCard: View {
 
     private var realtimeTranslationLanguageDialog: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(String(localized: "Choose Translation Language"))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.92))
-
-            Text(String(localized: "Realtime translation only translates Them segments."))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.6))
-
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(TranslationTargetLanguage.allCases) { language in
-                        Button {
-                            state.realtimeTranslationDraftLanguageRaw = language.rawValue
-                        } label: {
-                            HStack(spacing: 10) {
-                                Text(language.title)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.92))
-
-                                Spacer(minLength: 8)
-
-                                if state.realtimeTranslationDraftLanguageRaw == language.rawValue {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(Color.accentColor.opacity(0.95))
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(
-                                        state.realtimeTranslationDraftLanguageRaw == language.rawValue
-                                            ? Color.accentColor.opacity(0.20)
-                                            : .white.opacity(0.05)
-                                    )
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(
-                                        state.realtimeTranslationDraftLanguageRaw == language.rawValue
-                                            ? Color.accentColor.opacity(0.36)
-                                            : .white.opacity(0.08),
-                                        lineWidth: 1
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .frame(maxHeight: 220)
-
-            HStack(spacing: 10) {
-                Button(String(localized: "Cancel")) {
-                    onCancelRealtimeTranslationLanguage()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.94))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.white.opacity(0.06))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(.white.opacity(0.1), lineWidth: 1)
-                )
-
-                Button(String(localized: "Start Translation")) {
-                    onConfirmRealtimeTranslationLanguage()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.94))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.22))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)
-                )
-            }
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            realtimeTranslationLanguageDialogHeader
+            realtimeTranslationLanguageList
+            realtimeTranslationLanguageDialogActions
         }
         .padding(16)
         .frame(width: 280)
+        .frame(maxHeight: translationLanguageDialogMaxHeight)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(.black.opacity(0.94))
@@ -355,6 +282,104 @@ private struct MeetingOverlayCard: View {
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.28), radius: 20, y: 12)
+    }
+
+    private var realtimeTranslationLanguageDialogHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "Choose Translation Language"))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.92))
+
+            Text(String(localized: "Realtime translation only translates Them segments."))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.6))
+        }
+    }
+
+    private var realtimeTranslationLanguageList: some View {
+        ScrollView {
+            VStack(spacing: 6) {
+                ForEach(TranslationTargetLanguage.allCases) { language in
+                    realtimeTranslationLanguageRow(language)
+                }
+            }
+        }
+        .frame(maxHeight: translationLanguageListMaxHeight)
+    }
+
+    private func realtimeTranslationLanguageRow(_ language: TranslationTargetLanguage) -> some View {
+        let isSelected = state.realtimeTranslationDraftLanguageRaw == language.rawValue
+
+        return Button {
+            state.realtimeTranslationDraftLanguageRaw = language.rawValue
+        } label: {
+            HStack(spacing: 10) {
+                Text(language.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                Spacer(minLength: 8)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor.opacity(0.95))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(realtimeTranslationLanguageRowBackground(isSelected: isSelected))
+            .overlay(realtimeTranslationLanguageRowBorder(isSelected: isSelected))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func realtimeTranslationLanguageRowBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(isSelected ? Color.accentColor.opacity(0.20) : .white.opacity(0.05))
+    }
+
+    private func realtimeTranslationLanguageRowBorder(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(
+                isSelected ? Color.accentColor.opacity(0.36) : .white.opacity(0.08),
+                lineWidth: 1
+            )
+    }
+
+    private var realtimeTranslationLanguageDialogActions: some View {
+        HStack(spacing: 10) {
+            Button(String(localized: "Cancel")) {
+                onCancelRealtimeTranslationLanguage()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.94))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(realtimeTranslationActionBackground(isPrimary: false))
+            .overlay(realtimeTranslationActionBorder(isPrimary: false))
+
+            Button(String(localized: "Start Translation")) {
+                onConfirmRealtimeTranslationLanguage()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.94))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(realtimeTranslationActionBackground(isPrimary: true))
+            .overlay(realtimeTranslationActionBorder(isPrimary: true))
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private func realtimeTranslationActionBackground(isPrimary: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(isPrimary ? Color.accentColor.opacity(0.22) : .white.opacity(0.06))
+    }
+
+    private func realtimeTranslationActionBorder(isPrimary: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(isPrimary ? Color.accentColor.opacity(0.35) : .white.opacity(0.1), lineWidth: 1)
     }
 
     private var meetingCloseConfirmationDialog: some View {
@@ -431,6 +456,7 @@ private struct MeetingOverlayCard: View {
     private var showsHeaderWaveformLoader: Bool {
         state.isPresented && !state.isModelInitializing && !state.isRecording && !state.isPaused
     }
+
 }
 
 private struct MeetingCaptureModeSelectorBoundsPreferenceKey: PreferenceKey {

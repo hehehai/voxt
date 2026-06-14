@@ -147,6 +147,7 @@ extension TranscriptionHistoryEntry {
             senseVoiceMetadata: senseVoiceMetadata.resolved(current: self.senseVoiceMetadata),
             transcriptSegments: transcriptSegments.resolved(current: self.transcriptSegments),
             transcriptAudioRelativePath: transcriptAudioRelativePath,
+            meetingCaptureMode: meetingCaptureMode,
             transcriptSummary: transcriptSummary.resolved(current: self.transcriptSummary),
             transcriptSummaryChatMessages: transcriptSummaryChatMessages.resolved(
                 current: self.transcriptSummaryChatMessages

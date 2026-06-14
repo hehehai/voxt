@@ -13,6 +13,96 @@ extension MeetingSegmentTranscribing {
     func cancelPendingWork() async {}
 }
 
+enum MeetingTranscriptSanitizer {
+    static func sanitizedText(
+        _ rawText: String,
+        prompt: String? = nil,
+        contextualPhrases: [String] = [],
+        dictionaryEntries: [DictionaryEntry] = []
+    ) -> String {
+        let withoutContextLeakage = MLXTranscriptionPlanning.removingKnownASRContextLeakage(from: rawText)
+        let normalized = MeetingTranscriptTextPostProcessor.normalizedFinalText(withoutContextLeakage)
+        let withoutPromptEcho = RecordingSessionSupport.textAfterSuppressingPromptEcho(normalized, prompt: prompt)
+        guard !withoutPromptEcho.isEmpty else { return "" }
+
+        if isLikelyHintOnlyEcho(
+            withoutPromptEcho,
+            contextualPhrases: contextualPhrases,
+            dictionaryEntries: dictionaryEntries
+        ) {
+            return ""
+        }
+
+        return withoutPromptEcho
+    }
+
+    private static func isLikelyHintOnlyEcho(
+        _ text: String,
+        contextualPhrases: [String],
+        dictionaryEntries: [DictionaryEntry]
+    ) -> Bool {
+        let textKey = normalizedHintEchoKey(text)
+        guard textKey.count >= 6 else { return false }
+
+        let phraseKeys = hintPhraseKeys(
+            contextualPhrases: contextualPhrases,
+            dictionaryEntries: dictionaryEntries
+        )
+        guard !phraseKeys.isEmpty else { return false }
+
+        if phraseKeys.contains(textKey), textKey.count >= 12 {
+            return true
+        }
+
+        var remaining = textKey
+        var matchedCount = 0
+        var matchedCharacters = 0
+        for phraseKey in phraseKeys.sorted(by: { $0.count > $1.count }) {
+            guard phraseKey.count >= 3, remaining.contains(phraseKey) else { continue }
+            let occurrences = remaining.components(separatedBy: phraseKey).count - 1
+            guard occurrences > 0 else { continue }
+            matchedCount += occurrences
+            matchedCharacters += occurrences * phraseKey.count
+            remaining = remaining.replacingOccurrences(of: phraseKey, with: "")
+        }
+
+        guard matchedCount >= 2 else { return false }
+        let coverage = Double(matchedCharacters) / Double(max(textKey.count, 1))
+        return coverage >= 0.72 && remaining.count <= max(6, textKey.count / 4)
+    }
+
+    private static func hintPhraseKeys(
+        contextualPhrases: [String],
+        dictionaryEntries: [DictionaryEntry]
+    ) -> Set<String> {
+        var keys = Set<String>()
+
+        func insert(_ value: String) {
+            let key = normalizedHintEchoKey(value)
+            guard key.count >= 2 else { return }
+            keys.insert(key)
+        }
+
+        contextualPhrases.forEach(insert)
+        for entry in dictionaryEntries where entry.status == .active {
+            insert(entry.term)
+            entry.replacementTerms.map(\.text).forEach(insert)
+        }
+
+        return keys
+    }
+
+    private static func normalizedHintEchoKey(_ text: String) -> String {
+        let normalized = text
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .lowercased()
+        let dropped = CharacterSet.whitespacesAndNewlines
+            .union(.punctuationCharacters)
+            .union(.symbols)
+        return String(normalized.unicodeScalars.filter { !dropped.contains($0) })
+    }
+}
+
 actor MeetingRemoteTranscriptionGate {
     private var isBusy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -113,13 +203,22 @@ final class MeetingWhisperSegmentTranscriber: MeetingSegmentTranscribing {
                     usesBuiltInTranslationTask: false
                 )
             }
-            guard !text.isEmpty else { return nil }
+            let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
+                text,
+                prompt: hintPayload.prompt,
+                contextualPhrases: hintPayload.contextualPhrases,
+                dictionaryEntries: activeMeetingDictionaryEntries()
+            )
+            guard !sanitizedText.isEmpty else {
+                VoxtLog.warning("Meeting Whisper transcription suppressed because it matched ASR prompt or hint guidance.")
+                return nil
+            }
             return MeetingTranscriptSegment(
                 id: chunk.segmentID,
                 speaker: chunk.speaker,
                 startSeconds: chunk.startSeconds,
                 endSeconds: chunk.endSeconds,
-                text: text,
+                text: sanitizedText,
                 preventsAdjacentMerge: chunk.preventsAdjacentMerge
             )
         } catch {
@@ -184,12 +283,20 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
         ) else {
             return nil
         }
+        let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
+            text,
+            dictionaryEntries: activeMeetingDictionaryEntries()
+        )
+        guard !sanitizedText.isEmpty else {
+            VoxtLog.warning("Meeting MLX transcription suppressed because it matched ASR prompt or hint guidance.")
+            return nil
+        }
         return MeetingTranscriptSegment(
             id: chunk.segmentID,
             speaker: chunk.speaker,
             startSeconds: chunk.startSeconds,
             endSeconds: chunk.endSeconds,
-            text: text,
+            text: sanitizedText,
             preventsAdjacentMerge: chunk.preventsAdjacentMerge
         )
     }
@@ -237,13 +344,23 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
             let text = try await transcribeWithRetry(tempURL)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             try? FileManager.default.removeItem(at: tempURL)
-            guard !text.isEmpty else { return nil }
+            let hintPayload = currentHintPayload()
+            let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
+                text,
+                prompt: hintPayload.prompt,
+                contextualPhrases: hintPayload.contextualPhrases,
+                dictionaryEntries: activeMeetingDictionaryEntries()
+            )
+            guard !sanitizedText.isEmpty else {
+                VoxtLog.warning("Meeting Remote ASR transcription suppressed because it matched ASR prompt or hint guidance.")
+                return nil
+            }
             return MeetingTranscriptSegment(
                 id: chunk.segmentID,
                 speaker: chunk.speaker,
                 startSeconds: chunk.startSeconds,
                 endSeconds: chunk.endSeconds,
-                text: text,
+                text: sanitizedText,
                 preventsAdjacentMerge: chunk.preventsAdjacentMerge
             )
         } catch {
@@ -311,4 +428,30 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
 
         return false
     }
+
+    private func currentHintPayload() -> ResolvedASRHintPayload {
+        let meetingConfiguration = remoteTranscriber.currentMeetingConfiguration()
+        let settings = ASRHintSettingsStore.resolvedSettings(
+            for: ASRHintTarget.from(engine: .remote, remoteProvider: meetingConfiguration.provider),
+            rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.asrHintSettings)
+        )
+        let userLanguageCodes = UserMainLanguageOption.storedSelection(
+            from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
+        )
+        return ASRHintResolver.resolve(
+            target: ASRHintTarget.from(engine: .remote, remoteProvider: meetingConfiguration.provider),
+            settings: settings,
+            userLanguageCodes: userLanguageCodes,
+            mlxModelRepo: meetingConfiguration.configuration.model,
+            dictionaryTerms: DictionaryEntryCollection.asrPromptTermsText(from: activeMeetingDictionaryEntries())
+        )
+    }
+}
+
+@MainActor
+private func activeMeetingDictionaryEntries() -> [DictionaryEntry] {
+    guard let appDelegate = AppDelegate.shared else { return [] }
+    return appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
+        activeGroupID: appDelegate.activeDictionaryGroupID()
+    )
 }

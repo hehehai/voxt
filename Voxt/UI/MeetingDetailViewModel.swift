@@ -59,6 +59,7 @@ final class MeetingDetailViewModel: ObservableObject {
 
     let mode: Mode
     let audioURL: URL?
+    let captureMode: MeetingCaptureMode
     @Published private(set) var summaryModelOptions: [MeetingSummaryModelOption]
 
     private let historyEntryID: UUID?
@@ -89,6 +90,7 @@ final class MeetingDetailViewModel: ObservableObject {
         summarySettingsProvider: @escaping MeetingDetailWindowManager.SummarySettingsProvider,
         summaryModelOptionsProvider: @escaping MeetingDetailWindowManager.SummaryModelOptionsProvider,
         segments: [MeetingTranscriptSegment],
+        captureMode: MeetingCaptureMode? = nil,
         audioURL: URL?,
         translationHandler: @escaping MeetingDetailWindowManager.TranslationHandler,
         summaryStatusProvider: @escaping MeetingDetailWindowManager.SummaryStatusProvider,
@@ -100,7 +102,8 @@ final class MeetingDetailViewModel: ObservableObject {
     ) {
         self.mode = .history
         self.title = title
-        self.subtitle = subtitle
+        self.captureMode = captureMode ?? Self.inferredCaptureMode(from: segments)
+        self.subtitle = AppLocalization.format("%@ · %@", self.captureMode.title, subtitle)
         self.historyEntryID = historyEntryID
         self.summary = initialSummary
         self.summaryChatMessages = initialSummaryChatMessages
@@ -145,15 +148,17 @@ final class MeetingDetailViewModel: ObservableObject {
         translationHandler: @escaping MeetingDetailWindowManager.TranslationHandler
     ) {
         self.mode = .live
+        self.captureMode = liveState.captureMode
         self.title = String(localized: "Meeting Details")
-        self.subtitle = liveState.isPaused
+        let liveSubtitle = liveState.isPaused
             ? String(localized: "Meeting Paused")
             : String(localized: "Meeting In Progress")
+        self.subtitle = AppLocalization.format("%@ · %@", liveState.captureMode.title, liveSubtitle)
         self.historyEntryID = nil
         self.summary = nil
         self.summaryChatMessages = []
         self.summaryModelOptions = summaryModelOptions
-        self.segments = liveState.segments
+        self.segments = Self.liveDisplaySegments(from: liveState.segments)
         self.audioURL = nil
         self.isPaused = liveState.isPaused
         self.isFinalizing = liveState.isFinalizing
@@ -230,7 +235,10 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     var canEditSpeakers: Bool {
-        mode == .history && historyEntryID != nil && transcriptSegmentsPersistence != nil
+        captureMode.capabilities.allowsSpeakerFeatures
+            && mode == .history
+            && historyEntryID != nil
+            && transcriptSegmentsPersistence != nil
     }
 
     var canRegenerateSummary: Bool {
@@ -279,11 +287,26 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     var transcriptPresentationMode: TranscriptPresentationMode {
-        TranscriptPresentationMode(rawValue: transcriptPresentationModeRaw) ?? .timeline
+        let resolved = TranscriptPresentationMode(rawValue: transcriptPresentationModeRaw) ?? .timeline
+        guard captureMode.capabilities.allowsSpeakerFeatures || resolved != .speakerMarks else {
+            return .timeline
+        }
+        return resolved
     }
 
     var transcriptSpeakerDisplayMode: TranscriptSpeakerDisplayMode {
-        TranscriptSpeakerDisplayMode(rawValue: transcriptSpeakerDisplayModeRaw) ?? .source
+        guard captureMode.capabilities.allowsSpeakerFeatures else { return .source }
+        return TranscriptSpeakerDisplayMode(rawValue: transcriptSpeakerDisplayModeRaw) ?? .source
+    }
+
+    var availableTranscriptPresentationModes: [TranscriptPresentationMode] {
+        captureMode.capabilities.allowsSpeakerFeatures
+            ? TranscriptPresentationMode.allCases
+            : [.timeline]
+    }
+
+    var showsSpeakerDisplayModePicker: Bool {
+        captureMode.capabilities.allowsSpeakerFeatures
     }
 
     func export() throws {
@@ -358,10 +381,12 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     func setTranscriptPresentationMode(_ mode: TranscriptPresentationMode) {
+        guard captureMode.capabilities.allowsSpeakerFeatures || mode == .timeline else { return }
         transcriptPresentationModeRaw = mode.rawValue
     }
 
     func setTranscriptSpeakerDisplayMode(_ mode: TranscriptSpeakerDisplayMode) {
+        guard captureMode.capabilities.allowsSpeakerFeatures else { return }
         transcriptSpeakerDisplayModeRaw = mode.rawValue
     }
 
@@ -559,10 +584,21 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     func updateLiveSegments(_ incomingSegments: [MeetingTranscriptSegment]) {
-        segments = mergeSegmentsPreservingTranslationState(incomingSegments)
+        segments = mergeSegmentsPreservingTranslationState(
+            Self.liveDisplaySegments(from: incomingSegments)
+        )
         if translationEnabled {
             translateEligibleSegmentsIfNeeded(targetLanguage: resolvedStoredTranslationLanguage())
         }
+    }
+
+    static func liveDisplaySegments(
+        from segments: [MeetingTranscriptSegment]
+    ) -> [MeetingTranscriptSegment] {
+        MeetingTranscriptPostProcessor.process(
+            segments,
+            options: .liveOverlay
+        )
     }
 
     private func updateLiveSubtitle(
@@ -614,11 +650,16 @@ final class MeetingDetailViewModel: ObservableObject {
             return MeetingTranscriptSegment(
                 id: incoming.id,
                 speaker: incoming.speaker,
+                speakerID: incoming.speakerID,
+                speakerDisplayName: incoming.speakerDisplayName,
+                audioSource: incoming.audioSource,
+                speakerConfidence: incoming.speakerConfidence,
                 startSeconds: incoming.startSeconds,
                 endSeconds: incoming.endSeconds,
                 text: incoming.text,
                 translatedText: resolvedTranslatedText,
-                isTranslationPending: incoming.isTranslationPending || existing.isTranslationPending || shouldRefreshTranslation
+                isTranslationPending: incoming.isTranslationPending || existing.isTranslationPending || shouldRefreshTranslation,
+                preventsAdjacentMerge: incoming.preventsAdjacentMerge
             )
         }
     }
@@ -722,6 +763,29 @@ final class MeetingDetailViewModel: ObservableObject {
         return savedLanguage?.isEmpty == false
             ? savedLanguage!
             : TranslationTargetLanguage.english.rawValue
+    }
+
+    private static func inferredCaptureMode(from segments: [MeetingTranscriptSegment]) -> MeetingCaptureMode {
+        let meaningfulSegments = segments.filter {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let hasMicrophone = meaningfulSegments.contains { segment in
+            segment.audioSource == .microphone || segment.speaker == .me
+        }
+        let hasSystemAudio = meaningfulSegments.contains { segment in
+            segment.audioSource == .systemAudio || segment.speaker == .them
+        }
+
+        switch (hasMicrophone, hasSystemAudio) {
+        case (true, true):
+            return .meeting
+        case (false, true):
+            return .subtitles
+        case (true, false):
+            return .recording
+        case (false, false):
+            return .meeting
+        }
     }
 
     private static func resolveSummaryConfiguration(

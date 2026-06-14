@@ -3,6 +3,19 @@ import AppKit
 import AVFoundation
 
 extension AppDelegate {
+    func blockNonMeetingRecordingWhileMeetingIsActive(source: String) -> Bool {
+        guard meetingSessionCoordinator.isActive else { return false }
+        VoxtLog.info("Non-meeting recording blocked because meeting is active. source=\(source)")
+        VoxtLog.hotkey("Non-meeting recording blocked: meeting active. source=\(source)")
+        if meetingSessionCoordinator.overlayState.isPresented {
+            meetingOverlayWindow.show(
+                state: meetingSessionCoordinator.overlayState,
+                position: overlayPosition
+            )
+        }
+        return true
+    }
+
     func handleMeetingHotkeyDown() {
         VoxtLog.info(
             "Meeting hotkey invoked. isMeetingActive=\(meetingSessionCoordinator.isActive), isSessionActive=\(isSessionActive)"

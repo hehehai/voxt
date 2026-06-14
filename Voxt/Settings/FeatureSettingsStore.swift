@@ -134,9 +134,7 @@ enum FeatureSettingsStore {
                 realtimeTargetLanguageRawValue: defaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage) ?? "",
                 hideOverlayFromScreenSharing: defaults.object(forKey: AppPreferenceKey.hideMeetingOverlayFromScreenSharing) as? Bool ?? false,
                 chunkingModeRawValue: MeetingChunkingMode.stored(in: defaults).rawValue,
-                serverVADModeRawValue: MeetingServerVADMode.stored(in: defaults).rawValue,
-                speakerDiarizationSensitivityRawValue: MeetingSpeakerDiarizationSensitivity.stored(in: defaults).rawValue,
-                speakerDiarizationDebugEnabled: defaults.bool(forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled),
+                speakerDiarizationModelRawValue: MeetingDiarizationMode.stored(in: defaults).rawValue,
                 finalTranscriptOptimizationEnabled: legacyFinalTranscriptOptimizationEnabled(defaults: defaults)
             )
         )
@@ -267,15 +265,7 @@ enum FeatureSettingsStore {
 
     private static func syncLegacyMeeting(_ settings: MeetingFeatureSettings, defaults: UserDefaults) {
         defaults.set(settings.chunkingMode.rawValue, forKey: AppPreferenceKey.meetingChunkingMode)
-        defaults.set(settings.serverVADMode.rawValue, forKey: AppPreferenceKey.meetingServerVADMode)
-        defaults.set(
-            settings.speakerDiarizationSensitivity.rawValue,
-            forKey: AppPreferenceKey.meetingSpeakerDiarizationSensitivity
-        )
-        defaults.set(
-            settings.speakerDiarizationDebugEnabled,
-            forKey: AppPreferenceKey.meetingSpeakerDiarizationDebugEnabled
-        )
+        defaults.set(settings.speakerDiarizationModel.rawValue, forKey: AppPreferenceKey.meetingSpeakerDiarizationModel)
         defaults.set(
             settings.finalTranscriptOptimizationEnabled,
             forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled
@@ -337,9 +327,7 @@ enum FeatureSettingsStore {
                 realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguage?.rawValue ?? "",
                 hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing,
                 chunkingModeRawValue: settings.meeting.chunkingMode.rawValue,
-                serverVADModeRawValue: settings.meeting.serverVADMode.rawValue,
-                speakerDiarizationSensitivityRawValue: settings.meeting.speakerDiarizationSensitivity.rawValue,
-                speakerDiarizationDebugEnabled: settings.meeting.speakerDiarizationDebugEnabled,
+                speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
                 finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
             )
         )
@@ -377,9 +365,7 @@ enum FeatureSettingsStore {
                 realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguageRawValue,
                 hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing,
                 chunkingModeRawValue: settings.meeting.chunkingMode.rawValue,
-                serverVADModeRawValue: settings.meeting.serverVADMode.rawValue,
-                speakerDiarizationSensitivityRawValue: settings.meeting.speakerDiarizationSensitivity.rawValue,
-                speakerDiarizationDebugEnabled: settings.meeting.speakerDiarizationDebugEnabled,
+                speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
                 finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
             )
         )
@@ -473,9 +459,7 @@ enum FeatureSettingsStore {
             realtimeTargetLanguageRawValue: settings.realtimeTargetLanguageRawValue,
             hideOverlayFromScreenSharing: settings.hideOverlayFromScreenSharing,
             chunkingModeRawValue: settings.chunkingMode.rawValue,
-            serverVADModeRawValue: settings.serverVADMode.rawValue,
-            speakerDiarizationSensitivityRawValue: settings.speakerDiarizationSensitivity.rawValue,
-            speakerDiarizationDebugEnabled: settings.speakerDiarizationDebugEnabled,
+            speakerDiarizationModelRawValue: settings.speakerDiarizationModel.rawValue,
             finalTranscriptOptimizationEnabled: settings.finalTranscriptOptimizationEnabled
         )
     }

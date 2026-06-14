@@ -24,10 +24,13 @@ enum AliyunQwenRealtimeSessionKind: Equatable {
 }
 
 enum AliyunQwenRealtimePayloadSupport {
+    private static let balancedServerVADThreshold = 0.35
+    private static let balancedServerVADSilenceDurationMilliseconds = 800
+
     static func sessionUpdatePayload(
         kind: AliyunQwenRealtimeSessionKind,
         hintPayload: ResolvedASRHintPayload,
-        serverVADMode: MeetingServerVADMode = MeetingServerVADMode.stored()
+        includesTurnDetection: Bool = true
     ) -> [String: Any] {
         var transcriptionPayload: [String: Any] = [:]
         if let transcriptionModel = kind.transcriptionModel {
@@ -36,20 +39,23 @@ enum AliyunQwenRealtimePayloadSupport {
         if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
             transcriptionPayload["language"] = language
         }
+        var session: [String: Any] = [
+            "modalities": ["text"],
+            "input_audio_format": "pcm",
+            "sample_rate": 16000,
+            "input_audio_transcription": transcriptionPayload
+        ]
+        if includesTurnDetection {
+            session["turn_detection"] = [
+                "type": "server_vad",
+                "threshold": balancedServerVADThreshold,
+                "silence_duration_ms": balancedServerVADSilenceDurationMilliseconds
+            ]
+        }
         return [
             "event_id": UUID().uuidString.lowercased(),
             "type": "session.update",
-            "session": [
-                "modalities": ["text"],
-                "input_audio_format": "pcm",
-                "sample_rate": 16000,
-                "input_audio_transcription": transcriptionPayload,
-                "turn_detection": [
-                    "type": "server_vad",
-                    "threshold": serverVADMode.qwenThreshold,
-                    "silence_duration_ms": serverVADMode.qwenSilenceDurationMilliseconds
-                ]
-            ]
+            "session": session
         ]
     }
 }

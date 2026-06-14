@@ -365,9 +365,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
     var realtimeTargetLanguageRawValue: String
     var hideOverlayFromScreenSharing: Bool
     var chunkingModeRawValue: String
-    var serverVADModeRawValue: String
-    var speakerDiarizationSensitivityRawValue: String
-    var speakerDiarizationDebugEnabled: Bool
+    var speakerDiarizationModelRawValue: String
     var finalTranscriptOptimizationEnabled: Bool
 
     init(
@@ -379,9 +377,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         realtimeTargetLanguageRawValue: String,
         hideOverlayFromScreenSharing: Bool,
         chunkingModeRawValue: String = MeetingChunkingMode.quality.rawValue,
-        serverVADModeRawValue: String = MeetingServerVADMode.automatic.rawValue,
-        speakerDiarizationSensitivityRawValue: String = MeetingSpeakerDiarizationSensitivity.balanced.rawValue,
-        speakerDiarizationDebugEnabled: Bool = false,
+        speakerDiarizationModelRawValue: String = MeetingDiarizationMode.offlineVBx.rawValue,
         finalTranscriptOptimizationEnabled: Bool = MeetingFeatureSettings.defaultFinalTranscriptOptimizationEnabled
     ) {
         self.asrSelectionID = asrSelectionID
@@ -392,9 +388,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         self.realtimeTargetLanguageRawValue = realtimeTargetLanguageRawValue
         self.hideOverlayFromScreenSharing = hideOverlayFromScreenSharing
         self.chunkingModeRawValue = chunkingModeRawValue
-        self.serverVADModeRawValue = serverVADModeRawValue
-        self.speakerDiarizationSensitivityRawValue = speakerDiarizationSensitivityRawValue
-        self.speakerDiarizationDebugEnabled = speakerDiarizationDebugEnabled
+        self.speakerDiarizationModelRawValue = speakerDiarizationModelRawValue
         self.finalTranscriptOptimizationEnabled = finalTranscriptOptimizationEnabled
     }
 
@@ -407,12 +401,8 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         MeetingChunkingMode(rawValue: chunkingModeRawValue) ?? .quality
     }
 
-    var serverVADMode: MeetingServerVADMode {
-        MeetingServerVADMode(rawValue: serverVADModeRawValue) ?? .automatic
-    }
-
-    var speakerDiarizationSensitivity: MeetingSpeakerDiarizationSensitivity {
-        MeetingSpeakerDiarizationSensitivity(rawValue: speakerDiarizationSensitivityRawValue) ?? .balanced
+    var speakerDiarizationModel: MeetingDiarizationMode {
+        MeetingDiarizationMode(rawValue: speakerDiarizationModelRawValue) ?? .offlineVBx
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -424,9 +414,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         case realtimeTargetLanguageRawValue
         case hideOverlayFromScreenSharing
         case chunkingModeRawValue
-        case serverVADModeRawValue
-        case speakerDiarizationSensitivityRawValue
-        case speakerDiarizationDebugEnabled
+        case speakerDiarizationModelRawValue
         case finalTranscriptOptimizationEnabled
     }
 
@@ -442,12 +430,8 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
             hideOverlayFromScreenSharing: try container.decode(Bool.self, forKey: .hideOverlayFromScreenSharing),
             chunkingModeRawValue: try container.decodeIfPresent(String.self, forKey: .chunkingModeRawValue)
                 ?? MeetingChunkingMode.quality.rawValue,
-            serverVADModeRawValue: try container.decodeIfPresent(String.self, forKey: .serverVADModeRawValue)
-                ?? MeetingServerVADMode.automatic.rawValue,
-            speakerDiarizationSensitivityRawValue: try container.decodeIfPresent(String.self, forKey: .speakerDiarizationSensitivityRawValue)
-                ?? MeetingSpeakerDiarizationSensitivity.balanced.rawValue,
-            speakerDiarizationDebugEnabled: try container.decodeIfPresent(Bool.self, forKey: .speakerDiarizationDebugEnabled)
-                ?? false,
+            speakerDiarizationModelRawValue: try container.decodeIfPresent(String.self, forKey: .speakerDiarizationModelRawValue)
+                ?? MeetingDiarizationMode.offlineVBx.rawValue,
             finalTranscriptOptimizationEnabled: try container.decodeIfPresent(Bool.self, forKey: .finalTranscriptOptimizationEnabled)
                 ?? MeetingFeatureSettings.defaultFinalTranscriptOptimizationEnabled
         )

@@ -5,29 +5,11 @@ extension FeatureSettingsView {
         featurePage(
             title: featureSettingsLocalized("Meeting"),
             subtitle: featureSettingsLocalized("Capture microphone and system audio into a speaker-labelled transcript."),
+            titleBadge: featureSettingsLocalized("Beta"),
             systemImageName: "person.2.wave.2",
-            pills: meetingPills,
-            showsHeroHeader: false
+            pills: meetingPills
         ) {
             FeatureSettingsCard(title: "") {
-                HStack(spacing: 8) {
-                    Text(featureSettingsLocalized("Meeting Mode"))
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary.opacity(0.92))
-
-                    Text(featureSettingsLocalized("Beta"))
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule()
-                                .fill(Color.accentColor.opacity(0.14))
-                        )
-                        .foregroundStyle(Color.accentColor)
-
-                    Spacer(minLength: 0)
-                }
-
                 FeatureSettingSection(title: "", detail: "") {
                     FeatureSelectorRow(
                         title: featureSettingsLocalized("Speech Model"),
@@ -50,31 +32,6 @@ extension FeatureSettingsView {
                         set: { featureSettings.meeting.hideOverlayFromScreenSharing = $0 }
                     )
                 )
-
-                FeatureToggleRow(
-                    title: featureSettingsLocalized("Realtime Translation"),
-                    detail: "",
-                    isOn: binding(
-                        get: { featureSettings.meeting.realtimeTranslateEnabled },
-                        set: { featureSettings.meeting.realtimeTranslateEnabled = $0 }
-                    )
-                )
-
-                if featureSettings.meeting.realtimeTranslateEnabled {
-                    FeatureInlinePickerRow(
-                        title: featureSettingsLocalized("Translation Target"),
-                        detail: ""
-                    ) {
-                        SettingsMenuPicker(
-                            selection: meetingRealtimeTranslationTargetLanguage,
-                            options: TranslationTargetLanguage.allCases.map {
-                                SettingsMenuOption(value: $0, title: $0.title)
-                            },
-                            selectedTitle: meetingRealtimeTranslationTargetLanguage.wrappedValue.title,
-                            width: 220
-                        )
-                    }
-                }
 
                 FeatureToggleRow(
                     title: featureSettingsLocalized("Auto-generate Summary"),
@@ -108,41 +65,20 @@ extension FeatureSettingsView {
                 }
 
                 FeatureInlinePickerRow(
-                    title: featureSettingsLocalized("Server VAD"),
-                    detail: meetingServerVADMode.wrappedValue.detail
+                    title: featureSettingsLocalized("Speaker Separation Model"),
+                    detail: meetingSpeakerDiarizationModelDetailText
                 ) {
                     SettingsMenuPicker(
-                        selection: meetingServerVADMode,
-                        options: MeetingServerVADMode.allCases.map {
+                        selection: meetingSpeakerDiarizationModel,
+                        options: MeetingDiarizationMode.allCases.map {
                             SettingsMenuOption(value: $0, title: $0.title)
                         },
-                        selectedTitle: meetingServerVADMode.wrappedValue.title,
-                        width: 220
+                        selectedTitle: meetingSpeakerDiarizationModel.wrappedValue.title,
+                        width: 220,
+                        leadingAccessory: meetingSpeakerDiarizationModelLeadingAccessory,
+                        selectedStatusSystemImageName: meetingSpeakerDiarizationModelStatusIconName
                     )
                 }
-
-                FeatureInlinePickerRow(
-                    title: featureSettingsLocalized("Speaker Recognition"),
-                    detail: meetingSpeakerDiarizationSensitivity.wrappedValue.detail
-                ) {
-                    SettingsMenuPicker(
-                        selection: meetingSpeakerDiarizationSensitivity,
-                        options: MeetingSpeakerDiarizationSensitivity.allCases.map {
-                            SettingsMenuOption(value: $0, title: $0.title)
-                        },
-                        selectedTitle: meetingSpeakerDiarizationSensitivity.wrappedValue.title,
-                        width: 220
-                    )
-                }
-
-                FeatureToggleRow(
-                    title: featureSettingsLocalized("Speaker Analysis Debug Logs"),
-                    detail: featureSettingsLocalized("Log speaker analysis counts for debugging."),
-                    isOn: binding(
-                        get: { featureSettings.meeting.speakerDiarizationDebugEnabled },
-                        set: { featureSettings.meeting.speakerDiarizationDebugEnabled = $0 }
-                    )
-                )
             }
         }
     }
@@ -158,30 +94,66 @@ extension FeatureSettingsView {
                 value: shortSummary(llmSelectionSummary(featureSettings.meeting.summaryModelSelectionID), maxLength: 52)
             ),
             FeatureSummaryPill(
-                title: featureSettingsLocalized("Translate"),
-                value: featureSettings.meeting.realtimeTranslateEnabled
-                    ? meetingRealtimeTranslationTargetLanguage.wrappedValue.title
-                    : featureSettingsLocalized("Off")
+                title: featureSettingsLocalized("Speakers"),
+                value: featureSettings.meeting.speakerDiarizationModel.title
             )
         ]
     }
 
-    var meetingRealtimeTranslationTargetLanguage: Binding<TranslationTargetLanguage> {
-        Binding(
-            get: {
-                let rawValue = featureSettings.meeting.realtimeTargetLanguageRawValue
-                guard let language = TranslationTargetLanguage(rawValue: rawValue),
-                      !rawValue.isEmpty
-                else {
-                    return .english
-                }
-                return language
-            },
-            set: { language in
-                featureSettings.meeting.realtimeTargetLanguageRawValue = language.rawValue
-                saveFeatureSettings()
+    @ViewBuilder
+    var meetingSpeakerDiarizationModelDownloadControl: some View {
+        switch meetingDiarizationModelManager.state {
+        case .downloaded:
+            EmptyView()
+        case .notDownloaded:
+            ProgressView(value: 0)
+                .frame(width: 60)
+        case let .downloading(progress, _):
+            ProgressView(value: max(0, min(progress, 1)))
+                .frame(width: 60)
+        case .error:
+            Button(featureSettingsLocalized("Retry")) {
+                meetingDiarizationModelManager.downloadSelectedModel()
             }
-        )
+            .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 9, height: 28))
+        }
+    }
+
+    var meetingSpeakerDiarizationModelDetailText: String {
+        switch meetingDiarizationModelManager.state {
+        case .downloaded:
+            return AppLocalization.format(
+                "%@ %@",
+                meetingSpeakerDiarizationModel.wrappedValue.title,
+                featureSettingsLocalized("model is ready.")
+            )
+        case .notDownloaded:
+            return AppLocalization.format(
+                "%@ %@",
+                meetingSpeakerDiarizationModel.wrappedValue.detail,
+                featureSettingsLocalized("Download the model before meeting details can use speaker separation.")
+            )
+        case let .downloading(_, detail):
+            return detail ?? featureSettingsLocalized("Installing speaker separation model...")
+        case let .error(message):
+            return AppLocalization.format("Download failed: %@", message)
+        }
+    }
+
+    var meetingSpeakerDiarizationModelStatusIconName: String? {
+        if case .downloaded = meetingDiarizationModelManager.state {
+            return "checkmark.circle.fill"
+        }
+        return nil
+    }
+
+    var meetingSpeakerDiarizationModelLeadingAccessory: AnyView? {
+        switch meetingDiarizationModelManager.state {
+        case .downloaded:
+            return nil
+        case .notDownloaded, .downloading, .error:
+            return AnyView(meetingSpeakerDiarizationModelDownloadControl)
+        }
     }
 
     var meetingChunkingMode: Binding<MeetingChunkingMode> {
@@ -196,27 +168,18 @@ extension FeatureSettingsView {
         )
     }
 
-    var meetingServerVADMode: Binding<MeetingServerVADMode> {
+    var meetingSpeakerDiarizationModel: Binding<MeetingDiarizationMode> {
         Binding(
             get: {
-                featureSettings.meeting.serverVADMode
+                featureSettings.meeting.speakerDiarizationModel
             },
             set: { mode in
-                featureSettings.meeting.serverVADModeRawValue = mode.rawValue
+                featureSettings.meeting.speakerDiarizationModelRawValue = mode.rawValue
                 saveFeatureSettings()
+                meetingDiarizationModelManager.refresh()
+                meetingDiarizationModelManager.ensureSelectedModelInstalled()
             }
         )
     }
 
-    var meetingSpeakerDiarizationSensitivity: Binding<MeetingSpeakerDiarizationSensitivity> {
-        Binding(
-            get: {
-                featureSettings.meeting.speakerDiarizationSensitivity
-            },
-            set: { sensitivity in
-                featureSettings.meeting.speakerDiarizationSensitivityRawValue = sensitivity.rawValue
-                saveFeatureSettings()
-            }
-        )
-    }
 }

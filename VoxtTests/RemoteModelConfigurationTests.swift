@@ -160,8 +160,8 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertEqual(transcription["model"] as? String, "qwen3-asr-flash-realtime")
         XCTAssertEqual(transcription["language"] as? String, "zh")
         XCTAssertEqual(turnDetection["type"] as? String, "server_vad")
-        XCTAssertEqual(turnDetection["threshold"] as? Double, MeetingServerVADMode.automatic.qwenThreshold)
-        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, MeetingServerVADMode.automatic.qwenSilenceDurationMilliseconds)
+        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.35)
+        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, 800)
     }
 
     func testAliyunOmniRealtimeDoesNotRequireManualCommitWhenUsingServerVAD() {
@@ -179,6 +179,18 @@ final class RemoteModelConfigurationTests: XCTestCase {
 
         XCTAssertNil(transcription["model"])
         XCTAssertNil(transcription["language"])
+    }
+
+    func testAliyunQwenSessionUpdatePayloadCanDisableTurnDetectionForMeeting() throws {
+        let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
+            kind: .qwenASR,
+            hintPayload: ResolvedASRHintPayload(language: nil, languageHints: []),
+            includesTurnDetection: false
+        )
+
+        let session = try XCTUnwrap(payload["session"] as? [String: Any])
+
+        XCTAssertNil(session["turn_detection"])
     }
 
     func testLoadSaveRoundTripPreservesConfigurations() {

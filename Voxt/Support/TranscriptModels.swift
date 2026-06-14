@@ -71,7 +71,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         self.preventsAdjacentMerge = preventsAdjacentMerge
     }
 
-    func updatingTranslation(
+    nonisolated func updatingTranslation(
         translatedText: String?,
         isTranslationPending: Bool
     ) -> TranscriptSegment {
@@ -91,7 +91,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         )
     }
 
-    func updatingSpeakerAnalysis(
+    nonisolated func updatingSpeakerAnalysis(
         speaker: TranscriptSpeaker? = nil,
         speakerID: String?,
         speakerDisplayName: String?,
@@ -114,7 +114,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         )
     }
 
-    func updatingSpeakerDisplayName(_ displayName: String?) -> TranscriptSegment {
+    nonisolated func updatingSpeakerDisplayName(_ displayName: String?) -> TranscriptSegment {
         TranscriptSegment(
             id: id,
             speaker: speaker,

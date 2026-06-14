@@ -204,25 +204,37 @@ enum MeetingFinalTranscriptionPass {
 
 enum MeetingTranscriptPostProcessor {
     struct Options: Equatable, Sendable {
-        var maxSameSpeakerMergeGapSeconds: TimeInterval = 0.35
-        var maxMergedDurationSeconds: TimeInterval = 18
-        var maxMergedTextCharacters = 260
-        var maxSegmentDurationSeconds: TimeInterval = 24
-        var maxSegmentTextCharacters = 140
+        var maxSameSpeakerMergeGapSeconds: TimeInterval = 0.55
+        var maxMergedDurationSeconds: TimeInterval = 28
+        var maxMergedTextCharacters = 420
+        var maxSegmentDurationSeconds: TimeInterval = 28
+        var maxSegmentTextCharacters = 260
+        var minSegmentTextCharacters = 0
 
         nonisolated init(
-            maxSameSpeakerMergeGapSeconds: TimeInterval = 0.35,
-            maxMergedDurationSeconds: TimeInterval = 18,
-            maxMergedTextCharacters: Int = 260,
-            maxSegmentDurationSeconds: TimeInterval = 24,
-            maxSegmentTextCharacters: Int = 140
+            maxSameSpeakerMergeGapSeconds: TimeInterval = 0.55,
+            maxMergedDurationSeconds: TimeInterval = 28,
+            maxMergedTextCharacters: Int = 420,
+            maxSegmentDurationSeconds: TimeInterval = 28,
+            maxSegmentTextCharacters: Int = 260,
+            minSegmentTextCharacters: Int = 0
         ) {
             self.maxSameSpeakerMergeGapSeconds = maxSameSpeakerMergeGapSeconds
             self.maxMergedDurationSeconds = maxMergedDurationSeconds
             self.maxMergedTextCharacters = maxMergedTextCharacters
             self.maxSegmentDurationSeconds = maxSegmentDurationSeconds
             self.maxSegmentTextCharacters = maxSegmentTextCharacters
+            self.minSegmentTextCharacters = minSegmentTextCharacters
         }
+
+        static let liveOverlay = Options(
+            maxSameSpeakerMergeGapSeconds: 0.35,
+            maxMergedDurationSeconds: 16,
+            maxMergedTextCharacters: 240,
+            maxSegmentDurationSeconds: 16,
+            maxSegmentTextCharacters: 130,
+            minSegmentTextCharacters: 42
+        )
     }
 
     static func process(
@@ -318,7 +330,8 @@ enum MeetingTranscriptPostProcessor {
 
         let chunks = MeetingTranscriptTextPostProcessor.readableChunks(
             segment.text,
-            maxCharacters: targetMaxCharacters
+            maxCharacters: targetMaxCharacters,
+            minCharacters: min(options.minSegmentTextCharacters, targetMaxCharacters)
         )
         guard chunks.count > 1 else { return [segment] }
 
@@ -421,7 +434,11 @@ enum MeetingTranscriptTextPostProcessor {
         return 0
     }
 
-    nonisolated static func readableChunks(_ text: String, maxCharacters: Int) -> [String] {
+    nonisolated static func readableChunks(
+        _ text: String,
+        maxCharacters: Int,
+        minCharacters: Int = 0
+    ) -> [String] {
         let normalized = normalizedFinalText(text)
         guard normalized.count > maxCharacters else {
             return normalized.isEmpty ? [] : [normalized]
@@ -448,7 +465,57 @@ enum MeetingTranscriptTextPostProcessor {
         if !current.isEmpty {
             chunks.append(current)
         }
-        return chunks
+        return balancedReadableChunks(
+            chunks,
+            minCharacters: minCharacters,
+            maxCharacters: maxCharacters
+        )
+    }
+
+    nonisolated private static func balancedReadableChunks(
+        _ chunks: [String],
+        minCharacters: Int,
+        maxCharacters: Int
+    ) -> [String] {
+        let minCharacters = max(minCharacters, 0)
+        guard minCharacters > 0, chunks.count > 1 else { return chunks }
+
+        var output: [String] = []
+        var index = 0
+        while index < chunks.count {
+            var current = chunks[index]
+
+            while current.count < minCharacters, index + 1 < chunks.count {
+                let next = chunks[index + 1]
+                let candidate = joinedReadableChunk(current, next)
+                guard candidate.count <= maxCharacters else { break }
+                current = candidate
+                index += 1
+            }
+
+            if current.count < minCharacters,
+               let previous = output.last {
+                let candidate = joinedReadableChunk(previous, current)
+                if candidate.count <= maxCharacters {
+                    output[output.count - 1] = candidate
+                } else {
+                    output.append(current)
+                }
+            } else {
+                output.append(current)
+            }
+            index += 1
+        }
+
+        return output
+    }
+
+    nonisolated private static func joinedReadableChunk(_ lhs: String, _ rhs: String) -> String {
+        let separator = needsInlineSeparator(
+            leftLast: lhs.unicodeScalars.last,
+            rightFirst: rhs.unicodeScalars.first
+        ) ? " " : ""
+        return normalizedFinalText(lhs + separator + rhs)
     }
 
     nonisolated private static func readableClauses(in text: String, maxCharacters: Int) -> [String] {

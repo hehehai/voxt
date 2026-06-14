@@ -333,6 +333,33 @@ final class MeetingDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.resolvedSummaryModelSelectionID, "remote-llm:available")
     }
 
+    func testHistoryMeetingModeEnablesSpeakerPresentationEvenWithSingleSystemSpeaker() {
+        let viewModel = makeHistoryViewModel(
+            initialSettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: nil,
+                modelSelectionID: "custom-llm:test"
+            ),
+            modelOptions: [
+                MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")
+            ],
+            captureMode: .meeting,
+            segments: [
+                MeetingTranscriptSegment(
+                    speaker: .them,
+                    audioSource: .systemAudio,
+                    startSeconds: 0,
+                    endSeconds: 3,
+                    text: "A single realtime system speaker should still be treated as meeting mode."
+                )
+            ]
+        )
+
+        XCTAssertEqual(viewModel.captureMode, .meeting)
+        XCTAssertTrue(viewModel.showsSpeakerDisplayModePicker)
+        XCTAssertTrue(viewModel.availableTranscriptPresentationModes.contains(.speakerMarks))
+    }
+
     func testSummarySettingsPersistThroughFeatureSettingsStore() throws {
         try withRestoredStandardDefaults([
             AppPreferenceKey.featureSettings
@@ -410,6 +437,13 @@ final class MeetingDetailViewModelTests: XCTestCase {
                     startSeconds: 1,
                     endSeconds: 2,
                     text: "world"
+                ),
+                MeetingTranscriptSegment(
+                    speaker: .me,
+                    audioSource: .microphone,
+                    startSeconds: 2,
+                    endSeconds: 3,
+                    text: "ack"
                 )
             ],
             audioURL: nil,
@@ -487,6 +521,13 @@ final class MeetingDetailViewModelTests: XCTestCase {
                     startSeconds: 1,
                     endSeconds: 2,
                     text: "world"
+                ),
+                MeetingTranscriptSegment(
+                    speaker: .me,
+                    audioSource: .microphone,
+                    startSeconds: 2,
+                    endSeconds: 3,
+                    text: "ack"
                 )
             ],
             audioURL: nil,
@@ -556,7 +597,10 @@ final class MeetingDetailViewModelTests: XCTestCase {
         )
 
         XCTAssertFalse(viewModel.isFinalizing)
-        XCTAssertEqual(viewModel.subtitle, String(localized: "Meeting In Progress"))
+        XCTAssertEqual(
+            viewModel.subtitle,
+            AppLocalization.format("%@ · %@", MeetingCaptureMode.meeting.title, String(localized: "Meeting In Progress"))
+        )
 
         liveState.isRecording = false
         liveState.isFinalizing = true
@@ -566,9 +610,96 @@ final class MeetingDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.subtitle, String(localized: "Preparing final meeting details"))
     }
 
+    func testLiveViewModelSplitsLongDisplaySegments() {
+        let segments = [
+            MeetingTranscriptSegment(
+                speaker: .them,
+                startSeconds: 0,
+                endSeconds: 24,
+                text: "第一句介绍当前模型选择和采集链路。第二句继续说明发言人识别的误差来源，以及短暂停顿不应该直接生成新的发言人。第三句讨论会议详情应该保持连续语义，同时实时浮层需要更快地给出可读段落和清晰反馈。第四句补充说明如果文本继续变长，实时显示仍然需要在自然句边界拆开，避免一整块内容压在同一个气泡里。"
+            )
+        ]
+
+        let displaySegments = MeetingDetailViewModel.liveDisplaySegments(from: segments)
+
+        XCTAssertGreaterThan(displaySegments.count, 1)
+        XCTAssertTrue(displaySegments.allSatisfy { $0.text.count <= 130 })
+        XCTAssertEqual(
+            displaySegments.map(\.text).joined(),
+            segments[0].text
+        )
+    }
+
+    func testLiveViewModelPreservesSpeakerMetadataWhenUpdatingSegments() async {
+        let segmentID = UUID()
+        let liveState = MeetingOverlayState()
+        liveState.isPresented = true
+        liveState.isRecording = true
+        liveState.captureMode = .meeting
+        liveState.segments = [
+            MeetingTranscriptSegment(
+                id: segmentID,
+                speaker: .them,
+                speakerID: "sortformer-0",
+                speakerDisplayName: "Speaker 1",
+                audioSource: .systemAudio,
+                speakerConfidence: 0.71,
+                startSeconds: 0,
+                endSeconds: 2,
+                text: "Initial text"
+            )
+        ]
+
+        let viewModel = MeetingDetailViewModel(
+            liveState: liveState,
+            initialSummarySettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: true,
+                promptTemplate: "Default summary prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            summaryModelOptions: [
+                MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")
+            ],
+            summarySettingsProvider: {
+                MeetingSummarySettingsSnapshot(
+                    autoGenerate: true,
+                    promptTemplate: "Default summary prompt",
+                    modelSelectionID: "custom-llm:test"
+                )
+            },
+            summaryModelOptionsProvider: {
+                [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")]
+            },
+            translationHandler: { text, _ in text }
+        )
+
+        liveState.segments = [
+            MeetingTranscriptSegment(
+                id: segmentID,
+                speaker: .them,
+                speakerID: "sortformer-1",
+                speakerDisplayName: "Speaker 2",
+                audioSource: .systemAudio,
+                speakerConfidence: 0.82,
+                startSeconds: 0,
+                endSeconds: 2.5,
+                text: "Updated text"
+            )
+        ]
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(viewModel.segments.first?.speakerID, "sortformer-1")
+        XCTAssertEqual(viewModel.segments.first?.speakerDisplayName, "Speaker 2")
+        XCTAssertEqual(viewModel.segments.first?.audioSource, .systemAudio)
+        XCTAssertEqual(viewModel.segments.first?.speakerConfidence ?? -1, 0.82, accuracy: 0.001)
+        XCTAssertEqual(viewModel.segments.first?.displaySpeakerTitle, "Speaker 2")
+    }
+
     private func makeHistoryViewModel(
         initialSettings: MeetingSummarySettingsSnapshot,
-        modelOptions: [MeetingSummaryModelOption]
+        modelOptions: [MeetingSummaryModelOption],
+        captureMode: MeetingCaptureMode? = nil,
+        segments: [MeetingTranscriptSegment] = []
     ) -> MeetingDetailViewModel {
         MeetingDetailViewModel(
             title: "Meeting Details",
@@ -580,7 +711,8 @@ final class MeetingDetailViewModelTests: XCTestCase {
             summaryModelOptions: modelOptions,
             summarySettingsProvider: { initialSettings },
             summaryModelOptionsProvider: { modelOptions },
-            segments: [],
+            segments: segments,
+            captureMode: captureMode,
             audioURL: nil,
             translationHandler: { text, _ in text },
             summaryStatusProvider: { _ in
