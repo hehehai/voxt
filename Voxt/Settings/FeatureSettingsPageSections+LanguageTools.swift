@@ -128,6 +128,34 @@ extension FeatureSettingsView {
                         set: { featureSettings.rewrite.continueShortcut = $0 }
                     )
                 )
+
+                FeatureDisclosureSection(
+                    title: featureSettingsLocalized("Context Enhancement"),
+                    badgeText: featureSettingsLocalized("Experimental"),
+                    detail: featureSettingsLocalized("Current focused app information"),
+                    onExpand: requestScrollToBottom
+                ) {
+                    FeatureToggleRow(
+                        title: featureSettingsLocalized("Content Text"),
+                        detail: "",
+                        isOn: binding(
+                            get: { featureSettings.rewrite.appContext.textEnabled },
+                            set: { featureSettings.rewrite.appContext.textEnabled = $0 }
+                        ),
+                        isEmbedded: true
+                    )
+
+                    FeatureToggleRow(
+                        title: featureSettingsLocalized("Screenshot"),
+                        badgeText: rewriteScreenshotContextBadgeText,
+                        detail: "",
+                        isOn: binding(
+                            get: { featureSettings.rewrite.appContext.screenshotEnabled },
+                            set: { featureSettings.rewrite.appContext.screenshotEnabled = $0 }
+                        ),
+                        isEmbedded: true
+                    )
+                }
             }
         }
     }

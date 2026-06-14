@@ -3,15 +3,9 @@ import XCTest
 
 final class MeetingDetailFormattingTests: XCTestCase {
     func testSummaryParagraphsSplitsOnBlankLinesAndTrimsWhitespace() {
-        let paragraphs = MeetingDetailFormatting.summaryParagraphs("""
-        
-          First paragraph.
-        
-        
-          Second paragraph with spaces.
-        
-        Third paragraph.
-        """)
+        let paragraphs = MeetingDetailFormatting.summaryParagraphs(
+            "\n  First paragraph.\n\n\n  Second paragraph with spaces.\n\nThird paragraph."
+        )
 
         XCTAssertEqual(
             paragraphs,

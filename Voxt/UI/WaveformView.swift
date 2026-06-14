@@ -86,7 +86,6 @@ struct WaveformView: View {
     private let iconSlotSize = CGSize(width: 16, height: 28)
     private let barAreaHeight: CGFloat = 28
     private let waveformSlotWidth: CGFloat = Self.defaultWaveformSlotWidth
-    private let sessionLanguagePickerWidth: CGFloat = Self.defaultSessionLanguagePickerWidth
     private let transcriptAnimationGrowthThreshold: CGFloat = 6
     private let barCount = 16
     private let basePhases: [Double] = (0..<16).map { Double($0) * 0.4 }
@@ -176,23 +175,8 @@ struct WaveformView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !isAnswerMode && isSessionTranslationTargetPickerPresented {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-
-                    sessionTranslationLanguagePicker
-                        .transition(
-                            .opacity.combined(with: .scale(scale: 0.92, anchor: .bottom))
-                        )
-
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-
             cardView
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isSessionTranslationTargetPickerPresented)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .scaleEffect(appeared ? 1.0 : 0.5, anchor: .bottom)
         .opacity(appeared ? 1.0 : 0.0)
@@ -255,10 +239,6 @@ struct WaveformView: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.55, blendDuration: 0.1), value: isCompact)
         .frame(maxWidth: .infinity, alignment: .top)
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .onTapGesture {
-            guard isSessionTranslationTargetPickerPresented, !showsAnswerTranslationSelector else { return }
-            onDismissSessionTranslationTargetPicker()
-        }
     }
 
     private var compactCard: some View {
@@ -352,94 +332,13 @@ struct WaveformView: View {
     }
 
     private var sessionTranslationLanguagePill: some View {
-        Button(action: onToggleSessionTranslationTargetPicker) {
-            HStack(spacing: 6) {
-                Text(sessionTranslationTargetLanguage?.title ?? "")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: 62, alignment: .center)
-
-                Image(systemName: isSessionTranslationTargetPickerPresented ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.72))
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 28)
-            .background(
-                Capsule()
-                    .fill(.white.opacity(0.09))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(
-                        isSessionTranslationTargetPickerPresented ? Color.accentColor.opacity(0.28) : .white.opacity(0.14),
-                        lineWidth: 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(String(localized: "Target Language")))
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private var sessionTranslationLanguagePicker: some View {
-        ScrollView {
-            VStack(spacing: 4) {
-                ForEach(TranslationTargetLanguage.allCases) { language in
-                    Button {
-                        onSelectSessionTranslationTargetLanguage(language)
-                    } label: {
-                        sessionTranslationLanguageRow(for: language)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(7)
-        }
-        .frame(width: sessionLanguagePickerWidth, alignment: .top)
-        .frame(maxHeight: 184, alignment: .top)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.black.opacity(0.96))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.22), radius: 16, y: 10)
-        .accessibilityLabel(Text(String(localized: "Translation Language")))
-    }
-
-    private func sessionTranslationLanguageRow(for language: TranslationTargetLanguage) -> some View {
-        let isSelected = selectedSessionTranslationLanguage == language
-        let backgroundColor: Color = isSelected ? Color.accentColor.opacity(0.20) : .white.opacity(0.05)
-        let borderColor: Color = isSelected ? Color.accentColor.opacity(0.36) : .white.opacity(0.08)
-
-        return HStack(spacing: 10) {
-            Text(language.title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.92))
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.accentColor.opacity(0.95))
-            }
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(backgroundColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(borderColor, lineWidth: 1)
+        AnswerSessionTranslationMenuPicker(
+            selectedLanguage: selectedSessionTranslationLanguage,
+            isPresented: isSessionTranslationTargetPickerPresented,
+            onTogglePresentation: onToggleSessionTranslationTargetPicker,
+            onDismissPresentation: onDismissSessionTranslationTargetPicker,
+            onSelectLanguage: onSelectSessionTranslationTargetLanguage,
+            style: .compact
         )
     }
 

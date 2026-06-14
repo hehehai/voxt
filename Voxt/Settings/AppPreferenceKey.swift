@@ -213,7 +213,10 @@ enum AppPreferenceKey {
         7. Preserve the original mixed-language structure. Do not translate, summarize, expand, explain, or change the writing style. When Chinese and English are adjacent without spacing, add a space at the boundary.
         8. If the content contains ordered-list wording, format it as a numbered list. If it contains a clear non-ordered parallel relationship, format it as an unordered list using "-". If there is a sublist, use Markdown nested-list formatting with 4 leading spaces or 1 tab before child items.
         9. Add line breaks in appropriate places so the content is clear and well structured.
-        10. If no meaningful content remains after cleanup, return an empty string.
+        10. If active app context or a screenshot is provided, use it only to resolve references, identify the current UI target, and correct obvious recognition mistakes. Do not mechanically repeat visible UI text in the final answer.
+        11. If the spoken content and the app context disagree, prefer the spoken content unless the app context clearly disambiguates a short reference such as "this one", "reply here", or "send this".
+        12. Do not infer details that are not clearly present in the speech, the text context, or the screenshot. If any screenshot detail is blurry, partial, or ambiguous, ignore it.
+        13. If no meaningful content remains after cleanup, return an empty string.
 
         Examples:
         - Input: "Um, buy apples and bananas, uh, and sugarcane. Ah no no, no sugarcane, get some loquats."
@@ -269,7 +272,7 @@ enum AppPreferenceKey {
         7. Preserve the original mixed-language structure during cleanup. Do not summarize, expand, explain, or change the writing style. When Chinese and English are adjacent without spacing, add a space at the boundary before translation.
         8. If the content contains ordered-list wording, format it as a numbered list. If it contains a clear non-ordered parallel relationship, format it as an unordered list using "-". If there is a sublist, use Markdown nested-list formatting with 4 leading spaces or 1 tab before child items.
         9. Add line breaks in appropriate places so the content is clear and well structured.
-        10. Translate the cleaned content into {{TARGET_LANGUAGE}} accurately, preserving the original meaning without arbitrary additions or omissions.
+        10. Translate the cleaned content into {{TARGET_LANGUAGE}} accurately, preserving the original meaning without arbitrary additions or omissions. If the target language specifies a script or written variant, such as Simplified Chinese or Traditional Chinese, use that exact script only.
         11. If no meaningful content remains after cleanup, return an empty string.
 
         Examples:
@@ -311,9 +314,14 @@ enum AppPreferenceKey {
 
         Rules:
         1. Follow the spoken instruction precisely.
-        2. If source text exists, transform it accordingly; otherwise answer directly with the requested content.
-        3. Return only the final text to insert.
-        4. Do not include explanations, markdown, labels, or commentary.
+        2. If source text exists, treat it as the primary rewrite target. Do not pull in unrelated app-context details unless the spoken instruction clearly refers to them.
+        3. If source text does not exist, use the spoken instruction together with any provided app text context or screenshots to identify the user's intended target, such as "this", "that", "the latest message", or "reply here".
+        4. If the target can be identified from the available context, output the final reply or rewritten text directly instead of repeating the spoken instruction.
+        5. If the target cannot be identified confidently, return a short, direct fallback asking for the missing content or context. Do not invent details.
+        6. Use app context only to resolve references, identify the current UI target, and understand the current screen state. Do not mechanically copy visible UI text into the result unless the user is explicitly asking to transform that text.
+        7. If the spoken instruction conflicts with app context, prefer the spoken instruction unless the app context clearly disambiguates what the user is pointing at.
+        8. Return only the final text to insert.
+        9. Do not include explanations, markdown, labels, or commentary.
         """
 
     static let defaultTranscriptSummaryPrompt = TranscriptSummarySupport.defaultPromptTemplate()

@@ -386,6 +386,7 @@ extension AppDelegate {
                     isStablePrefixCandidate: false
                 )
             ],
+            attachments: [],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil

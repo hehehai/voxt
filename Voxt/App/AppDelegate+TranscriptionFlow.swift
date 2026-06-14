@@ -139,7 +139,8 @@ extension AppDelegate {
         let strategy = TaskLLMStrategyResolver.resolve(
             taskKind: .transcriptionEnhancement,
             rawText: text,
-            promptCharacterCount: promptResolution.content.count + (promptResolution.dictionaryGlossary?.count ?? 0),
+            promptCharacterCount: promptResolution.content.count +
+                (promptResolution.dictionaryGlossary?.count ?? 0),
             baseGlossarySelectionPolicy: basePolicy,
             capabilities: llmProviderModelCapabilities(for: provider)
         )

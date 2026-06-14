@@ -92,6 +92,7 @@ enum FeatureSettingsStore {
                     kind: .enhancement,
                     defaults: defaults
                 ),
+                appContext: .init(),
                 notes: TranscriptionNoteFeatureSettings(
                     enabled: false,
                     triggerShortcut: .defaultShortcut,
@@ -119,6 +120,7 @@ enum FeatureSettingsStore {
                     kind: .rewrite,
                     defaults: defaults
                 ),
+                appContext: .init(),
                 appEnhancementEnabled: true,
                 continueShortcut: .defaultShortcut
             ),
@@ -284,6 +286,7 @@ enum FeatureSettingsStore {
                     kind: .enhancement,
                     defaults: defaults
                 ),
+                appContext: settings.transcription.appContext,
                 notes: sanitizedNotesSettings(
                     settings.transcription.notes,
                     fallbackSelectionID: fallback.transcription.notes.titleModelSelectionID
@@ -308,6 +311,7 @@ enum FeatureSettingsStore {
                     kind: .rewrite,
                     defaults: defaults
                 ),
+                appContext: settings.rewrite.appContext,
                 appEnhancementEnabled: true,
                 continueShortcut: sanitizedContinueShortcutSettings(settings.rewrite.continueShortcut)
             ),
@@ -340,6 +344,7 @@ enum FeatureSettingsStore {
                 llmEnabled: settings.transcription.llmEnabled,
                 llmSelectionID: settings.transcription.llmSelectionID,
                 prompt: AppPromptDefaults.canonicalStoredText(settings.transcription.prompt, kind: .enhancement),
+                appContext: settings.transcription.appContext,
                 notes: settings.transcription.notes
             ),
             translation: TranslationFeatureSettings(
@@ -353,6 +358,7 @@ enum FeatureSettingsStore {
                 asrSelectionID: settings.rewrite.asrSelectionID,
                 llmSelectionID: settings.rewrite.llmSelectionID,
                 prompt: AppPromptDefaults.canonicalStoredText(settings.rewrite.prompt, kind: .rewrite),
+                appContext: settings.rewrite.appContext,
                 appEnhancementEnabled: true,
                 continueShortcut: settings.rewrite.continueShortcut
             ),

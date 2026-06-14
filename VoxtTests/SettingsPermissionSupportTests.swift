@@ -6,6 +6,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
         transcriptionASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         translationASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         rewriteASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
+        screenshotContextEnabled: Bool = false,
         remindersEnabled: Bool = false
     ) -> FeatureSettings {
         FeatureSettings(
@@ -30,6 +31,10 @@ final class SettingsPermissionSupportTests: XCTestCase {
                 asrSelectionID: rewriteASR,
                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultRewritePrompt,
+                appContext: .init(
+                    textEnabled: false,
+                    screenshotEnabled: screenshotContextEnabled
+                ),
                 appEnhancementEnabled: false
             )
         )
@@ -102,6 +107,21 @@ final class SettingsPermissionSupportTests: XCTestCase {
         XCTAssertEqual(
             permissions,
             [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .reminders]
+        )
+    }
+
+    func testSidebarPermissionsIncludeScreenCaptureWhenRewriteScreenshotContextIsEnabled() {
+        let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
+            selectedEngine: .remote,
+            muteSystemAudioWhileRecording: false,
+            featureSettings: makeFeatureSettings(screenshotContextEnabled: true)
+        )
+
+        let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
+
+        XCTAssertEqual(
+            permissions,
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .screenCapture]
         )
     }
 

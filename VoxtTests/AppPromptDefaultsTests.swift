@@ -24,6 +24,9 @@ final class AppPromptDefaultsTests: XCTestCase {
         XCTAssertContains(englishPrompt, "unordered list")
         XCTAssertContains(englishPrompt, "nested-list")
         XCTAssertContains(englishPrompt, "Add line breaks")
+        XCTAssertContains(englishPrompt, "active app context or a screenshot")
+        XCTAssertContains(englishPrompt, "Do not mechanically repeat visible UI text")
+        XCTAssertContains(englishPrompt, "If the spoken content and the app context disagree")
         XCTAssertContains(englishPrompt, "Prepare materials, including:")
         XCTAssertContains(englishPrompt, "Buy apples and bananas, and get some loquats.")
         XCTAssertContains(chinesePrompt, "中文与英文连续且无空格")
@@ -31,6 +34,9 @@ final class AppPromptDefaultsTests: XCTestCase {
         XCTAssertContains(chinesePrompt, "无序列表")
         XCTAssertContains(chinesePrompt, "Markdown 嵌套列表")
         XCTAssertContains(chinesePrompt, "适当位置增加换行间隔")
+        XCTAssertContains(chinesePrompt, "当前 App 上下文或截图")
+        XCTAssertContains(chinesePrompt, "不要机械复述界面上可见的文本")
+        XCTAssertContains(chinesePrompt, "默认优先口述内容")
         XCTAssertContains(chinesePrompt, "任务分三步")
         XCTAssertContains(chinesePrompt, "优先处理自我修正")
         XCTAssertContains(chinesePrompt, "历史叙述")
@@ -43,6 +49,9 @@ final class AppPromptDefaultsTests: XCTestCase {
         XCTAssertContains(japanesePrompt, "箇条書き")
         XCTAssertContains(japanesePrompt, "ネストリスト")
         XCTAssertContains(japanesePrompt, "適切な位置に改行")
+        XCTAssertContains(japanesePrompt, "App コンテキストやスクリーンショット")
+        XCTAssertContains(japanesePrompt, "機械的に最終結果へ書き写してはいけません")
+        XCTAssertContains(japanesePrompt, "原則として発話内容を優先")
         XCTAssertContains(japanesePrompt, "タスクは三つの手順")
         XCTAssertContains(japanesePrompt, "まず自己修正を解決")
         XCTAssertContains(japanesePrompt, "歴史的な叙述")
@@ -189,6 +198,7 @@ final class AppPromptDefaultsTests: XCTestCase {
         XCTAssertContains(englishPrompt, "nested-list")
         XCTAssertContains(englishPrompt, "Add line breaks")
         XCTAssertContains(englishPrompt, "Translate the cleaned content")
+        XCTAssertContains(englishPrompt, "If the target language specifies a script or written variant")
         XCTAssertContains(englishPrompt, "Prepare materials, including:")
         XCTAssertContains(chinesePrompt, "整理并翻译")
         XCTAssertContains(chinesePrompt, "中文与英文连续且无空格")
@@ -198,6 +208,7 @@ final class AppPromptDefaultsTests: XCTestCase {
         XCTAssertContains(chinesePrompt, "Markdown 嵌套列表")
         XCTAssertContains(chinesePrompt, "适当位置增加换行间隔")
         XCTAssertContains(chinesePrompt, "将整理后的内容准确翻译")
+        XCTAssertContains(chinesePrompt, "必须严格使用该变体")
         XCTAssertContains(chinesePrompt, "任务分三步")
         XCTAssertContains(chinesePrompt, "请直接输出整理并翻译后的文本")
         XCTAssertContains(japanesePrompt, "整理して翻訳")
@@ -207,6 +218,7 @@ final class AppPromptDefaultsTests: XCTestCase {
         XCTAssertContains(japanesePrompt, "70%")
         XCTAssertContains(japanesePrompt, "ネストリスト")
         XCTAssertContains(japanesePrompt, "適切な位置に改行")
+        XCTAssertContains(japanesePrompt, "その指定どおりの表記だけを使用し")
         XCTAssertContains(japanesePrompt, "タスクは三つの手順")
     }
 
@@ -342,6 +354,30 @@ final class AppPromptDefaultsTests: XCTestCase {
         XCTAssertFalse(prompt.contains("{{SOURCE_TEXT}}"))
         XCTAssertFalse(prompt.contains("<spoken_instruction>"))
         XCTAssertFalse(prompt.contains("<selected_source_text>"))
+    }
+
+    func testRewriteDefaultPromptIncludesAppContextTargetingRules() {
+        let englishPrompt = AppPromptDefaults.text(for: .rewrite, language: .english)
+        let chinesePrompt = AppPromptDefaults.text(for: .rewrite, language: .chineseSimplified)
+        let japanesePrompt = AppPromptDefaults.text(for: .rewrite, language: .japanese)
+
+        XCTAssertContains(englishPrompt, "If source text exists, treat it as the primary rewrite target.")
+        XCTAssertContains(englishPrompt, "If source text does not exist, use the spoken instruction together with any provided app text context or screenshots")
+        XCTAssertContains(englishPrompt, "If the target can be identified from the available context")
+        XCTAssertContains(englishPrompt, "Do not invent details.")
+        XCTAssertContains(englishPrompt, "Do not mechanically copy visible UI text into the result")
+
+        XCTAssertContains(chinesePrompt, "如果存在源文本，应优先把它作为改写目标")
+        XCTAssertContains(chinesePrompt, "如果不存在源文本，但提供了当前 App 的文本上下文或截图")
+        XCTAssertContains(chinesePrompt, "不要复述用户指令")
+        XCTAssertContains(chinesePrompt, "不要编造细节")
+        XCTAssertContains(chinesePrompt, "不要机械抄写界面文本")
+
+        XCTAssertContains(japanesePrompt, "元テキストがある場合は、それを主要な変換対象として扱うこと")
+        XCTAssertContains(japanesePrompt, "現在の App テキストコンテキストやスクリーンショット")
+        XCTAssertContains(japanesePrompt, "最終的な返信またはリライト結果を直接出力すること")
+        XCTAssertContains(japanesePrompt, "詳細を作り込まないこと")
+        XCTAssertContains(japanesePrompt, "画面上の可視テキストを機械的に写さないこと")
     }
 
     func testResolvedStoredTextTreatsLegacyEnhancementPromptAsKnownDefault() {

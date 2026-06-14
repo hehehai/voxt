@@ -99,6 +99,22 @@ struct LLMDebugResolvedPrompt: Equatable {
     let content: String
     let inputSummary: String
     let compiledRequest: LLMCompiledRequest?
+    let requestMetadata: LLMDebugRequestMetadata?
+}
+
+struct LLMDebugRequestMetadata: Equatable {
+    let spokenInstruction: String
+    let sourceText: String
+    let appContextCharacterCount: Int
+    let imageAttachmentCount: Int
+    let imagePreviews: [LLMDebugImagePreview]
+}
+
+struct LLMDebugImagePreview: Equatable {
+    let filename: String
+    let mimeType: String
+    let detail: String
+    let data: Data
 }
 
 struct DebugAudioClip: Identifiable, Equatable {
@@ -423,7 +439,8 @@ enum ModelDebugPromptResolver {
             return LLMDebugResolvedPrompt(
                 content: preset.promptTemplate,
                 inputSummary: "",
-                compiledRequest: nil
+                compiledRequest: nil,
+                requestMetadata: nil
             )
         case .enhancement, .appGroup:
             let rawTranscription = mergedValues[AppDelegate.rawTranscriptionTemplateVariable] ?? ""
@@ -455,6 +472,7 @@ enum ModelDebugPromptResolver {
                         isStablePrefixCandidate: false
                     )
                 ]),
+                attachments: [],
                 conversationHistory: [],
                 previousResponseID: nil,
                 responseFormat: nil
@@ -463,7 +481,8 @@ enum ModelDebugPromptResolver {
             return LLMDebugResolvedPrompt(
                 content: compiledRequestPreview(compiledRequest),
                 inputSummary: rawTranscription,
-                compiledRequest: compiledRequest
+                compiledRequest: compiledRequest,
+                requestMetadata: nil
             )
         case .translation:
             let sourceText = mergedValues["{{SOURCE_TEXT}}"] ?? ""
@@ -500,6 +519,7 @@ enum ModelDebugPromptResolver {
                         isStablePrefixCandidate: false
                     )
                 ]),
+                attachments: [],
                 conversationHistory: [],
                 previousResponseID: nil,
                 responseFormat: nil
@@ -508,11 +528,13 @@ enum ModelDebugPromptResolver {
             return LLMDebugResolvedPrompt(
                 content: compiledRequestPreview(compiledRequest),
                 inputSummary: sourceText,
-                compiledRequest: compiledRequest
+                compiledRequest: compiledRequest,
+                requestMetadata: nil
             )
         case .rewrite:
             let dictatedPrompt = mergedValues["{{DICTATED_PROMPT}}"] ?? ""
             let sourceText = mergedValues["{{SOURCE_TEXT}}"] ?? ""
+            let appContextCapture = mergedValues.rewriteAppContextCapture
             let resolvedPrompt = RewritePromptBuilder.build(
                 systemPrompt: preset.promptTemplate,
                 dictatedPrompt: dictatedPrompt,
@@ -521,6 +543,7 @@ enum ModelDebugPromptResolver {
                 directAnswerMode: sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 forceNonEmptyAnswer: false
             )
+            let appContextAttachmentCost = appContextCapture?.attachments.estimatedPromptCharacterCost ?? 0
             let plan = LLMExecutionPlan(
                 task: .rewrite(
                     dictatedPrompt: dictatedPrompt,
@@ -537,7 +560,9 @@ enum ModelDebugPromptResolver {
                 executionStrategy: TaskLLMStrategyResolver.resolve(
                     taskKind: .rewrite,
                     rawText: sourceText.isEmpty ? dictatedPrompt : sourceText,
-                    promptCharacterCount: resolvedPrompt.count,
+                    promptCharacterCount: resolvedPrompt.count +
+                        (appContextCapture?.textContext.count ?? 0) +
+                        appContextAttachmentCost,
                     baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.rewrite.selectionPolicy,
                     capabilities: .unknown
                 ),
@@ -556,8 +581,29 @@ enum ModelDebugPromptResolver {
                             title: "Selected source text",
                             content: sourceText,
                             isStablePrefixCandidate: false
+                        ),
+                    RewriteAppContextGuidance.content(
+                        hasTextContext: !(appContextCapture?.textContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+                        imageAttachmentCount: appContextCapture?.attachments.count ?? 0,
+                        directAnswerMode: sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ).map {
+                        LLMContextBlock(
+                            kind: .metadata,
+                            title: "App context usage rules",
+                            content: $0,
+                            isStablePrefixCandidate: false
                         )
+                    },
+                    appContextCapture.map {
+                        LLMContextBlock(
+                            kind: .app,
+                            title: "Active app context",
+                            content: $0.textContext,
+                            isStablePrefixCandidate: false
+                        )
+                    }
                 ]),
+                attachments: appContextCapture?.attachments ?? [],
                 conversationHistory: [],
                 previousResponseID: nil,
                 responseFormat: nil
@@ -566,7 +612,14 @@ enum ModelDebugPromptResolver {
             return LLMDebugResolvedPrompt(
                 content: compiledRequestPreview(compiledRequest),
                 inputSummary: sourceText.isEmpty ? dictatedPrompt : sourceText,
-                compiledRequest: compiledRequest
+                compiledRequest: compiledRequest,
+                requestMetadata: LLMDebugRequestMetadata(
+                    spokenInstruction: dictatedPrompt,
+                    sourceText: sourceText,
+                    appContextCharacterCount: appContextCapture?.textContext.count ?? 0,
+                    imageAttachmentCount: appContextCapture?.attachments.count ?? 0,
+                    imagePreviews: debugImagePreviews(from: appContextCapture?.attachments ?? [])
+                )
             )
         case .transcriptSummary:
             let transcript = TranscriptSummarySupport.transcriptRecord(from: mergedValues)
@@ -607,6 +660,7 @@ enum ModelDebugPromptResolver {
                         isStablePrefixCandidate: false
                     )
                 ]),
+                attachments: [],
                 conversationHistory: [],
                 previousResponseID: nil,
                 responseFormat: nil
@@ -615,7 +669,8 @@ enum ModelDebugPromptResolver {
             return LLMDebugResolvedPrompt(
                 content: compiledRequestPreview(compiledRequest),
                 inputSummary: transcript,
-                compiledRequest: compiledRequest
+                compiledRequest: compiledRequest,
+                requestMetadata: nil
             )
         }
     }
@@ -667,10 +722,39 @@ enum ModelDebugPromptResolver {
                 : "[instructions]\n\(request.instructions)",
             request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? nil
-                : "[prompt]\n\(request.prompt)"
+                : "[prompt]\n\(request.prompt)",
+            attachmentPreviewSection(request.attachments)
         ].compactMap { $0 }
 
         return sections.joined(separator: "\n\n")
+    }
+
+    private static func attachmentPreviewSection(_ attachments: [LLMInputAttachment]) -> String? {
+        guard !attachments.isEmpty else { return nil }
+        let lines = attachments.map { attachment in
+            switch attachment {
+            case .image(let image):
+                return "- image: \(image.filename) · \(image.mimeType) · detail=\(image.detail.rawValue) · \(image.data.count) bytes"
+            }
+        }
+        return """
+        [attachments]
+        \(lines.joined(separator: "\n"))
+        """
+    }
+
+    private static func debugImagePreviews(from attachments: [LLMInputAttachment]) -> [LLMDebugImagePreview] {
+        attachments.compactMap { attachment in
+            switch attachment {
+            case .image(let image):
+                return LLMDebugImagePreview(
+                    filename: image.filename,
+                    mimeType: image.mimeType,
+                    detail: image.detail.rawValue,
+                    data: image.data
+                )
+            }
+        }
     }
 
     private static func resolveEnhancementPrompt(
@@ -693,6 +777,86 @@ enum ModelDebugPromptResolver {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
+    }
+}
+
+enum ModelDebugRuntimeValueKey {
+    static let rewriteAppContextCapture = "__VOXT_DEBUG_REWRITE_APP_CONTEXT_CAPTURE__"
+}
+
+extension Dictionary where Key == String, Value == String {
+    var rewriteAppContextCapture: TranscriptionAppContextCapture? {
+        guard let raw = self[ModelDebugRuntimeValueKey.rewriteAppContextCapture],
+              let data = raw.data(using: .utf8)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(DebugRewriteAppContextPayload.self, from: data).capture
+    }
+}
+
+struct DebugRewriteAppContextPayload: Codable {
+    let textContext: String
+    let attachments: [DebugRewriteAttachmentPayload]
+
+    var capture: TranscriptionAppContextCapture {
+        TranscriptionAppContextCapture(
+            textContext: textContext,
+            attachments: attachments.map(\.attachment)
+        )
+    }
+}
+
+enum DebugRewriteAttachmentPayload: Codable {
+    case image(DebugRewriteImageAttachmentPayload)
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case image
+    }
+
+    enum AttachmentType: String, Codable {
+        case image
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(AttachmentType.self, forKey: .type) {
+        case .image:
+            self = .image(try container.decode(DebugRewriteImageAttachmentPayload.self, forKey: .image))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .image(let payload):
+            try container.encode(AttachmentType.image, forKey: .type)
+            try container.encode(payload, forKey: .image)
+        }
+    }
+
+    var attachment: LLMInputAttachment {
+        switch self {
+        case .image(let payload):
+            return .image(payload.attachment)
+        }
+    }
+}
+
+struct DebugRewriteImageAttachmentPayload: Codable {
+    let base64Data: String
+    let mimeType: String
+    let detail: String
+    let filename: String
+
+    var attachment: LLMImageAttachment {
+        LLMImageAttachment(
+            data: Data(base64Encoded: base64Data) ?? Data(),
+            mimeType: mimeType,
+            detail: LLMImageAttachmentDetail(rawValue: detail) ?? .auto,
+            filename: filename
+        )
     }
 }
 

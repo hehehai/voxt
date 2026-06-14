@@ -216,11 +216,66 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
     }
 }
 
+struct TranscriptionAppContextSettings: Codable, Hashable, Sendable {
+    var textEnabled: Bool
+    var screenshotEnabled: Bool
+
+    var enabled: Bool {
+        get { textEnabled || screenshotEnabled }
+        set {
+            if newValue {
+                textEnabled = true
+                screenshotEnabled = true
+            } else {
+                textEnabled = false
+                screenshotEnabled = false
+            }
+        }
+    }
+
+    init(
+        enabled: Bool = false,
+        textEnabled: Bool? = nil,
+        screenshotEnabled: Bool? = nil
+    ) {
+        let resolvedTextEnabled = textEnabled ?? enabled
+        let resolvedScreenshotEnabled = screenshotEnabled ?? enabled
+        self.textEnabled = resolvedTextEnabled
+        self.screenshotEnabled = resolvedScreenshotEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case textEnabled
+        case screenshotEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let legacyEnabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        let textEnabled = try container.decodeIfPresent(Bool.self, forKey: .textEnabled)
+        let screenshotEnabled = try container.decodeIfPresent(Bool.self, forKey: .screenshotEnabled)
+        self.init(
+            enabled: legacyEnabled,
+            textEnabled: textEnabled,
+            screenshotEnabled: screenshotEnabled
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(enabled, forKey: .enabled)
+        try container.encode(textEnabled, forKey: .textEnabled)
+        try container.encode(screenshotEnabled, forKey: .screenshotEnabled)
+    }
+}
+
 struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
     var asrSelectionID: FeatureModelSelectionID
     var llmEnabled: Bool
     var llmSelectionID: FeatureModelSelectionID
     var prompt: String
+    var appContext: TranscriptionAppContextSettings
     var notes: TranscriptionNoteFeatureSettings
 
     init(
@@ -228,12 +283,14 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
         llmEnabled: Bool,
         llmSelectionID: FeatureModelSelectionID,
         prompt: String,
+        appContext: TranscriptionAppContextSettings = .init(),
         notes: TranscriptionNoteFeatureSettings? = nil
     ) {
         self.asrSelectionID = asrSelectionID
         self.llmEnabled = llmEnabled
         self.llmSelectionID = llmSelectionID
         self.prompt = prompt
+        self.appContext = appContext
         self.notes = notes ?? TranscriptionNoteFeatureSettings(
             enabled: false,
             triggerShortcut: .defaultShortcut,
@@ -248,6 +305,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
         case llmEnabled
         case llmSelectionID
         case prompt
+        case appContext
         case notes
     }
 
@@ -263,6 +321,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
             llmEnabled: llmEnabled,
             llmSelectionID: llmSelectionID,
             prompt: prompt,
+            appContext: try container.decodeIfPresent(TranscriptionAppContextSettings.self, forKey: .appContext) ?? .init(),
             notes: decodedNotes
         )
     }
@@ -317,6 +376,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
     var asrSelectionID: FeatureModelSelectionID
     var llmSelectionID: FeatureModelSelectionID
     var prompt: String
+    var appContext: TranscriptionAppContextSettings
     var appEnhancementEnabled: Bool
     var continueShortcut: TranscriptionContinueShortcutSettings
 
@@ -324,12 +384,14 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
         asrSelectionID: FeatureModelSelectionID,
         llmSelectionID: FeatureModelSelectionID,
         prompt: String,
+        appContext: TranscriptionAppContextSettings = .init(),
         appEnhancementEnabled: Bool,
         continueShortcut: TranscriptionContinueShortcutSettings = .defaultShortcut
     ) {
         self.asrSelectionID = asrSelectionID
         self.llmSelectionID = llmSelectionID
         self.prompt = prompt
+        self.appContext = appContext
         self.appEnhancementEnabled = appEnhancementEnabled
         self.continueShortcut = continueShortcut
     }
@@ -338,6 +400,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
         case asrSelectionID
         case llmSelectionID
         case prompt
+        case appContext
         case appEnhancementEnabled
         case continueShortcut
     }
@@ -348,6 +411,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
             asrSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .asrSelectionID),
             llmSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .llmSelectionID),
             prompt: try container.decode(String.self, forKey: .prompt),
+            appContext: try container.decodeIfPresent(TranscriptionAppContextSettings.self, forKey: .appContext) ?? .init(),
             appEnhancementEnabled: try container.decode(Bool.self, forKey: .appEnhancementEnabled),
             continueShortcut: try container.decodeIfPresent(TranscriptionContinueShortcutSettings.self, forKey: .continueShortcut) ?? .defaultShortcut
         )

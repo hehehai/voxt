@@ -405,6 +405,17 @@ enum TranslationTargetLanguage: String, CaseIterable, Identifiable {
         case .malay: return "Malay"
         }
     }
+
+    var translationScriptConstraint: String? {
+        switch self {
+        case .chineseSimplified:
+            return "Use Simplified Chinese characters only. Do not output Traditional Chinese characters."
+        case .chineseTraditional:
+            return "Use Traditional Chinese characters only. Do not output Simplified Chinese characters."
+        default:
+            return nil
+        }
+    }
 }
 
 enum HistoryRetentionPeriod: String, Identifiable {

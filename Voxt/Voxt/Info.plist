@@ -22,6 +22,8 @@
 	<string>Voxt needs microphone access to transcribe your speech.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Voxt needs reminders access to sync notes into Apple Reminders.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Voxt captures the current app window screenshot to improve transcription enhancement when app context is enabled.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Voxt uses speech recognition for direct dictation.</string>
     <key>SUEnableInstallerLauncherService</key>

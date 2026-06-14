@@ -14,6 +14,7 @@
 		A1B2C3D4E5F6078901234570 /* MLXAudioVAD in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F6078901234571 /* MLXAudioVAD */; };
 		B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B1C2D3E4F5060708090A0B0D /* Sparkle */; };
 		C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B02 /* MLXLMCommon */; };
+		C1D2E3F4A5060708090A0B04 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B05 /* MLXVLM */; };
 		C1D2E3F4A5060708090A0B06 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B07 /* MLXLLM */; };
 		D1E2F3A4B5C60718293A4B5C /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1E2F3A4B5C60718293A4B5D /* WhisperKit */; };
 		E2A1C3B4D5F60718293A4B6C /* PermissionFlow in Frameworks */ = {isa = PBXBuildFile; productRef = E2A1C3B4D5F60718293A4B6D /* PermissionFlow */; };
@@ -82,6 +83,7 @@
 				A1B2C3D4E5F6078901234570 /* MLXAudioVAD in Frameworks */,
 				B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */,
 				C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */,
+				C1D2E3F4A5060708090A0B04 /* MLXVLM in Frameworks */,
 				C1D2E3F4A5060708090A0B06 /* MLXLLM in Frameworks */,
 				D1E2F3A4B5C60718293A4B5C /* WhisperKit in Frameworks */,
 				E2A1C3B4D5F60718293A4B6C /* PermissionFlow in Frameworks */,
@@ -193,6 +195,7 @@
 				A1B2C3D4E5F6078901234571 /* MLXAudioVAD */,
 				B1C2D3E4F5060708090A0B0D /* Sparkle */,
 				C1D2E3F4A5060708090A0B02 /* MLXLMCommon */,
+				C1D2E3F4A5060708090A0B05 /* MLXVLM */,
 				C1D2E3F4A5060708090A0B07 /* MLXLLM */,
 				D1E2F3A4B5C60718293A4B5D /* WhisperKit */,
 				E2A1C3B4D5F60718293A4B6D /* PermissionFlow */,
@@ -985,6 +988,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLMCommon;
+		};
+		C1D2E3F4A5060708090A0B05 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
 		};
 		C1D2E3F4A5060708090A0B07 /* MLXLLM */ = {
 			isa = XCSwiftPackageProductDependency;
