@@ -194,6 +194,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingSystemAudioMuteTask: Task<Void, Never>?
     var pendingSelectedTextTranslationRefreshTask: Task<Void, Never>?
     var pendingMeetingStartupTask: Task<Void, Never>?
+    var pendingApplicationTerminationTask: Task<Void, Never>?
     var lastSignificantAudioAt = Date()
     var didTriggerPauseTranscription = false
     var didTriggerPauseLLM = false
@@ -642,11 +643,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        if meetingSessionCoordinator.isActive {
-            meetingSessionCoordinator.stop()
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard pendingApplicationTerminationTask == nil else {
+            return .terminateLater
         }
+
+        guard meetingSessionCoordinator.isActive else {
+            performApplicationTerminationCleanup()
+            return .terminateNow
+        }
+
         pendingMeetingStartupTask?.cancel()
+        pendingMeetingStartupTask = nil
+        meetingSessionCoordinator.overlayState.isCloseConfirmationPresented = false
+        meetingSessionCoordinator.overlayState.isCaptureModePickerPresented = false
+        meetingSessionCoordinator.overlayState.isRealtimeTranslationLanguagePickerPresented = false
+        meetingDetailWindowManager.closeLiveWindow()
+        meetingOverlayWindow.hide()
+
+        guard let stopTask = meetingSessionCoordinator.stop() else {
+            performApplicationTerminationCleanup()
+            return .terminateNow
+        }
+
+        pendingApplicationTerminationTask = Task { @MainActor [weak self] in
+            await stopTask.value
+            self?.performApplicationTerminationCleanup()
+            self?.pendingApplicationTerminationTask = nil
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        performApplicationTerminationCleanup()
+    }
+
+    private func performApplicationTerminationCleanup() {
+        pendingMeetingStartupTask?.cancel()
+        pendingMeetingStartupTask = nil
         meetingDetailWindowManager.closeLiveWindow()
         noteWindowManager.hide()
         systemAudioMuteController.restoreSystemAudioIfNeeded()

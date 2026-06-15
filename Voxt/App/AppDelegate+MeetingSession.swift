@@ -246,9 +246,7 @@ extension AppDelegate {
         pendingMeetingSessionCompletionDisposition = .save
 
         meetingSessionCoordinator.onSessionFinished = { [weak self] result in
-            Task { @MainActor [weak self] in
-                self?.handleMeetingSessionFinished(result)
-            }
+            self?.handleMeetingSessionFinished(result)
         }
 
         meetingSessionCoordinator.prepareForStart()

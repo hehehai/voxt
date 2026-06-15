@@ -6,7 +6,7 @@ import WhisperKit
 final class MeetingSessionCoordinator {
     let overlayState = MeetingOverlayState()
 
-    var onSessionFinished: ((MeetingSessionResult) -> Void)?
+    var onSessionFinished: (@MainActor (MeetingSessionResult) -> Void)?
 
     private let whisperModelManager: WhisperKitModelManager
     private let mlxModelManager: MLXModelManager
@@ -25,6 +25,7 @@ final class MeetingSessionCoordinator {
     private var activeLocalEngine: TranscriptionEngine?
     private var activeEngineContext: MeetingASREngineContext?
     private var isStopping = false
+    private var stopFinalizationTask: Task<Void, Never>?
     private var recordingStartedAt: Date?
     private var accumulatedRecordingDuration: TimeInterval = 0
     private var preferredInputDeviceIDProvider: () -> AudioDeviceID?
@@ -174,8 +175,12 @@ final class MeetingSessionCoordinator {
         }
     }
 
-    func stop(shouldFlushPendingAudio: Bool = true) {
-        guard isActive, !isStopping else { return }
+    @discardableResult
+    func stop(shouldFlushPendingAudio: Bool = true) -> Task<Void, Never>? {
+        guard isActive else { return nil }
+        if isStopping {
+            return stopFinalizationTask
+        }
         isStopping = true
         let visibleSnapshotSegments = finalizedSegments(from: overlayState.segments)
         overlayState.isRecording = false
@@ -188,7 +193,7 @@ final class MeetingSessionCoordinator {
         finalizeCurrentRecordingSlice()
         stopCaptures()
 
-        Task { [weak self] in
+        let finalizationTask = Task { [weak self] in
             guard let self else { return }
             if shouldFlushPendingAudio {
                 await self.flushPendingAudio()
@@ -270,7 +275,10 @@ final class MeetingSessionCoordinator {
             self.resetSessionPresentationState()
             self.overlayState.reset()
             self.onSessionFinished?(result)
+            self.stopFinalizationTask = nil
         }
+        stopFinalizationTask = finalizationTask
+        return finalizationTask
     }
 
     func setCollapsed(_ isCollapsed: Bool) {
