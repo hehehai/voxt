@@ -1,3 +1,6 @@
+// TranscriptionAppContextSupportTests.swift
+// Provides Transcription App Context Support Tests for Voxt test coverage.
+
 import CoreGraphics
 import Foundation
 import ImageIO

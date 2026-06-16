@@ -1,3 +1,6 @@
+// HotkeyModifierInterpreter.swift
+// Provides Hotkey Modifier Interpreter for hotkey handling.
+
 import Foundation
 import Carbon
 import ApplicationServices

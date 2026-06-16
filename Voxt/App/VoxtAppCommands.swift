@@ -1,3 +1,6 @@
+// VoxtAppCommands.swift
+// Provides Voxt App Commands for app lifecycle and routing.
+
 import SwiftUI
 import AppKit
 import Combine

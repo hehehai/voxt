@@ -1,3 +1,6 @@
+// DictionaryHistoryScanSupport.swift
+// Provides Dictionary History Scan Support for app lifecycle and routing.
+
 import Foundation
 
 struct DictionaryHistoryScanModelOption: Identifiable, Hashable {

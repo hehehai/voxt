@@ -1,3 +1,6 @@
+// MLXModelManager.swift
+// Provides MLXModel Manager for transcription engines.
+
 import Foundation
 import Combine
 import CFNetwork

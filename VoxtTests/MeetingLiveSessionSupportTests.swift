@@ -1,3 +1,6 @@
+// MeetingLiveSessionSupportTests.swift
+// Provides Meeting Live Session Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

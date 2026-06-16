@@ -1,3 +1,6 @@
+// MicrophonePreferenceManagerTests.swift
+// Provides Microphone Preference Manager Tests for Voxt test coverage.
+
 import XCTest
 import CoreAudio
 @testable import Voxt

@@ -1,3 +1,6 @@
+// WhisperKitDownloadSupport.swift
+// Provides Whisper Kit Download Support for transcription engines.
+
 import Foundation
 import CFNetwork
 

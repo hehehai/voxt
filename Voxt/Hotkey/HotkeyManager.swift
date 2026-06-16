@@ -1,3 +1,6 @@
+// HotkeyManager.swift
+// Provides Hotkey Manager for hotkey handling.
+
 import Foundation
 import Carbon
 import AppKit

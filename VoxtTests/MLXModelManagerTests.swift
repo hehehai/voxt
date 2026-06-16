@@ -1,3 +1,6 @@
+// MLXModelManagerTests.swift
+// Provides MLXModel Manager Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 import HuggingFace

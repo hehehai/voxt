@@ -1,3 +1,6 @@
+// MeetingSessionModels.swift
+// Provides Meeting Session Models for meeting session behavior.
+
 import Foundation
 import Combine
 

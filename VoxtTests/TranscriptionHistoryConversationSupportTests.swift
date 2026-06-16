@@ -1,3 +1,6 @@
+// TranscriptionHistoryConversationSupportTests.swift
+// Provides Transcription History Conversation Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

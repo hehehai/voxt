@@ -1,3 +1,6 @@
+// HotkeyRuntimeConfiguration.swift
+// Provides Hotkey Runtime Configuration for hotkey handling.
+
 import AppKit
 import ApplicationServices
 import Foundation

@@ -1,3 +1,6 @@
+// TranscriberProtocol.swift
+// Provides Transcriber Protocol for transcription engines.
+
 import Foundation
 import Combine
 

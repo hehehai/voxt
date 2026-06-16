@@ -1,3 +1,6 @@
+// TranscriptionCapturePipelineTests.swift
+// Provides Transcription Capture Pipeline Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

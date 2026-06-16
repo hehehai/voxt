@@ -1,3 +1,6 @@
+// HotkeySettingsValidationTests.swift
+// Provides Hotkey Settings Validation Tests for Voxt test coverage.
+
 import XCTest
 import AppKit
 import Carbon

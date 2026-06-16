@@ -1,3 +1,6 @@
+// ModelTestGate.swift
+// Provides Model Test Gate for test support.
+
 import XCTest
 
 enum ModelTestGate {

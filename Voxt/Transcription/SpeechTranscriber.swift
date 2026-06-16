@@ -1,3 +1,6 @@
+// SpeechTranscriber.swift
+// Provides Speech Transcriber for transcription engines.
+
 import Foundation
 import Speech
 import AVFoundation

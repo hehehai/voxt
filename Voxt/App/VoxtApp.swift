@@ -1,3 +1,6 @@
+// VoxtApp.swift
+// Provides Voxt App for app lifecycle and routing.
+
 import AppKit
 import ApplicationServices
 import CoreAudio

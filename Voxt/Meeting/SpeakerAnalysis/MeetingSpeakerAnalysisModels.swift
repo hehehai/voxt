@@ -1,3 +1,6 @@
+// MeetingSpeakerAnalysisModels.swift
+// Provides Meeting Speaker Analysis Models for meeting speaker analysis.
+
 import Foundation
 
 struct MeetingAudioAsset: Sendable {

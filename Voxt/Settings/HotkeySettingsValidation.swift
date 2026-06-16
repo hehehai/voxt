@@ -1,3 +1,6 @@
+// HotkeySettingsValidation.swift
+// Provides Hotkey Settings Validation for settings screens.
+
 import AppKit
 import Carbon
 import Foundation

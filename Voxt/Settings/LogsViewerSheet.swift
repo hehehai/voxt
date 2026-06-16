@@ -1,3 +1,6 @@
+// LogsViewerSheet.swift
+// Provides Logs Viewer Sheet for settings screens.
+
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers

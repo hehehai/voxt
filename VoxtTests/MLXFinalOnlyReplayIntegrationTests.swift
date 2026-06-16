@@ -1,3 +1,6 @@
+// MLXFinalOnlyReplayIntegrationTests.swift
+// Provides MLXFinal Only Replay Integration Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

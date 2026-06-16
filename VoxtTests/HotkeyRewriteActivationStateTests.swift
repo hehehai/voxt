@@ -1,3 +1,6 @@
+// HotkeyRewriteActivationStateTests.swift
+// Provides Hotkey Rewrite Activation State Tests for Voxt test coverage.
+
 import XCTest
 import AppKit
 @testable import Voxt

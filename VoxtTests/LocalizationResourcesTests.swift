@@ -1,3 +1,6 @@
+// LocalizationResourcesTests.swift
+// Provides Localization Resources Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

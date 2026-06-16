@@ -1,3 +1,6 @@
+// ModelCatalogBuilderTests.swift
+// Provides Model Catalog Builder Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

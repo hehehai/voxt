@@ -1,3 +1,6 @@
+// ReportSettingsView.swift
+// Provides Report Settings View for settings screens.
+
 import SwiftUI
 import AppKit
 

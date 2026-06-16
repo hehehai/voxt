@@ -1,3 +1,6 @@
+// ModelDownloadStatusSnapshotTests.swift
+// Provides Model Download Status Snapshot Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

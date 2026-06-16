@@ -1,3 +1,6 @@
+// AudioLevelMeterTests.swift
+// Provides Audio Level Meter Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

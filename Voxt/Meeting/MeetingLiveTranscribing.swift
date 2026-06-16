@@ -1,3 +1,6 @@
+// MeetingLiveTranscribing.swift
+// Provides Meeting Live Transcribing for meeting session behavior.
+
 import Foundation
 
 @MainActor

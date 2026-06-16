@@ -1,3 +1,6 @@
+// HistoryAudioArchiveSupportTests.swift
+// Provides History Audio Archive Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

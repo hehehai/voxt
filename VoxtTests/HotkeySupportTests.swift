@@ -1,3 +1,6 @@
+// HotkeySupportTests.swift
+// Provides Hotkey Support Tests for Voxt test coverage.
+
 import XCTest
 import AppKit
 import Carbon

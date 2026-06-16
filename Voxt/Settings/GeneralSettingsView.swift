@@ -1,3 +1,6 @@
+// GeneralSettingsView.swift
+// Provides General Settings View for settings screens.
+
 import SwiftUI
 import CoreAudio
 import AppKit

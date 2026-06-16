@@ -1,3 +1,6 @@
+// HotkeyManagerTests.swift
+// Provides Hotkey Manager Tests for Voxt test coverage.
+
 import XCTest
 import AppKit
 import Carbon

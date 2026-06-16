@@ -1,3 +1,6 @@
+// MeetingSpeakerTurnLabeler.swift
+// Provides Meeting Speaker Turn Labeler for meeting speaker analysis.
+
 import Foundation
 
 enum MeetingSpeakerTurnLabeler {

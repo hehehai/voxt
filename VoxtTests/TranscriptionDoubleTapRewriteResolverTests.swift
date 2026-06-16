@@ -1,3 +1,6 @@
+// TranscriptionDoubleTapRewriteResolverTests.swift
+// Provides Transcription Double Tap Rewrite Resolver Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

@@ -1,3 +1,6 @@
+// WhisperKitModelSupport.swift
+// Provides Whisper Kit Model Support for transcription engines.
+
 import Foundation
 
 struct WhisperKitModelCatalog {

@@ -1,3 +1,6 @@
+// MeetingSpeakerTranscriptAssemblerTests.swift
+// Provides Meeting Speaker Transcript Assembler Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

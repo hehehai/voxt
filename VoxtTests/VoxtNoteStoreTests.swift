@@ -1,3 +1,6 @@
+// VoxtNoteStoreTests.swift
+// Provides Voxt Note Store Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

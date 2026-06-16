@@ -1,3 +1,6 @@
+// SessionEndFlowTests.swift
+// Provides Session End Flow Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

@@ -1,3 +1,6 @@
+// MLXModelSupport.swift
+// Provides MLXModel Support for transcription engines.
+
 import Foundation
 import HuggingFace
 

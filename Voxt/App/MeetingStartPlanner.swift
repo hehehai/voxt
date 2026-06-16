@@ -1,3 +1,6 @@
+// MeetingStartPlanner.swift
+// Provides Meeting Start Planner for app lifecycle and routing.
+
 import Foundation
 
 enum MeetingStartBlockReason: Equatable {

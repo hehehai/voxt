@@ -1,3 +1,6 @@
+// TranscriptionHistoryEntryAudioTests.swift
+// Provides Transcription History Entry Audio Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

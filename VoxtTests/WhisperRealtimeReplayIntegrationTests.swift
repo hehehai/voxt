@@ -1,3 +1,6 @@
+// WhisperRealtimeReplayIntegrationTests.swift
+// Provides Whisper Realtime Replay Integration Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

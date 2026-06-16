@@ -1,3 +1,6 @@
+// AliyunMeetingASRClientTests.swift
+// Provides Aliyun Meeting ASRClient Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

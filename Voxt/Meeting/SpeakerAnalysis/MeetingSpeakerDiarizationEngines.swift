@@ -1,3 +1,6 @@
+// MeetingSpeakerDiarizationEngines.swift
+// Provides Meeting Speaker Diarization Engines for meeting speaker analysis.
+
 import Foundation
 import MLX
 import MLXAudioVAD

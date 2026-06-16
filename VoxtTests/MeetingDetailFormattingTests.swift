@@ -1,3 +1,6 @@
+// MeetingDetailFormattingTests.swift
+// Provides Meeting Detail Formatting Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

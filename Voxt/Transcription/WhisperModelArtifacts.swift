@@ -1,3 +1,6 @@
+// WhisperModelArtifacts.swift
+// Provides Whisper Model Artifacts for transcription engines.
+
 import Foundation
 
 enum WhisperModelArtifacts {

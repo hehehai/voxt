@@ -1,3 +1,6 @@
+// MeetingCompatibilityAliases.swift
+// Provides Meeting Compatibility Aliases for meeting session behavior.
+
 import Foundation
 
 typealias MeetingSpeaker = TranscriptSpeaker

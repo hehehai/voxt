@@ -1,3 +1,6 @@
+// WhisperLongFormDiagnosticsTests.swift
+// Provides Whisper Long Form Diagnostics Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

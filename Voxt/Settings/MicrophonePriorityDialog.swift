@@ -1,3 +1,6 @@
+// MicrophonePriorityDialog.swift
+// Provides Microphone Priority Dialog for settings screens.
+
 import SwiftUI
 import UniformTypeIdentifiers
 

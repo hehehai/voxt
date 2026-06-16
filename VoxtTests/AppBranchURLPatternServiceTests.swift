@@ -1,3 +1,6 @@
+// AppBranchURLPatternServiceTests.swift
+// Provides App Branch URLPattern Service Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

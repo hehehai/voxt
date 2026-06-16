@@ -1,3 +1,6 @@
+// ModelSettingsManagerRefreshSupportTests.swift
+// Provides Model Settings Manager Refresh Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

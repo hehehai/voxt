@@ -1,3 +1,6 @@
+// PermissionsSettingsView.swift
+// Provides Permissions Settings View for settings screens.
+
 import SwiftUI
 import AppKit
 import AVFoundation

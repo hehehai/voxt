@@ -1,3 +1,6 @@
+// MLXModelPerRepoStateSupportTests.swift
+// Provides MLXModel Per Repo State Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

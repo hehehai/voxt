@@ -1,3 +1,6 @@
+// SettingsPermissionSupport.swift
+// Provides Settings Permission Support for settings screens.
+
 import SwiftUI
 import AVFoundation
 import CoreGraphics

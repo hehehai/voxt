@@ -1,3 +1,6 @@
+// RelativeNoteTimestampFormatterTests.swift
+// Provides Relative Note Timestamp Formatter Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

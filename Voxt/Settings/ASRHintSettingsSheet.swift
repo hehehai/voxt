@@ -1,3 +1,6 @@
+// ASRHintSettingsSheet.swift
+// Provides ASRHint Settings Sheet for settings screens.
+
 import SwiftUI
 
 @MainActor

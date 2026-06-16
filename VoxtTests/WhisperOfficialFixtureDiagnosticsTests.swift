@@ -1,3 +1,6 @@
+// WhisperOfficialFixtureDiagnosticsTests.swift
+// Provides Whisper Official Fixture Diagnostics Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

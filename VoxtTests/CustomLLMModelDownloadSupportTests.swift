@@ -1,3 +1,6 @@
+// CustomLLMModelDownloadSupportTests.swift
+// Provides Custom LLMModel Download Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

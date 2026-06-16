@@ -1,3 +1,6 @@
+// ModelSettingsCatalogSnapshotBuilderTests.swift
+// Provides Model Settings Catalog Snapshot Builder Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

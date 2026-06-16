@@ -1,3 +1,6 @@
+// TranslationSessionLanguageSwitchTests.swift
+// Provides Translation Session Language Switch Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

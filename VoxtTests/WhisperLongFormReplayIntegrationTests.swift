@@ -1,3 +1,6 @@
+// WhisperLongFormReplayIntegrationTests.swift
+// Provides Whisper Long Form Replay Integration Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

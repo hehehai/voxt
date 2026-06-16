@@ -1,3 +1,6 @@
+// MLXModelPerRepoStateSupport.swift
+// Provides MLXModel Per Repo State Support for transcription engines.
+
 import Foundation
 
 enum MLXModelPerRepoStateSupport {

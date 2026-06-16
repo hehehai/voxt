@@ -1,3 +1,6 @@
+// WhisperTextPostProcessor.swift
+// Provides Whisper Text Post Processor for transcription engines.
+
 import Foundation
 
 enum WhisperTextPostProcessor {

@@ -1,3 +1,6 @@
+// MeetingSessionCoordinator.swift
+// Provides Meeting Session Coordinator for meeting session behavior.
+
 import Foundation
 import AVFoundation
 import WhisperKit

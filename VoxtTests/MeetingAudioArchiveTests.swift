@@ -1,3 +1,6 @@
+// MeetingAudioArchiveTests.swift
+// Provides Meeting Audio Archive Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

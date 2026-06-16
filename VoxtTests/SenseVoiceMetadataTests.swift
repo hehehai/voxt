@@ -1,3 +1,6 @@
+// SenseVoiceMetadataTests.swift
+// Provides Sense Voice Metadata Tests for Voxt test coverage.
+
 import XCTest
 import MLXAudioSTT
 @testable import Voxt

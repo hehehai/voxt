@@ -1,3 +1,6 @@
+// HotkeyEventSupport.swift
+// Provides Hotkey Event Support for hotkey handling.
+
 import Foundation
 import AppKit
 import ApplicationServices

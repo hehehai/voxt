@@ -1,3 +1,6 @@
+// GeneralSettingsData.swift
+// Provides General Settings Data for settings screens.
+
 import Foundation
 import AppKit
 

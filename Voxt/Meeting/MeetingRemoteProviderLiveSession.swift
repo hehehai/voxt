@@ -1,3 +1,6 @@
+// MeetingRemoteProviderLiveSession.swift
+// Provides Meeting Remote Provider Live Session for meeting session behavior.
+
 import Foundation
 import zlib
 

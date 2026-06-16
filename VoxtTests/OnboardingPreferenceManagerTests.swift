@@ -1,3 +1,6 @@
+// OnboardingPreferenceManagerTests.swift
+// Provides Onboarding Preference Manager Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

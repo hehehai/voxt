@@ -1,3 +1,6 @@
+// SessionTextIOTests.swift
+// Provides Session Text IOTests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

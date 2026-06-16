@@ -1,3 +1,6 @@
+// WhisperKitTranscriber.swift
+// Provides Whisper Kit Transcriber for transcription engines.
+
 import Foundation
 import AVFoundation
 import Combine

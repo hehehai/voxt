@@ -1,3 +1,6 @@
+// TranslationProviderResolverTests.swift
+// Provides Translation Provider Resolver Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

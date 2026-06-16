@@ -1,3 +1,6 @@
+// MeetingHotkeyPreferenceTests.swift
+// Provides Meeting Hotkey Preference Tests for Voxt test coverage.
+
 import XCTest
 import AppKit
 import Carbon

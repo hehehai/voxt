@@ -1,3 +1,6 @@
+// MeetingRealtimeDiarization.swift
+// Provides Meeting Realtime Diarization for meeting session behavior.
+
 import Foundation
 import HuggingFace
 import MLX

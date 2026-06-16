@@ -1,3 +1,6 @@
+// RemoteModelConfigurationTests.swift
+// Provides Remote Model Configuration Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

@@ -1,3 +1,6 @@
+// MLXTranscriber.swift
+// Provides MLXTranscriber for transcription engines.
+
 import Foundation
 import AVFoundation
 import Combine

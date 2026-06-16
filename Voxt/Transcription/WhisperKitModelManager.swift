@@ -1,3 +1,6 @@
+// WhisperKitModelManager.swift
+// Provides Whisper Kit Model Manager for transcription engines.
+
 import Foundation
 import Combine
 import CFNetwork

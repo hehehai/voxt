@@ -1,3 +1,6 @@
+// WhisperRealtimeEagerStateTests.swift
+// Provides Whisper Realtime Eager State Tests for Voxt test coverage.
+
 import Testing
 import WhisperKit
 @testable import Voxt

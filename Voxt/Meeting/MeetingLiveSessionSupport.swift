@@ -1,3 +1,6 @@
+// MeetingLiveSessionSupport.swift
+// Provides Meeting Live Session Support for meeting session behavior.
+
 import Foundation
 
 enum MeetingLiveSessionState: Equatable, Sendable {

@@ -50,9 +50,52 @@
 		D4A1B2C32F7A100100ABCDEF /* Exceptions for "Voxt" folder in "Voxt" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				App/README.md,
+				App/Recording/README.md,
+				Core/Dictionary/README.md,
+				Core/History/README.md,
+				Core/LLM/README.md,
+				Core/Models/README.md,
+				Core/README.md,
+				Core/RemoteProviders/README.md,
+				Core/Security/README.md,
+				Core/Transcription/README.md,
+				Core/Utilities/README.md,
+				Hotkey/README.md,
+				Meeting/Capture/README.md,
+				Meeting/Processing/README.md,
+				Meeting/README.md,
+				Meeting/SpeakerAnalysis/README.md,
+				README.md,
+				Resources/Prompts/en/README.md,
+				Resources/Prompts/ja/README.md,
+				Resources/Prompts/README.md,
+				"Resources/Prompts/zh-Hans/README.md",
+				Resources/README.md,
+				Settings/AppEnhancement/README.md,
+				Settings/Dictionary/README.md,
+				Settings/Features/README.md,
+				Settings/History/README.md,
+				Settings/Models/README.md,
+				Settings/Onboarding/README.md,
+				Settings/README.md,
+				Settings/Shell/README.md,
+				Transcription/README.md,
+				Transcription/RemoteASR/README.md,
 				Voxt/Info.plist,
+				Windows/MeetingDetail/README.md,
+				Windows/README.md,
 			);
 			target = 31F19CCC2F4D76D200E96913 /* Voxt */;
+		};
+		D4A1B2C42F7A100100ABCDEF /* Exceptions for "VoxtTests" folder in "VoxtTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Fixtures/Audio/qwen-official/README.md",
+				README.md,
+				TestSupport/README.md,
+			);
+			target = 3A1A2B3C4D5E6F708090A0B0E /* VoxtTests */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -67,6 +110,9 @@
 		};
 		3A1A2B3C4D5E6F708090A0B0D /* VoxtTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D4A1B2C42F7A100100ABCDEF /* Exceptions for "VoxtTests" folder in "VoxtTests" target */,
+			);
 			path = VoxtTests;
 			sourceTree = "<group>";
 		};

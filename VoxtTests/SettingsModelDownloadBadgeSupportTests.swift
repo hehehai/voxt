@@ -1,3 +1,6 @@
+// SettingsModelDownloadBadgeSupportTests.swift
+// Provides Settings Model Download Badge Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

@@ -1,3 +1,6 @@
+// MicrophonePriorityListRow.swift
+// Provides Microphone Priority List Row for settings screens.
+
 import SwiftUI
 
 private func localized(_ key: String) -> String {

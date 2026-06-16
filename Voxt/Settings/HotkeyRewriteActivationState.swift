@@ -1,3 +1,6 @@
+// HotkeyRewriteActivationState.swift
+// Provides Hotkey Rewrite Activation State for settings screens.
+
 import Foundation
 
 struct HotkeyRewriteActivationState: Equatable {

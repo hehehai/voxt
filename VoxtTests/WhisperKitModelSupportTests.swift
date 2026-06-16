@@ -1,3 +1,6 @@
+// WhisperKitModelSupportTests.swift
+// Provides Whisper Kit Model Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

@@ -1,3 +1,6 @@
+// OnboardingSupportTests.swift
+// Provides Onboarding Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

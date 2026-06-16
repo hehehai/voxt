@@ -1,3 +1,6 @@
+// HotkeySettingsView.swift
+// Provides Hotkey Settings View for settings screens.
+
 import SwiftUI
 import AppKit
 import Carbon

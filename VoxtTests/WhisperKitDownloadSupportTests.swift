@@ -1,3 +1,6 @@
+// WhisperKitDownloadSupportTests.swift
+// Provides Whisper Kit Download Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

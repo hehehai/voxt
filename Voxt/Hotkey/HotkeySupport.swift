@@ -1,3 +1,6 @@
+// HotkeySupport.swift
+// Provides Hotkey Support for hotkey handling.
+
 import AppKit
 import Carbon
 import SwiftUI

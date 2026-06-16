@@ -1,3 +1,6 @@
+// HotkeyRecorderView.swift
+// Provides Hotkey Recorder View for hotkey handling.
+
 import SwiftUI
 import AppKit
 import Carbon

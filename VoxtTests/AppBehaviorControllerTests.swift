@@ -1,3 +1,6 @@
+// AppBehaviorControllerTests.swift
+// Provides App Behavior Controller Tests for Voxt test coverage.
+
 import XCTest
 import AppKit
 @testable import Voxt

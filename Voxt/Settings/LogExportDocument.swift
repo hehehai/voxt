@@ -1,3 +1,6 @@
+// LogExportDocument.swift
+// Provides Log Export Document for settings screens.
+
 import SwiftUI
 import UniformTypeIdentifiers
 

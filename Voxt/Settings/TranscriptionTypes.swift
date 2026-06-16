@@ -1,3 +1,6 @@
+// TranscriptionTypes.swift
+// Provides Transcription Types for settings screens.
+
 import SwiftUI
 
 enum TranscriptionEngine: String, CaseIterable, Identifiable {

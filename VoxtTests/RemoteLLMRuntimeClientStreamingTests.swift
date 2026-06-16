@@ -1,3 +1,6 @@
+// RemoteLLMRuntimeClientStreamingTests.swift
+// Provides Remote LLMRuntime Client Streaming Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
