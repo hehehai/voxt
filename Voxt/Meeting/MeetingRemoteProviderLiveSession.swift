@@ -417,7 +417,7 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
             let unitStart = resolvedProviderSegmentStartSeconds(for: lastUnit)
             let unitEnd = resolvedProviderSegmentEndSeconds(for: lastUnit, startSeconds: unitStart)
             let finalizedEndDescription = lastFinalizedSegmentEndSeconds.map { String($0) } ?? "nil"
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting live stale leading unit suppressed. speaker=\(speaker.rawValue), unitStart=\(unitStart), unitEnd=\(unitEnd), lastFinalizedEnd=\(finalizedEndDescription)",
                 verbose: true
             )
@@ -459,13 +459,13 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
     func logFirstAudioPacketIfNeeded(kind: String) {
         guard !hasLoggedFirstAudioPacket else { return }
         hasLoggedFirstAudioPacket = true
-        VoxtLog.info("Meeting live audio started. provider=\(kind), speaker=\(speaker.rawValue)")
+        VoxtLog.meeting("Meeting live audio started. provider=\(kind), speaker=\(speaker.rawValue)")
     }
 
     func logOutgoingAudioPacketIfNeeded(kind: String, sequence: Int32, payloadBytes: Int) {
         guard sentAudioPacketCount < 5 else { return }
         sentAudioPacketCount += 1
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting live audio packet sent. provider=\(kind), speaker=\(speaker.rawValue), sequence=\(sequence), payloadBytes=\(payloadBytes)"
         )
     }
@@ -479,13 +479,13 @@ private class BaseMeetingRemoteLiveSession: MeetingLiveTranscribingSession {
         let textCount = parsed?.text?.trimmingCharacters(in: .whitespacesAndNewlines).count ?? 0
         if !hasLoggedFirstServerPacket {
             hasLoggedFirstServerPacket = true
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting live server packet received. provider=\(kind), speaker=\(speaker.rawValue), textChars=\(textCount), isFinal=\(parsed?.isFinal == true), sequence=\(parsed?.sequence.map(String.init) ?? "nil")"
             )
             return
         }
         if textCount > 0 || parsed?.isFinal == true {
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting live transcript event. provider=\(kind), speaker=\(speaker.rawValue), textChars=\(textCount), isFinal=\(parsed?.isFinal == true), sequence=\(parsed?.sequence.map(String.init) ?? "nil")",
                 verbose: true
             )
@@ -603,7 +603,7 @@ private final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession
         let requestID = UUID().uuidString.lowercased()
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting Doubao live connect. endpoint=\(endpoint), resource=\(resourceID), speaker=\(speaker.rawValue), proxyMode=\(VoxtNetworkSession.modeDescription)"
         )
 
@@ -774,7 +774,7 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting Aliyun Fun live connect. endpoint=\(endpoint), model=\(model), speaker=\(speaker.rawValue), proxyMode=\(VoxtNetworkSession.modeDescription)"
         )
 
@@ -973,7 +973,7 @@ private final class AliyunQwenMeetingRemoteLiveSession: BaseMeetingRemoteLiveSes
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting Aliyun Qwen live connect. endpoint=\(endpoint), speaker=\(speaker.rawValue), proxyMode=\(VoxtNetworkSession.modeDescription)"
         )
 

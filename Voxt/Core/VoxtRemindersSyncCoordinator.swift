@@ -174,13 +174,13 @@ final class VoxtRemindersSyncCoordinator {
     ) {
         guard settings.enabled else { return }
         guard backend.authorizationState() == .authorized else {
-            VoxtLog.warning("Reminders sync skipped because permission is unavailable. reason=\(reason)")
+            VoxtLog.persistenceWarning("Reminders sync skipped because permission is unavailable. reason=\(reason)")
             return
         }
 
         let selectedListIdentifier = settings.selectedListIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selectedListIdentifier.isEmpty else {
-            VoxtLog.warning("Reminders sync skipped because no target list is configured. reason=\(reason)")
+            VoxtLog.persistenceWarning("Reminders sync skipped because no target list is configured. reason=\(reason)")
             return
         }
 
@@ -188,12 +188,12 @@ final class VoxtRemindersSyncCoordinator {
         do {
             writableLists = try backend.writableLists()
         } catch {
-            VoxtLog.warning("Reminders sync failed to load writable lists. reason=\(reason), error=\(error.localizedDescription)")
+            VoxtLog.persistenceWarning("Reminders sync failed to load writable lists. reason=\(reason), error=\(error.localizedDescription)")
             return
         }
 
         guard writableLists.contains(where: { $0.identifier == selectedListIdentifier }) else {
-            VoxtLog.warning("Reminders sync skipped because the target list is unavailable. reason=\(reason), listID=\(selectedListIdentifier)")
+            VoxtLog.persistenceWarning("Reminders sync skipped because the target list is unavailable. reason=\(reason), listID=\(selectedListIdentifier)")
             return
         }
 
@@ -221,7 +221,7 @@ final class VoxtRemindersSyncCoordinator {
                     selectedListIdentifierAtCreation: selectedListIdentifier
                 )
             } catch {
-                VoxtLog.warning("Reminders sync write failed. reason=\(reason), noteID=\(note.id.uuidString), error=\(error.localizedDescription)")
+                VoxtLog.persistenceWarning("Reminders sync write failed. reason=\(reason), noteID=\(note.id.uuidString), error=\(error.localizedDescription)")
                 if existingRecord == nil {
                     nextRecordsByNoteID.removeValue(forKey: note.id)
                 }
@@ -233,7 +233,7 @@ final class VoxtRemindersSyncCoordinator {
             do {
                 try backend.deleteReminder(with: record.reminderCalendarItemIdentifier)
             } catch {
-                VoxtLog.warning("Reminders sync delete failed. reason=\(reason), noteID=\(record.noteID.uuidString), error=\(error.localizedDescription)")
+                VoxtLog.persistenceWarning("Reminders sync delete failed. reason=\(reason), noteID=\(record.noteID.uuidString), error=\(error.localizedDescription)")
             }
             nextRecordsByNoteID.removeValue(forKey: record.noteID)
         }

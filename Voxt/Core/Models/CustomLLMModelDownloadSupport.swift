@@ -99,7 +99,7 @@ enum CustomLLMModelDownloadSupport {
             ) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Primary custom LLM metadata endpoint failed. Retrying with mirror. repo=\(repo), baseURL=\(preferredBaseURL.absoluteString), error=\(error.localizedDescription)"
             )
             return try await MLXModelDownloadSupport.fetchModelSizeInfo(
@@ -151,7 +151,7 @@ enum CustomLLMModelDownloadSupport {
                 token: token
             )
             if repaired {
-                VoxtLog.model("Custom LLM chat template repaired from repo metadata: \(repo)")
+                VoxtLog.modelInfo("Custom LLM chat template repaired from repo metadata: \(repo)")
                 return
             }
         } catch {
@@ -168,14 +168,14 @@ enum CustomLLMModelDownloadSupport {
                         token: token
                     )
                     if repaired {
-                        VoxtLog.model("Custom LLM chat template repaired from mirror metadata: \(repo)")
+                        VoxtLog.modelInfo("Custom LLM chat template repaired from mirror metadata: \(repo)")
                         return
                     }
                 } catch {
-                    VoxtLog.warning("Custom LLM chat template repair failed via mirror. repo=\(repo), error=\(error.localizedDescription)")
+                    VoxtLog.modelWarning("Custom LLM chat template repair failed via mirror. repo=\(repo), error=\(error.localizedDescription)")
                 }
             } else {
-                VoxtLog.warning("Custom LLM chat template repair failed. repo=\(repo), error=\(error.localizedDescription)")
+                VoxtLog.modelWarning("Custom LLM chat template repair failed. repo=\(repo), error=\(error.localizedDescription)")
             }
         }
     }

@@ -898,7 +898,7 @@ enum ResumableModelDownloadSupport {
                     guard recoveryAttempts <= descriptor.policy.maxRecoveryAttempts else {
                         throw error
                     }
-                    VoxtLog.warning("Resumable download retry \(recoveryAttempts)/\(descriptor.policy.maxRecoveryAttempts): \(descriptor.relativePath) (\(error.localizedDescription))")
+                    VoxtLog.modelWarning("Resumable download retry \(recoveryAttempts)/\(descriptor.policy.maxRecoveryAttempts): \(descriptor.relativePath) (\(error.localizedDescription))")
                     try? await Task.sleep(for: backoffDuration(policy: descriptor.policy, attempt: recoveryAttempts))
                     continue
                 }
@@ -910,7 +910,7 @@ enum ResumableModelDownloadSupport {
                 else {
                     throw error
                 }
-                VoxtLog.warning("Resumable download retry \(recoveryAttempts)/\(descriptor.policy.maxRecoveryAttempts): \(descriptor.relativePath) (\(error.localizedDescription))")
+                VoxtLog.modelWarning("Resumable download retry \(recoveryAttempts)/\(descriptor.policy.maxRecoveryAttempts): \(descriptor.relativePath) (\(error.localizedDescription))")
                 try? await Task.sleep(for: backoffDuration(policy: descriptor.policy, attempt: recoveryAttempts))
             } catch {
                 if let restartReason = (error as? ResumableDownloadLoopError)?.restartReason {
@@ -918,7 +918,7 @@ enum ResumableModelDownloadSupport {
                     guard restartFromZeroCount <= descriptor.policy.maxRecoveryAttempts else {
                         throw error
                     }
-                    VoxtLog.warning("Resumable download restart from zero: \(descriptor.relativePath) (\(restartReason))")
+                    VoxtLog.modelWarning("Resumable download restart from zero: \(descriptor.relativePath) (\(restartReason))")
                     try purgePartialArtifacts(for: descriptor.destinationURL)
                     continue
                 }
@@ -927,7 +927,7 @@ enum ResumableModelDownloadSupport {
                     guard recoveryAttempts <= descriptor.policy.maxRecoveryAttempts else {
                         throw error
                     }
-                    VoxtLog.warning("Resumable download recoverable retry \(recoveryAttempts)/\(descriptor.policy.maxRecoveryAttempts): \(descriptor.relativePath) (\(recoverableReason))")
+                    VoxtLog.modelWarning("Resumable download recoverable retry \(recoveryAttempts)/\(descriptor.policy.maxRecoveryAttempts): \(descriptor.relativePath) (\(recoverableReason))")
                     try? await Task.sleep(for: backoffDuration(policy: descriptor.policy, attempt: recoveryAttempts))
                     continue
                 }
@@ -1111,9 +1111,9 @@ enum ResumableModelDownloadSupport {
             if let etag = existingState?.etag, !etag.isEmpty {
                 request.setValue(etag, forHTTPHeaderField: "If-Range")
             }
-            VoxtLog.model("Resumable download resuming: file=\(descriptor.relativePath), offset=\(initialBytes)")
+            VoxtLog.modelInfo("Resumable download resuming: file=\(descriptor.relativePath), offset=\(initialBytes)")
         } else {
-            VoxtLog.model("Resumable download starting: file=\(descriptor.relativePath), url=\(descriptor.sourceURL.absoluteString)")
+            VoxtLog.modelInfo("Resumable download starting: file=\(descriptor.relativePath), url=\(descriptor.sourceURL.absoluteString)")
         }
 
         let task = session.dataTask(with: request)
@@ -1228,7 +1228,7 @@ enum ResumableModelDownloadSupport {
         }
         try FileManager.default.moveItem(at: partURL, to: descriptor.destinationURL)
         try? FileManager.default.removeItem(at: stateURL)
-        VoxtLog.model("Resumable download completed: file=\(descriptor.relativePath), bytes=\(result.bytesDownloaded), resumedFrom=\(result.resumedFromBytes)")
+        VoxtLog.modelInfo("Resumable download completed: file=\(descriptor.relativePath), bytes=\(result.bytesDownloaded), resumedFrom=\(result.resumedFromBytes)")
     }
 
     private static func partialFileURL(for destinationURL: URL) -> URL {

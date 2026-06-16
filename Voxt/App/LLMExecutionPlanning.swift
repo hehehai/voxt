@@ -257,7 +257,7 @@ extension AppDelegate {
     ) async throws -> String {
         let compiledRequest = LLMExecutionPlanCompiler.compile(plan)
         let executionStartedAt = Date()
-        VoxtLog.llm(
+        VoxtLog.llmInfo(
             "LLM execution plan. task=\(plan.taskLabel), provider=\(llmExecutionProviderLabel(plan.provider)), delivery=\(String(describing: plan.delivery)), promptChars=\(plan.promptCharacterCount), inputChars=\(plan.primaryInputCharacterCount), blocks=\(plan.contextBlocks.count), attachments=\(plan.attachments.count), strategy=\(plan.executionStrategy.logLabel)"
         )
 
@@ -288,7 +288,7 @@ extension AppDelegate {
             taskKind: visibleOutputSanitizerTaskKind(for: plan.task)
         )
         if sanitized.didFallback || sanitized.didExtractFinalOutput || sanitized.didRemoveProcessText {
-            VoxtLog.warning(
+            VoxtLog.llmWarning(
                 "LLM visible output sanitized. task=\(plan.taskLabel), fallback=\(sanitized.didFallback), extractedFinal=\(sanitized.didExtractFinalOutput), removedProcess=\(sanitized.didRemoveProcessText), inputChars=\(plan.primaryInputCharacterCount), outputChars=\(output.count), finalChars=\(sanitized.text.count)"
             )
         }

@@ -26,7 +26,7 @@ extension AppDelegate {
         let isFirstLivePartial = firstLiveASRPartialReceivedAt == nil
         if isFirstLivePartial {
             firstLiveASRPartialReceivedAt = Date()
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Live ASR partial received. sessionID=\(sessionID.uuidString), chars=\(text.count), pipeline=\(transcriptionCapturePipeline.rawValue)",
                 verbose: true
             )
@@ -48,7 +48,7 @@ extension AppDelegate {
             isSessionCancellationRequested: isSessionCancellationRequested
         )
         guard callbackDecision == .accept else {
-            VoxtLog.info(
+            VoxtLog.asr(
                 """
                 Dropping transcription callback before processing. reason=\(callbackDecision.logDescription), callbackSessionID=\(sessionID.uuidString), activeSessionID=\(activeRecordingSessionID.uuidString), stopped=\(recordingStoppedAt != nil), endingSessionID=\(currentEndingSessionID?.uuidString ?? "nil"), rawChars=\(rawText.count)
                 """,
@@ -57,14 +57,14 @@ extension AppDelegate {
             return
         }
         if didCommitSessionOutput {
-            VoxtLog.info("Ignoring transcription callback because current session output has already been committed.")
+            VoxtLog.asr("Ignoring transcription callback because current session output has already been committed.")
             return
         }
 
         transcriptionResultReceivedAt = Date()
         if let stoppedAt = recordingStoppedAt {
             let stopToResultMs = max(Int(Date().timeIntervalSince(stoppedAt) * 1000), 0)
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Transcription callback accepted after stop. sessionID=\(sessionID.uuidString), stopToResultMs=\(stopToResultMs), rawChars=\(rawText.count)",
                 verbose: true
             )
@@ -81,7 +81,7 @@ extension AppDelegate {
                 if isCurrentTranscriptionNoteSessionActive {
                     _ = captureTrailingVoxtNoteIfNeeded(finalRawText: currentSessionRawTranscribedText())
                 }
-                VoxtLog.warning(
+                VoxtLog.asrWarning(
                     "Transcription result is empty because runtime inference failed. message=\(runtimeFailureMessage)"
                 )
                 showOverlayStatus(runtimeFailureMessage, clearAfter: 2.4)
@@ -92,7 +92,7 @@ extension AppDelegate {
             if isCurrentTranscriptionNoteSessionActive {
                 _ = captureTrailingVoxtNoteIfNeeded(finalRawText: currentSessionRawTranscribedText())
             } else {
-                VoxtLog.info("Transcription result is empty; finishing session.")
+                VoxtLog.asr("Transcription result is empty; finishing session.")
             }
             setEnhancingState(false)
             finishSession(after: 0)
@@ -102,8 +102,8 @@ extension AppDelegate {
         updateActiveRecordingTranscriberTranscribedText(text)
         refreshVoxtNoteTranscriptDisplay()
 
-        VoxtLog.info("Transcription result received. characters=\(text.count), output=\(sessionOutputMode == .translation ? "translation" : "transcription")")
-        VoxtLog.info("Transcription result output mode resolved as \(RecordingSessionSupport.outputLabel(for: sessionOutputMode)).", verbose: true)
+        VoxtLog.asr("Transcription result received. characters=\(text.count), output=\(sessionOutputMode == .translation ? "translation" : "transcription")")
+        VoxtLog.asr("Transcription result output mode resolved as \(RecordingSessionSupport.outputLabel(for: sessionOutputMode)).", verbose: true)
         VoxtLog.model(
             "Session text model routing: \(RecordingSessionSupport.textModelRoutingDescription(outputMode: sessionOutputMode, transcriptionSettings: transcriptionFeatureSettings, translationSettings: translationFeatureSettings, rewriteSettings: rewriteFeatureSettings))"
         )
@@ -129,7 +129,7 @@ extension AppDelegate {
             return
         }
 
-        VoxtLog.info("Transcription flow dispatch: standard. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
+        VoxtLog.asr("Transcription flow dispatch: standard. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
         processStandardTranscription(text, sessionID: sessionID)
     }
 

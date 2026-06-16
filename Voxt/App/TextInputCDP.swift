@@ -162,7 +162,7 @@ extension AppDelegate {
     ) async -> FocusedInputTextSnapshot? {
         guard let processIdentifier else { return nil }
         guard let port = commandLineRemoteDebuggingPort(for: processIdentifier) else {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Focused input CDP fallback unavailable: remote debugging port missing. bundleID=\(bundleIdentifier ?? "unknown"), pid=\(processIdentifier)"
             )
             return nil
@@ -170,7 +170,7 @@ extension AppDelegate {
 
         do {
             guard let target = try await electronCDPPageTarget(port: port) else {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input CDP fallback unavailable: no page target. bundleID=\(bundleIdentifier ?? "unknown"), pid=\(processIdentifier), port=\(port)"
                 )
                 return nil
@@ -179,7 +179,7 @@ extension AppDelegate {
                 webSocketDebuggerURL: target.webSocketDebuggerUrl,
                 port: port
             ) else {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input CDP fallback unavailable: active element payload empty. bundleID=\(bundleIdentifier ?? "unknown"), pid=\(processIdentifier), port=\(port), targetTitle=\(target.title ?? "nil")"
                 )
                 return nil
@@ -187,7 +187,7 @@ extension AppDelegate {
 
             let trimmedText = payload.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedText.isEmpty else {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input CDP fallback unavailable: extracted text empty. bundleID=\(bundleIdentifier ?? "unknown"), pid=\(processIdentifier), port=\(port), tag=\(payload.tag ?? "nil"), source=\(payload.source ?? "nil")"
                 )
                 return nil
@@ -205,7 +205,7 @@ extension AppDelegate {
                 textSource: "electron-cdp:\(payload.source ?? "unknown")"
             )
         } catch {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Focused input CDP fallback failed. bundleID=\(bundleIdentifier ?? "unknown"), pid=\(processIdentifier), error=\(error.localizedDescription)"
             )
             return nil

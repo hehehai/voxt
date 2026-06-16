@@ -15,7 +15,7 @@ struct AudioInputDevice: Identifiable, Hashable, Sendable {
 enum AudioInputDeviceManager {
     static func availableInputDevices() -> [AudioInputDevice] {
         let devices = snapshotAvailableInputDevices()
-        VoxtLog.info("Audio input devices discovered: \(devices.count)", verbose: true)
+        VoxtLog.audio("Audio input devices discovered: \(devices.count)", verbose: true)
         return devices
     }
 
@@ -101,7 +101,7 @@ enum AudioInputDeviceManager {
             &deviceID
         )
         guard status == noErr, deviceID != 0 else {
-            VoxtLog.warning("Failed to read default input device. status=\(status), deviceID=\(deviceID)")
+            VoxtLog.audioWarning("Failed to read default input device. status=\(status), deviceID=\(deviceID)")
             return nil
         }
         return deviceID
@@ -236,7 +236,7 @@ final class AudioInputDeviceObserver {
                 AudioInputDeviceManager.selectorDescription($0.mSelector)
             }
             let selectors = selectorValues.isEmpty ? "unknown" : selectorValues.joined(separator: ",")
-            VoxtLog.info("Audio input device observer fired. selectors=\(selectors)", verbose: true)
+            VoxtLog.audio("Audio input device observer fired. selectors=\(selectors)", verbose: true)
             onChange()
         }
 
@@ -261,14 +261,14 @@ final class AudioInputDeviceObserver {
             if defaultInputStatus == noErr {
                 AudioObjectRemovePropertyListenerBlock(systemObjectID, &defaultInputAddress, queue, block)
             }
-            VoxtLog.warning(
+            VoxtLog.audioWarning(
                 "Failed to register audio device observer. devicesStatus=\(devicesStatus), defaultInputStatus=\(defaultInputStatus)"
             )
             return nil
         }
 
         isRegistered = true
-        VoxtLog.info("Audio input device observer registered.")
+        VoxtLog.audio("Audio input device observer registered.")
     }
 
     deinit {
@@ -276,6 +276,6 @@ final class AudioInputDeviceObserver {
         let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &devicesAddress, queue, block)
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &defaultInputAddress, queue, block)
-        VoxtLog.info("Audio input device observer removed.", verbose: true)
+        VoxtLog.audio("Audio input device observer removed.", verbose: true)
     }
 }

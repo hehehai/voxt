@@ -59,7 +59,7 @@ actor MeetingVoiceActivityDetector {
             }
         } catch {
             if shouldLogSileroFallback(error) {
-                VoxtLog.warning("Meeting Silero VAD failed; falling back to energy VAD. error=\(error.localizedDescription)")
+                VoxtLog.meetingWarning("Meeting Silero VAD failed; falling back to energy VAD. error=\(error.localizedDescription)")
                 sileroFallbackWarningLogged = true
             }
             await sileroDetector.reset()

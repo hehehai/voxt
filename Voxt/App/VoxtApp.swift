@@ -405,9 +405,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private var isRunningUnitTests: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-    }
+    private var isRunningUnitTests: Bool { VoxtRuntimeEnvironment.isRunningUnitTests }
 
     private var currentSystemVersionLogDescription: String {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -418,6 +416,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LoggingBootstrap.bootstrap()
         _ = noteObsidianSyncCoordinator
         _ = noteRemindersSyncCoordinator
         VoxtLog.info("Voxt launching.")

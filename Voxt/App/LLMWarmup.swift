@@ -180,9 +180,9 @@ extension AppDelegate {
             defer { self.llmWarmupTasksByRepo[canonicalRepo] = nil }
             do {
                 try await self.customLLMManager.prewarmModel(repo: canonicalRepo)
-                VoxtLog.info("Custom LLM warmup completed. repo=\(canonicalRepo), reason=\(reason)", verbose: true)
+                VoxtLog.llmInfo("Custom LLM warmup completed. repo=\(canonicalRepo), reason=\(reason)", verbose: true)
             } catch {
-                VoxtLog.warning("Custom LLM warmup failed. repo=\(canonicalRepo), reason=\(reason), error=\(error.localizedDescription)")
+                VoxtLog.llmWarning("Custom LLM warmup failed. repo=\(canonicalRepo), reason=\(reason), error=\(error.localizedDescription)")
             }
         }
     }
@@ -206,12 +206,12 @@ extension AppDelegate {
                     provider: context.provider,
                     configuration: context.configuration
                 )
-                VoxtLog.info(
+                VoxtLog.llmInfo(
                     "Remote LLM warmup completed. provider=\(context.provider.rawValue), model=\(context.configuration.model), reason=\(reason)",
                     verbose: true
                 )
             } catch {
-                VoxtLog.warning(
+                VoxtLog.llmWarning(
                     "Remote LLM warmup failed. provider=\(context.provider.rawValue), model=\(context.configuration.model), reason=\(reason), error=\(error.localizedDescription)"
                 )
             }

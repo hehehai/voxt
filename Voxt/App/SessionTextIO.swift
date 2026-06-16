@@ -132,7 +132,7 @@ extension AppDelegate {
         onDeliveryCompleted: (() -> Void)? = nil
     ) {
         if didCommitSessionOutput {
-            VoxtLog.info("Skipping duplicate commit for current session output.")
+            VoxtLog.input("Skipping duplicate commit for current session output.")
             return
         }
         didCommitSessionOutput = true
@@ -145,7 +145,7 @@ extension AppDelegate {
             isSessionCancellationRequested: isSessionCancellationRequested
         )
         guard callbackDecision == .accept else {
-            VoxtLog.warning(
+            VoxtLog.inputWarning(
                 """
                 Commit transcription abandoned after session invalidation. reason=\(callbackDecision.logDescription), sessionID=\(sessionID.uuidString), activeSessionID=\(activeRecordingSessionID.uuidString), outputMode=\(RecordingSessionSupport.outputLabel(for: sessionOutputMode)), chars=\(text.count), stopped=\(recordingStoppedAt != nil)
                 """
@@ -153,7 +153,7 @@ extension AppDelegate {
             return
         }
 
-        VoxtLog.info("Commit transcription entered. characters=\(text.count)")
+        VoxtLog.input("Commit transcription entered. characters=\(text.count)")
 
         let context = Self.preparedDeliveryContext(
             originalText: text,
@@ -168,7 +168,7 @@ extension AppDelegate {
         )
         cacheLatestInjectableOutputText(context.outputText)
 
-        VoxtLog.info(
+        VoxtLog.input(
             "Commit transcription prepared payload. inputChars=\(text.count), outputChars=\(context.outputText.count), hasRewritePayload=\(context.rewriteAnswerPayload != nil), dictionaryMatches=\(context.dictionaryMatches.count), dictionaryCorrections=\(context.dictionaryCorrectedTerms.count)"
         )
 
@@ -207,7 +207,7 @@ extension AppDelegate {
         onDeliveryCompleted: (() -> Void)? = nil
     ) {
         if didCommitSessionOutput {
-            VoxtLog.info("Skipping duplicate finalize for previously delivered session output.")
+            VoxtLog.input("Skipping duplicate finalize for previously delivered session output.")
             return
         }
         didCommitSessionOutput = true
@@ -219,7 +219,7 @@ extension AppDelegate {
             isSessionCancellationRequested: isSessionCancellationRequested
         )
         guard callbackDecision == .accept else {
-            VoxtLog.warning(
+            VoxtLog.inputWarning(
                 "Finalize previously delivered output abandoned after session invalidation. reason=\(callbackDecision.logDescription), sessionID=\(sessionID.uuidString)"
             )
             return
@@ -275,7 +275,7 @@ extension AppDelegate {
 
         pendingOutputReplacementTransaction = transaction
         cacheLatestInjectableOutputText(context.outputText)
-        VoxtLog.info(
+        VoxtLog.input(
             "Preview output injected. chars=\(context.outputText.count), sessionID=\(sessionID.uuidString)"
         )
         return context.outputText
@@ -479,7 +479,7 @@ extension AppDelegate {
         case .selectedTextTranslationResultWindow:
             deliveryLabel = "selectedTextTranslationResultWindow"
         }
-        VoxtLog.info(
+        VoxtLog.input(
             "Deliver committed output started. delivery=\(deliveryLabel), characters=\(context.outputText.count)"
         )
 
@@ -565,7 +565,7 @@ extension AppDelegate {
                         activeGroupID: dictionaryScope.groupID
                     )
                     if !reinforcedTerms.isEmpty {
-                        VoxtLog.info(
+                        VoxtLog.input(
                             "Dictionary occurrences reinforced from delivered text. terms=\(reinforcedTerms.joined(separator: ", "))"
                         )
                     }
@@ -581,7 +581,7 @@ extension AppDelegate {
                     suggestions: dictionarySuggestions,
                     historyEntryID: historyEntryID
                 )
-                VoxtLog.info(
+                VoxtLog.input(
                     "Deliver committed output finalized. historyEntryID=\(historyEntryID?.uuidString ?? "nil"), characters=\(deliveredText.count)"
                 )
                 self.logSessionTimingSummaryIfPossible(
@@ -643,12 +643,12 @@ extension AppDelegate {
         let finalLLMSummary = sessionLLMSummaryLabel(finalLLMExecution)
 
         if let captureGapMs, captureGapMs >= 350 {
-            VoxtLog.warning(
+            VoxtLog.inputWarning(
                 "Transcription capture gap detected. pipeline=\(snapshot.transcriptionCapturePipeline.rawValue), captureGapMs=\(captureGapMs), capturedAudioMs=\(timingValueLabel(capturedAudioMs)), startToStopMs=\(timingValueLabel(startToStopMs))"
             )
         }
 
-        VoxtLog.info(
+        VoxtLog.input(
             """
             Session timing summary. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), pipeline=\(snapshot.transcriptionCapturePipeline.rawValue), stages=\(snapshot.captureStageLabels.joined(separator: ">")), asrProvider=\(snapshot.asrProvider), asrModel=\(snapshot.asrModel), llmCalls=\(snapshot.llmExecutions.count), deliveredChars=\(deliveredText.count), didInject=\(didInject), requestToStartMs=\(timingValueLabel(requestToStartMs)), startToStopMs=\(timingValueLabel(startToStopMs)), startToFirstLiveASRMs=\(timingValueLabel(startToFirstLiveASRMs)), capturedAudioMs=\(timingValueLabel(capturedAudioMs)), captureGapMs=\(timingValueLabel(captureGapMs)), stopToASRMs=\(timingValueLabel(stopToASRMs)), asrToFirstLLMChunkMs=\(timingValueLabel(asrToFirstChunkMs)), asrToFirstLLMCompleteMs=\(timingValueLabel(asrToFirstCompleteMs)), asrToFinalLLMCompleteMs=\(timingValueLabel(asrToFinalCompleteMs)), asrToDeliveredMs=\(timingValueLabel(asrToDeliveredMs)), stopToDeliveredMs=\(timingValueLabel(stopToDeliveredMs)), overallMs=\(timingValueLabel(overallMs)), firstLLM=\(firstLLMSummary), finalLLM=\(finalLLMSummary)
             """
@@ -948,7 +948,7 @@ extension AppDelegate {
         let trimmed = overlayState.latestCompletedAnswerPayload?.trimmedContent ?? ""
         guard !trimmed.isEmpty else { return }
         guard overlayState.canInjectAnswer else { return }
-        VoxtLog.info("Answer overlay inject requested. chars=\(trimmed.count), canInject=\(overlayState.canInjectAnswer)")
+        VoxtLog.input("Answer overlay inject requested. chars=\(trimmed.count), canInject=\(overlayState.canInjectAnswer)")
         typeText(trimmed) { [weak self] didInject in
             guard let self, didInject else { return }
             self.dismissAnswerOverlay()
@@ -957,7 +957,7 @@ extension AppDelegate {
 
     func showCurrentTranscriptionDetailWindow() {
         guard let historyEntryID = overlayState.latestHistoryEntryID else {
-            VoxtLog.warning("Transcription detail open skipped: latest history entry ID was unavailable.")
+            VoxtLog.inputWarning("Transcription detail open skipped: latest history entry ID was unavailable.")
             return
         }
         showTranscriptionDetailWindow(for: historyEntryID)
@@ -979,7 +979,7 @@ extension AppDelegate {
             liveHasWritableFocusedInput ||
             hasFallbackInjectTarget
         if logResult {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Rewrite answer overlay inject check. sessionHadWritableFocusedInput=\(rewriteSessionHadWritableFocusedInput), liveHasWritableFocusedInput=\(liveHasWritableFocusedInput), fallbackBundleID=\(rewriteSessionFallbackInjectBundleID ?? "nil"), canInject=\(canInjectIntoFocusedInput)"
             )
         }

@@ -318,19 +318,19 @@ extension AppDelegate {
         }
 
         let historyKind = resolvedHistoryKind(for: outputMode)
-        VoxtLog.info(
+        VoxtLog.history(
             "History append requested. kind=\(historyKind.rawValue), engine=\(transcriptionEngine.rawValue), historyEnabled=\(historyEnabled), audioStorageEnabled=\(historyAudioStorageEnabled), stashedAudio=\(pendingCompletedHistoryAudioArchiveURL != nil)",
             verbose: true
         )
         let pendingAudioArchiveURL = consumePendingCompletedHistoryAudioURL()
         if let pendingAudioArchiveURL {
             let exists = FileManager.default.fileExists(atPath: pendingAudioArchiveURL.path)
-            VoxtLog.info(
+            VoxtLog.history(
                 "History append consumed pending audio archive. kind=\(historyKind.rawValue), file=\(pendingAudioArchiveURL.lastPathComponent), exists=\(exists)",
                 verbose: true
             )
         } else {
-            VoxtLog.warning(
+            VoxtLog.historyWarning(
                 "History append found no pending audio archive. kind=\(historyKind.rawValue), engine=\(transcriptionEngine.rawValue)"
             )
         }
@@ -723,7 +723,7 @@ extension AppDelegate {
         if let pendingCompletedHistoryAudioArchiveURL {
             self.pendingCompletedHistoryAudioArchiveURL = nil
             let exists = FileManager.default.fileExists(atPath: pendingCompletedHistoryAudioArchiveURL.path)
-            VoxtLog.info(
+            VoxtLog.history(
                 "Consumed stashed history audio archive. file=\(pendingCompletedHistoryAudioArchiveURL.lastPathComponent), exists=\(exists)",
                 verbose: true
             )
@@ -742,12 +742,12 @@ extension AppDelegate {
         }
         if let consumedURL {
             let exists = FileManager.default.fileExists(atPath: consumedURL.path)
-            VoxtLog.info(
+            VoxtLog.history(
                 "Consumed transcriber history audio archive. engine=\(transcriptionEngine.rawValue), file=\(consumedURL.lastPathComponent), exists=\(exists)",
                 verbose: true
             )
         } else {
-            VoxtLog.warning(
+            VoxtLog.historyWarning(
                 "No transcriber history audio archive available. engine=\(transcriptionEngine.rawValue)"
             )
         }
@@ -768,7 +768,7 @@ extension AppDelegate {
 
     func stashPendingCompletedHistoryAudioArchive(_ url: URL?) {
         guard let url else {
-            VoxtLog.warning("Pending history audio archive stash skipped because URL was nil.")
+            VoxtLog.historyWarning("Pending history audio archive stash skipped because URL was nil.")
             return
         }
         if let pendingCompletedHistoryAudioArchiveURL,
@@ -777,7 +777,7 @@ extension AppDelegate {
             try? FileManager.default.removeItem(at: pendingCompletedHistoryAudioArchiveURL)
         }
         pendingCompletedHistoryAudioArchiveURL = url
-        VoxtLog.info("Pending history audio archive stashed. file=\(url.lastPathComponent)")
+        VoxtLog.history("Pending history audio archive stashed. file=\(url.lastPathComponent)")
     }
 
     private func importConsumedAudioArchiveIfNeeded(
@@ -785,7 +785,7 @@ extension AppDelegate {
         kind: TranscriptionHistoryKind
     ) -> String? {
         guard let sourceURL else {
-            VoxtLog.warning("History audio import skipped because source URL was nil. kind=\(kind.rawValue)")
+            VoxtLog.historyWarning("History audio import skipped because source URL was nil. kind=\(kind.rawValue)")
             return nil
         }
         defer {
@@ -795,25 +795,25 @@ extension AppDelegate {
         }
         let exists = FileManager.default.fileExists(atPath: sourceURL.path)
         guard historyAudioStorageEnabled else {
-            VoxtLog.info(
+            VoxtLog.history(
                 "History audio import skipped because storage is disabled. kind=\(kind.rawValue), file=\(sourceURL.lastPathComponent), exists=\(exists)"
             )
             return nil
         }
         guard exists else {
-            VoxtLog.warning(
+            VoxtLog.historyWarning(
                 "History audio import skipped because source file does not exist. kind=\(kind.rawValue), file=\(sourceURL.lastPathComponent)"
             )
             return nil
         }
         do {
             let relativePath = try historyStore.importAudioArchive(from: sourceURL, kind: kind)
-            VoxtLog.info(
+            VoxtLog.history(
                 "History audio import succeeded. kind=\(kind.rawValue), file=\(sourceURL.lastPathComponent), relativePath=\(relativePath)"
             )
             return relativePath
         } catch {
-            VoxtLog.warning(
+            VoxtLog.historyWarning(
                 "History audio import failed. kind=\(kind.rawValue), source=\(sourceURL.lastPathComponent), error=\(error.localizedDescription)"
             )
             return nil

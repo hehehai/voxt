@@ -53,7 +53,7 @@ extension AppDelegate {
         )
         mlx.startRecording()
         guard mlx.isRecording else {
-            VoxtLog.warning("MLX recording session did not enter recording state.")
+            VoxtLog.asrWarning("MLX recording session did not enter recording state.")
             resetSessionAfterFailedStart()
             return
         }
@@ -80,7 +80,7 @@ extension AppDelegate {
             guard self.speechTranscriber.isRecording else {
                 let failureMessage = self.speechTranscriber.lastStartFailureMessage
                     ?? String(localized: "Direct Dictation failed to start recording.")
-                VoxtLog.warning("Speech recording session did not enter recording state. reason=\(failureMessage)")
+                VoxtLog.asrWarning("Speech recording session did not enter recording state. reason=\(failureMessage)")
                 self.handleRecordingStartFailure(failureMessage)
                 return
             }
@@ -161,7 +161,7 @@ extension AppDelegate {
             self.sessionUsesWhisperDirectTranslation = useWhisperDirectTranslation
             if let startFailureMessage = await whisper.startRecordingSession() {
                 guard self.shouldContinueWhisperStartup(for: sessionID) else { return }
-                VoxtLog.warning("Whisper recording session did not enter recording state. reason=\(startFailureMessage)")
+                VoxtLog.asrWarning("Whisper recording session did not enter recording state. reason=\(startFailureMessage)")
                 self.handleRecordingStartFailure(startFailureMessage)
                 return
             }
@@ -270,7 +270,7 @@ extension AppDelegate {
 
     func preflightPermissionsForRecording(engine: TranscriptionEngine) -> Bool {
         if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
-            VoxtLog.warning("Recording blocked: microphone permission not granted.")
+            VoxtLog.asrWarning("Recording blocked: microphone permission not granted.")
             showOverlayReminder(
                 String(localized: "Microphone permission is required. Enable it in Settings > Permissions.")
             )
@@ -278,7 +278,7 @@ extension AppDelegate {
         }
 
         if engine == .dictation && SFSpeechRecognizer.authorizationStatus() != .authorized {
-            VoxtLog.warning("Recording blocked: speech recognition permission not granted for Direct Dictation.")
+            VoxtLog.asrWarning("Recording blocked: speech recognition permission not granted for Direct Dictation.")
             showOverlayReminder(
                 String(localized: "Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions.")
             )
@@ -286,7 +286,7 @@ extension AppDelegate {
         }
 
         if !AccessibilityPermissionManager.isTrusted() {
-            VoxtLog.warning("Recording start proceeding without accessibility trust. Injection may be unavailable.")
+            VoxtLog.asrWarning("Recording start proceeding without accessibility trust. Injection may be unavailable.")
             showOverlayStatus(
                 String(localized: "Please enable required permissions in Settings > Permissions."),
                 clearAfter: 2.2
@@ -324,7 +324,7 @@ extension AppDelegate {
 
         let sessionKind = RecordingSessionSupport.outputLabel(for: sessionOutputMode)
         let remoteDebugState = remoteASRTranscriber.activeRealtimeDebugSummary() ?? "none"
-        VoxtLog.warning(
+        VoxtLog.asrWarning(
             """
             Preferred input device changed during recording. reason=\(reason), previousUID=\(previousUID ?? "none"), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind), remoteState=\(remoteDebugState)
             """
@@ -336,11 +336,11 @@ extension AppDelegate {
                 AppLocalization.format("Switched microphone to %@.", currentDevice.name),
                 clearAfter: 1.8
             )
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "Preferred input device change applied during recording. reason=\(reason), newUID=\(newUID ?? "none"), engine=\(transcriptionEngine.rawValue), output=\(sessionKind)"
             )
         } catch {
-            VoxtLog.error("Recording microphone switch failed: \(error.localizedDescription). reason=\(reason)")
+            VoxtLog.asrError("Recording microphone switch failed: \(error.localizedDescription). reason=\(reason)")
             showOverlayReminder(
                 AppLocalization.format("Failed to switch microphone to %@.", currentDevice.name)
             )
@@ -353,7 +353,7 @@ extension AppDelegate {
             mlxTranscriber?.stopRecording()
         } else if transcriptionEngine == .whisperKit, isWhisperReady {
             if let whisperTranscriber {
-                VoxtLog.info(
+                VoxtLog.asr(
                     "Issuing Whisper stop. \(whisperTranscriber.debugCaptureStopSummary())",
                     verbose: true
                 )

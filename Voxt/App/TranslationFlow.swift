@@ -74,7 +74,7 @@ extension AppDelegate {
             targetLanguage: targetLanguage,
             isSelectedTextTranslation: false
         )
-        VoxtLog.info(
+        VoxtLog.translation(
             "Translation flow started. inputChars=\(text.count), targetLanguage=\(targetLanguage.instructionName), translationModelProvider=\(translationModelProvider.rawValue), resolvedProvider=\(resolution.provider.rawValue)"
         )
         setEnhancingState(true)
@@ -94,16 +94,16 @@ extension AppDelegate {
                 guard self.shouldHandleCallbacks(for: sessionID) else { return }
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
                 if self.looksUntranslated(source: text, result: translated) {
-                    VoxtLog.warning("Translation output may be untranslated. sourceChars=\(text.count), outputChars=\(translated.count)")
+                    VoxtLog.translationWarning("Translation output may be untranslated. sourceChars=\(text.count), outputChars=\(translated.count)")
                 }
-                VoxtLog.info("Translation flow succeeded. outputChars=\(translated.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
+                VoxtLog.translation("Translation flow succeeded. outputChars=\(translated.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.commitTranscription(translated, llmDurationSeconds: llmDuration) { [weak self] in
                     guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
                     self.finishSession(after: 0)
                 }
             } catch {
                 guard self.shouldHandleCallbacks(for: sessionID) else { return }
-                VoxtLog.warning("Translation flow failed without committing raw text: \(error)")
+                VoxtLog.translationWarning("Translation flow failed without committing raw text: \(error)")
                 self.failCurrentTextTransformSession(
                     self.textTransformFailureMessage(
                         for: error,
@@ -116,7 +116,7 @@ extension AppDelegate {
 
     func processWhisperTranslatedTranscription(_ text: String, sessionID: UUID) {
         guard shouldHandleCallbacks(for: sessionID) else { return }
-        VoxtLog.info("Whisper direct translation completed. outputChars=\(text.count)")
+        VoxtLog.translation("Whisper direct translation completed. outputChars=\(text.count)")
         commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
             self?.finishSession(after: 0)
         }
@@ -180,7 +180,7 @@ extension AppDelegate {
             interactionSoundPlayer.playStart()
         }
 
-        VoxtLog.info("Selected text translation started. inputChars=\(selectedText.count)")
+        VoxtLog.translation("Selected text translation started. inputChars=\(selectedText.count)")
         prewarmSelectedTextTranslationLLMIfNeeded(targetLanguage: effectiveSessionTranslationTargetLanguage)
         processSelectedTextTranslation(selectedText)
         return true
@@ -210,7 +210,7 @@ extension AppDelegate {
             )
             previousConversationResponseID = nil
         }
-        VoxtLog.info(
+        VoxtLog.translation(
             "Rewrite flow started. promptChars=\(text.count), selectedSourceChars=\(selectedSourceText.count), rewriteModelProvider=\(rewriteModelProvider.rawValue), structuredAnswerOutput=\(prefersStructuredAnswerOutput), conversationHistoryTurns=\(conversationHistory.count)"
         )
         setEnhancingState(true)
@@ -255,7 +255,7 @@ extension AppDelegate {
                 rewritten = rewriteResult
                 if prefersStructuredAnswerOutput,
                    self.shouldRetryStructuredRewriteAnswer(for: rewritten, dictatedPrompt: text) {
-                    VoxtLog.warning("Rewrite structured answer was missing usable content; retrying in direct-answer mode.")
+                    VoxtLog.translationWarning("Rewrite structured answer was missing usable content; retrying in direct-answer mode.")
                     if let retried = try? await self.rewriteText(
                         dictatedPrompt: text,
                         sourceText: "",
@@ -275,7 +275,7 @@ extension AppDelegate {
                 if !prefersStructuredAnswerOutput {
                     let normalized = RewriteAnswerContentNormalizer.normalizePlainTextAnswer(rewritten)
                     if normalized != rewritten.trimmingCharacters(in: .whitespacesAndNewlines) {
-                        VoxtLog.warning(
+                        VoxtLog.translationWarning(
                             """
                             Rewrite plain-text answer normalized before delivery.
                             [raw]
@@ -289,12 +289,12 @@ extension AppDelegate {
                 }
                 if prefersStructuredAnswerOutput,
                    self.shouldRetryStructuredRewriteAnswer(for: rewritten, dictatedPrompt: text) {
-                    VoxtLog.warning("Rewrite structured answer still unusable after retry; failing without committing fallback text.")
+                    VoxtLog.translationWarning("Rewrite structured answer still unusable after retry; failing without committing fallback text.")
                     throw TextTransformFailure.rewriteRejectedByGuard(reason: "Structured rewrite answer was empty or unusable after retry.")
                 }
                 if !prefersStructuredAnswerOutput,
                    RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) {
-                    VoxtLog.warning("Rewrite plain-text answer was empty or unusable; retrying with stricter non-empty guidance.")
+                    VoxtLog.translationWarning("Rewrite plain-text answer was empty or unusable; retrying with stricter non-empty guidance.")
                     if let retried = try? await self.rewriteText(
                         dictatedPrompt: text,
                         sourceText: selectedSourceText,
@@ -313,7 +313,7 @@ extension AppDelegate {
                 }
                 if !prefersStructuredAnswerOutput,
                    RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) {
-                    VoxtLog.warning("Rewrite plain-text answer remained unusable after retry; failing without committing fallback text.")
+                    VoxtLog.translationWarning("Rewrite plain-text answer remained unusable after retry; failing without committing fallback text.")
                     throw TextTransformFailure.rewriteRejectedByGuard(reason: "Plain rewrite answer was empty or matched the prompt after retry.")
                 }
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
@@ -329,7 +329,7 @@ extension AppDelegate {
                     )
                 }
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
-                VoxtLog.info("Rewrite flow succeeded. outputChars=\(rewritten.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
+                VoxtLog.translation("Rewrite flow succeeded. outputChars=\(rewritten.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.commitTranscription(rewritten, llmDurationSeconds: llmDuration) { [weak self] in
                     guard let self,
                           self.shouldHandleCallbacks(for: sessionID),
@@ -339,7 +339,7 @@ extension AppDelegate {
                 }
             } catch {
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
-                VoxtLog.warning("Rewrite flow failed without committing fallback text: \(error)")
+                VoxtLog.translationWarning("Rewrite flow failed without committing fallback text: \(error)")
                 self.failCurrentTextTransformSession(
                     self.textTransformFailureMessage(
                         for: error,
@@ -370,9 +370,9 @@ extension AppDelegate {
                 guard self.isCurrentLLMRequest(requestID) else { return }
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
                 if self.looksUntranslated(source: text, result: translated) {
-                    VoxtLog.warning("Selected text translation output may be untranslated. inputChars=\(text.count), outputChars=\(translated.count)")
+                    VoxtLog.translationWarning("Selected text translation output may be untranslated. inputChars=\(text.count), outputChars=\(translated.count)")
                 }
-                VoxtLog.info("Selected text translation succeeded. outputChars=\(translated.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
+                VoxtLog.translation("Selected text translation succeeded. outputChars=\(translated.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.overlayState.transcribedText = translated
                 self.commitTranscription(translated, llmDurationSeconds: llmDuration) { [weak self] in
                     guard let self, self.isCurrentLLMRequest(requestID) else { return }
@@ -380,7 +380,7 @@ extension AppDelegate {
                 }
             } catch {
                 guard self.isCurrentLLMRequest(requestID) else { return }
-                VoxtLog.warning("Selected text translation failed without committing original selected text: \(error)")
+                VoxtLog.translationWarning("Selected text translation failed without committing original selected text: \(error)")
                 self.failCurrentTextTransformSession(
                     self.textTransformFailureMessage(
                         for: error,

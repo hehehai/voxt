@@ -159,7 +159,7 @@ final class WhisperKitModelManager: ObservableObject {
         await loadedWhisper?.unloadModels()
         clearLoadedWhisperState()
         checkExistingModel()
-        VoxtLog.info("Whisper model released. reason=\(reason)", verbose: true)
+        VoxtLog.modelInfo("Whisper model released. reason=\(reason)", verbose: true)
     }
 
     func beginActiveUse() {
@@ -348,7 +348,7 @@ final class WhisperKitModelManager: ObservableObject {
                 switch downloadStopAction {
                 case .pause:
                     pausedStatusMessageByID[targetID] = nil
-                    VoxtLog.info("Whisper download paused. model=\(targetID)")
+                    VoxtLog.modelInfo("Whisper download paused. model=\(targetID)")
                 case .cancel, .none:
                     pausedStatusMessageByID[targetID] = nil
                     activeDownload = nil
@@ -362,7 +362,7 @@ final class WhisperKitModelManager: ObservableObject {
                 if pauseDownloadIfNetworkIssue(error, targetID: targetID) {
                     return
                 }
-                VoxtLog.error(
+                VoxtLog.modelError(
                     "Whisper download failed. model=\(targetID), error=\(WhisperKitDownloadSupport.describeError(error))"
                 )
                 downloadErrorByID[targetID] = message
@@ -386,7 +386,7 @@ final class WhisperKitModelManager: ObservableObject {
             guard let fallbackBaseURL = fallbackHubBaseURL(from: hubBaseURL) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Primary Whisper download endpoint failed. Retrying with mirror. model=\(targetID), baseURL=\(hubBaseURL.absoluteString), error=\(error.localizedDescription)"
             )
             clearRepositoryMetadataCache()
@@ -404,7 +404,7 @@ final class WhisperKitModelManager: ObservableObject {
                 throw error
             }
 
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Whisper download hit invalid metadata cache. Clearing local metadata and retrying once. model=\(targetID), baseURL=\(baseURL.absoluteString), error=\(error.localizedDescription)"
             )
             clearRepositoryMetadataCache()
@@ -441,7 +441,7 @@ final class WhisperKitModelManager: ObservableObject {
         activeDownload = nil
         removeWritableModelDirectoryIfPresent(id: pausedDownload.modelID)
         checkExistingModel()
-        VoxtLog.info("Whisper download cancelled from paused state. model=\(pausedDownload.modelID)")
+        VoxtLog.modelInfo("Whisper download cancelled from paused state. model=\(pausedDownload.modelID)")
     }
 
     func cancelDownload(id: String) {
@@ -458,7 +458,7 @@ final class WhisperKitModelManager: ObservableObject {
             if canonicalModelID == modelID {
                 checkExistingModel()
             }
-            VoxtLog.info("Whisper download cancelled from paused state. model=\(canonicalModelID)")
+            VoxtLog.modelInfo("Whisper download cancelled from paused state. model=\(canonicalModelID)")
             return
         }
 
@@ -669,7 +669,7 @@ final class WhisperKitModelManager: ObservableObject {
             if canonicalModelID == modelID {
                 state = .error("Couldn't uninstall Whisper model. It may still be in use.")
             }
-            VoxtLog.error("Failed to delete Whisper model directory. id=\(canonicalModelID), error=\(error.localizedDescription)")
+            VoxtLog.modelError("Failed to delete Whisper model directory. id=\(canonicalModelID), error=\(error.localizedDescription)")
             return
         }
 
@@ -791,7 +791,7 @@ final class WhisperKitModelManager: ObservableObject {
                         text: Self.fallbackRemoteSizeText(id: canonicalModelID) ?? AppLocalization.localizedString("Unknown")
                     )
                 }
-                VoxtLog.warning(
+                VoxtLog.modelWarning(
                     "Failed to fetch Whisper remote size: model=\(canonicalModelID), error=\(error.localizedDescription)"
                 )
             }
@@ -823,7 +823,7 @@ final class WhisperKitModelManager: ObservableObject {
             guard let fallbackBaseURL = fallbackHubBaseURL(from: baseURL) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Primary Whisper metadata endpoint failed. Retrying with mirror. model=\(modelID), baseURL=\(baseURL.absoluteString), error=\(error.localizedDescription)"
             )
             return try await Self.fetchRemoteModelBytes(modelID: modelID, baseURL: fallbackBaseURL)
@@ -997,7 +997,7 @@ final class WhisperKitModelManager: ObservableObject {
                 )
             )
         }
-        VoxtLog.warning("Whisper download auto-paused after network issue. model=\(canonicalTargetID), error=\(error.localizedDescription)")
+        VoxtLog.modelWarning("Whisper download auto-paused after network issue. model=\(canonicalTargetID), error=\(error.localizedDescription)")
         return true
     }
 
@@ -1049,7 +1049,7 @@ final class WhisperKitModelManager: ObservableObject {
     }
 
     private func performModelDownload(targetID: String, baseURL: URL) async throws -> URL {
-        VoxtLog.info("Whisper download using direct file fetch path. model=\(targetID), baseURL=\(baseURL.absoluteString)")
+        VoxtLog.modelInfo("Whisper download using direct file fetch path. model=\(targetID), baseURL=\(baseURL.absoluteString)")
         return try await performDirectModelDownload(targetID: targetID, baseURL: baseURL)
     }
 
@@ -1152,7 +1152,7 @@ final class WhisperKitModelManager: ObservableObject {
                     completedFiles: completedFiles,
                     totalFiles: totalFiles
                 )
-                VoxtLog.info("Whisper download resume reused existing file: \(relativePath)", verbose: true)
+                VoxtLog.modelInfo("Whisper download resume reused existing file: \(relativePath)", verbose: true)
                 continue
             }
 
@@ -1244,7 +1244,7 @@ final class WhisperKitModelManager: ObservableObject {
     private func removeModelDirectory(at directoryURL: URL, modelID: String, updatesCurrentState: Bool) throws {
         do {
             try FileManager.default.removeItem(at: directoryURL)
-            VoxtLog.info("Deleted Whisper model directory. id=\(Self.canonicalModelID(modelID)), path=\(directoryURL.path)")
+            VoxtLog.modelInfo("Deleted Whisper model directory. id=\(Self.canonicalModelID(modelID)), path=\(directoryURL.path)")
         } catch {
             if updatesCurrentState {
                 state = .error("Couldn't uninstall Whisper model. It may still be in use.")

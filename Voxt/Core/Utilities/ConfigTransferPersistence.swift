@@ -71,7 +71,7 @@ extension ConfigurationTransferManager {
             do {
                 try repository.replaceAll(entries)
             } catch {
-                VoxtLog.error("Failed to persist dictionary entries during configuration import: \(error.localizedDescription)")
+                VoxtLog.persistenceError("Failed to persist dictionary entries during configuration import: \(error.localizedDescription)")
             }
             return
         }
@@ -88,7 +88,7 @@ extension ConfigurationTransferManager {
             )
             try data.write(to: url, options: [.atomic])
         } catch {
-            VoxtLog.error("Failed to persist dictionary entries during configuration import: \(error.localizedDescription)")
+            VoxtLog.persistenceError("Failed to persist dictionary entries during configuration import: \(error.localizedDescription)")
         }
     }
 
@@ -128,7 +128,7 @@ extension ConfigurationTransferManager {
             do {
                 try repository.replaceAll(entries: entries, categories: categories)
             } catch {
-                VoxtLog.error("Failed to persist dictionary during configuration import: \(error.localizedDescription)")
+                VoxtLog.persistenceError("Failed to persist dictionary during configuration import: \(error.localizedDescription)")
             }
             return
         }
@@ -163,7 +163,7 @@ extension ConfigurationTransferManager {
             )
             try data.write(to: url, options: [.atomic])
         } catch {
-            VoxtLog.error("Failed to persist dictionary suggestions during configuration import: \(error.localizedDescription)")
+            VoxtLog.persistenceError("Failed to persist dictionary suggestions during configuration import: \(error.localizedDescription)")
         }
     }
 

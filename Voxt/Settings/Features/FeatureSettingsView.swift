@@ -223,7 +223,7 @@ struct FeatureSettingsView: View {
             featureSettings.transcription.notes.obsidianSync.vaultBookmarkData = bookmarkData
             saveFeatureSettings()
         } catch {
-            VoxtLog.warning("Failed to store Obsidian vault bookmark: \(error.localizedDescription)")
+            VoxtLog.settingsWarning("Failed to store Obsidian vault bookmark: \(error.localizedDescription)")
         }
     }
 

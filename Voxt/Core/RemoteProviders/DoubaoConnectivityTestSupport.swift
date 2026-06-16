@@ -102,7 +102,7 @@ enum DoubaoConnectivityTestSupport {
         do {
             return (0x1, try gzipCompressPayload(payload))
         } catch {
-            VoxtLog.warning("Doubao test gzip compression failed. fallback to plain payload. error=\(error.localizedDescription)")
+            VoxtLog.networkWarning("Doubao test gzip compression failed. fallback to plain payload. error=\(error.localizedDescription)")
             return (0x0, payload)
         }
     }

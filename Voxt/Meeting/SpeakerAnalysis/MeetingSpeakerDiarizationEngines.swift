@@ -103,7 +103,7 @@ actor FluidAudioMeetingSpeakerDiarizationEngine: MeetingSpeakerDiarizationEngine
             do {
                 return try await diarizeOffline(asset: asset, options: options)
             } catch {
-                VoxtLog.warning("Meeting offline speaker analysis failed; falling back to streaming diarizer: \(error.localizedDescription)")
+                VoxtLog.meetingWarning("Meeting offline speaker analysis failed; falling back to streaming diarizer: \(error.localizedDescription)")
             }
         }
         return try await diarizeStreaming(asset: asset, options: options)

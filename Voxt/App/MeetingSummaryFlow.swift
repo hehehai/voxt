@@ -210,7 +210,7 @@ extension AppDelegate {
         )
         let modelLabel = meetingSummaryModelLogLabel(model)
         let startedAt = Date()
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting summary generation started. model=\(modelLabel), transcriptChars=\(trimmedTranscript.count), promptChars=\(prompt.count)"
         )
         VoxtLog.llm(
@@ -238,7 +238,7 @@ extension AppDelegate {
             )
 
             guard let summary = MeetingSummarySupport.decodeSummary(from: output, settings: settings) else {
-                VoxtLog.warning(
+                VoxtLog.meetingWarning(
                     "Meeting summary generation parse failed. model=\(modelLabel), outputChars=\(output.count), elapsedMs=\(elapsedMs)"
                 )
                 VoxtLog.llm("Meeting summary generation parse failure output. model=\(modelLabel)\n\(VoxtLog.llmPreview(output, limit: 4000))")
@@ -248,12 +248,12 @@ extension AppDelegate {
                     userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Meeting summary output could not be parsed.")]
                 )
             }
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting summary generation succeeded. model=\(modelLabel), elapsedMs=\(elapsedMs), title=\(summary.title), todoCount=\(summary.todoItems.count), bodyChars=\(summary.body.count)"
             )
             return summary
         } catch {
-            VoxtLog.warning(
+            VoxtLog.meetingWarning(
                 "Meeting summary generation failed. model=\(modelLabel), error=\(error.localizedDescription)"
             )
             throw error
@@ -306,7 +306,7 @@ extension AppDelegate {
         )
         let modelLabel = meetingSummaryModelLogLabel(model)
         let startedAt = Date()
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting summary follow-up started. model=\(modelLabel), transcriptChars=\(trimmedTranscript.count), questionChars=\(trimmedQuestion.count), historyCount=\(history.count), hasSummary=\(summary != nil)"
         )
         VoxtLog.llm(
@@ -334,12 +334,12 @@ extension AppDelegate {
                 \(VoxtLog.llmPreview(output, limit: 4000))
                 """
             )
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting summary follow-up succeeded. model=\(modelLabel), elapsedMs=\(elapsedMs), outputChars=\(output.count)"
             )
             return output
         } catch {
-            VoxtLog.warning(
+            VoxtLog.meetingWarning(
                 "Meeting summary follow-up failed. model=\(modelLabel), error=\(error.localizedDescription)"
             )
             throw error

@@ -199,7 +199,7 @@ final class MeetingSystemAudioCapture: @unchecked Sendable {
 
         if !hasLoggedFirstCallback {
             hasLoggedFirstCallback = true
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting system audio callback received. sampleRate=\(Int(format.sampleRate)), channels=\(format.channelCount), frames=\(pcmBuffer.frameLength)",
                 verbose: true
             )

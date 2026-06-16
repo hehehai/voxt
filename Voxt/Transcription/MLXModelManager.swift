@@ -246,9 +246,9 @@ class MLXModelManager: ObservableObject {
         for modelDir in managedDirectories {
             do {
                 try FileManager.default.removeItem(at: modelDir)
-                VoxtLog.info("Deleted MLX Audio managed artifact. repo=\(canonicalRepo), path=\(modelDir.path)")
+                VoxtLog.modelInfo("Deleted MLX Audio managed artifact. repo=\(canonicalRepo), path=\(modelDir.path)")
             } catch {
-                VoxtLog.error("Failed to delete MLX Audio managed artifact. repo=\(canonicalRepo), error=\(error.localizedDescription)")
+                VoxtLog.modelError("Failed to delete MLX Audio managed artifact. repo=\(canonicalRepo), error=\(error.localizedDescription)")
                 return
             }
         }
@@ -525,12 +525,12 @@ class MLXModelManager: ObservableObject {
                 } else {
                     setState(.downloaded, for: canonicalRepo)
                 }
-                VoxtLog.info("Download complete. repo=\(canonicalRepo)")
+                VoxtLog.modelInfo("Download complete. repo=\(canonicalRepo)")
             } catch is CancellationError {
                 switch downloadStopActionsByRepo[canonicalRepo] {
                 case .pause:
                     setPausedStatusMessage(nil, for: canonicalRepo)
-                    VoxtLog.info("Download paused. repo=\(canonicalRepo)")
+                    VoxtLog.modelInfo("Download paused. repo=\(canonicalRepo)")
                 case .cancel, .none:
                     setPausedStatusMessage(nil, for: canonicalRepo)
                     cleanupPartialDownload(for: canonicalRepo)
@@ -541,7 +541,7 @@ class MLXModelManager: ObservableObject {
                     } else {
                         setState(.notDownloaded, for: canonicalRepo)
                     }
-                    VoxtLog.info("Download cancelled. repo=\(canonicalRepo)")
+                    VoxtLog.modelInfo("Download cancelled. repo=\(canonicalRepo)")
                 }
             } catch {
                 if pauseDownloadIfNetworkIssue(error, repo: canonicalRepo) {
@@ -550,7 +550,7 @@ class MLXModelManager: ObservableObject {
                 setPausedStatusMessage(nil, for: canonicalRepo)
                 clearHubCache(for: canonicalRepo)
                 setState(.error(downloadErrorMessage(for: error, repo: canonicalRepo)), for: canonicalRepo)
-                VoxtLog.error("Download error. repo=\(canonicalRepo), error=\(error.localizedDescription)")
+                VoxtLog.modelError("Download error. repo=\(canonicalRepo), error=\(error.localizedDescription)")
             }
         }
         downloadTasksByRepo[canonicalRepo] = task
@@ -587,18 +587,18 @@ class MLXModelManager: ObservableObject {
     func loadModel() async throws -> any STTGenerationModel {
         cancelIdleUnloadTask()
         if let model = loadedModel, loadedRepo == modelRepo {
-            VoxtLog.info("MLX Audio model reuse existing instance. repo=\(modelRepo)", verbose: true)
+            VoxtLog.modelInfo("MLX Audio model reuse existing instance. repo=\(modelRepo)", verbose: true)
             return model
         }
         if let loadingTask, loadingRepo == modelRepo {
-            VoxtLog.info("MLX Audio model awaiting in-flight load. repo=\(modelRepo)", verbose: true)
+            VoxtLog.modelInfo("MLX Audio model awaiting in-flight load. repo=\(modelRepo)", verbose: true)
             try await loadingTask.value
             return try readyModel(for: modelRepo)
         }
 
         let repo = modelRepo
         let startedAt = Date()
-        VoxtLog.info("MLX Audio model load started. repo=\(repo)", verbose: true)
+        VoxtLog.modelInfo("MLX Audio model load started. repo=\(repo)", verbose: true)
         setState(.loading, for: repo)
         let loadingTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -617,14 +617,14 @@ class MLXModelManager: ObservableObject {
             self.loadingRepo = nil
             let model = try readyModel(for: repo)
             let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            VoxtLog.info("MLX Audio model load completed. repo=\(repo), elapsedMs=\(elapsedMs)")
+            VoxtLog.modelInfo("MLX Audio model load completed. repo=\(repo), elapsedMs=\(elapsedMs)")
             return model
         } catch {
             self.loadingTask = nil
             self.loadingRepo = nil
             setState(.error("Model load failed: \(error.localizedDescription)"), for: repo)
             let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            VoxtLog.error("MLX Audio model load failed. repo=\(repo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)")
+            VoxtLog.modelError("MLX Audio model load failed. repo=\(repo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)")
             throw error
         }
     }
@@ -655,10 +655,10 @@ class MLXModelManager: ObservableObject {
         for modelDir in managedDirectories {
             do {
                 try FileManager.default.removeItem(at: modelDir)
-                VoxtLog.info("Deleted MLX Audio managed artifact. repo=\(modelRepo), path=\(modelDir.path)")
+                VoxtLog.modelInfo("Deleted MLX Audio managed artifact. repo=\(modelRepo), path=\(modelDir.path)")
             } catch {
                 setState(.error("Couldn't uninstall MLX model. It may still be in use."), for: modelRepo)
-                VoxtLog.error("Failed to delete MLX Audio managed artifact. repo=\(modelRepo), error=\(error.localizedDescription)")
+                VoxtLog.modelError("Failed to delete MLX Audio managed artifact. repo=\(modelRepo), error=\(error.localizedDescription)")
                 return
             }
         }
@@ -1031,7 +1031,7 @@ class MLXModelManager: ObservableObject {
                 for: repo
             )
         }
-        VoxtLog.warning("Download auto-paused after network issue. repo=\(repo), error=\(error.localizedDescription)")
+        VoxtLog.modelWarning("Download auto-paused after network issue. repo=\(repo), error=\(error.localizedDescription)")
         return true
     }
 
@@ -1174,7 +1174,7 @@ class MLXModelManager: ObservableObject {
             guard let fallbackBaseURL = fallbackHubBaseURL(from: baseURL) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Primary model metadata endpoint failed. Retrying with mirror. repo=\(repo), baseURL=\(baseURL.absoluteString), error=\(error.localizedDescription)"
             )
             return try await MLXModelDownloadSupport.fetchModelSizeInfo(
@@ -1195,7 +1195,7 @@ class MLXModelManager: ObservableObject {
             guard let fallbackBaseURL = fallbackHubBaseURL(from: hubBaseURL) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Primary model download endpoint failed. Retrying with mirror. repo=\(repo), baseURL=\(hubBaseURL.absoluteString), error=\(error.localizedDescription)"
             )
             clearHubCache(for: repo)
@@ -1240,14 +1240,14 @@ class MLXModelManager: ObservableObject {
 
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
-        VoxtLog.info("Fetching model entries: \(repoID.description)")
+        VoxtLog.modelInfo("Fetching model entries: \(repoID.description)")
         let entries = try await MLXModelDownloadSupport.fetchModelEntries(
             repo: repoID.description,
             baseURL: baseURL,
             session: session,
             userAgent: Self.hubUserAgent
         )
-        VoxtLog.info("Entry count: \(entries.count)")
+        VoxtLog.modelInfo("Entry count: \(entries.count)")
         guard !entries.isEmpty else {
             throw MLXModelDownloadSupport.DownloadValidationError.emptyFileList
         }
@@ -1273,7 +1273,7 @@ class MLXModelManager: ObservableObject {
                 totalFiles: totalFiles,
                 for: repo
             )
-            VoxtLog.info("Download start: \(entry.path) (size=\(entry.size ?? -1))", verbose: true)
+            VoxtLog.modelInfo("Download start: \(entry.path) (size=\(entry.size ?? -1))", verbose: true)
 
             let sampler = Task { [weak self] in
                 let startTime = Date()
@@ -1323,7 +1323,7 @@ class MLXModelManager: ObservableObject {
                     totalFiles: totalFiles,
                     for: repo
                 )
-                VoxtLog.info("Download resume reused existing file: \(entry.path)", verbose: true)
+                VoxtLog.modelInfo("Download resume reused existing file: \(entry.path)", verbose: true)
                 continue
             }
 
@@ -1335,7 +1335,7 @@ class MLXModelManager: ObservableObject {
                 baseURL: baseURL,
                 bearerToken: bearerToken
             )
-            VoxtLog.info("Download done: \(entry.path)", verbose: true)
+            VoxtLog.modelInfo("Download done: \(entry.path)", verbose: true)
             let delta = max(expectedEntryBytes, max(progress.completedUnitCount, 0))
             completedBytes += max(delta, 0)
             let finishedFiles = completedFiles + 1
@@ -1349,13 +1349,13 @@ class MLXModelManager: ObservableObject {
                 totalFiles: totalFiles,
                 for: repo
             )
-            VoxtLog.info(
+            VoxtLog.modelInfo(
                 "Download progress: files=\(finishedFiles)/\(totalFiles), bytes=\(min(completedBytes, totalBytes))/\(totalBytes)",
                 verbose: true
             )
         }
 
-        VoxtLog.info("Validating downloaded files...", verbose: true)
+        VoxtLog.modelInfo("Validating downloaded files...", verbose: true)
         try MLXModelDownloadSupport.validateDownloadedModel(
             at: tempDir,
             repo: repo,
@@ -1363,10 +1363,10 @@ class MLXModelManager: ObservableObject {
             downloadSizeTolerance: downloadSizeTolerance,
             fileManager: .default
         )
-        VoxtLog.info("Moving downloaded files into final cache...", verbose: true)
+        VoxtLog.modelInfo("Moving downloaded files into final cache...", verbose: true)
         try MLXModelDownloadSupport.clearDirectory(at: modelDir, fileManager: .default)
         try FileManager.default.moveItem(at: tempDir, to: modelDir)
-        VoxtLog.info("Download files moved to final cache.", verbose: true)
+        VoxtLog.modelInfo("Download files moved to final cache.", verbose: true)
         return modelDir
     }
 
@@ -1504,7 +1504,7 @@ class MLXModelManager: ObservableObject {
         idleUnloadTask = nil
         Memory.clearCache()
         checkExistingModel()
-        VoxtLog.info("MLX Audio model released. reason=\(reason)", verbose: true)
+        VoxtLog.modelInfo("MLX Audio model released. reason=\(reason)", verbose: true)
     }
 
     private func clearHubCache(for repo: String) {
@@ -1563,7 +1563,7 @@ class MLXModelManager: ObservableObject {
             guard let fallbackBaseURL = fallbackHubBaseURL(from: baseURL) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Primary model repair endpoint failed. Retrying with mirror. repo=\(repo), baseURL=\(baseURL.absoluteString), error=\(error.localizedDescription)"
             )
             try await repairIncompleteModelDirectory(
@@ -1596,7 +1596,7 @@ class MLXModelManager: ObservableObject {
         )
         guard !missingEntries.isEmpty else { return }
 
-        VoxtLog.info(
+        VoxtLog.modelInfo(
             "Repairing incomplete MLX model directory. repo=\(repo), files=\(missingEntries.map(\.path).joined(separator: ", "))"
         )
         for entry in missingEntries {

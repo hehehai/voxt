@@ -637,7 +637,7 @@ struct RemoteLLMRuntimeClient {
                 if requiresStreaming {
                     throw streamingFailure.underlying
                 }
-                VoxtLog.warning(
+                VoxtLog.llmWarning(
                     "Remote LLM Responses streaming unavailable, retrying non-streaming. provider=\(provider.rawValue), endpoint=\(endpointValue), detail=\(streamingFailure.underlying.localizedDescription)"
                 )
             }
@@ -694,7 +694,7 @@ struct RemoteLLMRuntimeClient {
             object = try decodeResponsesObject(from: data, response: http)
         } catch {
             let payloadPreview = responsePayloadPreview(from: data)
-            VoxtLog.warning(
+            VoxtLog.llmWarning(
                 "Remote LLM Responses response rejected. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payload=\(VoxtLog.llmPreview(payloadPreview)), detail=\(error.localizedDescription)"
             )
             throw error
@@ -716,7 +716,7 @@ struct RemoteLLMRuntimeClient {
 
         guard let content = extractPrimaryText(from: object), !content.isEmpty else {
             let payloadPreview = responsePayloadPreview(from: data)
-            VoxtLog.warning(
+            VoxtLog.llmWarning(
                 "Remote LLM Responses response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payload=\(VoxtLog.llmPreview(payloadPreview))"
             )
             throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
@@ -729,7 +729,7 @@ struct RemoteLLMRuntimeClient {
             context: "Responses response"
         )
 
-        VoxtLog.llm(
+        VoxtLog.llmInfo(
             "Remote LLM Responses response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs)"
         )
         VoxtLog.llm(
@@ -814,7 +814,7 @@ struct RemoteLLMRuntimeClient {
                     if let repetition = repetitionGuard.repeatedSuffix(in: aggregated) {
                         aggregated = repetition.truncatedText
                         didStopForRepetition = true
-                        VoxtLog.warning(
+                        VoxtLog.llmWarning(
                             "Remote LLM Responses streaming repetition guard stopped generation. provider=\(provider.rawValue), endpoint=\(endpointValue), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(aggregated.count)"
                         )
                         publishAggregated(force: true)
@@ -875,7 +875,7 @@ struct RemoteLLMRuntimeClient {
             publishAggregated(force: true)
 
             let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
-            VoxtLog.llm(
+            VoxtLog.llmInfo(
                 "Remote LLM Responses streaming response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), chunks=\(emittedChunkCount), totalMs=\(totalElapsedMs), responseID=\(responseID ?? "nil")"
             )
             VoxtLog.llm(
@@ -971,7 +971,7 @@ struct RemoteLLMRuntimeClient {
                         }
                         return trimmed
                     } catch let streamingFailure as StreamingFailure where streamingFailure.emittedChunkCount == 0 {
-                        VoxtLog.warning(
+                        VoxtLog.llmWarning(
                             "Remote LLM streaming unavailable, retrying non-streaming. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(index + 1)/\(endpoints.count), detail=\(streamingFailure.underlying.localizedDescription)"
                         )
                     } catch {
@@ -1041,7 +1041,7 @@ struct RemoteLLMRuntimeClient {
                         endpointValue: endpointValue,
                         context: "response"
                     )
-                    VoxtLog.llm(
+                    VoxtLog.llmInfo(
                         "Remote LLM response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs)"
                     )
                     VoxtLog.llm(
@@ -1054,7 +1054,7 @@ struct RemoteLLMRuntimeClient {
                     return guardedContent
                 }
 
-                VoxtLog.warning(
+                VoxtLog.llmWarning(
                     "Remote LLM response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs), payload=\(VoxtLog.llmPreview(responsePayloadPreview(from: data)))"
                 )
                 throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
@@ -1076,14 +1076,14 @@ struct RemoteLLMRuntimeClient {
                     resolvedProxyRoute(for: $0, settings: VoxtNetworkSession.currentProxySettings)
                 } ?? "unavailable"
                 if isTimeout {
-                    VoxtLog.warning("Remote LLM request timeout. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpoints.count), elapsedMs=\(elapsedMs), timeoutSec=\(Int(requestTimeout)), proxy=\(proxyRoute), detail=\(detail)")
+                    VoxtLog.llmWarning("Remote LLM request timeout. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpoints.count), elapsedMs=\(elapsedMs), timeoutSec=\(Int(requestTimeout)), proxy=\(proxyRoute), detail=\(detail)")
                 } else {
-                    VoxtLog.warning("Remote LLM request failed. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpoints.count), elapsedMs=\(elapsedMs), proxy=\(proxyRoute), detail=\(detail)")
+                    VoxtLog.llmWarning("Remote LLM request failed. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpoints.count), elapsedMs=\(elapsedMs), proxy=\(proxyRoute), detail=\(detail)")
                 }
 
                 let hasNext = index < endpoints.count - 1
                 if hasNext && shouldRetry(error: error, provider: provider) {
-                    VoxtLog.warning("Remote LLM request failed on endpoint \(endpointValue); retrying next endpoint. attempt=\(attempt)/\(endpoints.count), reason=\(error.localizedDescription)")
+                    VoxtLog.llmWarning("Remote LLM request failed on endpoint \(endpointValue); retrying next endpoint. attempt=\(attempt)/\(endpoints.count), reason=\(error.localizedDescription)")
                     continue
                 }
                 throw error
@@ -1901,7 +1901,7 @@ struct RemoteLLMRuntimeClient {
         let proxySettings = VoxtNetworkSession.currentProxySettings
         let proxyRoute = request.url.map { resolvedProxyRoute(for: $0, settings: proxySettings) } ?? "unavailable"
         let networkMode = VoxtNetworkSession.modeDescription
-        VoxtLog.llm(
+        VoxtLog.llmInfo(
             "Remote LLM request started. provider=\(provider.rawValue), endpoint=\(endpointValue), url=\(request.url?.absoluteString ?? endpointValue), model=\(model), timeoutSec=\(Int(request.timeoutInterval)), inputChars=\(inputTextLength), systemChars=\(systemPrompt.count), userChars=\(userPrompt.count), maxTokens=\(requestMaxTokensDescription), temp=\(tuning.temperature), topP=\(tuning.topP), networkMode=\(networkMode), proxy=\(proxyRoute)"
         )
         VoxtLog.llm(
@@ -1997,7 +1997,7 @@ struct RemoteLLMRuntimeClient {
                 if let repetition = repetitionGuard.repeatedSuffix(in: aggregated) {
                     aggregated = repetition.truncatedText
                     didStopForRepetition = true
-                    VoxtLog.warning(
+                    VoxtLog.llmWarning(
                         "Remote LLM streaming repetition guard stopped generation. provider=\(provider.rawValue), endpoint=\(endpointValue), attempt=\(attempt)/\(endpointCount), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(aggregated.count)"
                     )
                     publishAggregated(force: true)
@@ -2077,7 +2077,7 @@ struct RemoteLLMRuntimeClient {
             publishAggregated(force: true)
 
             let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
-            VoxtLog.llm(
+            VoxtLog.llmInfo(
                 "Remote LLM streaming response received. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpointCount), chunks=\(emittedChunkCount), totalMs=\(totalElapsedMs)"
             )
             VoxtLog.llm(
@@ -2127,7 +2127,7 @@ struct RemoteLLMRuntimeClient {
         guard let repetition = LLMOutputRepetitionGuard().repeatedSuffix(in: content) else {
             return content
         }
-        VoxtLog.warning(
+        VoxtLog.llmWarning(
             "Remote LLM \(context) repetition guard truncated output. provider=\(provider.rawValue), endpoint=\(endpointValue), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(repetition.truncatedText.count)"
         )
         return repetition.truncatedText

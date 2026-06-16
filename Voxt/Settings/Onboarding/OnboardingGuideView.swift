@@ -1779,7 +1779,7 @@ private extension OnboardingGuideView {
                 }
             }
         } catch {
-            VoxtLog.warning("Guide microphone meter failed: \(error.localizedDescription)")
+            VoxtLog.settingsWarning("Guide microphone meter failed: \(error.localizedDescription)")
             stopMicrophoneMeter()
         }
     }

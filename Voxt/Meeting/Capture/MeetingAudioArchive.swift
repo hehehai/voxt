@@ -42,7 +42,7 @@ actor MeetingAudioArchive {
                 themWrittenRange = Self.union(themWrittenRange, with: startIndex..<(startIndex + preparedSamples.count))
             }
         } catch {
-            VoxtLog.warning("Meeting audio archive append failed: \(error.localizedDescription)")
+            VoxtLog.meetingWarning("Meeting audio archive append failed: \(error.localizedDescription)")
         }
     }
 

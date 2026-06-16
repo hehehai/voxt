@@ -77,13 +77,13 @@ extension AppDelegate {
                 }
             }
             guard let entry = persistMeetingHistory(result, forceSave: true) else {
-                VoxtLog.warning("Meeting save-and-open failed: no history entry could be created.")
+                VoxtLog.meetingWarning("Meeting save-and-open failed: no history entry could be created.")
                 meetingDetailWindowManager.closeLiveWindow()
                 meetingOverlayWindow.hide()
                 showOverlayReminder(String(localized: "Couldn't save Meeting Notes history."))
                 return
             }
-            VoxtLog.info("Meeting history saved. entryID=\(entry.id.uuidString), kind=\(entry.kind.rawValue)")
+            VoxtLog.meeting("Meeting history saved. entryID=\(entry.id.uuidString), kind=\(entry.kind.rawValue)")
             meetingDetailWindowManager.closeLiveWindow()
             meetingOverlayWindow.hide { [weak self] in
                 guard let appDelegate = self else { return }
@@ -95,19 +95,19 @@ extension AppDelegate {
 
     func persistMeetingHistory(_ result: MeetingSessionResult, forceSave: Bool = false) -> TranscriptionHistoryEntry? {
         guard forceSave || historyEnabled else {
-            VoxtLog.info("Meeting history persistence skipped: history is disabled.")
+            VoxtLog.meeting("Meeting history persistence skipped: history is disabled.")
             return nil
         }
 
         let persistedSegments = result.persistedSegments
         guard !persistedSegments.isEmpty else {
-            VoxtLog.warning("Meeting history persistence skipped: no meaningful meeting segments were available.")
+            VoxtLog.meetingWarning("Meeting history persistence skipped: no meaningful meeting segments were available.")
             return nil
         }
 
         let persistedText = MeetingTranscriptFormatter.joinedText(for: persistedSegments)
         guard !persistedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            VoxtLog.warning("Meeting history persistence skipped: merged meeting text was empty after formatting.")
+            VoxtLog.meetingWarning("Meeting history persistence skipped: merged meeting text was empty after formatting.")
             return nil
         }
 
@@ -154,11 +154,11 @@ extension AppDelegate {
             dictionaryCorrectedTerms: [],
             dictionarySuggestedTerms: []
         ) else {
-            VoxtLog.warning("Meeting history persistence failed: history store rejected the meeting entry.")
+            VoxtLog.meetingWarning("Meeting history persistence failed: history store rejected the meeting entry.")
             return nil
         }
 
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting history persistence succeeded. entryID=\(entryID.uuidString), segments=\(persistedSegments.count), forceSave=\(forceSave)"
         )
         cacheLatestInjectableOutputText(persistedText)

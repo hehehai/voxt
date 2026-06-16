@@ -417,7 +417,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             isModelInitializing = false
             let message = String(localized: "Whisper failed to start recording.")
             lastStartFailureMessage = message
-            VoxtLog.error("Whisper capture setup failed: \(error)")
+            VoxtLog.asrError("Whisper capture setup failed: \(error)")
             stopAudioEngine()
             audioEngine.inputNode.removeTap(onBus: 0)
             cleanupPreparedWhisperIfNeeded()
@@ -450,7 +450,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             cleanupPreparedWhisperIfNeeded()
             let message = String(localized: "Whisper failed to load the selected model.")
             lastStartFailureMessage = message
-            VoxtLog.error("Whisper transcriber prepare failed: \(error)")
+            VoxtLog.asrError("Whisper transcriber prepare failed: \(error)")
             return message
         }
     }
@@ -467,7 +467,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             isModelInitializing = false
             let message = String(localized: "Whisper is not ready yet. Open Settings > Model and try again.")
             lastStartFailureMessage = message
-            VoxtLog.warning("Whisper start blocked: model is not prepared.")
+            VoxtLog.asrWarning("Whisper start blocked: model is not prepared.")
             return message
         }
 
@@ -503,7 +503,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         let revision = sessionRevision
         let stopSampleCount = effectiveWhisperRealtimeEnabled ? snapshotPreparedAudioSamples().count : sampleStore.count()
         let stopBufferedSeconds = Double(stopSampleCount) / max(effectiveWhisperRealtimeEnabled ? targetSampleRate : inputSampleRate, 1)
-        VoxtLog.info(
+        VoxtLog.asr(
             """
             Whisper stop requested. revision=\(revision), realtime=\(effectiveWhisperRealtimeEnabled), sampleCount=\(stopSampleCount), bufferedSec=\(String(format: "%.2f", stopBufferedSeconds)), partialChars=\(transcribedText.count)
             """,
@@ -899,7 +899,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         )
         let finalProfile: WhisperInferenceProfile = useOfflineFinalProfile ? .offline : .realtimeFinal
         if effectiveWhisperRealtimeEnabled, useOfflineFinalProfile {
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Whisper realtime finalization promoted to offline long-form profile. bufferedSec=\(String(format: "%.2f", bufferedSeconds))",
                 verbose: true
             )
@@ -915,7 +915,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                 let preparedSamples = prepareInputSamples(samples, sampleRate: sampleRate)
                 stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = []
-                VoxtLog.error("Whisper finalization model load failed: \(error)")
+                VoxtLog.asrError("Whisper finalization model load failed: \(error)")
                 onTranscriptionFinished?(fallbackText)
                 return
             }
@@ -980,7 +980,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
     ) async {
         guard !samples.isEmpty else {
             if publishFinalResult {
-                VoxtLog.warning("Whisper finalization produced an empty audio snapshot; finishing with empty transcription.")
+                VoxtLog.asrWarning("Whisper finalization produced an empty audio snapshot; finishing with empty transcription.")
                 cleanupPreparedWhisperIfNeeded()
                 onTranscriptionFinished?("")
             }
@@ -990,7 +990,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         guard revision == sessionRevision else { return }
         guard let whisper = preparedWhisper else {
             if publishFinalResult {
-                VoxtLog.warning("Whisper finalization aborted because preparedWhisper was already released.")
+                VoxtLog.asrWarning("Whisper finalization aborted because preparedWhisper was already released.")
                 cleanupPreparedWhisperIfNeeded()
                 onTranscriptionFinished?("")
             }
@@ -1029,13 +1029,13 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                 let elapsedMs = max(Int(Date().timeIntervalSince(inferenceStartedAt) * 1000), 0)
                 stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = includeWordTimings ? buildWordTimings(from: results) : []
-                VoxtLog.info(
+                VoxtLog.asr(
                     """
                     Whisper final transcription ready. revision=\(revision), chars=\(resolvedFinalText.count), preparedSampleCount=\(preparedSamples.count), segmentCount=\(results.count), elapsedMs=\(elapsedMs)
                     """
                 )
                 if resolvedFinalText != text {
-                    VoxtLog.info(
+                    VoxtLog.asr(
                         """
                         Whisper final transcription preserved longer live hypothesis tail. revision=\(revision), finalChars=\(text.count), liveChars=\(latestPublishedText.trimmingCharacters(in: .whitespacesAndNewlines).count), resolvedChars=\(resolvedFinalText.count)
                         """,
@@ -1051,12 +1051,12 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                 }
             }
         } catch {
-            VoxtLog.error("Whisper inference failed: \(error)")
+            VoxtLog.asrError("Whisper inference failed: \(error)")
             if publishFinalResult {
                 let preparedSamples = prepareInputSamples(samples, sampleRate: sampleRate)
                 stageCompletedAudioArchive(samples: preparedSamples, sampleRate: targetSampleRate)
                 latestWordTimings = []
-                VoxtLog.warning(
+                VoxtLog.asrWarning(
                     """
                     Whisper final inference failed; falling back to latest partial text. revision=\(revision), fallbackChars=\(transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).count), preparedSampleCount=\(preparedSamples.count)
                     """
@@ -1129,7 +1129,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         if profile == .offline {
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Whisper decode options. profile=\(profile.rawValue), task=\(resolvedTask.description), language=\(resolvedLanguage ?? "auto"), detectLanguage=\(detectLanguage), promptChars=\(hintPayload.prompt?.count ?? 0), promptTokens=\(promptTokens?.count ?? 0), realtime=\(effectiveWhisperRealtimeEnabled)",
                 verbose: true
             )
@@ -1237,7 +1237,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             }
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
-            VoxtLog.warning("Whisper completed audio archive export failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("Whisper completed audio archive export failed: \(error.localizedDescription)")
         }
     }
 
@@ -1344,7 +1344,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
 
         audioEngine.prepare()
         try audioEngine.start()
-        VoxtLog.info(
+        VoxtLog.asr(
             "Whisper audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), mode=offline",
             verbose: true
         )
@@ -1368,13 +1368,13 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         guard !didRetryCaptureStartup else { return }
 
         didRetryCaptureStartup = true
-        VoxtLog.warning("Whisper audio capture produced no initial callbacks. Restarting input graph once.")
+        VoxtLog.asrWarning("Whisper audio capture produced no initial callbacks. Restarting input graph once.")
 
         do {
             try startAudioCaptureGraph()
             scheduleCaptureStartupWatchdog(revision: revision)
         } catch {
-            VoxtLog.error("Whisper audio capture recovery failed: \(error)")
+            VoxtLog.asrError("Whisper audio capture recovery failed: \(error)")
         }
     }
 
@@ -1514,7 +1514,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         } catch is CancellationError {
             return nil
         } catch {
-            VoxtLog.warning("Whisper realtime draft pass failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("Whisper realtime draft pass failed: \(error.localizedDescription)")
             return nil
         }
     }
@@ -1535,7 +1535,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         } catch is CancellationError {
             return nil
         } catch {
-            VoxtLog.warning("Whisper realtime eager pass failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("Whisper realtime eager pass failed: \(error.localizedDescription)")
             return nil
         }
     }
@@ -1556,7 +1556,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         } catch is CancellationError {
             return nil
         } catch {
-            VoxtLog.warning("Whisper realtime silence reconcile failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("Whisper realtime silence reconcile failed: \(error.localizedDescription)")
             return nil
         }
     }
@@ -1746,7 +1746,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             throw CancellationError()
         case .interruptInFlightPass:
             if let activeInferencePassKind {
-                VoxtLog.info(
+                VoxtLog.asr(
                     "Whisper inference pass preempted. inFlight=\(String(describing: activeInferencePassKind)), requested=\(String(describing: passKind))",
                     verbose: true
                 )
@@ -1864,7 +1864,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
                 primaryText: initialText,
                 fallbackText: fallbackText
             ) {
-                VoxtLog.info(
+                VoxtLog.asr(
                     """
                     Whisper explicit-language fallback selected. profile=\(profile.rawValue), language=\(fallbackLanguage), primaryChars=\(initialText.count), fallbackChars=\(fallbackText.count), audioDurationSec=\(String(format: "%.1f", audioDurationSeconds))
                     """,
@@ -1984,7 +1984,7 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
         if status != noErr {
-            VoxtLog.warning("Unable to switch input device. status=\(status)")
+            VoxtLog.asrWarning("Unable to switch input device. status=\(status)")
         }
     }
 

@@ -630,7 +630,7 @@ final class DictionaryStore: ObservableObject {
         }
         replaceCategories(categories.filter { $0.id != id })
         if let targetCategory {
-            VoxtLog.info("Dictionary category deleted. category=\(targetCategory.name), deleteEntries=\(deleteEntries)")
+            VoxtLog.dictionary("Dictionary category deleted. category=\(targetCategory.name), deleteEntries=\(deleteEntries)")
         }
     }
 

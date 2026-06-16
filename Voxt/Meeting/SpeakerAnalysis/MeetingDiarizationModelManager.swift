@@ -76,12 +76,12 @@ final class MeetingDiarizationModelManager: ObservableObject {
                     _ = try await self.downloadSortformerWithFallback()
                 }
                 self.state = .downloaded
-                VoxtLog.info("Meeting diarization model ready. mode=\(mode.rawValue)")
+                VoxtLog.meeting("Meeting diarization model ready. mode=\(mode.rawValue)")
             } catch is CancellationError {
                 self.state = .notDownloaded
             } catch {
                 self.state = .error(error.localizedDescription)
-                VoxtLog.error("Meeting diarization model install failed. mode=\(mode.rawValue), error=\(error.localizedDescription)")
+                VoxtLog.meetingError("Meeting diarization model install failed. mode=\(mode.rawValue), error=\(error.localizedDescription)")
             }
         }
     }
@@ -146,7 +146,7 @@ final class MeetingDiarizationModelManager: ObservableObject {
             guard let fallback = Self.fallbackHubBaseURL(from: preferredBaseURL) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.meetingWarning(
                 "Primary meeting Sortformer download endpoint failed. Retrying with mirror. baseURL=\(preferredBaseURL.absoluteString), error=\(error.localizedDescription)"
             )
             MeetingSortformerModelStorage.clearHubCache()

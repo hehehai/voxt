@@ -300,8 +300,10 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
             accessibilityDescription: nil
         )?.withSymbolConfiguration(.init(pointSize: style.indicatorFontSize, weight: .bold))
         indicatorView.contentTintColor = style.indicatorColor
-        invalidateIntrinsicContentSize()
-        needsLayout = true
+        DispatchQueue.main.async { [weak self] in
+            self?.invalidateIntrinsicContentSize()
+            self?.needsLayout = true
+        }
         updateAppearance()
 
         if isPresented {

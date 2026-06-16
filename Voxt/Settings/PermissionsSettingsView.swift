@@ -306,7 +306,7 @@ struct PermissionsSettingsView: View {
         }
         states = snapshot
         notifyPermissionStatusChanged()
-        VoxtLog.info("Permission status: \(permissionSnapshotText(snapshot))")
+        VoxtLog.settings("Permission status: \(permissionSnapshotText(snapshot))")
     }
 
     private func currentState(for kind: SettingsPermissionKind) -> PermissionState {
@@ -316,7 +316,7 @@ struct PermissionsSettingsView: View {
     private func requestPermission(_ kind: SettingsPermissionKind) {
         let initial = currentState(for: kind)
         states[kind] = initial
-        VoxtLog.info("Permission request triggered: \(kind.logKey)=\(initial == .enabled ? "on" : "off")")
+        VoxtLog.settings("Permission request triggered: \(kind.logKey)=\(initial == .enabled ? "on" : "off")")
         startMonitoring(kind: kind, initialState: initial)
 
         switch kind {
@@ -385,7 +385,7 @@ struct PermissionsSettingsView: View {
                 states[kind] = latest
                 if latest != initialState {
                     notifyPermissionStatusChanged()
-                    VoxtLog.info("Permission status changed: \(kind.logKey)=\(latest == .enabled ? "on" : "off")")
+                    VoxtLog.settings("Permission status changed: \(kind.logKey)=\(latest == .enabled ? "on" : "off")")
                     return
                 }
             }

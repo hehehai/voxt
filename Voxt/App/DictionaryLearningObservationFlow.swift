@@ -12,23 +12,23 @@ extension AppDelegate {
         historyEntryID: UUID?
     ) {
         guard didInject else {
-            VoxtLog.info("Automatic dictionary learning skipped: text was not injected.")
+            VoxtLog.dictionary("Automatic dictionary learning skipped: text was not injected.")
             return
         }
         guard outputMode == .transcription else {
-            VoxtLog.info(
+            VoxtLog.dictionary(
                 "Automatic dictionary learning skipped: output mode is \(RecordingSessionSupport.outputLabel(for: outputMode))."
             )
             return
         }
         guard dictionaryAutoLearningEnabled else {
-            VoxtLog.info("Automatic dictionary learning skipped: feature disabled.")
+            VoxtLog.dictionary("Automatic dictionary learning skipped: feature disabled.")
             return
         }
 
         let insertedText = rawInsertedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !insertedText.isEmpty else {
-            VoxtLog.info("Automatic dictionary learning skipped: inserted text is empty.")
+            VoxtLog.dictionary("Automatic dictionary learning skipped: inserted text is empty.")
             return
         }
 
@@ -36,7 +36,7 @@ extension AppDelegate {
         let expectedBundleID = sessionTargetApplicationBundleID
             ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
-        VoxtLog.info(
+        VoxtLog.dictionary(
             "Automatic dictionary learning scheduled. chars=\(insertedText.count), expectedBundleID=\(expectedBundleID ?? "nil"), historyEntryID=\(historyEntryID?.uuidString ?? "nil"), windowSec=\(Int(AutomaticDictionaryLearningMonitor.observationWindowSeconds)), idleSec=\(Int(AutomaticDictionaryLearningMonitor.idleSettleSeconds))"
         )
 
@@ -62,13 +62,13 @@ extension AppDelegate {
         historyEntryID: UUID?
     ) async {
         do {
-            VoxtLog.info(
+            VoxtLog.dictionary(
                 "Automatic dictionary learning observation started. expectedBundleID=\(expectedBundleID ?? "nil"), historyEntryID=\(historyEntryID?.uuidString ?? "nil")"
             )
             guard let baselineSnapshot = try await automaticDictionaryLearningBaselineSnapshot(
                 expectedBundleID: expectedBundleID
             ) else {
-                VoxtLog.info("Automatic dictionary learning stopped: baseline snapshot unavailable.")
+                VoxtLog.dictionary("Automatic dictionary learning stopped: baseline snapshot unavailable.")
                 return
             }
             let baselineScopedText = AutomaticDictionaryLearningMonitor.observationScopedText(
@@ -76,7 +76,7 @@ extension AppDelegate {
                 baselineText: baselineSnapshot.text,
                 currentText: baselineSnapshot.text
             )
-            VoxtLog.info(
+            VoxtLog.dictionary(
                 "Automatic dictionary learning baseline captured. chars=\(baselineSnapshot.text.count), scopedChars=\(baselineScopedText.count), role=\(baselineSnapshot.role ?? "unknown"), bundleID=\(baselineSnapshot.bundleIdentifier ?? "nil"), editable=\(baselineSnapshot.isEditable), focused=\(baselineSnapshot.isFocusedTarget), textSource=\(baselineSnapshot.textSource ?? "nil")"
             )
 
@@ -87,7 +87,7 @@ extension AppDelegate {
                 expectedBundleID: expectedBundleID
             )
             guard observation.didObserveChange else {
-                VoxtLog.info("Automatic dictionary learning finished without detected user edits in observation window.")
+                VoxtLog.dictionary("Automatic dictionary learning finished without detected user edits in observation window.")
                 return
             }
 
@@ -98,11 +98,11 @@ extension AppDelegate {
             )
             guard case .ready(let request) = requestOutcome else {
                 if case .skipped(let reason) = requestOutcome {
-                    VoxtLog.info("Automatic dictionary learning skipped after diff analysis: \(reason)")
+                    VoxtLog.dictionary("Automatic dictionary learning skipped after diff analysis: \(reason)")
                 }
                 return
             }
-            VoxtLog.info(
+            VoxtLog.dictionary(
                 "Automatic dictionary learning request ready. editRatio=\(String(format: "%.3f", request.editRatio)), changedBeforeChars=\(request.baselineChangedFragment.count), changedAfterChars=\(request.finalChangedFragment.count)"
             )
 
@@ -113,9 +113,9 @@ extension AppDelegate {
                 historyEntryID: historyEntryID
             )
         } catch is CancellationError {
-            VoxtLog.info("Automatic dictionary learning cancelled.")
+            VoxtLog.dictionary("Automatic dictionary learning cancelled.")
         } catch {
-            VoxtLog.warning("Automatic dictionary learning failed: \(error)")
+            VoxtLog.dictionaryWarning("Automatic dictionary learning failed: \(error)")
         }
     }
 
@@ -167,7 +167,7 @@ extension AppDelegate {
                             currentFinalText: state.latestText
                        ) {
                         if !didLogDeferredAnalysis {
-                            VoxtLog.info(
+                            VoxtLog.dictionary(
                                 "Automatic dictionary learning deferred analysis: latest observed edit still looks like an incomplete deletion/replacement."
                             )
                             didLogDeferredAnalysis = true
@@ -179,7 +179,7 @@ extension AppDelegate {
                         continue
                     }
 
-                    VoxtLog.info(
+                    VoxtLog.dictionary(
                         "Automatic dictionary learning observed input change. previousChars=\(previousText.count), currentChars=\(scopedText.count), role=\(snapshot.role ?? "unknown"), editable=\(snapshot.isEditable), focused=\(snapshot.isFocusedTarget), textSource=\(snapshot.textSource ?? "nil")"
                     )
                     didLogDeferredAnalysis = false
@@ -196,12 +196,12 @@ extension AppDelegate {
                 case .continueObserving:
                     continue
                 case .stopWithoutAnalysis:
-                    VoxtLog.info(
+                    VoxtLog.dictionary(
                         "Automatic dictionary learning stopped early: focused input missing for \(state.consecutiveMissingSnapshots) consecutive polls before any user edit."
                     )
                     shouldTerminateObservation = true
                 case .settleForAnalysis:
-                    VoxtLog.info(
+                    VoxtLog.dictionary(
                         "Automatic dictionary learning settled after observed edit while focus was missing for \(state.consecutiveMissingSnapshots) consecutive polls."
                     )
                     shouldTerminateObservation = true
@@ -218,7 +218,7 @@ extension AppDelegate {
                 baselineText: state.baselineText,
                 currentFinalText: state.latestText
            ) {
-            VoxtLog.info(
+            VoxtLog.dictionary(
                 "Automatic dictionary learning finished without completed replacement inside observed text scope."
             )
             return AutomaticDictionaryLearningObservation(

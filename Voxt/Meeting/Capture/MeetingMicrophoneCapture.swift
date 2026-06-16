@@ -51,7 +51,7 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
             let level = Self.normalizedRMS(from: copiedBuffer)
             if self?.hasLoggedFirstCallback == false {
                 self?.hasLoggedFirstCallback = true
-                VoxtLog.info(
+                VoxtLog.meeting(
                     "Meeting microphone callback received. sampleRate=\(Int(copiedBuffer.format.sampleRate)), channels=\(copiedBuffer.format.channelCount), frames=\(copiedBuffer.frameLength)",
                     verbose: true
                 )
@@ -67,7 +67,7 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
             throw CaptureError.engineStartFailed(error)
         }
 
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting microphone capture started. sampleRate=\(Int(format.sampleRate)), channels=\(format.channelCount), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")",
             verbose: true
         )
@@ -86,7 +86,7 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
         audioEngine.reset()
         self.audioEngine = nil
         hasLoggedFirstCallback = false
-        VoxtLog.info("Meeting microphone capture stopped.", verbose: true)
+        VoxtLog.meeting("Meeting microphone capture stopped.", verbose: true)
     }
 
     private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
@@ -108,7 +108,7 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
         if status != noErr {
-            VoxtLog.warning("Meeting microphone capture could not switch input device. status=\(status), deviceID=\(preferredInputDeviceID)")
+            VoxtLog.meetingWarning("Meeting microphone capture could not switch input device. status=\(status), deviceID=\(preferredInputDeviceID)")
         }
     }
 

@@ -28,7 +28,7 @@ enum VoxtSecureStorage {
         case errSecItemNotFound:
             return nil
         default:
-            print("[Voxt] [WARN] Keychain read failed. account=\(account), status=\(status)")
+            VoxtLog.securityWarning("Keychain read failed. account=\(account), status=\(status)")
             return nil
         }
     }
@@ -44,7 +44,7 @@ enum VoxtSecureStorage {
         case errSecItemNotFound:
             return false
         default:
-            print("[Voxt] [WARN] Keychain presence check failed. account=\(account), status=\(status)")
+            VoxtLog.securityWarning("Keychain presence check failed. account=\(account), status=\(status)")
             return false
         }
     }
@@ -67,24 +67,24 @@ enum VoxtSecureStorage {
         case errSecSuccess:
             let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
             if updateStatus != errSecSuccess {
-                print("[Voxt] [WARN] Keychain update failed. account=\(account), status=\(updateStatus)")
+                VoxtLog.securityWarning("Keychain update failed. account=\(account), status=\(updateStatus)")
             }
         case errSecItemNotFound:
             var item = query
             attributes.forEach { item[$0.key] = $0.value }
             let addStatus = SecItemAdd(item as CFDictionary, nil)
             if addStatus != errSecSuccess {
-                print("[Voxt] [WARN] Keychain add failed. account=\(account), status=\(addStatus)")
+                VoxtLog.securityWarning("Keychain add failed. account=\(account), status=\(addStatus)")
             }
         default:
-            print("[Voxt] [WARN] Keychain lookup before write failed. account=\(account), status=\(status)")
+            VoxtLog.securityWarning("Keychain lookup before write failed. account=\(account), status=\(status)")
         }
     }
 
     nonisolated static func removeValue(for account: String) {
         let status = SecItemDelete(baseQuery(for: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            print("[Voxt] [WARN] Keychain delete failed. account=\(account), status=\(status)")
+            VoxtLog.securityWarning("Keychain delete failed. account=\(account), status=\(status)")
             return
         }
     }
@@ -96,7 +96,7 @@ enum VoxtSecureStorage {
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            print("[Voxt] [WARN] Keychain reset failed. status=\(status)")
+            VoxtLog.securityWarning("Keychain reset failed. status=\(status)")
             return
         }
     }

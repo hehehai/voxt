@@ -1,9 +1,10 @@
 // VoxtLog.swift
-// Provides Voxt Log for shared utilities.
+// Provides the compatibility logging facade for the app.
 
 import Darwin
 import AppKit
 import Foundation
+import Logging
 
 enum VoxtLog {
     struct ExportPayload {
@@ -11,74 +12,190 @@ enum VoxtLog {
         let content: String
     }
 
-    private enum Level: String {
-        case info = "INFO"
-        case warning = "WARN"
-        case error = "ERROR"
-    }
-
     nonisolated(unsafe) static var verboseEnabled = false
 
     nonisolated static func info(_ message: @autoclosure () -> String, verbose: Bool = false) {
-        log(message(), level: .info, verbose: verbose)
+        appLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func audio(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        audioLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func audioWarning(_ message: @autoclosure () -> String) {
+        audioLogger.warning(message())
+    }
+
+    nonisolated static func dictionary(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        dictionaryLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func dictionaryWarning(_ message: @autoclosure () -> String) {
+        dictionaryLogger.warning(message())
+    }
+
+    nonisolated static func history(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        historyLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func historyWarning(_ message: @autoclosure () -> String) {
+        historyLogger.warning(message())
     }
 
     nonisolated static func hotkey(_ message: @autoclosure () -> String) {
         guard UserDefaults.standard.bool(forKey: AppPreferenceKey.hotkeyDebugLoggingEnabled) else { return }
-        log(message(), level: .info)
+        hotkeyLogger.info(message())
+    }
+
+    nonisolated static func input(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        inputLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func inputWarning(_ message: @autoclosure () -> String) {
+        inputLogger.warning(message())
+    }
+
+    nonisolated static func asr(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        asrLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func asrWarning(_ message: @autoclosure () -> String) {
+        asrLogger.warning(message())
+    }
+
+    nonisolated static func asrError(_ message: @autoclosure () -> String) {
+        asrLogger.error(message())
     }
 
     nonisolated static func llm(_ message: @autoclosure () -> String) {
         guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
-        log(message(), level: .info)
+        llmLogger.info(message(), privacy: .preview(limit: 4_000))
+    }
+
+    nonisolated static func llmInfo(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        llmLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func llmWarning(_ message: @autoclosure () -> String) {
+        llmLogger.warning(message())
     }
 
     nonisolated static func model(_ message: @autoclosure () -> String) {
         guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
-        log(message(), level: .info)
+        modelLogger.info(message(), privacy: .preview(limit: 4_000))
+    }
+
+    nonisolated static func modelInfo(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        modelLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func modelWarning(_ message: @autoclosure () -> String) {
+        modelLogger.warning(message())
+    }
+
+    nonisolated static func modelError(_ message: @autoclosure () -> String) {
+        modelLogger.error(message())
+    }
+
+    nonisolated static func meeting(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        meetingLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func meetingWarning(_ message: @autoclosure () -> String) {
+        meetingLogger.warning(message())
+    }
+
+    nonisolated static func meetingError(_ message: @autoclosure () -> String) {
+        meetingLogger.error(message())
+    }
+
+    nonisolated static func network(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        networkLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func networkWarning(_ message: @autoclosure () -> String) {
+        networkLogger.warning(message())
+    }
+
+    nonisolated static func settings(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        settingsLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func settingsWarning(_ message: @autoclosure () -> String) {
+        settingsLogger.warning(message())
+    }
+
+    nonisolated static func persistence(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        persistenceLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func persistenceWarning(_ message: @autoclosure () -> String) {
+        persistenceLogger.warning(message())
+    }
+
+    nonisolated static func persistenceError(_ message: @autoclosure () -> String) {
+        persistenceLogger.error(message())
+    }
+
+    nonisolated static func translation(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        translationLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func translationWarning(_ message: @autoclosure () -> String) {
+        translationLogger.warning(message())
+    }
+
+    nonisolated static func update(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        updateLogger.info(message(), verbose: verbose)
+    }
+
+    nonisolated static func updateWarning(_ message: @autoclosure () -> String) {
+        updateLogger.warning(message())
+    }
+
+    nonisolated static func updateError(_ message: @autoclosure () -> String) {
+        updateLogger.error(message())
+    }
+
+    nonisolated static func securityWarning(_ message: @autoclosure () -> String) {
+        securityLogger.warning(message())
     }
 
     nonisolated static func llmPreview(_ text: String, limit: Int = 1200) -> String {
-        let normalized = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return "<empty>" }
-        guard normalized.count > limit else { return normalized }
-        let endIndex = normalized.index(normalized.startIndex, offsetBy: limit)
-        return "\(normalized[..<endIndex])…"
+        VoxtLogRedactor.preview(text, limit: limit)
     }
 
     nonisolated static func warning(_ message: @autoclosure () -> String) {
-        log(message(), level: .warning)
+        appLogger.warning(message())
     }
 
     nonisolated static func error(_ message: @autoclosure () -> String) {
-        log(message(), level: .error)
+        appLogger.error(message())
     }
 
     nonisolated static func latestLogUpdateDate() -> Date? {
-        lock.lock()
-        defer { lock.unlock() }
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: logFileURL.path)
-            return attributes[.modificationDate] as? Date
-        } catch {
-            return nil
-        }
+        VoxtLogExportStore.latestLogUpdateDate()
     }
 
     nonisolated static func latestLogExportPayload(limit: Int = 1000) -> ExportPayload {
-        let selectedLines = latestLogLines(limit: limit)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let filename = "voxt-log-\(formatter.string(from: Date())).txt"
-        let content = composedLogContent(selectedLines: selectedLines)
+        let content = VoxtLogExportStore.latestLogDisplayText(limit: limit) {
+            MainActorSync.run {
+                diagnosticsMetadataText()
+            }
+        }
         return ExportPayload(filename: filename, content: content)
     }
 
     nonisolated static func latestLogDisplayText(limit: Int = 1000) -> String {
-        composedLogContent(selectedLines: latestLogLines(limit: limit))
+        VoxtLogExportStore.latestLogDisplayText(limit: limit) {
+            MainActorSync.run {
+                diagnosticsMetadataText()
+            }
+        }
     }
 
     nonisolated static func exportLatestLogs(limit: Int = 1000) throws -> URL {
@@ -88,108 +205,22 @@ enum VoxtLog {
         return url
     }
 
-    private nonisolated static let lock = NSLock()
-    private nonisolated static let maxStoredLines = 10000
-    private nonisolated(unsafe) static var didLoadCache = false
-    private nonisolated(unsafe) static var logLines: [String] = []
-    private nonisolated(unsafe) static let lineDateFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private nonisolated static var logFileURL: URL {
-        let supportDirectory = try? FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let base = supportDirectory ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("Voxt", isDirectory: true)
-            .appendingPathComponent("Logs", isDirectory: true)
-            .appendingPathComponent("voxt.log")
-    }
-
-    private nonisolated static func log(_ message: String, level: Level, verbose: Bool = false) {
-        guard !verbose || verboseEnabled else { return }
-        let line = formatLine(message: message, level: level)
-        print(line)
-        persist(line: line)
-    }
-
-    private nonisolated static func formatLine(message: String, level: Level) -> String {
-        let dateText = lineDateFormatter.string(from: Date())
-        return "[Voxt] \(dateText) [\(level.rawValue)] \(message)"
-    }
-
-    private nonisolated static func persist(line: String) {
-        lock.lock()
-        defer { lock.unlock() }
-        loadCacheIfNeeded()
-        logLines.append(line)
-        trimIfNeeded()
-        writeAllLines()
-    }
-
-    private nonisolated static func loadCacheIfNeeded() {
-        guard !didLoadCache else { return }
-        didLoadCache = true
-        guard let content = try? String(contentsOf: logFileURL, encoding: .utf8), !content.isEmpty else {
-            logLines = []
-            return
-        }
-        logLines = content
-            .split(whereSeparator: \.isNewline)
-            .map(String.init)
-        trimIfNeeded()
-    }
-
-    private nonisolated static func trimIfNeeded() {
-        guard logLines.count > maxStoredLines else { return }
-        logLines = Array(logLines.suffix(maxStoredLines))
-    }
-
-    private nonisolated static func writeAllLines() {
-        do {
-            try FileManager.default.createDirectory(
-                at: logFileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            let text = logLines.joined(separator: "\n")
-            try text.write(to: logFileURL, atomically: true, encoding: .utf8)
-        } catch {
-            // Keep logging non-fatal.
-        }
-    }
-
-    private nonisolated static func latestLogLines(limit: Int) -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        loadCacheIfNeeded()
-        return Array(logLines.suffix(max(1, limit)))
-    }
-
-    private nonisolated static func composedLogContent(selectedLines: [String]) -> String {
-        let unavailableText = MainActorSync.run {
-            AppLocalization.localizedString("No logs available")
-        }
-        let logText = selectedLines.isEmpty
-            ? "[Voxt] <\(unavailableText)>"
-            : selectedLines.joined(separator: "\n")
-        let appMetaTitle = MainActorSync.run {
-            AppLocalization.localizedString("App Meta")
-        }
-        let metadataText = MainActorSync.run {
-            diagnosticsMetadataText()
-        }
-        return [
-            logText,
-            "========== \(appMetaTitle) ==========",
-            metadataText
-        ].joined(separator: "\n\n")
-    }
+    private nonisolated static let appLogger = VoxtLogger(category: .app)
+    private nonisolated static let audioLogger = VoxtLogger(category: .audio)
+    private nonisolated static let dictionaryLogger = VoxtLogger(category: .dictionary)
+    private nonisolated static let historyLogger = VoxtLogger(category: .history)
+    private nonisolated static let hotkeyLogger = VoxtLogger(category: .hotkey)
+    private nonisolated static let inputLogger = VoxtLogger(category: .input)
+    private nonisolated static let asrLogger = VoxtLogger(category: .asr)
+    private nonisolated static let llmLogger = VoxtLogger(category: .llm)
+    private nonisolated static let modelLogger = VoxtLogger(category: .model)
+    private nonisolated static let meetingLogger = VoxtLogger(category: .meeting)
+    private nonisolated static let networkLogger = VoxtLogger(category: .network)
+    private nonisolated static let settingsLogger = VoxtLogger(category: .settings)
+    private nonisolated static let persistenceLogger = VoxtLogger(category: .persistence)
+    private nonisolated static let translationLogger = VoxtLogger(category: .translation)
+    private nonisolated static let updateLogger = VoxtLogger(category: .update)
+    private nonisolated static let securityLogger = VoxtLogger(category: .security)
 
     @MainActor
     private static func diagnosticsMetadataText(defaults: UserDefaults = .standard) -> String {
@@ -252,7 +283,7 @@ enum VoxtLog {
         ) ?? .over
 
         var lines: [String] = []
-        lines.append("generatedAt: \(lineDateFormatter.string(from: Date()))")
+        lines.append("generatedAt: \(VoxtLogFormatter.timestamp(for: Date()))")
         lines.append("appVersion: \(bundleVersionText())")
         lines.append("bundleID: \(Bundle.main.bundleIdentifier ?? "unknown")")
         lines.append("macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)")

@@ -718,7 +718,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         activeLiveMode = resolvedSessionLiveMode()
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
         isModelInitializing = modelManager.state != .ready
-        VoxtLog.info(
+        VoxtLog.asr(
             "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), liveMode=\(String(describing: activeLiveMode)), modelState=\(String(describing: modelManager.state))",
             verbose: true
         )
@@ -736,13 +736,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     await self?.runIntermediateCorrectionLoop(revision: revision)
                 }
             } else {
-                VoxtLog.info(
+                VoxtLog.asr(
                     "MLX transcription intermediate corrections disabled for repo=\(modelManager.currentModelRepo); finalization-only mode enabled.",
                     verbose: true
                 )
             }
         } catch {
-            VoxtLog.error("MLXTranscriber start recording failed: \(error)")
+            VoxtLog.asrError("MLXTranscriber start recording failed: \(error)")
         }
     }
 
@@ -772,7 +772,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             sampleRate: sampleRate
         )
         let capturedAudioSec = String(format: "%.2f", lastCaptureMetrics?.capturedAudioSeconds ?? 0)
-        VoxtLog.info(
+        VoxtLog.asr(
             "MLX recording stop captured. callbacks=\(callbackCount), samples=\(sampleCount), sampleRate=\(Int(sampleRate)), capturedAudioSec=\(capturedAudioSec)",
             verbose: true
         )
@@ -780,7 +780,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         guard sampleCount > 0 else {
             isFinalizingTranscription = false
             if callbackCount > 0 {
-                VoxtLog.warning(
+                VoxtLog.asrWarning(
                     "MLX recording stopped with audio callbacks but no extracted samples. sampleRate=\(Int(sampleRate))"
                 )
             }
@@ -883,7 +883,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             sessionAllowsRealtimeTextDisplay: sessionAllowsRealtimeTextDisplay,
             liveMode: activeLiveMode
         )
-        VoxtLog.info(
+        VoxtLog.asr(
             "MLX finalization started. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), quickPass=\(shouldRunQuickPass)",
             verbose: true
         )
@@ -927,14 +927,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         if resolved.isEmpty, let error = finalResult.error ?? quickResult.error {
             let failureMessage = runtimeFailureMessage(for: error)
             pendingRuntimeFailureMessage = failureMessage
-            VoxtLog.error(
+            VoxtLog.asrError(
                 "MLX finalization produced no transcript because inference failed. repo=\(modelManager.currentModelRepo), error=\(failureMessage)"
             )
         }
         transcribedText = resolved
         publishPartial(resolved)
         onTranscriptionFinished?(resolved)
-        VoxtLog.info(
+        VoxtLog.asr(
             "MLX finalization completed. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), textChars=\(resolved.count)",
             verbose: true
         )
@@ -957,11 +957,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         case .waitForInFlightPass:
             break
         case .skipRequestedPass:
-            VoxtLog.info("MLX intermediate correction skipped because inference is still busy.", verbose: true)
+            VoxtLog.asr("MLX intermediate correction skipped because inference is still busy.", verbose: true)
             return .success(nil)
         case .interruptInFlightPass:
             if let activeCorrectionPassKind {
-                VoxtLog.info(
+                VoxtLog.asr(
                     "MLX correction pass preempted. inFlight=\(stageLabel(for: activeCorrectionPassKind)), requested=\(stageLabel(for: stage))",
                     verbose: true
                 )
@@ -1042,7 +1042,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             let rawCandidate = normalizeText(inferenceResult.rawText)
             let candidate = normalizeText(MLXTranscriptionPlanning.removingKnownASRContextLeakage(from: rawCandidate))
             if candidate != rawCandidate {
-                VoxtLog.warning(
+                VoxtLog.asrWarning(
                     "MLX ASR context leakage removed. repo=\(repo), stage=\(stageLabel(for: stage)), rawChars=\(rawCandidate.count), outputChars=\(candidate.count)"
                 )
             }
@@ -1050,14 +1050,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             latestSenseVoiceMetadata = inferenceResult.senseVoiceMetadata
             applyCandidate(candidate, stage: stage)
             let elapsedMs = Int(Date().timeIntervalSince(passStartedAt) * 1000)
-            VoxtLog.info(
+            VoxtLog.asr(
                 "MLX correction pass completed. repo=\(repo), stage=\(stageLabel(for: stage)), audioSec=\(String(format: "%.2f", audioSeconds)), elapsedMs=\(elapsedMs), inferenceMs=\(inferenceElapsedMs), textChars=\(candidate.count)",
                 verbose: true
             )
             return .success(candidate)
         } catch is CancellationError {
             let elapsedMs = Int(Date().timeIntervalSince(passStartedAt) * 1000)
-            VoxtLog.info(
+            VoxtLog.asr(
                 "MLX correction pass cancelled. repo=\(repo), stage=\(stageLabel(for: stage)), audioSec=\(String(format: "%.2f", audioSeconds)), elapsedMs=\(elapsedMs)",
                 verbose: true
             )
@@ -1067,7 +1067,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 self.isModelInitializing = false
             }
             let elapsedMs = Int(Date().timeIntervalSince(passStartedAt) * 1000)
-            VoxtLog.error(
+            VoxtLog.asrError(
                 "MLXTranscriber \(stageLabel(for: stage)) pass failed. repo=\(repo), audioSec=\(String(format: "%.2f", audioSeconds)), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)"
             )
             return .failure(error)
@@ -1150,7 +1150,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else {
                 if !self.loggedSampleExtractionFailure {
                     self.loggedSampleExtractionFailure = true
-                    VoxtLog.warning(
+                    VoxtLog.asrWarning(
                         """
                         MLX audio sample extraction failed. sampleRate=\(Int(buffer.format.sampleRate)), channels=\(buffer.format.channelCount), format=\(buffer.format.commonFormat.rawValue), interleaved=\(buffer.format.isInterleaved)
                         """
@@ -1168,7 +1168,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         audioEngine.prepare()
         try audioEngine.start()
-        VoxtLog.info(
+        VoxtLog.asr(
             "MLX audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
@@ -1203,7 +1203,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             }
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
-            VoxtLog.warning("MLX completed audio archive export failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("MLX completed audio archive export failed: \(error.localizedDescription)")
         }
     }
 
@@ -1254,7 +1254,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                       self.activeLiveMode == .nativeQwenLive
                 else { return }
                 guard let qwenModel = loadedModel as? Qwen3ASRModel else {
-                    VoxtLog.warning(
+                    VoxtLog.asrWarning(
                         "MLX native live requested for non-Qwen model. repo=\(self.modelManager.currentModelRepo)"
                     )
                     return
@@ -1264,7 +1264,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 self.isModelInitializing = false
                 shouldReleaseModel = false
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-                VoxtLog.info(
+                VoxtLog.asr(
                     "MLX native Qwen live session ready. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs)",
                     verbose: true
                 )
@@ -1272,7 +1272,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 guard !Task.isCancelled else { return }
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
                 self.isModelInitializing = false
-                VoxtLog.warning(
+                VoxtLog.asrWarning(
                     "MLX native Qwen live session setup failed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)"
                 )
             }
@@ -1363,7 +1363,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         do {
             return try prepareInputSamples(pending.samples, sampleRate: inputSampleRate)
         } catch {
-            VoxtLog.warning("MLX native Qwen live sample prepare failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("MLX native Qwen live sample prepare failed: \(error.localizedDescription)")
             return []
         }
     }
@@ -1384,7 +1384,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 session.feedAudio(samples: prepared)
             }
         } catch {
-            VoxtLog.warning("MLX native Qwen live stop-drain prepare failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("MLX native Qwen live stop-drain prepare failed: \(error.localizedDescription)")
         }
     }
 
@@ -1459,14 +1459,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     self.isModelInitializing = false
                 }
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-                VoxtLog.info(
+                VoxtLog.asr(
                     "MLX transcription preload completed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs)",
                     verbose: true
                 )
             } catch {
                 guard !Task.isCancelled else { return }
                 let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-                VoxtLog.warning(
+                VoxtLog.asrWarning(
                     "MLX transcription preload failed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)"
                 )
             }
@@ -1493,18 +1493,18 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         didRetryCaptureStartup = true
         let shouldFallbackToSystemDefault = preferredInputDeviceID != nil && activeCaptureUsesPreferredInputDevice
         if shouldFallbackToSystemDefault {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "MLX audio capture produced no initial callbacks. Retrying once with system default input instead of the preferred device."
             )
         } else {
-            VoxtLog.warning("MLX audio capture produced no initial callbacks. Restarting input graph once.")
+            VoxtLog.asrWarning("MLX audio capture produced no initial callbacks. Restarting input graph once.")
         }
 
         do {
             try startAudioCaptureGraph(usePreferredInputDevice: shouldFallbackToSystemDefault ? false : activeCaptureUsesPreferredInputDevice)
             scheduleCaptureStartupWatchdog(revision: revision)
         } catch {
-            VoxtLog.error("MLX audio capture recovery failed: \(error)")
+            VoxtLog.asrError("MLX audio capture recovery failed: \(error)")
         }
     }
 
@@ -1981,7 +1981,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             let structuredError = MLXStructuredTranscriptionError.senseVoiceLongFormVADUnavailable(
                 error.localizedDescription
             )
-            VoxtLog.error(structuredError.diagnosticDescription)
+            VoxtLog.asrError(structuredError.diagnosticDescription)
             throw structuredError
         }
 
@@ -1989,7 +1989,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             let structuredError = MLXStructuredTranscriptionError.senseVoiceLongFormNoSpeechSegments(
                 durationSeconds
             )
-            VoxtLog.error(structuredError.diagnosticDescription)
+            VoxtLog.asrError(structuredError.diagnosticDescription)
             throw structuredError
         }
 
@@ -2123,7 +2123,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let rawCandidate = normalizeText(inferenceResult.rawText)
         let candidate = normalizeText(MLXTranscriptionPlanning.removingKnownASRContextLeakage(from: rawCandidate))
         if candidate != rawCandidate {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "MLX ASR context leakage removed. repo=\(modelManager.currentModelRepo), stage=structured, rawChars=\(rawCandidate.count), outputChars=\(candidate.count)"
             )
         }
@@ -2316,7 +2316,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
         if status != noErr {
-            VoxtLog.warning("Unable to switch input device. status=\(status)")
+            VoxtLog.asrWarning("Unable to switch input device. status=\(status)")
         }
     }
 }

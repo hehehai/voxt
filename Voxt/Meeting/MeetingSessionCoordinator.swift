@@ -110,7 +110,7 @@ final class MeetingSessionCoordinator {
             try Task.checkCancellation()
             let engineContext = activeEngineContext ?? resolvedEngineContext()
             activeEngineContext = engineContext
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting start configuration. source=\(engineContext.historyModelDescription), mode=\(String(describing: engineContext.resolvedMode))",
                 verbose: true
             )
@@ -270,7 +270,7 @@ final class MeetingSessionCoordinator {
             )
 
             await MainActor.run {
-                VoxtLog.info(
+                VoxtLog.meeting(
                     "Meeting session finished. visibleSegments=\(visibleSnapshotSegments.count), persistedSegments=\(result.persistedSegments.count), duration=\(String(format: "%.2f", duration))s"
                 )
             }
@@ -305,7 +305,7 @@ final class MeetingSessionCoordinator {
         let previousMode = overlayState.captureMode
         overlayState.captureMode = mode
         mode.persist()
-        VoxtLog.info("Meeting capture mode changed. previous=\(previousMode.rawValue), current=\(mode.rawValue)")
+        VoxtLog.meeting("Meeting capture mode changed. previous=\(previousMode.rawValue), current=\(mode.rawValue)")
 
         if !mode.usesMicrophone {
             micLevel = 0
@@ -378,7 +378,7 @@ final class MeetingSessionCoordinator {
 
         if !loggedInitialBufferSpeakers.contains(speaker) {
             loggedInitialBufferSpeakers.insert(speaker)
-            VoxtLog.info(
+            VoxtLog.meeting(
                 "Meeting audio buffer received. speaker=\(speaker.rawValue), level=\(String(format: "%.3f", level)), sampleRate=\(Int(buffer.format.sampleRate)), channels=\(buffer.format.channelCount), format=\(buffer.format.commonFormat.rawValue)",
                 verbose: true
             )
@@ -387,7 +387,7 @@ final class MeetingSessionCoordinator {
         guard let samples = Self.extractMonoSamples(from: buffer) else {
             if !loggedSampleExtractionFailureSpeakers.contains(speaker) {
                 loggedSampleExtractionFailureSpeakers.insert(speaker)
-                VoxtLog.warning(
+                VoxtLog.meetingWarning(
                     "Meeting audio sample extraction failed. speaker=\(speaker.rawValue), interleaved=\(buffer.format.isInterleaved), sampleRate=\(Int(buffer.format.sampleRate)), channels=\(buffer.format.channelCount), format=\(buffer.format.commonFormat.rawValue)"
                 )
             }
@@ -457,7 +457,7 @@ final class MeetingSessionCoordinator {
             await MainActor.run {
                 if !self.loggedChunkSpeakers.contains(speaker) {
                     self.loggedChunkSpeakers.insert(speaker)
-                    VoxtLog.info(
+                    VoxtLog.meeting(
                         "Meeting audio chunk ready. speaker=\(speaker.rawValue), duration=\(String(format: "%.2f", chunk.endSeconds - chunk.startSeconds))s, sampleCount=\(chunk.samples.count)",
                         verbose: true
                     )
@@ -577,7 +577,7 @@ final class MeetingSessionCoordinator {
 
     private func startCaptures() throws {
         let captureMode = overlayState.captureMode
-        VoxtLog.info("Meeting capture start requested. captureMode=\(captureMode.rawValue)", verbose: true)
+        VoxtLog.meeting("Meeting capture start requested. captureMode=\(captureMode.rawValue)", verbose: true)
         microphoneStartupRetryCount = 0
         loggedInitialBufferSpeakers.remove(.me)
         loggedInitialBufferSpeakers.remove(.them)
@@ -593,7 +593,7 @@ final class MeetingSessionCoordinator {
             )
             if let preferredInputDeviceID = preferredInputDeviceIDProvider(),
                preferredInputDeviceID != resolvedInputDeviceID {
-                VoxtLog.info(
+                VoxtLog.meeting(
                     "Meeting microphone input device fallback applied. preferred=\(preferredInputDeviceID), resolved=\(resolvedInputDeviceID.map(String.init(describing:)) ?? "default")"
                 )
             }
@@ -625,7 +625,7 @@ final class MeetingSessionCoordinator {
 
     private func stopCaptures(shouldLog: Bool = true) {
         if shouldLog {
-            VoxtLog.info("Meeting capture stop requested.", verbose: true)
+            VoxtLog.meeting("Meeting capture stop requested.", verbose: true)
         }
         microphoneStartupWatchdogTask?.cancel()
         microphoneStartupWatchdogTask = nil
@@ -664,13 +664,13 @@ final class MeetingSessionCoordinator {
             self.microphoneStartupRetryCount += 1
             let retryDeviceID: AudioDeviceID? = self.microphoneStartupRetryCount == 1 ? AudioDeviceID(kAudioObjectUnknown) : deviceID
             let modeDescription = (retryDeviceID == nil || retryDeviceID == AudioDeviceID(kAudioObjectUnknown)) ? "default-input" : "preferred-input"
-            VoxtLog.warning("Meeting microphone startup watchdog restarting capture after missing initial callback. mode=\(modeDescription)")
+            VoxtLog.meetingWarning("Meeting microphone startup watchdog restarting capture after missing initial callback. mode=\(modeDescription)")
             do {
                 self.microphoneCapture.stop()
                 try self.startMicrophoneCapture(with: retryDeviceID == AudioDeviceID(kAudioObjectUnknown) ? nil : retryDeviceID)
                 self.scheduleMicrophoneStartupWatchdog(with: retryDeviceID == AudioDeviceID(kAudioObjectUnknown) ? nil : retryDeviceID)
             } catch {
-                VoxtLog.warning("Meeting microphone watchdog restart failed: \(error.localizedDescription)")
+                VoxtLog.meetingWarning("Meeting microphone watchdog restart failed: \(error.localizedDescription)")
             }
         }
     }
@@ -791,7 +791,7 @@ final class MeetingSessionCoordinator {
                     )
                 }
             } catch {
-                VoxtLog.warning("Meeting realtime translation failed: \(error)")
+                VoxtLog.meetingWarning("Meeting realtime translation failed: \(error)")
                 self.updateSegment(segment.id) { current in
                     current.updatingTranslation(
                         translatedText: current.translatedText,
@@ -846,7 +846,7 @@ final class MeetingSessionCoordinator {
     private func applyTranscriptEvent(_ event: MeetingTranscriptEvent) {
         switch event {
         case .failed(let speaker, let message):
-            VoxtLog.error("Meeting live transcription failed. speaker=\(speaker.rawValue), detail=\(message)")
+            VoxtLog.meetingError("Meeting live transcription failed. speaker=\(speaker.rawValue), detail=\(message)")
             liveSessions[speaker] = nil
             return
         case .finished(let speaker):
@@ -1017,10 +1017,10 @@ final class MeetingSessionCoordinator {
             transcriber: transcriber
         )
         guard !optimizedSegments.isEmpty else {
-            VoxtLog.info("Meeting final transcript optimization produced no segments; falling back to realtime transcript.", verbose: true)
+            VoxtLog.meeting("Meeting final transcript optimization produced no segments; falling back to realtime transcript.", verbose: true)
             return MeetingTranscriptPostProcessor.process(fallbackSegments)
         }
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting final transcript optimization succeeded. realtimeSegments=\(fallbackSegments.count), optimizedSegments=\(optimizedSegments.count)",
             verbose: true
         )
@@ -1049,7 +1049,7 @@ final class MeetingSessionCoordinator {
             if await hasSpeechEvidence(for: segment, captureMode: captureMode) {
                 output.append(segment)
             } else {
-                VoxtLog.info(
+                VoxtLog.meeting(
                     "Meeting final segment dropped by VAD validation. speaker=\(segment.speaker.rawValue), start=\(String(format: "%.2f", segment.startSeconds)), end=\(String(format: "%.2f", segment.endSeconds ?? segment.startSeconds)), textChars=\(segment.text.count)",
                     verbose: true
                 )
@@ -1292,7 +1292,7 @@ final class MeetingSessionCoordinator {
             return session
         } catch {
             liveSessions[speaker] = nil
-            VoxtLog.warning("Meeting live session reconnect failed. speaker=\(speaker.rawValue), detail=\(error.localizedDescription)")
+            VoxtLog.meetingWarning("Meeting live session reconnect failed. speaker=\(speaker.rawValue), detail=\(error.localizedDescription)")
             return nil
         }
     }

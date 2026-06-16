@@ -25,7 +25,7 @@ extension AppDelegate {
         let hadPendingWhisperStartup = pendingWhisperStartupTask != nil
 
         if speechWasRecording || mlxWasRecording || whisperWasRecording || remoteWasRecording || hadPendingWhisperStartup {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 """
                 Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), whisper=\(whisperWasRecording), remote=\(remoteWasRecording), pendingWhisperStartup=\(hadPendingWhisperStartup)
                 """
@@ -44,7 +44,7 @@ extension AppDelegate {
         whisperTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
         if preservePendingHistoryAudio {
-            VoxtLog.info("Preserving pending history audio during residual resource release. reason=\(reason)", verbose: true)
+            VoxtLog.asr("Preserving pending history audio during residual resource release. reason=\(reason)", verbose: true)
         } else {
             discardPendingCompletedHistoryAudio()
         }
@@ -65,7 +65,7 @@ extension AppDelegate {
 
     func beginRecording(outputMode: SessionOutputMode) {
         recordingRequestedAt = Date()
-        VoxtLog.info(
+        VoxtLog.asr(
             "Begin recording requested. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), isSessionActive=\(isSessionActive)"
         )
         guard !blockNonMeetingRecordingWhileMeetingIsActive(
@@ -75,7 +75,7 @@ extension AppDelegate {
         }
         pendingAutomaticDictionaryLearningTask?.cancel()
         guard !isSessionActive else {
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Begin recording ignored because a session is already active. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), activeOutput=\(RecordingSessionSupport.outputLabel(for: sessionOutputMode))"
             )
             return
@@ -97,13 +97,13 @@ extension AppDelegate {
         )
         guard case .start(let recordingEngine) = startDecision else {
             if case .blocked(let reason) = startDecision {
-                VoxtLog.warning("Recording start blocked: \(reason.logDescription)")
+                VoxtLog.asrWarning("Recording start blocked: \(reason.logDescription)")
                 showOverlayReminder(reason.userMessage, autoHideAfter: reason.reminderDuration)
             }
             return
         }
         guard preflightPermissionsForRecording(engine: recordingEngine) else {
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Begin recording blocked by preflight permissions. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), engine=\(recordingEngine.rawValue)"
             )
             return
@@ -148,14 +148,14 @@ extension AppDelegate {
         rewriteSessionFallbackInjectBundleID = outputMode == .rewrite ? sessionTargetBundleID : nil
         resetVoiceEndCommandState()
 
-        VoxtLog.info(
+        VoxtLog.asr(
             "Recording started. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), engine=\(recordingEngine.rawValue), pipeline=\(transcriptionCapturePipeline.rawValue)"
         )
         if outputMode == .rewrite {
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Rewrite focused input check at session start. hasWritableFocusedInput=\(rewriteSessionHadWritableFocusedInput)"
             )
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Rewrite fallback inject target at session start. frontmostBundleID=\(frontmostBundleID ?? "nil"), fallbackBundleID=\(rewriteSessionFallbackInjectBundleID ?? "nil")"
             )
         }
@@ -205,7 +205,7 @@ extension AppDelegate {
             VoxtLog.hotkey("Recording stop ignored: session is already stopping.")
             return
         }
-        VoxtLog.info("Recording stop requested.")
+        VoxtLog.asr("Recording stop requested.")
 
         if pendingWhisperStartupTask != nil, whisperTranscriber?.isRecording != true {
             pendingWhisperStartupTask?.cancel()
@@ -230,7 +230,7 @@ extension AppDelegate {
 
     func cancelActiveRecordingSession() {
         guard isSessionActive else { return }
-        VoxtLog.info("Recording cancelled by Escape key.")
+        VoxtLog.asr("Recording cancelled by Escape key.")
 
         if pendingWhisperStartupTask != nil, whisperTranscriber?.isRecording != true {
             pendingWhisperStartupTask?.cancel()
@@ -258,7 +258,7 @@ extension AppDelegate {
         resetVoiceEndCommandState()
         stopActiveRecordingTranscriber()
 
-        VoxtLog.info("Cancelled session invalidated. sessionID=\(cancelledSessionID.uuidString)", verbose: true)
+        VoxtLog.asr("Cancelled session invalidated. sessionID=\(cancelledSessionID.uuidString)", verbose: true)
         executeSessionEndPipeline(for: cancelledSessionID, trigger: "cancel")
     }
 
@@ -267,7 +267,7 @@ extension AppDelegate {
 
         let resolvedDelay = delay ?? sessionFinishDelay
         let finishingSessionID = activeRecordingSessionID
-        VoxtLog.info("Finish session scheduled. delayMs=\(Int(resolvedDelay * 1000)), displayMode=\(overlayState.displayMode), isRecording=\(overlayState.isRecording), isEnhancing=\(overlayState.isEnhancing), isRequesting=\(overlayState.isRequesting)", verbose: true)
+        VoxtLog.asr("Finish session scheduled. delayMs=\(Int(resolvedDelay * 1000)), displayMode=\(overlayState.displayMode), isRecording=\(overlayState.isRecording), isEnhancing=\(overlayState.isEnhancing), isRequesting=\(overlayState.isRequesting)", verbose: true)
         overlayState.isCompleting = resolvedDelay > 0
         if overlayState.displayMode != .answer {
             overlayState.isEnhancing = false
@@ -286,12 +286,12 @@ extension AppDelegate {
 
             guard !Task.isCancelled else { return }
             guard self.activeRecordingSessionID == finishingSessionID else {
-                VoxtLog.info(
+                VoxtLog.asr(
                     "Finish session ignored because session ID changed before execution. scheduledSessionID=\(finishingSessionID.uuidString), currentSessionID=\(self.activeRecordingSessionID.uuidString)"
                 )
                 return
             }
-            VoxtLog.info("Finish session executing now. displayMode=\(self.overlayState.displayMode)", verbose: true)
+            VoxtLog.asr("Finish session executing now. displayMode=\(self.overlayState.displayMode)", verbose: true)
             self.executeSessionEndPipeline(for: finishingSessionID, trigger: "finish")
         }
     }

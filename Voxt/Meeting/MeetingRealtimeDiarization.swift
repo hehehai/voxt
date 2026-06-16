@@ -167,13 +167,13 @@ actor MeetingRealtimeDiarizationStage {
             }
         } catch MeetingVADModelError.modelNotDownloaded {
             if !hasLoggedUnavailableModel {
-                VoxtLog.info("Meeting Sortformer v2 realtime diarization skipped: model is not downloaded.", verbose: true)
+                VoxtLog.meeting("Meeting Sortformer v2 realtime diarization skipped: model is not downloaded.", verbose: true)
                 hasLoggedUnavailableModel = true
             }
             return [segment]
         } catch {
             if !hasLoggedRuntimeFailure {
-                VoxtLog.warning("Meeting Sortformer v2 realtime diarization failed; keeping source labels. error=\(error.localizedDescription)")
+                VoxtLog.meetingWarning("Meeting Sortformer v2 realtime diarization failed; keeping source labels. error=\(error.localizedDescription)")
                 hasLoggedRuntimeFailure = true
             }
             return [segment]

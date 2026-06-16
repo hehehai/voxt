@@ -53,7 +53,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         let bundle = Bundle.main
         let bundleIdentifier = bundle.bundleIdentifier
         guard Self.shouldEnableSparkle(bundleIdentifier: bundleIdentifier) else {
-            VoxtLog.info("Sparkle disabled for development or test bundle. bundleID=\(bundleIdentifier ?? "nil")")
+            VoxtLog.update("Sparkle disabled for development or test bundle. bundleID=\(bundleIdentifier ?? "nil")")
             return false
         }
         let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?
@@ -62,7 +62,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let available = !shortVersion.isEmpty && !buildVersion.isEmpty
         if !available {
-            VoxtLog.warning("Sparkle disabled: bundle version metadata is missing. short=\(shortVersion), build=\(buildVersion)")
+            VoxtLog.updateWarning("Sparkle disabled: bundle version metadata is missing. short=\(shortVersion), build=\(buildVersion)")
         }
         return available
     }()
@@ -100,7 +100,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         }
 
         setUpdateState(hasUpdate: false, latestVersion: nil, issue: nil, downloadedURL: nil)
-        VoxtLog.info("Sparkle update state cleared because update channel preference changed.")
+        VoxtLog.update("Sparkle update state cleared because update channel preference changed.")
     }
 
     #if DEBUG
@@ -119,7 +119,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
         if isPreparingInteractiveUpdateUI {
             NSApp.activate(ignoringOtherApps: true)
-            VoxtLog.info("Manual update trigger ignored because Sparkle UI is still preparing.")
+            VoxtLog.update("Manual update trigger ignored because Sparkle UI is still preparing.")
             return
         }
 
@@ -130,7 +130,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
         configureUpdaterRequestContext(updaterController.updater)
         guard isInstallerServiceAvailable() else {
-            VoxtLog.error("Sparkle installer services unavailable. Unable to present interactive update flow.")
+            VoxtLog.updateError("Sparkle installer services unavailable. Unable to present interactive update flow.")
             reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
             return
         }
@@ -139,7 +139,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         setPreparingInteractiveUpdateUI(true)
         startInteractiveUpdatePresentationWatchdog()
         NSApp.activate(ignoringOtherApps: true)
-        VoxtLog.info("Manual update check triggered via Sparkle user interface.")
+        VoxtLog.update("Manual update check triggered via Sparkle user interface.")
         updaterController.updater.checkForUpdates()
     }
 
@@ -153,7 +153,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         configureUpdaterRequestContext(updaterController.updater)
         if source == .manual {
             if !isInstallerServiceAvailable() {
-                VoxtLog.error("Sparkle installer services unavailable. Opening manual update page instead of Sparkle installer flow.")
+                VoxtLog.updateError("Sparkle installer services unavailable. Opening manual update page instead of Sparkle installer flow.")
                 reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
                 return
             }
@@ -162,15 +162,15 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         switch source {
         case .manual:
             NSApp.activate(ignoringOtherApps: true)
-            VoxtLog.info("Manual update check triggered via Sparkle background mode.")
+            VoxtLog.update("Manual update check triggered via Sparkle background mode.")
             updaterController.updater.checkForUpdatesInBackground()
         case .automatic:
             if !isInstallerServiceAvailable() {
-                VoxtLog.warning("Sparkle installer services unavailable. Skipping background update cycle.")
+                VoxtLog.updateWarning("Sparkle installer services unavailable. Skipping background update cycle.")
                 reportIssue(AppLocalization.localizedString("Installer service is unavailable."))
                 return
             }
-            VoxtLog.info("Background update check triggered via Sparkle.")
+            VoxtLog.update("Background update check triggered via Sparkle.")
             updaterController.updater.checkForUpdatesInBackground()
         }
     }
@@ -185,7 +185,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         if isNoUpdateFoundError(nsError) {
             setPreparingInteractiveUpdateUI(false)
             setUpdateState(hasUpdate: false, latestVersion: nil, issue: nil, downloadedURL: nil)
-            VoxtLog.info(
+            VoxtLog.update(
                 """
                 Sparkle update abort treated as no-update result. source=\(lastCheckSource.description), \
                 domain=\(nsError.domain), code=\(nsError.code), description=\(nsError.localizedDescription)
@@ -200,7 +200,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         } else {
             underlyingErrorSummary = "nil"
         }
-        VoxtLog.error(
+        VoxtLog.updateError(
             """
             Sparkle update aborted. domain=\(nsError.domain), code=\(nsError.code), \
             description=\(nsError.localizedDescription), failureReason=\(failureReason), \
@@ -220,7 +220,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             issue: nil,
             downloadedURL: item.fileURL
         )
-        VoxtLog.info(
+        VoxtLog.update(
             """
             Sparkle found update. source=\(lastCheckSource.description), \
             version=\(item.displayVersionString), build=\(item.versionString), \
@@ -234,7 +234,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         setPreparingInteractiveUpdateUI(false)
         setUpdateState(hasUpdate: false, latestVersion: nil, issue: nil, downloadedURL: nil)
         let nsError = error as NSError
-        VoxtLog.info(
+        VoxtLog.update(
             """
             Sparkle did not find update. source=\(lastCheckSource.description), \
             domain=\(nsError.domain), code=\(nsError.code), description=\(nsError.localizedDescription)
@@ -244,7 +244,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
         latestDownloadedUpdateURL = item.fileURL
-        VoxtLog.info(
+        VoxtLog.update(
             """
             Sparkle finished downloading update. version=\(item.displayVersionString), \
             build=\(item.versionString), fileURL=\(item.fileURL?.absoluteString ?? "nil")
@@ -254,7 +254,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
     func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: any Error) {
         let nsError = error as NSError
-        VoxtLog.error(
+        VoxtLog.updateError(
             """
             Sparkle failed to download update. version=\(item.displayVersionString), \
             build=\(item.versionString), domain=\(nsError.domain), \
@@ -269,7 +269,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             let nsError = error as NSError
             if isNoUpdateFoundError(nsError) {
                 setUpdateState(hasUpdate: false, latestVersion: nil, issue: nil, downloadedURL: nil)
-                VoxtLog.info(
+                VoxtLog.update(
                     """
                     Sparkle finished update cycle with no-update result. source=\(lastCheckSource.description), \
                     check=\(String(describing: updateCheck)), domain=\(nsError.domain), \
@@ -279,7 +279,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
                 return
             }
             reportIssue(nsError.localizedDescription)
-            VoxtLog.warning(
+            VoxtLog.updateWarning(
                 """
                 Sparkle finished update cycle with error. source=\(lastCheckSource.description), \
                 check=\(String(describing: updateCheck)), domain=\(nsError.domain), \
@@ -288,7 +288,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             )
         } else {
             reportIssue(nil)
-            VoxtLog.info(
+            VoxtLog.update(
                 "Sparkle finished update cycle successfully. source=\(lastCheckSource.description), check=\(String(describing: updateCheck))"
             )
         }
@@ -297,7 +297,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
     func standardUserDriverWillShowModalAlert() {
         beginUpdatePresentationIfNeeded(reason: "modal alert")
-        VoxtLog.info("Sparkle will show modal alert.")
+        VoxtLog.update("Sparkle will show modal alert.")
     }
 
     func standardUserDriverWillHandleShowingUpdate(
@@ -310,7 +310,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         } else {
             setPreparingInteractiveUpdateUI(false)
         }
-        VoxtLog.info(
+        VoxtLog.update(
             """
             Sparkle will handle showing update. handleShowingUpdate=\(handleShowingUpdate), \
             version=\(update.displayVersionString), build=\(update.versionString)
@@ -320,11 +320,11 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
     func standardUserDriverDidShowModalAlert() {
         NSApp.activate(ignoringOtherApps: true)
-        VoxtLog.info("Sparkle did show modal alert.")
+        VoxtLog.update("Sparkle did show modal alert.")
     }
 
     func standardUserDriverWillFinishUpdateSession() {
-        VoxtLog.info("Sparkle will finish update session.")
+        VoxtLog.update("Sparkle will finish update session.")
         finishUpdatePresentationIfNeeded()
     }
 
@@ -354,7 +354,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             ?? selectedFeedURLString.replacingOccurrences(of: "/appcast.xml", with: "/")
 
         guard let url = URL(string: fallbackURLString) else { return }
-        VoxtLog.warning(
+        VoxtLog.updateWarning(
             """
             Sparkle installer failed to launch or authorize. \
             Opening fallback update URL: \(fallbackURLString)
@@ -371,7 +371,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             .appendingPathComponent("Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices", isDirectory: true)
         let frameworkEntries = (try? FileManager.default.contentsOfDirectory(atPath: frameworkXPCServicesURL.path)) ?? []
         let installerEntries = frameworkEntries.filter { $0.localizedCaseInsensitiveContains("Installer") }
-        VoxtLog.info("Sparkle installer check: found installer services \(installerEntries)")
+        VoxtLog.update("Sparkle installer check: found installer services \(installerEntries)")
     }
 
     private func isInstallerServiceAvailable() -> Bool {
@@ -385,7 +385,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         let combinedEntries = appEntries + frameworkEntries
         let installerEntries = combinedEntries.filter { $0.localizedCaseInsensitiveContains("Installer") }
         guard !installerEntries.isEmpty else {
-            VoxtLog.error(
+            VoxtLog.updateError(
                 """
                 Sparkle installer services not found.
                 appXPCServices=\(appXPCServicesURL.path) entries=\(appEntries)
@@ -427,7 +427,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
 
     private func configureUpdaterRequestContext(_ updater: SPUUpdater, shouldClearLegacyFeedURL: Bool = false) {
         if shouldClearLegacyFeedURL, let legacyFeedURL = updater.clearFeedURLFromUserDefaults() {
-            VoxtLog.info("Sparkle cleared legacy persisted feed URL. url=\(legacyFeedURL.absoluteString)")
+            VoxtLog.update("Sparkle cleared legacy persisted feed URL. url=\(legacyFeedURL.absoluteString)")
         }
 
         let headers = Self.updateRequestHeaders(interfaceLanguage: AppLocalization.language)
@@ -435,7 +435,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
             updater.httpHeaders = headers
         }
 
-        VoxtLog.info(
+        VoxtLog.update(
             """
             Sparkle request context refreshed. feedURL=\(selectedFeedURLString), \
             acceptLanguage=\(headers["Accept-Language"] ?? "nil")
@@ -459,7 +459,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
                 return
             }
 
-            VoxtLog.warning(
+            VoxtLog.updateWarning(
                 """
                 Sparkle interactive update UI did not become active before timeout. \
                 source=\(self.lastCheckSource.description)
@@ -484,7 +484,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         guard !isPresentingUpdateUI else { return }
         isPresentingUpdateUI = true
         NSApp.activate(ignoringOtherApps: true)
-        VoxtLog.info("Sparkle update UI became active. reason=\(reason), source=\(lastCheckSource.description)")
+        VoxtLog.update("Sparkle update UI became active. reason=\(reason), source=\(lastCheckSource.description)")
         onUpdatePresentationWillBegin?()
     }
 
@@ -493,7 +493,7 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         setPreparingInteractiveUpdateUI(false)
         guard isPresentingUpdateUI else { return }
         isPresentingUpdateUI = false
-        VoxtLog.info("Sparkle update UI finished. source=\(lastCheckSource.description)")
+        VoxtLog.update("Sparkle update UI finished. source=\(lastCheckSource.description)")
         onUpdatePresentationDidEnd?()
     }
 
@@ -503,11 +503,11 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         // Sparkle documents that invoking checkForUpdates again while an update or its
         // progress is already shown can bring that existing UI back into frontmost focus.
         guard updater.canCheckForUpdates else {
-            VoxtLog.info("Sparkle update UI focus request skipped because updater cannot check right now. reason=\(reason)")
+            VoxtLog.update("Sparkle update UI focus request skipped because updater cannot check right now. reason=\(reason)")
             return
         }
 
-        VoxtLog.info("Sparkle update UI focus requested. reason=\(reason)")
+        VoxtLog.update("Sparkle update UI focus requested. reason=\(reason)")
         updater.checkForUpdates()
     }
 

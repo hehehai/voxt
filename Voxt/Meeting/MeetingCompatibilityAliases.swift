@@ -88,7 +88,7 @@ extension MLXTranscriber {
         do {
             return try await transcribeBufferedChunk(samples: samples, sampleRate: sampleRate)
         } catch {
-            VoxtLog.error("Meeting MLX chunk transcription failed: \(error.localizedDescription)")
+            VoxtLog.meetingError("Meeting MLX chunk transcription failed: \(error.localizedDescription)")
             return nil
         }
     }

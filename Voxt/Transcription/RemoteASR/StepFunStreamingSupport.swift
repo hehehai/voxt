@@ -209,7 +209,7 @@ extension RemoteASRTranscriber {
         audioEngine.prepare()
         try audioEngine.start()
         isRecording = true
-        VoxtLog.info(
+        VoxtLog.asr(
             "StepFun realtime audio capture engine started. sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount)",
             verbose: true
         )
@@ -245,7 +245,7 @@ extension RemoteASRTranscriber {
         }
 
         if droppedChunks > 0 {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "StepFun startup audio buffer exceeded limit; dropped oldest chunks. droppedChunks=\(droppedChunks), droppedBytes=\(droppedBytes)"
             )
         }

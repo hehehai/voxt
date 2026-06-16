@@ -119,12 +119,12 @@ extension AppDelegate {
             currentEndingSessionID = sessionID
             return true
         case .skipDuplicateInFlight:
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Session end pipeline ignored because the same session is already ending. sessionID=\(sessionID.uuidString), trigger=\(trigger)"
             )
             return false
         case .skipAlreadyCompleted:
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Session end pipeline ignored because the same session has already ended. sessionID=\(sessionID.uuidString), trigger=\(trigger)"
             )
             return false
@@ -145,7 +145,7 @@ extension AppDelegate {
             completeSessionEndExecution(for: sessionID)
         }
 
-        VoxtLog.info(
+        VoxtLog.asr(
             "Session end pipeline started. sessionID=\(sessionID.uuidString), trigger=\(trigger), displayMode=\(overlayState.displayMode), overlayVisible=\(overlayWindow.isVisible)"
         )
         let stages: [any SessionEndStage] = [
@@ -158,7 +158,7 @@ extension AppDelegate {
         for stage in stages {
             stage.run(delegate: self)
         }
-        VoxtLog.info(
+        VoxtLog.asr(
             "Session end pipeline completed. sessionID=\(sessionID.uuidString), overlayVisible=\(overlayWindow.isVisible)"
         )
     }

@@ -18,7 +18,7 @@ extension AppDelegate {
         guard !trimmed.isEmpty else { return nil }
 
         let selectedTermCount = trimmed.split(separator: "\n").count
-        VoxtLog.info(
+        VoxtLog.dictionary(
             "Dictionary glossary selected. purpose=\(purpose), selectedTerms=\(selectedTermCount), glossaryChars=\(trimmed.count), maxTerms=\(effectivePolicy.maxTerms), maxChars=\(effectivePolicy.maxCharacters)"
         )
         return trimmed
@@ -44,9 +44,9 @@ extension AppDelegate {
         }
 
         if result.text != text {
-            VoxtLog.info("Dictionary auto-correction applied. inputChars=\(text.count), outputChars=\(result.text.count), matches=\(result.candidates.count)")
+            VoxtLog.dictionary("Dictionary auto-correction applied. inputChars=\(text.count), outputChars=\(result.text.count), matches=\(result.candidates.count)")
         } else if !result.candidates.isEmpty {
-            VoxtLog.info("Dictionary matches recorded without replacement. matches=\(result.candidates.count)")
+            VoxtLog.dictionary("Dictionary matches recorded without replacement. matches=\(result.candidates.count)")
         }
         return result
     }
@@ -65,7 +65,7 @@ extension AppDelegate {
         }
 
         if !result.candidates.isEmpty {
-            VoxtLog.info("Dictionary matches recorded without local replacement. matches=\(result.candidates.count)")
+            VoxtLog.dictionary("Dictionary matches recorded without local replacement. matches=\(result.candidates.count)")
         }
         return result
     }
@@ -258,7 +258,7 @@ extension AppDelegate {
             )
             scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded()
         } catch is CancellationError {
-            VoxtLog.info("Dictionary history scan cancelled.")
+            VoxtLog.dictionary("Dictionary history scan cancelled.")
             dictionarySuggestionStore.cancelHistoryScan(
                 processedCount: processedCount,
                 totalCount: entries.count,
@@ -267,7 +267,7 @@ extension AppDelegate {
                 message: AppLocalization.localizedString("Dictionary ingestion canceled.")
             )
         } catch {
-            VoxtLog.warning("Dictionary history scan failed: \(error)")
+            VoxtLog.dictionaryWarning("Dictionary history scan failed: \(error)")
             dictionarySuggestionStore.failHistoryScan(
                 processedCount: processedCount,
                 totalCount: entries.count,

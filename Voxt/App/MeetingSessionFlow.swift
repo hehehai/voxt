@@ -8,7 +8,7 @@ import AVFoundation
 extension AppDelegate {
     func blockNonMeetingRecordingWhileMeetingIsActive(source: String) -> Bool {
         guard meetingSessionCoordinator.isActive else { return false }
-        VoxtLog.info("Non-meeting recording blocked because meeting is active. source=\(source)")
+        VoxtLog.meeting("Non-meeting recording blocked because meeting is active. source=\(source)")
         VoxtLog.hotkey("Non-meeting recording blocked: meeting active. source=\(source)")
         if meetingSessionCoordinator.overlayState.isPresented {
             meetingOverlayWindow.show(
@@ -20,7 +20,7 @@ extension AppDelegate {
     }
 
     func handleMeetingHotkeyDown() {
-        VoxtLog.info(
+        VoxtLog.meeting(
             "Meeting hotkey invoked. isMeetingActive=\(meetingSessionCoordinator.isActive), isSessionActive=\(isSessionActive)"
         )
         VoxtLog.hotkey(
@@ -138,7 +138,7 @@ extension AppDelegate {
             guard let self else { return }
             if self.meetingSessionCoordinator.overlayState.isPaused {
                 if let failureMessage = await self.meetingSessionCoordinator.resume() {
-                    VoxtLog.warning("Meeting resume failed: \(failureMessage)")
+                    VoxtLog.meetingWarning("Meeting resume failed: \(failureMessage)")
                     self.showOverlayReminder(failureMessage)
                 }
             } else {
@@ -217,7 +217,7 @@ extension AppDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             if let failureMessage = await self.meetingSessionCoordinator.setCaptureMode(mode) {
-                VoxtLog.warning("Meeting capture mode switch failed: \(failureMessage)")
+                VoxtLog.meetingWarning("Meeting capture mode switch failed: \(failureMessage)")
                 self.showOverlayReminder(failureMessage)
             }
         }
@@ -244,7 +244,7 @@ extension AppDelegate {
     }
 
     private func startMeetingSession() async {
-        VoxtLog.info("Meeting session start requested.")
+        VoxtLog.meeting("Meeting session start requested.")
         guard preflightPermissionsForMeeting() else { return }
         pendingMeetingSessionCompletionDisposition = .save
 
@@ -273,7 +273,7 @@ extension AppDelegate {
             }
             self.pendingMeetingStartupTask = nil
             if let failureMessage {
-                VoxtLog.warning("Meeting start failed: \(failureMessage)")
+                VoxtLog.meetingWarning("Meeting start failed: \(failureMessage)")
                 self.meetingOverlayWindow.hide()
                 self.showOverlayReminder(failureMessage)
             }
@@ -285,7 +285,7 @@ extension AppDelegate {
         synchronizeRuntimeASRStateForMeeting()
 
         if isSessionActive {
-            VoxtLog.info("Meeting start blocked because another recording session is active.")
+            VoxtLog.meeting("Meeting start blocked because another recording session is active.")
             showOverlayStatus(
                 String(localized: "Finish the current recording before starting Meeting Notes."),
                 clearAfter: 2.2
@@ -313,7 +313,7 @@ extension AppDelegate {
         )
         guard case .start = startDecision else {
             if case .blocked(let reason) = startDecision {
-                VoxtLog.warning("Meeting start blocked: \(reason.logDescription)")
+                VoxtLog.meetingWarning("Meeting start blocked: \(reason.logDescription)")
                 showOverlayReminder(reason.userMessage)
             }
             return false
@@ -325,7 +325,7 @@ extension AppDelegate {
         }
 
         if !AccessibilityPermissionManager.isTrusted() {
-            VoxtLog.warning("Meeting start proceeding without accessibility trust. Some injection shortcuts may be unavailable.")
+            VoxtLog.meetingWarning("Meeting start proceeding without accessibility trust. Some injection shortcuts may be unavailable.")
             showOverlayStatus(
                 String(localized: "Please enable required permissions in Settings > Permissions."),
                 clearAfter: 2.2
@@ -337,7 +337,7 @@ extension AppDelegate {
 
     private func validatePermissionsForMeetingCaptureMode(_ mode: MeetingCaptureMode) -> Bool {
         if mode.usesMicrophone && AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
-            VoxtLog.warning("Meeting capture mode requires microphone permission. mode=\(mode.rawValue)")
+            VoxtLog.meetingWarning("Meeting capture mode requires microphone permission. mode=\(mode.rawValue)")
             showOverlayReminder(
                 String(localized: "Microphone permission is required. Enable it in Settings > Permissions.")
             )
@@ -345,7 +345,7 @@ extension AppDelegate {
         }
 
         if mode.usesSystemAudio && SystemAudioCapturePermission.authorizationStatus() != .authorized {
-            VoxtLog.warning("Meeting capture mode requires system audio permission. mode=\(mode.rawValue)")
+            VoxtLog.meetingWarning("Meeting capture mode requires system audio permission. mode=\(mode.rawValue)")
             showOverlayReminder(
                 String(localized: "System Audio Recording permission is required for Meeting Notes. Enable it in Settings > Permissions.")
             )

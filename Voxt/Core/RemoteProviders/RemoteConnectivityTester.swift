@@ -831,10 +831,10 @@ struct RemoteProviderConnectivityTester {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             task.sendPing { error in
                 if let error {
-                    VoxtLog.warning("WebSocket reachability test failed. error=\(error.localizedDescription)")
+                    VoxtLog.networkWarning("WebSocket reachability test failed. error=\(error.localizedDescription)")
                     continuation.resume(throwing: error)
                 } else {
-                    VoxtLog.info("WebSocket reachability test succeeded.")
+                    VoxtLog.network("WebSocket reachability test succeeded.")
                     continuation.resume(returning: ())
                 }
             }
@@ -907,7 +907,7 @@ struct RemoteProviderConnectivityTester {
                 let message = try await receiveWebSocketMessage(task: ws, timeoutSeconds: 3)
                 guard case .data(let packetData) = message else { continue }
                 let parsed = try DoubaoConnectivityTestSupport.parseServerPacket(packetData)
-                VoxtLog.info(
+                VoxtLog.network(
                     "Doubao test server packet. index=\(index), type=\(parsed.messageType), bytes=\(packetData.count), hasText=\(parsed.hasText), isFinal=\(parsed.isFinal)",
                     verbose: true
                 )

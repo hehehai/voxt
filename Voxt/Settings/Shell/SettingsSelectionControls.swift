@@ -458,7 +458,9 @@ private final class SettingsMenuHostView: NSView {
         indicatorHeightConstraint?.constant = compact ? 10 : 14
         updateStatusImageSize()
         titleField.alignment = compactInsets ? .right : .left
-        needsLayout = true
+        DispatchQueue.main.async { [weak self] in
+            self?.needsLayout = true
+        }
     }
 
     func updateMenu(

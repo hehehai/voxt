@@ -161,7 +161,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             do {
                 try startDoubaoStreaming(configuration: configuration, hintPayload: hintPayload)
             } catch {
-                VoxtLog.error("Doubao streaming setup failed: \(error.localizedDescription)")
+                VoxtLog.asrError("Doubao streaming setup failed: \(error.localizedDescription)")
                 cleanupRecorderState()
                 cleanupDoubaoStreamingState()
                 activeProvider = nil
@@ -182,7 +182,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     try startAliyunFunStreaming(configuration: configuration, hintPayload: hintPayload)
                 }
             } catch {
-                VoxtLog.error("Aliyun realtime streaming setup failed: \(error.localizedDescription)")
+                VoxtLog.asrError("Aliyun realtime streaming setup failed: \(error.localizedDescription)")
                 cleanupRecorderState()
                 cleanupAliyunStreamingState()
                 activeProvider = nil
@@ -196,7 +196,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             do {
                 try startStepFunStreaming(configuration: configuration, hintPayload: hintPayload)
             } catch {
-                VoxtLog.error("StepFun realtime streaming setup failed: \(error.localizedDescription)")
+                VoxtLog.asrError("StepFun realtime streaming setup failed: \(error.localizedDescription)")
                 cleanupRecorderState()
                 cleanupStepFunStreamingState()
                 activeProvider = nil
@@ -213,7 +213,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 startOpenAIPreviewLoop(configuration: configuration)
             }
         } catch {
-            VoxtLog.error("Remote ASR recorder setup failed: \(error.localizedDescription)")
+            VoxtLog.asrError("Remote ASR recorder setup failed: \(error.localizedDescription)")
             cleanupRecorderState()
             activeProvider = nil
             notifyStartFailure(error)
@@ -311,7 +311,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             } catch {
                 await MainActor.run {
                     guard self.isCurrentGeneration(generationID) else { return }
-                    VoxtLog.error("Remote ASR transcription failed: \(error.localizedDescription)")
+                    VoxtLog.asrError("Remote ASR transcription failed: \(error.localizedDescription)")
                     self.notifyRuntimeFailure(error)
                     self.completedAudioArchiveURL = fileURL
                     self.finish(with: self.transcribedText, generationID: generationID)
@@ -322,7 +322,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     func restartCaptureForPreferredInputDevice() throws {
         if let context = doubaoStreamingContext {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "Doubao audio capture restart requested. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
             )
         stopDoubaoAudioCapture()
@@ -331,7 +331,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         context.audioCaptureStartCount += 1
         context.lastAudioCaptureStartReason = "preferred-input-change"
         scheduleDoubaoCaptureStartupWatchdog(context)
-        VoxtLog.warning(
+        VoxtLog.asrWarning(
             "Doubao audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
         )
         return
@@ -367,17 +367,17 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         isRecording = false
         stopDoubaoAudioCapture()
         flushBufferedDoubaoAudioIfNeeded(context: context, includeTrailingPartial: true)
-        VoxtLog.info("Doubao streaming stop requested. state=\(context.debugSummary())", verbose: true)
+        VoxtLog.asr("Doubao streaming stop requested. state=\(context.debugSummary())", verbose: true)
 
         let finalSequence = DoubaoASRConfiguration.finalStreamingSequence(
             nextAudioSequence: context.nextAudioSequence
         )
-        VoxtLog.info(
+        VoxtLog.asr(
             "Doubao streaming final packet. lastSequence=\(context.lastAudioSequence), nextSequence=\(context.nextAudioSequence), finalSequence=\(finalSequence)",
             verbose: true
         )
         guard !context.isClosed else {
-            VoxtLog.info("Doubao streaming socket already closed before final packet, skip final send.", verbose: true)
+            VoxtLog.asr("Doubao streaming socket already closed before final packet, skip final send.", verbose: true)
             return
         }
 
@@ -487,10 +487,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         } catch {
             let fallbackText = await fallback()
             if fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                VoxtLog.warning("\(warningMessage): \(error.localizedDescription)")
+                VoxtLog.asrWarning("\(warningMessage): \(error.localizedDescription)")
                 notifyRuntimeFailure(error)
             } else {
-                VoxtLog.info("\(warningMessage): recovered with partial text fallback.", verbose: true)
+                VoxtLog.asr("\(warningMessage): recovered with partial text fallback.", verbose: true)
             }
             return fallbackText
         }
@@ -1193,7 +1193,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         if event == "task-started", !context.didStartAudioStream {
             guard !stopRequested else {
-                VoxtLog.info("Aliyun fun task-started ignored because stop was already requested.", verbose: true)
+                VoxtLog.asr("Aliyun fun task-started ignored because stop was already requested.", verbose: true)
                 return
             }
             do {
@@ -1406,13 +1406,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 return
             }
             VoxtLog.model("Aliyun qwen error event. detail=\(detail)")
-            VoxtLog.info("Aliyun qwen realtime error packet received. detail=\(detail)", verbose: true)
+            VoxtLog.asr("Aliyun qwen realtime error packet received. detail=\(detail)", verbose: true)
             throw NSError(domain: "Voxt.RemoteASR", code: -46, userInfo: [NSLocalizedDescriptionKey: detail])
         }
 
         if type == "session.updated", !context.didStartAudioStream {
             guard !stopRequested else {
-                VoxtLog.info("Aliyun qwen session.updated ignored because stop was already requested.", verbose: true)
+                VoxtLog.asr("Aliyun qwen session.updated ignored because stop was already requested.", verbose: true)
                 return
             }
             try startAliyunQwenAudioCapture(context: context)
@@ -1582,7 +1582,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let requestID = UUID().uuidString.lowercased()
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
-        VoxtLog.info(
+        VoxtLog.asr(
             "Doubao websocket connect. endpoint=\(endpoint), resource=\(resourceID)"
         )
 
@@ -1630,7 +1630,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     appID: appID,
                     accessToken: accessToken
                 ) {
-                    VoxtLog.warning("Doubao websocket receive failed. detail=\(detail)")
+                    VoxtLog.asrWarning("Doubao websocket receive failed. detail=\(detail)")
                     let detailedError = NSError(
                         domain: "Voxt.RemoteASR",
                         code: (error as NSError).code,
@@ -1706,7 +1706,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let requestID = UUID().uuidString.lowercased()
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
         request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
-        VoxtLog.info(
+        VoxtLog.asr(
             "Doubao websocket connect. endpoint=\(endpoint), resource=\(resourceID)"
         )
 
@@ -1754,7 +1754,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     appID: appID,
                     accessToken: accessToken
                 ) {
-                    VoxtLog.warning("Doubao websocket receive failed. detail=\(detail)")
+                    VoxtLog.asrWarning("Doubao websocket receive failed. detail=\(detail)")
                     let detailedError = NSError(
                         domain: "Voxt.RemoteASR",
                         code: (error as NSError).code,
@@ -1924,7 +1924,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         audioEngine.prepare()
         try audioEngine.start()
         isRecording = true
-        VoxtLog.info(
+        VoxtLog.asr(
             "Doubao audio capture engine started. sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
@@ -1944,7 +1944,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     ) throws {
         guard !context.didStartAudioStream else { return }
         guard !stopRequested else {
-            VoxtLog.info("Doubao audio capture start skipped because stop was already requested. reason=\(reason)", verbose: true)
+            VoxtLog.asr("Doubao audio capture start skipped because stop was already requested. reason=\(reason)", verbose: true)
             return
         }
         didRetryDoubaoCaptureStartup = false
@@ -1953,7 +1953,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         context.audioCaptureStartCount += 1
         context.lastAudioCaptureStartReason = reason
         scheduleDoubaoCaptureStartupWatchdog(context)
-        VoxtLog.info("Doubao audio capture started. reason=\(reason), state=\(context.debugSummary())", verbose: true)
+        VoxtLog.asr("Doubao audio capture started. reason=\(reason), state=\(context.debugSummary())", verbose: true)
     }
 
     private func scheduleDoubaoCaptureStartupWatchdog(_ context: DoubaoStreamingContext) {
@@ -1977,11 +1977,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         didRetryDoubaoCaptureStartup = true
         let shouldFallbackToSystemDefault = preferredInputDeviceID != nil && doubaoCaptureUsesPreferredInputDevice
         if shouldFallbackToSystemDefault {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "Doubao audio capture produced no initial callbacks. Retrying once with system default input instead of the preferred device. state=\(context.debugSummary())"
             )
         } else {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "Doubao audio capture produced no initial callbacks. Restarting input graph once. state=\(context.debugSummary())"
             )
         }
@@ -1994,7 +1994,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             context.lastAudioCaptureStartReason = "startup-watchdog"
             scheduleDoubaoCaptureStartupWatchdog(context)
         } catch {
-            VoxtLog.error("Doubao audio capture recovery failed: \(error.localizedDescription)")
+            VoxtLog.asrError("Doubao audio capture recovery failed: \(error.localizedDescription)")
         }
     }
 
@@ -2011,7 +2011,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
         if status != noErr {
-            VoxtLog.warning("Remote ASR failed to switch preferred input device. status=\(status)")
+            VoxtLog.asrWarning("Remote ASR failed to switch preferred input device. status=\(status)")
         }
     }
 
@@ -2039,7 +2039,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                         }
                         context.lastServerPacketAt = now
                         if context.serverPacketCount == 1 {
-                            VoxtLog.info("Doubao first server packet received. state=\(context.debugSummary(now: now))", verbose: true)
+                            VoxtLog.asr("Doubao first server packet received. state=\(context.debugSummary(now: now))", verbose: true)
                         }
                         if case .data(let payloadData) = message,
                            let parsed = try self.parseDoubaoServerPacket(payloadData) {
@@ -2069,7 +2069,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                             await context.responseState.markSocketClosed()
                         } else {
                             context.isClosed = true
-                            VoxtLog.warning("Doubao stream receive failed. detail=\(error.localizedDescription), state=\(context.debugSummary())")
+                            VoxtLog.asrWarning("Doubao stream receive failed. detail=\(error.localizedDescription), state=\(context.debugSummary())")
                             await context.responseState.markCompletedWithError(error)
                         }
                     }
@@ -2104,7 +2104,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     ) {
                         context.isClosed = true
                         await MainActor.run {
-                            VoxtLog.warning("Doubao stream receive failed. detail=\(detail), state=\(context.debugSummary())")
+                            VoxtLog.asrWarning("Doubao stream receive failed. detail=\(detail), state=\(context.debugSummary())")
                         }
                         let detailedError = NSError(
                             domain: "Voxt.RemoteASR",
@@ -2178,7 +2178,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             .joined(separator: ", ")
         let preview = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        VoxtLog.info("[\(context)] status=\(response.statusCode), headers={\(headers)}, body=\(preview)", verbose: true)
+        VoxtLog.asr("[\(context)] status=\(response.statusCode), headers={\(headers)}, body=\(preview)", verbose: true)
     }
 
     private func isBenignDoubaoSocketError(_ error: NSError) -> Bool {
@@ -2276,7 +2276,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             doubaoCaptureStartupWatchdogTask?.cancel()
             doubaoCaptureStartupWatchdogTask = nil
             context.firstPCMCallbackAt = now
-            VoxtLog.info("Doubao first PCM callback received. bytes=\(pcmData.count), state=\(context.debugSummary(now: now))", verbose: true)
+            VoxtLog.asr("Doubao first PCM callback received. bytes=\(pcmData.count), state=\(context.debugSummary(now: now))", verbose: true)
         }
         context.lastPCMCallbackAt = now
         context.pendingPCMData.append(pcmData)
@@ -2316,7 +2316,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             payload: audioPayload
         )
         if context.audioPacketCount == 1 {
-            VoxtLog.info("Doubao first audio packet sent. bytes=\(pcmData.count), sequence=\(sequence), state=\(context.debugSummary(now: now))", verbose: true)
+            VoxtLog.asr("Doubao first audio packet sent. bytes=\(pcmData.count), sequence=\(sequence), state=\(context.debugSummary(now: now))", verbose: true)
         }
         sendDoubaoPacket(packet, through: context.ws) { error, isBenign in
             Task { [responseState = context.responseState] in
@@ -2359,7 +2359,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         do {
             return (DoubaoProtocol.compressionGzip, try gzipCompressDoubaoPayload(payload))
         } catch {
-            VoxtLog.warning("Doubao gzip compression failed. fallback to plain payload. error=\(error.localizedDescription)")
+            VoxtLog.asrWarning("Doubao gzip compression failed. fallback to plain payload. error=\(error.localizedDescription)")
             return (DoubaoProtocol.compressionNone, payload)
         }
     }
@@ -2963,7 +2963,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let samples = sampleStore.snapshot()
         let realtimeSummary = activeRealtimeDebugSummary() ?? "none"
         guard !samples.isEmpty else {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "Remote streaming audio archive export skipped because no local samples were captured. realtime=\(realtimeSummary)"
             )
             return
@@ -2976,14 +2976,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 to: tempURL
             ) {
                 completedAudioArchiveURL = tempURL
-                VoxtLog.info(
+                VoxtLog.asr(
                     "Remote streaming audio archive staged. samples=\(samples.count), sampleRate=\(Int(streamingInputSampleRate)), file=\(tempURL.lastPathComponent), realtime=\(realtimeSummary)",
                     verbose: true
                 )
             }
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
-            VoxtLog.warning("Remote streaming completed audio archive export failed: \(error.localizedDescription)")
+            VoxtLog.asrWarning("Remote streaming completed audio archive export failed: \(error.localizedDescription)")
         }
     }
 
@@ -3027,7 +3027,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 prompt: hintPayload.prompt
             )
             guard !visibleText.isEmpty else {
-                VoxtLog.warning("OpenAI preview transcription suppressed because it matched ASR prompt guidance.")
+                VoxtLog.asrWarning("OpenAI preview transcription suppressed because it matched ASR prompt guidance.")
                 return
             }
             if normalized != openAIPreviewLastText {
@@ -3043,7 +3043,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         guard sessionAllowsRealtimeTextDisplay else { return }
         let visibleText = RecordingSessionSupport.textAfterSuppressingPromptEcho(text)
         guard !visibleText.isEmpty else {
-            VoxtLog.warning("Remote ASR intermediate transcription suppressed because it matched prompt guidance.")
+            VoxtLog.asrWarning("Remote ASR intermediate transcription suppressed because it matched prompt guidance.")
             return
         }
         transcribedText = visibleText

@@ -20,13 +20,13 @@ extension AppDelegate {
 
     func processStandardTranscription(_ text: String, sessionID: UUID) {
         guard shouldHandleCallbacks(for: sessionID) else { return }
-        VoxtLog.info("Standard transcription flow entered. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
+        VoxtLog.asr("Standard transcription flow entered. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
 
         switch enhancementMode {
         case .off:
             setEnhancingState(false)
             overlayState.transcribedText = text
-            VoxtLog.info("Standard transcription committing raw text immediately. characters=\(text.count)", verbose: true)
+            VoxtLog.asr("Standard transcription committing raw text immediately. characters=\(text.count)", verbose: true)
             commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
                 self?.finishSession(after: 0)
             }
@@ -34,14 +34,14 @@ extension AppDelegate {
         case .customLLM:
             guard let enhancementRepo = resolvedTranscriptionEnhancementLocalRepo(),
                   customLLMManager.isModelDownloaded(repo: enhancementRepo) else {
-                VoxtLog.warning("Custom LLM selected but local model is not installed. Using raw transcription.")
+                VoxtLog.asrWarning("Custom LLM selected but local model is not installed. Using raw transcription.")
                 showOverlayStatus(
                     String(localized: "Custom LLM model is not installed. Open Settings > Model to install it."),
                     clearAfter: 2.5
                 )
                 setEnhancingState(false)
                 overlayState.transcribedText = text
-                VoxtLog.info("Standard transcription falling back to raw text because custom model is unavailable. characters=\(text.count)", verbose: true)
+                VoxtLog.asr("Standard transcription falling back to raw text because custom model is unavailable. characters=\(text.count)", verbose: true)
                 commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
                     self?.finishSession(after: 0)
                 }
@@ -77,22 +77,22 @@ extension AppDelegate {
             let llmStartedAt = Date()
             if let asrAt = self.transcriptionResultReceivedAt {
                 let handoffMs = Int(llmStartedAt.timeIntervalSince(asrAt) * 1000)
-                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=\(max(handoffMs, 0)), inputChars=\(text.count)", verbose: true)
+                VoxtLog.asr("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=\(max(handoffMs, 0)), inputChars=\(text.count)", verbose: true)
             } else {
-                VoxtLog.info("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=unknown, inputChars=\(text.count)", verbose: true)
+                VoxtLog.asr("Enhancement handoff. mode=\(self.enhancementMode.rawValue), handoffMs=unknown, inputChars=\(text.count)", verbose: true)
             }
             do {
                 let enhanced = try await self.runStandardTranscriptionPipeline(text: text)
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
                 let llmDuration = Date().timeIntervalSince(llmStartedAt)
-                VoxtLog.info("Enhancement completed. mode=\(self.enhancementMode.rawValue), inputChars=\(text.count), outputChars=\(enhanced.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
+                VoxtLog.asr("Enhancement completed. mode=\(self.enhancementMode.rawValue), inputChars=\(text.count), outputChars=\(enhanced.count), llmDurationSec=\(String(format: "%.3f", llmDuration))")
                 self.overlayState.transcribedText = enhanced
                 self.commitTranscription(enhanced, llmDurationSeconds: llmDuration) { [weak self] in
                     self?.finishSession(after: 0)
                 }
             } catch {
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
-                VoxtLog.warning("Standard transcription pipeline enhancement failed, using raw text: \(error)")
+                VoxtLog.asrWarning("Standard transcription pipeline enhancement failed, using raw text: \(error)")
                 self.overlayState.transcribedText = text
                 self.commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
                     self?.finishSession(after: 0)
@@ -147,7 +147,7 @@ extension AppDelegate {
             baseGlossarySelectionPolicy: basePolicy,
             capabilities: llmProviderModelCapabilities(for: provider)
         )
-        VoxtLog.info(
+        VoxtLog.asr(
             "Task LLM strategy resolved. inputChars=\(text.count), \(strategy.logLabel)",
             verbose: true
         )
@@ -164,7 +164,7 @@ extension AppDelegate {
                 provider: context.provider,
                 stored: remoteLLMConfigurations
             ) else {
-                VoxtLog.warning("Enhancement provider remoteLLM unavailable: no configured model.")
+                VoxtLog.asrWarning("Enhancement provider remoteLLM unavailable: no configured model.")
                 return text
             }
             VoxtLog.llm(
@@ -187,7 +187,7 @@ extension AppDelegate {
             strategy: strategy
         )
         if guarded.didFallback {
-            VoxtLog.warning(
+            VoxtLog.asrWarning(
                 "Enhancement truncation guard restored raw text. inputChars=\(text.count), outputChars=\(enhanced.count), reason=\(guarded.reason ?? "unknown"), strategy=\(strategy.logLabel)"
             )
         }

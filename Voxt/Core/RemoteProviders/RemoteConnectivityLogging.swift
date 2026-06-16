@@ -13,7 +13,7 @@ enum RemoteProviderConnectivityTestLogging {
         let method = request.httpMethod ?? "GET"
         let url = redactedURLString(request.url)
         let headers = redactedHeaders(request.allHTTPHeaderFields ?? [:])
-        VoxtLog.info(
+        VoxtLog.network(
             "Network test request. context=\(context), method=\(method), url=\(url), headers=\(headers), body=\(truncateLogText(bodyPreview, limit: 700))",
             verbose: true
         )
@@ -25,7 +25,7 @@ enum RemoteProviderConnectivityTestLogging {
             partialResult[String(describing: pair.key)] = String(describing: pair.value)
         })
         let payload = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
-        VoxtLog.info(
+        VoxtLog.network(
             "Network test response. context=\(context), status=\(response.statusCode), url=\(url), headers=\(headers), body=\(truncateLogText(payload, limit: 700))",
             verbose: true
         )

@@ -942,7 +942,7 @@ extension RemoteProviderConfigurationSheet {
         isTestingConnection = true
         testResultMessage = nil
         testResultIsSuccess = false
-        VoxtLog.info(
+        VoxtLog.settings(
             "Remote provider test started. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), endpoint=\(sanitizedEndpointForLog(snapshot.endpoint)), proxyMode=\(VoxtNetworkSession.modeDescription), hasAPIKey=\(!snapshot.apiKey.isEmpty), hasAppID=\(!snapshot.appID.isEmpty), hasAccessToken=\(!snapshot.accessToken.isEmpty)"
         )
 
@@ -954,7 +954,7 @@ extension RemoteProviderConfigurationSheet {
                     isTestingConnection = false
                     testResultIsSuccess = true
                     testResultMessage = message
-                    VoxtLog.info(
+                    VoxtLog.settings(
                         "Remote provider test succeeded. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), message=\(message)"
                     )
                 }
@@ -964,7 +964,7 @@ extension RemoteProviderConfigurationSheet {
                     testResultIsSuccess = false
                     let message = VoxtNetworkSession.directModeConflictMessage(for: error) ?? error.localizedDescription
                     testResultMessage = message
-                    VoxtLog.warning(
+                    VoxtLog.settingsWarning(
                         "Remote provider test failed. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), error=\(message)"
                     )
                 }

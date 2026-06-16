@@ -30,7 +30,7 @@ enum MeetingSpeakerAnalysisPipeline {
             }
             return assembledSegments(from: segments, turns: turns, options: options)
         } catch {
-            VoxtLog.warning("Meeting speaker analysis failed: \(error.localizedDescription)")
+            VoxtLog.meetingWarning("Meeting speaker analysis failed: \(error.localizedDescription)")
             return segments
         }
     }
@@ -63,7 +63,7 @@ enum MeetingSpeakerAnalysisPipeline {
             }
             return assembledSegments(from: segments, turns: turns, options: options)
         } catch {
-            VoxtLog.warning("Meeting speaker analysis failed: \(error.localizedDescription)")
+            VoxtLog.meetingWarning("Meeting speaker analysis failed: \(error.localizedDescription)")
             return segments
         }
     }
@@ -99,7 +99,7 @@ enum MeetingSpeakerAnalysisPipeline {
 
     private static func logDebug(_ message: @autoclosure () -> String, options: MeetingSpeakerDiarizationOptions) {
         guard options.debugLoggingEnabled else { return }
-        VoxtLog.info(message())
+        VoxtLog.meeting(message())
     }
 
     private static func confidenceFilteredTurns(

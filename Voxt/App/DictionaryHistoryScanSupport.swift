@@ -63,7 +63,7 @@ enum DictionaryHistoryScanResponseParser {
             return normalizeAcceptedTerms(from: legacyTerms)
         }
 
-        VoxtLog.warning(
+        VoxtLog.dictionaryWarning(
             "Dictionary history scan returned invalid JSON payload. preview=\(responsePreview(normalizedResponse))"
         )
         throw DictionaryHistoryScanParseError.invalidText(code: -13)

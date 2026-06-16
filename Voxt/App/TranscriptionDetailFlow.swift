@@ -12,7 +12,7 @@ extension AppDelegate {
 
     func showTranscriptionDetailWindow(for entryID: UUID) {
         guard let entry = historyStore.entry(id: entryID) else {
-            VoxtLog.warning("Transcription detail open skipped: history entry \(entryID) was unavailable.")
+            VoxtLog.historyWarning("Transcription detail open skipped: history entry \(entryID) was unavailable.")
             return
         }
         showTranscriptionDetailWindow(for: entry)
@@ -110,7 +110,7 @@ extension AppDelegate {
         let modelLabel = transcriptionFollowUpModelLogLabel(model)
         let startedAt = Date()
 
-        VoxtLog.info(
+        VoxtLog.history(
             "Transcription detail follow-up started. model=\(modelLabel), entryID=\(entry.id), kind=\(entry.kind.rawValue), questionChars=\(trimmedQuestion.count), historyCount=\(history.count)"
         )
         VoxtLog.llm(
@@ -143,12 +143,12 @@ extension AppDelegate {
                 \(VoxtLog.llmPreview(output, limit: 4000))
                 """
             )
-            VoxtLog.info(
+            VoxtLog.history(
                 "Transcription detail follow-up succeeded. model=\(modelLabel), elapsedMs=\(elapsedMs), outputChars=\(output.count)"
             )
             return output
         } catch {
-            VoxtLog.warning(
+            VoxtLog.historyWarning(
                 "Transcription detail follow-up failed. model=\(modelLabel), error=\(error.localizedDescription)"
             )
             throw error

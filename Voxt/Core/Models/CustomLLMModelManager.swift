@@ -153,11 +153,11 @@ class CustomLLMModelManager: ObservableObject {
         self.hubBaseURL = hubBaseURL
         self.remoteSizeTextByRepo = CustomLLMModelStorageSupport.loadPersistedRemoteSizeCache()
         if !repoWasSupported {
-            VoxtLog.warning("Unsupported custom LLM repo '\(modelRepo)' found in settings. Falling back to \(repoSelection.effectiveRepo).")
+            VoxtLog.modelWarning("Unsupported custom LLM repo '\(modelRepo)' found in settings. Falling back to \(repoSelection.effectiveRepo).")
         } else if repoSelection.effectiveRepo != modelRepo {
-            VoxtLog.info("Canonicalized custom LLM repo '\(modelRepo)' -> '\(repoSelection.effectiveRepo)'")
+            VoxtLog.modelInfo("Canonicalized custom LLM repo '\(modelRepo)' -> '\(repoSelection.effectiveRepo)'")
         }
-        VoxtLog.model("Custom LLM manager initialized. repo=\(repoSelection.effectiveRepo), hub=\(hubBaseURL.absoluteString)")
+        VoxtLog.modelInfo("Custom LLM manager initialized. repo=\(repoSelection.effectiveRepo), hub=\(hubBaseURL.absoluteString)")
         checkExistingModel()
     }
 
@@ -461,7 +461,7 @@ class CustomLLMModelManager: ObservableObject {
                     if let repetition = repetitionGuard.repeatedSuffix(in: aggregated) {
                         repetitionStop = repetition
                         aggregated = repetition.truncatedText
-                        VoxtLog.warning(
+                        VoxtLog.modelWarning(
                             "Custom LLM \(request.kind.logLabel) repetition guard stopped generation. repo=\(request.repo), repeatedUnitChars=\(repetition.repeatedUnit.count), repetitions=\(repetition.repetitionCount), outputChars=\(aggregated.count)"
                         )
                         break
@@ -646,7 +646,7 @@ class CustomLLMModelManager: ObservableObject {
 
     private func userInputImage(from attachment: LLMImageAttachment) -> UserInput.Image? {
         guard let image = CIImage(data: attachment.data, options: [.applyOrientationProperty: true]) else {
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Custom LLM could not decode image attachment '\(attachment.filename)' for local VLM input."
             )
             return nil
@@ -691,11 +691,11 @@ class CustomLLMModelManager: ObservableObject {
         let repoWasSupported = Self.isSupportedModelRepo(repo)
         guard repoSelection.effectiveRepo != modelRepo else { return }
         if !repoWasSupported {
-            VoxtLog.warning("Unsupported custom LLM repo '\(repo)' requested. Falling back to \(repoSelection.effectiveRepo).")
+            VoxtLog.modelWarning("Unsupported custom LLM repo '\(repo)' requested. Falling back to \(repoSelection.effectiveRepo).")
         } else if repoSelection.effectiveRepo != repo {
-            VoxtLog.info("Canonicalized custom LLM repo '\(repo)' -> '\(repoSelection.effectiveRepo)'")
+            VoxtLog.modelInfo("Canonicalized custom LLM repo '\(repo)' -> '\(repoSelection.effectiveRepo)'")
         }
-            VoxtLog.model("Custom LLM model changed: \(modelRepo) -> \(repoSelection.effectiveRepo)")
+            VoxtLog.modelInfo("Custom LLM model changed: \(modelRepo) -> \(repoSelection.effectiveRepo)")
         modelRepo = repoSelection.effectiveRepo
         releaseInferenceResources(resetActiveInferenceCount: true)
         lastLoggedModelPresence = nil
@@ -723,7 +723,7 @@ class CustomLLMModelManager: ObservableObject {
 
     func updateHubBaseURL(_ url: URL) {
         guard url != hubBaseURL else { return }
-        VoxtLog.model("Custom LLM hub base URL changed: \(hubBaseURL.absoluteString) -> \(url.absoluteString)")
+        VoxtLog.modelInfo("Custom LLM hub base URL changed: \(hubBaseURL.absoluteString) -> \(url.absoluteString)")
         hubBaseURL = url
         fetchRemoteSize()
     }
@@ -810,7 +810,7 @@ class CustomLLMModelManager: ObservableObject {
             setStateIfNeeded(.error("Invalid model identifier"))
             downloadedStateByRepo[modelRepo] = false
             if lastInvalidRepoLogged != modelRepo {
-                VoxtLog.error("Invalid custom LLM repo identifier: \(modelRepo)")
+                VoxtLog.modelError("Invalid custom LLM repo identifier: \(modelRepo)")
                 lastInvalidRepoLogged = modelRepo
             }
             return
@@ -834,7 +834,7 @@ class CustomLLMModelManager: ObservableObject {
         }
         let downloaded = (state == .downloaded)
         if lastLoggedModelPresence?.repo != modelRepo || lastLoggedModelPresence?.downloaded != downloaded {
-            VoxtLog.model("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(downloaded)")
+            VoxtLog.modelInfo("Custom LLM local model state refreshed: repo=\(modelRepo), downloaded=\(downloaded)")
             lastLoggedModelPresence = (modelRepo, downloaded)
         }
     }
@@ -875,18 +875,18 @@ class CustomLLMModelManager: ObservableObject {
                 guard CustomLLMModelStorageSupport.isModelDirectoryValid(modelDir) else {
                     pausedStatusMessage = nil
                     state = .error("Downloaded files are incomplete.")
-                    VoxtLog.error("Custom LLM download produced incomplete files: \(modelRepo)")
+                    VoxtLog.modelError("Custom LLM download produced incomplete files: \(modelRepo)")
                     return
                 }
                 invalidateLocalCache(for: modelRepo)
                 checkExistingModel()
-                VoxtLog.model("Custom LLM download completed: \(modelRepo)")
+                VoxtLog.modelInfo("Custom LLM download completed: \(modelRepo)")
             } catch is CancellationError {
                 cancelDownloadProgressTask()
                 switch downloadStopAction {
                 case .pause:
                     pausedStatusMessage = nil
-                    VoxtLog.model("Custom LLM download paused: \(modelRepo)")
+                    VoxtLog.modelInfo("Custom LLM download paused: \(modelRepo)")
                 case .cancel, .none:
                     pausedStatusMessage = nil
                     if let modelDir = writeCacheDirectory(for: modelRepo) {
@@ -894,7 +894,7 @@ class CustomLLMModelManager: ObservableObject {
                     }
                     invalidateLocalCache(for: modelRepo)
                     state = .notDownloaded
-                    VoxtLog.warning("Custom LLM download cancelled: \(modelRepo)")
+                    VoxtLog.modelWarning("Custom LLM download cancelled: \(modelRepo)")
                 }
             } catch {
                 cancelDownloadProgressTask()
@@ -903,7 +903,7 @@ class CustomLLMModelManager: ObservableObject {
                 }
                 pausedStatusMessage = nil
                 state = .error("Download failed: \(error.localizedDescription)")
-                VoxtLog.error("Custom LLM download failed: \(modelRepo), error=\(error.localizedDescription)")
+                VoxtLog.modelError("Custom LLM download failed: \(modelRepo), error=\(error.localizedDescription)")
             }
         }
     }
@@ -953,7 +953,7 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func cancelDownload() {
-        VoxtLog.model("Custom LLM download cancellation requested: \(modelRepo)")
+        VoxtLog.modelInfo("Custom LLM download cancellation requested: \(modelRepo)")
         if downloadTask != nil {
             downloadStopAction = .cancel
             pausedStatusMessage = nil
@@ -970,7 +970,7 @@ class CustomLLMModelManager: ObservableObject {
         }
         invalidateLocalCache(for: modelRepo)
         state = .notDownloaded
-        VoxtLog.model("Custom LLM download cancelled from paused state: \(modelRepo)")
+        VoxtLog.modelInfo("Custom LLM download cancelled from paused state: \(modelRepo)")
     }
 
     private func cancelDownloadProgressTask() {
@@ -990,7 +990,7 @@ class CustomLLMModelManager: ObservableObject {
             ) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.modelWarning(
                 "Primary custom LLM download endpoint failed. Retrying with mirror. repo=\(modelRepo), baseURL=\(hubBaseURL.absoluteString), error=\(error.localizedDescription)"
             )
             clearHubCache(for: modelRepo)
@@ -1007,7 +1007,7 @@ class CustomLLMModelManager: ObservableObject {
             userAgent: Self.hubUserAgent,
             token: token
         )
-        VoxtLog.model("Custom LLM download started: repo=\(context.repoID.description), files=\(context.entries.count), baseURL=\(baseURL.absoluteString)")
+        VoxtLog.modelInfo("Custom LLM download started: repo=\(context.repoID.description), files=\(context.entries.count), baseURL=\(baseURL.absoluteString)")
 
         let totalBytes = context.totalBytes
         let totalFiles = context.entries.count
@@ -1054,7 +1054,7 @@ class CustomLLMModelManager: ObservableObject {
                     completedFiles: index + 1,
                     totalFiles: totalFiles
                 )
-                VoxtLog.info("Custom LLM download resume reused existing file: \(entry.path)", verbose: true)
+                VoxtLog.modelInfo("Custom LLM download resume reused existing file: \(entry.path)", verbose: true)
                 continue
             }
             cancelDownloadProgressTask()
@@ -1148,7 +1148,7 @@ class CustomLLMModelManager: ObservableObject {
         if canonicalRepo == modelRepo {
             pausedStatusMessage = nil
         }
-        VoxtLog.info("Deleting custom LLM model cache: \(canonicalRepo)")
+        VoxtLog.modelInfo("Deleting custom LLM model cache: \(canonicalRepo)")
         if canonicalRepo == inferenceModelRepo {
             releaseInferenceResources(resetActiveInferenceCount: true)
         }
@@ -1160,12 +1160,12 @@ class CustomLLMModelManager: ObservableObject {
         for modelDir in modelDirectories {
             do {
                 try FileManager.default.removeItem(at: modelDir)
-                VoxtLog.info("Deleted custom LLM model directory. repo=\(canonicalRepo), path=\(modelDir.path)")
+                VoxtLog.modelInfo("Deleted custom LLM model directory. repo=\(canonicalRepo), path=\(modelDir.path)")
             } catch {
                 if canonicalRepo == modelRepo {
                     state = .error("Couldn't uninstall local LLM. It may still be in use.")
                 }
-                VoxtLog.error("Failed to delete custom LLM model directory. repo=\(canonicalRepo), error=\(error.localizedDescription)")
+                VoxtLog.modelError("Failed to delete custom LLM model directory. repo=\(canonicalRepo), error=\(error.localizedDescription)")
                 return
             }
         }
@@ -1305,7 +1305,7 @@ class CustomLLMModelManager: ObservableObject {
                 totalFiles: 0
             )
         }
-        VoxtLog.warning("Custom LLM download auto-paused after network issue. repo=\(modelRepo), error=\(error.localizedDescription)")
+        VoxtLog.modelWarning("Custom LLM download auto-paused after network issue. repo=\(modelRepo), error=\(error.localizedDescription)")
         return true
     }
 
@@ -1621,7 +1621,7 @@ class CustomLLMModelManager: ObservableObject {
             repo: repo,
             text: Self.fallbackRemoteSizeText(repo: repo) ?? CustomLLMRemoteSizeCache.unknownText
         )
-        VoxtLog.warning(logMessage)
+        VoxtLog.modelWarning(logMessage)
     }
 
     private func loadRemoteSize(
@@ -1663,6 +1663,6 @@ class CustomLLMModelManager: ObservableObject {
         guard inferenceContainer != nil, inferenceModelRepo == expectedRepo else { return }
 
         releaseInferenceResources(resetActiveInferenceCount: false)
-        VoxtLog.info("Custom LLM model released. reason=\(reason)", verbose: true)
+        VoxtLog.modelInfo("Custom LLM model released. reason=\(reason)", verbose: true)
     }
 }

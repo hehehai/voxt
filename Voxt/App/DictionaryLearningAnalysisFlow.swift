@@ -39,7 +39,7 @@ extension AppDelegate {
         historyEntryID: UUID?
     ) async throws {
         let model = try resolvedAutomaticDictionaryLearningModel()
-        VoxtLog.info(
+        VoxtLog.dictionary(
             "Automatic dictionary learning analysis started. model=\(automaticDictionaryLearningModelDescription(model)), historyEntryID=\(historyEntryID?.uuidString ?? "nil")"
         )
         let promptExistingTerms = dictionaryStore.allTerms(limit: 20)
@@ -61,7 +61,7 @@ extension AppDelegate {
             excludeExistingTerms: false,
             activeGroupID: groupID
         )
-        VoxtLog.info(
+        VoxtLog.dictionary(
             "Automatic dictionary learning candidate terms merged. direct=\(directCandidateTerms.joined(separator: ", ")), model=\(scannedTerms.joined(separator: ", ")), final=\(mergedTerms.joined(separator: ", "))"
         )
 
@@ -72,7 +72,7 @@ extension AppDelegate {
         )
 
         guard !persistResult.isEmpty else {
-            VoxtLog.info("Automatic dictionary learning finished with no new dictionary entries.")
+            VoxtLog.dictionary("Automatic dictionary learning finished with no new dictionary entries.")
             return
         }
         if let historyEntryID, !persistResult.addedTerms.isEmpty {
@@ -81,14 +81,14 @@ extension AppDelegate {
                 historyEntryID: historyEntryID,
                 addedTerms: persistResult.addedTerms
             )
-            VoxtLog.info(
+            VoxtLog.dictionary(
                 "Automatic dictionary learning recorded correction into history. historyEntryID=\(historyEntryID.uuidString), added=\(persistResult.addedTerms.joined(separator: ", ")), reinforced=\(persistResult.reinforcedTerms.joined(separator: ", "))"
             )
         } else if !persistResult.addedTerms.isEmpty {
-            VoxtLog.info("Automatic dictionary learning added terms but history entry is unavailable.")
+            VoxtLog.dictionary("Automatic dictionary learning added terms but history entry is unavailable.")
         }
         showOverlayStatus(automaticDictionaryLearningSuccessMessage(for: persistResult), clearAfter: 3.2)
-        VoxtLog.info(
+        VoxtLog.dictionary(
             "Automatic dictionary learning persisted terms. added=\(persistResult.addedTerms.joined(separator: ", ")), reinforced=\(persistResult.reinforcedTerms.joined(separator: ", "))"
         )
     }
@@ -146,7 +146,7 @@ extension AppDelegate {
                 do {
                     scannedTerms = try await runAutomaticDictionaryLearningPrompt(prompt, model: model)
                 } catch {
-                    VoxtLog.warning("Manual dictionary correction term analysis failed: \(error)")
+                    VoxtLog.dictionaryWarning("Manual dictionary correction term analysis failed: \(error)")
                 }
             }
 
@@ -161,7 +161,7 @@ extension AppDelegate {
                 updatedText: correctedText
             )
         case .skipped(let reason):
-            VoxtLog.info("Manual dictionary correction skipped term analysis: \(reason)")
+            VoxtLog.dictionary("Manual dictionary correction skipped term analysis: \(reason)")
         }
 
         let persistResult = persistAutomaticDictionaryLearningTerms(
@@ -195,7 +195,7 @@ extension AppDelegate {
         for term in scannedTerms {
             let normalized = DictionaryStore.normalizeTerm(term)
             guard !normalized.isEmpty else {
-                VoxtLog.info("Automatic dictionary learning ignored blank/invalid term candidate.")
+                VoxtLog.dictionary("Automatic dictionary learning ignored blank/invalid term candidate.")
                 continue
             }
             do {
@@ -214,7 +214,7 @@ extension AppDelegate {
             } catch DictionaryStoreError.duplicateTerm {
                 continue
             } catch {
-                VoxtLog.warning("Automatic dictionary learning skipped term due to store error: \(error)")
+                VoxtLog.dictionaryWarning("Automatic dictionary learning skipped term due to store error: \(error)")
             }
         }
         return AutomaticDictionaryLearningPersistResult(

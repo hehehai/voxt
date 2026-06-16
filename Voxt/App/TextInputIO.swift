@@ -138,7 +138,7 @@ extension AppDelegate {
     func hasWritableFocusedTextInput() -> Bool {
         guard let processID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
               let focusedElement = focusedAXElement(preferredProcessID: processID) else {
-            VoxtLog.info("Focused input check: no focused AX element.")
+            VoxtLog.input("Focused input check: no focused AX element.")
             return false
         }
 
@@ -146,7 +146,7 @@ extension AppDelegate {
             let role = axStringAttribute(kAXRoleAttribute as CFString, for: writableElement) ?? "unknown"
             let editable = isWritableTextInputElement(writableElement)
             let valueSettable = isAttributeSettable(kAXValueAttribute as CFString, on: writableElement)
-            VoxtLog.info(
+            VoxtLog.input(
                 "Focused input check: writable descendant detected. role=\(role), editable=\(editable), valueSettable=\(valueSettable)"
             )
             return true
@@ -155,25 +155,25 @@ extension AppDelegate {
         let editable = axBoolAttribute("AXEditable" as CFString, for: focusedElement)
         if editable == true {
             let role = axStringAttribute(kAXRoleAttribute as CFString, for: focusedElement) ?? "unknown"
-            VoxtLog.info("Focused input check: editable AX element detected. role=\(role)")
+            VoxtLog.input("Focused input check: editable AX element detected. role=\(role)")
             return true
         }
 
         if isAttributeSettable(kAXValueAttribute as CFString, on: focusedElement) {
             let role = axStringAttribute(kAXRoleAttribute as CFString, for: focusedElement) ?? "unknown"
-            VoxtLog.info("Focused input check: settable AX value detected. role=\(role)")
+            VoxtLog.input("Focused input check: settable AX value detected. role=\(role)")
             return true
         }
 
         guard let role = axStringAttribute(kAXRoleAttribute as CFString, for: focusedElement) else {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Focused input check: role unavailable. editable=\(editable == true), valueSettable=false"
             )
             return false
         }
 
         let isWritable = Self.nativeWritableTextRoles.contains(role)
-        VoxtLog.info(
+        VoxtLog.input(
             "Focused input check: role=\(role), editable=\(editable == true), valueSettable=false, result=\(isWritable)"
         )
         return isWritable
@@ -185,7 +185,7 @@ extension AppDelegate {
     ) -> FocusedInputTextSnapshot? {
         guard let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
             if logDiagnostics {
-                VoxtLog.info("Focused input snapshot unavailable: no frontmost application.")
+                VoxtLog.input("Focused input snapshot unavailable: no frontmost application.")
             }
             return nil
         }
@@ -193,7 +193,7 @@ extension AppDelegate {
            let bundleIdentifier = frontmostApplication.bundleIdentifier,
            bundleIdentifier != expectedBundleID {
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input snapshot skipped: frontmost app changed. expectedBundleID=\(expectedBundleID), actualBundleID=\(bundleIdentifier)"
                 )
             }
@@ -208,7 +208,7 @@ extension AppDelegate {
             logDiagnostics: logDiagnostics
         ) else {
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input snapshot unavailable: no focused AX element. bundleID=\(bundleIdentifier ?? "unknown")"
                 )
             }
@@ -221,7 +221,7 @@ extension AppDelegate {
         guard let writableElement else {
             let role = axStringAttribute(kAXRoleAttribute as CFString, for: focusedElement) ?? "unknown"
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input snapshot unavailable: no writable text element found. bundleID=\(bundleIdentifier ?? "unknown"), role=\(role)"
                 )
             }
@@ -236,7 +236,7 @@ extension AppDelegate {
             let textFailureReason = unreadableTextFailureReason(for: writableElement)
             let role = axStringAttribute(kAXRoleAttribute as CFString, for: writableElement) ?? "unknown"
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input snapshot unavailable: writable element has empty/unreadable value. bundleID=\(bundleIdentifier ?? "unknown"), role=\(role), failureReason=\(textFailureReason)"
                 )
             }
@@ -255,7 +255,7 @@ extension AppDelegate {
             textSource: "ax-value"
         )
         if logDiagnostics {
-            VoxtLog.info("Focused input snapshot ready: \(focusedInputSnapshotSummary(snapshot))")
+            VoxtLog.input("Focused input snapshot ready: \(focusedInputSnapshotSummary(snapshot))")
         }
         return snapshot
     }
@@ -381,7 +381,7 @@ extension AppDelegate {
     ) -> AXUIElement? {
         guard AccessibilityPermissionManager.isTrusted() else {
             if logDiagnostics {
-                VoxtLog.info("Focused input check: accessibility not trusted.")
+                VoxtLog.input("Focused input check: accessibility not trusted.")
             }
             return nil
         }
@@ -393,13 +393,13 @@ extension AppDelegate {
         let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
         if let systemFocusedElement = systemFocusedAXElement(logDiagnostics: logDiagnostics) {
             if logDiagnostics {
-                VoxtLog.info("Focused input check: falling back to system-wide focused element. bundleID=\(bundleID)")
+                VoxtLog.input("Focused input check: falling back to system-wide focused element. bundleID=\(bundleID)")
             }
             return systemFocusedElement
         }
 
         if logDiagnostics {
-            VoxtLog.info("Focused input check: app/system focus resolution failed. bundleID=\(bundleID)")
+            VoxtLog.input("Focused input check: app/system focus resolution failed. bundleID=\(bundleID)")
         }
         return nil
     }
@@ -418,7 +418,7 @@ extension AppDelegate {
               CFGetTypeID(focusedElementRef) == AXUIElementGetTypeID() else {
             let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input check: system-wide focused element unavailable. status=\(focusedStatus.rawValue), bundleID=\(bundleID)"
                 )
             }
@@ -438,7 +438,7 @@ extension AppDelegate {
         if let focusedAppElement = axElementAttribute(kAXFocusedUIElementAttribute as CFString, for: appElement),
            let resolved = resolveFocusedElement(focusedAppElement) {
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input check: using frontmost app focused element. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
                 )
             }
@@ -447,7 +447,7 @@ extension AppDelegate {
 
         guard let focusedWindow = axElementAttribute(kAXFocusedWindowAttribute as CFString, for: appElement) else {
             if logDiagnostics {
-                VoxtLog.info("Focused input check: no focused window on frontmost app. bundleID=\(bundleID)")
+                VoxtLog.input("Focused input check: no focused window on frontmost app. bundleID=\(bundleID)")
             }
             return nil
         }
@@ -455,7 +455,7 @@ extension AppDelegate {
         if let focusedWindowElement = axElementAttribute(kAXFocusedUIElementAttribute as CFString, for: focusedWindow),
            let resolved = resolveFocusedElement(focusedWindowElement) {
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input check: using focused window focused element. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
                 )
             }
@@ -465,7 +465,7 @@ extension AppDelegate {
         if let focusedDescendant = findFocusedDescendant(in: focusedWindow, depthRemaining: 8),
            let resolved = resolveFocusedElement(focusedDescendant) {
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input check: resolved focused descendant from window subtree. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: resolved) ?? "unknown")"
                 )
             }
@@ -474,7 +474,7 @@ extension AppDelegate {
 
         if let bestEditableDescendant = findBestWritableTextDescendant(in: focusedWindow, depthRemaining: 8) {
             if logDiagnostics {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input check: using best editable descendant from focused window. bundleID=\(bundleID), role=\(axStringAttribute(kAXRoleAttribute as CFString, for: bestEditableDescendant) ?? "unknown")"
                 )
             }
@@ -482,7 +482,7 @@ extension AppDelegate {
         }
 
         if logDiagnostics {
-            VoxtLog.info("Focused input check: falling back to focused window element. bundleID=\(bundleID)")
+            VoxtLog.input("Focused input check: falling back to focused window element. bundleID=\(bundleID)")
         }
         return resolveFocusedElement(focusedWindow)
     }
@@ -615,7 +615,7 @@ extension AppDelegate {
 
         if let selectedText = axStringAttribute(kAXSelectedTextAttribute as CFString, for: element),
            let normalizedSelectedText = normalizedAXTextValue(selectedText, for: element) {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Focused input snapshot: resolved text via selected text attribute. role=\(axStringAttribute(kAXRoleAttribute as CFString, for: element) ?? "unknown"), length=\(normalizedSelectedText.count)"
             )
             return normalizedSelectedText
@@ -628,7 +628,7 @@ extension AppDelegate {
                range: visibleRange,
                for: element
            ) {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Focused input snapshot: resolved text via visible character range. role=\(axStringAttribute(kAXRoleAttribute as CFString, for: element) ?? "unknown"), length=\(visibleText.count)"
             )
             return visibleText
@@ -642,7 +642,7 @@ extension AppDelegate {
                 range: fullRange,
                 for: element
             ) {
-                VoxtLog.info(
+                VoxtLog.input(
                     "Focused input snapshot: resolved text via full character range. role=\(axStringAttribute(kAXRoleAttribute as CFString, for: element) ?? "unknown"), length=\(fullText.count)"
                 )
                 return fullText
@@ -898,7 +898,7 @@ extension AppDelegate {
         if let targetPID = sessionTargetApplicationPID,
            let targetApplication = NSRunningApplication(processIdentifier: targetPID),
            !targetApplication.isTerminated {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Restoring focus to session target app before text injection. bundleID=\(targetApplication.bundleIdentifier ?? "unknown"), pid=\(targetPID)"
             )
             return targetApplication.activate(options: [])
@@ -907,13 +907,13 @@ extension AppDelegate {
         if let targetBundleID = sessionTargetApplicationBundleID,
            let targetApplication = NSRunningApplication.runningApplications(withBundleIdentifier: targetBundleID)
             .first(where: { !$0.isTerminated }) {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Restoring focus to session target app by bundle ID before text injection. bundleID=\(targetBundleID), pid=\(targetApplication.processIdentifier)"
             )
             return targetApplication.activate(options: [])
         }
 
-        VoxtLog.info(
+        VoxtLog.input(
             "Session target app restoration skipped: target app unavailable. targetBundleID=\(sessionTargetApplicationBundleID ?? "nil"), targetPID=\(sessionTargetApplicationPID.map(String.init) ?? "nil")"
         )
         return false
@@ -934,14 +934,14 @@ extension AppDelegate {
         guard accessibilityTrusted else {
             writeTextToPasteboard(text)
             promptForAccessibilityPermission()
-            VoxtLog.warning("Accessibility permission missing. Transcription copied; paste manually after granting permission.")
+            VoxtLog.inputWarning("Accessibility permission missing. Transcription copied; paste manually after granting permission.")
             completion?(false)
             return
         }
 
         let activationRestored = restoreSessionTargetApplicationIfNeeded()
         let activationDelay: TimeInterval = activationRestored ? 0.04 : 0
-        VoxtLog.info(
+        VoxtLog.input(
             "Text injection prepared. characters=\(text.count), activationRestored=\(activationRestored), activationDelayMs=\(Int(activationDelay * 1000))"
         )
         DispatchQueue.main.asyncAfter(deadline: .now() + activationDelay) { [weak self] in
@@ -956,7 +956,7 @@ extension AppDelegate {
                 keepResultInClipboard: keepResultInClipboard,
                 completion: { didInject in
                     let elapsedMs = Int(Date().timeIntervalSince(injectionStartedAt) * 1000)
-                    VoxtLog.info(
+                    VoxtLog.input(
                         "Text injection completed via paste fallback. characters=\(text.count), elapsedMs=\(elapsedMs), didInject=\(didInject)"
                     )
                     completion?(didInject)
@@ -1066,14 +1066,14 @@ extension AppDelegate {
             return nil
         }
         guard let selectedRange = snapshot.selectedRange else {
-            VoxtLog.info("Preview replacement transaction skipped: selected range unavailable.")
+            VoxtLog.input("Preview replacement transaction skipped: selected range unavailable.")
             return nil
         }
 
         let baselineNSString = snapshot.text as NSString
         guard selectedRange.location >= 0,
               NSMaxRange(selectedRange) <= baselineNSString.length else {
-            VoxtLog.info("Preview replacement transaction skipped: selected range exceeded baseline text.")
+            VoxtLog.input("Preview replacement transaction skipped: selected range exceeded baseline text.")
             return nil
         }
 
@@ -1098,7 +1098,7 @@ extension AppDelegate {
     ) async -> Bool {
         let trimmedReplacement = replacementText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedReplacement.isEmpty else {
-            VoxtLog.info("Pending output replacement skipped: replacement text was empty.")
+            VoxtLog.input("Pending output replacement skipped: replacement text was empty.")
             return false
         }
 
@@ -1106,12 +1106,12 @@ extension AppDelegate {
             expectedBundleID: transaction.bundleIdentifier,
             logDiagnostics: false
         ) else {
-            VoxtLog.info("Pending output replacement skipped: focused input snapshot unavailable.")
+            VoxtLog.input("Pending output replacement skipped: focused input snapshot unavailable.")
             return false
         }
 
         guard snapshot.text == transaction.expectedTextAfterPreview else {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Pending output replacement skipped: focused input changed after preview injection. baselineChars=\(transaction.baselineText.count), expectedChars=\(transaction.expectedTextAfterPreview.count), currentChars=\(snapshot.text.count)"
             )
             return false
@@ -1120,7 +1120,7 @@ extension AppDelegate {
         guard let processIdentifier = snapshot.processIdentifier,
               let focusedElement = focusedAXElement(preferredProcessID: processIdentifier, logDiagnostics: false)
         else {
-            VoxtLog.info("Pending output replacement skipped: focused AX element unavailable.")
+            VoxtLog.input("Pending output replacement skipped: focused AX element unavailable.")
             return false
         }
 
@@ -1128,7 +1128,7 @@ extension AppDelegate {
             isWritableTextInputElement(focusedElement) ? focusedElement : nil
         )
         guard let writableElement else {
-            VoxtLog.info("Pending output replacement skipped: writable AX element unavailable.")
+            VoxtLog.input("Pending output replacement skipped: writable AX element unavailable.")
             return false
         }
 
@@ -1141,13 +1141,13 @@ extension AppDelegate {
             range: replacementCFRange,
             for: writableElement
         ) else {
-            VoxtLog.info("Pending output replacement skipped: unable to set selected text range.")
+            VoxtLog.input("Pending output replacement skipped: unable to set selected text range.")
             return false
         }
 
         let didInject = await typeTextAsync(trimmedReplacement)
         if didInject {
-            VoxtLog.info(
+            VoxtLog.input(
                 "Pending output replacement succeeded. previewChars=\(transaction.previewText.count), replacementChars=\(trimmedReplacement.count)"
             )
         }

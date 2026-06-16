@@ -57,7 +57,7 @@ enum MicrophonePreferenceManager {
             addedUIDs: addedUIDs,
             removedUIDs: removedUIDs
         ) {
-            VoxtLog.info(
+            VoxtLog.audio(
                 """
                 Microphone sync resolved. current=\(currentActiveUID ?? "none"), resolved=\(activeUID ?? "none"), default=\(defaultUID ?? "none"), autoSwitch=\(autoSwitchEnabled), added=\(formatUIDList(addedUIDs)), removed=\(formatUIDList(removedUIDs)), priority=\(formatUIDList(priorityUIDs)), available=\(formatDevices(availableDevices))
                 """
@@ -287,7 +287,7 @@ enum MicrophonePreferenceManager {
         if let lockedActiveUID,
            availableByUID[lockedActiveUID] != nil {
             if currentActiveUID != lockedActiveUID {
-                VoxtLog.info(
+                VoxtLog.audio(
                     "Microphone selection preserved during active session. previous=\(currentActiveUID ?? "none"), locked=\(lockedActiveUID)"
                 )
             }
@@ -308,7 +308,7 @@ enum MicrophonePreferenceManager {
                 guard !previousAvailableUIDs.contains(uid) else { return false }
                 return priorityRank(for: uid, priorityUIDs: priorityUIDs) < currentRank
             }) {
-                VoxtLog.info(
+                VoxtLog.audio(
                     "Microphone auto selection promoted higher-priority device. previous=\(currentActiveUID), promoted=\(promotedUID), previousRank=\(currentRank), promotedRank=\(priorityRank(for: promotedUID, priorityUIDs: priorityUIDs))"
                 )
                 return promotedUID
@@ -318,17 +318,17 @@ enum MicrophonePreferenceManager {
         }
 
         if let prioritizedUID = priorityUIDs.first(where: { availableByUID[$0] != nil }) {
-            VoxtLog.info("Microphone auto selection chose prioritized device. uid=\(prioritizedUID)")
+            VoxtLog.audio("Microphone auto selection chose prioritized device. uid=\(prioritizedUID)")
             return prioritizedUID
         }
 
         if let defaultUID, availableByUID[defaultUID] != nil {
-            VoxtLog.info("Microphone auto selection fell back to system default. uid=\(defaultUID)")
+            VoxtLog.audio("Microphone auto selection fell back to system default. uid=\(defaultUID)")
             return defaultUID
         }
 
         let fallbackUID = availableDevices.first?.uid
-        VoxtLog.info("Microphone auto selection fell back to first available device. uid=\(fallbackUID ?? "none")")
+        VoxtLog.audio("Microphone auto selection fell back to first available device. uid=\(fallbackUID ?? "none")")
         return fallbackUID
     }
 

@@ -91,8 +91,10 @@ class RecordingOverlayWindow: NSPanel {
 
         observe(state: state)
         updateAppearance(for: state, animated: isVisible)
-        hostingView?.needsLayout = true
-        contentView?.needsLayout = true
+        DispatchQueue.main.async { [weak self] in
+            self?.hostingView?.needsLayout = true
+            self?.contentView?.needsLayout = true
+        }
 
         if !isVisible {
             alphaValue = 1

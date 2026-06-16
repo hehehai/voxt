@@ -72,12 +72,12 @@ final class MeetingVADModelManager: ObservableObject {
                 let directory = try await self.downloadWithFallback()
                 try self.validateDownloadedModel(at: directory)
                 self.state = .downloaded
-                VoxtLog.info("Meeting Silero VAD download complete. repo=\(MeetingVADModelStorage.repo)")
+                VoxtLog.meeting("Meeting Silero VAD download complete. repo=\(MeetingVADModelStorage.repo)")
             } catch is CancellationError {
                 self.state = .notDownloaded
             } catch {
                 self.state = .error(error.localizedDescription)
-                VoxtLog.error("Meeting Silero VAD download failed. error=\(error.localizedDescription)")
+                VoxtLog.meetingError("Meeting Silero VAD download failed. error=\(error.localizedDescription)")
             }
         }
     }
@@ -117,7 +117,7 @@ final class MeetingVADModelManager: ObservableObject {
             guard let fallback = Self.fallbackHubBaseURL(from: preferredBaseURL) else {
                 throw error
             }
-            VoxtLog.warning(
+            VoxtLog.meetingWarning(
                 "Primary meeting Silero VAD download endpoint failed. Retrying with mirror. baseURL=\(preferredBaseURL.absoluteString), error=\(error.localizedDescription)"
             )
             MeetingVADModelStorage.clearHubCache()

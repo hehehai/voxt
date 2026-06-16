@@ -21,7 +21,7 @@ final class TranscriptionDetailWindowManager {
         followUpAnswerer: @escaping FollowUpAnswerer,
         followUpPersistence: @escaping FollowUpPersistence
     ) {
-        VoxtLog.info("Transcription detail open requested. entryID=\(entry.id), kind=\(entry.kind.rawValue)")
+        VoxtLog.history("Transcription detail open requested. entryID=\(entry.id), kind=\(entry.kind.rawValue)")
 
         if let controller = historyControllers[entry.id] {
             controller.refresh(entry: entry, audioURL: audioURL)
@@ -29,7 +29,7 @@ final class TranscriptionDetailWindowManager {
             AppBehaviorController.bringStandardWindowToFront(controller.window)
             controller.recenterIfNeeded()
             if let window = controller.window {
-                VoxtLog.info(
+                VoxtLog.history(
                     "Transcription detail window reused. frame=\(NSStringFromRect(window.frame)), visible=\(window.isVisible), miniaturized=\(window.isMiniaturized)"
                 )
             }
@@ -51,7 +51,7 @@ final class TranscriptionDetailWindowManager {
         AppBehaviorController.bringStandardWindowToFront(controller.window)
         controller.recenterIfNeeded()
         if let window = controller.window {
-            VoxtLog.info(
+            VoxtLog.history(
                 "Transcription detail window shown. frame=\(NSStringFromRect(window.frame)), visible=\(window.isVisible), miniaturized=\(window.isMiniaturized)"
             )
         }
@@ -111,7 +111,7 @@ private final class TranscriptionDetailWindowController: NSWindowController, NSW
     }
 
     func refresh(entry: TranscriptionHistoryEntry, audioURL: URL?) {
-        VoxtLog.info("Transcription detail refresh requested. entryID=\(entry.id)")
+        VoxtLog.history("Transcription detail refresh requested. entryID=\(entry.id)")
         viewModel.refresh(entry: entry, audioURL: audioURL)
         window?.title = viewModel.title
     }
@@ -144,7 +144,7 @@ private final class TranscriptionDetailWindowController: NSWindowController, NSW
     }
 
     func windowWillClose(_ notification: Notification) {
-        VoxtLog.info("Transcription detail window closed.")
+        VoxtLog.history("Transcription detail window closed.")
         onClose()
     }
 

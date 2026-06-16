@@ -136,17 +136,17 @@ extension AppDelegate {
 
         if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: translationRepo) else {
-                VoxtLog.warning("Translation provider customLLM unavailable: model not downloaded. repo=\(translationRepo)")
+                VoxtLog.translationWarning("Translation provider customLLM unavailable: model not downloaded. repo=\(translationRepo)")
                 throw TextTransformFailure.translationModelNotInstalled
             }
-            VoxtLog.info("Translation provider selected: customLLM")
+            VoxtLog.translation("Translation provider selected: customLLM")
         } else if modelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
-                VoxtLog.warning("Translation provider remoteLLM unavailable: no configured model.")
+                VoxtLog.translationWarning("Translation provider remoteLLM unavailable: no configured model.")
                 throw TextTransformFailure.translationRemoteModelNotConfigured
             }
-            VoxtLog.info("Translation provider selected: remoteLLM(\(context.provider.rawValue))")
+            VoxtLog.translation("Translation provider selected: remoteLLM(\(context.provider.rawValue))")
         } else {
             throw TextTransformFailure.translationProviderUnavailable
         }
@@ -175,7 +175,7 @@ extension AppDelegate {
             strategy: strategy
         )
         if guarded.didFallback {
-            VoxtLog.warning(
+            VoxtLog.translationWarning(
                 "Translation truncation guard restored source text. inputChars=\(text.count), outputChars=\(translated.count), reason=\(guarded.reason ?? "unknown"), strategy=\(strategy.logLabel)"
             )
             throw TextTransformFailure.translationRejectedByGuard(reason: guarded.reason)
@@ -211,7 +211,7 @@ extension AppDelegate {
             !shouldUseProviderManagedConversation
         if shouldUseChatMessageConversation {
             let latestTurn = trimmedConversationHistory.last
-            VoxtLog.info(
+            VoxtLog.translation(
                 """
                 Rewrite continue conversation context prepared. turns=\(trimmedConversationHistory.count), latestTitle=\(VoxtLog.llmPreview(latestTurn?.resultTitle ?? "")), latestContent=\(VoxtLog.llmPreview(latestTurn?.resultContent ?? "")), currentPrompt=\(VoxtLog.llmPreview(dictatedPrompt))
                 """
@@ -237,7 +237,7 @@ extension AppDelegate {
             "Rewrite request. promptChars=\(promptResolution.content.count), dictatedChars=\(dictatedPrompt.count), sourceChars=\(sourceText.count), provider=\(modelProvider.rawValue), rewriteRepo=\(rewriteRepo), structuredAnswerOutput=\(structuredAnswerOutput), directAnswerMode=\(directAnswerMode), forceNonEmptyAnswer=\(forceNonEmptyAnswer), delivery=\(String(describing: promptResolution.delivery))"
         )
         if shouldUseProviderManagedConversation, let remoteContext {
-            VoxtLog.info(
+            VoxtLog.translation(
                 "Rewrite continue using Responses API. provider=\(remoteContext.provider.rawValue), endpoint=\(remoteContext.configuration.endpoint)"
             )
         } else if modelProvider == .remoteLLM,
@@ -245,20 +245,20 @@ extension AppDelegate {
                   !structuredAnswerOutput,
                   onProgress != nil,
                   let remoteContext {
-            VoxtLog.info(
+            VoxtLog.translation(
                 "Rewrite continue using chat completions stream. provider=\(remoteContext.provider.rawValue), endpoint=\(remoteContext.configuration.endpoint)"
             )
         }
 
         if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: rewriteRepo) else {
-                VoxtLog.warning("Rewrite provider customLLM unavailable: model not downloaded. repo=\(rewriteRepo)")
+                VoxtLog.translationWarning("Rewrite provider customLLM unavailable: model not downloaded. repo=\(rewriteRepo)")
                 throw TextTransformFailure.rewriteModelNotInstalled
             }
         } else {
             let context = remoteContext ?? resolvedRemoteLLMContext(forRewrite: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
-                VoxtLog.warning("Rewrite provider remoteLLM unavailable: no configured model.")
+                VoxtLog.translationWarning("Rewrite provider remoteLLM unavailable: no configured model.")
                 throw TextTransformFailure.rewriteRemoteModelNotConfigured
             }
         }
@@ -322,7 +322,7 @@ extension AppDelegate {
             strategy: strategy
         )
         if guarded.didFallback {
-            VoxtLog.warning(
+            VoxtLog.translationWarning(
                 "Rewrite truncation guard restored source text. inputChars=\(originalText.count), outputChars=\(rewritten.count), reason=\(guarded.reason ?? "unknown"), strategy=\(strategy.logLabel)"
             )
             throw TextTransformFailure.rewriteRejectedByGuard(reason: guarded.reason)
@@ -405,7 +405,7 @@ extension AppDelegate {
             strategy: strategy
         )
         if guarded.didFallback {
-            VoxtLog.warning(
+            VoxtLog.translationWarning(
                 "Strict translation truncation guard restored source text. inputChars=\(text.count), outputChars=\(translated.count), reason=\(guarded.reason ?? "unknown"), strategy=\(strategy.logLabel)"
             )
             throw TextTransformFailure.translationRejectedByGuard(reason: guarded.reason)
@@ -613,7 +613,7 @@ extension AppDelegate {
                     return
                 }
 
-                VoxtLog.warning(
+                VoxtLog.translationWarning(
                     "Displayed translation refresh failed. sourceChars=\(sourceText.count), targetLanguage=\(targetLanguage.instructionName), error=\(error)"
                 )
 
@@ -819,7 +819,7 @@ extension AppDelegate {
             shouldRetry: { [weak self] source, result in
                 guard let self else { return false }
                 if self.looksUntranslated(source: source, result: result) {
-                    VoxtLog.warning("Selected text translation first-pass looks untranslated. Retrying with strict translation prompt.")
+                    VoxtLog.translationWarning("Selected text translation first-pass looks untranslated. Retrying with strict translation prompt.")
                     return true
                 }
                 return false

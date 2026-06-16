@@ -369,7 +369,7 @@ struct GeneralSettingsView: View {
     }
 
     private func setMicrophoneAutoSwitchEnabled(_ isEnabled: Bool) {
-        VoxtLog.info("Microphone auto switch updated from settings dialog. enabled=\(isEnabled)")
+        VoxtLog.settings("Microphone auto switch updated from settings dialog. enabled=\(isEnabled)")
         microphoneState = MicrophonePreferenceManager.setAutoSwitchEnabled(
             isEnabled,
             defaults: .standard,
@@ -379,7 +379,7 @@ struct GeneralSettingsView: View {
     }
 
     private func applyMicrophonePriorityOrder(_ orderedUIDs: [String]) {
-        VoxtLog.info("Microphone priority updated from settings dialog. orderedUIDs=\(orderedUIDs.joined(separator: ","))", verbose: true)
+        VoxtLog.settings("Microphone priority updated from settings dialog. orderedUIDs=\(orderedUIDs.joined(separator: ","))", verbose: true)
         microphoneState = MicrophonePreferenceManager.reorderPriority(
             orderedUIDs: orderedUIDs,
             defaults: .standard,
@@ -390,9 +390,9 @@ struct GeneralSettingsView: View {
 
     private func focusMicrophone(uid: String, source: String) {
         if let entry = microphoneState.entries.first(where: { $0.uid == uid }) {
-            VoxtLog.info("Microphone focus changed from \(source). uid=\(uid), name=\(entry.name)")
+            VoxtLog.settings("Microphone focus changed from \(source). uid=\(uid), name=\(entry.name)")
         } else {
-            VoxtLog.info("Microphone focus changed from \(source). uid=\(uid)")
+            VoxtLog.settings("Microphone focus changed from \(source). uid=\(uid)")
         }
         selectMicrophoneManually(uid: uid)
     }

@@ -30,7 +30,7 @@ extension AppDelegate {
             let previousRepo = MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo)
             guard canonicalRepo != previousRepo else { return }
 
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Synchronizing MLX runtime model. previous=\(previousRepo), current=\(canonicalRepo)"
             )
             mlxModelManager.updateModel(repo: canonicalRepo)
@@ -41,7 +41,7 @@ extension AppDelegate {
             let previousModelID = WhisperKitModelManager.canonicalModelID(whisperModelManager.currentModelID)
             guard canonicalModelID != previousModelID else { return }
 
-            VoxtLog.info(
+            VoxtLog.asr(
                 "Synchronizing Whisper runtime model. previous=\(previousModelID), current=\(canonicalModelID)"
             )
             whisperModelManager.updateModel(id: canonicalModelID)

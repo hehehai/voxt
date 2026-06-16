@@ -213,7 +213,7 @@ final class MeetingWhisperSegmentTranscriber: MeetingSegmentTranscribing {
                 dictionaryEntries: activeMeetingDictionaryEntries()
             )
             guard !sanitizedText.isEmpty else {
-                VoxtLog.warning("Meeting Whisper transcription suppressed because it matched ASR prompt or hint guidance.")
+                VoxtLog.meetingWarning("Meeting Whisper transcription suppressed because it matched ASR prompt or hint guidance.")
                 return nil
             }
             return MeetingTranscriptSegment(
@@ -226,7 +226,7 @@ final class MeetingWhisperSegmentTranscriber: MeetingSegmentTranscribing {
             )
         } catch {
             await MainActor.run {
-                VoxtLog.error("Meeting Whisper transcription failed: \(error)")
+                VoxtLog.meetingError("Meeting Whisper transcription failed: \(error)")
             }
             return nil
         }
@@ -291,7 +291,7 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             dictionaryEntries: activeMeetingDictionaryEntries()
         )
         guard !sanitizedText.isEmpty else {
-            VoxtLog.warning("Meeting MLX transcription suppressed because it matched ASR prompt or hint guidance.")
+            VoxtLog.meetingWarning("Meeting MLX transcription suppressed because it matched ASR prompt or hint guidance.")
             return nil
         }
         return MeetingTranscriptSegment(
@@ -355,7 +355,7 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
                 dictionaryEntries: activeMeetingDictionaryEntries()
             )
             guard !sanitizedText.isEmpty else {
-                VoxtLog.warning("Meeting Remote ASR transcription suppressed because it matched ASR prompt or hint guidance.")
+                VoxtLog.meetingWarning("Meeting Remote ASR transcription suppressed because it matched ASR prompt or hint guidance.")
                 return nil
             }
             return MeetingTranscriptSegment(
@@ -368,7 +368,7 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
             )
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
-            VoxtLog.error("Meeting Remote ASR transcription failed: \(error)")
+            VoxtLog.meetingError("Meeting Remote ASR transcription failed: \(error)")
             return nil
         }
     }
@@ -395,7 +395,7 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
                 guard attempt < retryLimit, shouldRetry(error, provider: configuration.provider) else {
                     throw error
                 }
-                VoxtLog.warning(
+                VoxtLog.meetingWarning(
                     "Meeting Remote ASR chunk retry scheduled. provider=\(configuration.provider.rawValue), attempt=\(attempt + 1)"
                 )
                 try? await Task.sleep(for: .milliseconds(220))

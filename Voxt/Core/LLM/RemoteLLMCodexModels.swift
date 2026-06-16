@@ -33,7 +33,7 @@ extension RemoteLLMRuntimeClient {
                 }
             }
         } catch {
-            VoxtLog.warning("Codex model catalog fetch failed, using built-in fallback: \(error.localizedDescription)")
+            VoxtLog.llmWarning("Codex model catalog fetch failed, using built-in fallback: \(error.localizedDescription)")
         }
         return RemoteLLMProvider.codex.modelOptions
     }

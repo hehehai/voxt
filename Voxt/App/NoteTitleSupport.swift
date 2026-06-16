@@ -53,12 +53,12 @@ extension AppDelegate {
             let resolvedTitle = normalizedTitle.isEmpty ? fallbackTitle : normalizedTitle
             let resolvedState: NoteTitleGenerationState = normalizedTitle.isEmpty ? .fallback : .generated
             _ = noteStore.updateTitle(resolvedTitle, state: resolvedState, for: noteID)
-            VoxtLog.info(
+            VoxtLog.history(
                 "Voxt note title generated. noteID=\(noteID.uuidString), state=\(resolvedState.rawValue), titleChars=\(resolvedTitle.count)"
             )
         } catch {
             _ = noteStore.updateTitle(fallbackTitle, state: .fallback, for: noteID)
-            VoxtLog.warning("Voxt note title generation failed. noteID=\(noteID.uuidString), error=\(error.localizedDescription)")
+            VoxtLog.historyWarning("Voxt note title generation failed. noteID=\(noteID.uuidString), error=\(error.localizedDescription)")
         }
     }
 
