@@ -1,6 +1,50 @@
 import Foundation
 
 extension AppDelegate {
+    enum TextTransformFailure: LocalizedError {
+        case translationModelNotInstalled
+        case translationRemoteModelNotConfigured
+        case translationProviderUnavailable
+        case translationPlanUnavailable
+        case translationRejectedByGuard(reason: String?)
+        case rewriteModelNotInstalled
+        case rewriteRemoteModelNotConfigured
+        case rewriteRejectedByGuard(reason: String?)
+
+        var errorDescription: String? {
+            switch self {
+            case .translationModelNotInstalled:
+                return String(localized: "Translation failed because the selected local LLM model is not installed.")
+            case .translationRemoteModelNotConfigured:
+                return String(localized: "Translation failed because no remote LLM model is configured.")
+            case .translationProviderUnavailable:
+                return String(localized: "Translation failed because the selected translation provider is unavailable for this request.")
+            case .translationPlanUnavailable:
+                return String(localized: "Translation failed because Voxt could not prepare the translation request.")
+            case .translationRejectedByGuard:
+                return String(localized: "Translation failed because the model output looked incomplete.")
+            case .rewriteModelNotInstalled:
+                return String(localized: "Rewrite failed because the selected local LLM model is not installed.")
+            case .rewriteRemoteModelNotConfigured:
+                return String(localized: "Rewrite failed because no remote LLM model is configured.")
+            case .rewriteRejectedByGuard:
+                return String(localized: "Rewrite failed because the model output looked incomplete.")
+            }
+        }
+
+        var recoverySuggestion: String? {
+            switch self {
+            case .translationModelNotInstalled, .rewriteModelNotInstalled:
+                return String(localized: "Open Settings > Model to install it.")
+            case .translationRemoteModelNotConfigured, .rewriteRemoteModelNotConfigured:
+                return String(localized: "Configure a provider in Settings > Model.")
+            case .translationRejectedByGuard, .rewriteRejectedByGuard,
+                 .translationProviderUnavailable, .translationPlanUnavailable:
+                return nil
+            }
+        }
+    }
+
     enum VariablePromptDelivery: Equatable {
         case systemPrompt
         case userMessage
@@ -90,26 +134,18 @@ extension AppDelegate {
         if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: translationRepo) else {
                 VoxtLog.warning("Translation provider customLLM unavailable: model not downloaded. repo=\(translationRepo)")
-                showOverlayStatus(
-                    String(localized: "Custom LLM model is not installed. Open Settings > Model to install it."),
-                    clearAfter: 2.5
-                )
-                return text
+                throw TextTransformFailure.translationModelNotInstalled
             }
             VoxtLog.info("Translation provider selected: customLLM")
         } else if modelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
                 VoxtLog.warning("Translation provider remoteLLM unavailable: no configured model.")
-                showOverlayStatus(
-                    String(localized: "No configured remote LLM model yet. Configure a provider in Settings > Model."),
-                    clearAfter: 2.5
-                )
-                return text
+                throw TextTransformFailure.translationRemoteModelNotConfigured
             }
             VoxtLog.info("Translation provider selected: remoteLLM(\(context.provider.rawValue))")
         } else {
-            return text
+            throw TextTransformFailure.translationProviderUnavailable
         }
 
         let strategy = TaskLLMStrategyResolver.resolve(
@@ -127,7 +163,7 @@ extension AppDelegate {
             providerOverride: providerOverride,
             executionStrategy: strategy
         ) else {
-            return text
+            throw TextTransformFailure.translationPlanUnavailable
         }
         let translated = try await executeLLMExecutionPlan(plan)
         let guarded = TaskLLMStrategyResolver.applyTruncationGuard(
@@ -139,6 +175,7 @@ extension AppDelegate {
             VoxtLog.warning(
                 "Translation truncation guard restored source text. inputChars=\(text.count), outputChars=\(translated.count), reason=\(guarded.reason ?? "unknown"), strategy=\(strategy.logLabel)"
             )
+            throw TextTransformFailure.translationRejectedByGuard(reason: guarded.reason)
         }
         return guarded.text
     }
@@ -213,29 +250,13 @@ extension AppDelegate {
         if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: rewriteRepo) else {
                 VoxtLog.warning("Rewrite provider customLLM unavailable: model not downloaded. repo=\(rewriteRepo)")
-                showOverlayStatus(
-                    String(localized: "Custom LLM model is not installed. Open Settings > Model to install it."),
-                    clearAfter: 2.5
-                )
-                return rewriteUnavailableFallbackText(
-                    dictatedPrompt: dictatedPrompt,
-                    sourceText: sourceText,
-                    structuredAnswerOutput: structuredAnswerOutput
-                )
+                throw TextTransformFailure.rewriteModelNotInstalled
             }
         } else {
             let context = remoteContext ?? resolvedRemoteLLMContext(forRewrite: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
                 VoxtLog.warning("Rewrite provider remoteLLM unavailable: no configured model.")
-                showOverlayStatus(
-                    String(localized: "No configured remote LLM model yet. Configure a provider in Settings > Model."),
-                    clearAfter: 2.5
-                )
-                return rewriteUnavailableFallbackText(
-                    dictatedPrompt: dictatedPrompt,
-                    sourceText: sourceText,
-                    structuredAnswerOutput: structuredAnswerOutput
-                )
+                throw TextTransformFailure.rewriteRemoteModelNotConfigured
             }
         }
 
@@ -301,6 +322,7 @@ extension AppDelegate {
             VoxtLog.warning(
                 "Rewrite truncation guard restored source text. inputChars=\(originalText.count), outputChars=\(rewritten.count), reason=\(guarded.reason ?? "unknown"), strategy=\(strategy.logLabel)"
             )
+            throw TextTransformFailure.rewriteRejectedByGuard(reason: guarded.reason)
         }
         return guarded.text
     }
@@ -345,15 +367,15 @@ extension AppDelegate {
 
         if modelProvider == .customLLM {
             guard customLLMManager.isModelDownloaded(repo: translationRepo) else {
-                return text
+                throw TextTransformFailure.translationModelNotInstalled
             }
         } else if modelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
-                return text
+                throw TextTransformFailure.translationRemoteModelNotConfigured
             }
         } else {
-            return text
+            throw TextTransformFailure.translationProviderUnavailable
         }
 
         let strategy = TaskLLMStrategyResolver.resolve(
@@ -371,7 +393,7 @@ extension AppDelegate {
             providerOverride: providerOverride,
             executionStrategy: strategy
         ) else {
-            return text
+            throw TextTransformFailure.translationPlanUnavailable
         }
         let translated = try await executeLLMExecutionPlan(plan)
         let guarded = TaskLLMStrategyResolver.applyTruncationGuard(
@@ -383,6 +405,7 @@ extension AppDelegate {
             VoxtLog.warning(
                 "Strict translation truncation guard restored source text. inputChars=\(text.count), outputChars=\(translated.count), reason=\(guarded.reason ?? "unknown"), strategy=\(strategy.logLabel)"
             )
+            throw TextTransformFailure.translationRejectedByGuard(reason: guarded.reason)
         }
         return guarded.text
     }
@@ -766,28 +789,6 @@ extension AppDelegate {
         return looksStructuredStub
     }
 
-    func rewriteUnavailableFallbackText(
-        dictatedPrompt: String,
-        sourceText: String,
-        structuredAnswerOutput: Bool
-    ) -> String {
-        if structuredAnswerOutput {
-            return serializedRewriteAnswerPayload(
-                RewriteAnswerPayload(
-                    title: String(localized: "AI Answer"),
-                    content: String(localized: "Unable to generate answer.")
-                )
-            ) ?? #"{"title":"AI Answer","content":"Unable to generate answer."}"#
-        }
-
-        let trimmedSource = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedSource.isEmpty {
-            return sourceText
-        }
-
-        return String(localized: "Unable to generate answer.")
-    }
-
     func serializedRewriteAnswerPayload(_ payload: RewriteAnswerPayload) -> String? {
         let object: [String: String] = [
             "title": payload.title,
@@ -809,7 +810,7 @@ extension AppDelegate {
             targetLanguage: targetLanguage,
             allowStrictRetry: allowStrictRetry,
             translate: { [weak self] value, targetLanguage in
-                guard let self else { return value }
+                guard let self else { throw CancellationError() }
                 return try await self.translateText(value, targetLanguage: targetLanguage)
             },
             shouldRetry: { [weak self] source, result in
@@ -821,7 +822,7 @@ extension AppDelegate {
                 return false
             },
             strictTranslate: { [weak self] value, targetLanguage in
-                guard let self else { return value }
+                guard let self else { throw CancellationError() }
                 return try await self.translateTextStrict(value, targetLanguage: targetLanguage)
             }
         )
@@ -843,7 +844,7 @@ extension AppDelegate {
         let stages = TranslationSessionPipelineBuilder.makeRewriteStages(
             sourceText: selectedSourceText,
             rewrite: { [weak self] dictatedPrompt, sourceText in
-                guard let self else { return dictatedPrompt }
+                guard let self else { throw CancellationError() }
                 return try await self.rewriteText(
                     dictatedPrompt: dictatedPrompt,
                     sourceText: sourceText,

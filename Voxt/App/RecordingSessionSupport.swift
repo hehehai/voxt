@@ -165,28 +165,6 @@ enum RecordingSessionSupport {
         return markerHits >= 2
     }
 
-    static func stopRecordingFallbackTimeoutSeconds(
-        transcriptionEngine: TranscriptionEngine,
-        remoteProvider: RemoteASRProvider
-    ) -> TimeInterval {
-        switch transcriptionEngine {
-        case .whisperKit:
-            return 20
-        case .mlxAudio:
-            return 20
-        case .dictation:
-            return 8
-        case .remote:
-            break
-        }
-        switch remoteProvider {
-        case .openAIWhisper, .glmASR, .stepFunASR:
-            return 60
-        case .doubaoASR, .aliyunBailianASR:
-            return 8
-        }
-    }
-
     static func extractTranscriptionTextValue(from object: Any) -> String? {
         if let text = object as? String {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

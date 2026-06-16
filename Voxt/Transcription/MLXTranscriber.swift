@@ -41,6 +41,15 @@ private struct SenseVoiceInferenceResult {
     let metadata: SenseVoiceTranscriptMetadata?
 }
 
+private struct MLXDetachedInferenceResult {
+    let rawText: String
+    let senseVoiceMetadata: SenseVoiceTranscriptMetadata?
+}
+
+private struct MLXUnsafeSendableBox<Value>: @unchecked Sendable {
+    nonisolated(unsafe) let value: Value
+}
+
 private struct MLXCorrectionPassResult {
     let text: String?
     let error: Error?
@@ -100,7 +109,7 @@ enum MLXCorrectionPassSchedulingDecision: Equatable {
 }
 
 enum MLXTranscriptionPlanning {
-    static func shouldUseSenseVoiceVAD(
+    nonisolated static func shouldUseSenseVoiceVAD(
         sampleCount: Int,
         sampleRate: Int,
         directPassMaximumDurationSeconds: Double
@@ -110,7 +119,7 @@ enum MLXTranscriptionPlanning {
         return durationSeconds > directPassMaximumDurationSeconds
     }
 
-    static func splitSenseVoiceRange(
+    nonisolated static func splitSenseVoiceRange(
         start: Int,
         end: Int,
         maxChunkSamples: Int,
@@ -168,11 +177,11 @@ enum MLXTranscriptionPlanning {
         )
     }
 
-    static func mergeSequentialTranscript(base: String, next: String) -> String {
+    nonisolated static func mergeSequentialTranscript(base: String, next: String) -> String {
         sequentialTranscriptMergeResult(base: base, next: next).text
     }
 
-    static func sequentialTranscriptMergeResult(base: String, next: String) -> MLXSequentialTranscriptMergeResult {
+    nonisolated static func sequentialTranscriptMergeResult(base: String, next: String) -> MLXSequentialTranscriptMergeResult {
         let left = base.trimmingCharacters(in: .whitespacesAndNewlines)
         let right = next.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !left.isEmpty else {
@@ -277,7 +286,7 @@ enum MLXTranscriptionPlanning {
         return plan.shouldRunQuickPass
     }
 
-    static func resolvedNativeLiveVisiblePreview(
+    nonisolated static func resolvedNativeLiveVisiblePreview(
         previousPreview: String,
         previousConfirmedText: String,
         confirmedText: String,
@@ -315,7 +324,7 @@ enum MLXTranscriptionPlanning {
         return .waitForInFlightPass
     }
 
-    static func automaticBiases(
+    nonisolated static func automaticBiases(
         for family: MLXModelFamily,
         multilingualContext: String?
     ) -> (qwenContextBias: String?, granitePromptBias: String?) {
@@ -333,14 +342,14 @@ enum MLXTranscriptionPlanning {
         }
     }
 
-    static func removingKnownASRContextLeakage(from text: String) -> String {
+    nonisolated static func removingKnownASRContextLeakage(from text: String) -> String {
         let lines = text
             .components(separatedBy: .newlines)
             .filter { !isKnownASRContextLeakageLine($0) }
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func isKnownASRContextLeakageLine(_ line: String) -> Bool {
+    private nonisolated static func isKnownASRContextLeakageLine(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
 
@@ -369,7 +378,7 @@ enum MLXTranscriptionPlanning {
         )
     }
 
-    static func mergedHiddenPostStopPreview(base: String, candidate: String) -> String {
+    nonisolated static func mergedHiddenPostStopPreview(base: String, candidate: String) -> String {
         let stableBase = base.trimmingCharacters(in: .whitespacesAndNewlines)
         let stableCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -423,7 +432,7 @@ enum MLXTranscriptionPlanning {
         return merged
     }
 
-    private static func mergeStablePrefix(_ stable: String, candidate: String) -> String {
+    private nonisolated static func mergeStablePrefix(_ stable: String, candidate: String) -> String {
         guard !stable.isEmpty else { return candidate }
         guard !candidate.isEmpty else { return stable }
         if candidate.hasPrefix(stable) {
@@ -445,7 +454,7 @@ enum MLXTranscriptionPlanning {
         return stable + " " + candidate
     }
 
-    private static func longestCommonPrefix(_ lhs: String, _ rhs: String) -> String {
+    private nonisolated static func longestCommonPrefix(_ lhs: String, _ rhs: String) -> String {
         var leftIndex = lhs.startIndex
         var rightIndex = rhs.startIndex
 
@@ -457,7 +466,7 @@ enum MLXTranscriptionPlanning {
         return String(lhs[..<leftIndex])
     }
 
-    private static func suffixPrefixOverlapCount(_ lhs: String, _ rhs: String) -> Int {
+    private nonisolated static func suffixPrefixOverlapCount(_ lhs: String, _ rhs: String) -> Int {
         let left = Array(lhs)
         let right = Array(rhs)
         let maxOverlap = min(left.count, right.count)
@@ -471,7 +480,7 @@ enum MLXTranscriptionPlanning {
         return 0
     }
 
-    private static func hasSharedWindow(_ lhs: String, _ rhs: String, minLength: Int) -> Bool {
+    private nonisolated static func hasSharedWindow(_ lhs: String, _ rhs: String, minLength: Int) -> Bool {
         guard min(lhs.count, rhs.count) >= minLength else { return false }
         let shorter = lhs.count <= rhs.count ? lhs : rhs
         let longer = lhs.count <= rhs.count ? rhs : lhs
@@ -488,7 +497,7 @@ enum MLXTranscriptionPlanning {
         return false
     }
 
-    private static func stitchedSentenceContinuation(
+    private nonisolated static func stitchedSentenceContinuation(
         base: String,
         candidate: String,
         minimumOverlap: Int,
@@ -521,7 +530,7 @@ enum MLXTranscriptionPlanning {
         return nil
     }
 
-    private static func endsWithSentenceBoundary(_ text: String) -> Bool {
+    private nonisolated static func endsWithSentenceBoundary(_ text: String) -> Bool {
         guard let last = text.trimmingCharacters(in: .whitespacesAndNewlines).last else {
             return false
         }
@@ -531,7 +540,7 @@ enum MLXTranscriptionPlanning {
 
 @MainActor
 class MLXTranscriber: ObservableObject, TranscriberProtocol {
-    private struct ResolvedInferenceConfiguration {
+    private struct ResolvedInferenceConfiguration: Sendable {
         let generationParameters: STTGenerateParameters
         let languageHint: String?
         let qwenContextBias: String
@@ -1019,7 +1028,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             let audioSamples = try prepareInputSamples(rawSamples, sampleRate: sampleRate)
             let inferenceConfiguration = resolvedInferenceConfiguration(for: stage)
             let inferenceStartedAt = Date()
-            let (streamedText, finalOutput, senseVoiceMetadata) = try await runStreamingInference(
+            let inferenceResult = try await runStreamingInference(
                 model: model,
                 audioSamples: audioSamples,
                 inferenceConfiguration: inferenceConfiguration
@@ -1027,7 +1036,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             try Task.checkCancellation()
             let inferenceElapsedMs = Int(Date().timeIntervalSince(inferenceStartedAt) * 1000)
 
-            let rawCandidate = normalizeText(finalOutput?.text ?? streamedText)
+            let rawCandidate = normalizeText(inferenceResult.rawText)
             let candidate = normalizeText(MLXTranscriptionPlanning.removingKnownASRContextLeakage(from: rawCandidate))
             if candidate != rawCandidate {
                 VoxtLog.warning(
@@ -1035,7 +1044,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 )
             }
             guard !candidate.isEmpty else { return .success(nil) }
-            latestSenseVoiceMetadata = senseVoiceMetadata
+            latestSenseVoiceMetadata = inferenceResult.senseVoiceMetadata
             applyCandidate(candidate, stage: stage)
             let elapsedMs = Int(Date().timeIntervalSince(passStartedAt) * 1000)
             VoxtLog.info(
@@ -1764,12 +1773,88 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         model: any STTGenerationModel,
         audioSamples: [Float],
         inferenceConfiguration: ResolvedInferenceConfiguration
-    ) async throws -> (streamedText: String, finalOutput: STTOutput?, senseVoiceMetadata: SenseVoiceTranscriptMetadata?) {
+    ) async throws -> MLXDetachedInferenceResult {
+        try Task.checkCancellation()
+        let senseVoiceVADModel = try await resolvedSenseVoiceVADModelIfNeeded(
+            model: model,
+            audioSamples: audioSamples
+        )
+        let modelBox = MLXUnsafeSendableBox(value: model)
+        let vadBox = MLXUnsafeSendableBox(value: senseVoiceVADModel)
+        let targetSampleRate = targetSampleRate
+        let directPassMaximumDurationSeconds = senseVoiceDirectPassMaximumDurationSeconds
+        let chunkMaximumDurationSeconds = senseVoiceChunkMaximumDurationSeconds
+        let chunkOverlapSeconds = senseVoiceChunkOverlapSeconds
+        let vadThreshold = senseVoiceVADThreshold
+        let vadMinSpeechDurationMs = senseVoiceVADMinSpeechDurationMs
+        let vadMinSilenceDurationMs = senseVoiceVADMinSilenceDurationMs
+        let vadSpeechPadMs = senseVoiceVADSpeechPadMs
+
+        let inferenceTask = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            return try await Self.runStreamingInferenceDetached(
+                model: modelBox.value,
+                audioSamples: audioSamples,
+                inferenceConfiguration: inferenceConfiguration,
+                senseVoiceVADModel: vadBox.value,
+                targetSampleRate: targetSampleRate,
+                directPassMaximumDurationSeconds: directPassMaximumDurationSeconds,
+                chunkMaximumDurationSeconds: chunkMaximumDurationSeconds,
+                chunkOverlapSeconds: chunkOverlapSeconds,
+                vadThreshold: vadThreshold,
+                vadMinSpeechDurationMs: vadMinSpeechDurationMs,
+                vadMinSilenceDurationMs: vadMinSilenceDurationMs,
+                vadSpeechPadMs: vadSpeechPadMs
+            )
+        }
+        return try await withTaskCancellationHandler {
+            try await inferenceTask.value
+        } onCancel: {
+            inferenceTask.cancel()
+        }
+    }
+
+    private func resolvedSenseVoiceVADModelIfNeeded(
+        model: any STTGenerationModel,
+        audioSamples: [Float]
+    ) async throws -> SileroVAD? {
+        guard model is SenseVoiceModel else { return nil }
+        guard MLXTranscriptionPlanning.shouldUseSenseVoiceVAD(
+            sampleCount: audioSamples.count,
+            sampleRate: targetSampleRate,
+            directPassMaximumDurationSeconds: senseVoiceDirectPassMaximumDurationSeconds
+        ) else {
+            return nil
+        }
+        if let senseVoiceVADModel {
+            return senseVoiceVADModel
+        }
+
+        let modelDirectory = try await modelManager.ensureModelDirectory(repo: senseVoiceVADRepo)
+        try Task.checkCancellation()
+        let loadedModel = try SileroVAD.fromModelDirectory(modelDirectory)
+        senseVoiceVADModel = loadedModel
+        return loadedModel
+    }
+
+    private nonisolated static func runStreamingInferenceDetached(
+        model: any STTGenerationModel,
+        audioSamples: [Float],
+        inferenceConfiguration: ResolvedInferenceConfiguration,
+        senseVoiceVADModel: SileroVAD?,
+        targetSampleRate: Int,
+        directPassMaximumDurationSeconds: Double,
+        chunkMaximumDurationSeconds: Double,
+        chunkOverlapSeconds: Double,
+        vadThreshold: Float,
+        vadMinSpeechDurationMs: Int,
+        vadMinSilenceDurationMs: Int,
+        vadSpeechPadMs: Int
+    ) async throws -> MLXDetachedInferenceResult {
         try Task.checkCancellation()
         let audioArray = MLXArray(audioSamples)
         var streamedText = ""
-        var finalOutput: STTOutput?
-        var senseVoiceMetadata: SenseVoiceTranscriptMetadata?
+        var finalText: String?
 
         let stream: AsyncThrowingStream<STTGeneration, Error>
         let generationParameters = inferenceConfiguration.generationParameters
@@ -1792,19 +1877,26 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 language: nil
             )
         } else if let senseVoiceModel = model as? SenseVoiceModel {
-            let result = try await runSenseVoiceInference(
+            let result = try runSenseVoiceInferenceDetached(
                 model: senseVoiceModel,
                 audioSamples: audioSamples,
                 languageHint: inferenceConfiguration.languageHint,
                 useITN: inferenceConfiguration.senseVoiceUseITN,
-                verbose: generationParameters.verbose
+                verbose: generationParameters.verbose,
+                vadModel: senseVoiceVADModel,
+                targetSampleRate: targetSampleRate,
+                directPassMaximumDurationSeconds: directPassMaximumDurationSeconds,
+                chunkMaximumDurationSeconds: chunkMaximumDurationSeconds,
+                chunkOverlapSeconds: chunkOverlapSeconds,
+                vadThreshold: vadThreshold,
+                vadMinSpeechDurationMs: vadMinSpeechDurationMs,
+                vadMinSilenceDurationMs: vadMinSilenceDurationMs,
+                vadSpeechPadMs: vadSpeechPadMs
             )
-            let output = result.output
-            senseVoiceMetadata = result.metadata
-            stream = AsyncThrowingStream { continuation in
-                continuation.yield(.result(output))
-                continuation.finish()
-            }
+            return MLXDetachedInferenceResult(
+                rawText: result.output.text,
+                senseVoiceMetadata: result.metadata
+            )
         } else {
             stream = model.generateStream(audio: audioArray, generationParameters: generationParameters)
         }
@@ -1818,27 +1910,39 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             case .info:
                 break
             case .result(let output):
-                finalOutput = output
+                finalText = output.text
             }
         }
 
-        return (streamedText, finalOutput, senseVoiceMetadata)
+        return MLXDetachedInferenceResult(
+            rawText: finalText ?? streamedText,
+            senseVoiceMetadata: nil
+        )
     }
 
-    private func runSenseVoiceInference(
+    private nonisolated static func runSenseVoiceInferenceDetached(
         model: SenseVoiceModel,
         audioSamples: [Float],
         languageHint: String?,
         useITN: Bool,
-        verbose: Bool
-    ) async throws -> SenseVoiceInferenceResult {
+        verbose: Bool,
+        vadModel: SileroVAD?,
+        targetSampleRate: Int,
+        directPassMaximumDurationSeconds: Double,
+        chunkMaximumDurationSeconds: Double,
+        chunkOverlapSeconds: Double,
+        vadThreshold: Float,
+        vadMinSpeechDurationMs: Int,
+        vadMinSilenceDurationMs: Int,
+        vadSpeechPadMs: Int
+    ) throws -> SenseVoiceInferenceResult {
         let durationSeconds = Double(audioSamples.count) / Double(targetSampleRate)
         let resolvedLanguage = normalizedSenseVoiceLanguageHint(languageHint)
 
         guard MLXTranscriptionPlanning.shouldUseSenseVoiceVAD(
             sampleCount: audioSamples.count,
             sampleRate: targetSampleRate,
-            directPassMaximumDurationSeconds: senseVoiceDirectPassMaximumDurationSeconds
+            directPassMaximumDurationSeconds: directPassMaximumDurationSeconds
         ) else {
             let output = model.generate(
                 audio: MLXArray(audioSamples),
@@ -1859,7 +1963,17 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         let ranges: [Range<Int>]
         do {
-            ranges = try await resolvedSenseVoiceSegmentRanges(for: audioSamples)
+            ranges = try resolvedSenseVoiceSegmentRangesDetached(
+                for: audioSamples,
+                vad: vadModel,
+                targetSampleRate: targetSampleRate,
+                chunkMaximumDurationSeconds: chunkMaximumDurationSeconds,
+                chunkOverlapSeconds: chunkOverlapSeconds,
+                vadThreshold: vadThreshold,
+                vadMinSpeechDurationMs: vadMinSpeechDurationMs,
+                vadMinSilenceDurationMs: vadMinSilenceDurationMs,
+                vadSpeechPadMs: vadSpeechPadMs
+            )
         } catch {
             let structuredError = MLXStructuredTranscriptionError.senseVoiceLongFormVADUnavailable(
                 error.localizedDescription
@@ -1889,7 +2003,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 useITN: useITN,
                 verbose: verbose
             )
-            let chunkText = normalizeText(output.text)
+            let chunkText = output.text.trimmingCharacters(in: .whitespacesAndNewlines)
             mergedText = MLXTranscriptionPlanning.mergeSequentialTranscript(base: mergedText, next: chunkText)
             if let metadata = SenseVoiceTranscriptMetadata.fromOutput(
                 output,
@@ -1925,18 +2039,30 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         return SenseVoiceInferenceResult(output: output, metadata: metadata)
     }
 
-    private func resolvedSenseVoiceSegmentRanges(for audioSamples: [Float]) async throws -> [Range<Int>] {
-        let vad = try await loadSenseVoiceVADModel()
+    private nonisolated static func resolvedSenseVoiceSegmentRangesDetached(
+        for audioSamples: [Float],
+        vad: SileroVAD?,
+        targetSampleRate: Int,
+        chunkMaximumDurationSeconds: Double,
+        chunkOverlapSeconds: Double,
+        vadThreshold: Float,
+        vadMinSpeechDurationMs: Int,
+        vadMinSilenceDurationMs: Int,
+        vadSpeechPadMs: Int
+    ) throws -> [Range<Int>] {
+        guard let vad else {
+            throw MLXStructuredTranscriptionError.senseVoiceLongFormVADUnavailable("VAD model is not loaded.")
+        }
         let timestamps = try vad.getSpeechTimestamps(
             MLXArray(audioSamples),
             sampleRate: targetSampleRate,
-            threshold: senseVoiceVADThreshold,
-            minSpeechDurationMs: senseVoiceVADMinSpeechDurationMs,
-            minSilenceDurationMs: senseVoiceVADMinSilenceDurationMs,
-            speechPadMs: senseVoiceVADSpeechPadMs
+            threshold: vadThreshold,
+            minSpeechDurationMs: vadMinSpeechDurationMs,
+            minSilenceDurationMs: vadMinSilenceDurationMs,
+            speechPadMs: vadSpeechPadMs
         )
-        let maxChunkSamples = Int(senseVoiceChunkMaximumDurationSeconds * Double(targetSampleRate))
-        let overlapSamples = Int(senseVoiceChunkOverlapSeconds * Double(targetSampleRate))
+        let maxChunkSamples = Int(chunkMaximumDurationSeconds * Double(targetSampleRate))
+        let overlapSamples = Int(chunkOverlapSeconds * Double(targetSampleRate))
         var ranges: [Range<Int>] = []
 
         for timestamp in timestamps {
@@ -1955,17 +2081,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         return ranges
     }
 
-    private func loadSenseVoiceVADModel() async throws -> SileroVAD {
-        if let senseVoiceVADModel {
-            return senseVoiceVADModel
-        }
-        let modelDirectory = try await modelManager.ensureModelDirectory(repo: senseVoiceVADRepo)
-        let model = try SileroVAD.fromModelDirectory(modelDirectory)
-        senseVoiceVADModel = model
-        return model
-    }
-
-    private func normalizedSenseVoiceLanguageHint(_ languageHint: String?) -> String {
+    private nonisolated static func normalizedSenseVoiceLanguageHint(_ languageHint: String?) -> String {
         let normalized = languageHint?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased() ?? "auto"
@@ -1995,13 +2111,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let model = try await modelManager.loadModel()
         let audioSamples = try prepareInputSamples(samples, sampleRate: sampleRate)
         let inferenceConfiguration = resolvedInferenceConfiguration(for: .postStopFinal)
-        let (streamedText, finalOutput, senseVoiceMetadata) = try await runStreamingInference(
+        let inferenceResult = try await runStreamingInference(
             model: model,
             audioSamples: audioSamples,
             inferenceConfiguration: inferenceConfiguration
         )
-        latestSenseVoiceMetadata = senseVoiceMetadata
-        let rawCandidate = normalizeText(finalOutput?.text ?? streamedText)
+        latestSenseVoiceMetadata = inferenceResult.senseVoiceMetadata
+        let rawCandidate = normalizeText(inferenceResult.rawText)
         let candidate = normalizeText(MLXTranscriptionPlanning.removingKnownASRContextLeakage(from: rawCandidate))
         if candidate != rawCandidate {
             VoxtLog.warning(

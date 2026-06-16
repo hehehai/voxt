@@ -299,7 +299,7 @@ struct SettingsView: View {
 
                         if sidebarMode == .root, selectedTab == .report {
                             Button(settingsLocalized("Guide")) {
-                                enterOnboarding(step: .language)
+                                AppDelegate.shared?.openOnboardingWindow()
                             }
                             .buttonStyle(SettingsPillButtonStyle())
                         }

@@ -58,9 +58,6 @@ extension AppDelegate {
             return
         }
 
-        stopRecordingFallbackTask?.cancel()
-        stopRecordingFallbackTask = nil
-
         transcriptionResultReceivedAt = Date()
         if let stoppedAt = recordingStoppedAt {
             let stopToResultMs = max(Int(Date().timeIntervalSince(stoppedAt) * 1000), 0)

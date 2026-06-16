@@ -401,8 +401,6 @@ extension AppDelegate {
     func cancelPendingFinishTasks() {
         pendingSessionFinishTask?.cancel()
         pendingSessionFinishTask = nil
-        stopRecordingFallbackTask?.cancel()
-        stopRecordingFallbackTask = nil
     }
 
     func cancelActiveRecordingTasks() {

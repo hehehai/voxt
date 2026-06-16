@@ -125,25 +125,47 @@ private struct SettingsPrimaryButtonBody: View {
     let horizontalPadding: CGFloat
     let height: CGFloat
 
+    @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
 
     var body: some View {
         configuration.label
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white.opacity(configuration.isPressed ? 0.82 : 0.96))
+            .foregroundStyle(foreground)
             .padding(.horizontal, horizontalPadding)
             .frame(height: height)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.accentColor.opacity(configuration.isPressed ? 0.82 : isHovered ? 1 : 0.96))
+                    .fill(background)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.accentColor.opacity(isHovered ? 0.38 : 0.28), lineWidth: 1)
+                    .strokeBorder(stroke, lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .opacity(configuration.isPressed ? 0.92 : 1)
-            .onHover { isHovered = $0 }
+            .opacity(isEnabled && configuration.isPressed ? 0.92 : 1)
+            .onHover { isHovered = isEnabled && $0 }
+    }
+
+    private var foreground: Color {
+        if !isEnabled {
+            return .secondary.opacity(0.62)
+        }
+        return .white.opacity(configuration.isPressed ? 0.82 : 0.96)
+    }
+
+    private var background: Color {
+        if !isEnabled {
+            return Color.primary.opacity(0.055)
+        }
+        return Color.accentColor.opacity(configuration.isPressed ? 0.82 : isHovered ? 1 : 0.96)
+    }
+
+    private var stroke: Color {
+        if !isEnabled {
+            return SettingsUIStyle.subtleBorderColor.opacity(0.78)
+        }
+        return Color.accentColor.opacity(isHovered ? 0.38 : 0.28)
     }
 }
 

@@ -461,6 +461,18 @@ extension OnboardingSettingsView {
                 }
             }
 
+            GeneralSettingsCard(title: "Notes") {
+                GeneralToggleRow(
+                    title: "Enable Notes",
+                    description: "Add segmented notes during transcription. Once enabled, Notes appears in the Feature menu and supports a dedicated trigger key.",
+                    isOn: onboardingNotesEnabled
+                )
+
+                Text(localized("Notes configuration moved here after transcription-level enablement."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             OnboardingSummaryCard(
                 title: "Quick Test",
                 lines: [
@@ -633,6 +645,38 @@ extension OnboardingSettingsView {
                         AppLocalization.format("Rewrite: %@", rewriteProviderSummary)
                     ]
                 )
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    OnboardingFeatureSummaryRow(
+                        iconKind: .meeting,
+                        title: "Meeting",
+                        detail: "Capture microphone and system audio into a speaker-labelled transcript.",
+                        status: meetingASRSummary,
+                        statusTint: .accentColor
+                    )
+
+                    Divider()
+
+                    OnboardingFeatureSummaryRow(
+                        iconKind: .note,
+                        title: "Notes",
+                        detail: "Capture key points during recording. Notes stay separate and get short AI titles.",
+                        status: notesStatusSummary,
+                        statusTint: featureSettings.transcription.notes.enabled ? .green : .secondary
+                    )
+
+                    Divider()
+
+                    OnboardingFeatureSummaryRow(
+                        iconKind: .appEnhancement,
+                        title: "App Enhancement",
+                        detail: "Use different enhancement prompts for different apps or browser pages.",
+                        status: featureSettings.rewrite.appEnhancementEnabled ? localized("Enabled") : localized("Disabled"),
+                        statusTint: featureSettings.rewrite.appEnhancementEnabled ? .green : .secondary
+                    )
+                }
 
                 HStack {
                     Spacer()

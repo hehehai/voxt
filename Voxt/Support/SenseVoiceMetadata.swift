@@ -10,7 +10,7 @@ struct SenseVoiceSegmentMetadata: Identifiable, Codable, Hashable, Sendable {
     let emotion: String?
     let event: String?
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         startSeconds: TimeInterval,
         endSeconds: TimeInterval,
@@ -70,7 +70,7 @@ struct SenseVoiceTranscriptMetadata: Codable, Hashable, Sendable {
 }
 
 extension SenseVoiceTranscriptMetadata {
-    static func fromOutput(
+    nonisolated static func fromOutput(
         _ output: STTOutput,
         startSeconds: TimeInterval,
         endSeconds: TimeInterval,
@@ -87,7 +87,7 @@ extension SenseVoiceTranscriptMetadata {
         )
     }
 
-    static func aggregated(
+    nonisolated static func aggregated(
         segments: [SenseVoiceSegmentMetadata],
         usedVADSegmentation: Bool
     ) -> SenseVoiceTranscriptMetadata? {
@@ -101,7 +101,7 @@ extension SenseVoiceTranscriptMetadata {
         )
     }
 
-    static func mergeSequentialSegments(
+    nonisolated static func mergeSequentialSegments(
         base: [SenseVoiceSegmentMetadata],
         next: [SenseVoiceSegmentMetadata]
     ) -> [SenseVoiceSegmentMetadata] {
@@ -137,7 +137,7 @@ extension SenseVoiceTranscriptMetadata {
         return merged
     }
 
-    private static func segments(
+    private nonisolated static func segments(
         from output: STTOutput,
         startSeconds: TimeInterval,
         endSeconds: TimeInterval
@@ -176,7 +176,7 @@ extension SenseVoiceTranscriptMetadata {
         }
     }
 
-    private static func fallbackSegmentRange(
+    private nonisolated static func fallbackSegmentRange(
         index: Int,
         totalCount: Int,
         startSeconds: TimeInterval,
@@ -196,7 +196,7 @@ extension SenseVoiceTranscriptMetadata {
         return segmentStart ... segmentEnd
     }
 
-    private static func dominantMetadataValue(_ values: [String]) -> String? {
+    private nonisolated static func dominantMetadataValue(_ values: [String]) -> String? {
         var counts: [String: Int] = [:]
         var order: [String] = []
         for value in values {
@@ -219,20 +219,20 @@ extension SenseVoiceTranscriptMetadata {
         }
     }
 
-    private static func normalizedMetadataValue(_ value: String?) -> String? {
+    private nonisolated static func normalizedMetadataValue(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func mergedMetadataValue(primary: String?, secondary: String?) -> String? {
+    private nonisolated static func mergedMetadataValue(primary: String?, secondary: String?) -> String? {
         normalizedMetadataValue(primary) ?? normalizedMetadataValue(secondary)
     }
 
-    private static func normalizedText(_ text: String) -> String {
+    private nonisolated static func normalizedText(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func shouldMergeBoundarySegments(
+    private nonisolated static func shouldMergeBoundarySegments(
         _ left: SenseVoiceSegmentMetadata,
         _ right: SenseVoiceSegmentMetadata
     ) -> Bool {
@@ -243,7 +243,7 @@ extension SenseVoiceTranscriptMetadata {
         return mergeResult.overlapCount > 0
     }
 
-    private static func parsedTimeInterval(_ value: Any?) -> TimeInterval? {
+    private nonisolated static func parsedTimeInterval(_ value: Any?) -> TimeInterval? {
         switch value {
         case let number as NSNumber:
             return number.doubleValue

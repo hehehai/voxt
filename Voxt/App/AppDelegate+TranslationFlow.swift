@@ -5,6 +5,36 @@ extension AppDelegate {
     // MARK: - Translation Flow
     // Keeps translation/enhancement orchestration isolated from recording lifecycle.
 
+    private func textTransformFailureMessage(
+        for error: Error,
+        fallbackMessage: String
+    ) -> String {
+        guard let localizedError = error as? LocalizedError else {
+            return fallbackMessage
+        }
+
+        let description = localizedError.errorDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let suggestion = localizedError.recoverySuggestion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        switch (description.isEmpty, suggestion.isEmpty) {
+        case (false, false):
+            return "\(description) \(suggestion)"
+        case (false, true):
+            return description
+        case (true, false):
+            return suggestion
+        case (true, true):
+            return fallbackMessage
+        }
+    }
+
+    private func failCurrentTextTransformSession(
+        _ message: String,
+        finishAfter delay: TimeInterval = 2.8
+    ) {
+        showOverlayStatus(message, clearAfter: delay)
+        finishSession(after: delay)
+    }
+
     func runTranslationPreview(_ text: String) async throws -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
@@ -70,11 +100,13 @@ extension AppDelegate {
                 }
             } catch {
                 guard self.shouldHandleCallbacks(for: sessionID) else { return }
-                VoxtLog.warning("Translation flow failed, using raw text: \(error)")
-                self.commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
-                    guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
-                    self.finishSession(after: 0)
-                }
+                VoxtLog.warning("Translation flow failed without committing raw text: \(error)")
+                self.failCurrentTextTransformSession(
+                    self.textTransformFailureMessage(
+                        for: error,
+                        fallbackMessage: String(localized: "Translation failed. Try again after checking the selected model.")
+                    )
+                )
             }
         }
     }
@@ -97,8 +129,6 @@ extension AppDelegate {
 
         pendingSessionFinishTask?.cancel()
         pendingSessionFinishTask = nil
-        stopRecordingFallbackTask?.cancel()
-        stopRecordingFallbackTask = nil
         silenceMonitorTask?.cancel()
         silenceMonitorTask = nil
         pauseLLMTask?.cancel()
@@ -256,12 +286,8 @@ extension AppDelegate {
                 }
                 if prefersStructuredAnswerOutput,
                    self.shouldRetryStructuredRewriteAnswer(for: rewritten, dictatedPrompt: text) {
-                    VoxtLog.warning("Rewrite structured answer still unusable after retry; substituting empty-answer placeholder.")
-                    rewritten = self.rewriteUnavailableFallbackText(
-                        dictatedPrompt: text,
-                        sourceText: selectedSourceText,
-                        structuredAnswerOutput: true
-                    )
+                    VoxtLog.warning("Rewrite structured answer still unusable after retry; failing without committing fallback text.")
+                    throw TextTransformFailure.rewriteRejectedByGuard(reason: "Structured rewrite answer was empty or unusable after retry.")
                 }
                 if !prefersStructuredAnswerOutput,
                    RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) {
@@ -284,12 +310,8 @@ extension AppDelegate {
                 }
                 if !prefersStructuredAnswerOutput,
                    RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) {
-                    VoxtLog.warning("Rewrite plain-text answer remained unusable after retry; substituting fallback text.")
-                    rewritten = self.rewriteUnavailableFallbackText(
-                        dictatedPrompt: text,
-                        sourceText: selectedSourceText,
-                        structuredAnswerOutput: false
-                    )
+                    VoxtLog.warning("Rewrite plain-text answer remained unusable after retry; failing without committing fallback text.")
+                    throw TextTransformFailure.rewriteRejectedByGuard(reason: "Plain rewrite answer was empty or matched the prompt after retry.")
                 }
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
                 if isConversationContinuation, let latestConversationResponseID {
@@ -314,19 +336,13 @@ extension AppDelegate {
                 }
             } catch {
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
-                VoxtLog.warning("Rewrite flow failed, using rewrite fallback: \(error)")
-                let fallback = self.rewriteUnavailableFallbackText(
-                    dictatedPrompt: text,
-                    sourceText: selectedSourceText,
-                    structuredAnswerOutput: prefersStructuredAnswerOutput
+                VoxtLog.warning("Rewrite flow failed without committing fallback text: \(error)")
+                self.failCurrentTextTransformSession(
+                    self.textTransformFailureMessage(
+                        for: error,
+                        fallbackMessage: String(localized: "Rewrite failed. Try again after checking the selected model.")
+                    )
                 )
-                self.commitTranscription(fallback, llmDurationSeconds: nil) { [weak self] in
-                    guard let self,
-                          self.shouldHandleCallbacks(for: sessionID),
-                          self.isCurrentLLMRequest(requestID)
-                    else { return }
-                    self.finishSession(after: 0)
-                }
             }
         }
     }
@@ -361,12 +377,13 @@ extension AppDelegate {
                 }
             } catch {
                 guard self.isCurrentLLMRequest(requestID) else { return }
-                VoxtLog.warning("Selected text translation failed, using original selected text: \(error)")
-                self.overlayState.transcribedText = text
-                self.commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
-                    guard let self, self.isCurrentLLMRequest(requestID) else { return }
-                    self.finishSession(after: 0)
-                }
+                VoxtLog.warning("Selected text translation failed without committing original selected text: \(error)")
+                self.failCurrentTextTransformSession(
+                    self.textTransformFailureMessage(
+                        for: error,
+                        fallbackMessage: String(localized: "Translation failed. Try again after checking the selected model.")
+                    )
+                )
             }
         }
     }

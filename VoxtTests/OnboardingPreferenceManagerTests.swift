@@ -63,6 +63,18 @@ final class OnboardingPreferenceManagerTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: AppPreferenceKey.onboardingLastStepID))
     }
 
+    func testGuideStepPersistsAndIsClearedWhenCompleted() {
+        let defaults = TestDoubles.makeUserDefaults()
+        OnboardingPreferenceManager.saveLastGuideStep(.models, defaults: defaults)
+
+        XCTAssertEqual(OnboardingPreferenceManager.savedLastGuideStep(defaults: defaults), .models)
+
+        OnboardingPreferenceManager.markCompleted(defaults: defaults)
+
+        XCTAssertEqual(defaults.object(forKey: AppPreferenceKey.onboardingCompleted) as? Bool, true)
+        XCTAssertNil(OnboardingPreferenceManager.savedLastGuideStep(defaults: defaults))
+    }
+
     private func makeIsolatedDefaults() -> (defaults: UserDefaults, suiteName: String) {
         let suiteName = "VoxtTests.Onboarding.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

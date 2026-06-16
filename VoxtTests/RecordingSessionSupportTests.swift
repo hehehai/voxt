@@ -18,44 +18,6 @@ final class RecordingSessionSupportTests: XCTestCase {
         )
     }
 
-    func testStopRecordingFallbackTimeoutUsesProviderSpecificRemoteBudget() {
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .whisperKit,
-                remoteProvider: .openAIWhisper
-            ),
-            20
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .remote,
-                remoteProvider: .openAIWhisper
-            ),
-            60
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .remote,
-                remoteProvider: .doubaoASR
-            ),
-            8
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .dictation,
-                remoteProvider: .openAIWhisper
-            ),
-            8
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .mlxAudio,
-                remoteProvider: .openAIWhisper
-            ),
-            20
-        )
-    }
-
     func testExtractTranscriptionTextValuePrefersKnownKeysAndNestedContent() {
         let payload: [String: Any] = [
             "metadata": ["ignored": true],

@@ -160,6 +160,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var enhancer: (any TextEnhancing)?
     var mainWindowController: NSWindowController?
+    var onboardingWindowController: NSWindowController?
     let mainWindowVisibilityState = MainWindowVisibilityState()
     var pendingStatusMenuActions: [() -> Void] = []
     var isStatusMenuOpen = false
@@ -180,7 +181,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var isSessionActive = false
     var pendingSessionFinishTask: Task<Void, Never>?
-    var stopRecordingFallbackTask: Task<Void, Never>?
     var silenceMonitorTask: Task<Void, Never>?
     var pauseLLMTask: Task<Void, Never>?
     var pendingWhisperStartupTask: Task<Void, Never>?

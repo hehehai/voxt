@@ -220,23 +220,38 @@ struct OnboardingSettingsView: View {
         AnyView(
             HStack(alignment: .top, spacing: 8) {
                 onboardingSidebar
-                    .frame(width: 184)
+                    .frame(width: SettingsUIStyle.sidebarWidth)
                     .frame(maxHeight: .infinity, alignment: .top)
 
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
                     onboardingHeader
+
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
                             stepContent
                             currentStepPermissionSection
                         }
-                        .padding(.horizontal, 8)
                         .padding(.top, 2)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 14)
+                        .padding(.trailing, SettingsUIStyle.contentScrollTrailingGutter)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
+                    .padding(.top, 16)
+                    .padding(.trailing, -SettingsUIStyle.contentScrollIndicatorOutset)
+
+                    onboardingFooter
+                        .padding(.top, 12)
                 }
+                .padding(16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
+                        .fill(SettingsUIStyle.panelFillColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
+                        .strokeBorder(SettingsUIStyle.panelBorderColor, lineWidth: 1)
+                )
             }
         )
     }
@@ -376,31 +391,43 @@ struct OnboardingSettingsView: View {
     }
 
     var onboardingSidebar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(localized("Setup Guide"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
                 Spacer(minLength: 0)
 
                 Text(AppLocalization.format("%d/%d", currentStep.stepNumber, OnboardingStep.allCases.count))
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
+                    .padding(.horizontal, 7)
+                    .frame(height: 19)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.primary.opacity(0.055))
+                    )
             }
-            .padding(.horizontal, 8)
+            .padding(.top, 5)
+            .padding(.bottom, 14)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(OnboardingStep.allCases) { step in
                     Button {
                         currentStep = step
                     } label: {
-                        HStack(spacing: 1) {
-                            Text("\(step.stepNumber)")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .frame(width: 12, alignment: .leading)
-                                .foregroundStyle(step == currentStep ? Color.white.opacity(0.82) : .secondary)
+                        HStack(spacing: 10) {
+                            SettingsSidebarIconView(kind: step.sidebarIconKind)
+                                .frame(width: SettingsUIStyle.sidebarItemIconWidth)
 
                             Text(step.title)
                                 .font(.system(size: 13, weight: .medium))
                                 .lineLimit(1)
+                                .truncationMode(.tail)
+                                .allowsTightening(true)
+                                .layoutPriority(1)
 
                             Spacer(minLength: 0)
 
@@ -431,38 +458,6 @@ struct OnboardingSettingsView: View {
                     .buttonStyle(SettingsStatusButtonStyle(tint: .red))
                 }
 
-                HStack(spacing: 8) {
-                    if let previousStep = currentStep.previous {
-                        Button {
-                            currentStep = previousStep
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text(localized("Prev"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 9))
-                        .frame(maxWidth: .infinity)
-                    }
-
-                    if let nextStep = currentStep.next {
-                        Button {
-                            currentStep = nextStep
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(localized("Next"))
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(SettingsPrimaryButtonStyle(horizontalPadding: 10))
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-
                 Group {
                     if currentStep == .finish {
                         Button(action: onFinish) {
@@ -486,14 +481,79 @@ struct OnboardingSettingsView: View {
     }
 
     var onboardingHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(currentStep.title)
-                .font(.title3.weight(.semibold))
-            Text(currentStep.subtitle)
-                .font(.caption)
+        HStack(alignment: .top, spacing: 14) {
+            SettingsSidebarIconView(kind: currentStep.sidebarIconKind)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 20, height: 20)
+                .frame(width: 36, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.12))
+                )
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(currentStep.title)
+                    .font(.title3.weight(.semibold))
+                Text(currentStep.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(AppLocalization.format("%d/%d", currentStep.stepNumber, OnboardingStep.allCases.count))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 9)
+                .frame(height: 26)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(SettingsUIStyle.controlFillColor)
+                )
         }
-        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    var onboardingFooter: some View {
+        HStack(spacing: 8) {
+            if let previousStep = currentStep.previous {
+                Button {
+                    currentStep = previousStep
+                } label: {
+                    Label(localized("Prev"), systemImage: "chevron.left")
+                }
+                .buttonStyle(SettingsPillButtonStyle())
+            }
+
+            Spacer(minLength: 0)
+
+            if currentStep != .finish {
+                Button(action: onExit) {
+                    Label(localized("Exit Guide"), systemImage: "xmark.circle")
+                }
+                .buttonStyle(SettingsPillButtonStyle())
+            }
+
+            if let nextStep = currentStep.next {
+                Button {
+                    currentStep = nextStep
+                } label: {
+                    Label(localized("Next"), systemImage: "chevron.right")
+                        .labelStyle(OnboardingNextLabelStyle())
+                }
+                .buttonStyle(SettingsPrimaryButtonStyle())
+            } else {
+                Button(action: onFinish) {
+                    Label(localized("Start Voxt"), systemImage: "checkmark.circle")
+                }
+                .buttonStyle(SettingsPrimaryButtonStyle())
+            }
+        }
+        .padding(.top, 12)
+        .overlay(alignment: .top) {
+            Divider()
+        }
     }
 
     func stepStatus(for step: OnboardingStep) -> OnboardingStepStatus {
@@ -588,4 +648,34 @@ struct OnboardingSettingsView: View {
         permissionMonitorTasks[permission] = task
     }
 
+}
+
+private extension OnboardingStep {
+    var sidebarIconKind: SettingsSidebarIconKind {
+        switch self {
+        case .language:
+            return .settings
+        case .model:
+            return .model
+        case .transcription:
+            return .transcription
+        case .translation:
+            return .translation
+        case .rewrite:
+            return .rewrite
+        case .appEnhancement:
+            return .appEnhancement
+        case .finish:
+            return .home
+        }
+    }
+}
+
+private struct OnboardingNextLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.title
+            configuration.icon
+        }
+    }
 }

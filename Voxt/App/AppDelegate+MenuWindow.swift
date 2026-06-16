@@ -439,6 +439,10 @@ extension AppDelegate {
     }
 
     func presentMainWindowOnLaunchIfNeeded() {
+        if OnboardingPreferenceManager.shouldPresentOnLaunch() {
+            openOnboardingWindow()
+            return
+        }
         guard LaunchPresentationPolicy.shouldPresentMainWindowOnLaunch() else { return }
         openMainWindow()
     }
@@ -550,10 +554,7 @@ extension AppDelegate {
     }
 
     private func resolvedInitialDisplayMode(for target: SettingsNavigationTarget) -> SettingsDisplayMode {
-        if OnboardingPreferenceManager.shouldPresentOnLaunch() {
-            let step = OnboardingPreferenceManager.savedLastStep() ?? .language
-            return .onboarding(step: step)
-        }
+        _ = target
         return .normal
     }
 
@@ -677,6 +678,11 @@ extension AppDelegate: NSWindowDelegate {
         sender.orderOut(nil)
         setMainWindowVisibility(false)
         return false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard notification.object as? NSWindow == onboardingWindowController?.window else { return }
+        onboardingWindowController = nil
     }
 
     func windowWillStartLiveResize(_ notification: Notification) {

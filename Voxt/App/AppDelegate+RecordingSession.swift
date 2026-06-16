@@ -5,104 +5,6 @@ import AVFoundation
 import Speech
 
 extension AppDelegate {
-    enum StopRecordingFallbackDecision: Equatable {
-        case finishNow
-        case extendGrace(seconds: TimeInterval)
-    }
-
-    private struct LocalEngineFinalizationState: Equatable {
-        let shouldDeferFallback: Bool
-        let description: String
-    }
-
-    nonisolated static func stopRecordingFallbackDecision(
-        transcriptionEngine: TranscriptionEngine,
-        isLocalEngineFinalizing: Bool,
-        transcriptionResultReceived: Bool,
-        isExtendedGrace: Bool
-    ) -> StopRecordingFallbackDecision {
-        switch transcriptionEngine {
-        case .whisperKit, .mlxAudio:
-            break
-        case .dictation, .remote:
-            return .finishNow
-        }
-        guard isLocalEngineFinalizing else { return .finishNow }
-        guard !transcriptionResultReceived else { return .finishNow }
-        guard !isExtendedGrace else { return .finishNow }
-        return .extendGrace(seconds: 12)
-    }
-
-    private func currentLocalEngineFinalizationState() -> LocalEngineFinalizationState {
-        let whisperFinalizing = whisperTranscriber?.isFinalizingTranscription == true
-        let mlxFinalizing = mlxTranscriber?.isFinalizingTranscription == true
-        let resultReceived = transcriptionResultReceivedAt != nil
-
-        switch transcriptionEngine {
-        case .whisperKit:
-            let shouldDefer = whisperFinalizing && !resultReceived
-            return LocalEngineFinalizationState(
-                shouldDeferFallback: shouldDefer,
-                description: "whisper=\(whisperFinalizing), mlx=\(mlxFinalizing)"
-            )
-        case .mlxAudio:
-            let shouldDefer = mlxFinalizing && !resultReceived
-            return LocalEngineFinalizationState(
-                shouldDeferFallback: shouldDefer,
-                description: "whisper=\(whisperFinalizing), mlx=\(mlxFinalizing)"
-            )
-        case .dictation, .remote:
-            return LocalEngineFinalizationState(
-                shouldDeferFallback: false,
-                description: "whisper=\(whisperFinalizing), mlx=\(mlxFinalizing)"
-            )
-        }
-    }
-
-    private func armStopRecordingFallback(
-        timeoutSeconds: TimeInterval,
-        isExtendedGrace: Bool = false
-    ) {
-        let armedSessionID = activeRecordingSessionID
-        stopRecordingFallbackTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await Task.sleep(for: .seconds(timeoutSeconds))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            guard self.isSessionActive, self.activeRecordingSessionID == armedSessionID else { return }
-
-            let finalizationState = self.currentLocalEngineFinalizationState()
-            let fallbackDecision = Self.stopRecordingFallbackDecision(
-                transcriptionEngine: self.transcriptionEngine,
-                isLocalEngineFinalizing: finalizationState.shouldDeferFallback,
-                transcriptionResultReceived: self.transcriptionResultReceivedAt != nil,
-                isExtendedGrace: isExtendedGrace
-            )
-            if case .extendGrace(let graceSeconds) = fallbackDecision {
-                VoxtLog.warning(
-                    """
-                    Stop recording fallback reached while local finalization is still running; extending grace. sessionID=\(armedSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode)), finalizing=\(finalizationState.description)
-                    """
-                )
-                self.armStopRecordingFallback(timeoutSeconds: graceSeconds, isExtendedGrace: true)
-                return
-            }
-
-            VoxtLog.warning(
-                """
-                Stop recording fallback triggered; forcing session finish. sessionID=\(self.activeRecordingSessionID.uuidString), engine=\(self.transcriptionEngine.rawValue), output=\(RecordingSessionSupport.outputLabel(for: self.sessionOutputMode)), resultReceived=\(self.transcriptionResultReceivedAt != nil), endingSessionID=\(self.currentEndingSessionID?.uuidString ?? "nil"), finalizing=\(finalizationState.description)
-                """
-            )
-            if self.transcriptionEngine == .remote {
-                self.remoteASRTranscriber.discardPendingSessionOutput()
-            }
-            self.finishSession(after: 0)
-        }
-    }
-
     func continueRewriteConversation() {
         guard overlayState.canContinueRewriteAnswer else { return }
         overlayState.beginRewriteConversationIfNeeded()
@@ -133,8 +35,6 @@ extension AppDelegate {
         silenceMonitorTask = nil
         pauseLLMTask?.cancel()
         pauseLLMTask = nil
-        stopRecordingFallbackTask?.cancel()
-        stopRecordingFallbackTask = nil
 
         speechTranscriber.stopRecording()
         mlxTranscriber?.stopRecording()
@@ -314,8 +214,6 @@ extension AppDelegate {
         cancelActiveRecordingTasks()
         pendingSystemAudioMuteTask?.cancel()
         pendingSystemAudioMuteTask = nil
-        stopRecordingFallbackTask?.cancel()
-        stopRecordingFallbackTask = nil
         recordingStoppedAt = Date()
         if transcriptionProcessingStartedAt == nil {
             transcriptionProcessingStartedAt = recordingStoppedAt
@@ -325,14 +223,6 @@ extension AppDelegate {
         voiceEndCommandState.lastDetectedCommand = false
         enhancementContextSnapshot = captureEnhancementContextSnapshot()
         stopActiveRecordingTranscriber()
-
-        // Safety fallback: some engine/device combinations may occasionally fail to
-        // report completion. Ensure the session/UI can always recover.
-        let fallbackTimeoutSeconds = RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-            transcriptionEngine: transcriptionEngine,
-            remoteProvider: remoteASRSelectedProvider
-        )
-        armStopRecordingFallback(timeoutSeconds: fallbackTimeoutSeconds)
     }
 
     func cancelActiveRecordingSession() {

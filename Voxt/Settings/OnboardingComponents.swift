@@ -39,9 +39,9 @@ struct OnboardingStatusBadge: View {
             .padding(.vertical, 4)
             .background(
                 Capsule(style: .continuous)
-                    .fill((isSelected ? Color.white : status.tint).opacity(isSelected ? 0.16 : 0.12))
+                    .fill(status.tint.opacity(isSelected ? 0.18 : 0.12))
             )
-            .foregroundStyle(isSelected ? Color.white : status.tint)
+            .foregroundStyle(status.tint)
     }
 }
 
@@ -123,6 +123,49 @@ struct OnboardingExampleRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+struct OnboardingFeatureSummaryRow: View {
+    let iconKind: SettingsSidebarIconKind
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
+    let status: String
+    var statusTint: Color = .secondary
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            SettingsSidebarIconView(kind: iconKind)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 18, height: 18)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.10))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(status)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(statusTint)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(statusTint.opacity(0.12))
+                )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -44,11 +44,25 @@ enum OnboardingPreferenceManager {
         defaults.set(step.rawValue, forKey: AppPreferenceKey.onboardingLastStepID)
     }
 
+    static func saveLastGuideStep(
+        _ step: OnboardingGuideStep,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(step.rawValue, forKey: AppPreferenceKey.onboardingLastStepID)
+    }
+
     static func savedLastStep(defaults: UserDefaults = .standard) -> OnboardingStep? {
         guard let rawValue = defaults.string(forKey: AppPreferenceKey.onboardingLastStepID) else {
             return nil
         }
         return OnboardingStep(rawValue: rawValue)
+    }
+
+    static func savedLastGuideStep(defaults: UserDefaults = .standard) -> OnboardingGuideStep? {
+        guard let rawValue = defaults.string(forKey: AppPreferenceKey.onboardingLastStepID) else {
+            return nil
+        }
+        return OnboardingGuideStep(rawValue: rawValue)
     }
 
     static func hasExistingUserData(
