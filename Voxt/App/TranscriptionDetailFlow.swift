@@ -217,6 +217,8 @@ extension AppDelegate {
             switch translationFeatureSettings.modelSelectionID.translationSelection {
             case .localLLM(let repo):
                 return .localLLM(repo: repo)
+            case .localGGUF:
+                return nil
             case .remoteLLM(let provider):
                 return .remoteLLM(provider: provider)
             case .whisperDirectTranslate, .none:

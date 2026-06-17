@@ -498,6 +498,7 @@ extension AppDelegate {
             mlxModelManager: mlxModelManager,
             whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
+            ggufTranslationModelManager: ggufTranslationModelManager,
             historyStore: historyStore,
             noteStore: noteStore,
             dictionaryStore: dictionaryStore,

@@ -4,13 +4,31 @@
 import Foundation
 
 struct TranslationPromptBuilder {
+    enum Style: Equatable {
+        case standard
+        case compactDefault(language: AppInterfaceLanguage)
+    }
+
     static func build(
         systemPrompt: String,
         targetLanguage: TranslationTargetLanguage,
         sourceText: String,
         userMainLanguagePromptValue: String,
-        strict: Bool
+        strict: Bool,
+        style: Style = .standard
     ) -> String {
+        switch style {
+        case .standard:
+            break
+        case .compactDefault(let language):
+            return compactDefaultPrompt(
+                language: language,
+                targetLanguage: targetLanguage,
+                userMainLanguagePromptValue: userMainLanguagePromptValue,
+                strict: strict
+            )
+        }
+
         let basePrompt = systemPrompt
             .replacingOccurrences(of: "{target_language}", with: targetLanguage.instructionName)
             .replacingOccurrences(of: "{{TARGET_LANGUAGE}}", with: targetLanguage.instructionName)
@@ -40,6 +58,122 @@ struct TranslationPromptBuilder {
             .joined(separator: "\n")
 
         return "\(basePrompt)\n\(normalizedEnforcement)"
+    }
+
+    private static func compactDefaultPrompt(
+        language: AppInterfaceLanguage,
+        targetLanguage: TranslationTargetLanguage,
+        userMainLanguagePromptValue: String,
+        strict: Bool
+    ) -> String {
+        switch resolvedLanguage(language) {
+        case .english:
+            return compactEnglishPrompt(
+                targetLanguage: targetLanguage,
+                userMainLanguagePromptValue: userMainLanguagePromptValue,
+                strict: strict
+            )
+        case .chineseSimplified:
+            return compactChinesePrompt(
+                targetLanguage: targetLanguage,
+                userMainLanguagePromptValue: userMainLanguagePromptValue,
+                strict: strict
+            )
+        case .japanese:
+            return compactJapanesePrompt(
+                targetLanguage: targetLanguage,
+                userMainLanguagePromptValue: userMainLanguagePromptValue,
+                strict: strict
+            )
+        case .system:
+            return compactEnglishPrompt(
+                targetLanguage: targetLanguage,
+                userMainLanguagePromptValue: userMainLanguagePromptValue,
+                strict: strict
+            )
+        }
+    }
+
+    private static func resolvedLanguage(_ language: AppInterfaceLanguage) -> AppInterfaceLanguage {
+        language == .system ? .resolvedSystemLanguage : language
+    }
+
+    private static func compactEnglishPrompt(
+        targetLanguage: TranslationTargetLanguage,
+        userMainLanguagePromptValue: String,
+        strict: Bool
+    ) -> String {
+        let scriptRule = targetLanguage.translationScriptConstraint.map { "- \($0)" } ?? ""
+        let strictRule = strict
+            ? "- Translate every meaningful linguistic token. Do not leave source-language wording except for names, code, URLs, emails, and pure numbers."
+            : "- Translate short text too."
+        return """
+        You are Voxt's translation assistant.
+
+        User main language: \(userMainLanguagePromptValue)
+        Target language: \(targetLanguage.instructionName)
+
+        Rules:
+        - Keep only the final intended content when spoken self-corrections appear.
+        - Remove obvious filler words and simple ASR disfluency only when they do not change meaning.
+        - Preserve names, product names, commands, code, paths, URLs, emails, and numbers.
+        - Preserve list structure and line breaks when clear.
+        \(scriptRule)
+        \(strictRule)
+        - Return translated text only.
+        """
+    }
+
+    private static func compactChinesePrompt(
+        targetLanguage: TranslationTargetLanguage,
+        userMainLanguagePromptValue: String,
+        strict: Bool
+    ) -> String {
+        let scriptRule = targetLanguage.translationScriptConstraint.map { "- \($0)" } ?? ""
+        let strictRule = strict
+            ? "- 所有有意义的语言内容都要翻译；除人名、代码、URL、邮箱和纯数字外，不要保留源语言措辞。"
+            : "- 很短的语言内容也要翻译。"
+        return """
+        你是 Voxt 的翻译助手。
+
+        用户主要语言：\(userMainLanguagePromptValue)
+        目标语言：\(targetLanguage.instructionName)
+
+        规则：
+        - 若口语中出现自我纠正，只保留最后确认的意思。
+        - 仅在不影响语义时去除明显语气词和简单口语停顿。
+        - 保留人名、产品名、命令、代码、路径、URL、邮箱和数字。
+        - 若原文有明确列表或换行结构，尽量保留。
+        \(scriptRule)
+        \(strictRule)
+        - 只返回翻译结果，不要附加说明。
+        """
+    }
+
+    private static func compactJapanesePrompt(
+        targetLanguage: TranslationTargetLanguage,
+        userMainLanguagePromptValue: String,
+        strict: Bool
+    ) -> String {
+        let scriptRule = targetLanguage.translationScriptConstraint.map { "- \($0)" } ?? ""
+        let strictRule = strict
+            ? "- 意味のある言語内容はすべて翻訳し、人名・コード・URL・メールアドレス・純粋な数字以外は原文の言い回しを残さないでください。"
+            : "- 短いテキストも翻訳してください。"
+        return """
+        あなたは Voxt の翻訳アシスタントです。
+
+        ユーザーの主要言語：\(userMainLanguagePromptValue)
+        翻訳先言語：\(targetLanguage.instructionName)
+
+        ルール：
+        - 話しながら自己修正した場合は、最後に確定した内容だけを残してください。
+        - 意味が変わらない場合に限り、明らかなフィラーや単純な言いよどみを除去してください。
+        - 人名、製品名、コマンド、コード、パス、URL、メールアドレス、数字は保持してください。
+        - 元の箇条書きや改行構造が明確なら、できるだけ維持してください。
+        \(scriptRule)
+        \(strictRule)
+        - 翻訳結果だけを返し、説明は付けないでください。
+        """
     }
 }
 

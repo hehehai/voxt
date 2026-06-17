@@ -7,7 +7,8 @@ enum SettingsModelDownloadBadgeSupport {
     static func activeDownloadCount(
         mlxActiveDownloadRepos: Set<String>,
         whisperActiveDownload: WhisperKitModelManager.ActiveDownload?,
-        customLLMState: CustomLLMModelManager.ModelState
+        customLLMState: CustomLLMModelManager.ModelState,
+        ggufActiveDownloadModelID: GGUFTranslationModelID?
     ) -> Int {
         var count = mlxActiveDownloadRepos.count
 
@@ -16,6 +17,10 @@ enum SettingsModelDownloadBadgeSupport {
         }
 
         if case .downloading = customLLMState {
+            count += 1
+        }
+
+        if ggufActiveDownloadModelID != nil {
             count += 1
         }
 

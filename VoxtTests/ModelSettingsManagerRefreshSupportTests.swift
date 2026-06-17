@@ -84,7 +84,9 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             mlxActiveDownloadRepos: ["repo-b", "repo-a"],
             whisperState: .downloaded,
             whisperActiveDownload: nil,
-            customLLMState: .downloaded
+            customLLMState: .downloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
         let tokenB = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
             mlxState: .paused(
@@ -98,7 +100,9 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             mlxActiveDownloadRepos: ["repo-a", "repo-b"],
             whisperState: .ready,
             whisperActiveDownload: nil,
-            customLLMState: .downloaded
+            customLLMState: .downloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(tokenA, tokenB)
@@ -142,7 +146,9 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             whisperActiveDownload: pausedDownload,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
         let activeToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
             mlxState: .notDownloaded,
@@ -156,7 +162,9 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             whisperActiveDownload: activeDownload,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertNotEqual(pausedToken, activeToken)

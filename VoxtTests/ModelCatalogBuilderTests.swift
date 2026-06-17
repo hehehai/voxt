@@ -488,10 +488,26 @@ final class ModelCatalogBuilderTests: XCTestCase {
             )
         }
 
+        let ggufTranslationInstallSnapshot: (GGUFTranslationModelID) -> LocalModelInstallSnapshot = { modelID in
+            LocalModelInstallSnapshot(
+                target: .ggufTranslation(modelID),
+                state: .installable(isEnabled: true),
+                isInstalled: false,
+                isCurrentSelection: false,
+                statusText: "",
+                badgeText: nil,
+                downloadStatus: nil,
+                canOpenLocation: false,
+                canConfigure: false,
+                configureActionTitle: nil
+            )
+        }
+
         return ModelCatalogBuilder(
             mlxModelManager: TestModelManagers.mlx,
             whisperModelManager: TestModelManagers.whisper,
             customLLMManager: TestModelManagers.customLLM,
+            ggufTranslationModelManager: TestModelManagers.gguf,
             remoteASRConfigurations: remoteASRConfigurations,
             remoteLLMConfigurations: remoteLLMConfigurations,
             featureSettings: featureSettings,
@@ -503,6 +519,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
             mlxInstallSnapshot: mlxInstallSnapshot,
             whisperInstallSnapshot: whisperInstallSnapshot,
             customLLMInstallSnapshot: customLLMInstallSnapshot,
+            ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot,
             catalogPrimaryAction: { snapshot in
                 ModelSettingsInstallActionResolver.catalogPrimaryAction(
                     for: snapshot,
@@ -556,4 +573,5 @@ private enum TestModelManagers {
         hubBaseURL: URL(string: "https://huggingface.co")!
     )
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
+    static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

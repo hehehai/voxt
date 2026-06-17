@@ -19,6 +19,7 @@ struct SettingsView: View {
     let mlxModelManager: MLXModelManager
     let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
+    let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
     @ObservedObject var noteStore: VoxtNoteStore
     @ObservedObject var dictionaryStore: DictionaryStore
@@ -64,6 +65,7 @@ struct SettingsView: View {
         mlxModelManager: MLXModelManager,
         whisperModelManager: WhisperKitModelManager,
         customLLMManager: CustomLLMModelManager,
+        ggufTranslationModelManager: GGUFTranslationModelManager,
         historyStore: TranscriptionHistoryStore,
         noteStore: VoxtNoteStore,
         dictionaryStore: DictionaryStore,
@@ -79,6 +81,7 @@ struct SettingsView: View {
         self.mlxModelManager = mlxModelManager
         self.whisperModelManager = whisperModelManager
         self.customLLMManager = customLLMManager
+        self.ggufTranslationModelManager = ggufTranslationModelManager
         self.historyStore = historyStore
         self.noteStore = noteStore
         self.dictionaryStore = dictionaryStore
@@ -95,7 +98,8 @@ struct SettingsView: View {
             initialValue: SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
                 whisperActiveDownload: whisperModelManager.activeDownload,
-                customLLMState: customLLMManager.state
+                customLLMState: customLLMManager.state,
+                ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
             )
         )
     }
@@ -408,16 +412,18 @@ struct SettingsView: View {
     }
 
     private var modelDownloadBadgeCountPublisher: AnyPublisher<Int, Never> {
-        Publishers.CombineLatest3(
+        Publishers.CombineLatest4(
             mlxModelManager.$activeDownloadRepos,
             whisperModelManager.$activeDownload,
-            customLLMManager.$state
+            customLLMManager.$state,
+            ggufTranslationModelManager.$activeDownloadModelID
         )
-        .map { mlxActiveDownloadRepos, whisperActiveDownload, customLLMState in
+        .map { mlxActiveDownloadRepos, whisperActiveDownload, customLLMState, ggufActiveDownloadModelID in
             SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxActiveDownloadRepos,
                 whisperActiveDownload: whisperActiveDownload,
-                customLLMState: customLLMState
+                customLLMState: customLLMState,
+                ggufActiveDownloadModelID: ggufActiveDownloadModelID
             )
         }
         .removeDuplicates()
@@ -480,7 +486,8 @@ struct SettingsView: View {
                         navigationRequest: navigationRequest,
                         mlxModelManager: mlxModelManager,
                         whisperModelManager: whisperModelManager,
-                        customLLMManager: customLLMManager
+                        customLLMManager: customLLMManager,
+                        ggufTranslationModelManager: ggufTranslationModelManager
                     )
                 }
             }
@@ -491,6 +498,7 @@ struct SettingsView: View {
                         mlxModelManager: mlxModelManager,
                         whisperModelManager: whisperModelManager,
                         customLLMManager: customLLMManager,
+                        ggufTranslationModelManager: ggufTranslationModelManager,
                         mainWindowState: mainWindowState,
                         missingConfigurationIssues: missingModelConfigurationIssues,
                         navigationRequest: navigationRequest,
@@ -538,6 +546,7 @@ struct SettingsView: View {
                                 mlxModelManager: mlxModelManager,
                                 whisperModelManager: whisperModelManager,
                                 customLLMManager: customLLMManager,
+                                ggufTranslationModelManager: ggufTranslationModelManager,
                                 mainWindowState: mainWindowState,
                                 missingConfigurationIssues: missingModelConfigurationIssues,
                                 navigationRequest: navigationRequest,

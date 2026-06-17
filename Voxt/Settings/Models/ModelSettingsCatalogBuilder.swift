@@ -18,6 +18,7 @@ struct ModelCatalogBuilder {
     let mlxModelManager: MLXModelManager
     let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
+    let ggufTranslationModelManager: GGUFTranslationModelManager
     let remoteASRConfigurations: [String: RemoteProviderConfiguration]
     let remoteLLMConfigurations: [String: RemoteProviderConfiguration]
     let featureSettings: FeatureSettings
@@ -29,6 +30,7 @@ struct ModelCatalogBuilder {
     let mlxInstallSnapshot: (String) -> LocalModelInstallSnapshot
     let whisperInstallSnapshot: (String) -> LocalModelInstallSnapshot
     let customLLMInstallSnapshot: (String) -> LocalModelInstallSnapshot
+    let ggufTranslationInstallSnapshot: (GGUFTranslationModelID) -> LocalModelInstallSnapshot
     let catalogPrimaryAction: (LocalModelInstallSnapshot) -> ModelTableAction?
     let catalogSecondaryActions: (LocalModelInstallSnapshot) -> [ModelTableAction]
     let configureASRProvider: (RemoteASRProvider) -> Void
@@ -104,6 +106,36 @@ struct ModelCatalogBuilder {
                     ? (customLLMManager.cachedModelSizeText(repo: repo) ?? customLLMManager.remoteSizeText(repo: repo))
                     : customLLMManager.remoteSizeText(repo: repo),
                 ratingText: CustomLLMModelManager.ratingText(for: repo),
+                filterTags: decoration.filterTags,
+                displayTags: decoration.displayTags,
+                statusText: snapshot.statusText,
+                usageLocations: decoration.usageLocations,
+                badgeText: snapshot.badgeText,
+                primaryAction: catalogPrimaryAction(snapshot),
+                secondaryActions: catalogSecondaryActions(snapshot)
+            )
+        })
+
+        entries.append(contentsOf: GGUFTranslationModelCatalog.allModels.map { model in
+            let selectionID = FeatureModelSelectionID.localGGUFTranslation(model.id)
+            let snapshot = ggufTranslationInstallSnapshot(model.id)
+
+            let decoration = catalogDecoration(
+                base: model.tags,
+                installed: snapshot.isInstalled,
+                requiresConfiguration: false,
+                configured: true,
+                selectionID: selectionID
+            )
+
+            return ModelCatalogEntry(
+                id: "local-gguf-translation:\(model.id.rawValue)",
+                title: model.title,
+                engine: localizedModelCatalog("Local GGUF"),
+                sizeText: snapshot.isInstalled
+                    ? (ggufTranslationModelManager.cachedModelSizeText(id: model.id) ?? model.sizeText)
+                    : model.sizeText,
+                ratingText: model.ratingText,
                 filterTags: decoration.filterTags,
                 displayTags: decoration.displayTags,
                 statusText: snapshot.statusText,

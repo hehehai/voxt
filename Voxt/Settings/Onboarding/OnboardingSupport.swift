@@ -203,7 +203,7 @@ enum OnboardingFeatureSelectionResolver {
                 return .whisperDirectTranslate
             }
             switch existingSelection.translationSelection {
-            case .localLLM, .remoteLLM, .whisperDirectTranslate:
+            case .localLLM, .localGGUF, .remoteLLM, .whisperDirectTranslate:
                 return existingSelection
             case .none:
                 return .localLLM(fallbackLocalLLMRepo)

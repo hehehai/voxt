@@ -34,9 +34,20 @@ extension ModelSettingsView {
             .map { _ in () }
             .eraseToAnyPublisher()
 
+        let gguf = Publishers.CombineLatest(
+            ggufTranslationModelManager.$activeDownloadModelID
+                .map { $0?.rawValue }
+                .removeDuplicates(),
+            ggufTranslationModelManager.$stateByID
+                .map(ModelSettingsManagerRefreshSupport.phase(for:))
+                .removeDuplicates()
+        )
+        .map { _, _ in () }
+        .eraseToAnyPublisher()
+
         return Publishers.Merge(
             Publishers.Merge(mlx, whisper),
-            customLLM
+            Publishers.Merge(customLLM, gguf)
         )
         .dropFirst()
         .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
@@ -76,12 +87,25 @@ extension ModelSettingsView {
             .map { _ in () }
             .eraseToAnyPublisher()
 
+        let gguf = ggufTranslationModelManager.$stateByID
+            .removeDuplicates()
+            .map { _ in () }
+            .eraseToAnyPublisher()
+
+        let ggufPauseMessage = ggufTranslationModelManager.$pausedStatusMessageByID
+            .removeDuplicates()
+            .map { _ in () }
+            .eraseToAnyPublisher()
+
         return Publishers.Merge(
             Publishers.Merge(
                 Publishers.Merge(mlx, mlxPauseMessage),
                 whisper
             ),
-            Publishers.Merge(customLLM, customLLMPauseMessage)
+            Publishers.Merge(
+                Publishers.Merge(customLLM, customLLMPauseMessage),
+                Publishers.Merge(gguf, ggufPauseMessage)
+            )
         )
         .dropFirst()
         .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
@@ -275,7 +299,9 @@ extension ModelSettingsView {
             mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
             whisperState: whisperModelManager.state,
             whisperActiveDownload: whisperModelManager.activeDownload,
-            customLLMState: customLLMManager.state
+            customLLMState: customLLMManager.state,
+            ggufStateByID: ggufTranslationModelManager.stateByID,
+            ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
         )
         guard lastHandledDownloadLifecycleToken != token else {
             return

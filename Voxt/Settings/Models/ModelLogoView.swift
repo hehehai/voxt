@@ -27,6 +27,7 @@ enum ModelLogoKey: String {
     case minimax
     case kimi
     case doubao
+    case hunyuan
     case volcengine
     case lmStudio
     case alibaba
@@ -79,6 +80,8 @@ enum ModelLogoKey: String {
             return "kimi"
         case .doubao:
             return "doubao"
+        case .hunyuan:
+            return "hunyuan"
         case .volcengine:
             return "volcengine"
         case .lmStudio:
@@ -98,6 +101,8 @@ enum ModelLogoKey: String {
             return true
         case .anthropic, .google, .gemini, .qwen, .zhipu, .deepSeek, .cohere, .granite, .fireRed, .sense,
              .mistral, .gemma, .meta, .nvidia, .minimax, .doubao, .volcengine, .alibaba, .stepFun, .generic:
+            return false
+        case .hunyuan:
             return false
         }
     }
@@ -148,6 +153,8 @@ enum ModelLogoKey: String {
             return "K"
         case .doubao:
             return "豆"
+        case .hunyuan:
+            return "HY"
         case .volcengine:
             return "火"
         case .lmStudio:
@@ -198,6 +205,9 @@ enum ModelLogoKey: String {
         }
         if value.contains("doubao") || value.contains("豆包") {
             return .doubao
+        }
+        if value.contains("hy-mt2") || value.contains("hunyuan") || value.contains("混元") {
+            return .hunyuan
         }
         if value.contains("stepfun") || value.contains("阶跃") {
             return .stepFun

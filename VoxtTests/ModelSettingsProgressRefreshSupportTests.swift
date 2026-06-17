@@ -63,7 +63,9 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
             mlxHasActiveDownloadingRepos: true,
             whisperState: .notDownloaded,
             whisperActiveDownload: nil,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertTrue(shouldPoll)
@@ -88,7 +90,9 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
             mlxHasActiveDownloadingRepos: false,
             whisperState: .notDownloaded,
             whisperActiveDownload: whisperDownload,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertTrue(shouldPoll)
@@ -100,7 +104,9 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
             mlxHasActiveDownloadingRepos: false,
             whisperState: .downloaded,
             whisperActiveDownload: nil,
-            customLLMState: .downloaded
+            customLLMState: .downloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertFalse(shouldPoll)
@@ -112,7 +118,9 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
             mlxHasActiveDownloadingRepos: false,
             whisperState: .loading,
             whisperActiveDownload: nil,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertFalse(shouldPoll)
@@ -131,7 +139,9 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
             mlxHasActiveDownloadingRepos: false,
             whisperState: .notDownloaded,
             whisperActiveDownload: nil,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertFalse(shouldPoll)

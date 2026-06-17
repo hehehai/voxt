@@ -7,6 +7,7 @@ enum LocalModelInstallTarget: Hashable {
     case mlx(String)
     case whisper(String)
     case customLLM(String)
+    case ggufTranslation(GGUFTranslationModelID)
 }
 
 enum LocalModelInstallState: Equatable {

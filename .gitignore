@@ -34,6 +34,7 @@ build2.log
 # Local release/agent workflow folders (keep local only)
 .codex/
 scripts/
+.repos/
 
 # Local signing overrides
 Config/Signing.local.xcconfig

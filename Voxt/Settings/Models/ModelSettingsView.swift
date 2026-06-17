@@ -28,6 +28,7 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.customLLMGenerationSettings) var customLLMGenerationSettingsRaw = CustomLLMGenerationSettingsStore.defaultStoredValue()
     @AppStorage(AppPreferenceKey.customLLMGenerationSettingsByRepo) var customLLMGenerationSettingsByRepoRaw = CustomLLMGenerationSettingsStore.defaultByRepoStoredValue()
     @AppStorage(AppPreferenceKey.translationCustomLLMModelRepo) var translationCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
+    @AppStorage(AppPreferenceKey.translationGGUFModelID) var translationGGUFModelIDRaw = GGUFTranslationModelCatalog.defaultModelID.rawValue
     @AppStorage(AppPreferenceKey.rewriteCustomLLMModelRepo) var rewriteCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.translationModelProvider) var translationModelProviderRaw = TranslationModelProvider.customLLM.rawValue
     @AppStorage(AppPreferenceKey.translationFallbackModelProvider) var translationFallbackModelProviderRaw = TranslationModelProvider.customLLM.rawValue
@@ -50,6 +51,7 @@ struct ModelSettingsView: View {
     let mlxModelManager: MLXModelManager
     let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
+    let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var mainWindowState: MainWindowVisibilityState
     let missingConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue]
     let navigationRequest: SettingsNavigationRequest?
@@ -166,6 +168,7 @@ struct ModelSettingsView: View {
             mlxModelManager: mlxModelManager,
             whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
+            ggufTranslationModelManager: ggufTranslationModelManager,
             remoteASRConfigurations: remoteASRConfigurations,
             remoteLLMConfigurations: remoteLLMConfigurations,
             featureSettings: featureSettings,
@@ -179,6 +182,7 @@ struct ModelSettingsView: View {
             mlxInstallSnapshot: mlxInstallSnapshot(for:),
             whisperInstallSnapshot: whisperInstallSnapshot(for:),
             customLLMInstallSnapshot: customLLMInstallSnapshot(for:),
+            ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot(for:),
             catalogPrimaryAction: {
                 ModelSettingsInstallActionResolver.catalogPrimaryAction(
                     for: $0,
@@ -647,7 +651,9 @@ struct ModelSettingsView: View {
             },
             whisperState: whisperModelManager.state,
             whisperActiveDownload: whisperModelManager.activeDownload,
-            customLLMState: customLLMManager.state
+            customLLMState: customLLMManager.state,
+            ggufStateByID: ggufTranslationModelManager.stateByID,
+            ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
         )
     }
 

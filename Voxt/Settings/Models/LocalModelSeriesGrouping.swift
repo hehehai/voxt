@@ -31,6 +31,9 @@ enum ModelCatalogBadgeSupport {
         if descriptor.engine == localized("Local LLM") && descriptor.title == "Gemma" {
             return localized("Recommended")
         }
+        if descriptor.engine == localized("Local GGUF") && descriptor.title == "Hy-MT2" {
+            return localized("Recommended")
+        }
         return nil
     }
 
@@ -311,6 +314,12 @@ enum LocalModelSeriesClassifier {
             if title.contains("Llama") {
                 let normalized = title.replacingOccurrences(of: "Meta ", with: "")
                 return prefixedFamily(title: normalized, prefix: "Llama ", family: "Llama")
+            }
+        }
+
+        if engine == localized("Local GGUF") {
+            if let family = prefixedFamily(title: title, prefix: "Hy-MT2 ", family: "Hy-MT2") {
+                return family
             }
         }
 

@@ -32,6 +32,10 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
         Self(rawValue: "local-llm:\(repo)")
     }
 
+    static func localGGUFTranslation(_ modelID: GGUFTranslationModelID) -> Self {
+        Self(rawValue: "local-gguf-translation:\(modelID.rawValue)")
+    }
+
     static func remoteLLM(_ provider: RemoteLLMProvider) -> Self {
         Self(rawValue: "remote-llm:\(provider.rawValue)")
     }
@@ -52,6 +56,7 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
     enum TranslationSelection: Hashable, Sendable {
         case whisperDirectTranslate
         case localLLM(repo: String)
+        case localGGUF(modelID: GGUFTranslationModelID)
         case remoteLLM(provider: RemoteLLMProvider)
     }
 
@@ -92,6 +97,10 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
         }
         if let repo = payload(after: "local-llm:") {
             return .localLLM(repo: repo)
+        }
+        if let value = payload(after: "local-gguf-translation:"),
+           let modelID = GGUFTranslationModelID(rawValue: value) {
+            return .localGGUF(modelID: modelID)
         }
         if let value = payload(after: "remote-llm:"),
            let provider = RemoteLLMProvider(rawValue: value) {

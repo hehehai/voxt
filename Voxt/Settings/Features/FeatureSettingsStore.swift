@@ -238,6 +238,10 @@ enum FeatureSettingsStore {
             defaults.set(TranslationModelProvider.customLLM.rawValue, forKey: AppPreferenceKey.translationModelProvider)
             defaults.set(TranslationModelProvider.customLLM.rawValue, forKey: AppPreferenceKey.translationFallbackModelProvider)
             defaults.set(repo, forKey: AppPreferenceKey.translationCustomLLMModelRepo)
+        case .localGGUF(let modelID):
+            defaults.set(TranslationModelProvider.localGGUF.rawValue, forKey: AppPreferenceKey.translationModelProvider)
+            defaults.set(TranslationModelProvider.localGGUF.rawValue, forKey: AppPreferenceKey.translationFallbackModelProvider)
+            defaults.set(modelID.rawValue, forKey: AppPreferenceKey.translationGGUFModelID)
         case .remoteLLM(let provider):
             defaults.set(TranslationModelProvider.remoteLLM.rawValue, forKey: AppPreferenceKey.translationModelProvider)
             defaults.set(TranslationModelProvider.remoteLLM.rawValue, forKey: AppPreferenceKey.translationFallbackModelProvider)
@@ -523,6 +527,12 @@ enum FeatureSettingsStore {
         switch provider {
         case .customLLM:
             return .localLLM(defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo)
+        case .localGGUF:
+            return .localGGUFTranslation(
+                GGUFTranslationModelCatalog.resolvedModelID(
+                    defaults.string(forKey: AppPreferenceKey.translationGGUFModelID)
+                )
+            )
         case .remoteLLM:
             let fallback = RemoteLLMProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteLLMSelectedProvider) ?? "") ?? .openAI
             let selected = RemoteLLMProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? "") ?? fallback
