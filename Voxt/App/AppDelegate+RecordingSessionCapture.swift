@@ -48,11 +48,24 @@ extension AppDelegate {
             state: overlayState,
             position: overlayPosition
         )
-        mlx.startRecording()
-        guard mlx.isRecording else {
-            VoxtLog.warning("MLX recording session did not enter recording state.")
-            resetSessionAfterFailedStart()
-            return
+        Task { [weak self] in
+            guard let self else { return }
+            if let startFailureMessage = await mlx.startRecordingSession() {
+                guard self.shouldHandleCallbacks(for: sessionID), self.isSessionActive else { return }
+                VoxtLog.warning("MLX recording session did not enter recording state. reason=\(startFailureMessage)")
+                self.handleRecordingStartFailure(startFailureMessage)
+                return
+            }
+            // Recording started, but the user may have released/cancelled the hotkey while the
+            // engine was starting. If the session is no longer current, stop the stray capture.
+            guard self.shouldHandleCallbacks(for: sessionID),
+                  self.isSessionActive,
+                  !self.isSessionCancellationRequested,
+                  self.recordingStoppedAt == nil
+            else {
+                mlx.stopRecording()
+                return
+            }
         }
     }
 

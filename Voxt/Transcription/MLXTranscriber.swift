@@ -54,6 +54,27 @@ private struct MLXCorrectionPassResult {
     }
 }
 
+private enum MLXCaptureStartError: LocalizedError {
+    case engineStartTimedOut(Double)
+
+    var errorDescription: String? {
+        switch self {
+        case .engineStartTimedOut(let seconds):
+            return "Audio engine failed to start within \(String(format: "%.0f", seconds))s."
+        }
+    }
+}
+
+/// Lets the non-`Sendable` `AVAudioEngine` be handed to a detached task so the blocking
+/// `start()` call can run off the main actor. Start/stop are serialized by `MLXTranscriber`,
+/// which never touches the engine concurrently, so this is safe.
+private struct MLXAudioEngineBox: @unchecked Sendable {
+    // `nonisolated(unsafe)` lets the detached start/stop run off the main actor under
+    // `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. Safe because MLXTranscriber never touches
+    // the engine concurrently with the single in-flight start.
+    nonisolated(unsafe) let engine: AVAudioEngine
+}
+
 private enum MLXStructuredTranscriptionError: LocalizedError {
     case senseVoiceLongFormVADUnavailable(String)
     case senseVoiceLongFormNoSpeechSegments(Double)
@@ -617,6 +638,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var preferredInputDeviceID: AudioDeviceID?
     private let targetSampleRate = 16000
 
+    /// Upper bound for the off-main `AVAudioEngine.start()`. A wedged coreaudiod can block
+    /// `kAUStartIO` for ~10s; failing fast surfaces an overlay error instead of stalling.
+    private static let captureStartTimeoutSeconds: Double = 6
+
     private let correctionPollInterval: Duration = .milliseconds(600)
     private let quickPassMinimumDurationSeconds: Double = 14.0
     private let qwenLiveFeedPollInterval: Duration = .milliseconds(100)
@@ -695,7 +720,19 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func startRecording() {
-        guard !isRecording else { return }
+        Task { [weak self] in
+            _ = await self?.startRecordingSession()
+        }
+    }
+
+    /// Starts capture and returns a user-facing failure message, or `nil` on success.
+    ///
+    /// The blocking `AVAudioEngine.start()` runs off the main actor with a timeout
+    /// (`startAudioCaptureGraphWithTimeout()`), so a wedged CoreAudio device can no longer
+    /// freeze the hotkey/UI thread — it surfaces an overlay error instead.
+    @discardableResult
+    func startRecordingSession() async -> String? {
+        guard !isRecording else { return nil }
 
         cancelActiveTasks()
         removeCompletedAudioArchiveIfNeeded()
@@ -712,7 +749,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         )
 
         do {
-            try startAudioCaptureGraph()
+            try await startAudioCaptureGraphWithTimeout()
             isRecording = true
             scheduleCaptureStartupWatchdog(revision: revision)
             startModelPreloadIfNeeded(revision: revision)
@@ -729,8 +766,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     verbose: true
                 )
             }
+            return nil
         } catch {
             VoxtLog.error("MLXTranscriber start recording failed: \(error)")
+            stopAudioEngine()
+            audioEngine.inputNode.removeTap(onBus: 0)
+            return String(localized: "Failed to start the microphone. Please try again.")
         }
     }
 
@@ -1113,7 +1154,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func startAudioCaptureGraph(usePreferredInputDevice: Bool? = nil) throws {
+    /// Configures the engine, input device, tap and `prepare()` — everything except the
+    /// blocking `start()`. Returns the data needed to log once the engine is running.
+    private func configureAudioCaptureGraph(usePreferredInputDevice: Bool? = nil) -> (format: AVAudioFormat, usedPreferredDevice: Bool) {
         if audioEngine.isRunning {
             audioEngine.stop()
         }
@@ -1155,11 +1198,52 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         audioEngine.prepare()
-        try audioEngine.start()
+        return (recordingFormat, shouldUsePreferredInputDevice)
+    }
+
+    private func logCaptureStarted(format: AVAudioFormat, usedPreferredDevice: Bool) {
         VoxtLog.info(
-            "MLX audio capture started. sampleRate=\(Int(recordingFormat.sampleRate)), channels=\(recordingFormat.channelCount), format=\(recordingFormat.commonFormat.rawValue), interleaved=\(recordingFormat.isInterleaved), routing=\(shouldUsePreferredInputDevice ? "preferred" : "system-default"), deviceID=\(shouldUsePreferredInputDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
+            "MLX audio capture started. sampleRate=\(Int(format.sampleRate)), channels=\(format.channelCount), format=\(format.commonFormat.rawValue), interleaved=\(format.isInterleaved), routing=\(usedPreferredDevice ? "preferred" : "system-default"), deviceID=\(usedPreferredDevice ? (preferredInputDeviceID.map(String.init(describing:)) ?? "default") : "system-default")",
             verbose: true
         )
+    }
+
+    /// Synchronous start. Used only by mid-session recovery/device-switch paths, which are
+    /// already off the hotkey thread. The hotkey start path uses the async timeout variant.
+    private func startAudioCaptureGraph(usePreferredInputDevice: Bool? = nil) throws {
+        let context = configureAudioCaptureGraph(usePreferredInputDevice: usePreferredInputDevice)
+        try audioEngine.start()
+        logCaptureStarted(format: context.format, usedPreferredDevice: context.usedPreferredDevice)
+    }
+
+    /// Same as `startAudioCaptureGraph`, but runs the blocking `AVAudioEngine.start()` off the
+    /// main actor and gives up after `captureStartTimeoutSeconds`, so a wedged coreaudiod can
+    /// never freeze the hotkey/UI thread.
+    private func startAudioCaptureGraphWithTimeout(usePreferredInputDevice: Bool? = nil) async throws {
+        let context = configureAudioCaptureGraph(usePreferredInputDevice: usePreferredInputDevice)
+        try await startConfiguredEngineWithTimeout(timeoutSeconds: Self.captureStartTimeoutSeconds)
+        logCaptureStarted(format: context.format, usedPreferredDevice: context.usedPreferredDevice)
+    }
+
+    /// Runs the already-configured engine's blocking `start()` on a detached task, racing it
+    /// against a timeout. On timeout the engine is stopped so the start call unwinds promptly.
+    private func startConfiguredEngineWithTimeout(timeoutSeconds: Double) async throws {
+        let engineBox = MLXAudioEngineBox(engine: audioEngine)
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                // Detached so the blocking start can never run on the main actor.
+                try await Task.detached(priority: .userInitiated) {
+                    try engineBox.engine.start()
+                }.value
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(timeoutSeconds))
+                engineBox.engine.stop()
+                throw MLXCaptureStartError.engineStartTimedOut(timeoutSeconds)
+            }
+            defer { group.cancelAll() }
+            _ = try await group.next()
+        }
     }
 
     private func cancelActiveTasks() {
