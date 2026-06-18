@@ -39,6 +39,10 @@ final class HotkeyManagerTests: XCTestCase {
         AppPreferenceKey.customPasteHotkeyMouseButtonNumber,
         AppPreferenceKey.customPasteHotkeyModifiers,
         AppPreferenceKey.customPasteHotkeySidedModifiers,
+        AppPreferenceKey.transcriptionHotkeyBindings,
+        AppPreferenceKey.translationHotkeyBindings,
+        AppPreferenceKey.meetingHotkeyBindings,
+        AppPreferenceKey.rewriteHotkeyBindings,
         AppPreferenceKey.hotkeyTriggerMode,
         AppPreferenceKey.hotkeyDistinguishModifierSides,
         AppPreferenceKey.hotkeyPreset,
@@ -579,46 +583,26 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(rewriteDownCount, 1)
     }
 
-    func testRewriteDedicatedHotkeyDoesNotEmitWhenDoubleTapWakeIsEnabled() {
+    func testLegacyDoubleTapWakeMigratesRewriteToDoubleTapBinding() {
         UserDefaults.standard.set(
             HotkeyPreference.RewriteActivationMode.doubleTapTranscriptionHotkey.rawValue,
             forKey: AppPreferenceKey.rewriteHotkeyActivationMode
         )
+        UserDefaults.standard.removeObject(forKey: AppPreferenceKey.rewriteHotkeyBindings)
 
         let manager = makeManager()
+        var transcriptionDownCount = 0
         var rewriteDownCount = 0
+        manager.onKeyDown = { transcriptionDownCount += 1 }
         manager.onRewriteKeyDown = { rewriteDownCount += 1 }
 
-        XCTAssertFalse(
-            manager.testingHandleEvent(
-                type: .flagsChanged,
-                keyCode: UInt16(kVK_Control),
-                flags: .maskControl
-            )
-        )
-        XCTAssertFalse(
-            manager.testingHandleEvent(
-                type: .flagsChanged,
-                keyCode: UInt16(kVK_Function),
-                flags: combinedFlags(.maskControl, .maskSecondaryFn)
-            )
-        )
-        XCTAssertFalse(
-            manager.testingHandleEvent(
-                type: .flagsChanged,
-                keyCode: UInt16(kVK_Function),
-                flags: .maskControl
-            )
-        )
-        XCTAssertFalse(
-            manager.testingHandleEvent(
-                type: .flagsChanged,
-                keyCode: UInt16(kVK_Control),
-                flags: []
-            )
-        )
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: []))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: []))
 
-        XCTAssertEqual(rewriteDownCount, 0)
+        XCTAssertEqual(transcriptionDownCount, 0)
+        XCTAssertEqual(rewriteDownCount, 1)
     }
 
     func testIdleGapRecoveryClearsStaleChordStateBeforeFnRelease() async {
@@ -1038,6 +1022,9 @@ final class HotkeyManagerTests: XCTestCase {
     func testLongPressFnEmitsDownThenUp() async {
         let defaults = UserDefaults.standard
         defaults.set(HotkeyPreference.TriggerMode.longPress.rawValue, forKey: AppPreferenceKey.hotkeyTriggerMode)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(hotkey: HotkeyPreference.load(), behavior: .longPress)
+        ])
 
         let manager = makeManager()
         var events: [String] = []
@@ -1076,7 +1063,7 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(events, ["down", "up"])
     }
 
-    func testSecondMouseMiddleTapCanFeedDoubleTapRewriteResolver() {
+    func testMouseMiddleDoubleTapCanTriggerRewriteBindingWithoutTapFallback() {
         let defaults = UserDefaults.standard
         defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
         defaults.set(
@@ -1097,8 +1084,66 @@ final class HotkeyManagerTests: XCTestCase {
         manager.testingHandleMouseEvent(type: .otherMouseDown, buttonNumber: 2)
         manager.testingHandleMouseEvent(type: .otherMouseUp, buttonNumber: 2)
 
+        XCTAssertEqual(transcriptionDownCount, 0)
+        XCTAssertEqual(rewriteDownCount, 1)
+    }
+
+    func testDoubleTapBindingWinsOverEarlierBusinessTapBindingForSameHotkey() {
+        let hotkey = HotkeyPreference.Hotkey(
+            keyCode: HotkeyPreference.modifierOnlyKeyCode,
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+        HotkeyPreference.saveTranslationBindings([.init(hotkey: hotkey, behavior: .tap)])
+        HotkeyPreference.saveRewriteBindings([.init(hotkey: hotkey, behavior: .doubleTap)])
+
+        let manager = makeManager()
+        var translationDownCount = 0
+        var rewriteDownCount = 0
+        manager.onTranslationKeyDown = { translationDownCount += 1 }
+        manager.onRewriteKeyDown = { rewriteDownCount += 1 }
+
+        manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn)
+        manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: [])
+        manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn)
+        manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: [])
+
+        XCTAssertEqual(translationDownCount, 0)
+        XCTAssertEqual(rewriteDownCount, 1)
+    }
+
+    func testMultipleTranscriptionBindingsCanTriggerSameBusiness() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: UInt16(kVK_Space),
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            ),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: UInt16(kVK_Return),
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            )
+        ])
+
+        let manager = makeManager()
+        var transcriptionDownCount = 0
+        manager.onKeyDown = { transcriptionDownCount += 1 }
+
+        XCTAssertTrue(manager.testingHandleEvent(type: .keyDown, keyCode: UInt16(kVK_Space), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .keyUp, keyCode: UInt16(kVK_Space), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .keyDown, keyCode: UInt16(kVK_Return), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .keyUp, keyCode: UInt16(kVK_Return), flags: .maskSecondaryFn))
+
         XCTAssertEqual(transcriptionDownCount, 2)
-        XCTAssertEqual(rewriteDownCount, 0)
     }
 
     func testMousePresetKeepsFnShiftTranslationHigherPriority() async {

@@ -94,6 +94,16 @@ final class TranslationSessionLanguageSwitchTests: XCTestCase {
     }
 
     func testWaveformViewPillVisibilityRequiresEligibleTranslationRecordingState() {
+        XCTAssertFalse(
+            WaveformView.shouldShowSessionTranslationLanguagePill(
+                displayMode: .recording,
+                allowsSwitching: true,
+                sessionTranslationTargetLanguage: .japanese,
+                isHovering: false,
+                isPickerPresented: false
+            )
+        )
+
         XCTAssertTrue(
             WaveformView.shouldShowSessionTranslationLanguagePill(
                 displayMode: .recording,
@@ -124,7 +134,7 @@ final class TranslationSessionLanguageSwitchTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(
+        XCTAssertFalse(
             WaveformView.shouldShowSessionTranslationLanguagePill(
                 displayMode: .answer,
                 allowsSwitching: true,

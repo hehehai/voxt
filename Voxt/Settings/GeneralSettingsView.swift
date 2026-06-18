@@ -103,7 +103,7 @@ struct GeneralSettingsView: View {
             keyCode: customPasteHotkeyKeyCode,
             modifiersRawValue: customPasteHotkeyModifiers,
             sidedModifiersRawValue: customPasteHotkeySidedModifiers,
-            distinguishModifierSides: hotkeyDistinguishModifierSides
+            distinguishModifierSides: true
         )
     }
 

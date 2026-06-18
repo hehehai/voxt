@@ -138,4 +138,44 @@ final class HotkeySettingsValidationTests: XCTestCase {
 
         XCTAssertFalse(messages.contains { $0.id.hasPrefix("duplicate.") })
     }
+
+    func testSameHotkeyWithSameBehaviorReportsConflict() {
+        let hotkey = HotkeyPreference.Hotkey(
+            keyCode: HotkeyPreference.modifierOnlyKeyCode,
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let messages = HotkeySettingsValidation.messages(
+            for: .init(
+                transcriptionBindings: [.init(hotkey: hotkey, behavior: .tap)],
+                translationBindings: [.init(hotkey: hotkey, behavior: .tap)],
+                meetingBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 4), behavior: .tap)],
+                rewriteBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 5), behavior: .tap)],
+                customPasteHotkey: nil
+            )
+        )
+
+        XCTAssertTrue(messages.contains { $0.id == "duplicate.transcription.translation" })
+    }
+
+    func testSameHotkeyWithDifferentBehaviorDoesNotConflict() {
+        let hotkey = HotkeyPreference.Hotkey(
+            keyCode: HotkeyPreference.modifierOnlyKeyCode,
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let messages = HotkeySettingsValidation.messages(
+            for: .init(
+                transcriptionBindings: [.init(hotkey: hotkey, behavior: .tap)],
+                translationBindings: [.init(hotkey: hotkey, behavior: .doubleTap)],
+                meetingBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 4), behavior: .tap)],
+                rewriteBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 5), behavior: .tap)],
+                customPasteHotkey: nil
+            )
+        )
+
+        XCTAssertFalse(messages.contains { $0.id.hasPrefix("duplicate.") })
+    }
 }

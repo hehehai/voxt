@@ -21,7 +21,7 @@ struct WaveformView: View {
     static let defaultWaveformBarWidth: CGFloat = 3.2
     static let defaultWaveformBarSpacing: CGFloat = 2.5
     static let defaultWaveformSlotWidth: CGFloat = 94
-    static let defaultSessionLanguagePickerWidth: CGFloat = 198
+    static let defaultSessionLanguagePickerWidth: CGFloat = 72
 
     static func waveformVisualWidth(
         barCount: Int = 16,
@@ -39,7 +39,7 @@ struct WaveformView: View {
         isHovering: Bool,
         isPickerPresented: Bool
     ) -> Bool {
-        (displayMode == .recording || displayMode == .answer) &&
+        displayMode == .recording &&
             allowsSwitching &&
             sessionTranslationTargetLanguage != nil &&
             (isHovering || isPickerPresented)

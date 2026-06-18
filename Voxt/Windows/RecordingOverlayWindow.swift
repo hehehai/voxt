@@ -123,6 +123,7 @@ class RecordingOverlayWindow: NSPanel {
         VoxtLog.info("Overlay hide requested. isVisible=\(isVisible)", verbose: true)
         observedState?.isPresented = false
         observedState?.audioLevel = 0
+        observedState?.clearSessionTranslationLanguageHover()
 
         guard isVisible else {
             orderOut(nil)

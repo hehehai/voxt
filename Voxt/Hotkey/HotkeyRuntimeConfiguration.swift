@@ -6,6 +6,10 @@ import ApplicationServices
 import Foundation
 
 struct HotkeyRuntimeConfiguration {
+    let transcriptionBindings: [HotkeyPreference.HotkeyBinding]
+    let translationBindings: [HotkeyPreference.HotkeyBinding]
+    let rewriteBindings: [HotkeyPreference.HotkeyBinding]
+    let meetingBindings: [HotkeyPreference.HotkeyBinding]
     let transcriptionHotkey: HotkeyPreference.Hotkey
     let translationHotkey: HotkeyPreference.Hotkey
     let rewriteHotkey: HotkeyPreference.Hotkey
@@ -17,16 +21,25 @@ struct HotkeyRuntimeConfiguration {
 
     static func load(defaults: UserDefaults = .standard) -> HotkeyRuntimeConfiguration {
         let customPasteEnabled = defaults.bool(forKey: AppPreferenceKey.customPasteHotkeyEnabled)
+        HotkeyPreference.migrateHotkeyBindingsIfNeeded(defaults: defaults)
+        let transcriptionBindings = HotkeyPreference.loadTranscriptionBindings(defaults: defaults)
+        let translationBindings = HotkeyPreference.loadTranslationBindings(defaults: defaults)
+        let rewriteBindings = HotkeyPreference.loadRewriteBindings(defaults: defaults)
+        let meetingBindings = HotkeyPreference.loadMeetingBindings(defaults: defaults)
 
         return HotkeyRuntimeConfiguration(
-            transcriptionHotkey: HotkeyPreference.load(),
-            translationHotkey: HotkeyPreference.loadTranslation(),
-            rewriteHotkey: HotkeyPreference.loadRewrite(),
-            meetingHotkey: HotkeyPreference.loadMeeting(),
+            transcriptionBindings: transcriptionBindings,
+            translationBindings: translationBindings,
+            rewriteBindings: rewriteBindings,
+            meetingBindings: meetingBindings,
+            transcriptionHotkey: transcriptionBindings.first?.hotkey ?? HotkeyPreference.load(),
+            translationHotkey: translationBindings.first?.hotkey ?? HotkeyPreference.loadTranslation(),
+            rewriteHotkey: rewriteBindings.first?.hotkey ?? HotkeyPreference.loadRewrite(),
+            meetingHotkey: meetingBindings.first?.hotkey ?? HotkeyPreference.loadMeeting(),
             customPasteHotkey: customPasteEnabled ? HotkeyPreference.loadCustomPaste() : nil,
-            distinguishModifierSides: HotkeyPreference.loadDistinguishModifierSides(),
-            triggerMode: HotkeyPreference.loadTriggerMode(defaults: defaults),
-            rewriteActivationMode: HotkeyPreference.loadRewriteActivationMode(defaults: defaults)
+            distinguishModifierSides: true,
+            triggerMode: transcriptionBindings.first?.behavior.legacyTriggerMode ?? HotkeyPreference.loadTriggerMode(defaults: defaults),
+            rewriteActivationMode: .dedicatedHotkey
         )
     }
 

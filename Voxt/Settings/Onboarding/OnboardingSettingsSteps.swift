@@ -444,15 +444,6 @@ extension OnboardingSettingsView {
                     }
                 )
 
-                SettingsMenuPicker(
-                    selection: triggerModeSelection,
-                    options: HotkeyPreference.TriggerMode.allCases.map { mode in
-                        SettingsMenuOption(value: mode, title: mode.title)
-                    },
-                    selectedTitle: triggerModeSelection.wrappedValue.title,
-                    width: 260
-                )
-
                 Text(hotkeyPresetDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)

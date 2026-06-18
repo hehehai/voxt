@@ -21,7 +21,7 @@ enum OverlayTranslationMenuStyle {
         case .answer:
             return 24
         case .compact:
-            return 28
+            return 22
         }
     }
 
@@ -30,12 +30,17 @@ enum OverlayTranslationMenuStyle {
         case .answer:
             return 10
         case .compact:
-            return 8
+            return 6
         }
     }
 
     var textFontSize: CGFloat {
-        11
+        switch self {
+        case .answer:
+            return 11
+        case .compact:
+            return 10
+        }
     }
 
     var indicatorFontSize: CGFloat {
@@ -52,7 +57,25 @@ enum OverlayTranslationMenuStyle {
         case .answer:
             return 92
         case .compact:
-            return 62
+            return 56
+        }
+    }
+
+    var minWidth: CGFloat {
+        switch self {
+        case .answer:
+            return 0
+        case .compact:
+            return WaveformView.defaultSessionLanguagePickerWidth
+        }
+    }
+
+    var fixedWidth: CGFloat? {
+        switch self {
+        case .answer:
+            return nil
+        case .compact:
+            return WaveformView.defaultSessionLanguagePickerWidth
         }
     }
 
@@ -94,7 +117,7 @@ struct AnswerSessionTranslationMenuPicker: View {
             onDismissPresentation: onDismissPresentation,
             onSelectLanguage: onSelectLanguage
         )
-        .frame(height: style.height)
+        .frame(width: style.fixedWidth, height: style.height)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel(Text(String(localized: "Target Language")))
     }
@@ -175,7 +198,6 @@ private struct OverlayTranslationMenuPickerRepresentable: NSViewRepresentable {
         }
 
         func dismissPresentation() {
-            guard isPresented else { return }
             isPresented = false
             onDismissPresentation()
         }
@@ -199,6 +221,13 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
     private var isHovered = false
     private var isMenuOpen = false
     private var isMenuPresentationScheduled = false
+    private var suppressPresentationUntilStateReset = false
+    private var didRequestDismissForCurrentPresentation = false
+    private var localMouseDownMonitor: Any?
+    private var titleLeadingConstraint: NSLayoutConstraint?
+    private var titleMaxWidthConstraint: NSLayoutConstraint?
+    private var indicatorTrailingConstraint: NSLayoutConstraint?
+    private var indicatorWidthConstraint: NSLayoutConstraint?
     var onSelectLanguage: ((TranslationTargetLanguage) -> Void)?
     var onTogglePresentation: (() -> Void)?
     var onDismissPresentation: (() -> Void)?
@@ -219,16 +248,29 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
         titleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         indicatorView.translatesAutoresizingMaskIntoConstraints = false
+        indicatorView.imageScaling = .scaleProportionallyDown
+        indicatorView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        indicatorView.setContentHuggingPriority(.required, for: .horizontal)
 
         addSubview(titleField)
         addSubview(indicatorView)
 
+        let titleLeadingConstraint = titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8)
+        let titleMaxWidthConstraint = titleField.widthAnchor.constraint(lessThanOrEqualToConstant: 92)
+        let indicatorTrailingConstraint = indicatorView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
+        let indicatorWidthConstraint = indicatorView.widthAnchor.constraint(equalToConstant: 13)
+        self.titleLeadingConstraint = titleLeadingConstraint
+        self.titleMaxWidthConstraint = titleMaxWidthConstraint
+        self.indicatorTrailingConstraint = indicatorTrailingConstraint
+        self.indicatorWidthConstraint = indicatorWidthConstraint
+
         NSLayoutConstraint.activate([
-            titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            titleLeadingConstraint,
             titleField.centerYAnchor.constraint(equalTo: centerYAnchor),
             titleField.trailingAnchor.constraint(equalTo: indicatorView.leadingAnchor, constant: -6),
-            titleField.widthAnchor.constraint(lessThanOrEqualToConstant: 92),
-            indicatorView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            titleMaxWidthConstraint,
+            indicatorTrailingConstraint,
+            indicatorWidthConstraint,
             indicatorView.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
@@ -250,7 +292,7 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
             6 +
             indicatorWidth +
             currentStyle.horizontalPadding
-        return NSSize(width: width, height: currentStyle.height)
+        return NSSize(width: max(width, currentStyle.minWidth), height: currentStyle.height)
     }
 
     override func updateTrackingAreas() {
@@ -283,6 +325,10 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
         onTogglePresentation?()
     }
 
+    deinit {
+        removeLocalMouseDownMonitor()
+    }
+
     func update(
         selectedLanguage: TranslationTargetLanguage?,
         isPresented: Bool,
@@ -290,11 +336,19 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
     ) {
         self.selectedLanguage = selectedLanguage
         self.isPresented = isPresented
+        if !isPresented {
+            suppressPresentationUntilStateReset = false
+            didRequestDismissForCurrentPresentation = false
+        }
         currentStyle = style
         rebuildMenu()
         titleField.stringValue = selectedLanguage?.title ?? ""
         titleField.font = .systemFont(ofSize: style.textFontSize, weight: .semibold)
         titleField.textColor = style.textColor
+        titleLeadingConstraint?.constant = style.horizontalPadding
+        titleMaxWidthConstraint?.constant = style.titleMaxWidth
+        indicatorTrailingConstraint?.constant = -style.horizontalPadding
+        indicatorWidthConstraint?.constant = style.indicatorFontSize + 4
         indicatorView.image = NSImage(
             systemSymbolName: "chevron.down",
             accessibilityDescription: nil
@@ -308,7 +362,8 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
 
         if isPresented {
             presentMenuIfNeeded()
-        } else if isMenuOpen {
+        } else if isMenuOpen || isMenuPresentationScheduled {
+            isMenuPresentationScheduled = false
             popupMenu.cancelTracking()
         }
     }
@@ -326,12 +381,25 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
     }
 
     private func presentMenuIfNeeded() {
-        guard isPresented, !isMenuOpen, !isMenuPresentationScheduled, !popupMenu.items.isEmpty else { return }
+        guard isPresented,
+              !suppressPresentationUntilStateReset,
+              !isMenuOpen,
+              !isMenuPresentationScheduled,
+              !popupMenu.items.isEmpty
+        else {
+            return
+        }
         isMenuPresentationScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isMenuPresentationScheduled = false
-            guard self.isPresented, !self.isMenuOpen, self.window != nil else { return }
+            guard self.isPresented,
+                  !self.suppressPresentationUntilStateReset,
+                  !self.isMenuOpen,
+                  self.window != nil
+            else {
+                return
+            }
             let selectedItem = self.selectedLanguage.flatMap { language in
                 self.popupMenu.items.first(where: { $0.representedObject as? String == language.rawValue })
             }
@@ -368,13 +436,52 @@ private final class OverlayTranslationMenuHostView: NSView, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         guard menu === popupMenu else { return }
         isMenuOpen = true
+        didRequestDismissForCurrentPresentation = false
+        installLocalMouseDownMonitor()
     }
 
     func menuDidClose(_ menu: NSMenu) {
         guard menu === popupMenu else { return }
         isMenuOpen = false
+        removeLocalMouseDownMonitor()
+        requestDismissPresentation(cancelMenu: false)
+    }
+
+    private func installLocalMouseDownMonitor() {
+        guard localMouseDownMonitor == nil else { return }
+        localMouseDownMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] event in
+            self?.dismissMenuForOverlayClickIfNeeded(event)
+            return event
+        }
+    }
+
+    private func removeLocalMouseDownMonitor() {
+        if let localMouseDownMonitor {
+            NSEvent.removeMonitor(localMouseDownMonitor)
+            self.localMouseDownMonitor = nil
+        }
+    }
+
+    private func dismissMenuForOverlayClickIfNeeded(_ event: NSEvent) {
+        guard isMenuOpen, event.window === window else { return }
+        let location = convert(event.locationInWindow, from: nil)
+        guard !bounds.contains(location) else { return }
+        requestDismissPresentation(cancelMenu: true)
+    }
+
+    private func requestDismissPresentation(cancelMenu: Bool) {
+        isPresented = false
         isMenuPresentationScheduled = false
-        onDismissPresentation?()
+        suppressPresentationUntilStateReset = true
+        if !didRequestDismissForCurrentPresentation {
+            didRequestDismissForCurrentPresentation = true
+            onDismissPresentation?()
+        }
+        if cancelMenu, isMenuOpen {
+            popupMenu.cancelTracking()
+        }
     }
 }
 

@@ -619,16 +619,20 @@ enum ConfigurationTransferManager {
         var hotkeyMouseButtonNumber: Int?
         var hotkeyModifiers: Int
         var hotkeySidedModifiers: Int
+        var transcriptionHotkeyBindings: [HotkeyPreference.HotkeyBinding]?
         var translationHotkeyInputType: String
         var translationHotkeyKeyCode: Int
         var translationHotkeyMouseButtonNumber: Int?
         var translationHotkeyModifiers: Int
         var translationHotkeySidedModifiers: Int
+        var translationHotkeyBindings: [HotkeyPreference.HotkeyBinding]?
         var rewriteHotkeyInputType: String
         var rewriteHotkeyKeyCode: Int
         var rewriteHotkeyMouseButtonNumber: Int?
         var rewriteHotkeyModifiers: Int
         var rewriteHotkeySidedModifiers: Int
+        var rewriteHotkeyBindings: [HotkeyPreference.HotkeyBinding]?
+        var meetingHotkeyBindings: [HotkeyPreference.HotkeyBinding]?
         var customPasteHotkeyInputType: String
         var customPasteHotkeyMouseButtonNumber: Int?
         var rewriteHotkeyActivationMode: String
@@ -643,16 +647,20 @@ enum ConfigurationTransferManager {
             case hotkeyMouseButtonNumber
             case hotkeyModifiers
             case hotkeySidedModifiers
+            case transcriptionHotkeyBindings
             case translationHotkeyInputType
             case translationHotkeyKeyCode
             case translationHotkeyMouseButtonNumber
             case translationHotkeyModifiers
             case translationHotkeySidedModifiers
+            case translationHotkeyBindings
             case rewriteHotkeyInputType
             case rewriteHotkeyKeyCode
             case rewriteHotkeyMouseButtonNumber
             case rewriteHotkeyModifiers
             case rewriteHotkeySidedModifiers
+            case rewriteHotkeyBindings
+            case meetingHotkeyBindings
             case customPasteHotkeyInputType
             case customPasteHotkeyMouseButtonNumber
             case rewriteHotkeyActivationMode
@@ -668,16 +676,20 @@ enum ConfigurationTransferManager {
             hotkeyMouseButtonNumber: Int?,
             hotkeyModifiers: Int,
             hotkeySidedModifiers: Int,
+            transcriptionHotkeyBindings: [HotkeyPreference.HotkeyBinding]? = nil,
             translationHotkeyInputType: String,
             translationHotkeyKeyCode: Int,
             translationHotkeyMouseButtonNumber: Int?,
             translationHotkeyModifiers: Int,
             translationHotkeySidedModifiers: Int,
+            translationHotkeyBindings: [HotkeyPreference.HotkeyBinding]? = nil,
             rewriteHotkeyInputType: String,
             rewriteHotkeyKeyCode: Int,
             rewriteHotkeyMouseButtonNumber: Int?,
             rewriteHotkeyModifiers: Int,
             rewriteHotkeySidedModifiers: Int,
+            rewriteHotkeyBindings: [HotkeyPreference.HotkeyBinding]? = nil,
+            meetingHotkeyBindings: [HotkeyPreference.HotkeyBinding]? = nil,
             customPasteHotkeyInputType: String,
             customPasteHotkeyMouseButtonNumber: Int?,
             rewriteHotkeyActivationMode: String,
@@ -691,16 +703,20 @@ enum ConfigurationTransferManager {
             self.hotkeyMouseButtonNumber = hotkeyMouseButtonNumber
             self.hotkeyModifiers = hotkeyModifiers
             self.hotkeySidedModifiers = hotkeySidedModifiers
+            self.transcriptionHotkeyBindings = transcriptionHotkeyBindings
             self.translationHotkeyInputType = translationHotkeyInputType
             self.translationHotkeyKeyCode = translationHotkeyKeyCode
             self.translationHotkeyMouseButtonNumber = translationHotkeyMouseButtonNumber
             self.translationHotkeyModifiers = translationHotkeyModifiers
             self.translationHotkeySidedModifiers = translationHotkeySidedModifiers
+            self.translationHotkeyBindings = translationHotkeyBindings
             self.rewriteHotkeyInputType = rewriteHotkeyInputType
             self.rewriteHotkeyKeyCode = rewriteHotkeyKeyCode
             self.rewriteHotkeyMouseButtonNumber = rewriteHotkeyMouseButtonNumber
             self.rewriteHotkeyModifiers = rewriteHotkeyModifiers
             self.rewriteHotkeySidedModifiers = rewriteHotkeySidedModifiers
+            self.rewriteHotkeyBindings = rewriteHotkeyBindings
+            self.meetingHotkeyBindings = meetingHotkeyBindings
             self.customPasteHotkeyInputType = customPasteHotkeyInputType
             self.customPasteHotkeyMouseButtonNumber = customPasteHotkeyMouseButtonNumber
             self.rewriteHotkeyActivationMode = rewriteHotkeyActivationMode
@@ -718,18 +734,34 @@ enum ConfigurationTransferManager {
             hotkeyMouseButtonNumber = try container.decodeIfPresent(Int.self, forKey: .hotkeyMouseButtonNumber)
             hotkeyModifiers = try container.decode(Int.self, forKey: .hotkeyModifiers)
             hotkeySidedModifiers = try container.decode(Int.self, forKey: .hotkeySidedModifiers)
+            transcriptionHotkeyBindings = try container.decodeIfPresent(
+                [HotkeyPreference.HotkeyBinding].self,
+                forKey: .transcriptionHotkeyBindings
+            )
             translationHotkeyInputType = try container.decodeIfPresent(String.self, forKey: .translationHotkeyInputType)
                 ?? HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
             translationHotkeyKeyCode = try container.decode(Int.self, forKey: .translationHotkeyKeyCode)
             translationHotkeyMouseButtonNumber = try container.decodeIfPresent(Int.self, forKey: .translationHotkeyMouseButtonNumber)
             translationHotkeyModifiers = try container.decode(Int.self, forKey: .translationHotkeyModifiers)
             translationHotkeySidedModifiers = try container.decode(Int.self, forKey: .translationHotkeySidedModifiers)
+            translationHotkeyBindings = try container.decodeIfPresent(
+                [HotkeyPreference.HotkeyBinding].self,
+                forKey: .translationHotkeyBindings
+            )
             rewriteHotkeyInputType = try container.decodeIfPresent(String.self, forKey: .rewriteHotkeyInputType)
                 ?? HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
             rewriteHotkeyKeyCode = try container.decode(Int.self, forKey: .rewriteHotkeyKeyCode)
             rewriteHotkeyMouseButtonNumber = try container.decodeIfPresent(Int.self, forKey: .rewriteHotkeyMouseButtonNumber)
             rewriteHotkeyModifiers = try container.decode(Int.self, forKey: .rewriteHotkeyModifiers)
             rewriteHotkeySidedModifiers = try container.decode(Int.self, forKey: .rewriteHotkeySidedModifiers)
+            rewriteHotkeyBindings = try container.decodeIfPresent(
+                [HotkeyPreference.HotkeyBinding].self,
+                forKey: .rewriteHotkeyBindings
+            )
+            meetingHotkeyBindings = try container.decodeIfPresent(
+                [HotkeyPreference.HotkeyBinding].self,
+                forKey: .meetingHotkeyBindings
+            )
             customPasteHotkeyInputType = try container.decodeIfPresent(String.self, forKey: .customPasteHotkeyInputType)
                 ?? HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
             customPasteHotkeyMouseButtonNumber = try container.decodeIfPresent(Int.self, forKey: .customPasteHotkeyMouseButtonNumber)
@@ -1024,16 +1056,20 @@ enum ConfigurationTransferManager {
             hotkeyMouseButtonNumber: defaults.object(forKey: AppPreferenceKey.hotkeyMouseButtonNumber) as? Int,
             hotkeyModifiers: defaults.integer(forKey: AppPreferenceKey.hotkeyModifiers),
             hotkeySidedModifiers: defaults.integer(forKey: AppPreferenceKey.hotkeySidedModifiers),
+            transcriptionHotkeyBindings: HotkeyPreference.loadTranscriptionBindings(defaults: defaults),
             translationHotkeyInputType: defaults.string(forKey: AppPreferenceKey.translationHotkeyInputType) ?? HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue,
             translationHotkeyKeyCode: defaults.integer(forKey: AppPreferenceKey.translationHotkeyKeyCode),
             translationHotkeyMouseButtonNumber: defaults.object(forKey: AppPreferenceKey.translationHotkeyMouseButtonNumber) as? Int,
             translationHotkeyModifiers: defaults.integer(forKey: AppPreferenceKey.translationHotkeyModifiers),
             translationHotkeySidedModifiers: defaults.integer(forKey: AppPreferenceKey.translationHotkeySidedModifiers),
+            translationHotkeyBindings: HotkeyPreference.loadTranslationBindings(defaults: defaults),
             rewriteHotkeyInputType: defaults.string(forKey: AppPreferenceKey.rewriteHotkeyInputType) ?? HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue,
             rewriteHotkeyKeyCode: defaults.integer(forKey: AppPreferenceKey.rewriteHotkeyKeyCode),
             rewriteHotkeyMouseButtonNumber: defaults.object(forKey: AppPreferenceKey.rewriteHotkeyMouseButtonNumber) as? Int,
             rewriteHotkeyModifiers: defaults.integer(forKey: AppPreferenceKey.rewriteHotkeyModifiers),
             rewriteHotkeySidedModifiers: defaults.integer(forKey: AppPreferenceKey.rewriteHotkeySidedModifiers),
+            rewriteHotkeyBindings: HotkeyPreference.loadRewriteBindings(defaults: defaults),
+            meetingHotkeyBindings: HotkeyPreference.loadMeetingBindings(defaults: defaults),
             customPasteHotkeyInputType: defaults.string(forKey: AppPreferenceKey.customPasteHotkeyInputType) ?? HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue,
             customPasteHotkeyMouseButtonNumber: defaults.object(forKey: AppPreferenceKey.customPasteHotkeyMouseButtonNumber) as? Int,
             rewriteHotkeyActivationMode: HotkeyPreference.loadRewriteActivationMode(defaults: defaults).rawValue,
@@ -1226,9 +1262,30 @@ enum ConfigurationTransferManager {
         let triggerMode = HotkeyPreference.TriggerMode(rawValue: hotkey.hotkeyTriggerMode)
             ?? HotkeyPreference.defaultTriggerMode
         HotkeyPreference.saveTriggerMode(triggerMode, defaults: defaults)
-        defaults.set(hotkey.hotkeyDistinguishModifierSides, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
         defaults.set(hotkey.hotkeyPreset, forKey: AppPreferenceKey.hotkeyPreset)
         defaults.set(hotkey.escapeKeyCancelsOverlaySession, forKey: AppPreferenceKey.escapeKeyCancelsOverlaySession)
+        if let bindings = hotkey.transcriptionHotkeyBindings {
+            HotkeyPreference.saveTranscriptionBindings(bindings, defaults: defaults)
+        } else {
+            defaults.removeObject(forKey: AppPreferenceKey.transcriptionHotkeyBindings)
+        }
+        if let bindings = hotkey.translationHotkeyBindings {
+            HotkeyPreference.saveTranslationBindings(bindings, defaults: defaults)
+        } else {
+            defaults.removeObject(forKey: AppPreferenceKey.translationHotkeyBindings)
+        }
+        if let bindings = hotkey.meetingHotkeyBindings {
+            HotkeyPreference.saveMeetingBindings(bindings, defaults: defaults)
+        } else {
+            defaults.removeObject(forKey: AppPreferenceKey.meetingHotkeyBindings)
+        }
+        if let bindings = hotkey.rewriteHotkeyBindings {
+            HotkeyPreference.saveRewriteBindings(bindings, defaults: defaults)
+        } else {
+            defaults.removeObject(forKey: AppPreferenceKey.rewriteHotkeyBindings)
+        }
+        HotkeyPreference.migrateHotkeyBindingsIfNeeded(defaults: defaults)
 
         let featureSettings = payload.feature ?? FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
         FeatureSettingsStore.save(featureSettings, defaults: defaults)

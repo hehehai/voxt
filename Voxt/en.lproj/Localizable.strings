@@ -97,6 +97,9 @@
 "When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation." = "When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation.";
 "Long Press (Release to End)" = "Long Press (Release to End)";
 "Tap (Press to Toggle)" = "Tap (Press to Toggle)";
+"Tap" = "Tap";
+"Long Press" = "Long Press";
+"Double Tap" = "Double Tap";
 "Tips" = "Tips";
 "Translation Prompt" = "Translation Prompt";
 "Custom LLM Model" = "Custom LLM Model";

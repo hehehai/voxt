@@ -27,31 +27,31 @@ extension AppDelegate {
         // Callback contract:
         // - HotkeyManager only emits normalized events (transcriptionDown/up, translationDown/up, rewriteDown/up).
         // - AppDelegate owns business decisions (start/stop session, selected-text fast path, mode rules).
-        hotkeyManager.onKeyDown = { [weak self] in
+        hotkeyManager.onKeyDownWithBehavior = { [weak self] behavior in
             guard let self else { return }
-            self.handleTranscriptionHotkeyDown()
+            self.handleTranscriptionHotkeyDown(behavior: behavior)
         }
-        hotkeyManager.onKeyUp = { [weak self] in
+        hotkeyManager.onKeyUpWithBehavior = { [weak self] behavior in
             guard let self else { return }
-            self.handleTranscriptionHotkeyUp()
+            self.handleTranscriptionHotkeyUp(behavior: behavior)
         }
-        hotkeyManager.onTranslationKeyDown = { [weak self] in
+        hotkeyManager.onTranslationKeyDownWithBehavior = { [weak self] behavior in
             guard let self else { return }
-            self.handleTranslationHotkeyDown()
+            self.handleTranslationHotkeyDown(behavior: behavior)
         }
-        hotkeyManager.onTranslationKeyUp = { [weak self] in
+        hotkeyManager.onTranslationKeyUpWithBehavior = { [weak self] behavior in
             guard let self else { return }
-            self.handleTranslationHotkeyUp()
+            self.handleTranslationHotkeyUp(behavior: behavior)
         }
-        hotkeyManager.onRewriteKeyDown = { [weak self] in
+        hotkeyManager.onRewriteKeyDownWithBehavior = { [weak self] behavior in
             guard let self else { return }
-            self.handleRewriteHotkeyDown()
+            self.handleRewriteHotkeyDown(behavior: behavior)
         }
-        hotkeyManager.onRewriteKeyUp = { [weak self] in
+        hotkeyManager.onRewriteKeyUpWithBehavior = { [weak self] behavior in
             guard let self else { return }
-            self.handleRewriteHotkeyUp()
+            self.handleRewriteHotkeyUp(behavior: behavior)
         }
-        hotkeyManager.onMeetingKeyDown = { [weak self] in
+        hotkeyManager.onMeetingKeyDownWithBehavior = { [weak self] _ in
             guard let self else { return }
             self.handleMeetingHotkeyDown()
         }
@@ -203,10 +203,10 @@ extension AppDelegate {
         beginRecording(outputMode: .translation)
     }
 
-    func handleTranscriptionHotkeyDown() {
+    func handleTranscriptionHotkeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
         handleTranscriptionTriggerDown(
-            triggerMode: HotkeyPreference.loadTriggerMode(),
-            allowsDoubleTapRewrite: true,
+            triggerMode: behavior.legacyTriggerMode,
+            allowsDoubleTapRewrite: false,
             source: "hotkey"
         )
     }
@@ -272,8 +272,8 @@ extension AppDelegate {
         }
     }
 
-    func handleTranscriptionHotkeyUp() {
-        handleTranscriptionTriggerUp(triggerMode: HotkeyPreference.loadTriggerMode(), source: "hotkey")
+    func handleTranscriptionHotkeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        handleTranscriptionTriggerUp(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 
     private func handleTranscriptionTriggerUp(
@@ -299,8 +299,8 @@ extension AppDelegate {
         }
     }
 
-    func handleTranslationHotkeyDown() {
-        handleTranslationTriggerDown(triggerMode: HotkeyPreference.loadTriggerMode(), source: "hotkey")
+    func handleTranslationHotkeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        handleTranslationTriggerDown(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 
     private func handleTranslationTriggerDown(
@@ -345,8 +345,8 @@ extension AppDelegate {
         }
     }
 
-    func handleTranslationHotkeyUp() {
-        handleTranslationTriggerUp(triggerMode: HotkeyPreference.loadTriggerMode(), source: "hotkey")
+    func handleTranslationHotkeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        handleTranslationTriggerUp(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 
     private func handleTranslationTriggerUp(
@@ -372,8 +372,8 @@ extension AppDelegate {
         }
     }
 
-    func handleRewriteHotkeyDown() {
-        handleRewriteTriggerDown(triggerMode: HotkeyPreference.loadTriggerMode(), source: "hotkey")
+    func handleRewriteHotkeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        handleRewriteTriggerDown(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 
     private func handleRewriteTriggerDown(
@@ -406,8 +406,8 @@ extension AppDelegate {
         beginRecording(outputMode: .rewrite)
     }
 
-    func handleRewriteHotkeyUp() {
-        handleRewriteTriggerUp(triggerMode: HotkeyPreference.loadTriggerMode(), source: "hotkey")
+    func handleRewriteHotkeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        handleRewriteTriggerUp(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 
     private func handleRewriteTriggerUp(

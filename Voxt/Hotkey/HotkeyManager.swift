@@ -17,6 +17,34 @@ class HotkeyManager {
         case unavailable
     }
 
+    private enum RoutedHotkeyBusiness: CaseIterable {
+        case translation
+        case rewrite
+        case meeting
+        case customPaste
+        case transcription
+
+        var priority: Int {
+            switch self {
+            case .translation:
+                return 0
+            case .rewrite:
+                return 1
+            case .meeting:
+                return 2
+            case .customPaste:
+                return 3
+            case .transcription:
+                return 4
+            }
+        }
+    }
+
+    private struct RoutedHotkeyBinding {
+        let business: RoutedHotkeyBusiness
+        let binding: HotkeyPreference.HotkeyBinding
+    }
+
     // Hotkey state machine notes:
     // 1) Translation shortcut has higher priority than transcription.
     // 2) For modifier-only tap mode (fn / fn+shift), we emit "down" as toggle signal.
@@ -32,6 +60,13 @@ class HotkeyManager {
     var onMeetingKeyDown: (() -> Void)?
     var onCustomPasteKeyDown: (() -> Void)?
     var onEscapeKeyDown: (() -> Bool)?
+    var onKeyDownWithBehavior: ((HotkeyPreference.TriggerBehavior) -> Void)?
+    var onKeyUpWithBehavior: ((HotkeyPreference.TriggerBehavior) -> Void)?
+    var onTranslationKeyDownWithBehavior: ((HotkeyPreference.TriggerBehavior) -> Void)?
+    var onTranslationKeyUpWithBehavior: ((HotkeyPreference.TriggerBehavior) -> Void)?
+    var onRewriteKeyDownWithBehavior: ((HotkeyPreference.TriggerBehavior) -> Void)?
+    var onRewriteKeyUpWithBehavior: ((HotkeyPreference.TriggerBehavior) -> Void)?
+    var onMeetingKeyDownWithBehavior: ((HotkeyPreference.TriggerBehavior) -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -63,6 +98,8 @@ class HotkeyManager {
     private var pendingTranscriptionLongPressReleaseTask: Task<Void, Never>?
     private var pendingTranslationLongPressReleaseTask: Task<Void, Never>?
     private var pendingRewriteLongPressReleaseTask: Task<Void, Never>?
+    private var pendingDoubleTapBindingID: UUID?
+    private var pendingDoubleTapAt: Date?
     private var retryTask: Task<Void, Never>?
     private var didPromptAccessibility = false
     private var didPromptInputMonitoring = false
@@ -281,7 +318,11 @@ class HotkeyManager {
         let triggerMode = configuration.triggerMode
         let incomingSidedModifiers =
             type == .flagsChanged
-            ? SidedModifierFlags.from(eventFlags: flags).filtered(by: HotkeyEventSupport.modifierFlags(from: flags))
+            ? resolvedSidedModifiers(
+                forModifierKeyCode: keyCode,
+                flags: flags,
+                currentSidedModifiers: currentSidedModifiers
+            )
             : currentSidedModifiers
         let transcriptionFlags = configuration.transcriptionFlags
         let translationFlags = configuration.translationFlags
@@ -320,6 +361,17 @@ class HotkeyManager {
 
         if type == .flagsChanged {
             currentSidedModifiers = incomingSidedModifiers
+        }
+
+        if handleBindingRoutedKeyboardEvent(
+            type: type,
+            keyCode: keyCode,
+            flags: flags,
+            isAutoRepeat: isAutoRepeat,
+            configuration: configuration
+        ) {
+            eventWasConsumed = true
+            return
         }
 
         if triggerMode == .tap, type == .keyDown, !HotkeyEventSupport.isModifierKeyCode(keyCode) {
@@ -648,6 +700,16 @@ class HotkeyManager {
             clearRewriteTransientState()
         }
 
+        if handleBindingRoutedMouseEvent(
+            type: type,
+            buttonNumber: buttonNumber,
+            flags: flags,
+            configuration: configuration
+        ) {
+            eventWasConsumed = true
+            return
+        }
+
         if handleMouseHotkey(
             type: type,
             buttonNumber: buttonNumber,
@@ -823,6 +885,472 @@ class HotkeyManager {
             distinguishModifierSides: distinguishModifierSides
         )
     }
+
+    private func resolvedSidedModifiers(
+        forModifierKeyCode keyCode: UInt16,
+        flags: CGEventFlags,
+        currentSidedModifiers: SidedModifierFlags
+    ) -> SidedModifierFlags {
+        let activeModifiers = HotkeyEventSupport.modifierFlags(from: flags)
+        let eventSidedModifiers = SidedModifierFlags.from(eventFlags: flags).filtered(by: activeModifiers)
+        let baseSidedModifiers = eventSidedModifiers.isEmpty ? currentSidedModifiers : eventSidedModifiers
+
+        guard let representedModifier = SidedModifierFlags.fromModifierKeyCode(keyCode) else {
+            return baseSidedModifiers.filtered(by: activeModifiers)
+        }
+
+        return SidedModifierFlags
+            .updating(
+                from: baseSidedModifiers,
+                keyCode: keyCode,
+                isPressed: activeModifiers.contains(representedModifier.modifiers)
+            )
+            .filtered(by: activeModifiers)
+    }
+
+    private func bindings(
+        for business: RoutedHotkeyBusiness,
+        configuration: HotkeyRuntimeConfiguration
+    ) -> [HotkeyPreference.HotkeyBinding] {
+        switch business {
+        case .translation:
+            return configuration.translationBindings
+        case .rewrite:
+            return configuration.rewriteBindings
+        case .meeting:
+            return configuration.meetingBindings
+        case .customPaste:
+            return configuration.customPasteHotkey.map {
+                [HotkeyPreference.HotkeyBinding(hotkey: $0, behavior: .tap)]
+            } ?? []
+        case .transcription:
+            return configuration.transcriptionBindings
+        }
+    }
+
+    private func routedBindings(configuration: HotkeyRuntimeConfiguration) -> [RoutedHotkeyBinding] {
+        RoutedHotkeyBusiness.allCases
+            .flatMap { business in
+                bindings(for: business, configuration: configuration).map {
+                    RoutedHotkeyBinding(business: business, binding: $0)
+                }
+            }
+            .sorted { lhs, rhs in
+                let lhsBehaviorPriority = behaviorPriority(lhs.binding.behavior)
+                let rhsBehaviorPriority = behaviorPriority(rhs.binding.behavior)
+                if lhsBehaviorPriority != rhsBehaviorPriority {
+                    return lhsBehaviorPriority < rhsBehaviorPriority
+                }
+                return lhs.business.priority < rhs.business.priority
+            }
+    }
+
+    private func behaviorPriority(_ behavior: HotkeyPreference.TriggerBehavior) -> Int {
+        switch behavior {
+        case .doubleTap:
+            return 0
+        case .longPress:
+            return 1
+        case .tap:
+            return 2
+        }
+    }
+
+    private func handleBindingRoutedKeyboardEvent(
+        type: CGEventType,
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        isAutoRepeat: Bool,
+        configuration: HotkeyRuntimeConfiguration
+    ) -> Bool {
+        guard type == .keyDown || type == .keyUp || type == .flagsChanged else { return false }
+        if type == .keyDown, !HotkeyEventSupport.isModifierKeyCode(keyCode) {
+            invalidateModifierOnlyTapCandidates(for: keyCode)
+        }
+
+        for routedBinding in routedBindings(configuration: configuration) {
+            let binding = routedBinding.binding
+            let business = routedBinding.business
+            if HotkeyModifierInterpreter.isModifierOnly(binding.hotkey) {
+                if handleModifierOnlyBinding(
+                    binding,
+                    business: business,
+                    type: type,
+                    keyCode: keyCode,
+                    flags: flags
+                ) {
+                    return true
+                }
+            } else if handleNonModifierKeyboardBinding(
+                binding,
+                business: business,
+                type: type,
+                keyCode: keyCode,
+                flags: flags,
+                isAutoRepeat: isAutoRepeat
+            ) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func handleBindingRoutedMouseEvent(
+        type: CGEventType,
+        buttonNumber: Int,
+        flags: CGEventFlags,
+        configuration: HotkeyRuntimeConfiguration
+    ) -> Bool {
+        guard type == .otherMouseDown || type == .otherMouseUp else { return false }
+        for routedBinding in routedBindings(configuration: configuration) {
+            let binding = routedBinding.binding
+            let business = routedBinding.business
+            guard binding.hotkey.mouseButtonNumber == buttonNumber else { continue }
+            guard HotkeyPreference.hotkeyMatches(
+                binding.hotkey,
+                eventFlags: flags,
+                sidedModifiers: currentSidedModifiers,
+                distinguishModifierSides: true
+            ) else {
+                continue
+            }
+            switch type {
+            case .otherMouseDown:
+                setActiveMouseButton(buttonNumber, for: business)
+                if binding.behavior == .tap {
+                    emitDown(for: business, behavior: binding.behavior)
+                } else if binding.behavior == .longPress {
+                    guard !isBusinessKeyDown(business) else { return true }
+                    setBusinessKeyDown(true, for: business)
+                    emitDown(for: business, behavior: binding.behavior)
+                }
+                return true
+            case .otherMouseUp:
+                guard activeMouseButtonNumber(for: business) == buttonNumber else { return false }
+                setActiveMouseButton(nil, for: business)
+                completeBindingRelease(binding, business: business)
+                return true
+            default:
+                return false
+            }
+        }
+        return false
+    }
+
+    private func handleNonModifierKeyboardBinding(
+        _ binding: HotkeyPreference.HotkeyBinding,
+        business: RoutedHotkeyBusiness,
+        type: CGEventType,
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        isAutoRepeat: Bool
+    ) -> Bool {
+        guard case .keyboard(let bindingKeyCode) = binding.hotkey.input else { return false }
+        switch type {
+        case .keyDown:
+            guard keyCode == bindingKeyCode,
+                  !isAutoRepeat,
+                  HotkeyPreference.hotkeyMatches(
+                    binding.hotkey,
+                    eventFlags: flags,
+                    sidedModifiers: currentSidedModifiers,
+                    distinguishModifierSides: true
+                  )
+            else {
+                return false
+            }
+            setActiveKeyCode(keyCode, for: business)
+            switch binding.behavior {
+            case .tap:
+                if business != .customPaste {
+                    emitDown(for: business, behavior: binding.behavior)
+                }
+            case .longPress:
+                if !isBusinessKeyDown(business) {
+                    setBusinessKeyDown(true, for: business)
+                    emitDown(for: business, behavior: binding.behavior)
+                }
+            case .doubleTap:
+                break
+            }
+            return true
+        case .keyUp:
+            guard activeKeyCode(for: business) == keyCode else { return false }
+            setActiveKeyCode(nil, for: business)
+            completeBindingRelease(binding, business: business)
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func handleModifierOnlyBinding(
+        _ binding: HotkeyPreference.HotkeyBinding,
+        business: RoutedHotkeyBusiness,
+        type: CGEventType,
+        keyCode: UInt16,
+        flags: CGEventFlags
+    ) -> Bool {
+        guard type == .flagsChanged else { return false }
+
+        let comboIsDown = HotkeyPreference.hotkeyMatches(
+            binding.hotkey,
+            eventFlags: flags,
+            sidedModifiers: currentSidedModifiers,
+            distinguishModifierSides: true
+        )
+        let triggerDown = HotkeyModifierInterpreter.translationTriggerDown(
+            keyCode: keyCode,
+            comboIsDown: comboIsDown,
+            eventFlags: flags,
+            translationFlags: HotkeyPreference.cgFlags(from: binding.hotkey.modifiers)
+        )
+
+        switch binding.behavior {
+        case .tap, .doubleTap:
+            if business == .transcription,
+               !comboIsDown,
+               HotkeyModifierInterpreter.isFunctionKeyEvent(keyCode),
+               shouldIgnoreNextFunctionTranscriptionRelease {
+                shouldIgnoreNextFunctionTranscriptionRelease = false
+                setModifierTapCandidate(false, for: business)
+                setBusinessKeyDown(false, for: business)
+                return true
+            }
+
+            if triggerDown && !isBusinessKeyDown(business) {
+                cancelLowerPriorityTranscriptionCandidateIfNeeded(for: business)
+                setBusinessKeyDown(true, for: business)
+                setModifierTapCandidate(true, for: business)
+                return true
+            }
+
+            if !comboIsDown, isBusinessKeyDown(business) {
+                if modifierTapCandidate(for: business) {
+                    completeBindingRelease(binding, business: business)
+                }
+                setModifierTapCandidate(false, for: business)
+                setBusinessKeyDown(false, for: business)
+                return true
+            }
+            return comboIsDown || isBusinessKeyDown(business)
+        case .longPress:
+            if comboIsDown && !isBusinessKeyDown(business) {
+                cancelLowerPriorityTranscriptionCandidateIfNeeded(for: business)
+                setBusinessKeyDown(true, for: business)
+                emitDown(for: business, behavior: binding.behavior)
+                return true
+            }
+            if !comboIsDown, isBusinessKeyDown(business) {
+                setBusinessKeyDown(false, for: business)
+                if business != .meeting {
+                    emitUp(for: business, behavior: binding.behavior)
+                }
+                return true
+            }
+            return comboIsDown
+        }
+    }
+
+    private func completeBindingRelease(
+        _ binding: HotkeyPreference.HotkeyBinding,
+        business: RoutedHotkeyBusiness
+    ) {
+        switch binding.behavior {
+        case .tap:
+            if business == .customPaste {
+                emitDown(for: business, behavior: binding.behavior)
+            } else if HotkeyModifierInterpreter.isModifierOnly(binding.hotkey) {
+                emitDown(for: business, behavior: binding.behavior)
+                if business != .transcription {
+                    shouldIgnoreNextFunctionTranscriptionRelease = true
+                }
+            } else {
+                emitUp(for: business, behavior: binding.behavior)
+            }
+        case .longPress:
+            if business != .meeting {
+                setBusinessKeyDown(false, for: business)
+                emitUp(for: business, behavior: binding.behavior)
+            }
+        case .doubleTap:
+            if completeDoubleTap(for: binding.id) {
+                emitDown(for: business, behavior: binding.behavior)
+            }
+        }
+    }
+
+    private func completeDoubleTap(for bindingID: UUID) -> Bool {
+        let now = Date()
+        guard pendingDoubleTapBindingID == bindingID,
+              let pendingDoubleTapAt,
+              now.timeIntervalSince(pendingDoubleTapAt) <= NSEvent.doubleClickInterval
+        else {
+            pendingDoubleTapBindingID = bindingID
+            pendingDoubleTapAt = now
+            return false
+        }
+        pendingDoubleTapBindingID = nil
+        self.pendingDoubleTapAt = nil
+        return true
+    }
+
+    private func cancelLowerPriorityTranscriptionCandidateIfNeeded(for business: RoutedHotkeyBusiness) {
+        guard business != .transcription else { return }
+        hasTranscriptionModifierTapCandidate = false
+        if isKeyDown {
+            isKeyDown = false
+        }
+    }
+
+    private func isBusinessKeyDown(_ business: RoutedHotkeyBusiness) -> Bool {
+        switch business {
+        case .translation:
+            return isTranslationKeyDown
+        case .rewrite:
+            return isRewriteKeyDown
+        case .meeting:
+            return isMeetingKeyDown
+        case .customPaste:
+            return isCustomPasteKeyDown
+        case .transcription:
+            return isKeyDown
+        }
+    }
+
+    private func setBusinessKeyDown(_ isDown: Bool, for business: RoutedHotkeyBusiness) {
+        switch business {
+        case .translation:
+            isTranslationKeyDown = isDown
+        case .rewrite:
+            isRewriteKeyDown = isDown
+        case .meeting:
+            isMeetingKeyDown = isDown
+        case .customPaste:
+            isCustomPasteKeyDown = isDown
+        case .transcription:
+            isKeyDown = isDown
+        }
+    }
+
+    private func modifierTapCandidate(for business: RoutedHotkeyBusiness) -> Bool {
+        switch business {
+        case .translation:
+            return hasTranslationModifierTapCandidate
+        case .rewrite:
+            return hasRewriteModifierTapCandidate
+        case .meeting:
+            return hasMeetingModifierTapCandidate
+        case .customPaste:
+            return hasCustomPasteModifierTapCandidate
+        case .transcription:
+            return hasTranscriptionModifierTapCandidate
+        }
+    }
+
+    private func setModifierTapCandidate(_ isCandidate: Bool, for business: RoutedHotkeyBusiness) {
+        switch business {
+        case .translation:
+            hasTranslationModifierTapCandidate = isCandidate
+        case .rewrite:
+            hasRewriteModifierTapCandidate = isCandidate
+        case .meeting:
+            hasMeetingModifierTapCandidate = isCandidate
+        case .customPaste:
+            hasCustomPasteModifierTapCandidate = isCandidate
+        case .transcription:
+            hasTranscriptionModifierTapCandidate = isCandidate
+        }
+    }
+
+    private func activeKeyCode(for business: RoutedHotkeyBusiness) -> UInt16? {
+        switch business {
+        case .translation:
+            return activeTranslationKeyCode
+        case .rewrite:
+            return activeRewriteKeyCode
+        case .meeting:
+            return activeMeetingKeyCode
+        case .customPaste:
+            return activeCustomPasteKeyCode
+        case .transcription:
+            return activeKeyCode
+        }
+    }
+
+    private func setActiveKeyCode(_ keyCode: UInt16?, for business: RoutedHotkeyBusiness) {
+        switch business {
+        case .translation:
+            activeTranslationKeyCode = keyCode
+        case .rewrite:
+            activeRewriteKeyCode = keyCode
+        case .meeting:
+            activeMeetingKeyCode = keyCode
+        case .customPaste:
+            activeCustomPasteKeyCode = keyCode
+        case .transcription:
+            activeKeyCode = keyCode
+        }
+    }
+
+    private func activeMouseButtonNumber(for business: RoutedHotkeyBusiness) -> Int? {
+        switch business {
+        case .translation:
+            return activeTranslationMouseButtonNumber
+        case .rewrite:
+            return activeRewriteMouseButtonNumber
+        case .meeting:
+            return activeMeetingMouseButtonNumber
+        case .customPaste:
+            return activeCustomPasteMouseButtonNumber
+        case .transcription:
+            return activeMouseButtonNumber
+        }
+    }
+
+    private func setActiveMouseButton(_ buttonNumber: Int?, for business: RoutedHotkeyBusiness) {
+        switch business {
+        case .translation:
+            activeTranslationMouseButtonNumber = buttonNumber
+        case .rewrite:
+            activeRewriteMouseButtonNumber = buttonNumber
+        case .meeting:
+            activeMeetingMouseButtonNumber = buttonNumber
+        case .customPaste:
+            activeCustomPasteMouseButtonNumber = buttonNumber
+        case .transcription:
+            activeMouseButtonNumber = buttonNumber
+        }
+    }
+
+    private func emitDown(for business: RoutedHotkeyBusiness, behavior: HotkeyPreference.TriggerBehavior) {
+        switch business {
+        case .translation:
+            emitTranslationKeyDown(behavior: behavior)
+        case .rewrite:
+            emitRewriteKeyDown(behavior: behavior)
+        case .meeting:
+            emitMeetingKeyDown(behavior: behavior)
+        case .customPaste:
+            emitCustomPasteKeyDown()
+        case .transcription:
+            emitKeyDown(behavior: behavior)
+        }
+    }
+
+    private func emitUp(for business: RoutedHotkeyBusiness, behavior: HotkeyPreference.TriggerBehavior) {
+        switch business {
+        case .translation:
+            emitTranslationKeyUp(behavior: behavior)
+        case .rewrite:
+            emitRewriteKeyUp(behavior: behavior)
+        case .meeting, .customPaste:
+            break
+        case .transcription:
+            emitKeyUp(behavior: behavior)
+        }
+    }
     private func resetTransientStateIfNeededForPotentialStaleFnEvent(
         type: CGEventType,
         keyCode: UInt16,
@@ -842,7 +1370,7 @@ class HotkeyManager {
 
         let relevantFlags = flags.intersection([.maskSecondaryFn, .maskShift, .maskControl, .maskAlternate, .maskCommand])
         let isPlainFunctionContext = relevantFlags.isEmpty || relevantFlags == .maskSecondaryFn
-        guard isPlainFunctionContext else { return }
+        guard isPlainFunctionContext, flags.contains(.maskSecondaryFn) else { return }
 
         let hasStaleHigherPriorityState =
             isTranslationKeyDown ||
@@ -1469,31 +1997,38 @@ class HotkeyManager {
         self[keyPath: taskKeyPath] = nil
     }
 
-    private func emitKeyDown() {
+    private func emitKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        onKeyDownWithBehavior?(behavior)
         onKeyDown?()
     }
 
-    private func emitKeyUp() {
+    private func emitKeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        onKeyUpWithBehavior?(behavior)
         onKeyUp?()
     }
 
-    private func emitTranslationKeyDown() {
+    private func emitTranslationKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        onTranslationKeyDownWithBehavior?(behavior)
         onTranslationKeyDown?()
     }
 
-    private func emitTranslationKeyUp() {
+    private func emitTranslationKeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        onTranslationKeyUpWithBehavior?(behavior)
         onTranslationKeyUp?()
     }
 
-    private func emitRewriteKeyDown() {
+    private func emitRewriteKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        onRewriteKeyDownWithBehavior?(behavior)
         onRewriteKeyDown?()
     }
 
-    private func emitRewriteKeyUp() {
+    private func emitRewriteKeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        onRewriteKeyUpWithBehavior?(behavior)
         onRewriteKeyUp?()
     }
 
-    private func emitMeetingKeyDown() {
+    private func emitMeetingKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        onMeetingKeyDownWithBehavior?(behavior)
         onMeetingKeyDown?()
     }
 

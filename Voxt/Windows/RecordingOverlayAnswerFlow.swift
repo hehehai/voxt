@@ -240,6 +240,7 @@ extension OverlayState {
         allowsSessionTranslationLanguageSwitching = allowsSwitching
         if !allowsSwitching {
             dismissSessionTranslationTargetPicker()
+            clearSessionTranslationLanguageHover()
         }
     }
 
@@ -252,11 +253,14 @@ extension OverlayState {
     func dismissSessionTranslationTargetPicker() {
         sessionTranslationDraftLanguage = sessionTranslationTargetLanguage
         isSessionTranslationTargetPickerPresented = false
-        isSessionTranslationLanguageHovering = false
     }
 
     func setSessionTranslationLanguageHovering(_ isHovering: Bool) {
         isSessionTranslationLanguageHovering = isHovering
+    }
+
+    func clearSessionTranslationLanguageHover() {
+        isSessionTranslationLanguageHovering = false
     }
 
     func setAnswerTranslationSourceText(_ text: String) {

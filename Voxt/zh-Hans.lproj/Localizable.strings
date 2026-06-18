@@ -93,10 +93,13 @@
 "Say this command at the end to end automatically." = "在语音末尾说出该指令，将自动结束。";
 "Trigger" = "触发方式";
 "Cancel Shortcut" = "取消快捷键";
-"Use Esc to Cancel" = "使用 Esc 取消";
+"Use Esc to Cancel" = "Esc 取消";
 "When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation." = "开启后，按下 Esc 会取消当前 overlay 会话。关闭后，将不再支持通过 Esc 取消。";
 "Long Press (Release to End)" = "长按（松开结束）";
 "Tap (Press to Toggle)" = "点按（按一次开始/结束）";
+"Tap" = "点按";
+"Long Press" = "长按";
+"Double Tap" = "双击";
 "Tips" = "提示";
 "Translation Prompt" = "翻译提示词";
 "Custom LLM Model" = "自定义 LLM 模型";
@@ -970,7 +973,7 @@
 "Type your shortcut now. Press Esc to cancel recording." = "请按下快捷键进行录制。";
 "Shortcut captured. Press another shortcut to replace it, or choose Confirm / Cancel." = "快捷键已捕获。你可以继续按新的快捷键替换，或选择确认 / 取消。";
 "Cancel Shortcut" = "取消快捷键";
-"Use Esc to Cancel" = "使用 Esc 取消";
+"Use Esc to Cancel" = "Esc 取消";
 "When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation." = "开启后，按下 Esc 会取消当前浮层会话。关闭后将禁用 Esc 取消行为。";
 "Tips" = "提示";
 "Both actions support custom shortcuts. You can use a single key (such as fn) or a key combination." = "所有操作都支持自定义快捷键。你可以使用单键（如 fn）或组合键。";

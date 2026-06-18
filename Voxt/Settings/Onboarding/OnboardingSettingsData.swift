@@ -21,21 +21,21 @@ extension OnboardingSettingsView {
     var formattedTranscriptionHotkey: String {
         HotkeyPreference.displayString(
             for: HotkeyPreference.load(),
-            distinguishModifierSides: hotkeyDistinguishModifierSides
+            distinguishModifierSides: true
         )
     }
 
     var formattedTranslationHotkey: String {
         HotkeyPreference.displayString(
             for: HotkeyPreference.loadTranslation(),
-            distinguishModifierSides: hotkeyDistinguishModifierSides
+            distinguishModifierSides: true
         )
     }
 
     var formattedRewriteHotkey: String {
         HotkeyPreference.displayString(
             for: HotkeyPreference.loadRewrite(),
-            distinguishModifierSides: hotkeyDistinguishModifierSides
+            distinguishModifierSides: true
         )
     }
 
@@ -455,8 +455,8 @@ extension OnboardingSettingsView {
 
     func applyHotkeyPreset(_ preset: HotkeyPreference.Preset) {
         hotkeyPresetRaw = preset.rawValue
-        guard let values = HotkeyPreference.applyPreset(preset) else { return }
-        hotkeyDistinguishModifierSides = values.distinguishSides
+        guard HotkeyPreference.applyPreset(preset) != nil else { return }
+        hotkeyDistinguishModifierSides = true
     }
 
     func setMicrophoneAutoSwitchEnabled(_ isEnabled: Bool) {

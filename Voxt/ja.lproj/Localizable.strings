@@ -97,6 +97,9 @@
 "When enabled, pressing Esc cancels the active overlay session. Turn this off to disable Esc cancellation." = "有効にすると、Esc で現在のオーバーレイセッションをキャンセルできます。無効にすると、Esc ではキャンセルできなくなります。";
 "Long Press (Release to End)" = "長押し（離すと終了）";
 "Tap (Press to Toggle)" = "タップ（押して開始/終了）";
+"Tap" = "タップ";
+"Long Press" = "長押し";
+"Double Tap" = "ダブルタップ";
 "Tips" = "ヒント";
 "Translation Prompt" = "翻訳プロンプト";
 "Custom LLM Model" = "カスタム LLM モデル";
