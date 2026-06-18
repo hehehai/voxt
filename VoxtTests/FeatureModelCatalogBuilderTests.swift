@@ -361,6 +361,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             mlxModelManager: TestModelManagers.mlx,
             whisperModelManager: TestModelManagers.whisper,
             customLLMManager: TestModelManagers.customLLM,
+            ggufTranslationModelManager: TestModelManagers.gguf,
             featureSettings: featureSettings,
             remoteASRProviderConfigurationsRaw: remoteASRConfigurationsRaw,
             remoteLLMProviderConfigurationsRaw: remoteLLMConfigurationsRaw,
@@ -409,4 +410,5 @@ private enum TestModelManagers {
         hubBaseURL: URL(string: "https://huggingface.co")!
     )
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
+    static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

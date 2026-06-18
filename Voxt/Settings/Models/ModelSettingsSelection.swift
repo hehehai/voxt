@@ -13,6 +13,15 @@ extension ModelSettingsView {
         }
     }
 
+    private var installedGGUFTranslationOptions: [TranslationModelOption] {
+        GGUFTranslationModelCatalog.allModels.compactMap { model in
+            guard ggufTranslationModelManager.isModelDownloaded(id: model.id) else {
+                return nil
+            }
+            return TranslationModelOption(id: model.id.rawValue, title: model.shortTitle)
+        }
+    }
+
     var whisperModelSelectionBinding: Binding<String> {
         Binding(
             get: {
@@ -67,6 +76,8 @@ extension ModelSettingsView {
             return configuredRemoteLLMOptions
         case .customLLM:
             return installedCustomLLMOptions(including: translationCustomLLMRepo)
+        case .localGGUF:
+            return installedGGUFTranslationOptions
         case .whisperKit:
             return []
         }
@@ -90,6 +101,8 @@ extension ModelSettingsView {
                     translationRemoteLLMProviderRaw = newValue
                 case .customLLM:
                     translationCustomLLMRepo = newValue
+                case .localGGUF:
+                    translationGGUFModelIDRaw = GGUFTranslationModelCatalog.resolvedModelID(newValue).rawValue
                 case .whisperKit:
                     break
                 }
@@ -155,6 +168,8 @@ extension ModelSettingsView {
             return translationRemoteLLMProviderRaw
         case .customLLM:
             return translationCustomLLMRepo
+        case .localGGUF:
+            return translationGGUFModelIDRaw
         case .whisperKit:
             return translationSelectionRaw(for: selectedTranslationFallbackModelProvider)
         }
@@ -175,6 +190,8 @@ extension ModelSettingsView {
             return "Remote LLM Model"
         case .customLLM:
             return "Custom LLM Model"
+        case .localGGUF:
+            return "Local GGUF Model"
         case .whisperKit:
             return "Whisper Model"
         }
@@ -186,6 +203,8 @@ extension ModelSettingsView {
             return "No configured remote LLM model yet. Configure a provider above."
         case .customLLM:
             return "No installed custom LLM model yet. Install one in the table above."
+        case .localGGUF:
+            return "No installed GGUF translation model yet. Install Hy in the model catalog first."
         case .whisperKit:
             return ""
         }
@@ -249,6 +268,8 @@ extension ModelSettingsView {
             } else if !CustomLLMModelManager.isSupportedModelRepo(translationCustomLLMRepo) {
                 translationCustomLLMRepo = customLLMRepo
             }
+        case .localGGUF:
+            translationGGUFModelIDRaw = GGUFTranslationModelCatalog.resolvedModelID(translationGGUFModelIDRaw).rawValue
         case .whisperKit:
             return
         }

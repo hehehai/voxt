@@ -127,6 +127,8 @@ extension AppDelegate {
             switch modelProvider {
             case .customLLM:
                 provider = .customLLM(repo: translationCustomLLMRepo)
+            case .localGGUF:
+                provider = .localGGUF(modelID: translationGGUFModelID)
             case .remoteLLM:
                 let context = resolvedRemoteLLMContext(forTranslation: true)
                 provider = .remote(provider: context.provider, configuration: context.configuration)
@@ -314,6 +316,8 @@ extension AppDelegate {
             return .unknown
         case .customLLM:
             return .unknown
+        case .localGGUF:
+            return .unknown
         case .remote:
             return .unknown
         }
@@ -371,6 +375,13 @@ extension AppDelegate {
             return try await customLLMManager.executeCompiledRequest(
                 compiledRequest,
                 repo: repo,
+                onPartialText: onPartialText
+            )
+
+        case .localGGUF(let modelID):
+            return try await ggufTranslationModelManager.executeCompiledRequest(
+                compiledRequest,
+                modelID: modelID,
                 onPartialText: onPartialText
             )
 
@@ -595,6 +606,8 @@ extension AppDelegate {
             return "appleIntelligence"
         case .customLLM(let repo):
             return "customLLM(\(repo))"
+        case .localGGUF(let modelID):
+            return "localGGUF(\(modelID.rawValue))"
         case .remote(let provider, let configuration):
             return "remote(\(provider.rawValue):\(configuration.model))"
         }

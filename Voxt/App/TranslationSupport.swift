@@ -57,6 +57,7 @@ extension AppDelegate {
         let content: String
         let dictionaryGlossary: String?
         let delivery: VariablePromptDelivery
+        let promptProfile: String
     }
 
     func isStoredRemoteLLMConfigured(_ provider: RemoteLLMProvider) -> Bool {
@@ -109,6 +110,8 @@ extension AppDelegate {
         switch modelProvider {
         case .customLLM:
             providerOverride = .customLLM(repo: translationCustomLLMRepo)
+        case .localGGUF:
+            providerOverride = .localGGUF(modelID: translationGGUFModelID)
         case .remoteLLM:
             let context = resolvedRemoteLLMContext(forTranslation: true)
             providerOverride = .remote(provider: context.provider, configuration: context.configuration)
@@ -127,19 +130,27 @@ extension AppDelegate {
             targetLanguage: targetLanguage,
             sourceText: text,
             strict: false,
-            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
+            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy,
+            modelProvider: modelProvider
         )
-        let translationRepo = translationCustomLLMRepo
+        let translationModel = translationModelLogDescriptor(for: modelProvider)
         VoxtLog.llm(
-            "Translation request. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo), delivery=\(String(describing: promptResolution.delivery))"
+            "Translation request. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
         )
 
         if modelProvider == .customLLM {
+            let translationRepo = translationCustomLLMRepo
             guard customLLMManager.isModelDownloaded(repo: translationRepo) else {
                 VoxtLog.translationWarning("Translation provider customLLM unavailable: model not downloaded. repo=\(translationRepo)")
                 throw TextTransformFailure.translationModelNotInstalled
             }
             VoxtLog.translation("Translation provider selected: customLLM")
+        } else if modelProvider == .localGGUF {
+            guard ggufTranslationModelManager.isModelDownloaded(id: translationGGUFModelID) else {
+                VoxtLog.translationWarning("Translation provider localGGUF unavailable: model not downloaded. modelID=\(translationGGUFModelID.rawValue)")
+                throw TextTransformFailure.translationModelNotInstalled
+            }
+            VoxtLog.translation("Translation provider selected: localGGUF(\(translationGGUFModelID.rawValue))")
         } else if modelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: true)
             guard isStoredRemoteLLMConfigured(context.provider) else {
@@ -221,7 +232,8 @@ extension AppDelegate {
             ? VariablePromptResolution(
                 content: resolvedRewriteConversationPrompt(forceNonEmptyAnswer: forceNonEmptyAnswer),
                 dictionaryGlossary: nil,
-                delivery: .systemPrompt
+                delivery: .systemPrompt,
+                promptProfile: "rewrite-conversation"
             )
             : resolvedRewritePrompt(
                 dictatedPrompt: dictatedPrompt,
@@ -343,6 +355,8 @@ extension AppDelegate {
         switch modelProvider {
         case .customLLM:
             providerOverride = .customLLM(repo: translationCustomLLMRepo)
+        case .localGGUF:
+            providerOverride = .localGGUF(modelID: translationGGUFModelID)
         case .remoteLLM:
             let context = resolvedRemoteLLMContext(forTranslation: true)
             providerOverride = .remote(provider: context.provider, configuration: context.configuration)
@@ -361,15 +375,21 @@ extension AppDelegate {
             targetLanguage: targetLanguage,
             sourceText: text,
             strict: true,
-            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
+            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy,
+            modelProvider: modelProvider
         )
-        let translationRepo = translationCustomLLMRepo
+        let translationModel = translationModelLogDescriptor(for: modelProvider)
         VoxtLog.llm(
-            "Strict translation retry. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationRepo=\(translationRepo), delivery=\(String(describing: promptResolution.delivery))"
+            "Strict translation retry. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
         )
 
         if modelProvider == .customLLM {
+            let translationRepo = translationCustomLLMRepo
             guard customLLMManager.isModelDownloaded(repo: translationRepo) else {
+                throw TextTransformFailure.translationModelNotInstalled
+            }
+        } else if modelProvider == .localGGUF {
+            guard ggufTranslationModelManager.isModelDownloaded(id: translationGGUFModelID) else {
                 throw TextTransformFailure.translationModelNotInstalled
             }
         } else if modelProvider == .remoteLLM {
@@ -646,27 +666,44 @@ extension AppDelegate {
         targetLanguage: TranslationTargetLanguage,
         sourceText: String,
         strict: Bool,
-        glossarySelectionPolicy: DictionaryGlossarySelectionPolicy?
+        glossarySelectionPolicy: DictionaryGlossarySelectionPolicy?,
+        modelProvider: TranslationModelProvider
     ) -> VariablePromptResolution {
+        let usesCompactDefaultPrompt =
+            modelProvider == .localGGUF &&
+            AppPromptDefaults.matchesKnownDefault(translationSystemPrompt, kind: .translation)
+        let promptStyle: TranslationPromptBuilder.Style =
+            usesCompactDefaultPrompt
+            ? .compactDefault(language: AppLocalization.language)
+            : .standard
         let basePrompt = TranslationPromptBuilder.build(
             systemPrompt: translationSystemPrompt,
             targetLanguage: targetLanguage,
             sourceText: sourceText,
             userMainLanguagePromptValue: userMainLanguagePromptValue,
-            strict: strict
+            strict: strict,
+            style: promptStyle
         )
         let glossary = dictionaryGlossaryText(
             for: sourceText,
             purpose: .translation,
             selectionPolicy: glossarySelectionPolicy
         )
-        return VariablePromptResolution(
-            content: basePrompt,
-            dictionaryGlossary: glossary,
-            delivery: deliveryForTemplate(
+        let delivery: VariablePromptDelivery
+        if usesCompactDefaultPrompt {
+            delivery = .systemPrompt
+        } else {
+            delivery = deliveryForTemplate(
                 translationSystemPrompt,
                 variableTokens: ["{{SOURCE_TEXT}}"]
             )
+        }
+        let promptProfile = usesCompactDefaultPrompt ? "localGGUF-compact-default" : "standard"
+        return VariablePromptResolution(
+            content: basePrompt,
+            dictionaryGlossary: glossary,
+            delivery: delivery,
+            promptProfile: promptProfile
         )
     }
 
@@ -699,7 +736,8 @@ extension AppDelegate {
             delivery: deliveryForTemplate(
                 rewriteSystemPrompt,
                 variableTokens: ["{{DICTATED_PROMPT}}", "{{SOURCE_TEXT}}"]
-            )
+            ),
+            promptProfile: "standard"
         )
     }
 
@@ -708,6 +746,20 @@ extension AppDelegate {
         variableTokens: [String]
     ) -> VariablePromptDelivery {
         variableTokens.contains { template.contains($0) } ? .userMessage : .systemPrompt
+    }
+
+    private func translationModelLogDescriptor(for provider: TranslationModelProvider) -> String {
+        switch provider {
+        case .whisperKit:
+            return "whisperKit"
+        case .customLLM:
+            return translationCustomLLMRepo
+        case .localGGUF:
+            return translationGGUFModelID.rawValue
+        case .remoteLLM:
+            let context = resolvedRemoteLLMContext(forTranslation: true)
+            return "\(context.provider.rawValue):\(context.configuration.model)"
+        }
     }
 
     func resolvedRewriteConversationPrompt(forceNonEmptyAnswer: Bool) -> String {

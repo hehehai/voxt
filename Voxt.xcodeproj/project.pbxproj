@@ -14,6 +14,7 @@
 		A1B2C3D4E5F6078901234570 /* MLXAudioVAD in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F6078901234571 /* MLXAudioVAD */; };
 		AABBCCDDEEFF001122334457 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCCDDEEFF001122334456 /* Logging */; };
 		B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B1C2D3E4F5060708090A0B0D /* Sparkle */; };
+		BB11CC22DD33EE44FF556671 /* LlamaSwift in Frameworks */ = {isa = PBXBuildFile; productRef = BB11CC22DD33EE44FF556672 /* LlamaSwift */; };
 		C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B02 /* MLXLMCommon */; };
 		C1D2E3F4A5060708090A0B04 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B05 /* MLXVLM */; };
 		C1D2E3F4A5060708090A0B06 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B07 /* MLXLLM */; };
@@ -130,6 +131,7 @@
 				A1B2C3D4E5F6078901234569 /* MLXAudioSTT in Frameworks */,
 				A1B2C3D4E5F6078901234570 /* MLXAudioVAD in Frameworks */,
 				B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */,
+				BB11CC22DD33EE44FF556671 /* LlamaSwift in Frameworks */,
 				C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */,
 				C1D2E3F4A5060708090A0B04 /* MLXVLM in Frameworks */,
 				C1D2E3F4A5060708090A0B06 /* MLXLLM in Frameworks */,
@@ -242,6 +244,7 @@
 				A1B2C3D4E5F6078901234568 /* MLXAudioCore */,
 				A1B2C3D4E5F607890123456A /* MLXAudioSTT */,
 				A1B2C3D4E5F6078901234571 /* MLXAudioVAD */,
+				BB11CC22DD33EE44FF556672 /* LlamaSwift */,
 				B1C2D3E4F5060708090A0B0D /* Sparkle */,
 				C1D2E3F4A5060708090A0B02 /* MLXLMCommon */,
 				C1D2E3F4A5060708090A0B05 /* MLXVLM */,
@@ -318,6 +321,7 @@
 				F7A1B2C3D4E5F60718293A03 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				FA11DBA2FA11DBA2FA11DBA2 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				AABBCCDDEEFF001122334455 /* XCRemoteSwiftPackageReference "swift-log" */,
+				BB11CC22DD33EE44FF556670 /* XCRemoteSwiftPackageReference "llama.swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 31F19CCE2F4D76D200E96913 /* Products */;
@@ -972,6 +976,14 @@
 				minimumVersion = 2.6.4;
 			};
 		};
+		BB11CC22DD33EE44FF556670 /* XCRemoteSwiftPackageReference "llama.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mattt/llama.swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9669.0;
+			};
+		};
 		C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
@@ -1047,6 +1059,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		BB11CC22DD33EE44FF556672 /* LlamaSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB11CC22DD33EE44FF556670 /* XCRemoteSwiftPackageReference "llama.swift" */;
+			productName = LlamaSwift;
 		};
 		C1D2E3F4A5060708090A0B02 /* MLXLMCommon */ = {
 			isa = XCSwiftPackageProductDependency;

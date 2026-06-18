@@ -18,6 +18,8 @@ struct ModelSettingsDownloadLifecycleToken: Equatable {
     let whisperPhase: ModelSettingsManagerActivityPhase
     let whisperDownload: WhisperDownloadActivityDescriptor
     let customLLMPhase: ModelSettingsManagerActivityPhase
+    let ggufPhase: ModelSettingsManagerActivityPhase
+    let ggufActiveDownloadModelID: String?
 }
 
 struct WhisperDownloadActivityDescriptor: Equatable {
@@ -79,6 +81,50 @@ enum ModelSettingsManagerRefreshSupport {
         }
     }
 
+    static func phase(for state: GGUFTranslationModelManager.ModelState) -> ModelSettingsManagerActivityPhase {
+        switch state {
+        case .notDownloaded:
+            return .idle
+        case .downloading:
+            return .downloading
+        case .paused:
+            return .paused
+        case .downloaded:
+            return .downloaded
+        case .error:
+            return .error
+        }
+    }
+
+    static func phase(for stateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState]) -> ModelSettingsManagerActivityPhase {
+        if stateByID.values.contains(where: {
+            if case .downloading = $0 { return true }
+            return false
+        }) {
+            return .downloading
+        }
+
+        if stateByID.values.contains(where: {
+            if case .paused = $0 { return true }
+            return false
+        }) {
+            return .paused
+        }
+
+        if stateByID.values.contains(where: {
+            if case .error = $0 { return true }
+            return false
+        }) {
+            return .error
+        }
+
+        if stateByID.values.contains(.downloaded) {
+            return .downloaded
+        }
+
+        return .idle
+    }
+
     static func whisperDownloadDescriptor(
         for activeDownload: WhisperKitModelManager.ActiveDownload?
     ) -> WhisperDownloadActivityDescriptor {
@@ -93,14 +139,18 @@ enum ModelSettingsManagerRefreshSupport {
         mlxActiveDownloadRepos: Set<String>,
         whisperState: WhisperKitModelManager.ModelState,
         whisperActiveDownload: WhisperKitModelManager.ActiveDownload?,
-        customLLMState: CustomLLMModelManager.ModelState
+        customLLMState: CustomLLMModelManager.ModelState,
+        ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState],
+        ggufActiveDownloadModelID: GGUFTranslationModelID?
     ) -> ModelSettingsDownloadLifecycleToken {
         ModelSettingsDownloadLifecycleToken(
             mlxPhase: phase(for: mlxState),
             mlxActiveDownloadRepos: mlxActiveDownloadRepos.sorted(),
             whisperPhase: phase(for: whisperState),
             whisperDownload: whisperDownloadDescriptor(for: whisperActiveDownload),
-            customLLMPhase: phase(for: customLLMState)
+            customLLMPhase: phase(for: customLLMState),
+            ggufPhase: phase(for: ggufStateByID),
+            ggufActiveDownloadModelID: ggufActiveDownloadModelID?.rawValue
         )
     }
 }

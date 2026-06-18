@@ -12,7 +12,8 @@ final class SettingsModelDownloadBadgeSupportTests: XCTestCase {
                 MLXModelManager.canonicalModelRepo("mlx-community/FireRedASR")
             ],
             whisperActiveDownload: nil,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(count, 2)
@@ -24,7 +25,8 @@ final class SettingsModelDownloadBadgeSupportTests: XCTestCase {
                 MLXModelManager.canonicalModelRepo("mlx-community/FireRedASR")
             ],
             whisperActiveDownload: nil,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(count, 1)
@@ -47,7 +49,8 @@ final class SettingsModelDownloadBadgeSupportTests: XCTestCase {
         let count = SettingsModelDownloadBadgeSupport.activeDownloadCount(
             mlxActiveDownloadRepos: [],
             whisperActiveDownload: whisperDownload,
-            customLLMState: .notDownloaded
+            customLLMState: .notDownloaded,
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(count, 0)

@@ -100,6 +100,7 @@ enum EnhancementMode: String, CaseIterable, Identifiable {
 
 enum TranslationModelProvider: String, CaseIterable, Identifiable {
     case customLLM
+    case localGGUF
     case remoteLLM
     case whisperKit
 
@@ -108,6 +109,7 @@ enum TranslationModelProvider: String, CaseIterable, Identifiable {
     var titleKey: LocalizedStringKey {
         switch self {
         case .customLLM: return "Custom LLM"
+        case .localGGUF: return "Local GGUF"
         case .remoteLLM: return "Remote LLM"
         case .whisperKit: return "Whisper"
         }
@@ -116,6 +118,7 @@ enum TranslationModelProvider: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .customLLM: return AppLocalization.localizedString("Custom LLM")
+        case .localGGUF: return AppLocalization.localizedString("Local GGUF")
         case .remoteLLM: return AppLocalization.localizedString("Remote LLM")
         case .whisperKit: return AppLocalization.localizedString("Whisper")
         }

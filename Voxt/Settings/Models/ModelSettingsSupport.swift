@@ -21,6 +21,7 @@ enum LocalModelRemovalTarget: Equatable, Identifiable {
     case mlx(repo: String)
     case whisper(modelID: String)
     case customLLM(repo: String)
+    case ggufTranslation(modelID: GGUFTranslationModelID)
 
     var id: String {
         switch self {
@@ -30,6 +31,8 @@ enum LocalModelRemovalTarget: Equatable, Identifiable {
             return "whisper:\(WhisperKitModelManager.canonicalModelID(modelID))"
         case .customLLM(let repo):
             return "custom-llm:\(CustomLLMModelManager.canonicalModelRepo(repo))"
+        case .ggufTranslation(let modelID):
+            return "gguf-translation:\(modelID.rawValue)"
         }
     }
 }

@@ -377,6 +377,8 @@ extension OnboardingSettingsView {
         switch selectionID.translationSelection {
         case .whisperDirectTranslate:
             return AppLocalization.localizedString("Whisper Direct Translate")
+        case .localGGUF(let modelID):
+            return GGUFTranslationModelCatalog.option(for: modelID).title
         case .localLLM, .remoteLLM:
             return llmSelectionSummary(selectionID)
         case .none:

@@ -115,6 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let mlxModelManager: MLXModelManager
     let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
+    let ggufTranslationModelManager: GGUFTranslationModelManager
     let historyStore = TranscriptionHistoryStore()
     let noteStore = VoxtNoteStore()
     let noteObsidianExportStore = VoxtNoteObsidianExportStore()
@@ -261,6 +262,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let llmRepo = UserDefaults.standard.string(forKey: AppPreferenceKey.customLLMModelRepo)
             ?? CustomLLMModelManager.defaultModelRepo
         customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: hubURL)
+        let ggufModelID = GGUFTranslationModelCatalog.resolvedModelID(
+            UserDefaults.standard.string(forKey: AppPreferenceKey.translationGGUFModelID)
+        )
+        ggufTranslationModelManager = GGUFTranslationModelManager(modelID: ggufModelID)
         UserDefaults.standard.register(defaults: [
             AppPreferenceKey.interactionSoundsEnabled: true,
             AppPreferenceKey.interactionSoundPreset: InteractionSoundPreset.soft.rawValue,
@@ -273,6 +278,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.translationTargetLanguage: TranslationTargetLanguage.english.rawValue,
             AppPreferenceKey.userMainLanguageCodes: UserMainLanguageOption.defaultStoredSelectionValue,
             AppPreferenceKey.translationModelProvider: TranslationModelProvider.customLLM.rawValue,
+            AppPreferenceKey.translationGGUFModelID: GGUFTranslationModelCatalog.defaultModelID.rawValue,
             AppPreferenceKey.rewriteModelProvider: RewriteModelProvider.customLLM.rawValue,
             AppPreferenceKey.escapeKeyCancelsOverlaySession: true,
             AppPreferenceKey.translateSelectedTextOnTranslationHotkey: true,

@@ -50,6 +50,8 @@ extension AppDelegate {
         switch resolution.provider {
         case .customLLM:
             startCustomLLMWarmupIfNeeded(repo: translationCustomLLMRepo, reason: "selected-text-translation")
+        case .localGGUF:
+            break
         case .remoteLLM:
             let context = resolvedRemoteLLMContext(forTranslation: true)
             startRemoteLLMWarmupIfNeeded(

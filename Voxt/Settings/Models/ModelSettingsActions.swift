@@ -282,6 +282,10 @@ extension ModelSettingsView {
         pendingModelRemovalTarget = .customLLM(repo: repo)
     }
 
+    func requestDeleteGGUFTranslationModel(_ modelID: GGUFTranslationModelID) {
+        pendingModelRemovalTarget = .ggufTranslation(modelID: modelID)
+    }
+
     func confirmDeleteModel(_ target: LocalModelRemovalTarget) {
         pendingModelRemovalTarget = nil
         uninstallingModelTarget = target
@@ -295,6 +299,8 @@ extension ModelSettingsView {
                 deleteWhisperModel(modelID)
             case .customLLM(let repo):
                 deleteCustomLLM(repo)
+            case .ggufTranslation(let modelID):
+                deleteGGUFTranslationModel(modelID)
             }
             uninstallingModelTarget = nil
             refreshCatalogSnapshot()
@@ -316,6 +322,11 @@ extension ModelSettingsView {
         return CustomLLMModelManager.canonicalModelRepo(uninstallingRepo) == CustomLLMModelManager.canonicalModelRepo(repo)
     }
 
+    func isUninstallingGGUFTranslationModel(_ modelID: GGUFTranslationModelID) -> Bool {
+        guard case .ggufTranslation(let uninstallingModelID) = uninstallingModelTarget else { return false }
+        return uninstallingModelID == modelID
+    }
+
     func uninstallConfirmationMessage(for target: LocalModelRemovalTarget) -> String {
         let modelName: String
         switch target {
@@ -325,6 +336,8 @@ extension ModelSettingsView {
             modelName = whisperModelManager.displayTitle(for: modelID)
         case .customLLM(let repo):
             modelName = customLLMManager.displayTitle(for: repo)
+        case .ggufTranslation(let modelID):
+            modelName = ggufTranslationModelManager.displayTitle(for: modelID)
         }
         return AppLocalization.format(
             "Uninstall %@ from this Mac? You can download it again later.",
@@ -354,6 +367,30 @@ extension ModelSettingsView {
 
     func customLLMStatusText(for repo: String) -> String {
         customLLMInstallSnapshot(for: repo).statusText
+    }
+
+    func useGGUFTranslationModel(_ modelID: GGUFTranslationModelID) {
+        translationGGUFModelIDRaw = modelID.rawValue
+        ggufTranslationModelManager.updateModel(id: modelID)
+    }
+
+    func downloadGGUFTranslationModel(_ modelID: GGUFTranslationModelID) {
+        ggufTranslationModelManager.downloadModel(id: modelID)
+        refreshCatalogSnapshot()
+    }
+
+    func cancelGGUFTranslationDownload(_ modelID: GGUFTranslationModelID) {
+        ggufTranslationModelManager.cancelDownload(id: modelID)
+        refreshCatalogSnapshot()
+    }
+
+    func deleteGGUFTranslationModel(_ modelID: GGUFTranslationModelID) {
+        ggufTranslationModelManager.deleteModel(id: modelID)
+        refreshCatalogSnapshot()
+    }
+
+    func openGGUFTranslationModelDirectory(_ modelID: GGUFTranslationModelID) {
+        ggufTranslationModelManager.openModelDirectory(id: modelID)
     }
 
     func useRemoteASRProvider(_ provider: RemoteASRProvider) {

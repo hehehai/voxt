@@ -68,6 +68,8 @@ extension ConfigurationTransferManager {
             if !customLLMManager.isModelDownloaded(repo: repo) {
                 issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
             }
+        case .localGGUF:
+            return
         case .remoteLLM(let provider):
             if !RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
                 provider: provider,

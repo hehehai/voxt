@@ -24,7 +24,9 @@ enum ModelSettingsProgressRefreshSupport {
         mlxHasActiveDownloadingRepos: Bool,
         whisperState: WhisperKitModelManager.ModelState,
         whisperActiveDownload: WhisperKitModelManager.ActiveDownload?,
-        customLLMState: CustomLLMModelManager.ModelState
+        customLLMState: CustomLLMModelManager.ModelState,
+        ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState],
+        ggufActiveDownloadModelID: GGUFTranslationModelID?
     ) -> Bool {
         if mlxHasActiveDownloadingRepos {
             return true
@@ -43,6 +45,17 @@ enum ModelSettingsProgressRefreshSupport {
         }
 
         if isCustomLLMStatePollingRequired(customLLMState) {
+            return true
+        }
+
+        if ggufActiveDownloadModelID != nil {
+            return true
+        }
+
+        if ggufStateByID.values.contains(where: {
+            if case .downloading = $0 { return true }
+            return false
+        }) {
             return true
         }
 

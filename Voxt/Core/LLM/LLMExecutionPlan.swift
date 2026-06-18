@@ -17,6 +17,7 @@ enum LLMExecutionDelivery: Equatable {
 enum LLMExecutionProvider: Equatable {
     case appleIntelligence
     case customLLM(repo: String)
+    case localGGUF(modelID: GGUFTranslationModelID)
     case remote(provider: RemoteLLMProvider, configuration: RemoteProviderConfiguration)
 }
 

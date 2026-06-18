@@ -12,6 +12,7 @@ struct FeatureModelCatalogBuilder {
     let mlxModelManager: MLXModelManager
     let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
+    let ggufTranslationModelManager: GGUFTranslationModelManager
     let featureSettings: FeatureSettings
     let remoteASRProviderConfigurationsRaw: String
     let remoteLLMProviderConfigurationsRaw: String
@@ -80,6 +81,8 @@ struct FeatureModelCatalogBuilder {
         switch selectionID.translationSelection {
         case .whisperDirectTranslate:
             return localized("Whisper Direct Translate")
+        case .localGGUF(let modelID):
+            return ggufTranslationModelManager.displayTitle(for: modelID)
         case .localLLM, .remoteLLM:
             return llmSelectionSummary(selectionID)
         case .none:
@@ -336,6 +339,37 @@ struct FeatureModelCatalogBuilder {
         targetLanguage: TranslationTargetLanguage
     ) -> [FeatureModelSelectorEntry] {
         var entries = llmEntries(includeAppleIntelligence: false)
+        entries.append(contentsOf: GGUFTranslationModelCatalog.allModels.compactMap { model in
+            guard ggufTranslationModelManager.isModelDownloaded(id: model.id) else {
+                return nil
+            }
+            let selectionID = FeatureModelSelectionID.localGGUFTranslation(model.id)
+            return FeatureModelSelectorEntry(
+                selectionID: selectionID,
+                title: model.title,
+                engine: localized("Local GGUF"),
+                sizeText: ggufTranslationModelManager.cachedModelSizeText(id: model.id) ?? model.sizeText,
+                ratingText: model.ratingText,
+                filterTags: featureFilterTags(
+                    base: model.tags,
+                    installed: true,
+                    requiresConfiguration: false,
+                    configured: true,
+                    usageLabels: usageLabels(for: selectionID)
+                ),
+                displayTags: featureDisplayTags(
+                    base: model.tags,
+                    requiresConfiguration: false,
+                    configured: true,
+                    selectionID: selectionID
+                ),
+                statusText: localized("Installed"),
+                usageLocations: usageLabels(for: selectionID),
+                badgeText: model.badgeText,
+                isSelectable: true,
+                disabledReason: nil
+            )
+        })
         let whisperSelectable: Bool
         let whisperDisabledReason: String?
 

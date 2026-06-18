@@ -10,6 +10,7 @@ struct FeatureSettingsView: View {
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
+    @ObservedObject var ggufTranslationModelManager: GGUFTranslationModelManager
     @StateObject var meetingDiarizationModelManager = MeetingDiarizationModelManager()
 
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
@@ -260,6 +261,7 @@ struct FeatureSettingsView: View {
             mlxModelManager: mlxModelManager,
             whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
+            ggufTranslationModelManager: ggufTranslationModelManager,
             featureSettings: featureSettings,
             remoteASRProviderConfigurationsRaw: remoteASRProviderConfigurationsRaw,
             remoteLLMProviderConfigurationsRaw: remoteLLMProviderConfigurationsRaw,

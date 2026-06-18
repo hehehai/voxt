@@ -117,7 +117,8 @@ extension AppDelegate {
                         targetLanguage: translationTargetLanguage,
                         sourceText: sourceText,
                         strict: false,
-                        glossarySelectionPolicy: strategy.glossarySelectionPolicy
+                        glossarySelectionPolicy: strategy.glossarySelectionPolicy,
+                        modelProvider: .customLLM
                     )
                     guard let builtPlan = self.buildTranslationExecutionPlan(
                         sourceText: sourceText,

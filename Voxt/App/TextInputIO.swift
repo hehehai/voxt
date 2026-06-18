@@ -100,7 +100,7 @@ extension AppDelegate {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return nil }
 
         let pasteboard = NSPasteboard.general
-        let previous = pasteboard.string(forType: .string)
+        let previous = readStringFromPasteboard(pasteboard)
         let originalChangeCount = pasteboard.changeCount
 
         let cKeyCode: CGKeyCode = 0x08
@@ -123,7 +123,7 @@ extension AppDelegate {
             return nil
         }
 
-        let copied = pasteboard.string(forType: .string)?
+        let copied = readStringFromPasteboard(pasteboard)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         pasteboard.clearContents()
@@ -927,7 +927,7 @@ extension AppDelegate {
 
         let injectionStartedAt = Date()
         let pasteboard = NSPasteboard.general
-        let previous = pasteboard.string(forType: .string) ?? ""
+        let previous = readStringFromPasteboard(pasteboard) ?? ""
         let accessibilityTrusted = AccessibilityPermissionManager.isTrusted()
         let keepResultInClipboard = autoCopyWhenNoFocusedInput
 

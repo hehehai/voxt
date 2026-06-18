@@ -8,6 +8,7 @@ extension ModelSettingsView {
         mlxModelManager.refreshStorageRoot()
         whisperModelManager.refreshStorageRoot()
         customLLMManager.refreshStorageRoot()
+        ggufTranslationModelManager.refreshStorageRoot()
     }
 
     func handleOnAppear() {
@@ -43,6 +44,10 @@ extension ModelSettingsView {
         if !CustomLLMModelManager.isSupportedModelRepo(translationCustomLLMRepo) {
             translationCustomLLMRepo = customLLMRepo
         }
+        translationGGUFModelIDRaw = GGUFTranslationModelCatalog.resolvedModelID(translationGGUFModelIDRaw).rawValue
+        ggufTranslationModelManager.updateModel(
+            id: GGUFTranslationModelCatalog.resolvedModelID(translationGGUFModelIDRaw)
+        )
         if !TranslationModelProvider.allCases.contains(where: { $0.rawValue == translationModelProviderRaw }) {
             translationModelProviderRaw = TranslationModelProvider.customLLM.rawValue
         }
@@ -72,6 +77,7 @@ extension ModelSettingsView {
         mlxModelManager.refreshMemoryOptimizationPolicy()
         customLLMManager.refreshMemoryOptimizationPolicy()
         whisperModelManager.refreshMemoryOptimizationPolicy()
+        ggufTranslationModelManager.refreshStorageRoot()
         DispatchQueue.main.async {
             refreshModelInstallStateIfNeeded()
         }

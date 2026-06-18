@@ -31,6 +31,11 @@ enum TranscriptionAppContextCapabilityResolver {
                 supportsTextContext: true,
                 supportsImageInput: CustomLLMModelCatalog.supportsImageInput(repo: repo)
             )
+        case .localGGUF:
+            return TranscriptionAppContextModelCapabilities(
+                supportsTextContext: true,
+                supportsImageInput: false
+            )
         case .remote(let remoteProvider, let configuration):
             return TranscriptionAppContextModelCapabilities(
                 supportsTextContext: true,
