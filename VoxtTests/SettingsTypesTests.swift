@@ -405,7 +405,7 @@ final class SettingsTypesTests: XCTestCase {
     func testHotkeyShortcutVisibilityOnlyIncludesCurrentFeatureKinds() {
         XCTAssertEqual(
             HotkeyShortcutVisibility.visibleKinds(),
-            [.transcription, .translation, .meeting, .rewrite]
+            [.transcription, .translation, .rewrite, .meeting]
         )
     }
 
