@@ -6,6 +6,50 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-06-17
+
+### English
+
+#### Added
+- Added native live preview support for local Qwen3 MLX ASR models.
+
+#### Changed
+- Refined ASR and model settings copy, layout, and recommendation badges so local model options are easier to understand and configure.
+- Improved SenseVoice integration and related ASR settings behavior across the app.
+
+#### Fixed
+- Fixed MLX capture startup so global hotkeys stay responsive while recording begins.
+- Fixed StepFun SSE final transcript handling so completed realtime results are captured more reliably.
+- Fixed SenseVoice finalization so completed results and related settings flows are more reliable.
+
+### 简体中文
+
+#### 新增
+- 为本地 Qwen3 MLX ASR 模型新增原生实时预览支持。
+
+#### 改进
+- 优化 ASR 与模型设置的文案、布局和推荐标识，让本地模型选项更容易理解和配置。
+- 改进 SenseVoice 集成以及相关 ASR 设置在应用内的整体行为。
+
+#### 修复
+- 修复 MLX 采集启动流程，让录音开始时全局快捷键保持响应。
+- 修复 StepFun SSE 最终转写结果处理，让实时转写的完成结果更可靠。
+- 修复 SenseVoice 收尾流程，让最终结果和相关设置流程更加稳定。
+
+### 日本語
+
+#### 追加
+- ローカル Qwen3 MLX ASR モデル向けに、ネイティブのライブプレビュー対応を追加しました。
+
+#### 変更
+- ASR とモデル設定の文言、レイアウト、推奨バッジを見直し、ローカルモデルの設定内容を把握しやすくしました。
+- SenseVoice の統合と関連する ASR 設定の挙動をアプリ全体で改善しました。
+
+#### 修正
+- MLX のキャプチャ開始処理を修正し、録音開始中もグローバルホットキーが応答し続けるようにしました。
+- StepFun SSE の最終文字起こし結果の処理を修正し、リアルタイム結果の完了内容をより確実に取得できるようにしました。
+- SenseVoice の終了処理を修正し、最終結果と関連する設定フローの安定性を向上させました。
+
 ## [1.12.0-beta.1] - 2026-06-04
 
 ### English
