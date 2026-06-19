@@ -582,6 +582,7 @@
 "OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "豆包 ASR";
 "GLM ASR" = "GLM ASR";
+"Z ai" = "智普";
 "StepFun ASR" = "阶跃星辰 ASR";
 "Anthropic" = "Anthropic";
 "Google" = "Google";
@@ -634,7 +635,7 @@
 "Template tip {{RAW_TRANSCRIPTION}}" = "增强前的原始转录文本。需要在提示词中引用原始识别结果时使用它。";
 "Template tip {{USER_MAIN_LANGUAGE}}" = "用户的主要口语语言。可用于指导标点、格式和语言相关的语气词清理。";
 "Template tip {{USER_OTHER_LANGUAGES}}" = "用户其他常用口语语言。适合用于提示模型处理单次发言中的混合语言内容。";
-"Template tip {{DICTIONARY_TERMS}}" = "当前作用域里没有别名的活跃词典词。适合直接注入到 Qwen3-ASR 的识别上下文中，提供精简术语提示。";
+"Template tip {{DICTIONARY_TERMS}}" = "当前作用域里没有别名的活跃词典词。适合直接注入到 Qwen3 的识别上下文中，提供精简术语提示。";
 "Template tip {{HISTORY_RECORDS}}" = "当前这批词典录入任务中序列化后的历史记录内容。";
 "Template tip {{INSERTED_TEXT}}" = "Voxt 最初插入到输入框中的原始文本，尚未经过用户手动修正。";
 "Template tip {{BASELINE_CONTEXT}}" = "刚插入完成后采集到的附近输入框上下文，适合做前后对比。";
@@ -658,13 +659,16 @@
 "Instant" = "极速";
 "Quality" = "质量";
 "Accuracy First" = "准确率优先";
+"Qwen3" = "Qwen3";
+"Granite" = "Granite";
+"Cohere" = "Cohere";
 "Default recognition behavior with moderate fallback and minimal extra bias." = "默认识别策略，回退强度适中，额外偏置较少。";
 "Stronger fallback and chunking choices that favor recognition stability over speed." = "使用更强的回退与分块策略，更偏向识别稳定性而不是速度。";
 "MLX ASR Configuration" = "MLX ASR 配置";
 "Other languages" = "其他语言";
 "Recognition Context" = "识别上下文";
 "Recognition Prompt" = "识别提示词";
-"Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "使用简洁的领域术语、人名和产品词汇，帮助 Qwen3-ASR 更准确地偏向正确转写。";
+"Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "使用简洁的领域术语、人名和产品词汇，帮助 Qwen3 更准确地偏向正确转写。";
 "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology." = "Granite 使用提示词式指令。内容应保持围绕识别本身，例如拼写偏好或领域术语。";
 "Enable ITN" = "启用 ITN";
 "ITN lets SenseVoice normalize spoken numbers, dates, and similar expressions into written form." = "ITN 可让 SenseVoice 将口述的数字、日期等表达规范化为书面形式。";
@@ -854,6 +858,7 @@
 "Direct Dictation uses your main language, optional contextual phrases, on-device preference, and punctuation settings. Prompt editing is not applied." = "系统听写会使用你的主语言，并支持可选的上下文短语、本地识别偏好和标点设置；不支持提示词编辑。";
 "OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition." = "OpenAI ASR 会使用解析后的主语言和简短 prompt 偏置。请保持 prompt 简洁，只聚焦识别辅助。";
 "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt." = "GLM ASR 使用简短的 prompt 偏置，Voxt 中不使用 hotwords。";
+"Z ai uses a short prompt bias. It does not use hotwords in Voxt." = "智普使用简短的 prompt 偏置，Voxt 中不使用 hotwords。";
 "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically." = "Doubao ASR 使用语言提示。中文输出会自动跟随你选择的简体或繁体主语言。";
 "Aliyun ASR uses language hints derived from your selected user languages." = "Aliyun ASR 使用根据你选择的用户语言生成的语言提示。";
 "StepFun ASR uses language hints derived from your selected user languages." = "阶跃星辰 ASR 使用根据你选择的用户语言生成的语言提示。";

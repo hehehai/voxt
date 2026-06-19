@@ -228,7 +228,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
     }
 
     func testMLXSelectorUsesCuratedRatingAndTags() throws {
-        let repo = "mlx-community/GLM-ASR-Nano-2512-4bit"
+        let repo = "mlx-community/parakeet-tdt-0.6b-v3"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo))
         )
@@ -238,7 +238,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
                 .first(where: { $0.selectionID == .mlx(repo) })
         )
 
-        XCTAssertEqual(entry.ratingText, "4.1")
+        XCTAssertEqual(entry.ratingText, "4.3")
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
     }
@@ -336,7 +336,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
 
         let qwenGroup = try XCTUnwrap(
             asrGroups.compactMap { item -> FeatureModelSelectorGroupSection? in
-                guard case .group(let group) = item, group.title == "Qwen3-ASR" else { return nil }
+                guard case .group(let group) = item, group.title == "Qwen3" else { return nil }
                 return group
             }.first
         )

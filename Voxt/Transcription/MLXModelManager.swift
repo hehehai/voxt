@@ -47,6 +47,7 @@ class MLXModelManager: ObservableObject {
 
     nonisolated static let defaultModelRepo = MLXModelCatalog.defaultModelRepo
     nonisolated static let availableModels = MLXModelCatalog.availableModels
+    nonisolated static let supportedModels = MLXModelCatalog.supportedModels
 
     enum ModelSizeState: Equatable {
         case unknown
@@ -299,6 +300,19 @@ class MLXModelManager: ObservableObject {
 
     nonisolated static func canonicalModelRepo(_ repo: String) -> String {
         MLXModelCatalog.canonicalModelRepo(repo)
+    }
+
+    nonisolated static func isAvailableModelRepo(_ repo: String) -> Bool {
+        MLXModelCatalog.isAvailableModelRepo(repo)
+    }
+
+    func displayModelsIncludingInstalled() -> [ModelOption] {
+        let localStateRepos = Set(Self.supportedModels.compactMap { model -> String? in
+            let repo = Self.canonicalModelRepo(model.id)
+            let snapshot = catalogSnapshot(for: repo)
+            return snapshot.isDownloaded || snapshot.isDownloading || snapshot.isPaused ? repo : nil
+        })
+        return MLXModelCatalog.displayModels(includingInstalled: localStateRepos)
     }
 
     nonisolated static func isRealtimeCapableModelRepo(_ repo: String) -> Bool {
@@ -691,7 +705,7 @@ class MLXModelManager: ObservableObject {
         guard !downloadedStateCachePrimed else { return }
         downloadedStateCachePrimed = true
 
-        for model in Self.availableModels {
+        for model in Self.supportedModels {
             let canonicalRepo = Self.canonicalModelRepo(model.id)
             guard downloadedStateByRepo[canonicalRepo] == nil else { continue }
             guard let modelDir = readableCacheDirectory(for: canonicalRepo, requireValid: true),
@@ -781,6 +795,9 @@ class MLXModelManager: ObservableObject {
         }
         if lower.contains("granite") {
             return try await GraniteSpeechModel.fromModelDirectory(modelDir)
+        }
+        if lower.contains("nemotron") {
+            return try NemotronASRModel.fromDirectory(modelDir)
         }
 
         return try await Qwen3ASRModel.fromModelDirectory(modelDir)

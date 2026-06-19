@@ -4,11 +4,31 @@
 import Foundation
 
 struct WhisperKitModelCatalog {
+    enum Visibility: String, Hashable {
+        case visible
+        case hiddenSupport
+    }
+
     struct Option: Identifiable, Hashable {
         let id: String
         let title: String
         let description: String
         let remoteSizeText: String
+        let visibility: Visibility
+
+        init(
+            id: String,
+            title: String,
+            description: String,
+            remoteSizeText: String,
+            visibility: Visibility = .visible
+        ) {
+            self.id = id
+            self.title = title
+            self.description = description
+            self.remoteSizeText = remoteSizeText
+            self.visibility = visibility
+        }
     }
 
     private struct PresentationMetadata {
@@ -16,20 +36,22 @@ struct WhisperKitModelCatalog {
         let tagKeys: [String]
     }
 
-    nonisolated static let defaultModelID = "base"
+    nonisolated static let defaultModelID = "small"
 
-    nonisolated static let availableModels: [Option] = [
+    nonisolated private static let allModels: [Option] = [
         .init(
             id: "tiny",
             title: "Whisper Tiny",
             description: "Smallest footprint for quick local drafts.",
-            remoteSizeText: "Unknown"
+            remoteSizeText: "Unknown",
+            visibility: .hiddenSupport
         ),
         .init(
             id: "base",
             title: "Whisper Base",
             description: "Default balance between quality and speed.",
-            remoteSizeText: "Unknown"
+            remoteSizeText: "Unknown",
+            visibility: .hiddenSupport
         ),
         .init(
             id: "small",
@@ -51,6 +73,9 @@ struct WhisperKitModelCatalog {
         ),
     ]
 
+    nonisolated static let availableModels: [Option] = allModels.filter { $0.visibility == .visible }
+    nonisolated static let supportedModels: [Option] = allModels
+
     nonisolated private static let presentationByID: [String: PresentationMetadata] = [
         "tiny": PresentationMetadata(ratingText: "4.0", tagKeys: ["Multilingual", "Fast"]),
         "base": PresentationMetadata(ratingText: "4.3", tagKeys: ["Multilingual", "Balanced"]),
@@ -68,12 +93,29 @@ struct WhisperKitModelCatalog {
     ]
 
     nonisolated static func canonicalModelID(_ modelID: String) -> String {
-        availableModels.contains(where: { $0.id == modelID }) ? modelID : defaultModelID
+        supportedModels.contains(where: { $0.id == modelID }) ? modelID : defaultModelID
     }
 
     nonisolated static func displayTitle(for modelID: String) -> String {
         let canonicalModelID = canonicalModelID(modelID)
-        return availableModels.first(where: { $0.id == canonicalModelID })?.title ?? canonicalModelID
+        return supportedModels.first(where: { $0.id == canonicalModelID })?.title ?? canonicalModelID
+    }
+
+    nonisolated static func description(for modelID: String) -> String? {
+        let canonicalModelID = canonicalModelID(modelID)
+        return supportedModels.first(where: { $0.id == canonicalModelID })?.description
+    }
+
+    nonisolated static func isAvailableModelID(_ modelID: String) -> Bool {
+        let canonicalModelID = canonicalModelID(modelID)
+        return supportedModels.first(where: { $0.id == canonicalModelID })?.visibility == .visible
+    }
+
+    nonisolated static func displayModels(includingInstalled modelIDs: Set<String>) -> [Option] {
+        let canonicalModelIDs = Set(modelIDs.map(canonicalModelID))
+        return supportedModels.filter { option in
+            option.visibility == .visible || canonicalModelIDs.contains(canonicalModelID(option.id))
+        }
     }
 
     nonisolated static func ratingText(for modelID: String) -> String {

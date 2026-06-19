@@ -89,13 +89,18 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"))
+        XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"))
         XCTAssertFalse(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Qwen3-ASR-0.6B-4bit"))
     }
 
-    func testLiveModeRoutesQwen3ToNativeSessionOnly() {
+    func testLiveModeRoutesQwen3AndNemotronToNativeSessions() {
         XCTAssertEqual(
             MLXModelManager.liveMode(for: "mlx-community/Qwen3-ASR-0.6B-4bit"),
             .nativeQwenLive
+        )
+        XCTAssertEqual(
+            MLXModelManager.liveMode(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"),
+            .nativeNemotronLive
         )
         XCTAssertEqual(
             MLXModelManager.liveMode(for: "mlx-community/Voxtral-Mini-4B-Realtime-6bit"),
@@ -186,12 +191,37 @@ final class MLXModelManagerTests: XCTestCase {
     func testAvailableModelsIncludeLatestSupportedSTTRepos() {
         let modelIDs = Set(MLXModelManager.availableModels.map(\.id))
 
-        XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
-        XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
-        XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-4bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-1.7B-6bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-1.7B-8bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertTrue(modelIDs.contains("mlx-community/SenseVoiceSmall"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v3"))
+        XCTAssertFalse(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
+        XCTAssertFalse(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
+    }
+
+    func testSupportedModelsKeepHiddenASRCompatibilityRepos() {
+        let modelIDs = Set(MLXModelManager.supportedModels.map(\.id))
+
+        XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/GLM-ASR-Nano-2512-4bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-bf16"))
+    }
+
+    func testHiddenASRModelsDisplayWhenIncludedByLocalState() {
+        let hiddenRepo = "mlx-community/GLM-ASR-Nano-2512-4bit"
+
+        XCTAssertFalse(
+            MLXModelCatalog.displayModels(includingInstalled: []).contains { $0.id == hiddenRepo }
+        )
+        XCTAssertTrue(
+            MLXModelCatalog.displayModels(includingInstalled: [hiddenRepo]).contains { $0.id == hiddenRepo }
+        )
     }
 
     func testKnownRemoteSizeFallbacksCoverCuratedLocalModels() {
@@ -206,7 +236,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testAllCuratedMLXModelsHaveRemoteSizeFallbacks() {
-        let missingRepos = MLXModelManager.availableModels
+        let missingRepos = MLXModelManager.supportedModels
             .map(\.id)
             .filter { MLXModelManager.fallbackRemoteSizeText(repo: $0) == nil }
 
@@ -236,7 +266,7 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testAllCuratedWhisperModelsHaveRemoteSizeFallbacks() {
-        let missingModelIDs = WhisperKitModelManager.availableModels
+        let missingModelIDs = WhisperKitModelManager.supportedModels
             .map(\.id)
             .filter { WhisperKitModelManager.fallbackRemoteSizeText(id: $0) == nil }
 
@@ -774,6 +804,7 @@ final class MLXModelManagerTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defaults.set(root.path, forKey: AppPreferenceKey.modelStorageRootPath)
         defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+        ModelStorageDirectoryManager.resetForTesting()
         defer {
             if let previousPath {
                 defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)
@@ -785,6 +816,7 @@ final class MLXModelManagerTests: XCTestCase {
             } else {
                 defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
             }
+            ModelStorageDirectoryManager.resetForTesting()
             try? FileManager.default.removeItem(at: root)
         }
         return try body(root)

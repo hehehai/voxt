@@ -59,7 +59,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/hehehai/mlx-audio-swift.git",
       "state" : {
-        "revision" : "a1c7b11b68b16f1591bb0ff586372dde9b265135"
+        "revision" : "3e693624ecb6b3fabf0e844b333c23334952d38d"
       }
     },
     {

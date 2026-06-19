@@ -24,7 +24,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
         case .doubaoASR:
             return AppLocalization.localizedString("Doubao ASR")
         case .glmASR:
-            return AppLocalization.localizedString("GLM ASR")
+            return AppLocalization.localizedString("Z ai")
         case .aliyunBailianASR:
             return AppLocalization.localizedString("Aliyun Bailian ASR")
         case .stepFunASR:

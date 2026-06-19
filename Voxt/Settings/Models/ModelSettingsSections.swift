@@ -63,7 +63,7 @@ extension ModelSettingsView {
             HStack(alignment: .center, spacing: 12) {
                 SettingsMenuPicker(
                     selection: $modelRepo,
-                    options: MLXModelManager.availableModels.map { model in
+                    options: mlxModelManager.displayModelsIncludingInstalled().map { model in
                         SettingsMenuOption(value: model.id, title: model.title)
                     },
                     selectedTitle: mlxModelManager.displayTitle(for: modelRepo),
@@ -124,7 +124,7 @@ extension ModelSettingsView {
             HStack(alignment: .center, spacing: 12) {
                 SettingsMenuPicker(
                     selection: whisperModelSelectionBinding,
-                    options: WhisperKitModelManager.availableModels.map { model in
+                    options: whisperModelManager.displayModelsIncludingInstalled().map { model in
                         SettingsMenuOption(value: model.id, title: AppLocalization.localizedString(model.title))
                     },
                     selectedTitle: whisperModelManager.displayTitle(for: whisperModelID),

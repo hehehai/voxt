@@ -69,6 +69,7 @@ final class WhisperKitModelManager: ObservableObject {
     nonisolated static let defaultModelID = WhisperKitModelCatalog.defaultModelID
 
     nonisolated static let availableModels = WhisperKitModelCatalog.availableModels
+    nonisolated static let supportedModels = WhisperKitModelCatalog.supportedModels
 
     @Published private(set) var state: ModelState = .notDownloaded
     @Published private(set) var remoteSizeTextByID: [String: String] = [:]
@@ -599,7 +600,7 @@ final class WhisperKitModelManager: ObservableObject {
         guard !directoryLookupCachePrimed else { return }
         directoryLookupCachePrimed = true
 
-        let expectedModelIDs = Set(Self.availableModels.map { Self.canonicalModelID($0.id) })
+        let expectedModelIDs = Set(Self.supportedModels.map { Self.canonicalModelID($0.id) })
         for rootURL in readableDownloadRootURLs() {
             guard let enumerator = FileManager.default.enumerator(
                 at: rootURL,
@@ -716,6 +717,19 @@ final class WhisperKitModelManager: ObservableObject {
     func displayTitle(for id: String) -> String {
         let canonicalModelID = Self.canonicalModelID(id)
         return AppLocalization.localizedString(WhisperKitModelCatalog.displayTitle(for: canonicalModelID))
+    }
+
+    nonisolated static func isAvailableModelID(_ id: String) -> Bool {
+        WhisperKitModelCatalog.isAvailableModelID(id)
+    }
+
+    func displayModelsIncludingInstalled() -> [WhisperKitModelCatalog.Option] {
+        let localStateModelIDs = Set(Self.supportedModels.compactMap { model -> String? in
+            let modelID = Self.canonicalModelID(model.id)
+            let hasActiveDownload = activeDownload?.modelID == modelID
+            return isModelDownloaded(id: modelID) || hasActiveDownload || hasResumableDownload(id: modelID) ? modelID : nil
+        })
+        return WhisperKitModelCatalog.displayModels(includingInstalled: localStateModelIDs)
     }
 
     func prefetchAllModelSizes() {

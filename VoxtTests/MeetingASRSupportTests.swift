@@ -45,7 +45,7 @@ final class MeetingASRSupportTests: XCTestCase {
             mlxModelState: .ready,
             mlxCurrentModelRepo: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
             mlxIsCurrentModelLoaded: true,
-            mlxDisplayTitle: { _ in "Voxtral Realtime Mini 4B" },
+            mlxDisplayTitle: { _ in "Voxtral 4B" },
             remoteProvider: .openAIWhisper,
             remoteConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "")
         )
@@ -55,7 +55,7 @@ final class MeetingASRSupportTests: XCTestCase {
         XCTAssertFalse(context.needsModelInitialization)
         XCTAssertEqual(
             context.historyModelDescription,
-            "Voxtral Realtime Mini 4B (mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16)"
+            "Voxtral 4B (mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16)"
         )
     }
 
@@ -70,7 +70,7 @@ final class MeetingASRSupportTests: XCTestCase {
             mlxModelState: .ready,
             mlxCurrentModelRepo: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
             mlxIsCurrentModelLoaded: true,
-            mlxDisplayTitle: { _ in "Voxtral Realtime Mini 4B" },
+            mlxDisplayTitle: { _ in "Voxtral 4B" },
             remoteProvider: .openAIWhisper,
             remoteConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "")
         )

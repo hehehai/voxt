@@ -41,12 +41,13 @@ extension ModelSettingsView {
     }
 
     var whisperRows: [ModelTableRow] {
-        WhisperKitModelManager.availableModels.map { model in
+        whisperModelManager.displayModelsIncludingInstalled().map { model in
             let snapshot = whisperInstallSnapshot(for: model.id)
             return modelTableRow(
                 id: model.id,
                 title: AppLocalization.localizedString(model.title),
-                snapshot: snapshot
+                snapshot: snapshot,
+                allowsUseAndInstall: WhisperKitModelManager.isAvailableModelID(model.id)
             )
         }
     }
@@ -118,12 +119,13 @@ extension ModelSettingsView {
     }
 
     var mlxRows: [ModelTableRow] {
-        MLXModelManager.availableModels.map { model in
+        mlxModelManager.displayModelsIncludingInstalled().map { model in
             let snapshot = mlxInstallSnapshot(for: model.id)
             return modelTableRow(
                 id: model.id,
                 title: model.title,
-                snapshot: snapshot
+                snapshot: snapshot,
+                allowsUseAndInstall: MLXModelManager.isAvailableModelRepo(model.id)
             )
         }
     }
@@ -565,15 +567,15 @@ extension ModelSettingsView {
 
     func modelLocalizedDescription(for repo: String) -> LocalizedStringKey {
         let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
-        if let model = MLXModelManager.availableModels.first(where: { $0.id == canonicalRepo }) {
-            return LocalizedStringKey(model.description)
+        if let description = MLXModelCatalog.description(for: canonicalRepo) {
+            return LocalizedStringKey(description)
         }
         return LocalizedStringKey("")
     }
 
     func whisperModelLocalizedDescription(for modelID: String) -> LocalizedStringKey {
-        if let model = WhisperKitModelManager.availableModels.first(where: { $0.id == modelID }) {
-            return LocalizedStringKey(model.description)
+        if let description = WhisperKitModelCatalog.description(for: modelID) {
+            return LocalizedStringKey(description)
         }
         return LocalizedStringKey("")
     }

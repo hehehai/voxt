@@ -273,7 +273,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
     }
 
     func testWhisperCatalogUsesCuratedRatingAndTags() throws {
-        let modelID = "base"
+        let modelID = "small"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .whisper(modelID))
         )
@@ -282,7 +282,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
             builder.asrEntries().first(where: { $0.id == "whisper:\(modelID)" })
         )
 
-        XCTAssertEqual(entry.ratingText, "4.3")
+        XCTAssertEqual(entry.ratingText, "4.5")
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
@@ -342,7 +342,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
 
         let qwenGroup = try XCTUnwrap(
             asrGroups.compactMap { item -> ModelCatalogGroupSection? in
-                guard case .group(let group) = item, group.title == "Qwen3-ASR" else { return nil }
+                guard case .group(let group) = item, group.title == "Qwen3" else { return nil }
                 return group
             }.first
         )

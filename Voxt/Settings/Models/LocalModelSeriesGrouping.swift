@@ -25,7 +25,7 @@ enum ModelCatalogBadgeSupport {
     ]
 
     static func recommendedBadgeText(forLocalSeriesDescriptor descriptor: LocalModelSeriesDescriptor) -> String? {
-        if descriptor.engine == localized("MLX Audio") && descriptor.title == "Qwen3-ASR" {
+        if descriptor.engine == localized("MLX Audio") && descriptor.title == "Qwen3" {
             return localized("Recommended")
         }
         if descriptor.engine == localized("Local LLM") && descriptor.title == "Gemma" {
@@ -286,10 +286,10 @@ enum LocalModelSeriesClassifier {
         }
 
         if engine == localized("MLX Audio") {
-            if let family = prefixedFamily(title: title, prefix: "Qwen3-ASR ", family: "Qwen3-ASR") {
+            if let family = prefixedFamily(title: title, prefix: "Qwen3 ", family: "Qwen3") {
                 return family
             }
-            if let family = prefixedFamily(title: title, prefix: "Voxtral Realtime ", family: "Voxtral Realtime") {
+            if let family = prefixedFamily(title: title, prefix: "Voxtral ", family: "Voxtral") {
                 return family
             }
             if let family = prefixedFamily(title: title, prefix: "Parakeet ", family: "Parakeet") {
