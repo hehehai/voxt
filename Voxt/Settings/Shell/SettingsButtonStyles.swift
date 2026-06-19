@@ -299,6 +299,47 @@ private struct SettingsCompactIconButtonBody: View {
     }
 }
 
+struct SettingsDialogCloseButtonStyle: ButtonStyle {
+    var size: CGFloat = 28
+
+    func makeBody(configuration: Configuration) -> some View {
+        SettingsDialogCloseButtonBody(
+            configuration: configuration,
+            size: size
+        )
+    }
+}
+
+private struct SettingsDialogCloseButtonBody: View {
+    let configuration: SettingsDialogCloseButtonStyle.Configuration
+    let size: CGFloat
+
+    @State private var isHovered = false
+
+    var body: some View {
+        configuration.label
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(SettingsUIStyle.dialogCloseButtonForegroundColor)
+            .frame(width: size, height: size)
+            .background(
+                Circle()
+                    .fill(isPressedOrHovering ? closeHoverFill : .clear)
+            )
+            .contentShape(Circle())
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .focusEffectDisabled()
+            .onHover { isHovered = $0 }
+    }
+
+    private var isPressedOrHovering: Bool {
+        configuration.isPressed || isHovered
+    }
+
+    private var closeHoverFill: Color {
+        SettingsUIStyle.dialogCloseButtonHoverFillColor(isPressed: configuration.isPressed)
+    }
+}
+
 struct SettingsInlineSelectorButtonStyle: ButtonStyle {
     var isEmphasized = false
 

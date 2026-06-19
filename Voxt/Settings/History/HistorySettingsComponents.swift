@@ -223,14 +223,14 @@ struct HistoryActionIcon: View {
     private func strokePath(_ pathData: String, opacity: Double = 1) -> some View {
         SVGPathShape(pathData: pathData)
             .stroke(
-                Color.black.opacity(opacity),
+                HistoryRowStyle.actionIconColor.opacity(opacity),
                 style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
             )
     }
 
     private func fillPath(_ pathData: String) -> some View {
         SVGPathShape(pathData: pathData)
-            .fill(Color.black)
+            .fill(HistoryRowStyle.actionIconColor)
     }
 }
 
@@ -255,6 +255,13 @@ private enum HistoryRowStyle {
         Color(nsColor: dynamicColor(
             light: NSColor.black.withAlphaComponent(0.075),
             dark: NSColor.white.withAlphaComponent(0.105)
+        ))
+    }
+
+    static var actionIconColor: Color {
+        Color(nsColor: dynamicColor(
+            light: NSColor.black,
+            dark: NSColor.white.withAlphaComponent(0.92)
         ))
     }
 
@@ -291,7 +298,7 @@ struct NoteHistoryRow: View {
                 Button(action: onCopy) {
                     Text(displayText)
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(2)
                         .lineLimit(3)

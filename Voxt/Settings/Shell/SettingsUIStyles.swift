@@ -188,6 +188,20 @@ enum SettingsUIStyle {
         ))
     }
 
+    static var dialogCloseButtonForegroundColor: Color {
+        Color(nsColor: dynamicColor(
+            light: NSColor.black,
+            dark: NSColor.white.withAlphaComponent(0.92)
+        ))
+    }
+
+    static func dialogCloseButtonHoverFillColor(isPressed: Bool) -> Color {
+        Color(nsColor: dynamicColor(
+            light: NSColor.black.withAlphaComponent(isPressed ? 0.18 : 0.10),
+            dark: NSColor.white.withAlphaComponent(isPressed ? 0.16 : 0.10)
+        ))
+    }
+
     static func resolvedSelectWidth(_ width: CGFloat) -> CGFloat {
         max(width - 16, 120)
     }
@@ -255,7 +269,7 @@ struct SettingsDialogChromeModifier: ViewModifier {
                         Image(systemName: "xmark")
                             .font(.system(size: 11, weight: .semibold))
                     }
-                    .buttonStyle(SettingsCompactIconButtonStyle())
+                    .buttonStyle(SettingsDialogCloseButtonStyle())
                     .keyboardShortcut(.cancelAction)
                     .padding(.top, 16)
                     .padding(.trailing, 16)
