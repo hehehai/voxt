@@ -36,7 +36,7 @@ struct FeatureHeroCard: View {
                                         .font(.title2.weight(.semibold))
                                 }
 
-                                if hasBadge {
+                                if let titleBadge, !titleBadge.isEmpty {
                                     Text(titleBadge)
                                         .font(.caption2.weight(.semibold))
                                         .padding(.horizontal, 7)
