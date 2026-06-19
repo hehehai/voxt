@@ -8,7 +8,6 @@ extension FeatureSettingsView {
         featurePage(
             title: "",
             subtitle: "",
-            titleBadge: featureSettingsLocalized("Experimental"),
             systemImageName: nil,
             pills: meetingPills
         ) {

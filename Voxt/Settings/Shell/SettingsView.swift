@@ -294,8 +294,14 @@ struct SettingsView: View {
                                 HomeShortcutPrompt(shortcut: currentTranscriptionHotkeyDisplayString)
                             }
                         } else {
-                            Text(currentTitle)
-                                .font(.title3.weight(.semibold))
+                            HStack(alignment: .center, spacing: 8) {
+                                Text(currentTitle)
+                                    .font(.title3.weight(.semibold))
+
+                                if showsMeetingExperimentalBadge {
+                                    FeatureStatusBadge(text: settingsLocalized("Experimental"))
+                                }
+                            }
                         }
 
                         Spacer(minLength: 0)
@@ -639,6 +645,10 @@ struct SettingsView: View {
 
     private var currentTitle: LocalizedStringKey {
         sidebarMode == .feature ? selectedFeatureTab.titleKey : selectedTab.titleKey
+    }
+
+    private var showsMeetingExperimentalBadge: Bool {
+        sidebarMode == .feature && selectedFeatureTab == .meeting
     }
 
     private var showsContentHeader: Bool {

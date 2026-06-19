@@ -4,6 +4,26 @@
 import SwiftUI
 import AppKit
 
+struct FeatureStatusBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.orange.opacity(0.12))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.orange.opacity(0.24), lineWidth: 1)
+            )
+    }
+}
+
 struct FeatureToggleRow: View {
     let title: String
     var badgeText: String? = nil
@@ -501,19 +521,7 @@ private struct FeatureRowLabelStack: View {
                     .foregroundStyle(.primary.opacity(0.92))
 
                 if let badgeText, !badgeText.isEmpty {
-                    Text(badgeText)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.orange.opacity(0.12))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .strokeBorder(Color.orange.opacity(0.24), lineWidth: 1)
-                        )
+                    FeatureStatusBadge(text: badgeText)
                 }
 
                 Spacer(minLength: 0)
