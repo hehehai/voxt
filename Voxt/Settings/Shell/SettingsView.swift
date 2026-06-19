@@ -319,7 +319,6 @@ struct SettingsView: View {
                 if selectedTab == .report && sidebarMode == .root {
                     HStack {
                         Spacer(minLength: 0)
-
                         Button(settingsLocalized("Changelog")) {
                             openChangelog()
                         }
@@ -1059,7 +1058,7 @@ private struct SettingsSidebarMenuPager: View {
                     iconKind: tab.sidebarIconKind,
                     systemImageName: tab.sidebarIconKind == nil ? tab.iconName : nil,
                     title: tab.titleKey,
-                    badgeText: tab == .meeting ? "Beta" : nil,
+                    badgeText: tab == .meeting ? "Experimental" : nil,
                     isActive: tab == selectedFeatureTab,
                     action: { onSelectFeatureTab(tab) }
                 )

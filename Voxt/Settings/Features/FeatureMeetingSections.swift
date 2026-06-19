@@ -6,10 +6,10 @@ import SwiftUI
 extension FeatureSettingsView {
     var meetingContent: some View {
         featurePage(
-            title: featureSettingsLocalized("Meeting"),
-            subtitle: featureSettingsLocalized("Capture microphone and system audio into a speaker-labelled transcript."),
-            titleBadge: featureSettingsLocalized("Beta"),
-            systemImageName: "person.2.wave.2",
+            title: "",
+            subtitle: "",
+            titleBadge: featureSettingsLocalized("Experimental"),
+            systemImageName: nil,
             pills: meetingPills
         ) {
             FeatureSettingsCard(title: "") {

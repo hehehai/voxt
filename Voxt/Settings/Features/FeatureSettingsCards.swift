@@ -20,17 +20,23 @@ struct FeatureHeroCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if !title.isEmpty || !subtitle.isEmpty {
+            let hasTitle = !title.isEmpty
+            let hasSubtitle = !subtitle.isEmpty
+            let hasBadge = titleBadge?.isEmpty == false
+
+            if hasTitle || hasSubtitle || hasBadge {
                 HStack(alignment: .top, spacing: 14) {
                     heroIcon
 
                     VStack(alignment: .leading, spacing: 6) {
-                        if !title.isEmpty {
+                        if hasTitle || hasBadge {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(title)
-                                    .font(.title2.weight(.semibold))
+                                if hasTitle {
+                                    Text(title)
+                                        .font(.title2.weight(.semibold))
+                                }
 
-                                if let titleBadge, !titleBadge.isEmpty {
+                                if hasBadge {
                                     Text(titleBadge)
                                         .font(.caption2.weight(.semibold))
                                         .padding(.horizontal, 7)
