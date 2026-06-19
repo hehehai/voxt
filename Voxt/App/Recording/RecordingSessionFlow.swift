@@ -20,20 +20,16 @@ extension AppDelegate {
     ) {
         let speechWasRecording = speechTranscriber.isRecording
         let mlxWasRecording = mlxTranscriber?.isRecording == true
-        let whisperWasRecording = whisperTranscriber?.isRecording == true
         let remoteWasRecording = remoteASRTranscriber.isRecording
-        let hadPendingWhisperStartup = pendingWhisperStartupTask != nil
 
-        if speechWasRecording || mlxWasRecording || whisperWasRecording || remoteWasRecording || hadPendingWhisperStartup {
+        if speechWasRecording || mlxWasRecording || remoteWasRecording {
             VoxtLog.asrWarning(
                 """
-                Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), whisper=\(whisperWasRecording), remote=\(remoteWasRecording), pendingWhisperStartup=\(hadPendingWhisperStartup)
+                Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), remote=\(remoteWasRecording)
                 """
             )
         }
 
-        pendingWhisperStartupTask?.cancel()
-        pendingWhisperStartupTask = nil
         silenceMonitorTask?.cancel()
         silenceMonitorTask = nil
         pauseLLMTask?.cancel()
@@ -41,7 +37,6 @@ extension AppDelegate {
 
         speechTranscriber.stopRecording()
         mlxTranscriber?.stopRecording()
-        whisperTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
         if preservePendingHistoryAudio {
             VoxtLog.asr("Preserving pending history audio during residual resource release. reason=\(reason)", verbose: true)
@@ -89,11 +84,7 @@ extension AppDelegate {
             selectedMLXRepo: localASRStartContext.selectedMLXRepo,
             activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
-            mlxModelState: localASRStartContext.mlxModelState,
-            selectedWhisperModelID: localASRStartContext.selectedWhisperModelID,
-            activeWhisperDownloadModelID: localASRStartContext.activeWhisperDownloadModelID,
-            isSelectedWhisperModelDownloaded: localASRStartContext.isSelectedWhisperModelDownloaded,
-            whisperModelState: localASRStartContext.whisperModelState
+            mlxModelState: localASRStartContext.mlxModelState
         )
         guard case .start(let recordingEngine) = startDecision else {
             if case .blocked(let reason) = startDecision {
@@ -207,13 +198,6 @@ extension AppDelegate {
         }
         VoxtLog.asr("Recording stop requested.")
 
-        if pendingWhisperStartupTask != nil, whisperTranscriber?.isRecording != true {
-            pendingWhisperStartupTask?.cancel()
-            pendingWhisperStartupTask = nil
-            resetSessionAfterFailedStart()
-            return
-        }
-
         cancelActiveRecordingTasks()
         pendingSystemAudioMuteTask?.cancel()
         pendingSystemAudioMuteTask = nil
@@ -231,13 +215,6 @@ extension AppDelegate {
     func cancelActiveRecordingSession() {
         guard isSessionActive else { return }
         VoxtLog.asr("Recording cancelled by Escape key.")
-
-        if pendingWhisperStartupTask != nil, whisperTranscriber?.isRecording != true {
-            pendingWhisperStartupTask?.cancel()
-            pendingWhisperStartupTask = nil
-            resetSessionAfterFailedStart()
-            return
-        }
 
         let cancelledSessionID = activeRecordingSessionID
         activeRecordingSessionID = UUID()

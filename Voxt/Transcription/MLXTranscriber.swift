@@ -380,7 +380,7 @@ enum MLXTranscriptionPlanning {
             // Local streaming MLX models may echo prompt/context guidance back into the
             // partial transcript UI, so multilingual guidance stays in the language hint only.
             return (nil, nil)
-        case .senseVoice, .cohereTranscribe, .generic:
+        case .whisper, .senseVoice, .cohereTranscribe, .generic:
             return (nil, nil)
         }
     }
@@ -1848,11 +1848,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         case .postStopFinal:
             maxTokens = 8192
         }
+        let temperature: Float = family == .whisper ? Float(tuningSettings.whisperTemperature) : 0.0
 
         return ResolvedInferenceConfiguration(
             generationParameters: STTGenerateParameters(
                 maxTokens: maxTokens,
-                temperature: 0.0,
+                temperature: temperature,
                 topP: 0.95,
                 topK: 0,
                 verbose: false,

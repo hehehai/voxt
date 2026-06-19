@@ -77,10 +77,10 @@ brew install --cask voxt
 依赖 macOS 15.0 及以上版本与本地模型能力，Voxt 当前提供：
 
 - `MLX Audio` 本地 ASR 模型
-- 通过 WhisperKit 接入的 `Whisper` 独立本地 ASR 引擎
+- 通过 `MLX Audio` 接入的 `Whisper` 本地 ASR 模型
 - 一组可下载的本地 LLM 模型（用于文本增强、翻译、改写）
 
-Whisper 不是 `MLX Audio` 的子模式，而是在模型页里独立显示的一个引擎，有自己的模型列表、下载流程和运行时配置。
+Whisper 已迁移为 `MLX Audio` 本地模型家族；旧 Whisper 选择会自动迁移到对应的 MLX Whisper repo。
 
 > [!NOTE]
 > 下表中的“当前状态 / 报错”来自当前项目代码；“语言支持 / 速度 / 推荐度”优先参考模型卡与项目内描述整理。速度与推荐度用于帮助选型，不是统一 benchmark。
@@ -115,23 +115,18 @@ Whisper 不是 `MLX Audio` 的子模式，而是在模型页里独立显示的�
 - 对齐专用仓库会被明确拒绝，例如 `Qwen3-ForcedAligner` 不会被当成可转录模型。
 - 当前工程里的依赖源是 Voxt 维护的镜像 fork `hehehai/mlx-audio-swift`，目前固定在 commit `3e693624ecb6b3fabf0e844b333c23334952d38d`。这次同步包含了上游 Nemotron ASR、Whisper STT、Voxtral streaming、Irodori TTS 以及相关 STT / TTS / VAD 更新。依赖策略见 [docs/MLXAudioDependency.md](./MLXAudioDependency.md)。
 
-#### Whisper（WhisperKit）
+#### Whisper（MLX Audio）
 
-Voxt 还支持通过 WhisperKit 使用 `Whisper` 作为独立的本地 ASR 引擎。
+Voxt 现在通过 MLX Audio Swift 使用 Whisper 本地 ASR。
 
-- 当前运行时包：Xcode 依赖已迁移到 `argmaxinc/argmax-oss-swift` 提供的 `WhisperKit` product
-- 内置模型列表：`tiny`、`base`、`small`、`medium`、`large-v3`
-- 当前下载源：模型文件仍然走基于 Hugging Face 风格路径的 `argmaxinc/whisperkit-coreml`
+- 当前运行时包：`mlx-audio-swift`
+- 默认可见模型：`whisper-large-v3-turbo`、`whisper-large-v3-mlx`、`whisper-small-mlx`
+- 隐藏兼容模型：`whisper-tiny-mlx`、`whisper-base-mlx`
+- 旧模型迁移：`tiny`、`base`、`small`、`medium`、`large-v3` 等旧 Whisper 选择会映射到 MLX Whisper repo
 - 支持中国镜像：跟随应用里的镜像开关
-- 当前可配置项：
-  - `Realtime`，默认开启
-  - `VAD`
-  - `Timestamps`
-  - `Temperature`
 - 当前行为：
-  - 普通转录默认使用 Whisper 的 `transcribe`
-  - 翻译快捷键可选用 Whisper 内建的 `translate-to-English`
-  - 如果当前场景不支持 Whisper 直翻，Voxt 会自动回退到已选的 LLM 翻译 provider
+  - 普通转录使用 MLX Whisper 的 `transcribe`
+  - 翻译不再走独立 Whisper 直翻 provider，统一使用已选的 LLM 翻译链路
 
 Voxt 当前内置的 Whisper 模型：
 
@@ -146,7 +141,7 @@ Voxt 当前内置的 Whisper 模型：
 Whisper 相关说明：
 
 - 如果主语言设置为简体中文 / 繁体中文，Whisper 输出会按主语言做简繁归一化。
-- Whisper 直翻目前只适用于“语音翻到英文”的场景；选中文本翻译仍然走原有文本翻译链路。
+- Whisper 只作为 ASR 模型参与语音转文字；翻译统一走文本翻译链路。
 - 如果 Whisper 模型下载中断或文件不完整，Voxt 会把它视为未完成模型，并要求重新下载，而不是继续尝试加载损坏模型。
 
 本地 ASR 常见报错 / 状态：
@@ -157,7 +152,7 @@ Whisper 相关说明：
 - `Model load failed (...)`
 - `Size unavailable`
 - 如果误配到对齐专用仓库，会提示 `alignment-only and not supported by Voxt transcription`
-- 如果 Whisper 缺少关键 Core ML 权重文件，也可能出现“下载不完整 / 模型损坏”相关错误
+- 如果 Whisper 缺少关键 MLX 权重文件，也可能出现“下载不完整 / 模型损坏”相关错误
 
 #### 本地 LLM 模型
 

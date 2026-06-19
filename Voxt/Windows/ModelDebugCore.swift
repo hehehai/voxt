@@ -43,17 +43,6 @@ struct ASRDebugResult: Identifiable, Equatable {
     var isError: Bool { errorText != nil }
 }
 
-private func formatWhisperRealtimeReplay(_ events: [WhisperRealtimeReplayEvent]) -> String {
-    guard !events.isEmpty else { return modelDebugLocalized("No realtime replay output.") }
-    return events
-        .map { event in
-            let time = String(format: "%.1fs", event.elapsedSeconds)
-            let phase = event.isFinal ? "final" : "live"
-            return "[\(time)] \(phase): \(event.text)"
-        }
-        .joined(separator: "\n")
-}
-
 struct ASRDebugClipItem: Identifiable, Equatable {
     let id: UUID
     let clip: DebugAudioClip
@@ -70,7 +59,7 @@ extension ASRDebugModelOption {
         switch selection {
         case .remote:
             locationTag = modelDebugLocalized("Remote")
-        case .mlx, .whisper:
+        case .mlx:
             locationTag = modelDebugLocalized("Local")
         }
         return FeatureModelSelectorEntry(
@@ -211,11 +200,9 @@ final class ASRDebugViewModel: ObservableObject {
     @Published private(set) var toastMessage = ""
 
     private let mlxModelManager: MLXModelManager
-    private let whisperModelManager: WhisperKitModelManager
     private var remoteConfigurations: [String: RemoteProviderConfiguration]
     private let recorder = DebugAudioRecorder()
     private let mlxTranscriber: MLXTranscriber
-    private let whisperTranscriber: WhisperKitTranscriber
     private let remoteTranscriber = RemoteASRTranscriber()
     private var toastDismissTask: Task<Void, Never>?
 
@@ -226,12 +213,7 @@ final class ASRDebugViewModel: ObservableObject {
             modelRepo: appDelegate.mlxModelManager.currentModelRepo,
             hubBaseURL: hubURL
         )
-        whisperModelManager = WhisperKitModelManager(
-            modelID: appDelegate.whisperModelManager.currentModelID,
-            hubBaseURL: hubURL
-        )
         mlxTranscriber = MLXTranscriber(modelManager: mlxModelManager)
-        whisperTranscriber = WhisperKitTranscriber(modelManager: whisperModelManager)
         mlxTranscriber.dictionaryEntryProvider = {
             appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
                 activeGroupID: appDelegate.activeDictionaryGroupID(),
@@ -257,7 +239,6 @@ final class ASRDebugViewModel: ObservableObject {
         )
         options = ModelDebugCatalog.availableASRModels(
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             remoteASRConfigurations: remoteConfigurations
         )
         if !options.contains(where: { $0.id == selectedModelID }) {
@@ -337,8 +318,6 @@ final class ASRDebugViewModel: ObservableObject {
         switch engine {
         case .mlxAudio:
             return "mlx:\(MLXModelManager.canonicalModelRepo(defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo))"
-        case .whisperKit:
-            return "whisper:\(WhisperKitModelManager.canonicalModelID(defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID))"
         case .remote:
             let provider = RemoteASRProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? "")
                 ?? .openAIWhisper
@@ -418,13 +397,6 @@ final class ASRDebugViewModel: ObservableObject {
                 errorText: nil
             )
             results.insert(result, at: 0)
-            if case .whisper = option.selection {
-                await appendWhisperRealtimeReplayResult(
-                    option: option,
-                    clipItem: clipItem,
-                    source: source
-                )
-            }
             updateClipTitleIfNeeded(clipID: clipItem.id, transcript: output)
             statusMessage = AppLocalization.format("Completed %@", option.title)
         } catch {
@@ -452,9 +424,6 @@ final class ASRDebugViewModel: ObservableObject {
         case .mlx(let repo):
             let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
             return mlxModelManager.currentModelRepo != canonicalRepo || !mlxModelManager.isCurrentModelLoaded
-        case .whisper(let modelID):
-            let canonicalModelID = WhisperKitModelManager.canonicalModelID(modelID)
-            return whisperModelManager.currentModelID != canonicalModelID || !whisperModelManager.isCurrentModelLoaded
         case .remote:
             return false
         }
@@ -470,62 +439,11 @@ final class ASRDebugViewModel: ObservableObject {
                 return metadata.formattedDebugSummary(appendingTranscript: transcript)
             }
             return transcript
-        case .whisper(let modelID):
-            whisperModelManager.updateModel(id: modelID)
-            return try await whisperTranscriber.transcribeAudioFile(clip.fileURL)
         case .remote(let provider, let configuration):
             return try await remoteTranscriber.transcribeDebugAudioFile(
                 clip.fileURL,
                 provider: provider,
                 configuration: configuration
-            )
-        }
-    }
-
-    private func appendWhisperRealtimeReplayResult(
-        option: ASRDebugModelOption,
-        clipItem: ASRDebugClipItem,
-        source: ASRDebugResult.Source
-    ) async {
-        guard case .whisper = option.selection else { return }
-        let startedAt = Date()
-        do {
-            let events = try await whisperTranscriber.debugReplayRealtimeAudioFile(clipItem.clip.fileURL)
-            let replayText = formatWhisperRealtimeReplay(events)
-            let elapsed = Date().timeIntervalSince(startedAt)
-            results.insert(
-                ASRDebugResult(
-                    id: UUID(),
-                    clipID: clipItem.id,
-                    clipTitle: clipItem.displayTitle,
-                    modelTitle: "\(option.title) · Realtime Replay",
-                    source: source,
-                    audioDurationText: String(format: "%.1fs", clipItem.clip.durationSeconds),
-                    runtimeText: String(format: "%.2fs", elapsed),
-                    characterCount: replayText.count,
-                    createdAt: Date(),
-                    outputText: replayText,
-                    errorText: nil
-                ),
-                at: 0
-            )
-        } catch {
-            let elapsed = Date().timeIntervalSince(startedAt)
-            results.insert(
-                ASRDebugResult(
-                    id: UUID(),
-                    clipID: clipItem.id,
-                    clipTitle: clipItem.displayTitle,
-                    modelTitle: "\(option.title) · Realtime Replay",
-                    source: source,
-                    audioDurationText: String(format: "%.1fs", clipItem.clip.durationSeconds),
-                    runtimeText: String(format: "%.2fs", elapsed),
-                    characterCount: 0,
-                    createdAt: Date(),
-                    outputText: "",
-                    errorText: error.localizedDescription
-                ),
-                at: 0
             )
         }
     }

@@ -364,7 +364,7 @@
 "MLX model is unavailable. Open Settings > Model to fix it." = "MLX model is unavailable. Open Settings > Model to fix it.";
 "MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@" = "MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@";
 "Whisper (On-device)" = "Whisper (On-device)";
-"Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding." = "Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding.";
+"Legacy Whisper selections now use MLX Whisper models. Requires a one-time model download." = "Legacy Whisper selections now use MLX Whisper models. Requires a one-time model download.";
 "Transcribe" = "Transcribe";
 "Translate to English" = "Translate to English";
 "Whisper Tiny" = "Whisper Tiny";
@@ -384,7 +384,6 @@
 "Enable VAD" = "Enable VAD";
 "Enable Timestamps" = "Enable Timestamps";
 "Temperature" = "Temperature";
-"These settings apply to Whisper transcription sessions. Standard ASR always uses transcribe; Whisper translate is only used by the translation hotkey when Whisper translation is selected. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates." = "These settings apply to Whisper transcription sessions. Standard ASR always uses transcribe; Whisper translate is only used by the translation hotkey when Whisper translation is selected. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates.";
 "Done" = "Done";
 "VAD On" = "VAD On";
 "VAD Off" = "VAD Off";
@@ -897,14 +896,9 @@
 "Whisper" = "Whisper";
 "Realtime" = "Realtime";
 "Live Realtime (Experimental)" = "Live Realtime (Experimental)";
-"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected." = "These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected.";
+"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path." = "These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path.";
 "Realtime On" = "Realtime On";
 "Quality Mode" = "Quality Mode";
-"Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider." = "Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider.";
-"Whisper translation only supports English output. Voxt will fall back to your saved LLM provider." = "Whisper translation only supports English output. Voxt will fall back to your saved LLM provider.";
-"Whisper translation needs a ready Whisper model. Voxt will fall back to your saved LLM provider until the model is ready." = "Whisper translation needs a ready Whisper model. Voxt will fall back to your saved LLM provider until the model is ready.";
-"Whisper translation reuses the current Whisper ASR model. It translates speech directly to English and falls back to %@ when Whisper direct translation is unavailable." = "Whisper translation reuses the current Whisper ASR model. It translates speech directly to English and falls back to %@ when Whisper direct translation is unavailable.";
-"These settings apply to Whisper transcription sessions. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates." = "These settings apply to Whisper transcription sessions. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates.";
 "The first local Whisper load can take a few seconds. Voxt will show an initializing state in the overlay until the model is ready." = "The first local Whisper load can take a few seconds. Voxt will show an initializing state in the overlay until the model is ready.";
 "Memory" = "Memory";
 "Memory Optimization" = "Memory Optimization";
@@ -1349,8 +1343,6 @@
 "Only used when realtime translation is enabled." = "Only used when realtime translation is enabled.";
 "Open Location" = "Open Location";
 "Pick the text model used to rewrite, rephrase, or clean captured content." = "Pick the text model used to rewrite, rephrase, or clean captured content.";
-"Prompt controls are shown only when the selected translation model supports prompt-based generation." = "Prompt controls are shown only when the selected translation model supports prompt-based generation.";
-"Prompt editing is hidden here because Whisper direct translation does not consume a text prompt." = "Prompt editing is hidden here because Whisper direct translation does not consume a text prompt.";
 "Prompt templates stay local to rewrite mode and no longer live in the shared model page." = "Prompt templates stay local to rewrite mode and no longer live in the shared model page.";
 "Ready when Whisper ASR is selected" = "Ready when Whisper ASR is selected";
 "Realtime Target" = "Realtime Target";
@@ -1364,7 +1356,6 @@
 "Run translation directly against the current selected text when the translation shortcut is triggered." = "Run translation directly against the current selected text when the translation shortcut is triggered.";
 "Score" = "Score";
 "Select" = "Select";
-"Select an LLM or use Whisper direct translation when the ASR path supports it." = "Select an LLM or use Whisper direct translation when the ASR path supports it.";
 "Selected" = "Selected";
 "Set the ASR and text model pairing used for rewrite mode, then decide whether app-aware enhancement is enabled." = "Set the ASR and text model pairing used for rewrite mode, then decide whether app-aware enhancement is enabled.";
 "Show Overlay In Screen Sharing" = "Show Overlay In Screen Sharing";
@@ -1389,11 +1380,7 @@
 "Uses the macOS system model when available, so later onboarding can stay minimal." = "Uses the macOS system model when available, so later onboarding can stay minimal.";
 "Uses the macOS system speech recognizer with no download required." = "Uses the macOS system speech recognizer with no download required.";
 "When enabled, the dedicated App Enhancement submenu becomes available in Feature mode." = "When enabled, the dedicated App Enhancement submenu becomes available in Feature mode.";
-"Whisper Direct Translate" = "Whisper Direct Translate";
-"Whisper Direct Translation" = "Whisper Direct Translation";
 "Whisper Settings" = "Whisper Settings";
-"Whisper direct translation only supports English output." = "Whisper direct translation only supports English output.";
-"Whisper direct translation requires Whisper as the translation ASR model." = "Whisper direct translation requires Whisper as the translation ASR model.";
 "Works immediately with no model download." = "Works immediately with no model download.";
 "You can still keep this selected and switch later after the system becomes available." = "You can still keep this selected and switch later after the system becomes available.";
 "1 model needs setup" = "1 model needs setup";

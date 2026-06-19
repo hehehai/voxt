@@ -17,7 +17,6 @@ struct SettingsView: View {
     let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
     let onCancelDictionarySuggestionsFromHistory: () -> Void
     let mlxModelManager: MLXModelManager
-    let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
@@ -63,7 +62,6 @@ struct SettingsView: View {
         onIngestDictionarySuggestionsFromHistory: @escaping (DictionaryHistoryScanRequest, Bool) -> Void,
         onCancelDictionarySuggestionsFromHistory: @escaping () -> Void,
         mlxModelManager: MLXModelManager,
-        whisperModelManager: WhisperKitModelManager,
         customLLMManager: CustomLLMModelManager,
         ggufTranslationModelManager: GGUFTranslationModelManager,
         historyStore: TranscriptionHistoryStore,
@@ -79,7 +77,6 @@ struct SettingsView: View {
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
         self.onCancelDictionarySuggestionsFromHistory = onCancelDictionarySuggestionsFromHistory
         self.mlxModelManager = mlxModelManager
-        self.whisperModelManager = whisperModelManager
         self.customLLMManager = customLLMManager
         self.ggufTranslationModelManager = ggufTranslationModelManager
         self.historyStore = historyStore
@@ -97,7 +94,6 @@ struct SettingsView: View {
         _activeModelDownloadCount = State(
             initialValue: SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
-                whisperActiveDownload: whisperModelManager.activeDownload,
                 customLLMState: customLLMManager.state,
                 ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
             )
@@ -346,7 +342,6 @@ struct SettingsView: View {
         OnboardingSettingsView(
             currentStep: onboardingStepBinding,
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
             appUpdateManager: appUpdateManager,
             onExit: exitOnboarding,
@@ -411,16 +406,14 @@ struct SettingsView: View {
     }
 
     private var modelDownloadBadgeCountPublisher: AnyPublisher<Int, Never> {
-        Publishers.CombineLatest4(
+        Publishers.CombineLatest3(
             mlxModelManager.$activeDownloadRepos,
-            whisperModelManager.$activeDownload,
             customLLMManager.$state,
             ggufTranslationModelManager.$activeDownloadModelID
         )
-        .map { mlxActiveDownloadRepos, whisperActiveDownload, customLLMState, ggufActiveDownloadModelID in
+        .map { mlxActiveDownloadRepos, customLLMState, ggufActiveDownloadModelID in
             SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxActiveDownloadRepos,
-                whisperActiveDownload: whisperActiveDownload,
                 customLLMState: customLLMState,
                 ggufActiveDownloadModelID: ggufActiveDownloadModelID
             )
@@ -484,7 +477,6 @@ struct SettingsView: View {
                         selectedTab: selectedFeatureTab,
                         navigationRequest: navigationRequest,
                         mlxModelManager: mlxModelManager,
-                        whisperModelManager: whisperModelManager,
                         customLLMManager: customLLMManager,
                         ggufTranslationModelManager: ggufTranslationModelManager
                     )
@@ -495,7 +487,6 @@ struct SettingsView: View {
                 staticTabLayer(for: .model) {
                     ModelSettingsView(
                         mlxModelManager: mlxModelManager,
-                        whisperModelManager: whisperModelManager,
                         customLLMManager: customLLMManager,
                         ggufTranslationModelManager: ggufTranslationModelManager,
                         mainWindowState: mainWindowState,
@@ -543,7 +534,6 @@ struct SettingsView: View {
                         case .model:
                             ModelSettingsView(
                                 mlxModelManager: mlxModelManager,
-                                whisperModelManager: whisperModelManager,
                                 customLLMManager: customLLMManager,
                                 ggufTranslationModelManager: ggufTranslationModelManager,
                                 mainWindowState: mainWindowState,
@@ -618,7 +608,6 @@ struct SettingsView: View {
     private func refreshModelConfigurationBadge() {
         let issues = ConfigurationTransferManager.missingConfigurationIssues(
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager
         )
         guard issues != missingModelConfigurationIssues else { return }

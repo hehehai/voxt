@@ -304,10 +304,6 @@ extension AppDelegate {
             activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
             mlxModelState: localASRStartContext.mlxModelState,
-            selectedWhisperModelID: localASRStartContext.selectedWhisperModelID,
-            activeWhisperDownloadModelID: localASRStartContext.activeWhisperDownloadModelID,
-            isSelectedWhisperModelDownloaded: localASRStartContext.isSelectedWhisperModelDownloaded,
-            whisperModelState: localASRStartContext.whisperModelState,
             remoteASRProvider: remoteASRSelectedProvider,
             remoteASRConfiguration: remoteConfiguration
         )

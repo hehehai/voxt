@@ -4,7 +4,7 @@
 
 本评估基于当前代码中的本地模型清单：
 
-- ASR：`Voxt/Transcription/MLXModelSupport.swift`、`Voxt/Transcription/WhisperKitModelSupport.swift`
+- ASR：`Voxt/Transcription/MLXModelSupport.swift`
 - LLM：`Voxt/Core/Models/CustomLLMModelSupport.swift`
 - 历史参考：`docs/MLXModelSupport2025.zh-CN.md`
 
@@ -40,7 +40,7 @@
 | 低 / 中性能 | 英文专用 | Parakeet TDT 0.6B v3 | `mlx-community/parakeet-tdt-0.6b-v3` | 2.51 GB | 只保留 Parakeet 英文主入口 |
 | 高性能 | 离线准确率 | FireRed ASR 2 | `mlx-community/FireRedASR2-AED-mlx` | 4.57 GB | 保留 |
 | 中性能 | 多语言 / 事件检测 | SenseVoice Small | `mlx-community/SenseVoiceSmall` | 936 MB | 保留 |
-| 兼容 | WhisperKit 历史路径 | Whisper Small / Medium / Large v3 | `small`, `medium`, `large-v3` | 486 MB / 1.53 GB / 3.09 GB | 保留 |
+| 兼容 | MLX Whisper 历史迁移 | Whisper Tiny / Base / Small / Large v3 / Large v3 Turbo | MLX Whisper repos | 76 MB 到 3.09 GB | 保留 MLX 路径；旧短 ID 迁移 |
 | 低 / 中性能 | 流式 ASR | Nemotron ASR Streaming 0.6B 8bit | `mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit` | 约 0.76 GB | 保留为流式 ASR 入口 |
 
 ### LLM
@@ -78,11 +78,11 @@
 | Parakeet | TDT CTC 1.1B | 隐藏兼容 | 74 | 1.1B 系列里相对可保留，但不进默认 UI |
 | Parakeet | CTC 1.1B | 隐藏兼容 | 62 | 同系列冗余 |
 | Parakeet | RNNT 1.1B | 隐藏兼容 | 62 | 同系列冗余 |
-| WhisperKit | Tiny | 隐藏兼容 | 58 | 质量和产品价值被 Qwen3-ASR 低配档覆盖，仅保留已安装用户卸载路径 |
-| WhisperKit | Base | 隐藏兼容 | 63 | 历史默认，但不建议继续作为新安装入口 |
-| WhisperKit | Small | 可见保留 | 76 | Whisper 轻量入口，保留给偏好 Whisper 路径的用户 |
-| WhisperKit | Medium | 可见保留 | 80 | Whisper 平衡质量档，和 Small / Large 阶段边界清晰 |
-| WhisperKit | Large v3 | 可见保留 | 84 | Whisper 高质量入口，保留为兼容和高精度选项 |
+| MLX Whisper | Tiny | 隐藏兼容 | 58 | 质量和产品价值被 Qwen3-ASR 低配档覆盖，仅用于旧配置迁移 |
+| MLX Whisper | Base | 隐藏兼容 | 63 | 历史默认迁移目标，但不建议继续作为新安装入口 |
+| MLX Whisper | Small | 可见保留 | 76 | Whisper 轻量入口，保留给偏好 Whisper 路径的用户 |
+| MLX Whisper | Large v3 Turbo | 可见保留 | 82 | Whisper 平衡质量和延迟的主入口 |
+| MLX Whisper | Large v3 | 可见保留 | 84 | Whisper 高质量入口，保留为高精度选项 |
 
 ## ASR 普通模型评估
 
@@ -144,10 +144,10 @@
 
 | 优先级 | 动作 | 范围 |
 |---:|---|---|
-| P0 | 将默认可见 ASR 收敛为 11 个入口 | MLX Audio 8 个：Qwen3-ASR 3 个、Voxtral 1 个、Parakeet 1 个、Nemotron 1 个、FireRed 1 个、SenseVoice 1 个；WhisperKit 3 个：Small、Medium、Large v3 |
+| P0 | 将默认可见 ASR 收敛为 11 个入口 | MLX Audio 11 个：Qwen3-ASR 3 个、Voxtral 1 个、Parakeet 1 个、Nemotron 1 个、FireRed 1 个、SenseVoice 1 个、MLX Whisper 3 个 |
 | P0 | 将默认可见 LLM 收敛为 6 个入口 | Qwen3.5 4 个、Gemma4 E4B、GLM-4 9B |
 | P0 | 核对并修正 Qwen3.5 0.8B OptiQ repo ID | 当前代码是 `mlx-community/Qwen3.5-0.8B-4bit-OptiQ`，历史文档提到 `mlx-community/Qwen3.5-0.8B-OptiQ-4bit` |
-| P1 | 将旧系列移入隐藏兼容 | Qwen2 / Qwen2.5、Qwen3、Llama、Mistral、Gemma2、WhisperKit 旧档位 |
+| P1 | 将旧系列移入隐藏兼容 | Qwen2 / Qwen2.5、Qwen3、Llama、Mistral、Gemma2、MLX Whisper 旧档位 |
 | P1 | UI 上按阶段展示，而不是平铺模型名 | 低性能 / 中性能 / 高性能 / 强性能或实验 |
 | P2 | 增加迁移说明和旧配置解析测试 | 确保已选模型不会因为隐藏而失效 |
 
@@ -156,7 +156,7 @@
 | 类型 | 当前默认可见 | 建议默认可见 | 隐藏兼容 / 实验 | 剔除 / 不推荐 |
 |---|---:|---:|---:|---:|
 | MLX ASR | 26 | 8 | 18 | 0 |
-| WhisperKit ASR | 5 | 3 | 2 | 0 |
+| MLX Whisper ASR | 5 | 3 | 2 | 0 |
 | 本地 LLM | 31 | 6 | 18 | 7 |
 | LLM 隐藏兼容 | 3 | 0 | 3 | 0 |
 

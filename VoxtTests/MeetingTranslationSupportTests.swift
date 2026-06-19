@@ -10,39 +10,22 @@ final class MeetingTranslationSupportTests: XCTestCase {
             selectedProvider: .customLLM,
             fallbackProvider: .remoteLLM,
             transcriptionEngine: .mlxAudio,
-            targetLanguage: .japanese,
-            whisperModelState: .ready
+            targetLanguage: .japanese
         )
 
         XCTAssertEqual(resolution.provider, .customLLM)
-        XCTAssertFalse(resolution.usesWhisperDirectTranslation)
+        XCTAssertEqual(resolution.fallbackProvider, .remoteLLM)
     }
 
-    func testWhisperMeetingTranslationFallsBackToConfiguredLLMProvider() {
+    func testRemoteLLMProviderPassesThrough() {
         let resolution = MeetingTranslationSupport.resolvedProvider(
-            selectedProvider: .whisperKit,
-            fallbackProvider: .remoteLLM,
-            transcriptionEngine: .whisperKit,
-            targetLanguage: .english,
-            whisperModelState: .ready
+            selectedProvider: .remoteLLM,
+            fallbackProvider: .customLLM,
+            transcriptionEngine: .mlxAudio,
+            targetLanguage: .english
         )
 
         XCTAssertEqual(resolution.provider, .remoteLLM)
-        XCTAssertEqual(resolution.fallbackProvider, .remoteLLM)
-        XCTAssertFalse(resolution.usesWhisperDirectTranslation)
-    }
-
-    func testWhisperFallbackProviderIsSanitized() {
-        let resolution = MeetingTranslationSupport.resolvedProvider(
-            selectedProvider: .whisperKit,
-            fallbackProvider: .whisperKit,
-            transcriptionEngine: .remote,
-            targetLanguage: .english,
-            whisperModelState: .notDownloaded
-        )
-
-        XCTAssertEqual(resolution.provider, .customLLM)
         XCTAssertEqual(resolution.fallbackProvider, .customLLM)
-        XCTAssertFalse(resolution.usesWhisperDirectTranslation)
     }
 }

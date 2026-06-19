@@ -7,7 +7,6 @@ import AVFoundation
 struct ASRDebugModelOption: Identifiable, Hashable {
     enum Selection: Hashable {
         case mlx(repo: String)
-        case whisper(modelID: String)
         case remote(provider: RemoteASRProvider, configuration: RemoteProviderConfiguration)
     }
 
@@ -181,7 +180,6 @@ enum LLMDebugPresetStore {
 enum ModelDebugCatalog {
     static func availableASRModels(
         mlxModelManager: MLXModelManager,
-        whisperModelManager: WhisperKitModelManager,
         remoteASRConfigurations: [String: RemoteProviderConfiguration]
     ) -> [ASRDebugModelOption] {
         let downloadedMLXRepos = Set(
@@ -189,22 +187,15 @@ enum ModelDebugCatalog {
                 mlxModelManager.isModelDownloaded(repo: model.id) ? model.id : nil
             }
         )
-        let downloadedWhisperModelIDs = Set(
-            WhisperKitModelManager.availableModels.compactMap { model in
-                whisperModelManager.isModelDownloaded(id: model.id) ? model.id : nil
-            }
-        )
 
         return availableASRModels(
             downloadedMLXRepos: downloadedMLXRepos,
-            downloadedWhisperModelIDs: downloadedWhisperModelIDs,
             remoteASRConfigurations: remoteASRConfigurations
         )
     }
 
     static func availableASRModels(
         downloadedMLXRepos: Set<String>,
-        downloadedWhisperModelIDs: Set<String>,
         remoteASRConfigurations: [String: RemoteProviderConfiguration]
     ) -> [ASRDebugModelOption] {
         var options: [ASRDebugModelOption] = []
@@ -219,17 +210,6 @@ enum ModelDebugCatalog {
             )
         }
         options.append(contentsOf: localMLX)
-
-        let localWhisper = WhisperKitModelManager.availableModels.compactMap { model -> ASRDebugModelOption? in
-            guard downloadedWhisperModelIDs.contains(model.id) else { return nil }
-            return ASRDebugModelOption(
-                id: "whisper:\(model.id)",
-                title: WhisperKitModelCatalog.displayTitle(for: model.id),
-                subtitle: AppLocalization.localizedString("Local Whisper"),
-                selection: .whisper(modelID: model.id)
-            )
-        }
-        options.append(contentsOf: localWhisper)
 
         let remote = RemoteASRProvider.allCases.compactMap { provider -> ASRDebugModelOption? in
             let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(

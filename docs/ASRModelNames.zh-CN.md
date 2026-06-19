@@ -4,7 +4,7 @@
 >
 > 来源：
 > - 本地 MLX ASR：`Voxt/Transcription/MLXModelSupport.swift`
-> - 本地 Whisper：`Voxt/Transcription/WhisperKitModelSupport.swift`
+> - 本地 Whisper：`Voxt/Transcription/MLXModelSupport.swift` 中的 MLX Whisper family，旧 Whisper ID 仅保留迁移解析
 > - 远程 ASR：`Voxt/Core/Models/RemoteModelConfiguration.swift`
 
 ## 本地 ASR 系列总览
@@ -12,7 +12,7 @@
 | 系列名称 | 引擎/来源 | 当前状态 | 说明 |
 | --- | --- | --- | --- |
 | System ASR | Apple 系统听写 | 可见 | 无需下载，系统内置 |
-| Whisper | WhisperKit / Core ML | 部分可见 | OpenAI Whisper 本地 Core ML 模型 |
+| Whisper | MLX Audio | 部分可见 | OpenAI Whisper 的 MLX 本地模型；旧 Whisper ID 会迁移到对应 MLX repo |
 | Qwen3 | MLX Audio | 部分可见 | 阿里 Qwen3-ASR 本地模型 |
 | Voxtral | MLX Audio | 部分可见 | Mistral Voxtral Realtime 系列 |
 | Cohere | MLX Audio | 隐藏支持 | Cohere Transcribe MLX 移植 |
@@ -33,11 +33,11 @@
 
 | 系列名称 | 模型显示名称 | 内部 ID | 可见性 | 当前描述 |
 | --- | --- | --- | --- | --- |
-| Whisper | Whisper Tiny | `tiny` | 隐藏支持 | Smallest footprint for quick local drafts. |
-| Whisper | Whisper Base | `base` | 隐藏支持 | Default balance between quality and speed. |
-| Whisper | Whisper Small | `small` | 可见 | Higher quality with moderate local resource usage. |
-| Whisper | Whisper Medium | `medium` | 可见 | High accuracy with heavier local compute requirements. |
-| Whisper | Whisper Large v3 | `large-v3` | 可见 | Best accuracy in the curated list with the largest footprint. |
+| Whisper | Whisper Large v3 Turbo | `mlx-community/whisper-large-v3-turbo` | 可见 | Fast Whisper large-v3 family model with the best quality-to-latency balance. |
+| Whisper | Whisper Large v3 | `mlx-community/whisper-large-v3-mlx` | 可见 | Accuracy-first Whisper model with a heavier local footprint. |
+| Whisper | Whisper Small | `mlx-community/whisper-small-mlx` | 可见 | Lower-resource Whisper model for lighter local setups. |
+| Whisper | Whisper Tiny | `mlx-community/whisper-tiny-mlx` | 隐藏支持 | Legacy lightweight Whisper option kept for existing installations. |
+| Whisper | Whisper Base | `mlx-community/whisper-base-mlx` | 隐藏支持 | Legacy compact Whisper option kept for existing installations. |
 
 ## 本地 MLX ASR 模型
 

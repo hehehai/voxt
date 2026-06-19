@@ -364,7 +364,7 @@
 "MLX model is unavailable. Open Settings > Model to fix it." = "MLX 模型当前不可用，请在设置 > 模型中修复。";
 "MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@" = "MLX 模型当前不可用，请在设置 > 模型中修复。\n原因：%@";
 "Whisper (On-device)" = "Whisper 本地转录";
-"Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding." = "使用本地 WhisperKit 语音模型，支持多个 Whisper 模型和可配置解码参数。";
+"Legacy Whisper selections now use MLX Whisper models. Requires a one-time model download." = "旧版 Whisper 选择现在会迁移到 MLX Whisper 模型，需要一次性下载模型。";
 "Transcribe" = "转录";
 "Translate to English" = "翻译为英文";
 "Whisper Tiny" = "Whisper Tiny";
@@ -384,7 +384,6 @@
 "Enable VAD" = "启用 VAD";
 "Enable Timestamps" = "启用时间戳";
 "Temperature" = "温度";
-"These settings apply to Whisper transcription sessions. Standard ASR always uses transcribe; Whisper translate is only used by the translation hotkey when Whisper translation is selected. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates." = "这些设置适用于 Whisper 转录会话。普通 ASR 始终使用转录；只有在翻译快捷键选择了 Whisper 翻译时，才会使用 Whisper 的翻译任务。Realtime 使用 WhisperKit 的流式路径；关闭后会切换到质量优先的增量更新模式。";
 "Done" = "完成";
 "VAD On" = "VAD 开";
 "VAD Off" = "VAD 关";
@@ -897,14 +896,9 @@
 "Whisper" = "Whisper";
 "Realtime" = "实时";
 "Live Realtime (Experimental)" = "实时转写（实验性）";
-"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected." = "这些设置适用于 Whisper 转录会话。实时转写（实验性）会在你说话时持续输出 partial 文本，并在停止后再做一次最终修正。关闭后会回到质量优先的非实时路径。只有在选择了 Whisper 翻译时，才会使用 Whisper translate。";
+"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path." = "这些设置适用于 Whisper 转录会话。实时转写（实验性）会在你说话时持续输出 partial 文本，并在停止后再做一次最终修正。关闭后会回到质量优先的非实时路径。";
 "Realtime On" = "实时模式";
 "Quality Mode" = "质量模式";
-"Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider." = "Whisper 翻译仅在 ASR 引擎为 Whisper 时可用。否则 Voxt 会回退到你保存的 LLM 提供者。";
-"Whisper translation only supports English output. Voxt will fall back to your saved LLM provider." = "Whisper 翻译仅支持输出英文。否则 Voxt 会回退到你保存的 LLM 提供者。";
-"Whisper translation needs a ready Whisper model. Voxt will fall back to your saved LLM provider until the model is ready." = "Whisper 翻译需要可用的 Whisper 模型。在模型准备好之前，Voxt 会回退到你保存的 LLM 提供者。";
-"Whisper translation reuses the current Whisper ASR model. It translates speech directly to English and falls back to %@ when Whisper direct translation is unavailable." = "Whisper 翻译会复用当前 Whisper ASR 模型，直接将语音翻译成英文；当 Whisper 直翻不可用时，会回退到 %@。";
-"These settings apply to Whisper transcription sessions. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates." = "这些设置适用于 Whisper 转录会话。开启实时模式时使用 WhisperKit 的流式路径；关闭后会切换为质量优先的 partial 更新策略。";
 "The first local Whisper load can take a few seconds. Voxt will show an initializing state in the overlay until the model is ready." = "Whisper 首次在本地加载时可能需要几秒钟。在模型准备好之前，Voxt 会在浮层中显示初始化状态。";
 "Memory" = "内存";
 "Memory Optimization" = "内存优化";
@@ -1294,8 +1288,6 @@
 "Only used when realtime translation is enabled." = "仅在启用实时翻译时生效。";
 "Open Location" = "打开位置";
 "Pick the text model used to rewrite, rephrase, or clean captured content." = "选择用于改写、润色或清理识别内容的文本模型。";
-"Prompt controls are shown only when the selected translation model supports prompt-based generation." = "只有当前翻译模型支持提示词生成时，才会显示提示词设置。";
-"Prompt editing is hidden here because Whisper direct translation does not consume a text prompt." = "Whisper 直译不使用文本提示词，因此这里不会显示提示词编辑。";
 "Prompt templates stay local to rewrite mode and no longer live in the shared model page." = "提示词模板现在只属于转写模式，不再放在共享的模型页里。";
 "Ready when Whisper ASR is selected" = "选择 Whisper ASR 后可用";
 "Realtime Target" = "实时目标语言";
@@ -1309,7 +1301,6 @@
 "Run translation directly against the current selected text when the translation shortcut is triggered." = "触发翻译快捷键时，直接对当前选中文本执行翻译。";
 "Score" = "评分";
 "Select" = "选择";
-"Select an LLM or use Whisper direct translation when the ASR path supports it." = "选择一个 LLM，或者在 ASR 路径支持时使用 Whisper 直译。";
 "Selected" = "已选择";
 "Set the ASR and text model pairing used for rewrite mode, then decide whether app-aware enhancement is enabled." = "设置转写模式使用的 ASR 与文本模型组合，再决定是否启用应用增强。";
 "Show Overlay In Screen Sharing" = "屏幕共享时显示悬浮层";
@@ -1334,11 +1325,7 @@
 "Uses the macOS system model when available, so later onboarding can stay minimal." = "在可用时使用 macOS 系统模型，这样后续引导可以保持最简。";
 "Uses the macOS system speech recognizer with no download required." = "使用 macOS 系统语音识别，无需下载模型。";
 "When enabled, the dedicated App Enhancement submenu becomes available in Feature mode." = "开启后，功能模式里会出现专属的应用增强子菜单。";
-"Whisper Direct Translate" = "Whisper 直译";
-"Whisper Direct Translation" = "Whisper 直接翻译";
 "Whisper Settings" = "Whisper 设置";
-"Whisper direct translation only supports English output." = "Whisper 直译目前只支持英文输出。";
-"Whisper direct translation requires Whisper as the translation ASR model." = "Whisper 直译要求翻译所用的 ASR 模型本身也是 Whisper。";
 "Works immediately with no model download." = "无需下载模型，立即可用。";
 "You can still keep this selected and switch later after the system becomes available." = "你仍然可以先保留这个选择，等系统能力可用后再切换。";
 "1 model needs setup" = "1 个模型需要完成配置";

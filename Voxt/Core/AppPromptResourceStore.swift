@@ -58,8 +58,6 @@ private extension AppPromptKind {
             return "openai-asr-hint"
         case .glmASRHint:
             return "glm-asr-hint"
-        case .whisperASRHint:
-            return "whisper-asr-hint"
         }
     }
 }

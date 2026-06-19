@@ -518,7 +518,6 @@ final class ModelDebugSupportTests: XCTestCase {
 
         let asrOptions = ModelDebugCatalog.availableASRModels(
             downloadedMLXRepos: [],
-            downloadedWhisperModelIDs: [],
             remoteASRConfigurations: remoteASRConfigurations
         )
         let llmOptions = ModelDebugCatalog.availableLLMModels(

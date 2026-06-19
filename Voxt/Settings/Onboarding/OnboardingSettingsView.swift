@@ -15,7 +15,6 @@ struct OnboardingSettingsView: View {
     @Binding var currentStep: OnboardingStep
 
     @ObservedObject var mlxModelManager: MLXModelManager
-    @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var appUpdateManager: AppUpdateManager
 
@@ -34,7 +33,6 @@ struct OnboardingSettingsView: View {
     @AppStorage(AppPreferenceKey.transcriptionEngine) var engineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.enhancementMode) var enhancementModeRaw = EnhancementMode.off.rawValue
     @AppStorage(AppPreferenceKey.mlxModelRepo) var mlxModelRepo = MLXModelManager.defaultModelRepo
-    @AppStorage(AppPreferenceKey.whisperModelID) var whisperModelID = WhisperKitModelManager.defaultModelID
     @AppStorage(AppPreferenceKey.customLLMModelRepo) var customLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.translationCustomLLMModelRepo) var translationCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.rewriteCustomLLMModelRepo) var rewriteCustomLLMRepo = CustomLLMModelManager.defaultModelRepo
@@ -138,7 +136,7 @@ struct OnboardingSettingsView: View {
         Binding(
             get: {
                 switch selectedEngine {
-                case .mlxAudio, .whisperKit:
+                case .mlxAudio:
                     return .local
                 case .remote:
                     return .remote
@@ -193,8 +191,8 @@ struct OnboardingSettingsView: View {
         Binding(
             get: {
                 switch selectedEngine {
-                case .mlxAudio, .whisperKit:
-                    return selectedEngine
+                case .mlxAudio:
+                    return .mlxAudio
                 case .remote, .dictation:
                     return .mlxAudio
                 }
@@ -284,10 +282,7 @@ struct OnboardingSettingsView: View {
         let mlxObserved = AnyView(storageObserved.onChange(of: mlxModelRepo) { _, newValue in
                 handleMLXRepoChange(newValue)
             })
-        let whisperObserved = AnyView(mlxObserved.onChange(of: whisperModelID) { _, newValue in
-                handleWhisperModelChange(newValue)
-            })
-        let llmRepoObserved = AnyView(whisperObserved.onChange(of: customLLMRepo) { _, newValue in
+        let llmRepoObserved = AnyView(mlxObserved.onChange(of: customLLMRepo) { _, newValue in
                 handleCustomLLMRepoChange(newValue)
             })
         let engineObserved = AnyView(llmRepoObserved.onChange(of: engineRaw) { _, _ in

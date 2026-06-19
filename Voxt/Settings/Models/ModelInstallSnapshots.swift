@@ -58,83 +58,6 @@ extension ModelSettingsView {
         )
     }
 
-    func whisperInstallSnapshot(for modelID: String) -> LocalModelInstallSnapshot {
-        let canonicalModelID = WhisperKitModelManager.canonicalModelID(modelID)
-        let isInstalled = whisperModelManager.isModelDownloaded(id: canonicalModelID)
-        let isUninstalling = isUninstallingWhisperModel(canonicalModelID)
-        let target = LocalModelInstallTarget.whisper(canonicalModelID)
-        let activeDownload = whisperModelManager.activeDownload?.modelID == canonicalModelID
-            ? whisperModelManager.activeDownload
-            : nil
-        let hasResumableDownload = activeDownload == nil && whisperModelManager.hasResumableDownload(id: canonicalModelID)
-        let errorMessage = whisperModelManager.downloadErrorMessage(for: canonicalModelID)
-            ?? {
-                guard isCurrentWhisperModel(canonicalModelID),
-                      case .error(let message) = whisperModelManager.state else {
-                    return nil
-                }
-                return message
-            }()
-
-        let state: LocalModelInstallState
-        if isUninstalling {
-            state = .uninstalling
-        } else if isCancellationPending(for: target) {
-            state = .cancelling
-        } else if let activeDownload {
-            state = activeDownload.isPaused ? .paused : .downloading
-        } else if hasResumableDownload {
-            state = .paused
-        } else if isInstalled {
-            state = .installed
-        } else {
-            state = .installable(isEnabled: !isAnotherWhisperModelDownloading(canonicalModelID))
-        }
-
-        let pausedFallbackDownload = hasResumableDownload
-            ? WhisperKitModelManager.ActiveDownload(
-                modelID: canonicalModelID,
-                isPaused: true,
-                progress: 0,
-                completed: 0,
-                total: 0,
-                currentFile: nil,
-                currentFileCompleted: 0,
-                currentFileTotal: 0,
-                completedFiles: 0,
-                totalFiles: 0
-            )
-            : nil
-        let effectiveDownload = activeDownload ?? pausedFallbackDownload
-        let pauseMessage = hasResumableDownload && activeDownload == nil
-            ? AppLocalization.localizedString("Paused. Ready to continue.")
-            : whisperModelManager.pausedStatusMessage(for: canonicalModelID)
-
-        return LocalModelInstallSnapshot(
-            target: target,
-            state: state,
-            isInstalled: isInstalled,
-            isCurrentSelection: isCurrentWhisperModel(canonicalModelID),
-            statusText: isUninstalling
-                ? AppLocalization.localizedString("Uninstalling…")
-                : isCancellationPending(for: target)
-                ? AppLocalization.localizedString("Cancelling…")
-                : ModelDownloadPresentationSupport.whisperStatusText(
-                    activeDownload: effectiveDownload,
-                    pauseMessage: pauseMessage,
-                    errorMessage: errorMessage
-                ),
-            badgeText: hasIssue(for: .whisperModel(canonicalModelID)) ? AppLocalization.localizedString("Needs Setup") : nil,
-            downloadStatus: isCancellationPending(for: target) ? nil : ModelDownloadStatusSnapshot.fromWhisperDownload(
-                effectiveDownload,
-                pauseMessage: pauseMessage
-            ),
-            canOpenLocation: isInstalled && !isUninstalling && !isCancellationPending(for: target),
-            canConfigure: !isUninstalling && !isCancellationPending(for: target),
-            configureActionTitle: AppLocalization.localizedString("Whisper Settings")
-        )
-    }
-
     func customLLMInstallSnapshot(for repo: String) -> LocalModelInstallSnapshot {
         let canonicalRepo = CustomLLMModelManager.canonicalModelRepo(repo)
         let isInstalled = customLLMManager.isModelDownloaded(repo: canonicalRepo)
@@ -283,24 +206,6 @@ extension ModelSettingsView {
             openMLXModelDirectory(repo)
         case (.mlx(let repo), .configure):
             activeLocalASRConfigurationTarget = .mlx(repo: repo)
-
-        case (.whisper(let modelID), .use):
-            useWhisperModel(modelID)
-        case (.whisper(let modelID), .install), (.whisper(let modelID), .resume):
-            downloadWhisperModel(modelID)
-        case (.whisper, .pause):
-            whisperModelManager.pauseDownload()
-            refreshCatalogSnapshot()
-        case (.whisper(let modelID), .cancel):
-            cancellingInstallTargets.insert(.whisper(modelID))
-            whisperModelManager.cancelDownload(id: modelID)
-            refreshCatalogSnapshot()
-        case (.whisper(let modelID), .uninstall):
-            requestDeleteWhisperModel(modelID)
-        case (.whisper(let modelID), .openLocation):
-            openWhisperModelDirectory(modelID)
-        case (.whisper(let modelID), .configure):
-            activeLocalASRConfigurationTarget = .whisper(modelID: modelID)
 
         case (.customLLM(let repo), .use):
             useCustomLLM(repo)
@@ -497,11 +402,6 @@ extension ModelSettingsView {
         case .mlx(let repo):
             let snapshot = mlxModelManager.catalogSnapshot(for: repo)
             return snapshot.isDownloading || snapshot.isPaused
-        case .whisper(let modelID):
-            if whisperModelManager.activeDownload?.modelID == modelID {
-                return true
-            }
-            return whisperModelManager.hasResumableDownload(id: modelID)
         case .customLLM(let repo):
             return ModelDownloadStateRouting.isCustomLLMDownloading(
                 repo: repo,

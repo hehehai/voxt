@@ -22,23 +22,6 @@ extension ModelSettingsView {
         }
     }
 
-    var whisperModelSelectionBinding: Binding<String> {
-        Binding(
-            get: {
-                let canonicalModelID = WhisperKitModelManager.canonicalModelID(whisperModelID)
-                if canonicalModelID != whisperModelID {
-                    DispatchQueue.main.async {
-                        whisperModelID = canonicalModelID
-                    }
-                }
-                return canonicalModelID
-            },
-            set: { newValue in
-                whisperModelID = WhisperKitModelManager.canonicalModelID(newValue)
-            }
-        )
-    }
-
     var translationProviderOptions: [ModelSettingsProviderOption] {
         TranslationModelProvider.allCases.map {
             ModelSettingsProviderOption(id: $0.rawValue, title: $0.title)
@@ -78,8 +61,6 @@ extension ModelSettingsView {
             return installedCustomLLMOptions(including: translationCustomLLMRepo)
         case .localGGUF:
             return installedGGUFTranslationOptions
-        case .whisperKit:
-            return []
         }
     }
 
@@ -103,8 +84,6 @@ extension ModelSettingsView {
                     translationCustomLLMRepo = newValue
                 case .localGGUF:
                     translationGGUFModelIDRaw = GGUFTranslationModelCatalog.resolvedModelID(newValue).rawValue
-                case .whisperKit:
-                    break
                 }
             }
         )
@@ -170,8 +149,6 @@ extension ModelSettingsView {
             return translationCustomLLMRepo
         case .localGGUF:
             return translationGGUFModelIDRaw
-        case .whisperKit:
-            return translationSelectionRaw(for: selectedTranslationFallbackModelProvider)
         }
     }
 
@@ -192,8 +169,6 @@ extension ModelSettingsView {
             return "Custom LLM Model"
         case .localGGUF:
             return "Local GGUF Model"
-        case .whisperKit:
-            return "Whisper Model"
         }
     }
 
@@ -205,30 +180,18 @@ extension ModelSettingsView {
             return "No installed custom LLM model yet. Install one in the table above."
         case .localGGUF:
             return "No installed GGUF translation model yet. Install Hy in the model catalog first."
-        case .whisperKit:
-            return ""
         }
     }
 
     var translationModelDisplayText: String? {
-        guard selectedTranslationModelProvider == .whisperKit else { return nil }
-        return whisperModelManager.displayTitle(for: whisperModelID)
+        nil
     }
 
     var translationProviderStatusMessage: String? {
-        if let warning = TranslationProviderResolver.warningMessage(
+        TranslationProviderResolver.warningMessage(
             selectedProvider: selectedTranslationModelProvider,
             transcriptionEngine: selectedEngine,
-            targetLanguage: selectedTranslationTargetLanguage,
-            whisperModelState: whisperModelManager.state
-        ) {
-            return warning
-        }
-
-        guard selectedTranslationModelProvider == .whisperKit else { return nil }
-        return AppLocalization.format(
-            "Whisper translation reuses the current Whisper ASR model. It translates speech directly to English and falls back to %@ when Whisper direct translation is unavailable.",
-            selectedTranslationFallbackModelProvider.title
+            targetLanguage: selectedTranslationTargetLanguage
         )
     }
 
@@ -236,8 +199,7 @@ extension ModelSettingsView {
         TranslationProviderResolver.warningMessage(
             selectedProvider: selectedTranslationModelProvider,
             transcriptionEngine: selectedEngine,
-            targetLanguage: selectedTranslationTargetLanguage,
-            whisperModelState: whisperModelManager.state
+            targetLanguage: selectedTranslationTargetLanguage
         ) != nil
     }
 
@@ -270,8 +232,6 @@ extension ModelSettingsView {
             }
         case .localGGUF:
             translationGGUFModelIDRaw = GGUFTranslationModelCatalog.resolvedModelID(translationGGUFModelIDRaw).rawValue
-        case .whisperKit:
-            return
         }
     }
 

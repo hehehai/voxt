@@ -109,11 +109,7 @@ extension AppDelegate {
         )
 
         if sessionOutputMode == .translation {
-            if sessionUsesWhisperDirectTranslation {
-                processWhisperTranslatedTranscription(text, sessionID: sessionID)
-            } else {
-                processTranslatedTranscription(text, sessionID: sessionID)
-            }
+            processTranslatedTranscription(text, sessionID: sessionID)
             return
         }
 

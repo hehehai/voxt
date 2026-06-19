@@ -16,18 +16,6 @@ extension ModelSettingsView {
         .map { _ in () }
         .eraseToAnyPublisher()
 
-        let whisper = Publishers.CombineLatest3(
-            whisperModelManager.$state
-                .map(ModelSettingsManagerRefreshSupport.phase(for:))
-                .removeDuplicates(),
-            whisperModelManager.$activeDownload
-                .map(ModelSettingsManagerRefreshSupport.whisperDownloadDescriptor(for:))
-                .removeDuplicates(),
-            whisperModelManager.$pausedStatusMessageByID.removeDuplicates()
-        )
-        .map { _, _, _ in () }
-        .eraseToAnyPublisher()
-
         let customLLM = customLLMManager.$state
             .map(ModelSettingsManagerRefreshSupport.phase(for:))
             .removeDuplicates()
@@ -46,7 +34,7 @@ extension ModelSettingsView {
         .eraseToAnyPublisher()
 
         return Publishers.Merge(
-            Publishers.Merge(mlx, whisper),
+            mlx,
             Publishers.Merge(customLLM, gguf)
         )
         .dropFirst()
@@ -64,18 +52,6 @@ extension ModelSettingsView {
             .removeDuplicates()
             .map { _ in () }
             .eraseToAnyPublisher()
-
-        let whisper = Publishers.Merge(
-            whisperModelManager.$remoteSizeTextByID
-                .removeDuplicates()
-                .map { _ in () }
-                .eraseToAnyPublisher(),
-            whisperModelManager.$pausedStatusMessageByID
-                .removeDuplicates()
-                .map { _ in () }
-                .eraseToAnyPublisher()
-        )
-        .eraseToAnyPublisher()
 
         let customLLM = customLLMManager.$remoteSizeTextByRepo
             .removeDuplicates()
@@ -100,10 +76,10 @@ extension ModelSettingsView {
         return Publishers.Merge(
             Publishers.Merge(
                 Publishers.Merge(mlx, mlxPauseMessage),
-                whisper
+                customLLM
             ),
             Publishers.Merge(
-                Publishers.Merge(customLLM, customLLMPauseMessage),
+                customLLMPauseMessage,
                 Publishers.Merge(gguf, ggufPauseMessage)
             )
         )
@@ -125,9 +101,6 @@ extension ModelSettingsView {
             appeared
                 .onChange(of: modelRepo) { _, newValue in
                     handleModelRepoChange(newValue)
-                }
-                .onChange(of: whisperModelID) { _, newValue in
-                    handleWhisperModelIDChange(newValue)
                 }
                 .onChange(of: localModelIdleUnloadDelaySeconds) { _, _ in
                     handleLocalModelIdleUnloadDelayChange()
@@ -202,16 +175,6 @@ extension ModelSettingsView {
         refreshCatalogSnapshot()
     }
 
-    func handleWhisperModelIDChange(_ newValue: String) {
-        let canonicalModelID = WhisperKitModelManager.canonicalModelID(newValue)
-        if canonicalModelID != newValue {
-            whisperModelID = canonicalModelID
-            return
-        }
-        whisperModelManager.updateModel(id: canonicalModelID)
-        refreshCatalogSnapshot()
-    }
-
     func handleLocalModelIdleUnloadDelayChange() {
         let clamped = AppPreferenceKey.clampedLocalModelIdleUnloadDelaySeconds(localModelIdleUnloadDelaySeconds)
         if localModelIdleUnloadDelaySeconds != clamped {
@@ -219,7 +182,6 @@ extension ModelSettingsView {
         }
         mlxModelManager.refreshMemoryOptimizationPolicy()
         customLLMManager.refreshMemoryOptimizationPolicy()
-        whisperModelManager.refreshMemoryOptimizationPolicy()
         AppDelegate.shared?.scheduleLLMIdleWarmupIfNeeded()
     }
 
@@ -297,8 +259,6 @@ extension ModelSettingsView {
         let token = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
             mlxState: mlxModelManager.state,
             mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
-            whisperState: whisperModelManager.state,
-            whisperActiveDownload: whisperModelManager.activeDownload,
             customLLMState: customLLMManager.state,
             ggufStateByID: ggufTranslationModelManager.stateByID,
             ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID

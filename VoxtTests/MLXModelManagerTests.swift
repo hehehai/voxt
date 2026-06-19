@@ -231,8 +231,8 @@ final class MLXModelManagerTests: XCTestCase {
         )
         XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
         XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-ASR-0.6B-4bit"))
+        XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "mlx-community/whisper-base-mlx"))
         XCTAssertNotNil(CustomLLMModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-4B-4bit"))
-        XCTAssertNotNil(WhisperKitModelManager.fallbackRemoteSizeText(id: "base"))
     }
 
     func testAllCuratedMLXModelsHaveRemoteSizeFallbacks() {
@@ -265,12 +265,56 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertFalse(MLXModelDownloadSupport.isModelDirectoryValid(finalDirectory, fileManager: .default))
     }
 
-    func testAllCuratedWhisperModelsHaveRemoteSizeFallbacks() {
-        let missingModelIDs = WhisperKitModelManager.supportedModels
-            .map(\.id)
-            .filter { WhisperKitModelManager.fallbackRemoteSizeText(id: $0) == nil }
+    func testWhisperDirectoryWithoutTokenizerAssetsIsNotTreatedAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let repo = "mlx-community/whisper-large-v3-turbo"
+        let modelDir = root
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent("mlx-community_whisper-large-v3-turbo")
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        try Data(#"{"model_type":"whisper"}"#.utf8).write(to: modelDir.appendingPathComponent("config.json"))
+        try Data("weights".utf8).write(to: modelDir.appendingPathComponent("weights.safetensors"))
+        defer { try? FileManager.default.removeItem(at: root) }
 
-        XCTAssertEqual(missingModelIDs, [])
+        XCTAssertFalse(
+            MLXModelDownloadSupport.isModelDirectoryValid(
+                modelDir,
+                repo: repo,
+                fileManager: .default
+            )
+        )
+    }
+
+    func testWhisperDirectoryWithTokenizerAssetsIsTreatedAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let repo = "mlx-community/whisper-large-v3-turbo"
+        let modelDir = root
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent("mlx-community_whisper-large-v3-turbo")
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        try Data(#"{"model_type":"whisper"}"#.utf8).write(to: modelDir.appendingPathComponent("config.json"))
+        try Data("weights".utf8).write(to: modelDir.appendingPathComponent("weights.safetensors"))
+        for assetPath in MLXModelDownloadSupport.whisperTokenizerAssetPaths {
+            try Data("asset".utf8).write(to: modelDir.appendingPathComponent(assetPath))
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertTrue(
+            MLXModelDownloadSupport.isModelDirectoryValid(
+                modelDir,
+                repo: repo,
+                fileManager: .default
+            )
+        )
+    }
+
+    func testAllCuratedMLXWhisperModelsHaveRemoteSizeFallbacks() {
+        let missingRepos = MLXModelManager.supportedModels
+            .map(\.id)
+            .filter(MLXWhisperMigrationSupport.isWhisperRepo(_:))
+            .filter { MLXModelManager.fallbackRemoteSizeText(repo: $0) == nil }
+
+        XCTAssertEqual(missingRepos, [])
     }
 
     func testCustomLLMBehaviorDisablesThinkingForThinkingModels() {

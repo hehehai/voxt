@@ -9,7 +9,7 @@
 - LLM 来源：`mlx-swift-lm` 当前 `LLMRegistry` 注册表，commit `a47894a`，日期 `2026-06-04`。
 - 时间筛选：Hugging Face `lastModified >= 2025-01-01`。
 - 包体积：Hugging Face `usedStorage`，按十进制 GB 四舍五入。`size unavailable` 表示 HF API 返回 `0` 或未给出有效体积。
-- Voxt 接入状态：基于 `Voxt/Transcription/MLXModelSupport.swift`、`Voxt/Support/CustomLLMModelSupport.swift`、`Voxt/Transcription/WhisperKitModelSupport.swift`。
+- Voxt 接入状态：基于 `Voxt/Transcription/MLXModelSupport.swift`、`Voxt/Support/CustomLLMModelSupport.swift`。
 - `Qwen3-ForcedAligner` 是强制对齐模型，不是转写模型，本表不计入 ASR / STT。
 
 ## ASR / STT 2025+ 上游清单
@@ -80,7 +80,7 @@
 | 类型 | 当前 Voxt 本地可见/支持 | 2025+ 上游已覆盖 | 2025+ 上游未覆盖 | 需要纠正 |
 |---|---:|---:|---:|---:|
 | MLX ASR / STT | 25 个本地 MLX ASR 选项 | 22 个 2025+ 上游 STT 变体已接入 | 2 个 Nemotron ASR 变体未接入 | 0 |
-| WhisperKit ASR | 5 个历史 CoreML Whisper 选项 | 不属于 MLX 2025+ | 不适用 | 不适用 |
+| MLX Whisper ASR | 5 个 MLX Whisper 选项 | MLX Whisper family | 已接入 | 旧短 ID 迁移到 MLX repo |
 | Custom LLM | 30 个可见本地 LLM，另有 3 个隐藏兼容 | 已覆盖 Qwen3、部分 Qwen3.5、Gemma4 E2/E4、Llama3.2、Granite3.3、MiMo、GLM4、AceReason | 未覆盖 Gemma3/3n、Gemma4 12B/26B、Qwen3.6、SmolLM3、BitNet、Jamba、gpt-oss 20B 等 | 1 个 Qwen3.5 0.8B OptiQ repo ID 疑似错误 |
 
 ## 最值得优先接入
@@ -104,7 +104,7 @@
 | ASR | Parakeet 0.6B `ctc` / `rnnt` | 与 `tdt-v3` 目标重叠，用户难以理解差异 | Parakeet 0.6B `tdt-v3` | 隐藏兼容，除非实测证明更优 |
 | ASR | Parakeet 1.1B 多个解码变体 | 4 个 4.25-4.29 GB 变体过多 | 只保留 `tdt_ctc` 或 `tdt` 一个推荐 | 收敛为 1 个可见，其他隐藏兼容 |
 | ASR | Voxtral `fp16` | 8.89 GB，体积明显高于 4bit / 6bit | Voxtral `6bit` | 降级为高级选项 |
-| ASR | WhisperKit Tiny/Base | 非 MLX 2025+，质量落后于 Qwen3-ASR / GLM-ASR Nano | Qwen3-ASR 0.6B 4bit、GLM-ASR Nano | 保留兼容但降低推荐 |
+| ASR | MLX Whisper Tiny/Base | 质量落后于 Qwen3-ASR / GLM-ASR Nano | Qwen3-ASR 0.6B 4bit、GLM-ASR Nano | 保留旧配置迁移但降低推荐 |
 | LLM | Qwen/Qwen2 1.5B | 旧系列，非 MLX 上游 2025+ 注册项 | Qwen3 1.7B、Qwen3.5 2B | 标记 deprecatedSoon，未来隐藏兼容 |
 | LLM | Qwen/Qwen2.5 3B | 旧系列，本地下载体积约 6.18 GB，性价比低于 Qwen3.5 4B | Qwen3.5 4B 4bit / OptiQ | 标记 deprecatedSoon |
 | LLM | Qwen2.5 7B hidden compat | 已是隐藏兼容，且 Qwen3/Qwen3.5 更合适 | Qwen3.5 4B / 9B | 继续隐藏，不恢复可见 |
@@ -158,8 +158,8 @@
 | 隐藏兼容 | Parakeet TDT 1.1B | `mlx-community/parakeet-tdt-1.1b` | 与 `tdt_ctc-1.1b` 重叠 |
 | 隐藏兼容 | Parakeet CTC 1.1B | `mlx-community/parakeet-ctc-1.1b` | 与 `tdt_ctc-1.1b` 重叠 |
 | 隐藏兼容 | Parakeet RNNT 1.1B | `mlx-community/parakeet-rnnt-1.1b` | 与 `tdt_ctc-1.1b` 重叠 |
-| 隐藏兼容 | WhisperKit Small / Medium / Large v3 | `small`, `medium`, `large-v3` | 非 MLX，但可作为历史 CoreML 兼容路径 |
-| 剔除/不推荐 | WhisperKit Tiny / Base | `tiny`, `base` | 质量和维护价值低于 Qwen3-ASR 轻量档 |
+| 隐藏兼容 | MLX Whisper Tiny / Base | `mlx-community/whisper-tiny-mlx`, `mlx-community/whisper-base-mlx` | 旧配置迁移目标，不作为主推 |
+| 可见保留 | MLX Whisper Small / Large v3 Turbo / Large v3 | `mlx-community/whisper-small-mlx`, `mlx-community/whisper-large-v3-turbo`, `mlx-community/whisper-large-v3-mlx` | 保留 Whisper 系列但只走 MLX Audio |
 | 剔除/不推荐 | FireRed ASR 2 | `mlx-community/FireRedASR2-AED-mlx` | 非本轮 2025+ 上游 MLX STT 主清单，体积较大 |
 | 剔除/不推荐 | SenseVoice Small | `mlx-community/SenseVoiceSmall` | 非本轮 2025+ 上游 MLX STT 主清单 |
 | 剔除/不推荐 | Granite Speech 4.0 1B | `mlx-community/granite-4.0-1b-speech-5bit` | 当前调研源未列入 `mlx-audio-swift` STT 主 README 清单 |
@@ -272,7 +272,7 @@
 | 可见保留 | Parakeet 0.6B `tdt-v3` | 英文轻量只保留一个最清晰的新版本 |
 | 隐藏兼容 | Parakeet 110M、Parakeet TDT CTC 1.1B、GLM-ASR Nano 2512 4bit | 有特定场景价值，但不进入默认可见列表 |
 | 剔除/不推荐 | Parakeet 0.6B v2 / CTC / RNNT、Parakeet 1.1B TDT / CTC / RNNT | 同系列同尺寸变体太多，安装和解释成本高 |
-| 剔除/不推荐 | WhisperKit Tiny / Base、FireRed ASR 2、SenseVoice Small、Granite Speech 4.0 1B | 非精简 MLX 主线或被 Qwen3-ASR / Nemotron / Cohere 覆盖 |
+| 剔除/不推荐 | MLX Whisper Tiny / Base、FireRed ASR 2、SenseVoice Small、Granite Speech 4.0 1B | 非精简主线或被 Qwen3-ASR / Nemotron / Cohere 覆盖 |
 
 ### LLM 最终可见模型
 
@@ -321,7 +321,7 @@
 | P1 | 接入 Nemotron 3.5 ASR Streaming 0.6B 8bit | ASR |
 | P1 | 接入 Qwen3.5 9B 4bit、SmolLM3 3B 4bit | LLM |
 | P1 | 将同系列重复变体转为隐藏兼容 | Qwen3-ASR、Parakeet、Voxtral、Qwen3、Qwen3.5 OptiQ |
-| P2 | 删除或不再展示剔除/不推荐组 | WhisperKit Tiny/Base、旧 LLM 系列、非主线实验模型 |
+| P2 | 删除或不再展示剔除/不推荐组 | MLX Whisper Tiny/Base、旧 LLM 系列、非主线实验模型 |
 
 ## 来源
 

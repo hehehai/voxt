@@ -8,7 +8,6 @@ struct FeatureSettingsView: View {
     let selectedTab: FeatureSettingsTab
     let navigationRequest: SettingsNavigationRequest?
     @ObservedObject var mlxModelManager: MLXModelManager
-    @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var ggufTranslationModelManager: GGUFTranslationModelManager
     @StateObject var meetingDiarizationModelManager = MeetingDiarizationModelManager()
@@ -259,7 +258,6 @@ struct FeatureSettingsView: View {
     var selectorBuilder: FeatureModelCatalogBuilder {
         FeatureModelCatalogBuilder(
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             featureSettings: featureSettings,

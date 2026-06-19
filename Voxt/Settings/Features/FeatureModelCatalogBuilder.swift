@@ -10,7 +10,6 @@ private func localized(_ key: String) -> String {
 @MainActor
 struct FeatureModelCatalogBuilder {
     let mlxModelManager: MLXModelManager
-    let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let featureSettings: FeatureSettings
@@ -39,8 +38,6 @@ struct FeatureModelCatalogBuilder {
             return localized("Direct Dictation")
         case .mlx(let repo):
             return mlxModelManager.displayTitle(for: repo)
-        case .whisper(let modelID):
-            return whisperModelManager.displayTitle(for: modelID)
         case .remote(let provider):
             let configurations = RemoteModelConfigurationStore.loadConfigurations(
                 from: remoteASRProviderConfigurationsRaw,
@@ -79,8 +76,6 @@ struct FeatureModelCatalogBuilder {
 
     func translationSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
         switch selectionID.translationSelection {
-        case .whisperDirectTranslate:
-            return localized("Whisper Direct Translate")
         case .localGGUF(let modelID):
             return ggufTranslationModelManager.displayTitle(for: modelID)
         case .localLLM, .remoteLLM:
@@ -118,12 +113,13 @@ struct FeatureModelCatalogBuilder {
         entries.append(contentsOf: mlxModelManager.displayModelsIncludingInstalled().map { model in
             let selectionID = FeatureModelSelectionID.mlx(model.id)
             let isInstalled = mlxModelManager.isModelDownloaded(repo: model.id)
-            let isAvailable = MLXModelManager.isAvailableModelRepo(model.id)
-            let isSelectable = isInstalled && isAvailable
+            let availability = Self.mlxSelectorAvailability(isInstalled: isInstalled)
             return FeatureModelSelectorEntry(
                 selectionID: selectionID,
                 title: model.title,
-                engine: localized("MLX Audio"),
+                engine: MLXWhisperMigrationSupport.isWhisperRepo(model.id)
+                    ? localized("Whisper (MLX)")
+                    : localized("MLX Audio"),
                 sizeText: isInstalled
                     ? (mlxModelManager.cachedModelSizeText(repo: model.id) ?? mlxModelManager.remoteSizeText(repo: model.id))
                     : mlxModelManager.remoteSizeText(repo: model.id),
@@ -144,50 +140,8 @@ struct FeatureModelCatalogBuilder {
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
                 badgeText: ModelCatalogBadgeSupport.recommendedBadgeText(forMLXRepo: model.id),
-                isSelectable: isSelectable,
-                disabledReason: isSelectable
-                    ? nil
-                    : (isInstalled ? localized("This model is no longer available for new selections.") : localized("Install this model in Model settings first."))
-            )
-        })
-
-        entries.append(contentsOf: whisperModelManager.displayModelsIncludingInstalled().map { model in
-            let selectionID = FeatureModelSelectionID.whisper(model.id)
-            let isInstalled = whisperModelManager.isModelDownloaded(id: model.id)
-            let isUnavailableForMeeting = sheet == .meetingASR
-            let isAvailable = WhisperKitModelManager.isAvailableModelID(model.id)
-            let isSelectable = !isUnavailableForMeeting && isInstalled && isAvailable
-            let disabledReason = isUnavailableForMeeting
-                ? localized("Whisper is not available for Meeting mode.")
-                : (isSelectable
-                    ? nil
-                    : (isInstalled ? localized("This model is no longer available for new selections.") : localized("Install this model in Model settings first.")))
-            return FeatureModelSelectorEntry(
-                selectionID: selectionID,
-                title: model.title,
-                engine: localized("Whisper"),
-                sizeText: isInstalled
-                    ? (whisperModelManager.cachedModelSizeText(id: model.id) ?? whisperModelManager.remoteSizeText(id: model.id))
-                    : whisperModelManager.remoteSizeText(id: model.id),
-                ratingText: WhisperKitModelManager.ratingText(for: model.id),
-                filterTags: featureFilterTags(
-                    base: [localized("Local")] + whisperSpeedTags(for: model.id),
-                    installed: isInstalled,
-                    requiresConfiguration: false,
-                    configured: true,
-                    usageLabels: usageLabels(for: selectionID)
-                ),
-                displayTags: featureDisplayTags(
-                    base: [localized("Local")] + whisperSpeedTags(for: model.id),
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: selectionID
-                ),
-                statusText: isInstalled ? localized("Installed") : localized("Not installed"),
-                usageLocations: usageLabels(for: selectionID),
-                badgeText: nil,
-                isSelectable: isSelectable,
-                disabledReason: disabledReason
+                isSelectable: availability.isSelectable,
+                disabledReason: availability.disabledReason
             )
         })
 
@@ -229,6 +183,13 @@ struct FeatureModelCatalogBuilder {
         })
 
         return entries
+    }
+
+    static func mlxSelectorAvailability(isInstalled: Bool) -> (isSelectable: Bool, disabledReason: String?) {
+        (
+            isSelectable: isInstalled,
+            disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
+        )
     }
 
     private func llmEntries(includeAppleIntelligence: Bool) -> [FeatureModelSelectorEntry] {
@@ -378,51 +339,6 @@ struct FeatureModelCatalogBuilder {
                 disabledReason: nil
             )
         })
-        let whisperSelectable: Bool
-        let whisperDisabledReason: String?
-
-        switch selectedASR.asrSelection {
-        case .whisper:
-            if targetLanguage == .english {
-                whisperSelectable = true
-                whisperDisabledReason = nil
-            } else {
-                whisperSelectable = false
-                whisperDisabledReason = localized("Whisper direct translation only supports English output.")
-            }
-        default:
-            whisperSelectable = false
-            whisperDisabledReason = localized("Whisper direct translation requires Whisper as the translation ASR model.")
-        }
-
-        entries.insert(
-            FeatureModelSelectorEntry(
-                selectionID: .whisperDirectTranslate,
-                title: localized("Whisper Direct Translate"),
-                engine: localized("Whisper"),
-                sizeText: localized("Built-in path"),
-                ratingText: "4.0",
-                filterTags: featureFilterTags(
-                    base: [localized("Local"), localized("Fast"), localized("Multilingual")],
-                    installed: false,
-                    requiresConfiguration: false,
-                    configured: true,
-                    usageLabels: usageLabels(for: .whisperDirectTranslate)
-                ),
-                displayTags: featureDisplayTags(
-                    base: [localized("Local"), localized("Fast"), localized("Multilingual")],
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: .whisperDirectTranslate
-                ),
-                statusText: whisperSelectable ? localized("Ready when Whisper ASR is selected") : localized("Unavailable"),
-                usageLocations: usageLabels(for: .whisperDirectTranslate),
-                badgeText: nil,
-                isSelectable: whisperSelectable,
-                disabledReason: whisperDisabledReason
-            ),
-            at: 0
-        )
         return entries
     }
 
@@ -498,10 +414,6 @@ struct FeatureModelCatalogBuilder {
         deduplicatedFeatureTags(MLXModelManager.catalogTagKeys(for: repo).map(localized))
     }
 
-    private func whisperSpeedTags(for modelID: String) -> [String] {
-        deduplicatedFeatureTags(WhisperKitModelManager.catalogTagKeys(for: modelID).map(localized))
-    }
-
     private func llmSpeedTags(for repo: String) -> [String] {
         deduplicatedFeatureTags(CustomLLMModelManager.catalogTagKeys(for: repo).map(localized))
     }
@@ -558,8 +470,6 @@ struct FeatureModelCatalogBuilder {
             return true
         case .mlx(let repo):
             return mlxSupportsPrimaryLanguage(repo, primaryLanguage: primaryLanguage)
-        case .whisper:
-            return true
         case .remote:
             return true
         case .none:

@@ -102,8 +102,6 @@ extension AppDelegate {
             return speechTranscriber.isRecording
         case .mlxAudio:
             return mlxTranscriber?.isRecording == true
-        case .whisperKit:
-            return whisperTranscriber?.isRecording == true
         case .remote:
             return remoteASRTranscriber.isRecording
         }
@@ -132,8 +130,6 @@ extension AppDelegate {
             return speechTranscriber.transcribedText
         case .mlxAudio:
             return mlxTranscriber?.currentWorkingTranscriptText ?? ""
-        case .whisperKit:
-            return whisperTranscriber?.transcribedText ?? ""
         case .remote:
             return remoteASRTranscriber.transcribedText
         }
@@ -143,7 +139,7 @@ extension AppDelegate {
         switch transcriptionEngine {
         case .mlxAudio:
             return mlxTranscriber?.lastCaptureMetrics
-        case .dictation, .whisperKit, .remote:
+        case .dictation, .remote:
             return nil
         }
     }

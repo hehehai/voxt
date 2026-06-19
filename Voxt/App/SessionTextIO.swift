@@ -670,9 +670,8 @@ extension AppDelegate {
         case .dictation:
             return ("dictation", "builtin")
         case .mlx(let repo):
-            return ("mlx", MLXModelManager.canonicalModelRepo(repo))
-        case .whisper(let modelID):
-            return ("whisper", WhisperKitModelManager.canonicalModelID(modelID))
+            let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
+            return (MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) ? "whisper-mlx" : "mlx", canonicalRepo)
         case .remote(let provider):
             let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
             let stored = RemoteModelConfigurationStore.loadConfigurations(from: raw)
@@ -683,9 +682,8 @@ extension AppDelegate {
             case .dictation:
                 return ("dictation", "builtin")
             case .mlxAudio:
-                return ("mlx", MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo))
-            case .whisperKit:
-                return ("whisper", WhisperKitModelManager.canonicalModelID(whisperModelManager.currentModelID))
+                let canonicalRepo = MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo)
+                return (MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) ? "whisper-mlx" : "mlx", canonicalRepo)
             case .remote:
                 return ("remote", "unknown")
             }

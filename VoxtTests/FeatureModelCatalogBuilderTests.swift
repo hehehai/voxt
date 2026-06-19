@@ -6,7 +6,7 @@ import XCTest
 
 @MainActor
 final class FeatureModelCatalogBuilderTests: XCTestCase {
-    func testTranslationEntriesDisableWhisperDirectTranslateWithoutWhisperASR() throws {
+    func testTranslationEntriesDoNotExposeWhisperDirectTranslate() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
                 translationASR: .mlx(MLXModelManager.defaultModelRepo),
@@ -15,52 +15,34 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             )
         )
 
-        let directTranslate = try XCTUnwrap(
+        XCTAssertNil(
             builder.entries(for: .translationModel)
-                .first(where: { $0.selectionID == .whisperDirectTranslate })
-        )
-
-        XCTAssertFalse(directTranslate.isSelectable)
-        XCTAssertEqual(
-            directTranslate.disabledReason,
-            AppLocalization.localizedString("Whisper direct translation requires Whisper as the translation ASR model.")
+                .first(where: { $0.selectionID.rawValue == "whisper-direct-translate" })
         )
     }
 
-    func testTranslationEntriesDisableWhisperDirectTranslateForNonEnglishOutput() throws {
+    func testLegacyWhisperTranslationSelectionIsNotDisplayed() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
-                translationASR: .whisper(WhisperKitModelManager.defaultModelID),
+                translationASR: .mlx(MLXWhisperMigrationSupport.defaultRepo),
                 translationModel: .remoteLLM(.openAI),
                 translationTarget: .japanese
             )
         )
 
-        let directTranslate = try XCTUnwrap(
+        XCTAssertNil(
             builder.entries(for: .translationModel)
-                .first(where: { $0.selectionID == .whisperDirectTranslate })
-        )
-
-        XCTAssertFalse(directTranslate.isSelectable)
-        XCTAssertEqual(
-            directTranslate.disabledReason,
-            AppLocalization.localizedString("Whisper direct translation only supports English output.")
+                .first(where: { $0.selectionID.rawValue == "whisper-direct-translate" })
         )
     }
 
-    func testMeetingASREntriesDisableWhisperModels() throws {
+    func testMeetingASREntriesDoNotExposeLegacyWhisperModels() throws {
         let builder = makeBuilder(featureSettings: makeFeatureSettings())
 
         let whisperEntries = builder.entries(for: .meetingASR)
             .filter { $0.selectionID.rawValue.hasPrefix("whisper:") }
 
-        XCTAssertFalse(whisperEntries.isEmpty)
-        XCTAssertTrue(whisperEntries.allSatisfy { !$0.isSelectable })
-        XCTAssertTrue(
-            whisperEntries.allSatisfy {
-                $0.disabledReason == AppLocalization.localizedString("Whisper is not available for Meeting mode.")
-            }
-        )
+        XCTAssertTrue(whisperEntries.isEmpty)
     }
 
     func testConfiguredRemoteEntriesExposeUsageAndSelectionSummary() throws {
@@ -257,20 +239,31 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Realtime")))
     }
 
-    func testWhisperSelectorUsesCuratedRatingAndTags() throws {
+    func testInstalledHiddenMLXWhisperModelRemainsSelectableInSelector() throws {
+        let repo = "mlx-community/whisper-base-mlx"
+        let availability = FeatureModelCatalogBuilder.mlxSelectorAvailability(isInstalled: true)
+
+        XCTAssertFalse(MLXModelManager.isAvailableModelRepo(repo))
+        XCTAssertTrue(availability.isSelectable)
+        XCTAssertNil(availability.disabledReason)
+    }
+
+    func testLegacyWhisperSelectionSummaryUsesMigratedMLXWhisperModel() throws {
         let modelID = "medium"
         let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(transcriptionASR: .whisper(modelID))
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID)))
         )
 
+        let repo = MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID)
         let entry = try XCTUnwrap(
             builder.entries(for: .transcriptionASR)
-                .first(where: { $0.selectionID == .whisper(modelID) })
+                .first(where: { $0.selectionID == .mlx(repo) })
         )
 
-        XCTAssertEqual(entry.ratingText, "4.7")
-        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
-        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+        XCTAssertEqual(builder.asrSelectionSummary(.mlx(repo)), MLXModelCatalog.displayTitle(for: repo))
+        XCTAssertEqual(entry.ratingText, "4.8")
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
     }
 
     func testSelectorEntriesShowRecommendedBadgesForTargetedSinglesAndProviders() throws {
@@ -316,17 +309,17 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(aliyun.badgeText, recommended)
     }
 
-    func testSelectorGroupedFamiliesShowRecommendedBadgesForQwenASRAndGemma() throws {
+    func testSelectorGroupedFamiliesShowRecommendedBadgesForWhisperQwenASRAndGemma() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
-                transcriptionASR: .mlx("mlx-community/Qwen3-ASR-0.6B-4bit"),
+                transcriptionASR: .mlx("mlx-community/whisper-large-v3-turbo"),
                 translationModel: .localLLM("mlx-community/gemma-2-2b-it-4bit")
             )
         )
 
         let asrGroups = LocalModelSeriesGrouping.featureSelectorItems(
             from: builder.entries(for: .transcriptionASR),
-            selectedID: .mlx("mlx-community/Qwen3-ASR-0.6B-4bit")
+            selectedID: .mlx("mlx-community/whisper-large-v3-turbo")
         )
         let llmGroups = LocalModelSeriesGrouping.featureSelectorItems(
             from: builder.entries(for: .translationModel),
@@ -334,6 +327,12 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         )
         let recommended = AppLocalization.localizedString("Recommended")
 
+        let whisperGroup = try XCTUnwrap(
+            asrGroups.compactMap { item -> FeatureModelSelectorGroupSection? in
+                guard case .group(let group) = item, group.title == "Whisper" else { return nil }
+                return group
+            }.first
+        )
         let qwenGroup = try XCTUnwrap(
             asrGroups.compactMap { item -> FeatureModelSelectorGroupSection? in
                 guard case .group(let group) = item, group.title == "Qwen3" else { return nil }
@@ -347,19 +346,21 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             }.first
         )
 
+        XCTAssertEqual(whisperGroup.badgeText, recommended)
+        XCTAssertEqual(whisperGroup.entries.map(\.groupedVariantTitle), ["Large v3 Turbo", "Large v3", "Small"])
         XCTAssertEqual(qwenGroup.badgeText, recommended)
         XCTAssertEqual(gemmaGroup.badgeText, recommended)
     }
 
     private func makeBuilder(
+        mlxModelManager: MLXModelManager = TestModelManagers.mlx,
         featureSettings: FeatureSettings,
         remoteASRConfigurationsRaw: String = "",
         remoteLLMConfigurationsRaw: String = "",
         primaryUserLanguageCode: String? = "en"
     ) -> FeatureModelCatalogBuilder {
         FeatureModelCatalogBuilder(
-            mlxModelManager: TestModelManagers.mlx,
-            whisperModelManager: TestModelManagers.whisper,
+            mlxModelManager: mlxModelManager,
             customLLMManager: TestModelManagers.customLLM,
             ggufTranslationModelManager: TestModelManagers.gguf,
             featureSettings: featureSettings,
@@ -400,15 +401,12 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             )
         )
     }
+
 }
 
 @MainActor
 private enum TestModelManagers {
     static let mlx = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
-    static let whisper = WhisperKitModelManager(
-        modelID: WhisperKitModelManager.defaultModelID,
-        hubBaseURL: URL(string: "https://huggingface.co")!
-    )
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
     static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

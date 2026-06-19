@@ -29,6 +29,7 @@ enum LocalASRRecognitionPreset: String, CaseIterable, Codable, Identifiable {
 }
 
 enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
+    case whisper
     case qwen3ASR
     case graniteSpeech
     case senseVoice
@@ -39,6 +40,9 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
 
     static func family(for repo: String) -> MLXModelFamily {
         let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
+        if MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) {
+            return .whisper
+        }
         if canonicalRepo.localizedCaseInsensitiveContains("Qwen3-ASR") {
             return .qwen3ASR
         }
@@ -58,6 +62,8 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
+        case .whisper:
+            return AppLocalization.localizedString("Whisper")
         case .qwen3ASR:
             return AppLocalization.localizedString("Qwen3")
         case .graniteSpeech:
@@ -74,93 +80,46 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
     var supportsContextBias: Bool { self == .qwen3ASR }
     var supportsPromptBias: Bool { self == .graniteSpeech }
     var supportsITN: Bool { self == .senseVoice }
+    var supportsWhisperTemperature: Bool { self == .whisper }
     var supportsRecognitionPreset: Bool { self != .senseVoice }
-}
-
-struct WhisperLocalTuningSettings: Codable, Equatable {
-    var preset: LocalASRRecognitionPreset = .balanced
-    var temperatureFallbackCount: Int = 2
-    var temperatureIncrementOnFallback: Double = 0.2
-    var compressionRatioThreshold: Double = 2.4
-    var logProbThreshold: Double = -1.0
-    var noSpeechThreshold: Double = 0.6
-
-    static func defaults(for preset: LocalASRRecognitionPreset) -> WhisperLocalTuningSettings {
-        switch preset {
-        case .balanced:
-            return WhisperLocalTuningSettings(
-                preset: .balanced,
-                temperatureFallbackCount: 2,
-                temperatureIncrementOnFallback: 0.2,
-                compressionRatioThreshold: 2.4,
-                logProbThreshold: -1.0,
-                noSpeechThreshold: 0.4
-            )
-        case .accuracyFirst:
-            return WhisperLocalTuningSettings(
-                preset: .accuracyFirst,
-                temperatureFallbackCount: 4,
-                temperatureIncrementOnFallback: 0.2,
-                compressionRatioThreshold: 2.2,
-                logProbThreshold: -1.2,
-                noSpeechThreshold: 0.3
-            )
-        }
-    }
-}
-
-enum WhisperLocalTuningSettingsStore {
-    static func resolvedSettings(from rawValue: String?) -> WhisperLocalTuningSettings {
-        guard let rawValue,
-              let data = rawValue.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(WhisperLocalTuningSettings.self, from: data)
-        else {
-            return WhisperLocalTuningSettings.defaults(for: .balanced)
-        }
-        return sanitized(decoded)
-    }
-
-    static func storageValue(for settings: WhisperLocalTuningSettings) -> String {
-        let sanitized = sanitized(settings)
-        guard let data = try? JSONEncoder().encode(sanitized),
-              let text = String(data: data, encoding: .utf8) else {
-            return defaultStoredValue()
-        }
-        return text
-    }
-
-    static func defaultStoredValue() -> String {
-        storageValue(for: WhisperLocalTuningSettings.defaults(for: .balanced))
-    }
-
-    static func sanitized(_ settings: WhisperLocalTuningSettings) -> WhisperLocalTuningSettings {
-        WhisperLocalTuningSettings(
-            preset: settings.preset,
-            temperatureFallbackCount: max(0, min(settings.temperatureFallbackCount, 8)),
-            temperatureIncrementOnFallback: max(0, min(settings.temperatureIncrementOnFallback, 1.0)),
-            compressionRatioThreshold: max(1.0, min(settings.compressionRatioThreshold, 4.0)),
-            logProbThreshold: max(-3.0, min(settings.logProbThreshold, 0.0)),
-            noSpeechThreshold: max(0.0, min(settings.noSpeechThreshold, 1.0))
-        )
-    }
 }
 
 struct MLXLocalTuningSettings: Codable, Equatable {
     var preset: LocalASRRecognitionPreset = .balanced
+    var whisperTemperature: Double = 0.0
     var qwenContextBias: String = ""
     var granitePromptBias: String = ""
     var senseVoiceUseITN: Bool = false
 
     init(
         preset: LocalASRRecognitionPreset = .balanced,
+        whisperTemperature: Double = 0.0,
         qwenContextBias: String = "",
         granitePromptBias: String = "",
         senseVoiceUseITN: Bool = false
     ) {
         self.preset = preset
+        self.whisperTemperature = whisperTemperature
         self.qwenContextBias = qwenContextBias
         self.granitePromptBias = granitePromptBias
         self.senseVoiceUseITN = senseVoiceUseITN
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case preset
+        case whisperTemperature
+        case qwenContextBias
+        case granitePromptBias
+        case senseVoiceUseITN
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        preset = try container.decodeIfPresent(LocalASRRecognitionPreset.self, forKey: .preset) ?? .balanced
+        whisperTemperature = try container.decodeIfPresent(Double.self, forKey: .whisperTemperature) ?? 0.0
+        qwenContextBias = try container.decodeIfPresent(String.self, forKey: .qwenContextBias) ?? ""
+        granitePromptBias = try container.decodeIfPresent(String.self, forKey: .granitePromptBias) ?? ""
+        senseVoiceUseITN = try container.decodeIfPresent(Bool.self, forKey: .senseVoiceUseITN) ?? false
     }
 
     static func defaults(for preset: LocalASRRecognitionPreset) -> MLXLocalTuningSettings {
@@ -227,6 +186,7 @@ enum MLXLocalTuningSettingsStore {
         let qwenContextBias = settings.qwenContextBias.trimmingCharacters(in: .whitespacesAndNewlines)
         return MLXLocalTuningSettings(
             preset: settings.preset,
+            whisperTemperature: max(0.0, min(settings.whisperTemperature, 1.0)),
             qwenContextBias: AppPromptDefaults.matchesKnownDefault(qwenContextBias, kind: .qwenASRContextBias)
                 ? ""
                 : qwenContextBias,

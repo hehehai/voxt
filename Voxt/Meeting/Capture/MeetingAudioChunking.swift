@@ -3,7 +3,6 @@
 
 import Foundation
 import AVFoundation
-import WhisperKit
 
 struct BufferedMeetingChunk: Sendable {
     let segmentID: UUID
@@ -102,13 +101,15 @@ enum MeetingFinalTranscriptOptimization {
 }
 
 actor MeetingChunkAccumulator {
+    private static let defaultSampleRate = 16_000.0
+
     private let speaker: MeetingSpeaker
     private let speechThreshold: Float
     private let config: MeetingChunkingProfile.Configuration
 
     private var currentSamples: [Float] = []
     private var currentStartSeconds: TimeInterval?
-    private var currentSampleRate: Double = Double(WhisperKit.sampleRate)
+    private var currentSampleRate: Double = defaultSampleRate
     private var accumulatedSilenceSeconds: TimeInterval = 0
     private var currentSegmentID = UUID()
     private var lastPartialEmissionDuration: TimeInterval = 0

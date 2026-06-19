@@ -127,8 +127,7 @@ extension OnboardingSettingsView {
             OnboardingSegmentedTabs(
                 selection: localEngineSelection,
                 items: [
-                    OnboardingTabItem(value: TranscriptionEngine.mlxAudio, title: TranscriptionEngine.mlxAudio.titleKey),
-                    OnboardingTabItem(value: TranscriptionEngine.whisperKit, title: TranscriptionEngine.whisperKit.titleKey)
+                    OnboardingTabItem(value: TranscriptionEngine.mlxAudio, title: TranscriptionEngine.mlxAudio.titleKey)
                 ]
             )
 
@@ -136,98 +135,51 @@ extension OnboardingSettingsView {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if localEngineSelection.wrappedValue == .mlxAudio {
-                LocalModelPickerCard(
-                    title: "Speech Model",
-                    selectionTitle: mlxModelManager.displayTitle(for: mlxModelRepo),
-                    selectionDescription: modelDescription(for: mlxModelRepo),
-                    isInstalled: mlxModelManager.isModelDownloaded(repo: mlxModelRepo),
-                    showsCardSurface: false,
-                    isInstalling: isSelectedMLXModelDownloading,
-                    isPaused: isSelectedMLXModelPaused,
-                    isInstallEnabled: !isAnotherMLXModelDownloading && MLXModelManager.isAvailableModelRepo(mlxModelRepo),
-                    installLabel: "Download",
-                    openLabel: "Open Folder",
-                    downloadStatus: selectedMLXDownloadStatus,
-                    errorMessage: selectedMLXDownloadErrorMessage,
-                    onChoose: {},
-                    pickerContent: {
-                        SettingsMenuPicker(
-                            selection: $mlxModelRepo,
-                            options: mlxModelManager.displayModelsIncludingInstalled().map { model in
-                                SettingsMenuOption(value: model.id, title: model.title)
-                            },
-                            selectedTitle: mlxModelManager.displayTitle(for: mlxModelRepo),
-                            width: 280
-                        )
-                    },
-                    onInstall: {
-                        Task { await mlxModelManager.downloadModel(repo: mlxModelRepo) }
-                    },
-                    onOpen: {
-                        guard let folderURL = mlxModelManager.modelDirectoryURL(repo: mlxModelRepo) else { return }
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
-                    },
-                    onPause: {
-                        mlxModelManager.pauseDownload()
-                    },
-                    onResume: {
-                        Task { await mlxModelManager.downloadModel(repo: mlxModelRepo) }
-                    },
-                    onCancel: {
-                        mlxModelManager.cancelDownload()
-                    },
-                    onUninstall: {
-                        mlxModelManager.deleteModel(repo: mlxModelRepo)
-                        mlxModelManager.checkExistingModel()
-                    }
-                )
-            } else {
-                LocalModelPickerCard(
-                    title: "Speech Model",
-                    selectionTitle: whisperModelManager.displayTitle(for: whisperModelID),
-                    selectionDescription: whisperDescription(for: whisperModelID),
-                    isInstalled: whisperModelManager.isModelDownloaded(id: whisperModelID),
-                    showsCardSurface: false,
-                    isInstalling: isSelectedWhisperModelDownloading,
-                    isPaused: isSelectedWhisperModelPaused,
-                    isInstallEnabled: !isAnotherWhisperModelDownloading && WhisperKitModelManager.isAvailableModelID(whisperModelID),
-                    installLabel: "Download",
-                    openLabel: "Open Folder",
-                    downloadStatus: selectedWhisperDownloadStatus,
-                    errorMessage: selectedWhisperDownloadErrorMessage,
-                    onChoose: {},
-                    pickerContent: {
-                        SettingsMenuPicker(
-                            selection: $whisperModelID,
-                            options: whisperModelManager.displayModelsIncludingInstalled().map { model in
-                                SettingsMenuOption(value: model.id, title: AppLocalization.localizedString(model.title))
-                            },
-                            selectedTitle: whisperModelManager.displayTitle(for: whisperModelID),
-                            width: 280
-                        )
-                    },
-                    onInstall: {
-                        Task { await whisperModelManager.downloadModel(id: whisperModelID) }
-                    },
-                    onOpen: {
-                        guard let folderURL = whisperModelManager.modelDirectoryURL(id: whisperModelID) else { return }
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
-                    },
-                    onPause: {
-                        whisperModelManager.pauseDownload()
-                    },
-                    onResume: {
-                        Task { await whisperModelManager.downloadModel(id: whisperModelID) }
-                    },
-                    onCancel: {
-                        whisperModelManager.cancelDownload()
-                    },
-                    onUninstall: {
-                        whisperModelManager.deleteModel(id: whisperModelID)
-                    }
-                )
-            }
+            LocalModelPickerCard(
+                title: "Speech Model",
+                selectionTitle: mlxModelManager.displayTitle(for: mlxModelRepo),
+                selectionDescription: modelDescription(for: mlxModelRepo),
+                isInstalled: mlxModelManager.isModelDownloaded(repo: mlxModelRepo),
+                showsCardSurface: false,
+                isInstalling: isSelectedMLXModelDownloading,
+                isPaused: isSelectedMLXModelPaused,
+                isInstallEnabled: !isAnotherMLXModelDownloading && MLXModelManager.isAvailableModelRepo(mlxModelRepo),
+                installLabel: "Download",
+                openLabel: "Open Folder",
+                downloadStatus: selectedMLXDownloadStatus,
+                errorMessage: selectedMLXDownloadErrorMessage,
+                onChoose: {},
+                pickerContent: {
+                    SettingsMenuPicker(
+                        selection: $mlxModelRepo,
+                        options: mlxModelManager.displayModelsIncludingInstalled().map { model in
+                            SettingsMenuOption(value: model.id, title: model.title)
+                        },
+                        selectedTitle: mlxModelManager.displayTitle(for: mlxModelRepo),
+                        width: 280
+                    )
+                },
+                onInstall: {
+                    Task { await mlxModelManager.downloadModel(repo: mlxModelRepo) }
+                },
+                onOpen: {
+                    guard let folderURL = mlxModelManager.modelDirectoryURL(repo: mlxModelRepo) else { return }
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
+                },
+                onPause: {
+                    mlxModelManager.pauseDownload()
+                },
+                onResume: {
+                    Task { await mlxModelManager.downloadModel(repo: mlxModelRepo) }
+                },
+                onCancel: {
+                    mlxModelManager.cancelDownload()
+                },
+                onUninstall: {
+                    mlxModelManager.deleteModel(repo: mlxModelRepo)
+                    mlxModelManager.checkExistingModel()
+                }
+            )
         }
     }
 
@@ -738,8 +690,6 @@ extension OnboardingSettingsView {
         switch localEngineSelection.wrappedValue {
         case .mlxAudio:
             return TranscriptionEngine.mlxAudio.description
-        case .whisperKit:
-            return TranscriptionEngine.whisperKit.description
         case .dictation, .remote:
             return ""
         }
@@ -769,13 +719,6 @@ extension OnboardingSettingsView {
 
     func modelDescription(for repo: String) -> String {
         guard let description = MLXModelCatalog.description(for: MLXModelManager.canonicalModelRepo(repo)) else {
-            return ""
-        }
-        return AppLocalization.localizedString(description)
-    }
-
-    func whisperDescription(for modelID: String) -> String {
-        guard let description = WhisperKitModelCatalog.description(for: WhisperKitModelManager.canonicalModelID(modelID)) else {
             return ""
         }
         return AppLocalization.localizedString(description)
@@ -816,33 +759,6 @@ extension OnboardingSettingsView {
             return nil
         }
         return message
-    }
-
-    var isSelectedWhisperModelDownloading: Bool {
-        guard let activeDownload = whisperModelManager.activeDownload else { return false }
-        return activeDownload.modelID == WhisperKitModelManager.canonicalModelID(whisperModelID) && !activeDownload.isPaused
-    }
-
-    var isAnotherWhisperModelDownloading: Bool {
-        guard let activeDownload = whisperModelManager.activeDownload else { return false }
-        return activeDownload.modelID != WhisperKitModelManager.canonicalModelID(whisperModelID) && !activeDownload.isPaused
-    }
-
-    var isSelectedWhisperModelPaused: Bool {
-        guard let activeDownload = whisperModelManager.activeDownload else { return false }
-        return activeDownload.modelID == WhisperKitModelManager.canonicalModelID(whisperModelID) && activeDownload.isPaused
-    }
-
-    var selectedWhisperDownloadStatus: ModelDownloadStatusSnapshot? {
-        guard isSelectedWhisperModelDownloading || isSelectedWhisperModelPaused else { return nil }
-        return ModelDownloadStatusSnapshot.fromWhisperDownload(
-            whisperModelManager.activeDownload,
-            pauseMessage: whisperModelManager.pausedStatusMessage(for: whisperModelID)
-        )
-    }
-
-    var selectedWhisperDownloadErrorMessage: String? {
-        whisperModelManager.downloadErrorMessage(for: whisperModelID)
     }
 
     var isSelectedCustomLLMDownloading: Bool {

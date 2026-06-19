@@ -9,6 +9,7 @@ private func localized(_ key: String) -> String {
 
 enum ModelCatalogBadgeSupport {
     private static let recommendedMLXRepos: Set<String> = [
+        "mlx-community/whisper-large-v3-turbo",
         "mlx-community/SenseVoiceSmall"
     ]
 
@@ -26,6 +27,9 @@ enum ModelCatalogBadgeSupport {
 
     static func recommendedBadgeText(forLocalSeriesDescriptor descriptor: LocalModelSeriesDescriptor) -> String? {
         if descriptor.engine == localized("MLX Audio") && descriptor.title == "Qwen3" {
+            return localized("Recommended")
+        }
+        if descriptor.engine == localized("Whisper (MLX)") && descriptor.title == "Whisper" {
             return localized("Recommended")
         }
         if descriptor.engine == localized("Local LLM") && descriptor.title == "Gemma" {
@@ -281,7 +285,6 @@ enum LocalModelSeriesClassifier {
 
     private static func familyInfo(title: String, engine: String) -> (title: String, variantTitle: String)? {
         if engine == localized("Whisper") {
-            guard title != localized("Whisper Direct Translate") else { return nil }
             return prefixedFamily(title: title, prefix: "Whisper ", family: "Whisper")
         }
 
@@ -296,6 +299,10 @@ enum LocalModelSeriesClassifier {
                 return family
             }
             return nil
+        }
+
+        if engine == localized("Whisper (MLX)") {
+            return prefixedFamily(title: title, prefix: "Whisper ", family: "Whisper")
         }
 
         if engine == localized("Local LLM") {

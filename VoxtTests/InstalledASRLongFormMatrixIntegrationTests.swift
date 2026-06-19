@@ -65,15 +65,6 @@ final class InstalledASRLongFormMatrixIntegrationTests: XCTestCase {
             : MLXModelManager.defaultHubBaseURL
     }
 
-    private func installedWhisperModelIDs() -> [String] {
-        let hubURL = configuredHubURL()
-        let probeManager = WhisperKitModelManager(modelID: WhisperKitModelManager.defaultModelID, hubBaseURL: hubURL)
-        return WhisperKitModelManager.availableModels
-            .map(\.id)
-            .map(WhisperKitModelManager.canonicalModelID(_:))
-            .filter { probeManager.isModelDownloaded(id: $0) }
-    }
-
     private func installedMultilingualMLXRepos() -> [String] {
         let hubURL = configuredHubURL()
         let probeManager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo, hubBaseURL: hubURL)
@@ -82,42 +73,6 @@ final class InstalledASRLongFormMatrixIntegrationTests: XCTestCase {
             .map(MLXModelManager.canonicalModelRepo(_:))
             .filter { MLXModelManager.isMultilingualModelRepo($0) }
             .filter { probeManager.isModelDownloaded(repo: $0) }
-    }
-
-    func testInstalledWhisperModelsProduceReasonableLongFormResults() async throws {
-        try requireModelTestsEnabled()
-        let clips = longFormClips()
-        guard !clips.isEmpty else {
-            throw XCTSkip("No long-form clips are available for installed-model matrix testing.")
-        }
-
-        let modelIDs = installedWhisperModelIDs()
-        guard !modelIDs.isEmpty else {
-            throw XCTSkip("No downloaded Whisper models are available for installed-model matrix testing.")
-        }
-
-        let hubURL = configuredHubURL()
-
-        for modelID in modelIDs {
-            let transcriber = WhisperKitTranscriber(
-                modelManager: WhisperKitModelManager(modelID: modelID, hubBaseURL: hubURL)
-            )
-            for clip in clips {
-                let text = try await transcriber.transcribeAudioFile(URL(fileURLWithPath: clip.path))
-                let count = text.trimmingCharacters(in: .whitespacesAndNewlines).count
-                print("ASR_MATRIX whisper \(modelID) \(clip.path) chars=\(count)")
-                XCTAssertGreaterThan(
-                    count,
-                    clip.minimumReasonableCharacters,
-                    "Whisper model \(modelID) collapsed on long-form clip \(clip.path)"
-                )
-                XCTAssertLessThan(
-                    count,
-                    clip.maximumReasonableCharacters,
-                    "Whisper model \(modelID) ballooned on long-form clip \(clip.path)"
-                )
-            }
-        }
     }
 
     func testInstalledMultilingualMLXModelsProduceReasonableLongFormResults() async throws {

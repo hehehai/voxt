@@ -9,15 +9,10 @@ enum AppPreferenceKey {
     static let enhancementSystemPrompt = "enhancementSystemPrompt"
     static let translationSystemPrompt = "translationSystemPrompt"
     static let mlxModelRepo = "mlxModelRepo"
-    static let whisperModelID = "whisperModelID"
-    static let whisperTemperature = "whisperTemperature"
-    static let whisperVADEnabled = "whisperVADEnabled"
-    static let whisperTimestampsEnabled = "whisperTimestampsEnabled"
-    static let whisperRealtimeEnabled = "whisperRealtimeEnabled"
+    static let legacyWhisperModelID = "whisperModelID"
     static let localModelIdleUnloadDelaySeconds = "localModelIdleUnloadDelaySeconds"
     static let localModelMemoryOptimizationEnabled = "localModelMemoryOptimizationEnabled"
-    static let whisperKeepResidentLoaded = "whisperKeepResidentLoaded"
-    static let whisperLocalASRTuningSettings = "whisperLocalASRTuningSettings"
+    static let legacyWhisperKeepResidentLoaded = "whisperKeepResidentLoaded"
     static let customLLMModelRepo = "customLLMModelRepo"
     static let customLLMGenerationSettings = "customLLMGenerationSettings"
     static let customLLMGenerationSettingsByRepo = "customLLMGenerationSettingsByRepo"
@@ -118,7 +113,6 @@ enum AppPreferenceKey {
     static let appBranchCustomBrowsers = "appBranchCustomBrowsers"
     static let featureSettings = "featureSettings"
     static let mlxRemoteSizeCache = "mlxRemoteSizeCache"
-    static let whisperRemoteSizeCache = "whisperRemoteSizeCache"
     static let customLLMRemoteSizeCache = "customLLMRemoteSizeCache"
     static let launchAtLogin = "launchAtLogin"
     static let showInDock = "showInDock"
@@ -147,7 +141,7 @@ enum AppPreferenceKey {
                 ? defaultLocalModelIdleUnloadDelaySeconds
                 : legacyLongLocalModelIdleUnloadDelaySeconds
         }
-        if let legacyKeepResident = defaults.object(forKey: whisperKeepResidentLoaded) as? Bool {
+        if let legacyKeepResident = defaults.object(forKey: legacyWhisperKeepResidentLoaded) as? Bool {
             return legacyKeepResident
                 ? legacyLongLocalModelIdleUnloadDelaySeconds
                 : defaultLocalModelIdleUnloadDelaySeconds
@@ -242,11 +236,4 @@ enum AppPreferenceKey {
         AppPromptDefaults.text(for: .glmASRHint, language: .english)
     }
 
-    static let legacyDefaultWhisperASRHintPrompt = """
-        The speaker's primary language is {{USER_MAIN_LANGUAGE}}. Prioritize accurate recognition in that language. Preserve mixed-language words, names, product terms, URLs, and code-like text exactly as spoken.
-        """
-
-    static var defaultWhisperASRHintPrompt: String {
-        AppPromptDefaults.text(for: .whisperASRHint, language: .english)
-    }
 }

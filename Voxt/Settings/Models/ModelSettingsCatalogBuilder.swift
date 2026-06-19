@@ -16,7 +16,6 @@ struct ModelCatalogBuilder {
     }
 
     let mlxModelManager: MLXModelManager
-    let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let remoteASRConfigurations: [String: RemoteProviderConfiguration]
@@ -28,7 +27,6 @@ struct ModelCatalogBuilder {
     let remoteLLMBadgeText: (RemoteLLMProvider) -> String?
     let primaryUserLanguageCode: String?
     let mlxInstallSnapshot: (String) -> LocalModelInstallSnapshot
-    let whisperInstallSnapshot: (String) -> LocalModelInstallSnapshot
     let customLLMInstallSnapshot: (String) -> LocalModelInstallSnapshot
     let ggufTranslationInstallSnapshot: (GGUFTranslationModelID) -> LocalModelInstallSnapshot
     let catalogPrimaryAction: (LocalModelInstallSnapshot) -> ModelTableAction?
@@ -42,7 +40,6 @@ struct ModelCatalogBuilder {
 
         entries.append(dictationASREntry())
         entries.append(contentsOf: mlxASREntries())
-        entries.append(contentsOf: whisperASREntries())
 
         entries.append(contentsOf: RemoteASRProvider.allCases.map { provider in
             let selectionID = FeatureModelSelectionID.remoteASR(provider)
@@ -281,10 +278,6 @@ struct ModelCatalogBuilder {
         deduplicatedTags(MLXModelManager.catalogTagKeys(for: repo).map(localizedModelCatalog))
     }
 
-    func whisperCatalogTags(for modelID: String) -> [String] {
-        deduplicatedTags(WhisperKitModelManager.catalogTagKeys(for: modelID).map(localizedModelCatalog))
-    }
-
     private func llmCatalogTags(for repo: String) -> [String] {
         deduplicatedTags(CustomLLMModelManager.catalogTagKeys(for: repo).map(localizedModelCatalog))
     }
@@ -341,8 +334,6 @@ struct ModelCatalogBuilder {
             return true
         case .mlx(let repo):
             return mlxSupportsPrimaryLanguage(repo, primaryLanguage: primaryLanguage)
-        case .whisper:
-            return true
         case .remote:
             return true
         case .none:

@@ -14,14 +14,14 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
 
     static let dictation = Self(rawValue: "dictation")
     static let appleIntelligence = Self(rawValue: "apple-intelligence")
-    static let whisperDirectTranslate = Self(rawValue: "whisper-direct-translate")
+    private static let legacyWhisperDirectTranslateRawValue = "whisper-direct-translate"
 
     static func mlx(_ repo: String) -> Self {
         Self(rawValue: "mlx:\(MLXModelManager.canonicalModelRepo(repo))")
     }
 
     static func whisper(_ modelID: String) -> Self {
-        Self(rawValue: "whisper:\(WhisperKitModelManager.canonicalModelID(modelID))")
+        .mlx(MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID))
     }
 
     static func remoteASR(_ provider: RemoteASRProvider) -> Self {
@@ -43,7 +43,6 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
     enum ASRSelection: Hashable, Sendable {
         case dictation
         case mlx(repo: String)
-        case whisper(modelID: String)
         case remote(provider: RemoteASRProvider)
     }
 
@@ -54,7 +53,6 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
     }
 
     enum TranslationSelection: Hashable, Sendable {
-        case whisperDirectTranslate
         case localLLM(repo: String)
         case localGGUF(modelID: GGUFTranslationModelID)
         case remoteLLM(provider: RemoteLLMProvider)
@@ -68,7 +66,7 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
             return .mlx(repo: MLXModelManager.canonicalModelRepo(repo))
         }
         if let modelID = payload(after: "whisper:") {
-            return .whisper(modelID: WhisperKitModelManager.canonicalModelID(modelID))
+            return .mlx(repo: MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID))
         }
         if let value = payload(after: "remote-asr:"),
            let provider = RemoteASRProvider(rawValue: value) {
@@ -92,8 +90,8 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
     }
 
     var translationSelection: TranslationSelection? {
-        if rawValue == Self.whisperDirectTranslate.rawValue {
-            return .whisperDirectTranslate
+        if rawValue == Self.legacyWhisperDirectTranslateRawValue {
+            return .localLLM(repo: CustomLLMModelManager.defaultModelRepo)
         }
         if let repo = payload(after: "local-llm:") {
             return .localLLM(repo: repo)

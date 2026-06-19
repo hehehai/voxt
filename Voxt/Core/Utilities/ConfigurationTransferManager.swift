@@ -333,17 +333,10 @@ enum ConfigurationTransferManager {
         var translationSystemPrompt: String
         var rewriteSystemPrompt: String
         var asrHintSettings: String
-        var whisperLocalASRTuningSettings: String
         var mlxLocalASRTuningSettings: String
         var mlxModelRepo: String
-        var whisperModelID: String
-        var whisperTemperature: Double
-        var whisperVADEnabled: Bool
-        var whisperTimestampsEnabled: Bool
-        var whisperRealtimeEnabled: Bool
         var localModelIdleUnloadDelaySeconds: Int
         var localModelMemoryOptimizationEnabled: Bool
-        var whisperKeepResidentLoaded: Bool
         var customLLMModelRepo: String
         var customLLMGenerationSettings: String
         var customLLMGenerationSettingsByRepo: String
@@ -367,14 +360,9 @@ enum ConfigurationTransferManager {
             case translationSystemPrompt
             case rewriteSystemPrompt
             case asrHintSettings
-            case whisperLocalASRTuningSettings
             case mlxLocalASRTuningSettings
             case mlxModelRepo
             case whisperModelID
-            case whisperTemperature
-            case whisperVADEnabled
-            case whisperTimestampsEnabled
-            case whisperRealtimeEnabled
             case localModelIdleUnloadDelaySeconds
             case localModelMemoryOptimizationEnabled
             case whisperKeepResidentLoaded
@@ -402,14 +390,8 @@ enum ConfigurationTransferManager {
             translationSystemPrompt: String,
             rewriteSystemPrompt: String,
             asrHintSettings: String,
-            whisperLocalASRTuningSettings: String,
             mlxLocalASRTuningSettings: String,
             mlxModelRepo: String,
-            whisperModelID: String,
-            whisperTemperature: Double,
-            whisperVADEnabled: Bool,
-            whisperTimestampsEnabled: Bool,
-            whisperRealtimeEnabled: Bool,
             localModelIdleUnloadDelaySeconds: Int,
             customLLMModelRepo: String,
             customLLMGenerationSettings: String,
@@ -433,18 +415,11 @@ enum ConfigurationTransferManager {
             self.translationSystemPrompt = translationSystemPrompt
             self.rewriteSystemPrompt = rewriteSystemPrompt
             self.asrHintSettings = asrHintSettings
-            self.whisperLocalASRTuningSettings = whisperLocalASRTuningSettings
             self.mlxLocalASRTuningSettings = mlxLocalASRTuningSettings
             self.mlxModelRepo = MLXModelManager.canonicalModelRepo(mlxModelRepo)
-            self.whisperModelID = whisperModelID
-            self.whisperTemperature = whisperTemperature
-            self.whisperVADEnabled = whisperVADEnabled
-            self.whisperTimestampsEnabled = whisperTimestampsEnabled
-            self.whisperRealtimeEnabled = whisperRealtimeEnabled
             let clampedIdleUnloadDelay = AppPreferenceKey.clampedLocalModelIdleUnloadDelaySeconds(localModelIdleUnloadDelaySeconds)
             self.localModelIdleUnloadDelaySeconds = clampedIdleUnloadDelay
             self.localModelMemoryOptimizationEnabled = clampedIdleUnloadDelay <= AppPreferenceKey.defaultLocalModelIdleUnloadDelaySeconds
-            self.whisperKeepResidentLoaded = !self.localModelMemoryOptimizationEnabled
             self.customLLMModelRepo = customLLMModelRepo
             self.customLLMGenerationSettings = CustomLLMGenerationSettingsStore.storageValue(
                 for: CustomLLMGenerationSettingsStore.resolvedSettings(from: customLLMGenerationSettings)
@@ -466,6 +441,35 @@ enum ConfigurationTransferManager {
             self.remoteLLMProviderConfigurations = remoteLLMProviderConfigurations
         }
 
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(transcriptionEngine, forKey: .transcriptionEngine)
+            try container.encode(enhancementMode, forKey: .enhancementMode)
+            try container.encode(enhancementSystemPrompt, forKey: .enhancementSystemPrompt)
+            try container.encode(translationSystemPrompt, forKey: .translationSystemPrompt)
+            try container.encode(rewriteSystemPrompt, forKey: .rewriteSystemPrompt)
+            try container.encode(asrHintSettings, forKey: .asrHintSettings)
+            try container.encode(mlxLocalASRTuningSettings, forKey: .mlxLocalASRTuningSettings)
+            try container.encode(mlxModelRepo, forKey: .mlxModelRepo)
+            try container.encode(localModelIdleUnloadDelaySeconds, forKey: .localModelIdleUnloadDelaySeconds)
+            try container.encode(localModelMemoryOptimizationEnabled, forKey: .localModelMemoryOptimizationEnabled)
+            try container.encode(customLLMModelRepo, forKey: .customLLMModelRepo)
+            try container.encode(customLLMGenerationSettings, forKey: .customLLMGenerationSettings)
+            try container.encode(customLLMGenerationSettingsByRepo, forKey: .customLLMGenerationSettingsByRepo)
+            try container.encode(translationCustomLLMModelRepo, forKey: .translationCustomLLMModelRepo)
+            try container.encode(rewriteCustomLLMModelRepo, forKey: .rewriteCustomLLMModelRepo)
+            try container.encode(translationModelProvider, forKey: .translationModelProvider)
+            try container.encode(translationFallbackModelProvider, forKey: .translationFallbackModelProvider)
+            try container.encode(rewriteModelProvider, forKey: .rewriteModelProvider)
+            try container.encode(remoteASRSelectedProvider, forKey: .remoteASRSelectedProvider)
+            try container.encode(remoteLLMSelectedProvider, forKey: .remoteLLMSelectedProvider)
+            try container.encode(translationRemoteLLMProvider, forKey: .translationRemoteLLMProvider)
+            try container.encode(rewriteRemoteLLMProvider, forKey: .rewriteRemoteLLMProvider)
+            try container.encode(useHfMirror, forKey: .useHfMirror)
+            try container.encode(remoteASRProviderConfigurations, forKey: .remoteASRProviderConfigurations)
+            try container.encode(remoteLLMProviderConfigurations, forKey: .remoteLLMProviderConfigurations)
+        }
+
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             transcriptionEngine = try container.decode(String.self, forKey: .transcriptionEngine)
@@ -474,18 +478,19 @@ enum ConfigurationTransferManager {
             translationSystemPrompt = try container.decode(String.self, forKey: .translationSystemPrompt)
             rewriteSystemPrompt = try container.decode(String.self, forKey: .rewriteSystemPrompt)
             asrHintSettings = try container.decodeIfPresent(String.self, forKey: .asrHintSettings) ?? ASRHintSettingsStore.defaultStoredValue()
-            whisperLocalASRTuningSettings = try container.decodeIfPresent(String.self, forKey: .whisperLocalASRTuningSettings)
-                ?? WhisperLocalTuningSettingsStore.defaultStoredValue()
             mlxLocalASRTuningSettings = try container.decodeIfPresent(String.self, forKey: .mlxLocalASRTuningSettings)
                 ?? "{}"
-            mlxModelRepo = MLXModelManager.canonicalModelRepo(
-                try container.decode(String.self, forKey: .mlxModelRepo)
-            )
-            whisperModelID = try container.decodeIfPresent(String.self, forKey: .whisperModelID) ?? WhisperKitModelManager.defaultModelID
-            whisperTemperature = try container.decodeIfPresent(Double.self, forKey: .whisperTemperature) ?? 0.0
-            whisperVADEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperVADEnabled) ?? true
-            whisperTimestampsEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperTimestampsEnabled) ?? false
-            whisperRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .whisperRealtimeEnabled) ?? false
+            let decodedMLXModelRepo = try container.decodeIfPresent(String.self, forKey: .mlxModelRepo)
+                ?? MLXModelManager.defaultModelRepo
+            if transcriptionEngine == "whisperKit" {
+                let legacyWhisperModelID = try container.decodeIfPresent(String.self, forKey: .whisperModelID)
+                    ?? MLXWhisperMigrationSupport.defaultLegacyModelID
+                transcriptionEngine = TranscriptionEngine.mlxAudio.rawValue
+                mlxModelRepo = MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: legacyWhisperModelID)
+            } else {
+                transcriptionEngine = TranscriptionEngine.resolved(rawValue: transcriptionEngine).rawValue
+                mlxModelRepo = MLXModelManager.canonicalModelRepo(decodedMLXModelRepo)
+            }
             if let idleUnloadDelay = try container.decodeIfPresent(Int.self, forKey: .localModelIdleUnloadDelaySeconds) {
                 localModelIdleUnloadDelaySeconds = AppPreferenceKey.clampedLocalModelIdleUnloadDelaySeconds(idleUnloadDelay)
             } else if let optimizationEnabled = try container.decodeIfPresent(Bool.self, forKey: .localModelMemoryOptimizationEnabled) {
@@ -500,7 +505,6 @@ enum ConfigurationTransferManager {
                 localModelIdleUnloadDelaySeconds = AppPreferenceKey.defaultLocalModelIdleUnloadDelaySeconds
             }
             localModelMemoryOptimizationEnabled = localModelIdleUnloadDelaySeconds <= AppPreferenceKey.defaultLocalModelIdleUnloadDelaySeconds
-            whisperKeepResidentLoaded = !localModelMemoryOptimizationEnabled
             customLLMModelRepo = try container.decode(String.self, forKey: .customLLMModelRepo)
             customLLMGenerationSettings = try container.decodeIfPresent(String.self, forKey: .customLLMGenerationSettings)
                 ?? CustomLLMGenerationSettingsStore.defaultStoredValue()
@@ -518,9 +522,6 @@ enum ConfigurationTransferManager {
             useHfMirror = try container.decode(Bool.self, forKey: .useHfMirror)
             remoteASRProviderConfigurations = try container.decode([RemoteProviderConfiguration].self, forKey: .remoteASRProviderConfigurations)
             remoteLLMProviderConfigurations = try container.decode([RemoteProviderConfiguration].self, forKey: .remoteLLMProviderConfigurations)
-            whisperLocalASRTuningSettings = WhisperLocalTuningSettingsStore.storageValue(
-                for: WhisperLocalTuningSettingsStore.resolvedSettings(from: whisperLocalASRTuningSettings)
-            )
             mlxLocalASRTuningSettings = MLXLocalTuningSettingsStore.storageValue(
                 for: MLXLocalTuningSettingsStore.load(from: mlxLocalASRTuningSettings)
             )
@@ -801,7 +802,6 @@ enum ConfigurationTransferManager {
             case remoteASRProvider(RemoteASRProvider)
             case remoteLLMProvider(RemoteLLMProvider)
             case mlxModel(String)
-            case whisperModel(String)
             case customLLMModel(String)
             case translationRemoteLLM(RemoteLLMProvider)
             case rewriteRemoteLLM(RemoteLLMProvider)
@@ -820,8 +820,6 @@ enum ConfigurationTransferManager {
                 return "llm:\(provider.rawValue)"
             case .mlxModel(let repo):
                 return "mlx:\(repo)"
-            case .whisperModel(let modelID):
-                return "whisper:\(modelID)"
             case .customLLMModel(let repo):
                 return "custom:\(repo)"
             case .translationRemoteLLM(let provider):
@@ -862,7 +860,6 @@ enum ConfigurationTransferManager {
     static func missingConfigurationIssues(
         defaults: UserDefaults = .standard,
         mlxModelManager: MLXModelManager,
-        whisperModelManager: WhisperKitModelManager,
         customLLMManager: CustomLLMModelManager
     ) -> [MissingConfigurationIssue] {
         var issues: [MissingConfigurationIssue] = []
@@ -881,8 +878,7 @@ enum ConfigurationTransferManager {
             for: featureSettings.transcription.asrSelectionID,
             issues: &issues,
             remoteASR: remoteASR,
-            mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager
+            mlxModelManager: mlxModelManager
         )
         if featureSettings.transcription.llmEnabled {
             appendTextModelIssues(
@@ -897,8 +893,7 @@ enum ConfigurationTransferManager {
             for: featureSettings.translation.asrSelectionID,
             issues: &issues,
             remoteASR: remoteASR,
-            mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager
+            mlxModelManager: mlxModelManager
         )
         appendTranslationModelIssues(
             for: featureSettings.translation,
@@ -911,8 +906,7 @@ enum ConfigurationTransferManager {
             for: featureSettings.rewrite.asrSelectionID,
             issues: &issues,
             remoteASR: remoteASR,
-            mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager
+            mlxModelManager: mlxModelManager
         )
         appendTextModelIssues(
             for: featureSettings.rewrite.llmSelectionID,
@@ -992,17 +986,10 @@ enum ConfigurationTransferManager {
                 defaults: defaults
             ),
             asrHintSettings: defaults.string(forKey: AppPreferenceKey.asrHintSettings) ?? ASRHintSettingsStore.defaultStoredValue(),
-            whisperLocalASRTuningSettings: defaults.string(forKey: AppPreferenceKey.whisperLocalASRTuningSettings)
-                ?? WhisperLocalTuningSettingsStore.defaultStoredValue(),
             mlxLocalASRTuningSettings: defaults.string(forKey: AppPreferenceKey.mlxLocalASRTuningSettings) ?? "{}",
             mlxModelRepo: MLXModelManager.canonicalModelRepo(
                 defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
             ),
-            whisperModelID: defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID,
-            whisperTemperature: defaults.object(forKey: AppPreferenceKey.whisperTemperature) as? Double ?? 0.0,
-            whisperVADEnabled: defaults.object(forKey: AppPreferenceKey.whisperVADEnabled) as? Bool ?? true,
-            whisperTimestampsEnabled: defaults.object(forKey: AppPreferenceKey.whisperTimestampsEnabled) as? Bool ?? false,
-            whisperRealtimeEnabled: defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false,
             localModelIdleUnloadDelaySeconds: AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds(defaults: defaults),
             customLLMModelRepo: defaults.string(forKey: AppPreferenceKey.customLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo,
             customLLMGenerationSettings: defaults.string(forKey: AppPreferenceKey.customLLMGenerationSettings)
@@ -1160,19 +1147,13 @@ enum ConfigurationTransferManager {
         defaults.set(model.translationSystemPrompt, forKey: AppPreferenceKey.translationSystemPrompt)
         defaults.set(model.rewriteSystemPrompt, forKey: AppPreferenceKey.rewriteSystemPrompt)
         defaults.set(model.asrHintSettings, forKey: AppPreferenceKey.asrHintSettings)
-        defaults.set(model.whisperLocalASRTuningSettings, forKey: AppPreferenceKey.whisperLocalASRTuningSettings)
         defaults.set(model.mlxLocalASRTuningSettings, forKey: AppPreferenceKey.mlxLocalASRTuningSettings)
         defaults.set(MLXModelManager.canonicalModelRepo(model.mlxModelRepo), forKey: AppPreferenceKey.mlxModelRepo)
-        defaults.set(WhisperKitModelManager.canonicalModelID(model.whisperModelID), forKey: AppPreferenceKey.whisperModelID)
-        defaults.set(model.whisperTemperature, forKey: AppPreferenceKey.whisperTemperature)
-        defaults.set(model.whisperVADEnabled, forKey: AppPreferenceKey.whisperVADEnabled)
-        defaults.set(model.whisperTimestampsEnabled, forKey: AppPreferenceKey.whisperTimestampsEnabled)
-        defaults.set(model.whisperRealtimeEnabled, forKey: AppPreferenceKey.whisperRealtimeEnabled)
         let clampedIdleUnloadDelay = AppPreferenceKey.clampedLocalModelIdleUnloadDelaySeconds(model.localModelIdleUnloadDelaySeconds)
         let legacyOptimizationEnabled = clampedIdleUnloadDelay <= AppPreferenceKey.defaultLocalModelIdleUnloadDelaySeconds
         defaults.set(clampedIdleUnloadDelay, forKey: AppPreferenceKey.localModelIdleUnloadDelaySeconds)
         defaults.set(legacyOptimizationEnabled, forKey: AppPreferenceKey.localModelMemoryOptimizationEnabled)
-        defaults.set(!legacyOptimizationEnabled, forKey: AppPreferenceKey.whisperKeepResidentLoaded)
+        defaults.set(!legacyOptimizationEnabled, forKey: AppPreferenceKey.legacyWhisperKeepResidentLoaded)
         defaults.set(model.customLLMModelRepo, forKey: AppPreferenceKey.customLLMModelRepo)
         defaults.set(model.customLLMGenerationSettings, forKey: AppPreferenceKey.customLLMGenerationSettings)
         defaults.set(model.customLLMGenerationSettingsByRepo, forKey: AppPreferenceKey.customLLMGenerationSettingsByRepo)

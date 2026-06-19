@@ -52,11 +52,6 @@ struct MeetingASREngineContext: Equatable {
 enum MeetingASRSupport {
     static func resolveContext(
         transcriptionEngine: TranscriptionEngine,
-        whisperModelState: WhisperKitModelManager.ModelState,
-        whisperCurrentModelID: String,
-        whisperRealtimeEnabled: Bool,
-        whisperIsCurrentModelLoaded: Bool,
-        whisperDisplayTitle: (String) -> String,
         mlxModelState: MLXModelManager.ModelState,
         mlxCurrentModelRepo: String,
         mlxIsCurrentModelLoaded: Bool,
@@ -65,15 +60,6 @@ enum MeetingASRSupport {
         remoteConfiguration: RemoteProviderConfiguration
     ) -> MeetingASREngineContext {
         switch transcriptionEngine {
-        case .whisperKit:
-            return MeetingASREngineContext(
-                engine: .mlxAudio,
-                historyModelDescription: "\(mlxDisplayTitle(mlxCurrentModelRepo)) (\(mlxCurrentModelRepo))",
-                resolvedMode: .chunk(
-                    profile: MLXModelManager.isRealtimeCapableModelRepo(mlxCurrentModelRepo) ? .realtime : .quality
-                ),
-                needsModelInitialization: !mlxIsCurrentModelLoaded && modelStateNeedsInitialization(mlxModelState)
-            )
         case .mlxAudio:
             return MeetingASREngineContext(
                 engine: .mlxAudio,
@@ -134,23 +120,11 @@ enum MeetingASRSupport {
         }
     }
 
-    private static func modelStateNeedsInitialization<T>(_ state: T) -> Bool where T: Equatable {
+    private static func modelStateNeedsInitialization(_ state: MLXModelManager.ModelState) -> Bool {
         switch state {
-        case let state as WhisperKitModelManager.ModelState:
-            switch state {
-            case .downloaded, .loading, .ready:
-                return true
-            case .notDownloaded, .downloading, .paused, .error:
-                return false
-            }
-        case let state as MLXModelManager.ModelState:
-            switch state {
-            case .downloaded, .loading, .ready:
-                return true
-            case .notDownloaded, .downloading, .paused, .error:
-                return false
-            }
-        default:
+        case .downloaded, .loading, .ready:
+            return true
+        case .notDownloaded, .downloading, .paused, .error:
             return false
         }
     }

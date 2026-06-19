@@ -8,6 +8,12 @@ enum MLXConfigurationSummarySupport {
     static func summary(for repo: String, tuning: MLXLocalTuningSettings) -> String {
         let family = MLXModelFamily.family(for: repo)
         switch family {
+        case .whisper:
+            return AppLocalization.format(
+                "%@ · Temp %.2f",
+                tuning.preset.title,
+                tuning.whisperTemperature
+            )
         case .qwen3ASR:
             let hasContext = tuning.qwenContextBias.isEmpty
                 ? AppLocalization.localizedString("Context Off")
@@ -38,18 +44,6 @@ extension ModelSettingsView {
                 storage.wrappedValue = AppPromptDefaults.canonicalStoredText(newValue, kind: kind)
             }
         )
-    }
-
-    var whisperRows: [ModelTableRow] {
-        whisperModelManager.displayModelsIncludingInstalled().map { model in
-            let snapshot = whisperInstallSnapshot(for: model.id)
-            return modelTableRow(
-                id: model.id,
-                title: AppLocalization.localizedString(model.title),
-                snapshot: snapshot,
-                allowsUseAndInstall: WhisperKitModelManager.isAvailableModelID(model.id)
-            )
-        }
     }
 
     var remoteASRRows: [ModelTableRow] {
@@ -184,21 +178,9 @@ extension ModelSettingsView {
         mlxModelManager.updateModel(repo: canonicalRepo)
     }
 
-    func useWhisperModel(_ modelID: String) {
-        let canonicalModelID = WhisperKitModelManager.canonicalModelID(modelID)
-        whisperModelID = canonicalModelID
-        whisperModelManager.updateModel(id: canonicalModelID)
-    }
-
     func downloadModel(_ repo: String) {
         Task {
             await mlxModelManager.downloadModel(repo: repo)
-        }
-    }
-
-    func downloadWhisperModel(_ modelID: String) {
-        Task {
-            await whisperModelManager.downloadModel(id: modelID)
         }
     }
 
@@ -209,19 +191,8 @@ extension ModelSettingsView {
         }
     }
 
-    func deleteWhisperModel(_ modelID: String) {
-        whisperModelManager.deleteModel(id: modelID)
-        if WhisperKitModelManager.canonicalModelID(modelID) == WhisperKitModelManager.canonicalModelID(whisperModelID) {
-            whisperModelManager.checkExistingModel()
-        }
-    }
-
     func isCurrentModel(_ repo: String) -> Bool {
         MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(modelRepo)
-    }
-
-    func isCurrentWhisperModel(_ modelID: String) -> Bool {
-        WhisperKitModelManager.canonicalModelID(modelID) == WhisperKitModelManager.canonicalModelID(whisperModelID)
     }
 
     func isDownloadingModel(_ repo: String) -> Bool {
@@ -232,26 +203,8 @@ extension ModelSettingsView {
         mlxInstallSnapshot(for: repo).state == .paused
     }
 
-    func isDownloadingWhisperModel(_ modelID: String) -> Bool {
-        whisperInstallSnapshot(for: modelID).state == .downloading
-    }
-
-    func isPausedWhisperModel(_ modelID: String) -> Bool {
-        whisperInstallSnapshot(for: modelID).state == .paused
-    }
-
-    func isAnotherWhisperModelDownloading(_ modelID: String) -> Bool {
-        guard let activeDownload = whisperModelManager.activeDownload,
-              activeDownload.isPaused == false else { return false }
-        return activeDownload.modelID != WhisperKitModelManager.canonicalModelID(modelID)
-    }
-
     func modelStatusText(for repo: String) -> String {
         mlxInstallSnapshot(for: repo).statusText
-    }
-
-    func whisperModelStatusText(for modelID: String) -> String {
-        whisperInstallSnapshot(for: modelID).statusText
     }
 
     func useCustomLLM(_ repo: String) {
@@ -276,10 +229,6 @@ extension ModelSettingsView {
         pendingModelRemovalTarget = .mlx(repo: repo)
     }
 
-    func requestDeleteWhisperModel(_ modelID: String) {
-        pendingModelRemovalTarget = .whisper(modelID: modelID)
-    }
-
     func requestDeleteCustomLLM(_ repo: String) {
         pendingModelRemovalTarget = .customLLM(repo: repo)
     }
@@ -297,8 +246,6 @@ extension ModelSettingsView {
             switch target {
             case .mlx(let repo):
                 deleteModel(repo)
-            case .whisper(let modelID):
-                deleteWhisperModel(modelID)
             case .customLLM(let repo):
                 deleteCustomLLM(repo)
             case .ggufTranslation(let modelID):
@@ -312,11 +259,6 @@ extension ModelSettingsView {
     func isUninstallingModel(_ repo: String) -> Bool {
         guard case .mlx(let uninstallingRepo) = uninstallingModelTarget else { return false }
         return MLXModelManager.canonicalModelRepo(uninstallingRepo) == MLXModelManager.canonicalModelRepo(repo)
-    }
-
-    func isUninstallingWhisperModel(_ modelID: String) -> Bool {
-        guard case .whisper(let uninstallingModelID) = uninstallingModelTarget else { return false }
-        return WhisperKitModelManager.canonicalModelID(uninstallingModelID) == WhisperKitModelManager.canonicalModelID(modelID)
     }
 
     func isUninstallingCustomLLM(_ repo: String) -> Bool {
@@ -334,8 +276,6 @@ extension ModelSettingsView {
         switch target {
         case .mlx(let repo):
             modelName = mlxModelManager.displayTitle(for: repo)
-        case .whisper(let modelID):
-            modelName = whisperModelManager.displayTitle(for: modelID)
         case .customLLM(let repo):
             modelName = customLLMManager.displayTitle(for: repo)
         case .ggufTranslation(let modelID):
@@ -441,21 +381,6 @@ extension ModelSettingsView {
         )
     }
 
-    func resolvedWhisperLocalTuningSettings() -> WhisperLocalTuningSettings {
-        WhisperLocalTuningSettingsStore.resolvedSettings(from: whisperLocalASRTuningSettingsRaw)
-    }
-
-    func saveWhisperLocalTuningSettings(_ settings: WhisperLocalTuningSettings) {
-        whisperLocalASRTuningSettingsRaw = WhisperLocalTuningSettingsStore.storageValue(for: settings)
-    }
-
-    func whisperLocalTuningSettingsBinding() -> Binding<WhisperLocalTuningSettings> {
-        Binding(
-            get: { resolvedWhisperLocalTuningSettings() },
-            set: { saveWhisperLocalTuningSettings($0) }
-        )
-    }
-
     func resolvedMLXLocalTuningSettings(for repo: String) -> MLXLocalTuningSettings {
         MLXLocalTuningSettingsStore.resolvedSettings(
             for: repo,
@@ -516,7 +441,6 @@ extension ModelSettingsView {
     func updateMirrorSetting() {
         let url = useHfMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
         mlxModelManager.updateHubBaseURL(url)
-        whisperModelManager.updateHubBaseURL(url)
         customLLMManager.updateHubBaseURL(url)
     }
 
@@ -529,16 +453,6 @@ extension ModelSettingsView {
             // Avoid resetting while model is being loaded.
         } else {
             mlxModelManager.checkExistingModel()
-        }
-
-        if case .downloading = whisperModelManager.state {
-            // Keep current transient state during active downloads.
-        } else if case .paused = whisperModelManager.state {
-            // Preserve paused state while download cancellation settles.
-        } else if case .loading = whisperModelManager.state {
-            // Avoid resetting while model is being loaded.
-        } else {
-            whisperModelManager.checkExistingModel()
         }
 
         if case .downloading = customLLMManager.state {
@@ -555,11 +469,6 @@ extension ModelSettingsView {
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
     }
 
-    func openWhisperModelDirectory(_ modelID: String) {
-        guard let folderURL = whisperModelManager.modelDirectoryURL(id: modelID) else { return }
-        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
-    }
-
     func openCustomLLMModelDirectory(_ repo: String) {
         guard let folderURL = customLLMManager.modelDirectoryURL(repo: repo) else { return }
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
@@ -571,29 +480,6 @@ extension ModelSettingsView {
             return LocalizedStringKey(description)
         }
         return LocalizedStringKey("")
-    }
-
-    func whisperModelLocalizedDescription(for modelID: String) -> LocalizedStringKey {
-        if let description = WhisperKitModelCatalog.description(for: modelID) {
-            return LocalizedStringKey(description)
-        }
-        return LocalizedStringKey("")
-    }
-
-    var whisperConfigurationSummary: String {
-        let vad = AppLocalization.localizedString(whisperVADEnabled ? "VAD On" : "VAD Off")
-        let timestamps = AppLocalization.localizedString(whisperTimestampsEnabled ? "Timestamps On" : "Timestamps Off")
-        let realtime = AppLocalization.localizedString(whisperRealtimeEnabled ? "Realtime On" : "Quality Mode")
-        let temperature = String(format: "%.1f", whisperTemperature)
-        let tuning = resolvedWhisperLocalTuningSettings()
-        return AppLocalization.format(
-            "Temperature: %@ · %@ · %@ · %@ · %@",
-            temperature,
-            vad,
-            timestamps,
-            realtime,
-            tuning.preset.title
-        )
     }
 
     var mlxConfigurationSummary: String {

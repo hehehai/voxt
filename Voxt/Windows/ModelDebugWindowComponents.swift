@@ -452,7 +452,7 @@ struct ASRDebugResultCard: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(SettingsCompactIconButtonStyle())
+                .buttonStyle(SettingsDialogCloseButtonStyle())
             }
 
             ScrollView {
@@ -505,7 +505,7 @@ struct LLMDebugResultCard: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(SettingsCompactIconButtonStyle())
+                .buttonStyle(SettingsDialogCloseButtonStyle())
             }
 
             if !result.inputSummary.isEmpty {

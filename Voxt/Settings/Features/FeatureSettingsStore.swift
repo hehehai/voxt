@@ -186,9 +186,6 @@ enum FeatureSettingsStore {
         case .mlx(let repo):
             defaults.set(TranscriptionEngine.mlxAudio.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
             defaults.set(MLXModelManager.canonicalModelRepo(repo), forKey: AppPreferenceKey.mlxModelRepo)
-        case .whisper(let modelID):
-            defaults.set(TranscriptionEngine.whisperKit.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
-            defaults.set(WhisperKitModelManager.canonicalModelID(modelID), forKey: AppPreferenceKey.whisperModelID)
         case .remote(let provider):
             defaults.set(TranscriptionEngine.remote.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
             defaults.set(provider.rawValue, forKey: AppPreferenceKey.remoteASRSelectedProvider)
@@ -231,9 +228,6 @@ enum FeatureSettingsStore {
         defaults.set(settings.showResultWindow, forKey: AppPreferenceKey.showSelectedTextTranslationResultWindow)
 
         switch settings.modelSelectionID.translationSelection {
-        case .whisperDirectTranslate:
-            defaults.set(TranslationModelProvider.whisperKit.rawValue, forKey: AppPreferenceKey.translationModelProvider)
-            defaults.set(TranslationModelProvider.customLLM.rawValue, forKey: AppPreferenceKey.translationFallbackModelProvider)
         case .localLLM(let repo):
             defaults.set(TranslationModelProvider.customLLM.rawValue, forKey: AppPreferenceKey.translationModelProvider)
             defaults.set(TranslationModelProvider.customLLM.rawValue, forKey: AppPreferenceKey.translationFallbackModelProvider)
@@ -283,9 +277,21 @@ enum FeatureSettingsStore {
 
     private static func sanitize(_ settings: FeatureSettings, defaults: UserDefaults) -> FeatureSettings {
         let fallback = deriveFromLegacy(defaults: defaults)
+        let transcriptionASR = sanitizedASRSelection(
+            settings.transcription.asrSelectionID,
+            fallback: fallback.transcription.asrSelectionID
+        )
+        let translationASR = sanitizedASRSelection(
+            settings.translation.asrSelectionID,
+            fallback: fallback.translation.asrSelectionID
+        )
+        let rewriteASR = sanitizedASRSelection(
+            settings.rewrite.asrSelectionID,
+            fallback: fallback.rewrite.asrSelectionID
+        )
         return FeatureSettings(
             transcription: TranscriptionFeatureSettings(
-                asrSelectionID: settings.transcription.asrSelectionID.asrSelection == nil ? fallback.transcription.asrSelectionID : settings.transcription.asrSelectionID,
+                asrSelectionID: transcriptionASR,
                 llmEnabled: settings.transcription.llmEnabled,
                 llmSelectionID: settings.transcription.llmSelectionID.textSelection == nil ? fallback.transcription.llmSelectionID : settings.transcription.llmSelectionID,
                 prompt: AppPromptDefaults.resolvedStoredText(
@@ -300,8 +306,11 @@ enum FeatureSettingsStore {
                 )
             ),
             translation: TranslationFeatureSettings(
-                asrSelectionID: settings.translation.asrSelectionID.asrSelection == nil ? fallback.translation.asrSelectionID : settings.translation.asrSelectionID,
-                modelSelectionID: settings.translation.modelSelectionID.translationSelection == nil ? fallback.translation.modelSelectionID : settings.translation.modelSelectionID,
+                asrSelectionID: translationASR,
+                modelSelectionID: sanitizedTranslationSelection(
+                    settings.translation.modelSelectionID,
+                    fallback: fallback.translation.modelSelectionID
+                ),
                 targetLanguageRawValue: settings.translation.targetLanguage.rawValue,
                 prompt: AppPromptDefaults.resolvedStoredText(
                     sanitizedPrompt(settings.translation.prompt),
@@ -311,7 +320,7 @@ enum FeatureSettingsStore {
                 showResultWindow: settings.translation.showResultWindow
             ),
             rewrite: RewriteFeatureSettings(
-                asrSelectionID: settings.rewrite.asrSelectionID.asrSelection == nil ? fallback.rewrite.asrSelectionID : settings.rewrite.asrSelectionID,
+                asrSelectionID: rewriteASR,
                 llmSelectionID: settings.rewrite.llmSelectionID.textSelection == nil ? fallback.rewrite.llmSelectionID : settings.rewrite.llmSelectionID,
                 prompt: AppPromptDefaults.resolvedStoredText(
                     sanitizedPrompt(settings.rewrite.prompt),
@@ -324,7 +333,10 @@ enum FeatureSettingsStore {
             ),
             meeting: MeetingFeatureSettings(
                 asrSelectionID: supportedMeetingASRSelection(
-                    settings.meeting.asrSelectionID.asrSelection == nil ? fallback.meeting.asrSelectionID : settings.meeting.asrSelectionID,
+                    sanitizedASRSelection(
+                        settings.meeting.asrSelectionID,
+                        fallback: fallback.meeting.asrSelectionID
+                    ),
                     defaults: defaults
                 ),
                 summaryModelSelectionID: settings.meeting.summaryModelSelectionID.textSelection == nil ? fallback.meeting.summaryModelSelectionID : settings.meeting.summaryModelSelectionID,
@@ -342,6 +354,30 @@ enum FeatureSettingsStore {
                 finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
             )
         )
+    }
+
+    private static func sanitizedASRSelection(
+        _ selectionID: FeatureModelSelectionID,
+        fallback: FeatureModelSelectionID
+    ) -> FeatureModelSelectionID {
+        switch selectionID.asrSelection {
+        case .dictation, .mlx, .remote:
+            return selectionID
+        case .none:
+            return fallback
+        }
+    }
+
+    private static func sanitizedTranslationSelection(
+        _ selectionID: FeatureModelSelectionID,
+        fallback: FeatureModelSelectionID
+    ) -> FeatureModelSelectionID {
+        switch selectionID.translationSelection {
+        case .localLLM, .localGGUF, .remoteLLM:
+            return selectionID
+        case .none:
+            return fallback
+        }
     }
 
     private static func storageRepresentation(for settings: FeatureSettings) -> FeatureSettings {
@@ -485,8 +521,6 @@ enum FeatureSettingsStore {
             defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
         )
         switch selectionID.asrSelection {
-        case .whisper:
-            return .mlx(fallbackRepo)
         case .none:
             return .mlx(fallbackRepo)
         case .dictation, .mlx, .remote:
@@ -495,14 +529,21 @@ enum FeatureSettingsStore {
     }
 
     private static func legacyASRSelection(defaults: UserDefaults) -> FeatureModelSelectionID {
-        let engine = TranscriptionEngine(rawValue: defaults.string(forKey: AppPreferenceKey.transcriptionEngine) ?? "") ?? .mlxAudio
+        let engineRaw = defaults.string(forKey: AppPreferenceKey.transcriptionEngine)
+        let engine = TranscriptionEngine.resolved(rawValue: engineRaw)
         switch engine {
         case .dictation:
             return .dictation
         case .mlxAudio:
+            if engineRaw == "whisperKit" {
+                return .mlx(
+                    MLXWhisperMigrationSupport.repo(
+                        forLegacyWhisperModelID: defaults.string(forKey: AppPreferenceKey.legacyWhisperModelID)
+                            ?? MLXWhisperMigrationSupport.defaultLegacyModelID
+                    )
+                )
+            }
             return .mlx(defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo)
-        case .whisperKit:
-            return .whisper(defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID)
         case .remote:
             let provider = RemoteASRProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? "") ?? .openAIWhisper
             return .remoteASR(provider)
@@ -523,7 +564,9 @@ enum FeatureSettingsStore {
     }
 
     private static func legacyTranslationSelection(defaults: UserDefaults) -> FeatureModelSelectionID {
-        let provider = TranslationModelProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationModelProvider) ?? "") ?? .customLLM
+        let provider = TranslationModelProvider.resolved(
+            rawValue: defaults.string(forKey: AppPreferenceKey.translationModelProvider)
+        )
         switch provider {
         case .customLLM:
             return .localLLM(defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo) ?? CustomLLMModelManager.defaultModelRepo)
@@ -537,8 +580,6 @@ enum FeatureSettingsStore {
             let fallback = RemoteLLMProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteLLMSelectedProvider) ?? "") ?? .openAI
             let selected = RemoteLLMProvider(rawValue: defaults.string(forKey: AppPreferenceKey.translationRemoteLLMProvider) ?? "") ?? fallback
             return .remoteLLM(selected)
-        case .whisperKit:
-            return .whisperDirectTranslate
         }
     }
 

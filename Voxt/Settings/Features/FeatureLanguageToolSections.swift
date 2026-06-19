@@ -54,27 +54,20 @@ extension FeatureSettingsView {
                     )
                 }
 
-                if featureSettings.translation.modelSelectionID.translationSelection != .whisperDirectTranslate {
-                    FeatureSettingSection(title: "", detail: "") {
-                        FeaturePromptSection(
-                            title: featureSettingsLocalized("Translation Prompt"),
-                            text: promptBinding(
-                                get: { featureSettings.translation.prompt },
-                                set: { featureSettings.translation.prompt = $0 },
-                                kind: .translation
-                            ),
-                            defaultText: AppPromptDefaults.text(for: .translation),
-                            variables: ModelSettingsPromptVariables.translation,
-                            guidance: "",
-                            persistChanges: { prompt in
-                                FeatureSettingsStore.saveTranslationPrompt(prompt)
-                            }
-                        )
-                    }
-                } else {
-                    FeatureHintBanner(
-                        title: featureSettingsLocalized("Whisper Direct Translation"),
-                        detail: featureSettingsLocalized("Prompt editing is hidden here because Whisper direct translation does not consume a text prompt.")
+                FeatureSettingSection(title: "", detail: "") {
+                    FeaturePromptSection(
+                        title: featureSettingsLocalized("Translation Prompt"),
+                        text: promptBinding(
+                            get: { featureSettings.translation.prompt },
+                            set: { featureSettings.translation.prompt = $0 },
+                            kind: .translation
+                        ),
+                        defaultText: AppPromptDefaults.text(for: .translation),
+                        variables: ModelSettingsPromptVariables.translation,
+                        guidance: "",
+                        persistChanges: { prompt in
+                            FeatureSettingsStore.saveTranslationPrompt(prompt)
+                        }
                     )
                 }
             }

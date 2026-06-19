@@ -52,7 +52,9 @@ extension ModelCatalogBuilder {
             return ModelCatalogEntry(
                 id: "mlx:\(repo)",
                 title: mlxModelManager.displayTitle(for: repo),
-                engine: localizedModelCatalog("MLX Audio"),
+                engine: MLXWhisperMigrationSupport.isWhisperRepo(repo)
+                    ? localizedModelCatalog("Whisper (MLX)")
+                    : localizedModelCatalog("MLX Audio"),
                 sizeText: mlxASRSizeText(repo: repo, isInstalled: installSnapshot.isInstalled),
                 ratingText: MLXModelManager.ratingText(for: repo),
                 filterTags: decoration.filterTags,
@@ -60,40 +62,6 @@ extension ModelCatalogBuilder {
                 statusText: installSnapshot.statusText,
                 usageLocations: decoration.usageLocations,
                 badgeText: installSnapshot.badgeText ?? ModelCatalogBadgeSupport.recommendedBadgeText(forMLXRepo: repo),
-                primaryAction: catalogPrimaryAction(installSnapshot),
-                secondaryActions: localASRSecondaryActions(
-                    for: installSnapshot,
-                    isAvailable: isAvailable
-                )
-            )
-        }
-    }
-
-    func whisperASREntries() -> [ModelCatalogEntry] {
-        whisperModelManager.displayModelsIncludingInstalled().map { model in
-            let modelID = WhisperKitModelManager.canonicalModelID(model.id)
-            let selectionID = FeatureModelSelectionID.whisper(modelID)
-            let installSnapshot = whisperInstallSnapshot(modelID)
-            let isAvailable = WhisperKitModelManager.isAvailableModelID(modelID)
-            let decoration = catalogDecoration(
-                base: [localizedModelCatalog("Local")] + whisperCatalogTags(for: modelID),
-                installed: installSnapshot.isInstalled,
-                requiresConfiguration: false,
-                configured: true,
-                selectionID: selectionID
-            )
-
-            return ModelCatalogEntry(
-                id: "whisper:\(modelID)",
-                title: whisperModelManager.displayTitle(for: modelID),
-                engine: localizedModelCatalog("Whisper"),
-                sizeText: whisperASRSizeText(modelID: modelID, isInstalled: installSnapshot.isInstalled),
-                ratingText: WhisperKitModelManager.ratingText(for: modelID),
-                filterTags: decoration.filterTags,
-                displayTags: decoration.displayTags,
-                statusText: installSnapshot.statusText,
-                usageLocations: decoration.usageLocations,
-                badgeText: installSnapshot.badgeText,
                 primaryAction: catalogPrimaryAction(installSnapshot),
                 secondaryActions: localASRSecondaryActions(
                     for: installSnapshot,
@@ -124,13 +92,6 @@ extension ModelCatalogBuilder {
             return mlxModelManager.cachedModelSizeText(repo: repo) ?? mlxModelManager.remoteSizeText(repo: repo)
         }
         return mlxModelManager.remoteSizeText(repo: repo)
-    }
-
-    private func whisperASRSizeText(modelID: String, isInstalled: Bool) -> String {
-        if isInstalled {
-            return whisperModelManager.cachedModelSizeText(id: modelID) ?? whisperModelManager.remoteSizeText(id: modelID)
-        }
-        return whisperModelManager.remoteSizeText(id: modelID)
     }
 
 }
