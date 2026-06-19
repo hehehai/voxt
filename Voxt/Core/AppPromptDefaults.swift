@@ -13,7 +13,6 @@ enum AppPromptKind: CaseIterable {
     case qwenASRContextBias
     case openAIASRHint
     case glmASRHint
-    case whisperASRHint
 }
 
 enum AppPromptDefaults {
@@ -65,9 +64,7 @@ enum AppPromptDefaults {
     static func matchesKnownDefault(_ text: String, kind: AppPromptKind) -> Bool {
         let normalizedText = normalizeStoredText(text, kind: kind) ?? text
         let trimmedText = normalizedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else {
-            return kind == .whisperASRHint
-        }
+        guard !trimmedText.isEmpty else { return false }
 
         let localizedDefaults = [AppInterfaceLanguage.english, .chineseSimplified, .japanese]
             .map { self.text(for: kind, language: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -97,11 +94,6 @@ enum AppPromptDefaults {
 
         if matchesLegacyASRLanguagePromptText(trimmedText, kind: kind) {
             return true
-        }
-
-        if kind == .whisperASRHint {
-            return trimmedText == AppPreferenceKey.legacyDefaultWhisperASRHintPrompt
-                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         return false
@@ -232,7 +224,7 @@ enum AppPromptDefaults {
     }
 
     private static func matchesLegacyASRLanguagePromptText(_ text: String, kind: AppPromptKind) -> Bool {
-        guard [.openAIASRHint, .glmASRHint, .whisperASRHint].contains(kind) else { return false }
+        guard [.openAIASRHint, .glmASRHint].contains(kind) else { return false }
         let markerSets = [
             [
                 "The speaker's primary language is",

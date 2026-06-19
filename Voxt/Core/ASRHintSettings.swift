@@ -6,7 +6,6 @@ import Foundation
 enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
     case dictation
     case mlxAudio
-    case whisperKit
     case openAIWhisper
     case glmASR
     case doubaoASR
@@ -21,8 +20,6 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("Direct Dictation")
         case .mlxAudio:
             return AppLocalization.localizedString("MLX Audio")
-        case .whisperKit:
-            return AppLocalization.localizedString("Whisper")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI Transcribe")
         case .glmASR:
@@ -38,7 +35,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
 
     var supportsPromptEditor: Bool {
         switch self {
-        case .whisperKit, .openAIWhisper, .glmASR:
+        case .openAIWhisper, .glmASR:
             return true
         case .dictation, .mlxAudio, .doubaoASR, .aliyunBailianASR, .stepFunASR:
             return false
@@ -53,8 +50,6 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .dictation:
             return ""
-        case .whisperKit:
-            return AppPromptDefaults.text(for: .whisperASRHint)
         case .openAIWhisper:
             return AppPromptDefaults.text(for: .openAIASRHint)
         case .glmASR:
@@ -70,8 +65,6 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("Direct Dictation uses your main language, optional contextual phrases, on-device preference, and punctuation settings. Prompt editing is not applied.")
         case .mlxAudio:
             return AppLocalization.localizedString("MLX uses language hints by default. Some model families also expose model-specific local tuning in the Configure dialog.")
-        case .whisperKit:
-            return AppLocalization.localizedString("Whisper uses the resolved main language and a short prompt bias. Keep the prompt concise and recognition-focused.")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition.")
         case .glmASR:
@@ -89,7 +82,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .dictation:
             return AppLocalization.localizedString("Dictation Settings")
-        case .mlxAudio, .whisperKit, .openAIWhisper, .glmASR, .doubaoASR, .aliyunBailianASR, .stepFunASR:
+        case .mlxAudio, .openAIWhisper, .glmASR, .doubaoASR, .aliyunBailianASR, .stepFunASR:
             return AppLocalization.localizedString("Engine Hint Settings")
         }
     }
@@ -100,8 +93,6 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return .dictation
         case .mlxAudio:
             return .mlxAudio
-        case .whisperKit:
-            return .whisperKit
         case .remote:
             switch remoteProvider ?? .openAIWhisper {
             case .openAIWhisper:
@@ -222,12 +213,15 @@ enum ASRHintSettingsStore {
     }
 
     static func resolved(_ settings: ASRHintSettings, for target: ASRHintTarget) -> ASRHintSettings {
-        ASRHintSettings(
-            followsUserMainLanguage: settings.followsUserMainLanguage,
-            promptTemplate: AppPromptDefaults.resolvedStoredText(
+        let resolvedPrompt = target.supportsPromptEditor
+            ? AppPromptDefaults.resolvedStoredText(
                 settings.promptTemplate,
                 kind: promptKind(for: target)
-            ),
+            )
+            : ""
+        return ASRHintSettings(
+            followsUserMainLanguage: settings.followsUserMainLanguage,
+            promptTemplate: resolvedPrompt,
             contextualPhrasesText: settings.contextualPhrasesText,
             prefersOnDeviceRecognition: settings.prefersOnDeviceRecognition,
             addsPunctuation: settings.addsPunctuation,
@@ -262,8 +256,8 @@ enum ASRHintSettingsStore {
             return .openAIASRHint
         case .glmASR:
             return .glmASRHint
-        case .whisperKit, .dictation, .mlxAudio, .doubaoASR, .aliyunBailianASR, .stepFunASR:
-            return .whisperASRHint
+        case .dictation, .mlxAudio, .doubaoASR, .aliyunBailianASR, .stepFunASR:
+            return .openAIASRHint
         }
     }
 

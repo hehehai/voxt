@@ -38,8 +38,6 @@ enum RecordingSessionSupport {
             }
         case .translation:
             switch translationSettings.modelSelectionID.translationSelection {
-            case .whisperDirectTranslate:
-                return "translation: whisper-direct-translate"
             case .localLLM(let repo):
                 return "translation: local-llm(\(repo))"
             case .localGGUF(let modelID):

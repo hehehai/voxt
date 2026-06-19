@@ -68,5 +68,42 @@ final class MLXModelSupportTests: XCTestCase {
         XCTAssertNotNil(
             MLXModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-ASR-0.6B-4bit")
         )
+        XCTAssertNotNil(
+            MLXModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/whisper-large-v3-turbo")
+        )
+        XCTAssertNotNil(
+            MLXModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/whisper-small-mlx")
+        )
+    }
+
+    func testWhisperMigrationMapsLegacyModelIDsToMLXRepos() {
+        XCTAssertEqual(
+            MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: "tiny"),
+            "mlx-community/whisper-tiny-mlx"
+        )
+        XCTAssertEqual(
+            MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: "base"),
+            "mlx-community/whisper-base-mlx"
+        )
+        XCTAssertEqual(
+            MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: "medium"),
+            "mlx-community/whisper-large-v3-turbo"
+        )
+        XCTAssertTrue(
+            MLXWhisperMigrationSupport.isWhisperRepo("mlx-community/whisper-large-v3-turbo")
+        )
+    }
+
+    func testTinyAndBaseWhisperReposAreHiddenUnlessInstalled() {
+        let defaultDisplayRepos = Set(MLXModelCatalog.displayModels(includingInstalled: []).map(\.id))
+
+        XCTAssertFalse(defaultDisplayRepos.contains("mlx-community/whisper-tiny-mlx"))
+        XCTAssertFalse(defaultDisplayRepos.contains("mlx-community/whisper-base-mlx"))
+
+        let displayReposIncludingInstalled = Set(
+            MLXModelCatalog.displayModels(includingInstalled: ["mlx-community/whisper-base-mlx"]).map(\.id)
+        )
+
+        XCTAssertTrue(displayReposIncludingInstalled.contains("mlx-community/whisper-base-mlx"))
     }
 }

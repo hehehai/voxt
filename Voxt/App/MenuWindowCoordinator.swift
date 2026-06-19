@@ -496,7 +496,6 @@ extension AppDelegate {
                 self.cancelDictionaryHistorySuggestionScan()
             },
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             historyStore: historyStore,

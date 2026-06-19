@@ -3,7 +3,6 @@
 
 import Foundation
 import AVFoundation
-import WhisperKit
 
 @MainActor
 final class MeetingSessionCoordinator {
@@ -11,7 +10,6 @@ final class MeetingSessionCoordinator {
 
     var onSessionFinished: (@MainActor (MeetingSessionResult) -> Void)?
 
-    private let whisperModelManager: WhisperKitModelManager
     private let mlxModelManager: MLXModelManager
     private let microphoneCapture = MeetingMicrophoneCapture()
     private let systemAudioCapture = MeetingSystemAudioCapture()
@@ -20,7 +18,6 @@ final class MeetingSessionCoordinator {
     private var micAccumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: micSpeechThreshold, profile: .quality)
     private var systemAccumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: systemSpeechThreshold, profile: .quality)
     private let voiceActivityDetector = MeetingVoiceActivityDetector()
-    private var whisper: WhisperKit?
     private var transcriber: (any MeetingSegmentTranscribing)?
     private var liveSessionFactory: (any MeetingLiveSessionFactory)?
     private var liveSessions: [MeetingSpeaker: any MeetingLiveTranscribingSession] = [:]
@@ -49,13 +46,11 @@ final class MeetingSessionCoordinator {
     private var isStarting = false
 
     init(
-        whisperModelManager: WhisperKitModelManager,
         mlxModelManager: MLXModelManager,
         preferredInputDeviceIDProvider: @escaping () -> AudioDeviceID?,
         realtimeTranslationTargetLanguageProvider: @escaping @MainActor () -> TranslationTargetLanguage?,
         realtimeTranslationHandler: @escaping @MainActor (String, TranslationTargetLanguage) async throws -> String
     ) {
-        self.whisperModelManager = whisperModelManager
         self.mlxModelManager = mlxModelManager
         self.preferredInputDeviceIDProvider = preferredInputDeviceIDProvider
         self.realtimeTranslationTargetLanguageProvider = realtimeTranslationTargetLanguageProvider
@@ -559,7 +554,6 @@ final class MeetingSessionCoordinator {
         isStarting = false
         isStopping = false
         releaseActiveLocalEngine()
-        whisper = nil
         transcriber = nil
         liveSessionFactory = nil
         activeEngineContext = nil
@@ -1093,21 +1087,15 @@ final class MeetingSessionCoordinator {
 
     private func resolvedTranscriptionEngine() -> TranscriptionEngine {
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.transcriptionEngine) ?? ""
-        return TranscriptionEngine(rawValue: raw) ?? .mlxAudio
+        return TranscriptionEngine.resolved(rawValue: raw)
     }
 
     private func resolvedEngineContext() -> MeetingASREngineContext {
         let transcriptionEngine = resolvedTranscriptionEngine()
         let remoteSelection = resolvedRemoteASRSelection()
-        let whisperRealtimeEnabled = UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
 
         let automaticContext = MeetingASRSupport.resolveContext(
             transcriptionEngine: transcriptionEngine,
-            whisperModelState: whisperModelManager.state,
-            whisperCurrentModelID: whisperModelManager.currentModelID,
-            whisperRealtimeEnabled: whisperRealtimeEnabled,
-            whisperIsCurrentModelLoaded: whisperModelManager.isCurrentModelLoaded,
-            whisperDisplayTitle: whisperModelManager.displayTitle(for:),
             mlxModelState: mlxModelManager.state,
             mlxCurrentModelRepo: mlxModelManager.currentModelRepo,
             mlxIsCurrentModelLoaded: mlxModelManager.isCurrentModelLoaded,
@@ -1122,22 +1110,6 @@ final class MeetingSessionCoordinator {
     private func makeTranscriber(for context: MeetingASREngineContext) async throws -> any MeetingSegmentTranscribing {
         liveSessionFactory = nil
         switch context.engine {
-        case .whisperKit:
-            whisperModelManager.beginActiveUse()
-            activeLocalEngine = .whisperKit
-            let whisper = try await whisperModelManager.loadWhisper()
-            self.whisper = whisper
-            let hintSettings = ASRHintSettingsStore.resolvedSettings(
-                for: .whisperKit,
-                rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.asrHintSettings)
-            )
-            let hintPayload = resolvedMeetingHintPayload(settings: hintSettings)
-            return MeetingWhisperSegmentTranscriber(
-                whisper: whisper,
-                mainLanguage: resolvedMeetingMainLanguage(),
-                temperature: Float(UserDefaults.standard.double(forKey: AppPreferenceKey.whisperTemperature)),
-                hintPayload: hintPayload
-            )
         case .mlxAudio:
             mlxModelManager.beginActiveUse()
             activeLocalEngine = .mlxAudio
@@ -1145,14 +1117,18 @@ final class MeetingSessionCoordinator {
         case .remote:
             if context.resolvedMode.usesLiveSessions {
                 let remoteSelection = resolvedRemoteASRSelection()
+                let hintTarget = ASRHintTarget.from(
+                    engine: .remote,
+                    remoteProvider: remoteSelection.provider
+                )
                 let hintSettings = ASRHintSettingsStore.resolvedSettings(
-                    for: .whisperKit,
+                    for: hintTarget,
                     rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.asrHintSettings)
                 )
                 liveSessionFactory = MeetingRemoteLiveSessionFactory(
                     provider: remoteSelection.provider,
                     configuration: remoteSelection.configuration,
-                    hintPayload: resolvedMeetingHintPayload(settings: hintSettings)
+                    hintPayload: resolvedMeetingHintPayload(target: hintTarget, settings: hintSettings)
                 )
             }
             return MeetingRemoteASRSegmentTranscriber()
@@ -1198,8 +1174,6 @@ final class MeetingSessionCoordinator {
     private func releaseActiveLocalEngine() {
         guard let activeLocalEngine else { return }
         switch activeLocalEngine {
-        case .whisperKit:
-            whisperModelManager.endActiveUse()
         case .mlxAudio:
             mlxModelManager.endActiveUse()
         case .dictation, .remote:
@@ -1222,11 +1196,14 @@ final class MeetingSessionCoordinator {
         return UserMainLanguageOption.fallbackOption()
     }
 
-    private func resolvedMeetingHintPayload(settings: ASRHintSettings) -> ResolvedASRHintPayload {
+    private func resolvedMeetingHintPayload(
+        target: ASRHintTarget,
+        settings: ASRHintSettings
+    ) -> ResolvedASRHintPayload {
         let storedCodes = UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
         let userLanguageCodes = UserMainLanguageOption.storedSelection(from: storedCodes)
         return ASRHintResolver.resolve(
-            target: .whisperKit,
+            target: target,
             settings: settings,
             userLanguageCodes: userLanguageCodes
         )

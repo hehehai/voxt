@@ -42,7 +42,6 @@ extension OnboardingSettingsView {
     var missingConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue] {
         ConfigurationTransferManager.missingConfigurationIssues(
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager
         )
     }
@@ -124,16 +123,6 @@ extension OnboardingSettingsView {
         syncOnboardingFeatureSelections()
     }
 
-    func handleWhisperModelChange(_ newValue: String) {
-        let canonicalModelID = WhisperKitModelManager.canonicalModelID(newValue)
-        if canonicalModelID != newValue {
-            whisperModelID = canonicalModelID
-            return
-        }
-        whisperModelManager.updateModel(id: canonicalModelID)
-        syncOnboardingFeatureSelections()
-    }
-
     func handleCustomLLMRepoChange(_ newValue: String) {
         let sanitizedRepo = CustomLLMModelManager.isSupportedModelRepo(newValue)
             ? newValue
@@ -152,12 +141,6 @@ extension OnboardingSettingsView {
             mlxModelRepo = canonicalRepo
         }
         mlxModelManager.updateModel(repo: canonicalRepo)
-
-        let canonicalWhisperModelID = WhisperKitModelManager.canonicalModelID(whisperModelID)
-        if canonicalWhisperModelID != whisperModelID {
-            whisperModelID = canonicalWhisperModelID
-        }
-        whisperModelManager.updateModel(id: canonicalWhisperModelID)
 
         let sanitizedCustomLLMRepo = CustomLLMModelManager.isSupportedModelRepo(customLLMRepo)
             ? customLLMRepo
@@ -251,7 +234,6 @@ extension OnboardingSettingsView {
         OnboardingFeatureSelectionResolver.asrSelectionID(
             selectedEngine: selectedEngine,
             mlxModelRepo: mlxModelRepo,
-            whisperModelID: whisperModelID,
             remoteASRProvider: selectedRemoteASRProvider
         )
     }
@@ -340,8 +322,6 @@ extension OnboardingSettingsView {
             return AppLocalization.localizedString("Direct Dictation")
         case .mlx(let repo):
             return mlxModelManager.displayTitle(for: repo)
-        case .whisper(let modelID):
-            return whisperModelManager.displayTitle(for: modelID)
         case .remote(let provider):
             let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: remoteASRConfigurations)
             if configuration.hasUsableModel {
@@ -375,8 +355,6 @@ extension OnboardingSettingsView {
 
     func translationSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
         switch selectionID.translationSelection {
-        case .whisperDirectTranslate:
-            return AppLocalization.localizedString("Whisper Direct Translate")
         case .localGGUF(let modelID):
             return GGUFTranslationModelCatalog.option(for: modelID).title
         case .localLLM, .remoteLLM:
@@ -439,7 +417,6 @@ extension OnboardingSettingsView {
             try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
             modelStorageSelectionError = nil
             mlxModelManager.refreshStorageRoot()
-            whisperModelManager.refreshStorageRoot()
             customLLMManager.refreshStorageRoot()
             refreshModelStorageDisplayPath()
         } catch {

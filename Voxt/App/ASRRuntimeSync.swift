@@ -36,17 +36,6 @@ extension AppDelegate {
             mlxModelManager.updateModel(repo: canonicalRepo)
             mlxTranscriber = nil
 
-        case .whisper(let modelID):
-            let canonicalModelID = WhisperKitModelManager.canonicalModelID(modelID)
-            let previousModelID = WhisperKitModelManager.canonicalModelID(whisperModelManager.currentModelID)
-            guard canonicalModelID != previousModelID else { return }
-
-            VoxtLog.asr(
-                "Synchronizing Whisper runtime model. previous=\(previousModelID), current=\(canonicalModelID)"
-            )
-            whisperModelManager.updateModel(id: canonicalModelID)
-            whisperTranscriber = nil
-
         case .dictation, .remote, .none:
             return
         }

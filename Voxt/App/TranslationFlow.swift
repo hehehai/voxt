@@ -114,14 +114,6 @@ extension AppDelegate {
         }
     }
 
-    func processWhisperTranslatedTranscription(_ text: String, sessionID: UUID) {
-        guard shouldHandleCallbacks(for: sessionID) else { return }
-        VoxtLog.translation("Whisper direct translation completed. outputChars=\(text.count)")
-        commitTranscription(text, llmDurationSeconds: nil) { [weak self] in
-            self?.finishSession(after: 0)
-        }
-    }
-
     func beginSelectedTextTranslationIfPossible() -> Bool {
         guard !isSessionActive else { return false }
         guard let selectedText = selectedTextFromSystemSelection(),

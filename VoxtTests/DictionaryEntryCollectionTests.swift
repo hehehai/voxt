@@ -106,11 +106,11 @@ final class DictionaryEntryCollectionTests: XCTestCase {
 
     func testProjectDictionaryScannerExtractsDecoratedTerms() {
         let terms = ProjectDictionaryScanner.candidateTerms(
-            in: "Use WhisperKit, MLXAudio and tmp/typeflux for VoxtProject.",
+            in: "Use MLXWhisper, MLXAudio and tmp/typeflux for VoxtProject.",
             allowPlainLowercase: false
         )
 
-        XCTAssertTrue(terms.contains("WhisperKit"))
+        XCTAssertTrue(terms.contains("MLXWhisper"))
         XCTAssertTrue(terms.contains("MLXAudio"))
         XCTAssertTrue(terms.contains("tmp/typeflux"))
         XCTAssertTrue(terms.contains("VoxtProject"))

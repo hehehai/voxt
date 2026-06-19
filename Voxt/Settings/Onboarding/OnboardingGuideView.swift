@@ -14,7 +14,6 @@ struct OnboardingGuideView: View {
     @Binding var currentStep: OnboardingGuideStep
 
     @ObservedObject var mlxModelManager: MLXModelManager
-    @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
 
     let onClose: () -> Void
@@ -1824,7 +1823,6 @@ private extension OnboardingGuideView {
             try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
             modelStorageSelectionError = nil
             mlxModelManager.refreshStorageRoot()
-            whisperModelManager.refreshStorageRoot()
             customLLMManager.refreshStorageRoot()
             refreshModelStorageDisplayPath()
         } catch {

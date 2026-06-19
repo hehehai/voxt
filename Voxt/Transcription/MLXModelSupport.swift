@@ -10,6 +10,43 @@ enum MLXLiveMode: Equatable {
     case nativeNemotronLive
 }
 
+enum MLXWhisperMigrationSupport {
+    nonisolated static let defaultRepo = "mlx-community/whisper-large-v3-turbo"
+    nonisolated static let defaultLegacyModelID = "large-v3"
+
+    nonisolated private static let legacyWhisperModelMap: [String: String] = [
+        "tiny": "mlx-community/whisper-tiny-mlx",
+        "base": "mlx-community/whisper-base-mlx",
+        "small": "mlx-community/whisper-small-mlx",
+        "medium": defaultRepo,
+        "large-v3": "mlx-community/whisper-large-v3-mlx",
+    ]
+
+    nonisolated static func canonicalLegacyModelID(_ modelID: String) -> String {
+        let raw = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return defaultLegacyModelID }
+        var normalized = raw
+            .replacingOccurrences(of: "openai_whisper-", with: "")
+            .replacingOccurrences(of: "openai/whisper-", with: "")
+        if normalized == "large-v3-v20240930" {
+            normalized = "large-v3"
+        }
+        if legacyWhisperModelMap[normalized] != nil {
+            return normalized
+        }
+        return defaultLegacyModelID
+    }
+
+    nonisolated static func repo(forLegacyWhisperModelID modelID: String) -> String {
+        let canonicalModelID = canonicalLegacyModelID(modelID)
+        return legacyWhisperModelMap[canonicalModelID] ?? defaultRepo
+    }
+
+    nonisolated static func isWhisperRepo(_ repo: String) -> Bool {
+        MLXModelCatalog.canonicalModelRepo(repo).localizedCaseInsensitiveContains("whisper")
+    }
+}
+
 struct MLXModelCatalog {
     enum Visibility: String, Hashable {
         case visible
@@ -58,6 +95,33 @@ struct MLXModelCatalog {
     ]
 
     nonisolated private static let allModels: [Option] = [
+        Option(
+            id: "mlx-community/whisper-large-v3-turbo",
+            title: "Whisper Large v3 Turbo",
+            description: "Fast Whisper large-v3 family model with the best quality-to-latency balance."
+        ),
+        Option(
+            id: "mlx-community/whisper-large-v3-mlx",
+            title: "Whisper Large v3",
+            description: "Accuracy-first Whisper model with a heavier local footprint."
+        ),
+        Option(
+            id: "mlx-community/whisper-small-mlx",
+            title: "Whisper Small",
+            description: "Lower-resource Whisper model for lighter local setups."
+        ),
+        Option(
+            id: "mlx-community/whisper-tiny-mlx",
+            title: "Whisper Tiny",
+            description: "Legacy lightweight Whisper option kept for existing installations.",
+            visibility: .hiddenSupport
+        ),
+        Option(
+            id: "mlx-community/whisper-base-mlx",
+            title: "Whisper Base",
+            description: "Legacy compact Whisper option kept for existing installations.",
+            visibility: .hiddenSupport
+        ),
         Option(
             id: "mlx-community/Qwen3-ASR-0.6B-4bit",
             title: "Qwen3 0.6B (4bit)",
@@ -212,6 +276,11 @@ struct MLXModelCatalog {
     nonisolated static let supportedModels: [Option] = allModels
 
     nonisolated private static let presentationByRepo: [String: PresentationMetadata] = [
+        "mlx-community/whisper-large-v3-turbo": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Fast", "Balanced"]),
+        "mlx-community/whisper-large-v3-mlx": PresentationMetadata(ratingText: "4.9", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/whisper-small-mlx": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Fast"]),
+        "mlx-community/whisper-tiny-mlx": PresentationMetadata(ratingText: "4.0", tagKeys: ["Multilingual", "Fast"]),
+        "mlx-community/whisper-base-mlx": PresentationMetadata(ratingText: "4.3", tagKeys: ["Multilingual", "Fast"]),
         "mlx-community/Qwen3-ASR-0.6B-4bit": PresentationMetadata(ratingText: "4.4", tagKeys: ["Multilingual", "Realtime", "Fast"]),
         "mlx-community/Qwen3-ASR-0.6B-6bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
         "mlx-community/Qwen3-ASR-0.6B-8bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
@@ -241,6 +310,11 @@ struct MLXModelCatalog {
     ]
 
     nonisolated private static let knownRemoteSizeBytesByRepo: [String: Int64] = [
+        "mlx-community/whisper-large-v3-turbo": 1_617_000_000,
+        "mlx-community/whisper-large-v3-mlx": 3_090_319_899,
+        "mlx-community/whisper-small-mlx": 486_487_465,
+        "mlx-community/whisper-tiny-mlx": 76_635_397,
+        "mlx-community/whisper-base-mlx": 146_719_453,
         "mlx-community/Qwen3-ASR-0.6B-4bit": 712_781_279,
         "mlx-community/Qwen3-ASR-0.6B-6bit": 861_777_567,
         "mlx-community/Qwen3-ASR-0.6B-8bit": 1_010_773_761,

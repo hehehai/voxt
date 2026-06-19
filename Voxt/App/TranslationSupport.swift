@@ -115,8 +115,6 @@ extension AppDelegate {
         case .remoteLLM:
             let context = resolvedRemoteLLMContext(forTranslation: true)
             providerOverride = .remote(provider: context.provider, configuration: context.configuration)
-        case .whisperKit:
-            providerOverride = nil
         }
         let basePolicy = DictionaryGlossaryPurpose.translation.selectionPolicy
         let provisionalStrategy = TaskLLMStrategyResolver.resolve(
@@ -135,7 +133,7 @@ extension AppDelegate {
         )
         let translationModel = translationModelLogDescriptor(for: modelProvider)
         VoxtLog.llm(
-            "Translation request. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
+            "Translation request. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
         )
 
         if modelProvider == .customLLM {
@@ -360,8 +358,6 @@ extension AppDelegate {
         case .remoteLLM:
             let context = resolvedRemoteLLMContext(forTranslation: true)
             providerOverride = .remote(provider: context.provider, configuration: context.configuration)
-        case .whisperKit:
-            providerOverride = nil
         }
         let basePolicy = DictionaryGlossaryPurpose.translation.selectionPolicy
         let provisionalStrategy = TaskLLMStrategyResolver.resolve(
@@ -380,7 +376,7 @@ extension AppDelegate {
         )
         let translationModel = translationModelLogDescriptor(for: modelProvider)
         VoxtLog.llm(
-            "Strict translation retry. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), fallbackReason=\(resolution.fallbackReason.map(String.init(describing:)) ?? "none"), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
+            "Strict translation retry. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
         )
 
         if modelProvider == .customLLM {
@@ -462,8 +458,7 @@ extension AppDelegate {
             fallbackProvider: translationFallbackModelProvider,
             transcriptionEngine: transcriptionEngine,
             targetLanguage: targetLanguage,
-            isSelectedTextTranslation: isSelectedTextTranslation,
-            whisperModelState: whisperModelManager.state
+            isSelectedTextTranslation: isSelectedTextTranslation
         )
     }
 
@@ -473,8 +468,7 @@ extension AppDelegate {
         fallbackProvider: TranslationModelProvider,
         transcriptionEngine: TranscriptionEngine,
         targetLanguage: TranslationTargetLanguage,
-        isSelectedTextTranslation: Bool,
-        whisperModelState: WhisperKitModelManager.ModelState
+        isSelectedTextTranslation: Bool
     ) -> TranslationProviderResolution {
         if !isSelectedTextTranslation,
            let lockedResolution {
@@ -486,8 +480,7 @@ extension AppDelegate {
             fallbackProvider: fallbackProvider,
             transcriptionEngine: transcriptionEngine,
             targetLanguage: targetLanguage,
-            isSelectedTextTranslation: isSelectedTextTranslation,
-            whisperModelState: whisperModelState
+            isSelectedTextTranslation: isSelectedTextTranslation
         )
     }
 
@@ -498,19 +491,16 @@ extension AppDelegate {
             fallbackProvider: translationFallbackModelProvider,
             transcriptionEngine: transcriptionEngine,
             targetLanguage: persistedTargetLanguage,
-            isSelectedTextTranslation: false,
-            whisperModelState: whisperModelManager.state
+            isSelectedTextTranslation: false
         )
 
         sessionTranslationTargetLanguageOverride = persistedTargetLanguage
         activeSessionTranslationProviderResolution = resolution
-        sessionUsesWhisperDirectTranslation = resolution.usesWhisperDirectTranslation
         overlayState.configureSessionTranslationTargetLanguage(
             persistedTargetLanguage,
             allowsSwitching: Self.shouldAllowSessionTranslationLanguageSwitching(
                 sessionOutputMode: .translation,
-                isSelectedTextTranslationFlow: false,
-                sessionUsesWhisperDirectTranslation: resolution.usesWhisperDirectTranslation
+                isSelectedTextTranslationFlow: false
             )
         )
     }
@@ -519,18 +509,15 @@ extension AppDelegate {
         cancelPendingSelectedTextTranslationRefresh()
         sessionTranslationTargetLanguageOverride = nil
         activeSessionTranslationProviderResolution = nil
-        sessionUsesWhisperDirectTranslation = false
         overlayState.configureSessionTranslationTargetLanguage(nil, allowsSwitching: false)
     }
 
     static func shouldAllowSessionTranslationLanguageSwitching(
         sessionOutputMode: SessionOutputMode,
-        isSelectedTextTranslationFlow: Bool,
-        sessionUsesWhisperDirectTranslation: Bool
+        isSelectedTextTranslationFlow: Bool
     ) -> Bool {
         sessionOutputMode == .translation &&
-            !isSelectedTextTranslationFlow &&
-            !sessionUsesWhisperDirectTranslation
+            !isSelectedTextTranslationFlow
     }
 
     func toggleSessionTranslationTargetPicker() {
@@ -750,8 +737,6 @@ extension AppDelegate {
 
     private func translationModelLogDescriptor(for provider: TranslationModelProvider) -> String {
         switch provider {
-        case .whisperKit:
-            return "whisperKit"
         case .customLLM:
             return translationCustomLLMRepo
         case .localGGUF:

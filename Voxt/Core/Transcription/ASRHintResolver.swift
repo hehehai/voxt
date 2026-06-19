@@ -64,15 +64,6 @@ enum ASRHintResolver {
                 otherLanguages: otherLanguages,
                 multilingualContext: multilingualContext
             )
-        case .whisperKit:
-            return ResolvedASRHintPayload(
-                // Local Whisper is brittle both when we hard-pin a single language and
-                // when we inject a localized prompt template. Keep the local path as
-                // close to plain transcription as possible and let the decoder auto-detect.
-                language: nil,
-                prompt: nil,
-                otherLanguages: otherLanguages
-            )
         case .openAIWhisper:
             return ResolvedASRHintPayload(
                 language: usesExplicitSingleLanguageHint ? resolvedOpenAILanguage(mainLanguage) : nil,

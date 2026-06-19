@@ -70,7 +70,6 @@ extension AppDelegate {
             delegate.rewriteSessionFallbackInjectBundleID = nil
             delegate.sessionTranslationTargetLanguageOverride = nil
             delegate.activeSessionTranslationProviderResolution = nil
-            delegate.sessionUsesWhisperDirectTranslation = false
             delegate.resetVoxtNoteSessionRuntimeState()
             if !shouldPreserveTranslationAnswerControls {
                 delegate.overlayState.configureSessionTranslationTargetLanguage(nil, allowsSwitching: false)

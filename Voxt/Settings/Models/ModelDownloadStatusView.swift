@@ -100,27 +100,6 @@ struct ModelDownloadStatusSnapshot: Equatable {
         }
     }
 
-    static func fromWhisperDownload(
-        _ activeDownload: WhisperKitModelManager.ActiveDownload?,
-        pauseMessage: String? = nil
-    ) -> Self? {
-        guard let activeDownload else { return nil }
-
-        return .init(
-            progress: activeDownload.progress,
-            isPaused: activeDownload.isPaused,
-            kind: .standard,
-            completed: activeDownload.completed,
-            total: activeDownload.total,
-            currentFile: activeDownload.currentFile,
-            currentFileCompleted: activeDownload.currentFileCompleted,
-            currentFileTotal: activeDownload.currentFileTotal,
-            completedFiles: activeDownload.completedFiles,
-            totalFiles: activeDownload.totalFiles,
-            pauseMessage: activeDownload.isPaused ? pauseMessage : nil
-        )
-    }
-
     static func fromCustomLLMState(_ state: CustomLLMModelManager.ModelState, pauseMessage: String? = nil) -> Self? {
         switch state {
         case .downloading(let progress, let completed, let total, let currentFile, let completedFiles, let totalFiles):

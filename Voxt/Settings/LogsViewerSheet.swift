@@ -122,7 +122,7 @@ struct LogsViewerSheet: View {
                 Button(action: dismiss.callAsFunction) {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(SettingsCompactIconButtonStyle())
+                .buttonStyle(SettingsDialogCloseButtonStyle())
             }
             .padding(.horizontal, 20)
             .padding(.top, 18)

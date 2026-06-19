@@ -38,7 +38,7 @@ Voxt 初次插入的文本：
 
 接受：
 - 专有名词、App/产品/公司名、人名、稳定项目名、缩写、代码/API 名、模型名、不常见领域术语。
-- 对识别有价值的拼写、大小写、空格、符号或同音修正，例如 JWT、Redis、Session、INFO、Doubao、WhisperKit、MLX。
+- 对识别有价值的拼写、大小写、空格、符号或同音修正，例如 JWT、Redis、Session、INFO、Doubao、Whisper、MLX。
 - 具体且可复用的中文领域词，或中英混排术语。
 
 排除：

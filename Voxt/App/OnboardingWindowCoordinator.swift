@@ -8,7 +8,6 @@ private struct OnboardingGuideWindowRoot: View {
     @State private var currentStep: OnboardingGuideStep
 
     @ObservedObject var mlxModelManager: MLXModelManager
-    @ObservedObject var whisperModelManager: WhisperKitModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
 
     let onClose: () -> Void
@@ -17,14 +16,12 @@ private struct OnboardingGuideWindowRoot: View {
     init(
         initialStep: OnboardingGuideStep,
         mlxModelManager: MLXModelManager,
-        whisperModelManager: WhisperKitModelManager,
         customLLMManager: CustomLLMModelManager,
         onClose: @escaping () -> Void,
         onFinish: @escaping () -> Void
     ) {
         _currentStep = State(initialValue: initialStep)
         self.mlxModelManager = mlxModelManager
-        self.whisperModelManager = whisperModelManager
         self.customLLMManager = customLLMManager
         self.onClose = onClose
         self.onFinish = onFinish
@@ -34,7 +31,6 @@ private struct OnboardingGuideWindowRoot: View {
         OnboardingGuideView(
             currentStep: $currentStep,
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
             onClose: onClose,
             onFinish: onFinish
@@ -89,7 +85,6 @@ extension AppDelegate {
         let contentView = OnboardingGuideWindowRoot(
             initialStep: initialStep,
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
             onClose: { [weak self, weak window] in
                 window?.close()

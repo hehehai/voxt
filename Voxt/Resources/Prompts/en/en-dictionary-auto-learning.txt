@@ -38,7 +38,7 @@ Return only corrected vocabulary terms that are worth adding to the speech dicti
 
 Accept:
 - Proper nouns, app/product/company names, people names, stable project names, acronyms, code/API names, model names, and uncommon domain terms.
-- Corrected spellings, capitalization, spacing, symbols, or homophones that matter for recognition, such as JWT, Redis, Session, INFO, Doubao, WhisperKit, MLX.
+- Corrected spellings, capitalization, spacing, symbols, or homophones that matter for recognition, such as JWT, Redis, Session, INFO, Doubao, Whisper, MLX.
 - Short Chinese domain terms or mixed Chinese/English terms when they are specific and reusable.
 
 Reject:

@@ -112,19 +112,6 @@ class OverlayState: ObservableObject {
         )
     }
 
-    func bind(to transcriber: WhisperKitTranscriber) {
-        bind(
-            isRecording: transcriber.$isRecording.eraseToAnyPublisher(),
-            isModelInitializing: transcriber.$isModelInitializing.eraseToAnyPublisher(),
-            audioLevel: transcriber.$audioLevel.eraseToAnyPublisher(),
-            transcribedText: transcriber.$transcribedText.eraseToAnyPublisher(),
-            isEnhancing: transcriber.$isEnhancing.eraseToAnyPublisher(),
-            isRequesting: Just(false).eraseToAnyPublisher(),
-            isFinalizingTranscription: transcriber.$isFinalizingTranscription.eraseToAnyPublisher(),
-            initializingEngine: .whisperKit
-        )
-    }
-
     func reset() {
         isRecording = false
         isModelInitializing = false

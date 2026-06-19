@@ -234,22 +234,6 @@ extension AppDelegate {
         defaults.bool(forKey: AppPreferenceKey.showInDock)
     }
 
-    var whisperTemperature: Double {
-        defaults.double(forKey: AppPreferenceKey.whisperTemperature)
-    }
-
-    var whisperVADEnabled: Bool {
-        defaults.object(forKey: AppPreferenceKey.whisperVADEnabled) as? Bool ?? true
-    }
-
-    var whisperTimestampsEnabled: Bool {
-        defaults.object(forKey: AppPreferenceKey.whisperTimestampsEnabled) as? Bool ?? false
-    }
-
-    var whisperRealtimeEnabled: Bool {
-        defaults.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) as? Bool ?? false
-    }
-
     var realtimeTextDisplayEnabled: Bool {
         defaults.object(forKey: AppPreferenceKey.realtimeTextDisplayEnabled) as? Bool ?? true
     }
@@ -311,9 +295,6 @@ extension AppDelegate {
         case .mlxAudio:
             let repo = mlxModelManager.currentModelRepo
             transcriptionModel = "\(mlxModelManager.displayTitle(for: repo)) (\(repo))"
-        case .whisperKit:
-            let modelID = whisperModelManager.currentModelID
-            transcriptionModel = "\(whisperModelManager.displayTitle(for: modelID)) (\(modelID))"
         case .remote:
             let provider = remoteASRSelectedProvider
             if let config = remoteASRConfigurations[provider.rawValue], config.hasUsableModel {
@@ -369,7 +350,9 @@ extension AppDelegate {
             remoteASRProviderInfo = nil
             remoteASRModelInfo = nil
             remoteASREndpointInfo = nil
-            senseVoiceMetadata = transcriptionEngine == .mlxAudio ? mlxTranscriber?.latestSenseVoiceMetadata : nil
+            senseVoiceMetadata = transcriptionEngine == .mlxAudio
+                ? mlxTranscriber?.latestSenseVoiceMetadata
+                : nil
         }
 
         if historyKind == .rewrite,
@@ -380,9 +363,7 @@ extension AppDelegate {
                 transcriptionProcessingDurationSeconds: processingDuration,
                 llmDurationSeconds: llmDurationSeconds,
                 pendingAudioArchiveURL: pendingAudioArchiveURL,
-                whisperWordTimings: transcriptionEngine == .whisperKit && whisperTimestampsEnabled
-                    ? whisperTranscriber?.latestWordTimings
-                    : nil,
+                whisperWordTimings: nil,
                 senseVoiceMetadata: senseVoiceMetadata,
                 dictionaryHitTerms: dictionaryHitTerms,
                 dictionaryCorrectedTerms: dictionaryCorrectedTerms,
@@ -426,9 +407,7 @@ extension AppDelegate {
             remoteLLMModel: textModelMetadata.remoteModelTitle,
             remoteLLMEndpoint: textModelMetadata.remoteEndpoint,
             audioRelativePath: audioRelativePath,
-            whisperWordTimings: transcriptionEngine == .whisperKit && whisperTimestampsEnabled
-                ? whisperTranscriber?.latestWordTimings
-                : nil,
+            whisperWordTimings: nil,
             senseVoiceMetadata: senseVoiceMetadata,
             displayTitle: trimmedDisplayTitle?.isEmpty == false ? trimmedDisplayTitle : nil,
             transcriptionChatMessages: historyKind == .rewrite
@@ -598,15 +577,6 @@ extension AppDelegate {
 
     private func resolvedTranslationHistoryTextModelMetadata() -> HistoryTextModelMetadata {
         switch translationFeatureSettings.modelSelectionID.translationSelection {
-        case .whisperDirectTranslate:
-            let whisperTitle = TranslationModelProvider.whisperKit.title
-            return HistoryTextModelMetadata(
-                modeTitle: whisperTitle,
-                modelTitle: whisperTitle,
-                remoteProviderTitle: nil,
-                remoteModelTitle: nil,
-                remoteEndpoint: nil
-            )
         case .localLLM(let repo):
             return HistoryTextModelMetadata(
                 modeTitle: TranslationModelProvider.customLLM.title,
@@ -750,8 +720,6 @@ extension AppDelegate {
             consumedURL = speechTranscriber.consumeCompletedAudioArchiveURL()
         case .mlxAudio:
             consumedURL = mlxTranscriber?.consumeCompletedAudioArchiveURL()
-        case .whisperKit:
-            consumedURL = whisperTranscriber?.consumeCompletedAudioArchiveURL()
         case .remote:
             consumedURL = remoteASRTranscriber.consumeCompletedAudioArchiveURL()
         }
@@ -777,7 +745,6 @@ extension AppDelegate {
         pendingCompletedHistoryAudioArchiveURL = nil
         speechTranscriber.discardCompletedAudioArchive()
         mlxTranscriber?.discardCompletedAudioArchive()
-        whisperTranscriber?.discardCompletedAudioArchive()
         remoteASRTranscriber.discardCompletedAudioArchive()
     }
 

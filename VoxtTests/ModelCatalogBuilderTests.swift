@@ -273,18 +273,18 @@ final class ModelCatalogBuilderTests: XCTestCase {
     }
 
     func testWhisperCatalogUsesCuratedRatingAndTags() throws {
-        let modelID = "small"
+        let repo = "mlx-community/whisper-small-mlx"
         let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(transcriptionASR: .whisper(modelID))
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo))
         )
 
         let entry = try XCTUnwrap(
-            builder.asrEntries().first(where: { $0.id == "whisper:\(modelID)" })
+            builder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
         )
 
         XCTAssertEqual(entry.ratingText, "4.5")
-        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
-        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
     }
 
@@ -328,10 +328,10 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(aliyun.badgeText, recommended)
     }
 
-    func testCatalogShowsRecommendedBadgeForQwenASRAndGemmaGroups() throws {
+    func testCatalogShowsRecommendedBadgeForWhisperQwenASRAndGemmaGroups() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
-                transcriptionASR: .mlx("mlx-community/Qwen3-ASR-0.6B-4bit"),
+                transcriptionASR: .mlx("mlx-community/whisper-large-v3-turbo"),
                 translationModel: .localLLM("mlx-community/gemma-2-2b-it-4bit")
             )
         )
@@ -340,6 +340,12 @@ final class ModelCatalogBuilderTests: XCTestCase {
         let llmGroups = LocalModelSeriesGrouping.modelCatalogItems(from: builder.llmEntries())
         let recommended = AppLocalization.localizedString("Recommended")
 
+        let whisperGroup = try XCTUnwrap(
+            asrGroups.compactMap { item -> ModelCatalogGroupSection? in
+                guard case .group(let group) = item, group.title == "Whisper" else { return nil }
+                return group
+            }.first
+        )
         let qwenGroup = try XCTUnwrap(
             asrGroups.compactMap { item -> ModelCatalogGroupSection? in
                 guard case .group(let group) = item, group.title == "Qwen3" else { return nil }
@@ -353,6 +359,8 @@ final class ModelCatalogBuilderTests: XCTestCase {
             }.first
         )
 
+        XCTAssertEqual(whisperGroup.badgeText, recommended)
+        XCTAssertEqual(whisperGroup.entries.map(\.groupedVariantTitle), ["Large v3 Turbo", "Large v3", "Small"])
         XCTAssertEqual(qwenGroup.badgeText, recommended)
         XCTAssertEqual(gemmaGroup.badgeText, recommended)
     }
@@ -365,15 +373,11 @@ final class ModelCatalogBuilderTests: XCTestCase {
         hasIssue: @escaping (ConfigurationTransferManager.MissingConfigurationIssue.Scope) -> Bool = { _ in false },
         isDownloadingModel: @escaping (String) -> Bool = { _ in false },
         isPausedModel: @escaping (String) -> Bool = { _ in false },
-        isDownloadingWhisperModel: @escaping (String) -> Bool = { _ in false },
-        isPausedWhisperModel: @escaping (String) -> Bool = { _ in false },
-        isAnotherWhisperModelDownloading: @escaping (String) -> Bool = { _ in false },
         isDownloadingCustomLLM: @escaping (String) -> Bool = { _ in false },
         isPausedCustomLLM: @escaping (String) -> Bool = { _ in false },
         isAnotherCustomLLMDownloading: @escaping (String) -> Bool = { _ in false },
         isCustomLLMInstalled: @escaping (String) -> Bool = { _ in false },
         isUninstallingModel: @escaping (String) -> Bool = { _ in false },
-        isUninstallingWhisperModel: @escaping (String) -> Bool = { _ in false },
         isUninstallingCustomLLM: @escaping (String) -> Bool = { _ in false },
         pauseModelDownload: @escaping (String) -> Void = { _ in },
         cancelModelDownload: @escaping (String) -> Void = { _ in },
@@ -415,38 +419,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
                 state: state,
                 isInstalled: isInstalled,
                 isCurrentSelection: featureSettings.transcription.asrSelectionID == .mlx(canonicalRepo),
-                statusText: "",
-                badgeText: nil,
-                downloadStatus: nil,
-                canOpenLocation: isInstalled,
-                canConfigure: false,
-                configureActionTitle: nil
-            )
-        }
-
-        let whisperInstallSnapshot: (String) -> LocalModelInstallSnapshot = { modelID in
-            let canonicalModelID = WhisperKitModelManager.canonicalModelID(modelID)
-            let isDownloading = isDownloadingWhisperModel(canonicalModelID)
-            let isPaused = isPausedWhisperModel(canonicalModelID)
-            let isUninstalling = isUninstallingWhisperModel(canonicalModelID)
-            let isInstalled = !isDownloading && !isPaused && !isUninstalling
-            let state: LocalModelInstallState
-            if isUninstalling {
-                state = .uninstalling
-            } else if isDownloading {
-                state = .downloading
-            } else if isPaused {
-                state = .paused
-            } else if isInstalled {
-                state = .installed
-            } else {
-                state = .installable(isEnabled: !isAnotherWhisperModelDownloading(canonicalModelID))
-            }
-            return LocalModelInstallSnapshot(
-                target: .whisper(canonicalModelID),
-                state: state,
-                isInstalled: isInstalled,
-                isCurrentSelection: featureSettings.transcription.asrSelectionID == .whisper(canonicalModelID),
                 statusText: "",
                 badgeText: nil,
                 downloadStatus: nil,
@@ -505,7 +477,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
 
         return ModelCatalogBuilder(
             mlxModelManager: TestModelManagers.mlx,
-            whisperModelManager: TestModelManagers.whisper,
             customLLMManager: TestModelManagers.customLLM,
             ggufTranslationModelManager: TestModelManagers.gguf,
             remoteASRConfigurations: remoteASRConfigurations,
@@ -517,7 +488,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
             remoteLLMBadgeText: { _ in nil },
             primaryUserLanguageCode: primaryUserLanguageCode,
             mlxInstallSnapshot: mlxInstallSnapshot,
-            whisperInstallSnapshot: whisperInstallSnapshot,
             customLLMInstallSnapshot: customLLMInstallSnapshot,
             ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot,
             catalogPrimaryAction: { snapshot in
@@ -568,10 +538,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
 @MainActor
 private enum TestModelManagers {
     static let mlx = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
-    static let whisper = WhisperKitModelManager(
-        modelID: WhisperKitModelManager.defaultModelID,
-        hubBaseURL: URL(string: "https://huggingface.co")!
-    )
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
     static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

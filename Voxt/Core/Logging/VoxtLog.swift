@@ -43,8 +43,12 @@ enum VoxtLog {
     }
 
     nonisolated static func hotkey(_ message: @autoclosure () -> String) {
-        guard UserDefaults.standard.bool(forKey: AppPreferenceKey.hotkeyDebugLoggingEnabled) else { return }
+        guard isHotkeyDebugLoggingEnabled else { return }
         hotkeyLogger.info(message())
+    }
+
+    nonisolated static var isHotkeyDebugLoggingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: AppPreferenceKey.hotkeyDebugLoggingEnabled)
     }
 
     nonisolated static func input(_ message: @autoclosure () -> String, verbose: Bool = false) {
@@ -247,13 +251,11 @@ enum VoxtLog {
             provider: remoteLLMProvider,
             stored: remoteLLMConfigurations
         )
-        let selectedEngine = TranscriptionEngine(rawValue: defaults.string(forKey: AppPreferenceKey.transcriptionEngine) ?? "")
-            ?? .mlxAudio
+        let selectedEngine = TranscriptionEngine.resolved(
+            rawValue: defaults.string(forKey: AppPreferenceKey.transcriptionEngine)
+        )
         let enhancementMode = EnhancementMode(rawValue: defaults.string(forKey: AppPreferenceKey.enhancementMode) ?? "")
             ?? .off
-        let whisperModelID = WhisperKitModelManager.canonicalModelID(
-            defaults.string(forKey: AppPreferenceKey.whisperModelID) ?? WhisperKitModelManager.defaultModelID
-        )
         let mlxModelRepo = MLXModelManager.canonicalModelRepo(
             defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelCatalog.defaultModelRepo
         )
@@ -294,7 +296,6 @@ enum VoxtLog {
         lines.append("selectedTranscriptionEngine: \(selectedEngine.rawValue) [\(selectedEngine.title)]")
         lines.append("enhancementMode: \(enhancementMode.rawValue) [\(enhancementMode.title)]")
         lines.append("realtimeTextDisplayEnabled: \(defaults.bool(forKey: AppPreferenceKey.realtimeTextDisplayEnabled))")
-        lines.append("whisperRealtimeEnabled: \(defaults.bool(forKey: AppPreferenceKey.whisperRealtimeEnabled))")
         lines.append("voiceEndCommandEnabled: \(defaults.bool(forKey: AppPreferenceKey.voiceEndCommandEnabled))")
         lines.append("voiceEndCommandPreset: \(voiceEndPreset.rawValue) [\(voiceEndPreset.title)]")
         lines.append("voiceEndCommandText: \(nonEmptyOrPlaceholder(defaults.string(forKey: AppPreferenceKey.voiceEndCommandText), placeholder: "<preset>"))")
@@ -313,7 +314,6 @@ enum VoxtLog {
         lines.append("useHfMirror: \(defaults.bool(forKey: AppPreferenceKey.useHfMirror))")
         lines.append("localModelIdleUnloadDelaySeconds: \(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds(defaults: defaults))")
         lines.append("mlxModel: \(mlxModelRepo) [\(MLXModelCatalog.displayTitle(for: mlxModelRepo))]")
-        lines.append("whisperModel: \(whisperModelID) [\(WhisperKitModelCatalog.displayTitle(for: whisperModelID))]")
         lines.append("customLLMModelRepo: \(nonEmptyOrPlaceholder(defaults.string(forKey: AppPreferenceKey.customLLMModelRepo)))")
         lines.append("translationCustomLLMModelRepo: \(nonEmptyOrPlaceholder(defaults.string(forKey: AppPreferenceKey.translationCustomLLMModelRepo)))")
         lines.append("rewriteCustomLLMModelRepo: \(nonEmptyOrPlaceholder(defaults.string(forKey: AppPreferenceKey.rewriteCustomLLMModelRepo)))")

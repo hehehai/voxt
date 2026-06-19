@@ -312,7 +312,7 @@ class MLXModelManager: ObservableObject {
             let snapshot = catalogSnapshot(for: repo)
             return snapshot.isDownloaded || snapshot.isDownloading || snapshot.isPaused ? repo : nil
         })
-        return MLXModelCatalog.displayModels(includingInstalled: localStateRepos)
+        return MLXModelCatalog.displayModels(includingInstalled: localStateRepos.union([Self.canonicalModelRepo(modelRepo)]))
     }
 
     nonisolated static func isRealtimeCapableModelRepo(_ repo: String) -> Bool {
@@ -774,6 +774,9 @@ class MLXModelManager: ObservableObject {
         }
         if lower.contains("glmasr") || lower.contains("glm-asr") {
             return try await GLMASRModel.fromModelDirectory(modelDir)
+        }
+        if lower.contains("whisper") {
+            return try await WhisperModel.fromDirectory(modelDir)
         }
         if lower.contains("firered") {
             return try FireRedASR2Model.fromDirectory(modelDir)
@@ -1372,6 +1375,13 @@ class MLXModelManager: ObservableObject {
             )
         }
 
+        try await downloadMissingWhisperTokenizerAssetsIfNeeded(
+            for: repo,
+            directory: tempDir,
+            baseURL: baseURL,
+            bearerToken: bearerToken
+        )
+
         VoxtLog.modelInfo("Validating downloaded files...", verbose: true)
         try MLXModelDownloadSupport.validateDownloadedModel(
             at: tempDir,
@@ -1413,6 +1423,55 @@ class MLXModelManager: ObservableObject {
             ),
             progress: progress
         )
+    }
+
+    private func downloadMissingWhisperTokenizerAssetsIfNeeded(
+        for repo: String,
+        directory: URL,
+        baseURL: URL,
+        bearerToken: String?
+    ) async throws {
+        guard let tokenizerRepo = MLXModelDownloadSupport.whisperTokenizerRepo(for: repo) else {
+            return
+        }
+        let missingPaths = MLXModelDownloadSupport.missingWhisperTokenizerAssetPaths(
+            at: directory,
+            fileManager: .default
+        )
+        guard !missingPaths.isEmpty else { return }
+
+        let session = MLXModelDownloadSupport.makeDownloadSession(for: baseURL)
+        VoxtLog.modelInfo(
+            "Fetching Whisper tokenizer entries. repo=\(repo), tokenizerRepo=\(tokenizerRepo)"
+        )
+        let availableEntries = try await MLXModelDownloadSupport.fetchModelEntries(
+            repo: tokenizerRepo,
+            baseURL: baseURL,
+            session: session,
+            userAgent: Self.hubUserAgent
+        )
+        let availableByPath = Dictionary(uniqueKeysWithValues: availableEntries.map { ($0.path, $0) })
+        let entries = try missingPaths.map { path -> MLXModelDownloadSupport.ModelFileEntry in
+            guard let entry = availableByPath[path] else {
+                throw MLXModelDownloadSupport.DownloadValidationError.missingFiles
+            }
+            return entry
+        }
+
+        VoxtLog.modelInfo(
+            "Downloading Whisper tokenizer assets. repo=\(repo), tokenizerRepo=\(tokenizerRepo), files=\(entries.map(\.path).joined(separator: ", "))"
+        )
+        for entry in entries {
+            let progress = Progress(totalUnitCount: max(entry.size ?? 0, 1))
+            try await downloadEntryWithRetry(
+                repo: tokenizerRepo,
+                entryPath: entry.path,
+                tempDir: directory,
+                progress: progress,
+                baseURL: baseURL,
+                bearerToken: bearerToken
+            )
+        }
     }
 
     private func setDownloadingState(
@@ -1540,7 +1599,8 @@ class MLXModelManager: ObservableObject {
         for repo: String,
         existingDirectory: URL
     ) async throws -> URL {
-        guard repo.lowercased().contains("sensevoice") else {
+        let lowercasedRepo = repo.lowercased()
+        guard lowercasedRepo.contains("sensevoice") || lowercasedRepo.contains("whisper") else {
             return existingDirectory
         }
         guard !MLXModelDownloadSupport.isModelDirectoryValid(
@@ -1553,14 +1613,31 @@ class MLXModelManager: ObservableObject {
 
         let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
             ?? Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String
+        let repairDirectory = try writableRepairDirectoryIfNeeded(
+            for: repo,
+            existingDirectory: existingDirectory
+        )
 
         try await repairIncompleteModelDirectoryIfNeeded(
             for: repo,
-            existingDirectory: existingDirectory,
+            existingDirectory: repairDirectory,
             baseURL: hubBaseURL,
             bearerToken: token
         )
-        return existingDirectory
+        return repairDirectory
+    }
+
+    private func writableRepairDirectoryIfNeeded(
+        for repo: String,
+        existingDirectory: URL
+    ) throws -> URL {
+        if FileManager.default.isWritableFile(atPath: existingDirectory.path) {
+            return existingDirectory
+        }
+        guard let writableDirectory = writableShadowDirectory(for: repo) else {
+            return existingDirectory
+        }
+        return try prepareWritableShadowDirectory(from: existingDirectory, to: writableDirectory)
     }
 
     private func repairIncompleteModelDirectoryIfNeeded(
@@ -1598,6 +1675,16 @@ class MLXModelManager: ObservableObject {
         baseURL: URL,
         bearerToken: String?
     ) async throws {
+        if MLXModelDownloadSupport.whisperTokenizerRepo(for: repo) != nil {
+            try await downloadMissingWhisperTokenizerAssetsIfNeeded(
+                for: repo,
+                directory: existingDirectory,
+                baseURL: baseURL,
+                bearerToken: bearerToken
+            )
+            return
+        }
+
         let session = MLXModelDownloadSupport.makeDownloadSession(for: baseURL)
         let entries = try await MLXModelDownloadSupport.fetchModelEntries(
             repo: repo,

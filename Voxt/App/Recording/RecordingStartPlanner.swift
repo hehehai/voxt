@@ -7,9 +7,6 @@ enum RecordingStartBlockReason: Equatable {
     case mlxModelNotInstalled
     case mlxModelDownloading
     case mlxModelUnavailable(detail: String?)
-    case whisperModelNotInstalled
-    case whisperModelDownloading
-    case whisperModelUnavailable(detail: String?)
 
     var userMessage: String {
         switch self {
@@ -21,16 +18,6 @@ enum RecordingStartBlockReason: Equatable {
             return detailedUnavailableMessage(
                 base: String(localized: "MLX model is unavailable. Open Settings > Model to fix it."),
                 detailedFormat: String(localized: "MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
-                detail: detail
-            )
-        case .whisperModelNotInstalled:
-            return String(localized: "Whisper model is not downloaded. Open Settings > Model to install it.")
-        case .whisperModelDownloading:
-            return String(localized: "Whisper model is still downloading. Wait for installation to finish and try again.")
-        case .whisperModelUnavailable(let detail):
-            return detailedUnavailableMessage(
-                base: String(localized: "Whisper model is unavailable. Open Settings > Model to fix it."),
-                detailedFormat: String(localized: "Whisper model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
                 detail: detail
             )
         }
@@ -47,21 +34,12 @@ enum RecordingStartBlockReason: Equatable {
                 base: "MLX Audio model is unavailable.",
                 detail: detail
             )
-        case .whisperModelNotInstalled:
-            return "Whisper model is not downloaded."
-        case .whisperModelDownloading:
-            return "Whisper model download is still in progress."
-        case .whisperModelUnavailable(let detail):
-            return detailedLogDescription(
-                base: "Whisper model is unavailable.",
-                detail: detail
-            )
         }
     }
 
     var reminderDuration: TimeInterval {
         switch self {
-        case .mlxModelUnavailable(let detail), .whisperModelUnavailable(let detail):
+        case .mlxModelUnavailable(let detail):
             return normalizedDetail(detail) == nil ? 2.4 : 4.2
         default:
             return 2.4
@@ -114,11 +92,7 @@ enum RecordingStartPlanner {
         selectedMLXRepo: String? = nil,
         activeMLXDownloadRepo: String? = nil,
         isSelectedMLXModelDownloaded: Bool = false,
-        mlxModelState: MLXModelManager.ModelState,
-        selectedWhisperModelID: String? = nil,
-        activeWhisperDownloadModelID: String? = nil,
-        isSelectedWhisperModelDownloaded: Bool = false,
-        whisperModelState: WhisperKitModelManager.ModelState
+        mlxModelState: MLXModelManager.ModelState
     ) -> RecordingStartDecision {
         switch selectedEngine {
         case .dictation:
@@ -137,19 +111,6 @@ enum RecordingStartPlanner {
                 notInstalledReason: .mlxModelNotInstalled,
                 downloadingReason: .mlxModelDownloading,
                 unavailableReason: { .mlxModelUnavailable(detail: $0) }
-            )
-        case .whisperKit:
-            return decision(
-                engine: .whisperKit,
-                availability: whisperAvailability(
-                    selectedModelID: selectedWhisperModelID,
-                    activeDownloadModelID: activeWhisperDownloadModelID,
-                    isSelectedModelDownloaded: isSelectedWhisperModelDownloaded,
-                    state: whisperModelState
-                ),
-                notInstalledReason: .whisperModelNotInstalled,
-                downloadingReason: .whisperModelDownloading,
-                unavailableReason: { .whisperModelUnavailable(detail: $0) }
             )
         }
     }
@@ -188,46 +149,12 @@ enum RecordingStartPlanner {
         )
     }
 
-    private static func whisperAvailability(
-        selectedModelID: String?,
-        activeDownloadModelID: String?,
-        isSelectedModelDownloaded: Bool,
-        state: WhisperKitModelManager.ModelState
-    ) -> DownloadableModelAvailability {
-        availability(
-            selectedIdentifier: selectedModelID,
-            activeIdentifier: activeDownloadModelID,
-            isSelectedModelDownloaded: isSelectedModelDownloaded,
-            canonicalize: WhisperKitModelManager.canonicalModelID,
-            state: state
-        )
-    }
-
     private static func availability(
         selectedIdentifier: String?,
         activeIdentifier: String?,
         isSelectedModelDownloaded: Bool,
         canonicalize: (String) -> String,
         state: MLXModelManager.ModelState
-    ) -> DownloadableModelAvailability {
-        availability(
-            isSelectedDownloadActive: isSelectedOperationActive(
-                selectedIdentifier: selectedIdentifier,
-                activeIdentifier: activeIdentifier,
-                canonicalize: canonicalize
-            ),
-            isSelectedModelDownloaded: isSelectedModelDownloaded,
-            phase: downloadStatePhase(for: state),
-            unavailableDetail: modelErrorDetail(from: state)
-        )
-    }
-
-    private static func availability(
-        selectedIdentifier: String?,
-        activeIdentifier: String?,
-        isSelectedModelDownloaded: Bool,
-        canonicalize: (String) -> String,
-        state: WhisperKitModelManager.ModelState
     ) -> DownloadableModelAvailability {
         availability(
             isSelectedDownloadActive: isSelectedOperationActive(
@@ -275,19 +202,6 @@ enum RecordingStartPlanner {
         }
     }
 
-    private static func downloadStatePhase(for state: WhisperKitModelManager.ModelState) -> DownloadStatePhase {
-        switch state {
-        case .downloaded, .ready, .loading:
-            return .ready
-        case .notDownloaded:
-            return .notDownloaded
-        case .downloading, .paused:
-            return .activeDownload
-        case .error:
-            return .unavailable
-        }
-    }
-
     private static func isSelectedOperationActive(
         selectedIdentifier: String?,
         activeIdentifier: String?,
@@ -298,11 +212,6 @@ enum RecordingStartPlanner {
     }
 
     private static func modelErrorDetail(from state: MLXModelManager.ModelState) -> String? {
-        guard case .error(let message) = state else { return nil }
-        return message
-    }
-
-    private static func modelErrorDetail(from state: WhisperKitModelManager.ModelState) -> String? {
         guard case .error(let message) = state else { return nil }
         return message
     }

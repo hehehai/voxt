@@ -7,6 +7,16 @@ import HuggingFace
 
 enum MLXModelDownloadSupport {
     private static let modelEntryAllowedExtensions: Set<String> = ["safetensors", "json", "txt", "wav", "jinja", "model", "mvn"]
+    static let whisperTokenizerAssetPaths: [String] = [
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "added_tokens.json",
+        "vocab.json",
+        "merges.txt",
+        "normalizer.json",
+        "generation_config.json",
+    ]
     private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useMB, .useGB]
@@ -387,6 +397,36 @@ enum MLXModelDownloadSupport {
         }
     }
 
+    static func whisperTokenizerRepo(for repo: String) -> String? {
+        let lowercasedRepo = repo.lowercased()
+        guard lowercasedRepo.contains("whisper") else { return nil }
+        if lowercasedRepo.contains("tiny") {
+            return "openai/whisper-tiny"
+        }
+        if lowercasedRepo.contains("base") {
+            return "openai/whisper-base"
+        }
+        if lowercasedRepo.contains("small") {
+            return "openai/whisper-small"
+        }
+        if lowercasedRepo.contains("medium") {
+            return "openai/whisper-medium"
+        }
+        if lowercasedRepo.contains("large-v2") {
+            return "openai/whisper-large-v2"
+        }
+        return "openai/whisper-large-v3"
+    }
+
+    static func missingWhisperTokenizerAssetPaths(
+        at directory: URL,
+        fileManager: FileManager
+    ) -> [String] {
+        whisperTokenizerAssetPaths.filter { path in
+            !fileManager.fileExists(atPath: directory.appendingPathComponent(path).path)
+        }
+    }
+
     static func isMirrorHost(_ url: URL) -> Bool {
         url.host?.contains("hf-mirror.com") == true
     }
@@ -417,11 +457,14 @@ enum MLXModelDownloadSupport {
         fileManager: FileManager
     ) -> Bool {
         switch resolvedModelType(at: directory, repo: repo, fileManager: fileManager) {
+        case "whisper":
+            return missingWhisperTokenizerAssetPaths(at: directory, fileManager: fileManager).isEmpty
         case "sensevoice":
             return hasSenseVoiceTokenizerAssets(at: directory, fileManager: fileManager)
                 && fileManager.fileExists(atPath: directory.appendingPathComponent("am.mvn").path)
         default:
-            return true
+            guard let repo, whisperTokenizerRepo(for: repo) != nil else { return true }
+            return missingWhisperTokenizerAssetPaths(at: directory, fileManager: fileManager).isEmpty
         }
     }
 

@@ -132,8 +132,6 @@ extension AppDelegate {
             case .remoteLLM:
                 let context = resolvedRemoteLLMContext(forTranslation: true)
                 provider = .remote(provider: context.provider, configuration: context.configuration)
-            case .whisperKit:
-                return nil
             }
         }
 

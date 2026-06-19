@@ -80,57 +80,6 @@ enum ModelDownloadPresentationSupport {
         }
     }
 
-    static func whisperStatusText(
-        activeDownload: WhisperKitModelManager.ActiveDownload?,
-        pauseMessage: String?,
-        errorMessage: String?
-    ) -> String {
-        guard let activeDownload else {
-            if let errorMessage, !errorMessage.isEmpty {
-                return "Error: \(errorMessage)"
-            }
-            return ""
-        }
-
-        let progressText = ModelDownloadProgressFormatter.progressText(
-            completed: activeDownload.completed,
-            total: activeDownload.total
-        )
-        let summaryText = statusText(
-            downloadState: activeDownload.isPaused
-                ? .paused(
-                    completed: activeDownload.completed,
-                    total: activeDownload.total,
-                    pauseMessage: pauseMessage
-                )
-                : .downloading(
-                    completed: activeDownload.completed,
-                    total: activeDownload.total
-                )
-        )
-
-        let detailText = activeDownload.isPaused
-            ? ModelDownloadProgressFormatter.pausedFileProgressText(
-                currentFile: activeDownload.currentFile,
-                currentFileCompleted: activeDownload.currentFileCompleted,
-                currentFileTotal: activeDownload.currentFileTotal,
-                completedFiles: activeDownload.completedFiles,
-                totalFiles: activeDownload.totalFiles
-            )
-            : ModelDownloadProgressFormatter.fileProgressText(
-                currentFile: activeDownload.currentFile,
-                currentFileCompleted: activeDownload.currentFileCompleted,
-                currentFileTotal: activeDownload.currentFileTotal,
-                completedFiles: activeDownload.completedFiles,
-                totalFiles: activeDownload.totalFiles
-            )
-
-        if detailText.isEmpty || detailText == progressText {
-            return summaryText
-        }
-        return AppLocalization.format("%@ • %@", summaryText, detailText)
-    }
-
     enum DownloadState {
         case idle
         case downloading(completed: Int64, total: Int64)

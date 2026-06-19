@@ -36,12 +36,7 @@ final class MeetingASRSupportTests: XCTestCase {
 
     func testWhisperMeetingFallsBackToMLXContext() {
         let context = MeetingASRSupport.resolveContext(
-            transcriptionEngine: .whisperKit,
-            whisperModelState: .ready,
-            whisperCurrentModelID: "base",
-            whisperRealtimeEnabled: true,
-            whisperIsCurrentModelLoaded: true,
-            whisperDisplayTitle: { _ in "Whisper Base" },
+            transcriptionEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
             mlxModelState: .ready,
             mlxCurrentModelRepo: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
             mlxIsCurrentModelLoaded: true,
@@ -62,11 +57,6 @@ final class MeetingASRSupportTests: XCTestCase {
     func testMLXRealtimeModelUsesRealtimeProfile() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .mlxAudio,
-            whisperModelState: .notDownloaded,
-            whisperCurrentModelID: "base",
-            whisperRealtimeEnabled: false,
-            whisperIsCurrentModelLoaded: false,
-            whisperDisplayTitle: { _ in "" },
             mlxModelState: .ready,
             mlxCurrentModelRepo: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
             mlxIsCurrentModelLoaded: true,
@@ -83,11 +73,6 @@ final class MeetingASRSupportTests: XCTestCase {
     func testOpenAIPseudoRealtimeUsesRealtimeProfile() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .remote,
-            whisperModelState: .notDownloaded,
-            whisperCurrentModelID: "base",
-            whisperRealtimeEnabled: false,
-            whisperIsCurrentModelLoaded: false,
-            whisperDisplayTitle: { _ in "" },
             mlxModelState: .notDownloaded,
             mlxCurrentModelRepo: MLXModelManager.defaultModelRepo,
             mlxIsCurrentModelLoaded: false,
@@ -110,11 +95,6 @@ final class MeetingASRSupportTests: XCTestCase {
     func testGLMRemoteUsesQualityProfile() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .remote,
-            whisperModelState: .notDownloaded,
-            whisperCurrentModelID: "base",
-            whisperRealtimeEnabled: false,
-            whisperIsCurrentModelLoaded: false,
-            whisperDisplayTitle: { _ in "" },
             mlxModelState: .notDownloaded,
             mlxCurrentModelRepo: MLXModelManager.defaultModelRepo,
             mlxIsCurrentModelLoaded: false,
@@ -135,11 +115,6 @@ final class MeetingASRSupportTests: XCTestCase {
     func testAliyunRealtimeMeetingUsesLiveRemoteMode() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .remote,
-            whisperModelState: .notDownloaded,
-            whisperCurrentModelID: "base",
-            whisperRealtimeEnabled: false,
-            whisperIsCurrentModelLoaded: false,
-            whisperDisplayTitle: { _ in "" },
             mlxModelState: .notDownloaded,
             mlxCurrentModelRepo: MLXModelManager.defaultModelRepo,
             mlxIsCurrentModelLoaded: false,
@@ -160,11 +135,6 @@ final class MeetingASRSupportTests: XCTestCase {
     func testDoubaoMeetingUsesLiveRemoteModel() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .remote,
-            whisperModelState: .notDownloaded,
-            whisperCurrentModelID: "base",
-            whisperRealtimeEnabled: false,
-            whisperIsCurrentModelLoaded: false,
-            whisperDisplayTitle: { _ in "" },
             mlxModelState: .notDownloaded,
             mlxCurrentModelRepo: MLXModelManager.defaultModelRepo,
             mlxIsCurrentModelLoaded: false,

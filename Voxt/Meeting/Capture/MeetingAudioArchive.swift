@@ -2,7 +2,6 @@
 // Provides Meeting Audio Archive for meeting capture.
 
 import Foundation
-import WhisperKit
 
 actor MeetingAudioArchive {
     private static let segmentDurationSeconds: TimeInterval = 300

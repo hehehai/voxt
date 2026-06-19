@@ -157,7 +157,6 @@ enum OnboardingFeatureSelectionResolver {
     static func asrSelectionID(
         selectedEngine: TranscriptionEngine,
         mlxModelRepo: String,
-        whisperModelID: String,
         remoteASRProvider: RemoteASRProvider
     ) -> FeatureModelSelectionID {
         switch selectedEngine {
@@ -165,8 +164,6 @@ enum OnboardingFeatureSelectionResolver {
             return .dictation
         case .mlxAudio:
             return .mlx(mlxModelRepo)
-        case .whisperKit:
-            return .whisper(whisperModelID)
         case .remote:
             return .remoteASR(remoteASRProvider)
         }
@@ -193,17 +190,18 @@ enum OnboardingFeatureSelectionResolver {
         existingSelection: FeatureModelSelectionID,
         fallbackLocalLLMRepo: String
     ) -> FeatureModelSelectionID {
+        if existingSelection.rawValue == "whisper-direct-translate" {
+            return .localLLM(fallbackLocalLLMRepo)
+        }
+
         switch llmSelection.textSelection {
         case .localLLM(let repo):
             return .localLLM(repo)
         case .remoteLLM(let provider):
             return .remoteLLM(provider)
         case .appleIntelligence:
-            if case .whisper = asrSelection.asrSelection {
-                return .whisperDirectTranslate
-            }
             switch existingSelection.translationSelection {
-            case .localLLM, .localGGUF, .remoteLLM, .whisperDirectTranslate:
+            case .localLLM, .localGGUF, .remoteLLM:
                 return existingSelection
             case .none:
                 return .localLLM(fallbackLocalLLMRepo)

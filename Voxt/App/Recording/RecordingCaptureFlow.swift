@@ -15,15 +15,6 @@ extension AppDelegate {
         }
     }
 
-    var isWhisperReady: Bool {
-        switch whisperModelManager.state {
-        case .downloaded, .ready, .loading:
-            return true
-        default:
-            return false
-        }
-    }
-
     func startMLXRecordingSession() {
         let mlx = mlxTranscriber ?? MLXTranscriber(modelManager: mlxModelManager)
         mlxTranscriber = mlx
@@ -106,86 +97,6 @@ extension AppDelegate {
         }
     }
 
-    func startWhisperRecordingSession() {
-        let whisper = whisperTranscriber ?? WhisperKitTranscriber(modelManager: whisperModelManager)
-        whisperTranscriber = whisper
-        whisper.dictionaryEntryProvider = { [weak self] in
-            guard let self else { return [] }
-            return self.dictionaryStore.activeEntriesForRemoteRequest(
-                activeGroupID: self.activeDictionaryGroupID(),
-                limit: DictionaryEntryCollection.asrPromptTermLimit
-            )
-        }
-        let sessionID = activeRecordingSessionID
-        let needsModelInitialization = !whisperModelManager.isCurrentModelLoaded
-
-        overlayState.statusMessage = ""
-        overlayState.isModelInitializing = needsModelInitialization
-        overlayState.initializingEngine = needsModelInitialization ? .whisperKit : nil
-        whisper.transcribedText = ""
-        whisper.sessionAllowsRealtimeTextDisplay = transcriptionCapturePipeline.usesLiveDisplay
-        whisper.isModelInitializing = needsModelInitialization
-        whisper.setPreferredInputDevice(selectedInputDeviceID)
-        whisper.onPartialTranscription = { [weak self] text in
-            self?.handleLiveASRPartialTranscription(text, sessionID: sessionID)
-        }
-        whisper.onTranscriptionFinished = { [weak self] text in
-            self?.stashPendingCompletedHistoryAudioArchive(self?.whisperTranscriber?.consumeCompletedAudioArchiveURL())
-            self?.processTranscription(text, sessionID: sessionID)
-        }
-        overlayState.bind(to: whisper)
-        overlayWindow.show(
-            state: overlayState,
-            position: overlayPosition
-        )
-        if let captureStartFailure = whisper.startRecordingCapture() {
-            handleRecordingStartFailure(captureStartFailure)
-            return
-        }
-
-        pendingWhisperStartupTask?.cancel()
-        pendingWhisperStartupTask = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                if self.pendingWhisperStartupTask?.isCancelled != false {
-                    self.pendingWhisperStartupTask = nil
-                } else if !self.shouldHandleCallbacks(for: sessionID) || !self.isSessionActive {
-                    self.pendingWhisperStartupTask = nil
-                }
-            }
-            let granted = await whisper.requestPermissions()
-            guard self.shouldContinueWhisperStartup(for: sessionID) else { return }
-            guard granted else {
-                self.handleRecordingPermissionDenied()
-                return
-            }
-
-            let useWhisperDirectTranslation = self.shouldUseWhisperDirectTranslationForCurrentSession()
-            let failureMessage = await whisper.prepareSession(
-                outputMode: self.sessionOutputMode,
-                useBuiltInTranslationTask: useWhisperDirectTranslation
-            )
-            guard self.shouldContinueWhisperStartup(for: sessionID) else { return }
-            if let failureMessage {
-                self.handleRecordingStartFailure(failureMessage)
-                return
-            }
-
-            self.sessionUsesWhisperDirectTranslation = useWhisperDirectTranslation
-            if let startFailureMessage = await whisper.startRecordingSession() {
-                guard self.shouldContinueWhisperStartup(for: sessionID) else { return }
-                VoxtLog.asrWarning("Whisper recording session did not enter recording state. reason=\(startFailureMessage)")
-                self.handleRecordingStartFailure(startFailureMessage)
-                return
-            }
-            self.pendingWhisperStartupTask = nil
-            guard self.shouldContinueWhisperStartup(for: sessionID) else {
-                whisper.stopRecording()
-                return
-            }
-        }
-    }
-
     func startRemoteRecordingSession() {
         Task { [weak self] in
             guard let self else { return }
@@ -231,8 +142,6 @@ extension AppDelegate {
         switch engine {
         case .mlxAudio:
             startMLXRecordingSession()
-        case .whisperKit:
-            startWhisperRecordingSession()
         case .remote:
             startRemoteRecordingSession()
         case .dictation:
@@ -312,7 +221,6 @@ extension AppDelegate {
     func applyPreferredInputDevice() {
         speechTranscriber.setPreferredInputDevice(selectedInputDeviceID)
         mlxTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
-        whisperTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
         remoteASRTranscriber.setPreferredInputDevice(selectedInputDeviceID)
     }
 
@@ -364,14 +272,6 @@ extension AppDelegate {
     func stopActiveRecordingTranscriber() {
         if transcriptionEngine == .mlxAudio {
             mlxTranscriber?.stopRecording()
-        } else if transcriptionEngine == .whisperKit, isWhisperReady {
-            if let whisperTranscriber {
-                VoxtLog.asr(
-                    "Issuing Whisper stop. \(whisperTranscriber.debugCaptureStopSummary())",
-                    verbose: true
-                )
-            }
-            whisperTranscriber?.stopRecording()
         } else if transcriptionEngine == .remote {
             remoteASRTranscriber.stopRecording()
         } else {
@@ -385,8 +285,6 @@ extension AppDelegate {
             remoteASRTranscriber.transcribedText = text
         case .mlxAudio:
             mlxTranscriber?.transcribedText = text
-        case .whisperKit:
-            whisperTranscriber?.transcribedText = text
         case .dictation:
             speechTranscriber.transcribedText = text
         }
@@ -396,7 +294,7 @@ extension AppDelegate {
         switch transcriptionEngine {
         case .mlxAudio:
             return mlxTranscriber?.consumePendingRuntimeFailureMessage()
-        case .whisperKit, .remote, .dictation:
+        case .remote, .dictation:
             return nil
         }
     }
@@ -405,8 +303,6 @@ extension AppDelegate {
         switch transcriptionEngine {
         case .mlxAudio:
             mlxTranscriber?.isEnhancing = isEnhancing
-        case .whisperKit:
-            whisperTranscriber?.isEnhancing = isEnhancing
         case .remote:
             remoteASRTranscriber.isEnhancing = isEnhancing
         case .dictation:
@@ -424,8 +320,6 @@ extension AppDelegate {
         silenceMonitorTask = nil
         pauseLLMTask?.cancel()
         pauseLLMTask = nil
-        pendingWhisperStartupTask?.cancel()
-        pendingWhisperStartupTask = nil
     }
 
     func cancelSessionControlTasks() {
@@ -451,11 +345,6 @@ extension AppDelegate {
     private func restartCurrentRecordingCaptureForPreferredInputDevice() throws {
         if transcriptionEngine == .mlxAudio {
             try mlxTranscriber?.restartCaptureForPreferredInputDevice()
-            return
-        }
-
-        if transcriptionEngine == .whisperKit {
-            try whisperTranscriber?.restartCaptureForPreferredInputDevice()
             return
         }
 
@@ -502,14 +391,6 @@ extension AppDelegate {
                         self.mlxTranscriber?.forceIntermediateTranscription()
                     }
 
-                    if self.transcriptionEngine == .whisperKit,
-                       !self.whisperRealtimeEnabled,
-                       silentDuration >= 2.0,
-                       !self.didTriggerPauseTranscription {
-                        self.didTriggerPauseTranscription = true
-                        self.whisperTranscriber?.forceIntermediateTranscription()
-                    }
-
                 }
 
                 if self.shouldStopRecordingForVoiceEndCommand() {
@@ -533,10 +414,6 @@ extension AppDelegate {
         voiceEndCommandState.lastDetectedCommand = false
     }
 
-    private func shouldUseWhisperDirectTranslationForCurrentSession() -> Bool {
-        activeSessionTranslationProviderResolution?.usesWhisperDirectTranslation == true
-    }
-
     private func triggerVoiceEndCommandStop() {
         voiceEndCommandState.didAutoStop = true
         voiceEndCommandState.lastDetectedCommand = false
@@ -544,10 +421,4 @@ extension AppDelegate {
         endRecording()
     }
 
-    private func shouldContinueWhisperStartup(for sessionID: UUID) -> Bool {
-        shouldHandleCallbacks(for: sessionID)
-            && isSessionActive
-            && !isSessionCancellationRequested
-            && recordingStoppedAt == nil
-    }
 }

@@ -6,7 +6,6 @@ import Foundation
 extension ModelSettingsView {
     func refreshAllModelStorageRoots() {
         mlxModelManager.refreshStorageRoot()
-        whisperModelManager.refreshStorageRoot()
         customLLMManager.refreshStorageRoot()
         ggufTranslationModelManager.refreshStorageRoot()
     }
@@ -17,14 +16,6 @@ extension ModelSettingsView {
             modelRepo = canonicalRepo
         }
         mlxModelManager.updateModel(repo: canonicalRepo)
-        let canonicalWhisperModelID = WhisperKitModelManager.canonicalModelID(whisperModelID)
-        if canonicalWhisperModelID != whisperModelID {
-            whisperModelID = canonicalWhisperModelID
-        }
-        whisperModelManager.updateModel(id: canonicalWhisperModelID)
-        if UserDefaults.standard.object(forKey: AppPreferenceKey.whisperRealtimeEnabled) == nil {
-            whisperRealtimeEnabled = false
-        }
         let resolvedIdleUnloadDelay = AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds()
         if UserDefaults.standard.object(forKey: AppPreferenceKey.localModelIdleUnloadDelaySeconds) == nil
             || localModelIdleUnloadDelaySeconds != resolvedIdleUnloadDelay
@@ -76,7 +67,6 @@ extension ModelSettingsView {
         updateMirrorSetting()
         mlxModelManager.refreshMemoryOptimizationPolicy()
         customLLMManager.refreshMemoryOptimizationPolicy()
-        whisperModelManager.refreshMemoryOptimizationPolicy()
         ggufTranslationModelManager.refreshStorageRoot()
         DispatchQueue.main.async {
             refreshModelInstallStateIfNeeded()
@@ -84,17 +74,7 @@ extension ModelSettingsView {
     }
 
     func syncTranslationFallbackProvider() {
-        let currentProvider = TranslationModelProvider(rawValue: translationModelProviderRaw) ?? .customLLM
-        let sanitizedFallback = TranslationProviderResolver.sanitizedFallbackProvider(
-            TranslationModelProvider(rawValue: translationFallbackModelProviderRaw) ?? .customLLM
-        )
-
-        if currentProvider == .whisperKit {
-            if translationFallbackModelProviderRaw != sanitizedFallback.rawValue {
-                translationFallbackModelProviderRaw = sanitizedFallback.rawValue
-            }
-            return
-        }
+        let currentProvider = TranslationModelProvider.resolved(rawValue: translationModelProviderRaw)
 
         if translationFallbackModelProviderRaw != currentProvider.rawValue {
             translationFallbackModelProviderRaw = currentProvider.rawValue

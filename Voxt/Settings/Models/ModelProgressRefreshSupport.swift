@@ -22,8 +22,6 @@ enum ModelSettingsProgressRefreshSupport {
     static func shouldPollModelState(
         mlxState: MLXModelManager.ModelState,
         mlxHasActiveDownloadingRepos: Bool,
-        whisperState: WhisperKitModelManager.ModelState,
-        whisperActiveDownload: WhisperKitModelManager.ActiveDownload?,
         customLLMState: CustomLLMModelManager.ModelState,
         ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState],
         ggufActiveDownloadModelID: GGUFTranslationModelID?
@@ -33,14 +31,6 @@ enum ModelSettingsProgressRefreshSupport {
         }
 
         if isMLXStatePollingRequired(mlxState) {
-            return true
-        }
-
-        if isWhisperStatePollingRequired(whisperState) {
-            return true
-        }
-
-        if let whisperActiveDownload, !whisperActiveDownload.isPaused {
             return true
         }
 
@@ -63,15 +53,6 @@ enum ModelSettingsProgressRefreshSupport {
     }
 
     private static func isMLXStatePollingRequired(_ state: MLXModelManager.ModelState) -> Bool {
-        switch state {
-        case .downloading:
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isWhisperStatePollingRequired(_ state: WhisperKitModelManager.ModelState) -> Bool {
         switch state {
         case .downloading:
             return true

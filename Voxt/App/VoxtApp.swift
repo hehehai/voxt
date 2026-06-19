@@ -110,10 +110,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let speechTranscriber = SpeechTranscriber()
     var mlxTranscriber: MLXTranscriber?
-    var whisperTranscriber: WhisperKitTranscriber?
     let remoteASRTranscriber = RemoteASRTranscriber()
     let mlxModelManager: MLXModelManager
-    let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let historyStore = TranscriptionHistoryStore()
@@ -147,7 +145,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         exportStore: noteRemindersExportStore
     )
     lazy var meetingSessionCoordinator = MeetingSessionCoordinator(
-        whisperModelManager: whisperModelManager,
         mlxModelManager: mlxModelManager,
         preferredInputDeviceIDProvider: { [weak self] in
             self?.selectedInputDeviceID
@@ -187,10 +184,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingSessionFinishTask: Task<Void, Never>?
     var silenceMonitorTask: Task<Void, Never>?
     var pauseLLMTask: Task<Void, Never>?
-    var pendingWhisperStartupTask: Task<Void, Never>?
     var pendingDictionaryHistoryScanTask: Task<Void, Never>?
     var pendingAutomaticDictionaryLearningTask: Task<Void, Never>?
-    var whisperWarmupTask: Task<Void, Never>?
     var llmWarmupTasksByRepo: [String: Task<Void, Never>] = [:]
     var remoteLLMWarmupTasksByKey: [String: Task<Void, Never>] = [:]
     var overlayReminderTask: Task<Void, Never>?
@@ -237,7 +232,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var transcriptionCaptureSessionMode: TranscriptionCaptureSessionMode = .standard
     var transcriptionCapturePipeline: TranscriptionCapturePipeline = .liveDisplay
     var liveTranscriptSegmentationState = LiveTranscriptSegmentationState()
-    var sessionUsesWhisperDirectTranslation = false
     var sessionTranslationTargetLanguageOverride: TranslationTargetLanguage?
     var selectedTextTranslationRefreshID = UUID()
     var activeSessionTranslationProviderResolution: TranslationProviderResolution?
@@ -256,9 +250,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let useMirror = UserDefaults.standard.bool(forKey: AppPreferenceKey.useHfMirror)
         let hubURL = useMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
         mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: hubURL)
-        let whisperModelID = UserDefaults.standard.string(forKey: AppPreferenceKey.whisperModelID)
-            ?? WhisperKitModelManager.defaultModelID
-        whisperModelManager = WhisperKitModelManager(modelID: whisperModelID, hubBaseURL: hubURL)
         let llmRepo = UserDefaults.standard.string(forKey: AppPreferenceKey.customLLMModelRepo)
             ?? CustomLLMModelManager.defaultModelRepo
         customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: hubURL)
@@ -298,11 +289,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.translationSystemPrompt: "",
             AppPreferenceKey.rewriteSystemPrompt: "",
             AppPreferenceKey.asrHintSettings: ASRHintSettingsStore.defaultStoredValue(),
-            AppPreferenceKey.whisperModelID: WhisperKitModelManager.defaultModelID,
-            AppPreferenceKey.whisperTemperature: 0.0,
-            AppPreferenceKey.whisperVADEnabled: true,
-            AppPreferenceKey.whisperTimestampsEnabled: false,
-            AppPreferenceKey.whisperRealtimeEnabled: false,
             AppPreferenceKey.translationFallbackModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.rewriteCustomLLMModelRepo: CustomLLMModelManager.defaultModelRepo,
             AppPreferenceKey.remoteASRSelectedProvider: RemoteASRProvider.openAIWhisper.rawValue,
@@ -336,6 +322,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.customProxyPassword: "",
         ])
         FeatureSettingsStore.migrateIfNeeded(defaults: .standard)
+        Self.migrateLegacyWhisperSelectionIfNeeded()
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
         Self.migrateLegacyLocalModelMemoryPreferenceIfNeeded()
@@ -358,10 +345,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(resolvedDelay, forKey: AppPreferenceKey.localModelIdleUnloadDelaySeconds)
     }
 
+    private static func migrateLegacyWhisperSelectionIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: AppPreferenceKey.transcriptionEngine) == "whisperKit" else { return }
+        let legacyModelID = defaults.string(forKey: AppPreferenceKey.legacyWhisperModelID)
+            ?? MLXWhisperMigrationSupport.defaultLegacyModelID
+        defaults.set(TranscriptionEngine.mlxAudio.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
+        defaults.set(
+            MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: legacyModelID),
+            forKey: AppPreferenceKey.mlxModelRepo
+        )
+    }
+
     var transcriptionEngine: TranscriptionEngine {
         get {
             let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.transcriptionEngine)
-            return TranscriptionEngine(rawValue: raw ?? "") ?? .mlxAudio
+            if raw == "whisperKit" {
+                Self.migrateLegacyWhisperSelectionIfNeeded()
+            }
+            let resolved = TranscriptionEngine.resolved(rawValue: raw)
+            return resolved
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
@@ -640,7 +643,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         presentMainWindowOnLaunchIfNeeded()
-        scheduleWhisperIdleWarmupIfNeeded()
         scheduleLLMIdleWarmupIfNeeded()
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
     }
@@ -729,7 +731,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         inputDevicesRefreshTask?.cancel()
         pendingMeetingStartupTask?.cancel()
-        whisperWarmupTask?.cancel()
         for task in llmWarmupTasksByRepo.values {
             task.cancel()
         }
@@ -738,11 +739,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             task.cancel()
         }
         remoteLLMWarmupTasksByKey.removeAll()
-    }
-
-    func scheduleWhisperIdleWarmupIfNeeded() {
-        whisperWarmupTask?.cancel()
-        whisperWarmupTask = nil
     }
 
     private func migrateLegacyPreferences() {

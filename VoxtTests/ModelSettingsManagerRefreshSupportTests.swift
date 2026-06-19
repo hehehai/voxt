@@ -31,31 +31,6 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
         XCTAssertEqual(phaseA, phaseB)
     }
 
-    func testWhisperDownloadDescriptorTracksIdentityAndPauseState() {
-        let activeDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: true,
-            progress: 0.5,
-            completed: 50,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 25,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-
-        let descriptor = ModelSettingsManagerRefreshSupport.whisperDownloadDescriptor(for: activeDownload)
-
-        XCTAssertEqual(
-            descriptor,
-            WhisperDownloadActivityDescriptor(
-                modelID: "openai_whisper-large-v3-v20240930",
-                isPaused: true
-            )
-        )
-    }
-
     func testCustomLLMPhaseMapsPausedState() {
         let phase = ModelSettingsManagerRefreshSupport.phase(
             for: CustomLLMModelManager.ModelState.paused(
@@ -82,8 +57,6 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: ["repo-b", "repo-a"],
-            whisperState: .downloaded,
-            whisperActiveDownload: nil,
             customLLMState: .downloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -98,8 +71,6 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: ["repo-a", "repo-b"],
-            whisperState: .ready,
-            whisperActiveDownload: nil,
             customLLMState: .downloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -108,36 +79,9 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
         XCTAssertEqual(tokenA, tokenB)
     }
 
-    func testDownloadLifecycleTokenTracksWhisperPauseDescriptor() {
-        let pausedDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: true,
-            progress: 0.2,
-            completed: 20,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 10,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-        let activeDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: false,
-            progress: 0.2,
-            completed: 20,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 10,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-
+    func testDownloadLifecycleTokenTracksMLXPausePhase() {
         let pausedToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
-            mlxState: .notDownloaded,
-            mlxActiveDownloadRepos: [],
-            whisperState: .paused(
+            mlxState: .paused(
                 progress: 0.2,
                 completed: 20,
                 total: 100,
@@ -145,15 +89,13 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            whisperActiveDownload: pausedDownload,
+            mlxActiveDownloadRepos: [],
             customLLMState: .notDownloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
         let activeToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
-            mlxState: .notDownloaded,
-            mlxActiveDownloadRepos: [],
-            whisperState: .downloading(
+            mlxState: .downloading(
                 progress: 0.2,
                 completed: 20,
                 total: 100,
@@ -161,7 +103,7 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            whisperActiveDownload: activeDownload,
+            mlxActiveDownloadRepos: [],
             customLLMState: .notDownloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil

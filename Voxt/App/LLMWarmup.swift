@@ -61,8 +61,6 @@ extension AppDelegate {
                 ),
                 reason: "selected-text-translation"
             )
-        case .whisperKit:
-            break
         }
     }
 

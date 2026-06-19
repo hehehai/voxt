@@ -8,9 +8,8 @@ import XCTest
 final class MeetingStartPlannerTests: XCTestCase {
     func testWhisperMeetingFallsBackToMLXWhenAvailable() {
         let decision = MeetingStartPlanner.resolve(
-            selectedEngine: .whisperKit,
+            selectedEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
             mlxModelState: .ready,
-            whisperModelState: .ready,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
@@ -20,9 +19,8 @@ final class MeetingStartPlannerTests: XCTestCase {
 
     func testWhisperMeetingUsesMLXAvailabilityRules() {
         let decision = MeetingStartPlanner.resolve(
-            selectedEngine: .whisperKit,
+            selectedEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
             mlxModelState: .notDownloaded,
-            whisperModelState: .ready,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
@@ -34,7 +32,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .mlxAudio,
             mlxModelState: .ready,
-            whisperModelState: .notDownloaded,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
@@ -56,7 +53,6 @@ final class MeetingStartPlannerTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            whisperModelState: .ready,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
@@ -77,7 +73,6 @@ final class MeetingStartPlannerTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            whisperModelState: .ready,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
@@ -89,7 +84,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let blocked = MeetingStartPlanner.resolve(
             selectedEngine: .remote,
             mlxModelState: .ready,
-            whisperModelState: .ready,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "")
         )
@@ -98,7 +92,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let allowed = MeetingStartPlanner.resolve(
             selectedEngine: .remote,
             mlxModelState: .ready,
-            whisperModelState: .ready,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "token")
         )
@@ -109,7 +102,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let allowed = MeetingStartPlanner.resolve(
             selectedEngine: .remote,
             mlxModelState: .ready,
-            whisperModelState: .ready,
             remoteASRProvider: .doubaoASR,
             remoteASRConfiguration: .init(
                 providerID: RemoteASRProvider.doubaoASR.rawValue,
@@ -127,7 +119,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .dictation,
             mlxModelState: .ready,
-            whisperModelState: .ready,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "token")
         )

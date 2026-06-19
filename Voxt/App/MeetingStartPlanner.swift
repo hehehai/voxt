@@ -48,26 +48,18 @@ enum MeetingStartPlanner {
         activeMLXDownloadRepo: String? = nil,
         isSelectedMLXModelDownloaded: Bool = false,
         mlxModelState: MLXModelManager.ModelState,
-        selectedWhisperModelID: String? = nil,
-        activeWhisperDownloadModelID: String? = nil,
-        isSelectedWhisperModelDownloaded: Bool = false,
-        whisperModelState: WhisperKitModelManager.ModelState,
         remoteASRProvider: RemoteASRProvider,
         remoteASRConfiguration: RemoteProviderConfiguration
     ) -> MeetingStartDecision {
         switch selectedEngine {
         case .dictation:
             return .blocked(.dictationUnsupported)
-        case .mlxAudio, .whisperKit:
+        case .mlxAudio:
             return resolveLocalMeetingStart(
                 selectedMLXRepo: selectedMLXRepo,
                 activeMLXDownloadRepo: activeMLXDownloadRepo,
                 isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
-                mlxModelState: mlxModelState,
-                selectedWhisperModelID: selectedWhisperModelID,
-                activeWhisperDownloadModelID: activeWhisperDownloadModelID,
-                isSelectedWhisperModelDownloaded: isSelectedWhisperModelDownloaded,
-                whisperModelState: whisperModelState
+                mlxModelState: mlxModelState
             )
         case .remote:
             guard remoteASRConfiguration.isConfigured else {
@@ -87,22 +79,14 @@ enum MeetingStartPlanner {
         selectedMLXRepo: String?,
         activeMLXDownloadRepo: String?,
         isSelectedMLXModelDownloaded: Bool,
-        mlxModelState: MLXModelManager.ModelState,
-        selectedWhisperModelID: String?,
-        activeWhisperDownloadModelID: String?,
-        isSelectedWhisperModelDownloaded: Bool,
-        whisperModelState: WhisperKitModelManager.ModelState
+        mlxModelState: MLXModelManager.ModelState
     ) -> MeetingStartDecision {
         switch RecordingStartPlanner.resolve(
             selectedEngine: .mlxAudio,
             selectedMLXRepo: selectedMLXRepo,
             activeMLXDownloadRepo: activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
-            mlxModelState: mlxModelState,
-            selectedWhisperModelID: selectedWhisperModelID,
-            activeWhisperDownloadModelID: activeWhisperDownloadModelID,
-            isSelectedWhisperModelDownloaded: isSelectedWhisperModelDownloaded,
-            whisperModelState: whisperModelState
+            mlxModelState: mlxModelState
         ) {
         case .start:
             return .start(.mlxAudio)

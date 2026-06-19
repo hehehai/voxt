@@ -359,7 +359,7 @@
 "MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@" = "MLX モデルが利用できません。設定 > モデルで修正してください。\n理由: %@";
 "MLX model is still downloading. Wait for installation to finish and try again." = "MLX モデルはまだダウンロード中です。インストール完了後に再試行してください。";
 "Whisper (On-device)" = "Whisper オンデバイス";
-"Uses WhisperKit speech models running locally. Supports multiple Whisper models and configurable decoding." = "WhisperKit の音声モデルをローカル実行します。複数の Whisper モデルとデコード設定に対応します。";
+"Legacy Whisper selections now use MLX Whisper models. Requires a one-time model download." = "従来の Whisper 選択は MLX Whisper モデルに移行されます。初回にモデルのダウンロードが必要です。";
 "Transcribe" = "文字起こし";
 "Translate to English" = "英語に翻訳";
 "Whisper Tiny" = "Whisper Tiny";
@@ -379,7 +379,6 @@
 "Enable VAD" = "VAD を有効化";
 "Enable Timestamps" = "タイムスタンプを有効化";
 "Temperature" = "温度";
-"These settings apply to Whisper transcription sessions. Standard ASR always uses transcribe; Whisper translate is only used by the translation hotkey when Whisper translation is selected. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates." = "これらの設定は Whisper の文字起こしセッションに適用されます。通常の ASR は常に文字起こしを使用し、Whisper の翻訳は翻訳ホットキーで Whisper 翻訳を選んだ場合にのみ使われます。Realtime は WhisperKit のストリーミング経路を使用し、オフにすると品質優先の増分更新に切り替わります。";
 "Done" = "完了";
 "VAD On" = "VAD オン";
 "VAD Off" = "VAD オフ";
@@ -896,14 +895,9 @@
 "Whisper" = "Whisper";
 "Realtime" = "リアルタイム";
 "Live Realtime (Experimental)" = "ライブリアルタイム（実験的）";
-"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path. Whisper translate is only used when Whisper translation is selected." = "これらの設定は Whisper の文字起こしセッションに適用されます。ライブリアルタイム（実験的）では話している間に partial テキストを継続表示し、停止後に最終補正を行います。オフにすると品質優先の非リアルタイム経路を使います。Whisper translate は Whisper 翻訳を選択した場合にのみ使われます。";
+"These settings apply to Whisper transcription sessions. Live Realtime (Experimental) streams partial text while you speak and does a final correction after stop. Turn it off to use the quality-first non-live path." = "これらの設定は Whisper の文字起こしセッションに適用されます。ライブリアルタイム（実験的）では話している間に partial テキストを継続表示し、停止後に最終補正を行います。オフにすると品質優先の非リアルタイム経路を使います。";
 "Realtime On" = "リアルタイム";
 "Quality Mode" = "高品質モード";
-"Whisper translation works only when the ASR engine is Whisper. Voxt will fall back to your saved LLM provider." = "Whisper 翻訳は ASR エンジンが Whisper のときのみ使えます。それ以外では保存済みの LLM プロバイダにフォールバックします。";
-"Whisper translation only supports English output. Voxt will fall back to your saved LLM provider." = "Whisper 翻訳は英語出力のみ対応しています。それ以外では保存済みの LLM プロバイダにフォールバックします。";
-"Whisper translation needs a ready Whisper model. Voxt will fall back to your saved LLM provider until the model is ready." = "Whisper 翻訳には利用可能な Whisper モデルが必要です。モデルの準備ができるまでは保存済みの LLM プロバイダにフォールバックします。";
-"Whisper translation reuses the current Whisper ASR model. It translates speech directly to English and falls back to %@ when Whisper direct translation is unavailable." = "Whisper 翻訳は現在の Whisper ASR モデルを再利用し、音声を直接英語へ翻訳します。Whisper の直接翻訳が使えない場合は %@ にフォールバックします。";
-"These settings apply to Whisper transcription sessions. Realtime uses WhisperKit's streaming path; turning it off switches to quality-first partial updates." = "これらの設定は Whisper の文字起こしセッションに適用されます。リアルタイムを有効にすると WhisperKit のストリーミング経路を使い、無効にすると品質優先の partial 更新に切り替わります。";
 "The first local Whisper load can take a few seconds. Voxt will show an initializing state in the overlay until the model is ready." = "Whisper の初回ローカル読み込みには数秒かかることがあります。モデルの準備ができるまでは、Voxt がオーバーレイに初期化状態を表示します。";
 "Memory" = "メモリ";
 "Memory Optimization" = "メモリ最適化";
@@ -1205,8 +1199,6 @@
 "Only used when realtime translation is enabled." = "リアルタイム翻訳が有効な場合にのみ使われます。";
 "Open Location" = "保存場所を開く";
 "Pick the text model used to rewrite, rephrase, or clean captured content." = "書き換え、言い換え、整形に使うテキストモデルを選択します。";
-"Prompt controls are shown only when the selected translation model supports prompt-based generation." = "選択中の翻訳モデルがプロンプト生成に対応している場合のみ、プロンプト設定が表示されます。";
-"Prompt editing is hidden here because Whisper direct translation does not consume a text prompt." = "Whisper 直接翻訳はテキストプロンプトを使わないため、ここではプロンプト編集を表示しません。";
 "Prompt templates stay local to rewrite mode and no longer live in the shared model page." = "プロンプトテンプレートは書き換えモード専用となり、共有モデルページには置かれません。";
 "Ready when Whisper ASR is selected" = "Whisper ASR を選択すると利用可能";
 "Realtime Target" = "リアルタイム翻訳先";
@@ -1220,7 +1212,6 @@
 "Run translation directly against the current selected text when the translation shortcut is triggered." = "翻訳ショートカット実行時に、現在選択中のテキストへ直接翻訳を行います。";
 "Score" = "評価";
 "Select" = "選択";
-"Select an LLM or use Whisper direct translation when the ASR path supports it." = "LLM を選ぶか、ASR 経路が対応していれば Whisper 直接翻訳を使います。";
 "Selected" = "選択中";
 "Set the ASR and text model pairing used for rewrite mode, then decide whether app-aware enhancement is enabled." = "書き換えモードで使う ASR とテキストモデルの組み合わせを設定し、アプリ強化を有効にするか決めます。";
 "Show Overlay In Screen Sharing" = "画面共有時にオーバーレイを表示";
@@ -1250,11 +1241,7 @@
 "Uses the macOS system model when available, so later onboarding can stay minimal." = "利用可能な場合は macOS のシステムモデルを使い、後続のオンボーディングを最小限に保ちます。";
 "Uses the macOS system speech recognizer with no download required." = "ダウンロード不要で macOS のシステム音声認識を使います。";
 "When enabled, the dedicated App Enhancement submenu becomes available in Feature mode." = "有効にすると、機能モード内に専用のアプリ強化サブメニューが表示されます。";
-"Whisper Direct Translate" = "Whisper 直接翻訳";
-"Whisper Direct Translation" = "Whisper 直接翻訳";
 "Whisper Settings" = "Whisper 設定";
-"Whisper direct translation only supports English output." = "Whisper 直接翻訳は英語出力のみ対応しています。";
-"Whisper direct translation requires Whisper as the translation ASR model." = "Whisper 直接翻訳を使うには、翻訳用 ASR モデルにも Whisper が必要です。";
 "Works immediately with no model download." = "モデルのダウンロードなしですぐ使えます。";
 "You can still keep this selected and switch later after the system becomes available." = "この選択を維持したまま、システムが利用可能になった後で切り替えることもできます。";
 "1 model needs setup" = "1 個のモデルで設定が必要です";

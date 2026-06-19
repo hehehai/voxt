@@ -163,9 +163,6 @@ extension AppDelegate {
     private func unavailableTranscriptionFollowUpProviderMessage(for kind: TranscriptionHistoryKind) -> String {
         switch kind {
         case .translation:
-            if translationFeatureSettings.modelSelectionID.translationSelection == .whisperDirectTranslate {
-                return AppLocalization.localizedString("The selected translation model does not support follow-up questions yet.")
-            }
             return unavailableTextSelectionMessage(
                 resolvedTranscriptionFollowUpTextSelection(for: kind)
             )
@@ -221,7 +218,7 @@ extension AppDelegate {
                 return nil
             case .remoteLLM(let provider):
                 return .remoteLLM(provider: provider)
-            case .whisperDirectTranslate, .none:
+            case .none:
                 return nil
             }
         case .rewrite:

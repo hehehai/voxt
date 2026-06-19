@@ -61,35 +61,6 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
         let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
             mlxState: .notDownloaded,
             mlxHasActiveDownloadingRepos: true,
-            whisperState: .notDownloaded,
-            whisperActiveDownload: nil,
-            customLLMState: .notDownloaded,
-            ggufStateByID: [:],
-            ggufActiveDownloadModelID: nil
-        )
-
-        XCTAssertTrue(shouldPoll)
-    }
-
-    func testShouldPollModelStateForActiveWhisperDownload() {
-        let whisperDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: false,
-            progress: 0.5,
-            completed: 50,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 25,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
-            mlxState: .notDownloaded,
-            mlxHasActiveDownloadingRepos: false,
-            whisperState: .notDownloaded,
-            whisperActiveDownload: whisperDownload,
             customLLMState: .notDownloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -102,8 +73,6 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
         let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
             mlxState: .downloaded,
             mlxHasActiveDownloadingRepos: false,
-            whisperState: .downloaded,
-            whisperActiveDownload: nil,
             customLLMState: .downloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -116,8 +85,6 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
         let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
             mlxState: .loading,
             mlxHasActiveDownloadingRepos: false,
-            whisperState: .loading,
-            whisperActiveDownload: nil,
             customLLMState: .notDownloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -137,8 +104,6 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxHasActiveDownloadingRepos: false,
-            whisperState: .notDownloaded,
-            whisperActiveDownload: nil,
             customLLMState: .notDownloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil

@@ -16,14 +16,8 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.translationSystemPrompt) var translationPrompt = ""
     @AppStorage(AppPreferenceKey.rewriteSystemPrompt) var rewritePrompt = ""
     @AppStorage(AppPreferenceKey.mlxModelRepo) var modelRepo = MLXModelManager.defaultModelRepo
-    @AppStorage(AppPreferenceKey.whisperModelID) var whisperModelID = WhisperKitModelManager.defaultModelID
-    @AppStorage(AppPreferenceKey.whisperTemperature) var whisperTemperature = 0.0
-    @AppStorage(AppPreferenceKey.whisperVADEnabled) var whisperVADEnabled = true
-    @AppStorage(AppPreferenceKey.whisperTimestampsEnabled) var whisperTimestampsEnabled = false
-    @AppStorage(AppPreferenceKey.whisperRealtimeEnabled) var whisperRealtimeEnabled = false
     @AppStorage(AppPreferenceKey.localModelIdleUnloadDelaySeconds)
     var localModelIdleUnloadDelaySeconds = AppPreferenceKey.defaultLocalModelIdleUnloadDelaySeconds
-    @AppStorage(AppPreferenceKey.whisperLocalASRTuningSettings) var whisperLocalASRTuningSettingsRaw = WhisperLocalTuningSettingsStore.defaultStoredValue()
     @AppStorage(AppPreferenceKey.customLLMModelRepo) var customLLMRepo = CustomLLMModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.customLLMGenerationSettings) var customLLMGenerationSettingsRaw = CustomLLMGenerationSettingsStore.defaultStoredValue()
     @AppStorage(AppPreferenceKey.customLLMGenerationSettingsByRepo) var customLLMGenerationSettingsByRepoRaw = CustomLLMGenerationSettingsStore.defaultByRepoStoredValue()
@@ -49,7 +43,6 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
 
     let mlxModelManager: MLXModelManager
-    let whisperModelManager: WhisperKitModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var mainWindowState: MainWindowVisibilityState
@@ -166,7 +159,6 @@ struct ModelSettingsView: View {
     private var catalogBuilder: ModelCatalogBuilder {
         ModelCatalogBuilder(
             mlxModelManager: mlxModelManager,
-            whisperModelManager: whisperModelManager,
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             remoteASRConfigurations: remoteASRConfigurations,
@@ -180,7 +172,6 @@ struct ModelSettingsView: View {
             remoteLLMBadgeText: remoteLLMBadgeText(for:),
             primaryUserLanguageCode: selectedUserLanguageCodes.first,
             mlxInstallSnapshot: mlxInstallSnapshot(for:),
-            whisperInstallSnapshot: whisperInstallSnapshot(for:),
             customLLMInstallSnapshot: customLLMInstallSnapshot(for:),
             ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot(for:),
             catalogPrimaryAction: {
@@ -649,8 +640,6 @@ struct ModelSettingsView: View {
                 }
                 return false
             },
-            whisperState: whisperModelManager.state,
-            whisperActiveDownload: whisperModelManager.activeDownload,
             customLLMState: customLLMManager.state,
             ggufStateByID: ggufTranslationModelManager.stateByID,
             ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
@@ -696,8 +685,6 @@ struct ModelSettingsView: View {
             return AppLocalization.format("%@ %@: %@", provider.title, localized("LLM"), issue.message)
         case .mlxModel(let repo):
             return AppLocalization.format("%@ %@: %@", mlxModelManager.displayTitle(for: repo), localized("ASR"), issue.message)
-        case .whisperModel(let modelID):
-            return AppLocalization.format("%@ %@: %@", whisperModelManager.displayTitle(for: modelID), localized("Whisper"), issue.message)
         case .customLLMModel(let repo):
             return AppLocalization.format("%@ %@: %@", customLLMManager.displayTitle(for: repo), localized("LLM"), issue.message)
         case .translationRemoteLLM(let provider):
