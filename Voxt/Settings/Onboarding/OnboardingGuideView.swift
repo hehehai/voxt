@@ -80,7 +80,7 @@ struct OnboardingGuideView: View {
     @FocusState private var focusedField: OnboardingGuideFocusField?
 
     private static let localASRRepos = [
-        "mlx-community/Qwen3-ASR-1.7B-4bit",
+        "mlx-community/Qwen3-ASR-1.7B-6bit",
         "mlx-community/SenseVoiceSmall"
     ]
 

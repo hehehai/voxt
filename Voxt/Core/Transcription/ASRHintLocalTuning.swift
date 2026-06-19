@@ -59,13 +59,13 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .qwen3ASR:
-            return AppLocalization.localizedString("Qwen3-ASR")
+            return AppLocalization.localizedString("Qwen3")
         case .graniteSpeech:
-            return AppLocalization.localizedString("Granite Speech")
+            return AppLocalization.localizedString("Granite")
         case .senseVoice:
             return AppLocalization.localizedString("SenseVoice")
         case .cohereTranscribe:
-            return AppLocalization.localizedString("Cohere Transcribe")
+            return AppLocalization.localizedString("Cohere")
         case .generic:
             return AppLocalization.localizedString("General MLX ASR")
         }

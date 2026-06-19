@@ -112,7 +112,7 @@ Notes for the current MLX Audio integration:
 - Voxt stores MLX Audio downloads under its `mlx-audio` model storage root and checks canonical model identifiers before deciding whether a model is already installed.
 - Older saved model IDs are auto-migrated to the current canonical IDs for `Parakeet`, `GLM-ASR Nano`, `Voxtral Realtime`, and `FireRed ASR 2`, so existing settings should continue working after upgrade.
 - Alignment-only repositories are rejected explicitly; for example, `Qwen3-ForcedAligner` is not treated as a transcription model.
-- The current package source is the Voxt mirror fork `hehehai/mlx-audio-swift` pinned to commit `a1c7b11b68b16f1591bb0ff586372dde9b265135`. This sync includes the upstream FireRed ASR 2 load fix and related STT/TTS/VAD updates. See [docs/MLXAudioDependency.md](docs/MLXAudioDependency.md) for the dependency policy.
+- The current package source is the Voxt mirror fork `hehehai/mlx-audio-swift` pinned to commit `3e693624ecb6b3fabf0e844b333c23334952d38d`. This sync includes upstream Nemotron ASR, Whisper STT, Voxtral streaming, Irodori TTS, and related STT/TTS/VAD updates. See [docs/MLXAudioDependency.md](docs/MLXAudioDependency.md) for the dependency policy.
 
 #### Whisper (WhisperKit)
 

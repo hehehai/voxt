@@ -582,6 +582,7 @@
 "OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "Doubao ASR";
 "GLM ASR" = "GLM ASR";
+"Z ai" = "Z ai";
 "StepFun ASR" = "StepFun ASR";
 "Anthropic" = "Anthropic";
 "Google" = "Google";
@@ -634,7 +635,7 @@
 "Template tip {{RAW_TRANSCRIPTION}}" = "The raw transcription text before enhancement. Use it when you want the prompt to reference the original recognized text.";
 "Template tip {{USER_MAIN_LANGUAGE}}" = "The user's primary spoken language used to guide punctuation, formatting, and language-specific cleanup decisions.";
 "Template tip {{USER_OTHER_LANGUAGES}}" = "Other frequently used spoken languages. Useful when the speaker often mixes languages in one utterance.";
-"Template tip {{DICTIONARY_TERMS}}" = "Active dictionary terms without aliases in the current scope. Useful for injecting concise domain vocabulary into Qwen3-ASR recognition context.";
+"Template tip {{DICTIONARY_TERMS}}" = "Active dictionary terms without aliases in the current scope. Useful for injecting concise domain vocabulary into Qwen3 recognition context.";
 "Template tip {{HISTORY_RECORDS}}" = "The serialized history records included in the current dictionary ingestion batch.";
 "Template tip {{INSERTED_TEXT}}" = "The exact text Voxt inserted into the input field before the user made any manual correction.";
 "Template tip {{BASELINE_CONTEXT}}" = "The nearby input-field text captured right after insertion. Useful for comparing before and after states.";
@@ -658,13 +659,16 @@
 "Instant" = "Instant";
 "Quality" = "Quality";
 "Accuracy First" = "Accuracy First";
+"Qwen3" = "Qwen3";
+"Granite" = "Granite";
+"Cohere" = "Cohere";
 "Default recognition behavior with moderate fallback and minimal extra bias." = "Default recognition behavior with moderate fallback and minimal extra bias.";
 "Stronger fallback and chunking choices that favor recognition stability over speed." = "Stronger fallback and chunking choices that favor recognition stability over speed.";
 "MLX ASR Configuration" = "MLX ASR Configuration";
 "Other languages" = "Other languages";
 "Recognition Context" = "Recognition Context";
 "Recognition Prompt" = "Recognition Prompt";
-"Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription.";
+"Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "Use concise domain terms, names, and product vocabulary to bias Qwen3 toward the right transcription.";
 "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology." = "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology.";
 "Enable ITN" = "Enable ITN";
 "ITN lets SenseVoice normalize spoken numbers, dates, and similar expressions into written form." = "ITN lets SenseVoice normalize spoken numbers, dates, and similar expressions into written form.";
@@ -854,6 +858,7 @@
 "Direct Dictation uses your main language, optional contextual phrases, on-device preference, and punctuation settings. Prompt editing is not applied." = "Direct Dictation uses your main language, optional contextual phrases, on-device preference, and punctuation settings. Prompt editing is not applied.";
 "OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition." = "OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition.";
 "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt." = "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt.";
+"Z ai uses a short prompt bias. It does not use hotwords in Voxt." = "Z ai uses a short prompt bias. It does not use hotwords in Voxt.";
 "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically." = "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically.";
 "Aliyun ASR uses language hints derived from your selected user languages." = "Aliyun ASR uses language hints derived from your selected user languages.";
 "StepFun ASR uses language hints derived from your selected user languages." = "StepFun ASR uses language hints derived from your selected user languages.";

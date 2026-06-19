@@ -36,10 +36,11 @@ extension ModelCatalogBuilder {
     }
 
     func mlxASREntries() -> [ModelCatalogEntry] {
-        MLXModelManager.availableModels.map { model in
+        mlxModelManager.displayModelsIncludingInstalled().map { model in
             let repo = MLXModelManager.canonicalModelRepo(model.id)
             let selectionID = FeatureModelSelectionID.mlx(repo)
             let installSnapshot = mlxInstallSnapshot(repo)
+            let isAvailable = MLXModelManager.isAvailableModelRepo(repo)
             let decoration = catalogDecoration(
                 base: [localizedModelCatalog("Local")] + mlxCatalogTags(for: repo),
                 installed: installSnapshot.isInstalled,
@@ -60,16 +61,20 @@ extension ModelCatalogBuilder {
                 usageLocations: decoration.usageLocations,
                 badgeText: installSnapshot.badgeText ?? ModelCatalogBadgeSupport.recommendedBadgeText(forMLXRepo: repo),
                 primaryAction: catalogPrimaryAction(installSnapshot),
-                secondaryActions: catalogSecondaryActions(installSnapshot)
+                secondaryActions: localASRSecondaryActions(
+                    for: installSnapshot,
+                    isAvailable: isAvailable
+                )
             )
         }
     }
 
     func whisperASREntries() -> [ModelCatalogEntry] {
-        WhisperKitModelManager.availableModels.map { model in
+        whisperModelManager.displayModelsIncludingInstalled().map { model in
             let modelID = WhisperKitModelManager.canonicalModelID(model.id)
             let selectionID = FeatureModelSelectionID.whisper(modelID)
             let installSnapshot = whisperInstallSnapshot(modelID)
+            let isAvailable = WhisperKitModelManager.isAvailableModelID(modelID)
             let decoration = catalogDecoration(
                 base: [localizedModelCatalog("Local")] + whisperCatalogTags(for: modelID),
                 installed: installSnapshot.isInstalled,
@@ -90,8 +95,27 @@ extension ModelCatalogBuilder {
                 usageLocations: decoration.usageLocations,
                 badgeText: installSnapshot.badgeText,
                 primaryAction: catalogPrimaryAction(installSnapshot),
-                secondaryActions: catalogSecondaryActions(installSnapshot)
+                secondaryActions: localASRSecondaryActions(
+                    for: installSnapshot,
+                    isAvailable: isAvailable
+                )
             )
+        }
+    }
+
+    private func localASRSecondaryActions(
+        for snapshot: LocalModelInstallSnapshot,
+        isAvailable: Bool
+    ) -> [ModelTableAction] {
+        if isAvailable {
+            return catalogSecondaryActions(snapshot)
+        }
+
+        switch snapshot.state {
+        case .downloading, .paused:
+            return catalogSecondaryActions(snapshot)
+        case .installable, .cancelling, .installed, .uninstalling:
+            return []
         }
     }
 

@@ -145,7 +145,7 @@ extension OnboardingSettingsView {
                     showsCardSurface: false,
                     isInstalling: isSelectedMLXModelDownloading,
                     isPaused: isSelectedMLXModelPaused,
-                    isInstallEnabled: !isAnotherMLXModelDownloading,
+                    isInstallEnabled: !isAnotherMLXModelDownloading && MLXModelManager.isAvailableModelRepo(mlxModelRepo),
                     installLabel: "Download",
                     openLabel: "Open Folder",
                     downloadStatus: selectedMLXDownloadStatus,
@@ -154,7 +154,7 @@ extension OnboardingSettingsView {
                     pickerContent: {
                         SettingsMenuPicker(
                             selection: $mlxModelRepo,
-                            options: MLXModelManager.availableModels.map { model in
+                            options: mlxModelManager.displayModelsIncludingInstalled().map { model in
                                 SettingsMenuOption(value: model.id, title: model.title)
                             },
                             selectedTitle: mlxModelManager.displayTitle(for: mlxModelRepo),
@@ -191,7 +191,7 @@ extension OnboardingSettingsView {
                     showsCardSurface: false,
                     isInstalling: isSelectedWhisperModelDownloading,
                     isPaused: isSelectedWhisperModelPaused,
-                    isInstallEnabled: !isAnotherWhisperModelDownloading,
+                    isInstallEnabled: !isAnotherWhisperModelDownloading && WhisperKitModelManager.isAvailableModelID(whisperModelID),
                     installLabel: "Download",
                     openLabel: "Open Folder",
                     downloadStatus: selectedWhisperDownloadStatus,
@@ -200,7 +200,7 @@ extension OnboardingSettingsView {
                     pickerContent: {
                         SettingsMenuPicker(
                             selection: $whisperModelID,
-                            options: WhisperKitModelManager.availableModels.map { model in
+                            options: whisperModelManager.displayModelsIncludingInstalled().map { model in
                                 SettingsMenuOption(value: model.id, title: AppLocalization.localizedString(model.title))
                             },
                             selectedTitle: whisperModelManager.displayTitle(for: whisperModelID),
@@ -768,14 +768,14 @@ extension OnboardingSettingsView {
     }
 
     func modelDescription(for repo: String) -> String {
-        guard let description = MLXModelManager.availableModels.first(where: { $0.id == MLXModelManager.canonicalModelRepo(repo) })?.description else {
+        guard let description = MLXModelCatalog.description(for: MLXModelManager.canonicalModelRepo(repo)) else {
             return ""
         }
         return AppLocalization.localizedString(description)
     }
 
     func whisperDescription(for modelID: String) -> String {
-        guard let description = WhisperKitModelManager.availableModels.first(where: { $0.id == WhisperKitModelManager.canonicalModelID(modelID) })?.description else {
+        guard let description = WhisperKitModelCatalog.description(for: WhisperKitModelManager.canonicalModelID(modelID)) else {
             return ""
         }
         return AppLocalization.localizedString(description)

@@ -32,7 +32,7 @@ final class MLXModelSupportTests: XCTestCase {
         )
     }
 
-    func testLiveModeUsesNativeSessionOnlyForQwen3ASR() {
+    func testLiveModeUsesNativeSessionForQwen3AndNemotronASR() {
         XCTAssertEqual(
             MLXModelCatalog.liveMode(for: "mlx-community/Qwen3-ASR-0.6B-4bit"),
             .nativeQwenLive
@@ -40,6 +40,10 @@ final class MLXModelSupportTests: XCTestCase {
         XCTAssertEqual(
             MLXModelCatalog.liveMode(for: "mlx-community/Qwen3-ASR-1.7B-6bit"),
             .nativeQwenLive
+        )
+        XCTAssertEqual(
+            MLXModelCatalog.liveMode(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"),
+            .nativeNemotronLive
         )
         XCTAssertEqual(
             MLXModelCatalog.liveMode(for: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"),

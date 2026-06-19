@@ -115,9 +115,11 @@ struct FeatureModelCatalogBuilder {
             )
         )
 
-        entries.append(contentsOf: MLXModelManager.availableModels.map { model in
+        entries.append(contentsOf: mlxModelManager.displayModelsIncludingInstalled().map { model in
             let selectionID = FeatureModelSelectionID.mlx(model.id)
             let isInstalled = mlxModelManager.isModelDownloaded(repo: model.id)
+            let isAvailable = MLXModelManager.isAvailableModelRepo(model.id)
+            let isSelectable = isInstalled && isAvailable
             return FeatureModelSelectorEntry(
                 selectionID: selectionID,
                 title: model.title,
@@ -142,18 +144,24 @@ struct FeatureModelCatalogBuilder {
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
                 badgeText: ModelCatalogBadgeSupport.recommendedBadgeText(forMLXRepo: model.id),
-                isSelectable: isInstalled,
-                disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
+                isSelectable: isSelectable,
+                disabledReason: isSelectable
+                    ? nil
+                    : (isInstalled ? localized("This model is no longer available for new selections.") : localized("Install this model in Model settings first."))
             )
         })
 
-        entries.append(contentsOf: WhisperKitModelManager.availableModels.map { model in
+        entries.append(contentsOf: whisperModelManager.displayModelsIncludingInstalled().map { model in
             let selectionID = FeatureModelSelectionID.whisper(model.id)
             let isInstalled = whisperModelManager.isModelDownloaded(id: model.id)
             let isUnavailableForMeeting = sheet == .meetingASR
+            let isAvailable = WhisperKitModelManager.isAvailableModelID(model.id)
+            let isSelectable = !isUnavailableForMeeting && isInstalled && isAvailable
             let disabledReason = isUnavailableForMeeting
                 ? localized("Whisper is not available for Meeting mode.")
-                : (isInstalled ? nil : localized("Install this model in Model settings first."))
+                : (isSelectable
+                    ? nil
+                    : (isInstalled ? localized("This model is no longer available for new selections.") : localized("Install this model in Model settings first.")))
             return FeatureModelSelectorEntry(
                 selectionID: selectionID,
                 title: model.title,
@@ -178,7 +186,7 @@ struct FeatureModelCatalogBuilder {
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
                 badgeText: nil,
-                isSelectable: !isUnavailableForMeeting && isInstalled,
+                isSelectable: isSelectable,
                 disabledReason: disabledReason
             )
         })

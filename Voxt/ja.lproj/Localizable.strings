@@ -576,6 +576,7 @@
 "OpenAI Transcribe" = "OpenAI Transcribe";
 "Doubao ASR" = "Doubao ASR";
 "GLM ASR" = "GLM ASR";
+"Z ai" = "Z ai";
 "StepFun ASR" = "StepFun ASR";
 "Anthropic" = "Anthropic";
 "Google" = "Google";
@@ -629,7 +630,7 @@
 "Template tip {{RAW_TRANSCRIPTION}}" = "強化前の生の文字起こしテキストです。元の認識結果をプロンプト内で参照したいときに使います。";
 "Template tip {{USER_MAIN_LANGUAGE}}" = "句読点、整形、言語固有の不要語除去を判断するときに使う、ユーザーの主要な話し言葉です。";
 "Template tip {{USER_OTHER_LANGUAGES}}" = "その他によく使う話し言葉です。1つの発話内で言語が混ざるケースをモデルに伝えるときに使えます。";
-"Template tip {{DICTIONARY_TERMS}}" = "現在のスコープでエイリアスを持たない有効な辞書用語です。Qwen3-ASR の認識コンテキストに簡潔な用語集として差し込むのに使えます。";
+"Template tip {{DICTIONARY_TERMS}}" = "現在のスコープでエイリアスを持たない有効な辞書用語です。Qwen3 の認識コンテキストに簡潔な用語集として差し込むのに使えます。";
 "Template tip {{HISTORY_RECORDS}}" = "現在の辞書取り込みバッチに含まれる、シリアライズ済みの履歴レコードです。";
 "Template tip {{INSERTED_TEXT}}" = "ユーザーが手動修正する前に、Voxt が入力欄へ挿入した元のテキストです。";
 "Template tip {{BASELINE_CONTEXT}}" = "挿入直後に取得した周辺の入力欄コンテキストです。前後比較に使います。";
@@ -653,13 +654,16 @@
 "Instant" = "高速";
 "Quality" = "高品質";
 "Accuracy First" = "精度優先";
+"Qwen3" = "Qwen3";
+"Granite" = "Granite";
+"Cohere" = "Cohere";
 "Default recognition behavior with moderate fallback and minimal extra bias." = "適度なフォールバックと最小限の追加バイアスを使う、標準的な認識動作です。";
 "Stronger fallback and chunking choices that favor recognition stability over speed." = "速度よりも認識の安定性を優先する、より強めのフォールバックとチャンク設定です。";
 "MLX ASR Configuration" = "MLX ASR 設定";
 "Other languages" = "その他の言語";
 "Recognition Context" = "認識コンテキスト";
 "Recognition Prompt" = "認識プロンプト";
-"Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "簡潔な業界用語、人名、製品語彙を使って、Qwen3-ASR が正しい文字起こしに寄るよう補助します。";
+"Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "簡潔な業界用語、人名、製品語彙を使って、Qwen3 が正しい文字起こしに寄るよう補助します。";
 "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology." = "Granite はプロンプト形式の指示を使います。綴りの好みや業界用語など、認識に関する内容に絞ってください。";
 "Enable ITN" = "ITN を有効化";
 "ITN lets SenseVoice normalize spoken numbers, dates, and similar expressions into written form." = "ITN を使うと、SenseVoice が話し言葉の数字や日付などを書き言葉として正規化できます。";
@@ -866,6 +870,7 @@
 "Direct Dictation uses your main language, optional contextual phrases, on-device preference, and punctuation settings. Prompt editing is not applied." = "Direct Dictation は主言語、任意の文脈フレーズ、オンデバイス優先設定、句読点設定を使います。プロンプト編集は適用されません。";
 "OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition." = "OpenAI ASR は主言語と短い prompt バイアスを使います。prompt は短く、認識補助に集中させてください。";
 "GLM ASR uses a short prompt bias. It does not use hotwords in Voxt." = "GLM ASR は短い prompt バイアスを使います。Voxt では hotwords は使いません。";
+"Z ai uses a short prompt bias. It does not use hotwords in Voxt." = "Z ai は短い prompt バイアスを使います。Voxt では hotwords は使いません。";
 "Doubao ASR uses language hints. Chinese output follows your selected simplified or traditional main language automatically." = "Doubao ASR は言語ヒントを使います。中国語出力は、選択した簡体字または繁体字の主言語に自動追従します。";
 "Aliyun ASR uses language hints derived from your selected user languages." = "Aliyun ASR は選択したユーザー言語から生成された言語ヒントを使います。";
 "StepFun ASR uses language hints derived from your selected user languages." = "StepFun ASR は選択したユーザー言語から生成された言語ヒントを使います。";

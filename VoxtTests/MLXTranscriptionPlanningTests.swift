@@ -132,7 +132,7 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         XCTAssertEqual(decision, .waitForInFlightPass)
     }
 
-    func testQuickStopPassDisabledForNativeQwenLiveMode() {
+    func testQuickStopPassDisabledForNativeLiveModes() {
         let plan = MLXFinalizationPlan(durationSeconds: 30, quickPassSampleCount: 16000 * 30)
 
         XCTAssertFalse(
@@ -140,6 +140,13 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
                 plan: plan,
                 sessionAllowsRealtimeTextDisplay: true,
                 liveMode: .nativeQwenLive
+            )
+        )
+        XCTAssertFalse(
+            MLXTranscriptionPlanning.shouldRunQuickStopPass(
+                plan: plan,
+                sessionAllowsRealtimeTextDisplay: true,
+                liveMode: .nativeNemotronLive
             )
         )
         XCTAssertTrue(
