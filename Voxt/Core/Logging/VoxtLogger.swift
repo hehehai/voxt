@@ -20,7 +20,7 @@ struct VoxtLogger: Sendable {
         privacy: VoxtLogPrivacy = .automatic,
         verbose: Bool = false
     ) {
-        log(level: .trace, message: message(), metadata: metadata, privacy: privacy, verbose: verbose)
+        log(level: .trace, message: message, metadata: metadata, privacy: privacy, verbose: verbose)
     }
 
     nonisolated func debug(
@@ -29,7 +29,7 @@ struct VoxtLogger: Sendable {
         privacy: VoxtLogPrivacy = .automatic,
         verbose: Bool = false
     ) {
-        log(level: .debug, message: message(), metadata: metadata, privacy: privacy, verbose: verbose)
+        log(level: .debug, message: message, metadata: metadata, privacy: privacy, verbose: verbose)
     }
 
     nonisolated func info(
@@ -38,7 +38,7 @@ struct VoxtLogger: Sendable {
         privacy: VoxtLogPrivacy = .automatic,
         verbose: Bool = false
     ) {
-        log(level: .info, message: message(), metadata: metadata, privacy: privacy, verbose: verbose)
+        log(level: .info, message: message, metadata: metadata, privacy: privacy, verbose: verbose)
     }
 
     nonisolated func notice(
@@ -47,7 +47,7 @@ struct VoxtLogger: Sendable {
         privacy: VoxtLogPrivacy = .automatic,
         verbose: Bool = false
     ) {
-        log(level: .notice, message: message(), metadata: metadata, privacy: privacy, verbose: verbose)
+        log(level: .notice, message: message, metadata: metadata, privacy: privacy, verbose: verbose)
     }
 
     nonisolated func warning(
@@ -55,7 +55,7 @@ struct VoxtLogger: Sendable {
         metadata: Logger.Metadata? = nil,
         privacy: VoxtLogPrivacy = .automatic
     ) {
-        log(level: .warning, message: message(), metadata: metadata, privacy: privacy)
+        log(level: .warning, message: message, metadata: metadata, privacy: privacy)
     }
 
     nonisolated func error(
@@ -63,7 +63,7 @@ struct VoxtLogger: Sendable {
         metadata: Logger.Metadata? = nil,
         privacy: VoxtLogPrivacy = .automatic
     ) {
-        log(level: .error, message: message(), metadata: metadata, privacy: privacy)
+        log(level: .error, message: message, metadata: metadata, privacy: privacy)
     }
 
     nonisolated func critical(
@@ -71,18 +71,18 @@ struct VoxtLogger: Sendable {
         metadata: Logger.Metadata? = nil,
         privacy: VoxtLogPrivacy = .automatic
     ) {
-        log(level: .critical, message: message(), metadata: metadata, privacy: privacy)
+        log(level: .critical, message: message, metadata: metadata, privacy: privacy)
     }
 
     private nonisolated func log(
         level: Logger.Level,
-        message: String,
+        message: () -> String,
         metadata: Logger.Metadata?,
         privacy: VoxtLogPrivacy,
         verbose: Bool = false
     ) {
         guard !verbose || VoxtLog.verboseEnabled else { return }
-        let redactedMessage = VoxtLogRedactor.redact(message, privacy: privacy)
+        let redactedMessage = VoxtLogRedactor.redact(message(), privacy: privacy)
         let metadata = VoxtLogRedactor.redactedMetadata(metadata) ?? [:]
         logger.log(level: level, "\(redactedMessage)", metadata: metadata)
     }

@@ -105,7 +105,16 @@ nonisolated final class VoxtLogFileStore: @unchecked Sendable {
 
         data.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else { return }
-            _ = write(descriptor, baseAddress, buffer.count)
+            var bytesWritten = 0
+            while bytesWritten < buffer.count {
+                let result = write(
+                    descriptor,
+                    baseAddress.advanced(by: bytesWritten),
+                    buffer.count - bytesWritten
+                )
+                guard result > 0 else { return }
+                bytesWritten += result
+            }
         }
     }
 
