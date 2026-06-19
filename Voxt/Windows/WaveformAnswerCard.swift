@@ -179,7 +179,8 @@ struct WaveformAnswerCard: View {
             isPresented: isSessionTranslationTargetPickerPresented,
             onTogglePresentation: onToggleSessionTranslationTargetPicker,
             onDismissPresentation: onDismissSessionTranslationTargetPicker,
-            onSelectLanguage: onSelectSessionTranslationTargetLanguage
+            onSelectLanguage: onSelectSessionTranslationTargetLanguage,
+            fixedWidth: 82
         )
     }
 
