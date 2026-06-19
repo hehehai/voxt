@@ -101,14 +101,35 @@ class HotkeyManager {
     private var pendingDoubleTapBindingID: UUID?
     private var pendingDoubleTapAt: Date?
     private var retryTask: Task<Void, Never>?
+    private var defaultsDidChangeObserver: NSObjectProtocol?
+    private var cachedConfiguration: HotkeyRuntimeConfiguration?
+    private var dispatchCallbacksAsynchronously = true
+    private var lastFlagsChangedDebugLogSignature: String?
+    private var lastFlagsChangedDebugLogAt = Date.distantPast
+    private let flagsChangedDebugLogMinimumInterval: TimeInterval = 0.25
     private var didPromptAccessibility = false
     private var didPromptInputMonitoring = false
     private var lastEventAt: Date?
     private let staleTapStateResetIdleThreshold: TimeInterval = 2.0
 
+    init() {
+        defaultsDidChangeObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.cachedConfiguration = nil
+            }
+        }
+    }
+
     deinit {
         retryTask?.cancel()
         retryTask = nil
+        if let defaultsDidChangeObserver {
+            NotificationCenter.default.removeObserver(defaultsDidChangeObserver)
+        }
 
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
@@ -131,7 +152,7 @@ class HotkeyManager {
         if eventTap != nil {
             return
         }
-        let configuration = HotkeyRuntimeConfiguration.load()
+        let configuration = runtimeConfiguration()
         VoxtLog.info("Starting hotkey manager.")
         VoxtLog.hotkey(configuration.debugBindingsDescription)
         guard preflightAndPromptPermissionsIfNeeded() else {
@@ -242,6 +263,45 @@ class HotkeyManager {
         }
     }
 
+    private func runtimeConfiguration() -> HotkeyRuntimeConfiguration {
+        if let cachedConfiguration {
+            return cachedConfiguration
+        }
+        let configuration = HotkeyRuntimeConfiguration.load()
+        cachedConfiguration = configuration
+        return configuration
+    }
+
+    private func logFlagsChangedDebugEventIfNeeded(
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        transcriptionFlags: CGEventFlags,
+        translationFlags: CGEventFlags,
+        rewriteFlags: CGEventFlags
+    ) {
+        guard VoxtLog.isHotkeyDebugLoggingEnabled else { return }
+
+        let now = Date()
+        let signature = [
+            "keyCode=\(keyCode)",
+            "flags=\(HotkeyEventSupport.debugDescription(for: flags))",
+            "isKeyDown=\(isKeyDown)",
+            "isTranslationKeyDown=\(isTranslationKeyDown)",
+            "isRewriteKeyDown=\(isRewriteKeyDown)",
+            "sawNonModifier=\(sawNonModifierKeyDuringFunctionChord)"
+        ].joined(separator: ",")
+        if signature == lastFlagsChangedDebugLogSignature,
+           now.timeIntervalSince(lastFlagsChangedDebugLogAt) < flagsChangedDebugLogMinimumInterval {
+            return
+        }
+
+        lastFlagsChangedDebugLogSignature = signature
+        lastFlagsChangedDebugLogAt = now
+        VoxtLog.hotkey(
+            "Hotkey flagsChanged(tap). keyCode=\(keyCode), flags=\(HotkeyEventSupport.debugDescription(for: flags)), tHotkey=\(HotkeyEventSupport.debugDescription(for: transcriptionFlags)), trHotkey=\(HotkeyEventSupport.debugDescription(for: translationFlags)), rwHotkey=\(HotkeyEventSupport.debugDescription(for: rewriteFlags)), isKeyDown=\(isKeyDown), isTranslationKeyDown=\(isTranslationKeyDown), isRewriteKeyDown=\(isRewriteKeyDown), sawNonModifier=\(sawNonModifierKeyDuringFunctionChord), suppressRemainingMs=\(max(Int(suppressTranscriptionTapUntil.timeIntervalSinceNow * 1000), 0))"
+        )
+    }
+
     private func createEventTap(eventMask: CGEventMask) -> (tap: CFMachPort, location: CGEventTapLocation)? {
         let callback: CGEventTapCallBack = { _, type, event, refcon -> Unmanaged<CGEvent>? in
             guard let refcon else { return Unmanaged.passUnretained(event) }
@@ -306,7 +366,7 @@ class HotkeyManager {
             lastEventAt = Date()
         }
 
-        let configuration = HotkeyRuntimeConfiguration.load()
+        let configuration = runtimeConfiguration()
         let transcriptionHotkey = configuration.transcriptionHotkey
         let translationHotkey = configuration.translationHotkey
         let rewriteHotkey = configuration.rewriteActivationMode == .dedicatedHotkey
@@ -397,8 +457,12 @@ class HotkeyManager {
             hasRewriteModifierTapCandidate: hasRewriteModifierTapCandidate,
             sawNonModifierKeyDuringFunctionChord: sawNonModifierKeyDuringFunctionChord
            ) {
-            VoxtLog.hotkey(
-                "Hotkey flagsChanged(tap). keyCode=\(keyCode), flags=\(HotkeyEventSupport.debugDescription(for: flags)), tHotkey=\(HotkeyEventSupport.debugDescription(for: transcriptionFlags)), trHotkey=\(HotkeyEventSupport.debugDescription(for: translationFlags)), rwHotkey=\(HotkeyEventSupport.debugDescription(for: rewriteFlags)), isKeyDown=\(isKeyDown), isTranslationKeyDown=\(isTranslationKeyDown), isRewriteKeyDown=\(isRewriteKeyDown), sawNonModifier=\(sawNonModifierKeyDuringFunctionChord), suppressRemainingMs=\(max(Int(suppressTranscriptionTapUntil.timeIntervalSinceNow * 1000), 0))"
+            logFlagsChangedDebugEventIfNeeded(
+                keyCode: keyCode,
+                flags: flags,
+                transcriptionFlags: transcriptionFlags,
+                translationFlags: translationFlags,
+                rewriteFlags: rewriteFlags
             )
         }
 
@@ -686,7 +750,7 @@ class HotkeyManager {
         }
 
         guard type == .otherMouseDown || type == .otherMouseUp else { return }
-        let configuration = HotkeyRuntimeConfiguration.load()
+        let configuration = runtimeConfiguration()
         let rewriteHotkey = configuration.rewriteActivationMode == .dedicatedHotkey
             ? configuration.rewriteHotkey
             : nil
@@ -1998,42 +2062,83 @@ class HotkeyManager {
     }
 
     private func emitKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
-        onKeyDownWithBehavior?(behavior)
-        onKeyDown?()
+        let onKeyDownWithBehavior = onKeyDownWithBehavior
+        let onKeyDown = onKeyDown
+        dispatchHotkeyCallback {
+            onKeyDownWithBehavior?(behavior)
+            onKeyDown?()
+        }
     }
 
     private func emitKeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
-        onKeyUpWithBehavior?(behavior)
-        onKeyUp?()
+        let onKeyUpWithBehavior = onKeyUpWithBehavior
+        let onKeyUp = onKeyUp
+        dispatchHotkeyCallback {
+            onKeyUpWithBehavior?(behavior)
+            onKeyUp?()
+        }
     }
 
     private func emitTranslationKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
-        onTranslationKeyDownWithBehavior?(behavior)
-        onTranslationKeyDown?()
+        let onTranslationKeyDownWithBehavior = onTranslationKeyDownWithBehavior
+        let onTranslationKeyDown = onTranslationKeyDown
+        dispatchHotkeyCallback {
+            onTranslationKeyDownWithBehavior?(behavior)
+            onTranslationKeyDown?()
+        }
     }
 
     private func emitTranslationKeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
-        onTranslationKeyUpWithBehavior?(behavior)
-        onTranslationKeyUp?()
+        let onTranslationKeyUpWithBehavior = onTranslationKeyUpWithBehavior
+        let onTranslationKeyUp = onTranslationKeyUp
+        dispatchHotkeyCallback {
+            onTranslationKeyUpWithBehavior?(behavior)
+            onTranslationKeyUp?()
+        }
     }
 
     private func emitRewriteKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
-        onRewriteKeyDownWithBehavior?(behavior)
-        onRewriteKeyDown?()
+        let onRewriteKeyDownWithBehavior = onRewriteKeyDownWithBehavior
+        let onRewriteKeyDown = onRewriteKeyDown
+        dispatchHotkeyCallback {
+            onRewriteKeyDownWithBehavior?(behavior)
+            onRewriteKeyDown?()
+        }
     }
 
     private func emitRewriteKeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
-        onRewriteKeyUpWithBehavior?(behavior)
-        onRewriteKeyUp?()
+        let onRewriteKeyUpWithBehavior = onRewriteKeyUpWithBehavior
+        let onRewriteKeyUp = onRewriteKeyUp
+        dispatchHotkeyCallback {
+            onRewriteKeyUpWithBehavior?(behavior)
+            onRewriteKeyUp?()
+        }
     }
 
     private func emitMeetingKeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
-        onMeetingKeyDownWithBehavior?(behavior)
-        onMeetingKeyDown?()
+        let onMeetingKeyDownWithBehavior = onMeetingKeyDownWithBehavior
+        let onMeetingKeyDown = onMeetingKeyDown
+        dispatchHotkeyCallback {
+            onMeetingKeyDownWithBehavior?(behavior)
+            onMeetingKeyDown?()
+        }
     }
 
     private func emitCustomPasteKeyDown() {
-        onCustomPasteKeyDown?()
+        let onCustomPasteKeyDown = onCustomPasteKeyDown
+        dispatchHotkeyCallback {
+            onCustomPasteKeyDown?()
+        }
+    }
+
+    private func dispatchHotkeyCallback(_ callback: @escaping () -> Void) {
+        if dispatchCallbacksAsynchronously {
+            DispatchQueue.main.async {
+                callback()
+            }
+        } else {
+            callback()
+        }
     }
 
     private func clearMeetingTransientState() {
@@ -2116,6 +2221,11 @@ extension HotkeyManager {
         flags: CGEventFlags,
         isAutoRepeat: Bool = false
     ) -> Bool {
+        let previousDispatchMode = dispatchCallbacksAsynchronously
+        dispatchCallbacksAsynchronously = false
+        defer {
+            dispatchCallbacksAsynchronously = previousDispatchMode
+        }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             _ = recoverEventTapIfNeeded(disabledEventType: type)
             return false
@@ -2131,11 +2241,38 @@ extension HotkeyManager {
         buttonNumber: Int,
         flags: CGEventFlags = []
     ) -> Bool {
+        let previousDispatchMode = dispatchCallbacksAsynchronously
+        dispatchCallbacksAsynchronously = false
+        defer {
+            dispatchCallbacksAsynchronously = previousDispatchMode
+        }
         var eventWasConsumed = false
         handleResolvedMouseEvent(
             type: type,
             buttonNumber: buttonNumber,
             flags: flags,
+            eventWasConsumed: &eventWasConsumed
+        )
+        return eventWasConsumed
+    }
+
+    @discardableResult
+    func testingHandleEventUsingProductionCallbackDispatch(
+        type: CGEventType,
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        isAutoRepeat: Bool = false
+    ) -> Bool {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            _ = recoverEventTapIfNeeded(disabledEventType: type)
+            return false
+        }
+        var eventWasConsumed = false
+        handleResolvedEvent(
+            type: type,
+            keyCode: keyCode,
+            flags: flags,
+            isAutoRepeat: isAutoRepeat,
             eventWasConsumed: &eventWasConsumed
         )
         return eventWasConsumed

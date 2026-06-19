@@ -192,6 +192,36 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(keyUpCount, 1)
     }
 
+    func testProductionEventDispatchDoesNotRunCallbackBeforeReturning() async {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.save(
+            keyCode: UInt16(kVK_Space),
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let manager = makeManager()
+        var transcriptionDownCount = 0
+        let callbackExpectation = expectation(description: "transcription callback")
+        manager.onKeyDown = {
+            transcriptionDownCount += 1
+            callbackExpectation.fulfill()
+        }
+
+        XCTAssertTrue(
+            manager.testingHandleEventUsingProductionCallbackDispatch(
+                type: .keyDown,
+                keyCode: UInt16(kVK_Space),
+                flags: .maskSecondaryFn
+            )
+        )
+        XCTAssertEqual(transcriptionDownCount, 0)
+
+        await fulfillment(of: [callbackExpectation], timeout: 1.0)
+        XCTAssertEqual(transcriptionDownCount, 1)
+    }
+
     func testTapTranslationNonModifierDoesNotConsumeReleaseWithoutMatchingKeyDown() {
         let defaults = UserDefaults.standard
         defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
