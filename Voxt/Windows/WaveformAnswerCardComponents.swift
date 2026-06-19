@@ -107,6 +107,7 @@ struct AnswerSessionTranslationMenuPicker: View {
     let onDismissPresentation: () -> Void
     let onSelectLanguage: (TranslationTargetLanguage) -> Void
     var style: OverlayTranslationMenuStyle = .answer
+    var fixedWidth: CGFloat?
 
     var body: some View {
         OverlayTranslationMenuPickerRepresentable(
@@ -117,7 +118,7 @@ struct AnswerSessionTranslationMenuPicker: View {
             onDismissPresentation: onDismissPresentation,
             onSelectLanguage: onSelectLanguage
         )
-        .frame(width: style.fixedWidth, height: style.height)
+        .frame(width: fixedWidth ?? style.fixedWidth, height: style.height)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel(Text(String(localized: "Target Language")))
     }
