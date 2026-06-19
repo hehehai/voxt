@@ -224,7 +224,7 @@ struct HistorySettingsView: View {
                         Button {
                             pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history
                         } label: {
-                            Image(systemName: "trash")
+                            HistoryActionIcon(kind: .delete)
                         }
                         .buttonStyle(SettingsCompactIconButtonStyle(tone: .destructive))
                         .help(localized("Delete All"))

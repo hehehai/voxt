@@ -74,16 +74,17 @@ struct HistoryDayHeader: View {
     let date: Date
 
     var body: some View {
-        Text(
-            date.formatted(
-                .dateTime
-                    .locale(locale)
-                    .year()
-                    .month(.defaultDigits)
-                    .day()
-            )
+        let isToday = Calendar.current.isDateInToday(date)
+        let title = isToday ? localized("Today") : date.formatted(
+            .dateTime
+                .locale(locale)
+                .year()
+                .month(.defaultDigits)
+                .day()
         )
-        .font(.system(size: 14, weight: .bold))
+
+        Text(title)
+        .font(.system(size: 14, weight: .medium))
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         .padding(.leading, 2)
@@ -113,9 +114,10 @@ struct HistoryRow: View {
 
                 Button(action: onCopy) {
                     Text(displayText)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
+                        .lineSpacing(2)
                         .lineLimit(3)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,7 +137,7 @@ struct HistoryRow: View {
                 Button(role: .destructive, action: onDelete) {
                     HistoryActionIcon(kind: .delete)
                 }
-                .buttonStyle(SettingsCompactIconButtonStyle(tone: .destructive, size: 26))
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
             }
             .opacity(isHovered ? 1 : 0)
             .allowsHitTesting(isHovered)
@@ -178,12 +180,12 @@ struct HistoryRow: View {
     }
 }
 
-private enum HistoryActionIconKind {
+enum HistoryActionIconKind {
     case detail
     case delete
 }
 
-private struct HistoryActionIcon: View {
+struct HistoryActionIcon: View {
     let kind: HistoryActionIconKind
 
     var body: some View {
@@ -196,16 +198,15 @@ private struct HistoryActionIcon: View {
             }
         }
         .frame(width: 17, height: 17)
-        .foregroundStyle(.primary.opacity(0.82))
         .contentShape(Rectangle())
     }
 
     private var detailIcon: some View {
         ZStack {
-            strokePath("M10.97 20.02C15.94 20.02 19.97 15.99 19.97 11.02C19.97 6.05002 15.94 2.02002 10.97 2.02002C5.99997 2.02002 1.96997 6.04002 1.96997 11.02C1.96997 16 5.99997 20.02 10.97 20.02Z")
-            strokePath("M18.8699 20.48C19.1499 22.14 20.3299 22.48 21.4599 21.24C22.4899 20.1 22.0999 18.98 20.5699 18.75C19.4399 18.57 18.6799 19.34 18.8699 20.48Z", opacity: 0.4)
-            strokePath("M7.96997 9.52002H13.97", opacity: 0.4)
-            strokePath("M7.96997 12.52H10.97", opacity: 0.4)
+            fillPath("M15 12.9492H8C7.59 12.9492 7.25 12.6092 7.25 12.1992C7.25 11.7892 7.59 11.4492 8 11.4492H15C15.41 11.4492 15.75 11.7892 15.75 12.1992C15.75 12.6092 15.41 12.9492 15 12.9492Z")
+            fillPath("M12.38 16.9492H8C7.59 16.9492 7.25 16.6092 7.25 16.1992C7.25 15.7892 7.59 15.4492 8 15.4492H12.38C12.79 15.4492 13.13 15.7892 13.13 16.1992C13.13 16.6092 12.79 16.9492 12.38 16.9492Z")
+            fillPath("M14 6.75H10C9.04 6.75 7.25 6.75 7.25 4C7.25 1.25 9.04 1.25 10 1.25H14C14.96 1.25 16.75 1.25 16.75 4C16.75 4.96 16.75 6.75 14 6.75ZM10 2.75C9.01 2.75 8.75 2.75 8.75 4C9.01 5.25 9.01 5.25 10 5.25H14C15.25 5.25 15.25 4.99 15.25 4C15.25 2.75 14.99 2.75 14 2.75H10Z")
+            fillPath("M15 22.7504H9C3.38 22.7504 2.25 20.1704 2.25 16.0004V10.0004C2.25 5.44042 3.9 3.49042 7.96 3.28042C8.36 3.26042 8.73 3.57042 8.75 3.99042C8.77 4.41042 8.45 4.75042 8.04 4.77042C5.2 4.93042 3.75 5.78042 3.75 10.0004V16.0004C3.75 19.7004 4.48 21.2504 9 21.2504H15C19.52 21.2504 20.25 19.7004 20.25 16.0004V10.0004C20.25 5.78042 18.8 4.93042 15.96 4.77042C15.55 4.75042 15.23 4.39042 15.25 3.98042C15.27 3.57042 15.63 3.25042 16.04 3.27042C20.1 3.49042 21.75 5.44042 21.75 9.99042V15.9904C21.75 20.1704 20.62 22.7504 15 22.7504Z")
         }
     }
 
@@ -222,14 +223,14 @@ private struct HistoryActionIcon: View {
     private func strokePath(_ pathData: String, opacity: Double = 1) -> some View {
         SVGPathShape(pathData: pathData)
             .stroke(
-                Color.primary.opacity(0.82 * opacity),
+                Color.black.opacity(opacity),
                 style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
             )
     }
 
     private func fillPath(_ pathData: String) -> some View {
         SVGPathShape(pathData: pathData)
-            .fill(Color.primary.opacity(0.82))
+            .fill(Color.black)
     }
 }
 
@@ -289,9 +290,10 @@ struct NoteHistoryRow: View {
 
                 Button(action: onCopy) {
                     Text(displayText)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
+                        .lineSpacing(2)
                         .lineLimit(3)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -311,7 +313,7 @@ struct NoteHistoryRow: View {
                 Button(role: .destructive, action: onDelete) {
                     HistoryActionIcon(kind: .delete)
                 }
-                .buttonStyle(SettingsCompactIconButtonStyle(tone: .destructive, size: 26))
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
             }
             .opacity(isHovered ? 1 : 0)
             .allowsHitTesting(isHovered)
