@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "31F19CCC2F4D76D200E96913"
-               BuildableName = "Voxt Dev.app"
+               BuildableName = "Voxt.app"
                BlueprintName = "Voxt"
                ReferencedContainer = "container:Voxt.xcodeproj">
             </BuildableReference>
@@ -37,21 +37,21 @@
          </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
-      <TestAction
-         buildConfiguration = "TestDebug"
-         selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
-         selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-         shouldUseLaunchSchemeArgsEnv = "YES">
-         <MacroExpansion>
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "31F19CCC2F4D76D200E96913"
-               BuildableName = "Voxt Dev.app"
-               BlueprintName = "Voxt"
-               ReferencedContainer = "container:Voxt.xcodeproj">
-            </BuildableReference>
-         </MacroExpansion>
-         <Testables>
+   <TestAction
+      buildConfiguration = "TestDebug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "31F19CCC2F4D76D200E96913"
+            BuildableName = "Voxt.app"
+            BlueprintName = "Voxt"
+            ReferencedContainer = "container:Voxt.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+      <Testables>
          <TestableReference
             skipped = "NO">
             <BuildableReference
@@ -79,7 +79,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "31F19CCC2F4D76D200E96913"
-            BuildableName = "Voxt Dev.app"
+            BuildableName = "Voxt.app"
             BlueprintName = "Voxt"
             ReferencedContainer = "container:Voxt.xcodeproj">
          </BuildableReference>
@@ -96,7 +96,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "31F19CCC2F4D76D200E96913"
-            BuildableName = "Voxt Dev.app"
+            BuildableName = "Voxt.app"
             BlueprintName = "Voxt"
             ReferencedContainer = "container:Voxt.xcodeproj">
          </BuildableReference>

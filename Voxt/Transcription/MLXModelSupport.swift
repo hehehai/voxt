@@ -263,7 +263,8 @@ struct MLXModelCatalog {
         Option(
             id: "mlx-community/FireRedASR2-AED-mlx",
             title: "FireRed 2",
-            description: "Beam-search ASR model tuned for higher offline accuracy."
+            description: "Beam-search ASR model tuned for higher offline accuracy.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/SenseVoiceSmall",
@@ -304,7 +305,7 @@ struct MLXModelCatalog {
         "mlx-community/parakeet-rnnt-1.1b": PresentationMetadata(ratingText: "4.5", tagKeys: ["Accurate"]),
         "mlx-community/GLM-ASR-Nano-2512-4bit": PresentationMetadata(ratingText: "4.1", tagKeys: ["Multilingual", "Fast"]),
         "mlx-community/granite-4.0-1b-speech-5bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Balanced"]),
-        "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Realtime", "Fast"]),
+        "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Realtime", "Fast"]),
         "mlx-community/FireRedASR2-AED-mlx": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
         "mlx-community/SenseVoiceSmall": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Fast"]),
     ]

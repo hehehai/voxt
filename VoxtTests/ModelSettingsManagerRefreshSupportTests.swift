@@ -57,6 +57,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: ["repo-b", "repo-a"],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
             customLLMState: .downloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -71,6 +73,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: ["repo-a", "repo-b"],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
             customLLMState: .downloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -90,6 +94,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
             customLLMState: .notDownloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
@@ -104,11 +110,54 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
             customLLMState: .notDownloaded,
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
 
         XCTAssertNotEqual(pausedToken, activeToken)
+    }
+
+    func testDownloadLifecycleTokenTracksSherpaActiveModelIDs() {
+        let idleToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
+            mlxState: .notDownloaded,
+            mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
+        )
+        let sherpaToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
+            mlxState: .notDownloaded,
+            mlxActiveDownloadRepos: [],
+            sherpaState: .downloading(
+                progress: 0,
+                completed: 0,
+                total: 100,
+                currentFile: "model.tar.bz2",
+                completedFiles: 0,
+                totalFiles: 1
+            ),
+            sherpaActiveDownloadModelIDs: [
+                SherpaOnnxModelCatalog.funASRNanoModelID,
+                SherpaOnnxModelCatalog.fireRedModelID,
+            ],
+            customLLMState: .notDownloaded,
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
+        )
+
+        XCTAssertNotEqual(idleToken, sherpaToken)
+        XCTAssertEqual(sherpaToken.sherpaPhase, .downloading)
+        XCTAssertEqual(
+            sherpaToken.sherpaActiveDownloadModelIDs,
+            [
+                SherpaOnnxModelCatalog.fireRedModelID.rawValue,
+                SherpaOnnxModelCatalog.funASRNanoModelID.rawValue,
+            ]
+        )
     }
 }

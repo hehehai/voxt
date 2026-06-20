@@ -23,6 +23,14 @@ enum ModelDownloadProgressFormatter {
         return AppLocalization.format("Downloaded: %@", completedText)
     }
 
+    static func byteProgressText(completed: Int64, total: Int64) -> String {
+        let completedText = byteFormatter.string(fromByteCount: completed)
+        guard total > 0 else {
+            return completedText
+        }
+        return "\(completedText) / \(byteFormatter.string(fromByteCount: total))"
+    }
+
     static func fileProgressText(
         currentFile: String?,
         currentFileCompleted: Int64 = 0,

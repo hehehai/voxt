@@ -69,10 +69,10 @@ enum ModelDownloadPresentationSupport {
         case .downloading(let completed, let total):
             return AppLocalization.format(
                 "Downloading %@",
-                ModelDownloadProgressFormatter.progressText(completed: completed, total: total)
+                ModelDownloadProgressFormatter.byteProgressText(completed: completed, total: total)
             )
         case .paused(let completed, let total, let pauseMessage):
-            let progressText = ModelDownloadProgressFormatter.progressText(completed: completed, total: total)
+            let progressText = ModelDownloadProgressFormatter.byteProgressText(completed: completed, total: total)
             if let pauseMessage, !pauseMessage.isEmpty {
                 return AppLocalization.format("%@ • %@", pauseMessage, progressText)
             }

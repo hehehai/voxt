@@ -512,6 +512,7 @@ struct ResumableDownloadDescriptor {
     let destinationURL: URL
     let relativePath: String
     let expectedSize: Int64?
+    let requiresExpectedSizeMatch: Bool
     let userAgent: String
     let bearerToken: String?
     let disableProxy: Bool
@@ -523,6 +524,7 @@ struct ResumableDownloadDescriptor {
         destinationURL: URL,
         relativePath: String,
         expectedSize: Int64?,
+        requiresExpectedSizeMatch: Bool = true,
         userAgent: String,
         bearerToken: String? = nil,
         disableProxy: Bool,
@@ -533,6 +535,7 @@ struct ResumableDownloadDescriptor {
         self.destinationURL = destinationURL
         self.relativePath = relativePath
         self.expectedSize = expectedSize
+        self.requiresExpectedSizeMatch = requiresExpectedSizeMatch
         self.userAgent = userAgent
         self.bearerToken = bearerToken
         self.disableProxy = disableProxy
@@ -627,6 +630,7 @@ private struct ResumableResponseMetadata {
     nonisolated init(response: HTTPURLResponse) {
         statusCode = response.statusCode
         etag = response.value(forHTTPHeaderField: "ETag")
+            ?? response.value(forHTTPHeaderField: "X-Linked-Etag")
         let acceptRangesValue = response.value(forHTTPHeaderField: "Accept-Ranges")?.lowercased() ?? ""
         acceptRanges = acceptRangesValue.contains("bytes")
         contentLength = response.expectedContentLength > 0 ? response.expectedContentLength : nil
@@ -1051,7 +1055,8 @@ enum ResumableModelDownloadSupport {
                 }
 
                 let actualExpectedSize = max(metadata.contentLength ?? descriptor.expectedSize ?? 0, 0)
-                if let descriptorExpected = descriptor.expectedSize,
+                if descriptor.requiresExpectedSizeMatch,
+                   let descriptorExpected = descriptor.expectedSize,
                    descriptorExpected > 0,
                    actualExpectedSize > 0,
                    descriptorExpected != actualExpectedSize
@@ -1116,9 +1121,9 @@ enum ResumableModelDownloadSupport {
                     resumedFromBytes: initialBytes
                 )
             case 416:
-                if let descriptorExpected = descriptor.expectedSize,
-                   descriptorExpected > 0,
-                   initialBytes == descriptorExpected
+                if let completedSize = existingState?.expectedSize ?? descriptor.expectedSize,
+                   completedSize > 0,
+                   initialBytes == completedSize
                 {
                     return .completedExisting(
                         ResumableDownloadResult(
@@ -1219,7 +1224,8 @@ enum ResumableModelDownloadSupport {
             return nil
         }
 
-        if let expectedSize = descriptor.expectedSize,
+        if descriptor.requiresExpectedSizeMatch,
+           let expectedSize = descriptor.expectedSize,
            expectedSize > 0,
            loadedState.expectedSize != expectedSize
         {
@@ -1261,9 +1267,11 @@ enum ResumableModelDownloadSupport {
         stateURL: URL,
         result: ResumableDownloadResult
     ) throws {
-        let expectedSize = descriptor.expectedSize ?? result.bytesDownloaded
-        if expectedSize > 0, result.bytesDownloaded != expectedSize {
-            throw ResumableDownloadError.inconsistentExpectedSize(expected: expectedSize, actual: result.bytesDownloaded)
+        if descriptor.requiresExpectedSizeMatch {
+            let expectedSize = descriptor.expectedSize ?? result.bytesDownloaded
+            if expectedSize > 0, result.bytesDownloaded != expectedSize {
+                throw ResumableDownloadError.inconsistentExpectedSize(expected: expectedSize, actual: result.bytesDownloaded)
+            }
         }
 
         if FileManager.default.fileExists(atPath: descriptor.destinationURL.path) {

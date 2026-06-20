@@ -52,6 +52,16 @@ final class FeatureSettingsStoreTests: XCTestCase {
         }
     }
 
+    func testLegacyFireRedSelectionOnlyMigratesToSherpaWhenRuntimeIsAvailable() {
+        let selection = FeatureModelSelectionID.mlx("mlx-community/FireRedASR2").asrSelection
+
+        #if SHERPA_ONNX_AVAILABLE
+        XCTAssertEqual(selection, .sherpaOnnx(modelID: SherpaOnnxModelCatalog.fireRedModelID))
+        #else
+        XCTAssertEqual(selection, .mlx(repo: "mlx-community/FireRedASR2-AED-mlx"))
+        #endif
+    }
+
     func testSaveRemovesObsoleteLatencyProfileKeysWithoutAffectingStoredSettings() throws {
         try withEphemeralDefaults { defaults in
             defaults.set("instant", forKey: "enhancementLatencyProfile")

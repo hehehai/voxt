@@ -58,43 +58,48 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
     }
 
     func testShouldPollModelStateWhenNonCurrentMLXDownloadIsActive() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .notDownloaded,
             mlxHasActiveDownloadingRepos: true,
-            customLLMState: .notDownloaded,
-            ggufStateByID: [:],
-            ggufActiveDownloadModelID: nil
+            customLLMState: .notDownloaded
+        )
+
+        XCTAssertTrue(shouldPoll)
+    }
+
+    func testShouldPollModelStateWhenSherpaDownloadIsActive() {
+        let shouldPoll = shouldPollModelState(
+            mlxState: .notDownloaded,
+            mlxHasActiveDownloadingRepos: false,
+            sherpaOnnxHasActiveDownloads: true,
+            customLLMState: .notDownloaded
         )
 
         XCTAssertTrue(shouldPoll)
     }
 
     func testShouldNotPollModelStateWithoutActiveDownloads() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .downloaded,
             mlxHasActiveDownloadingRepos: false,
-            customLLMState: .downloaded,
-            ggufStateByID: [:],
-            ggufActiveDownloadModelID: nil
+            customLLMState: .downloaded
         )
 
         XCTAssertFalse(shouldPoll)
     }
 
     func testShouldNotPollModelStateForLoadingWithoutActiveDownloads() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .loading,
             mlxHasActiveDownloadingRepos: false,
-            customLLMState: .notDownloaded,
-            ggufStateByID: [:],
-            ggufActiveDownloadModelID: nil
+            customLLMState: .notDownloaded
         )
 
         XCTAssertFalse(shouldPoll)
     }
 
     func testShouldNotPollModelStateForPausedMLXWhileCancellationStillCleansUp() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .paused(
                 progress: 0.5,
                 completed: 50,
@@ -104,11 +109,31 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxHasActiveDownloadingRepos: false,
-            customLLMState: .notDownloaded,
-            ggufStateByID: [:],
-            ggufActiveDownloadModelID: nil
+            customLLMState: .notDownloaded
         )
 
         XCTAssertFalse(shouldPoll)
+    }
+
+    private func shouldPollModelState(
+        mlxState: MLXModelManager.ModelState,
+        mlxHasActiveDownloadingRepos: Bool,
+        sherpaOnnxState: MLXModelManager.ModelState = .notDownloaded,
+        sherpaOnnxStateByID: [SherpaOnnxModelID: MLXModelManager.ModelState] = [:],
+        sherpaOnnxHasActiveDownloads: Bool = false,
+        customLLMState: CustomLLMModelManager.ModelState,
+        ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState] = [:],
+        ggufActiveDownloadModelID: GGUFTranslationModelID? = nil
+    ) -> Bool {
+        ModelSettingsProgressRefreshSupport.shouldPollModelState(
+            mlxState: mlxState,
+            mlxHasActiveDownloadingRepos: mlxHasActiveDownloadingRepos,
+            sherpaOnnxState: sherpaOnnxState,
+            sherpaOnnxStateByID: sherpaOnnxStateByID,
+            sherpaOnnxHasActiveDownloads: sherpaOnnxHasActiveDownloads,
+            customLLMState: customLLMState,
+            ggufStateByID: ggufStateByID,
+            ggufActiveDownloadModelID: ggufActiveDownloadModelID
+        )
     }
 }

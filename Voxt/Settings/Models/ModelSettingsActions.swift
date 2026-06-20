@@ -135,12 +135,12 @@ extension ModelSettingsView {
         }
     }
 
-    func hasIssue(for scope: ConfigurationTransferManager.MissingConfigurationIssue.Scope) -> Bool {
+    func hasIssue(for scope: ModelConfigurationIssue.Scope) -> Bool {
         missingConfigurationIssues.contains(where: { $0.scope == scope })
     }
 
     func remoteLLMBadgeText(for provider: RemoteLLMProvider) -> String? {
-        let scopes: [ConfigurationTransferManager.MissingConfigurationIssue.Scope] = [
+        let scopes: [ModelConfigurationIssue.Scope] = [
             .remoteLLMProvider(provider),
             .translationRemoteLLM(provider),
             .rewriteRemoteLLM(provider)
@@ -149,7 +149,7 @@ extension ModelSettingsView {
     }
 
     func customLLMBadgeText(for repo: String) -> String? {
-        let scopes: [ConfigurationTransferManager.MissingConfigurationIssue.Scope] = [
+        let scopes: [ModelConfigurationIssue.Scope] = [
             .customLLMModel(repo),
             .translationCustomLLM(repo),
             .rewriteCustomLLM(repo)
@@ -178,10 +178,22 @@ extension ModelSettingsView {
         mlxModelManager.updateModel(repo: canonicalRepo)
     }
 
+    func useSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
+        guard SherpaOnnxRuntimeSupport.isAvailable else { return }
+        sherpaOnnxModelManager.updateModel(id: modelID)
+        UserDefaults.standard.set(modelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
+        engineRaw = TranscriptionEngine.sherpaOnnx.rawValue
+    }
+
     func downloadModel(_ repo: String) {
         Task {
             await mlxModelManager.downloadModel(repo: repo)
         }
+    }
+
+    func downloadSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
+        guard SherpaOnnxRuntimeSupport.isAvailable else { return }
+        sherpaOnnxModelManager.downloadModel(id: modelID)
     }
 
     func deleteModel(_ repo: String) {
@@ -191,8 +203,20 @@ extension ModelSettingsView {
         }
     }
 
+    func deleteSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
+        sherpaOnnxModelManager.deleteModel(id: modelID)
+        if sherpaOnnxModelManager.selectedModelID == modelID {
+            sherpaOnnxModelManager.checkExistingModel()
+        }
+    }
+
     func isCurrentModel(_ repo: String) -> Bool {
         MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(modelRepo)
+    }
+
+    func isCurrentSherpaOnnxModel(_ modelID: SherpaOnnxModelID) -> Bool {
+        TranscriptionEngine.resolved(rawValue: engineRaw) == .sherpaOnnx
+            && sherpaOnnxModelManager.selectedModelID == modelID
     }
 
     func isDownloadingModel(_ repo: String) -> Bool {
@@ -229,6 +253,10 @@ extension ModelSettingsView {
         pendingModelRemovalTarget = .mlx(repo: repo)
     }
 
+    func requestDeleteSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
+        pendingModelRemovalTarget = .sherpaOnnx(modelID: modelID)
+    }
+
     func requestDeleteCustomLLM(_ repo: String) {
         pendingModelRemovalTarget = .customLLM(repo: repo)
     }
@@ -246,6 +274,8 @@ extension ModelSettingsView {
             switch target {
             case .mlx(let repo):
                 deleteModel(repo)
+            case .sherpaOnnx(let modelID):
+                deleteSherpaOnnxModel(modelID)
             case .customLLM(let repo):
                 deleteCustomLLM(repo)
             case .ggufTranslation(let modelID):
@@ -259,6 +289,11 @@ extension ModelSettingsView {
     func isUninstallingModel(_ repo: String) -> Bool {
         guard case .mlx(let uninstallingRepo) = uninstallingModelTarget else { return false }
         return MLXModelManager.canonicalModelRepo(uninstallingRepo) == MLXModelManager.canonicalModelRepo(repo)
+    }
+
+    func isUninstallingSherpaOnnxModel(_ modelID: SherpaOnnxModelID) -> Bool {
+        guard case .sherpaOnnx(let uninstallingModelID) = uninstallingModelTarget else { return false }
+        return uninstallingModelID == modelID
     }
 
     func isUninstallingCustomLLM(_ repo: String) -> Bool {
@@ -276,6 +311,8 @@ extension ModelSettingsView {
         switch target {
         case .mlx(let repo):
             modelName = mlxModelManager.displayTitle(for: repo)
+        case .sherpaOnnx(let modelID):
+            modelName = sherpaOnnxModelManager.displayTitle(for: modelID)
         case .customLLM(let repo):
             modelName = customLLMManager.displayTitle(for: repo)
         case .ggufTranslation(let modelID):
@@ -403,6 +440,30 @@ extension ModelSettingsView {
         )
     }
 
+    func resolvedSherpaOnnxLocalTuningSettings(for modelID: SherpaOnnxModelID) -> SherpaOnnxLocalTuningSettings {
+        let option = SherpaOnnxModelCatalog.option(for: modelID)
+        return SherpaOnnxLocalTuningSettingsStore.resolvedSettings(
+            for: modelID,
+            kind: option.kind,
+            rawValue: sherpaOnnxLocalASRTuningSettingsRaw
+        )
+    }
+
+    func saveSherpaOnnxLocalTuningSettings(_ settings: SherpaOnnxLocalTuningSettings, for modelID: SherpaOnnxModelID) {
+        sherpaOnnxLocalASRTuningSettingsRaw = SherpaOnnxLocalTuningSettingsStore.save(
+            settings,
+            for: modelID,
+            rawValue: sherpaOnnxLocalASRTuningSettingsRaw
+        )
+    }
+
+    func sherpaOnnxLocalTuningSettingsBinding(for modelID: SherpaOnnxModelID) -> Binding<SherpaOnnxLocalTuningSettings> {
+        Binding(
+            get: { resolvedSherpaOnnxLocalTuningSettings(for: modelID) },
+            set: { saveSherpaOnnxLocalTuningSettings($0, for: modelID) }
+        )
+    }
+
     func resolvedCustomLLMGenerationSettings(for repo: String) -> LLMGenerationSettings {
         CustomLLMGenerationSettingsStore.resolvedSettings(
             for: repo,
@@ -436,12 +497,6 @@ extension ModelSettingsView {
             updating: remoteLLMProviderConfigurationsRaw
         )
         NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
-    }
-
-    func updateMirrorSetting() {
-        let url = useHfMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
-        mlxModelManager.updateHubBaseURL(url)
-        customLLMManager.updateHubBaseURL(url)
     }
 
     func refreshModelInstallStateIfNeeded() {

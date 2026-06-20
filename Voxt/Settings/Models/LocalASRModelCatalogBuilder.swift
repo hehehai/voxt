@@ -71,6 +71,40 @@ extension ModelCatalogBuilder {
         }
     }
 
+    func sherpaOnnxASREntries() -> [ModelCatalogEntry] {
+        guard SherpaOnnxRuntimeSupport.isAvailable else {
+            return []
+        }
+
+        return SherpaOnnxModelCatalog.allModels.map { model in
+            let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
+            let installSnapshot = sherpaInstallSnapshot(model.id)
+            let decoration = catalogDecoration(
+                base: model.tagKeys.map { localizedModelCatalog($0) },
+                installed: installSnapshot.isInstalled,
+                requiresConfiguration: false,
+                configured: true,
+                selectionID: selectionID
+            )
+
+            return ModelCatalogEntry(
+                id: selectionID.rawValue,
+                title: model.title,
+                engine: localizedModelCatalog("Sherpa ONNX"),
+                sizeText: sherpaOnnxASRSizeText(id: model.id, isInstalled: installSnapshot.isInstalled),
+                ratingText: model.ratingText,
+                filterTags: decoration.filterTags,
+                displayTags: decoration.displayTags,
+                statusText: installSnapshot.statusText,
+                usageLocations: decoration.usageLocations,
+                badgeText: installSnapshot.badgeText
+                    ?? (model.id == SherpaOnnxModelCatalog.fireRedModelID ? localizedModelCatalog("Recommended") : nil),
+                primaryAction: catalogPrimaryAction(installSnapshot),
+                secondaryActions: catalogSecondaryActions(installSnapshot)
+            )
+        }
+    }
+
     private func localASRSecondaryActions(
         for snapshot: LocalModelInstallSnapshot,
         isAvailable: Bool
@@ -92,6 +126,13 @@ extension ModelCatalogBuilder {
             return mlxModelManager.cachedModelSizeText(repo: repo) ?? mlxModelManager.remoteSizeText(repo: repo)
         }
         return mlxModelManager.remoteSizeText(repo: repo)
+    }
+
+    private func sherpaOnnxASRSizeText(id: SherpaOnnxModelID, isInstalled: Bool) -> String {
+        if isInstalled {
+            return sherpaOnnxModelManager.cachedModelSizeText(id: id) ?? sherpaOnnxModelManager.remoteSizeText(id: id)
+        }
+        return sherpaOnnxModelManager.remoteSizeText(id: id)
     }
 
 }

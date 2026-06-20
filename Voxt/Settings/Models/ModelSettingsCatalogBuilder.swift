@@ -16,17 +16,19 @@ struct ModelCatalogBuilder {
     }
 
     let mlxModelManager: MLXModelManager
+    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let remoteASRConfigurations: [String: RemoteProviderConfiguration]
     let remoteLLMConfigurations: [String: RemoteProviderConfiguration]
     let featureSettings: FeatureSettings
-    let hasIssue: (ConfigurationTransferManager.MissingConfigurationIssue.Scope) -> Bool
+    let hasIssue: (ModelConfigurationIssue.Scope) -> Bool
     let customLLMBadgeText: (String) -> String?
     let remoteASRStatusText: (RemoteASRProvider, RemoteProviderConfiguration) -> String
     let remoteLLMBadgeText: (RemoteLLMProvider) -> String?
     let primaryUserLanguageCode: String?
     let mlxInstallSnapshot: (String) -> LocalModelInstallSnapshot
+    let sherpaInstallSnapshot: (SherpaOnnxModelID) -> LocalModelInstallSnapshot
     let customLLMInstallSnapshot: (String) -> LocalModelInstallSnapshot
     let ggufTranslationInstallSnapshot: (GGUFTranslationModelID) -> LocalModelInstallSnapshot
     let catalogPrimaryAction: (LocalModelInstallSnapshot) -> ModelTableAction?
@@ -40,6 +42,7 @@ struct ModelCatalogBuilder {
 
         entries.append(dictationASREntry())
         entries.append(contentsOf: mlxASREntries())
+        entries.append(contentsOf: sherpaOnnxASREntries())
 
         entries.append(contentsOf: RemoteASRProvider.allCases.map { provider in
             let selectionID = FeatureModelSelectionID.remoteASR(provider)
@@ -334,6 +337,8 @@ struct ModelCatalogBuilder {
             return true
         case .mlx(let repo):
             return mlxSupportsPrimaryLanguage(repo, primaryLanguage: primaryLanguage)
+        case .sherpaOnnx:
+            return true
         case .remote:
             return true
         case .none:

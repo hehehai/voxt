@@ -186,6 +186,9 @@ enum FeatureSettingsStore {
         case .mlx(let repo):
             defaults.set(TranscriptionEngine.mlxAudio.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
             defaults.set(MLXModelManager.canonicalModelRepo(repo), forKey: AppPreferenceKey.mlxModelRepo)
+        case .sherpaOnnx(let modelID):
+            defaults.set(TranscriptionEngine.sherpaOnnx.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
+            defaults.set(modelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
         case .remote(let provider):
             defaults.set(TranscriptionEngine.remote.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
             defaults.set(provider.rawValue, forKey: AppPreferenceKey.remoteASRSelectedProvider)
@@ -361,7 +364,7 @@ enum FeatureSettingsStore {
         fallback: FeatureModelSelectionID
     ) -> FeatureModelSelectionID {
         switch selectionID.asrSelection {
-        case .dictation, .mlx, .remote:
+        case .dictation, .mlx, .sherpaOnnx, .remote:
             return selectionID
         case .none:
             return fallback
@@ -523,7 +526,7 @@ enum FeatureSettingsStore {
         switch selectionID.asrSelection {
         case .none:
             return .mlx(fallbackRepo)
-        case .dictation, .mlx, .remote:
+        case .dictation, .mlx, .sherpaOnnx, .remote:
             return selectionID
         }
     }
@@ -543,7 +546,19 @@ enum FeatureSettingsStore {
                     )
                 )
             }
-            return .mlx(defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo)
+            let storedRepo = defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
+            if SherpaOnnxRuntimeSupport.isAvailable,
+               SherpaOnnxModelCatalog.isLegacyFireRedMLXRepo(storedRepo) {
+                return .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
+            }
+            return .mlx(storedRepo)
+        case .sherpaOnnx:
+            return .sherpaOnnx(
+                SherpaOnnxModelID(
+                    rawValue: defaults.string(forKey: AppPreferenceKey.sherpaOnnxASRModelID)
+                        ?? SherpaOnnxModelCatalog.defaultModelID.rawValue
+                )
+            )
         case .remote:
             let provider = RemoteASRProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? "") ?? .openAIWhisper
             return .remoteASR(provider)

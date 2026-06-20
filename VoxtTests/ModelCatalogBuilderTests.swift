@@ -6,6 +6,35 @@ import XCTest
 
 @MainActor
 final class ModelCatalogBuilderTests: XCTestCase {
+    func testCancellingInstallActionKeepsCancelButtonWithProgress() throws {
+        let snapshot = LocalModelInstallSnapshot(
+            target: .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID),
+            state: .cancelling,
+            isInstalled: false,
+            isCurrentSelection: false,
+            statusText: AppLocalization.localizedString("Cancelling…"),
+            badgeText: nil,
+            downloadStatus: nil,
+            canOpenLocation: false,
+            canConfigure: false,
+            configureActionTitle: nil
+        )
+
+        let primaryAction = try XCTUnwrap(
+            ModelSettingsInstallActionResolver.catalogPrimaryAction(for: snapshot) { _, _ in }
+        )
+        let tableAction = try XCTUnwrap(
+            ModelSettingsInstallActionResolver.tableActions(for: snapshot) { _, _ in }.first
+        )
+
+        XCTAssertEqual(primaryAction.title, AppLocalization.localizedString("Cancel"))
+        XCTAssertFalse(primaryAction.isEnabled)
+        XCTAssertTrue(primaryAction.showsProgress)
+        XCTAssertEqual(tableAction.title, AppLocalization.localizedString("Cancel"))
+        XCTAssertFalse(tableAction.isEnabled)
+        XCTAssertTrue(tableAction.showsProgress)
+    }
+
     func testModelCatalogTagPriorityDoesNotExposeMultilingualFilter() {
         XCTAssertFalse(ModelCatalogTag.priority.contains(AppLocalization.localizedString("Multilingual")))
     }
@@ -370,7 +399,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         remoteASRConfigurations: [String: RemoteProviderConfiguration] = [:],
         remoteLLMConfigurations: [String: RemoteProviderConfiguration] = [:],
         primaryUserLanguageCode: String? = "en",
-        hasIssue: @escaping (ConfigurationTransferManager.MissingConfigurationIssue.Scope) -> Bool = { _ in false },
+        hasIssue: @escaping (ModelConfigurationIssue.Scope) -> Bool = { _ in false },
         isDownloadingModel: @escaping (String) -> Bool = { _ in false },
         isPausedModel: @escaping (String) -> Bool = { _ in false },
         isDownloadingCustomLLM: @escaping (String) -> Bool = { _ in false },
@@ -474,9 +503,24 @@ final class ModelCatalogBuilderTests: XCTestCase {
                 configureActionTitle: nil
             )
         }
+        let sherpaInstallSnapshot: (SherpaOnnxModelID) -> LocalModelInstallSnapshot = { modelID in
+            LocalModelInstallSnapshot(
+                target: .sherpaOnnx(modelID),
+                state: .installable(isEnabled: true),
+                isInstalled: false,
+                isCurrentSelection: false,
+                statusText: "",
+                badgeText: nil,
+                downloadStatus: nil,
+                canOpenLocation: false,
+                canConfigure: false,
+                configureActionTitle: nil
+            )
+        }
 
         return ModelCatalogBuilder(
             mlxModelManager: TestModelManagers.mlx,
+            sherpaOnnxModelManager: TestModelManagers.sherpa,
             customLLMManager: TestModelManagers.customLLM,
             ggufTranslationModelManager: TestModelManagers.gguf,
             remoteASRConfigurations: remoteASRConfigurations,
@@ -488,6 +532,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
             remoteLLMBadgeText: { _ in nil },
             primaryUserLanguageCode: primaryUserLanguageCode,
             mlxInstallSnapshot: mlxInstallSnapshot,
+            sherpaInstallSnapshot: sherpaInstallSnapshot,
             customLLMInstallSnapshot: customLLMInstallSnapshot,
             ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot,
             catalogPrimaryAction: { snapshot in
@@ -538,6 +583,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
 @MainActor
 private enum TestModelManagers {
     static let mlx = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+    static let sherpa = SherpaOnnxModelManager(modelID: SherpaOnnxModelCatalog.defaultModelID)
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
     static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

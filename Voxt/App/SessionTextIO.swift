@@ -672,6 +672,8 @@ extension AppDelegate {
         case .mlx(let repo):
             let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
             return (MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) ? "whisper-mlx" : "mlx", canonicalRepo)
+        case .sherpaOnnx(let modelID):
+            return ("sherpa-onnx", modelID.rawValue)
         case .remote(let provider):
             let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
             let stored = RemoteModelConfigurationStore.loadConfigurations(from: raw)
@@ -684,6 +686,8 @@ extension AppDelegate {
             case .mlxAudio:
                 let canonicalRepo = MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo)
                 return (MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) ? "whisper-mlx" : "mlx", canonicalRepo)
+            case .sherpaOnnx:
+                return ("sherpa-onnx", sherpaOnnxModelManager.selectedModelID.rawValue)
             case .remote:
                 return ("remote", "unknown")
             }

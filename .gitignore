@@ -30,6 +30,7 @@ Package.resolved
 /tmp/
 build.log
 build2.log
+ThirdParty/sherpa-onnx/
 
 # Local release/agent workflow folders (keep local only)
 .codex/
@@ -38,3 +39,4 @@ scripts/
 
 # Local signing overrides
 Config/Signing.local.xcconfig
+Config/SherpaOnnx.local.xcconfig

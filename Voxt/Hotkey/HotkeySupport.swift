@@ -484,6 +484,7 @@ struct HotkeyPreference {
             AppPreferenceKey.rewriteHotkeyActivationMode: defaultRewriteActivationMode.rawValue,
             AppPreferenceKey.hotkeyDistinguishModifierSides: defaultDistinguishModifierSides,
             AppPreferenceKey.hotkeyPreset: defaultPreset.rawValue,
+            AppPreferenceKey.hotkeyCaptureInProgress: false,
         ])
         migrateHotkeyBindingsIfNeeded()
     }
@@ -1026,6 +1027,10 @@ struct HotkeyPreference {
         case kVK_DownArrow: return "↓"
         default:
             break
+        }
+
+        guard Thread.isMainThread else {
+            return "Key \(keyCode)"
         }
 
         if let translated = translateKeyCode(keyCode), !translated.isEmpty {

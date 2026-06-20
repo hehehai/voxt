@@ -163,6 +163,7 @@ struct ModelTableAction {
     let title: String
     var role: ButtonRole? = nil
     var isEnabled: Bool = true
+    var showsProgress: Bool = false
     let handler: () -> Void
 }
 
@@ -246,8 +247,13 @@ struct ModelTableView: View {
 
                     HStack(spacing: 6) {
                         ForEach(Array(row.actions.enumerated()), id: \.offset) { _, action in
-                            Button(action.title, role: action.role) {
+                            Button(role: action.role) {
                                 action.handler()
+                            } label: {
+                                ModelActionLabel(
+                                    title: action.title,
+                                    showsProgress: action.showsProgress
+                                )
                             }
                             .buttonStyle(
                                 SettingsCompactActionButtonStyle(
@@ -290,6 +296,22 @@ struct ModelTableView: View {
                             .stroke(Color.orange.opacity(0.35), lineWidth: 1)
                     )
             }
+        }
+    }
+}
+
+struct ModelActionLabel: View {
+    let title: String
+    var showsProgress: Bool = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if showsProgress {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.72)
+            }
+            Text(title)
         }
     }
 }

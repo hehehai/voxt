@@ -518,6 +518,7 @@ final class ModelDebugSupportTests: XCTestCase {
 
         let asrOptions = ModelDebugCatalog.availableASRModels(
             downloadedMLXRepos: [],
+            downloadedSherpaModelIDs: [],
             remoteASRConfigurations: remoteASRConfigurations
         )
         let llmOptions = ModelDebugCatalog.availableLLMModels(
@@ -531,5 +532,20 @@ final class ModelDebugSupportTests: XCTestCase {
         XCTAssertTrue(llmOptions.contains(where: { $0.id == "remote-llm:\(RemoteLLMProvider.openAI.rawValue)" }))
         XCTAssertFalse(llmOptions.contains(where: { $0.id == "remote-llm:\(RemoteLLMProvider.aliyunBailian.rawValue)" }))
         XCTAssertTrue(llmOptions.contains(where: { $0.id == "remote-llm:\(RemoteLLMProvider.ollama.rawValue)" }))
+    }
+
+    func testASRDebugCatalogIncludesDownloadedSherpaModelsWhenRuntimeIsAvailable() {
+        let options = ModelDebugCatalog.availableASRModels(
+            downloadedMLXRepos: [],
+            downloadedSherpaModelIDs: [SherpaOnnxModelCatalog.funASRNanoModelID],
+            remoteASRConfigurations: [:]
+        )
+
+        #if SHERPA_ONNX_AVAILABLE
+        let option = options.first(where: { $0.id == "sherpa:\(SherpaOnnxModelCatalog.funASRNanoModelID.rawValue)" })
+        XCTAssertEqual(option?.selection, .sherpaOnnx(modelID: SherpaOnnxModelCatalog.funASRNanoModelID))
+        #else
+        XCTAssertFalse(options.contains(where: { $0.id.hasPrefix("sherpa:") }))
+        #endif
     }
 }

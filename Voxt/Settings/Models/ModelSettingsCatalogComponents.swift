@@ -236,8 +236,13 @@ struct ModelCatalogRow: View {
 
             HStack(spacing: 6) {
                 if let primaryAction = entry.primaryAction {
-                    Button(primaryAction.title, role: primaryAction.role) {
+                    Button(role: primaryAction.role) {
                         primaryAction.handler()
+                    } label: {
+                        ModelActionLabel(
+                            title: primaryAction.title,
+                            showsProgress: primaryAction.showsProgress
+                        )
                     }
                     .buttonStyle(
                         SettingsCompactActionButtonStyle(

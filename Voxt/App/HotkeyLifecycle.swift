@@ -59,8 +59,16 @@ extension AppDelegate {
             guard let self else { return }
             self.handleCustomPasteHotkeyDown()
         }
+        hotkeyManager.onCommonStopKeyDown = { [weak self] in
+            guard let self else { return }
+            self.handleCommonStopHotkeyDown()
+        }
         hotkeyManager.onEscapeKeyDown = { [weak self] in
-            self?.handleEscapeShortcut() ?? false
+            guard let self, self.shouldConsumeEscapeShortcut() else { return false }
+            Task { @MainActor [weak self] in
+                _ = self?.handleEscapeShortcut()
+            }
+            return true
         }
         hotkeyManager.start()
         VoxtLog.hotkey("Hotkey callbacks configured.")
@@ -144,17 +152,25 @@ extension AppDelegate {
         return shouldConsume ? nil : event
     }
 
-    func handleEscapeShortcut() -> Bool {
+    func shouldConsumeEscapeShortcut() -> Bool {
         guard UserDefaults.standard.object(forKey: AppPreferenceKey.escapeKeyCancelsOverlaySession) as? Bool ?? true else {
             return false
         }
         if overlayState.displayMode == .answer {
-            dismissAnswerOverlay()
             return true
         }
         guard HotkeyPreference.loadTriggerMode() == .tap else { return false }
         guard isSessionActive else { return false }
         guard !isSelectedTextTranslationFlow else { return false }
+        return true
+    }
+
+    func handleEscapeShortcut() -> Bool {
+        guard shouldConsumeEscapeShortcut() else { return false }
+        if overlayState.displayMode == .answer {
+            dismissAnswerOverlay()
+            return true
+        }
         cancelActiveRecordingSession()
         return true
     }
@@ -186,6 +202,7 @@ extension AppDelegate {
             endRecording()
             return
         }
+        pendingTranscriptionHotkeyStartBehavior = .tap
         beginRecording(outputMode: .transcription)
     }
 
@@ -203,8 +220,41 @@ extension AppDelegate {
         beginRecording(outputMode: .translation)
     }
 
+    func handleCommonStopHotkeyDown() {
+        cancelPendingTranscriptionStart()
+
+        if meetingSessionCoordinator.isActive {
+            hotkeyManager.cancelPendingDoubleTapCandidate(reason: "commonStopMeeting")
+            handleMeetingHotkeyDown()
+            return
+        }
+
+        guard isSessionActive else { return }
+        switch sessionOutputMode {
+        case .translation, .rewrite, .transcription:
+            hotkeyManager.cancelPendingDoubleTapCandidate(reason: "commonStopRecording")
+            endRecording()
+        }
+    }
+
     func handleTranscriptionHotkeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        if behavior == .longPress {
+            isTranscriptionLongPressHotkeyDown = true
+            handleTranscriptionTriggerDown(
+                triggerBehavior: behavior,
+                triggerMode: behavior.legacyTriggerMode,
+                allowsDoubleTapRewrite: false,
+                source: "hotkey",
+                pendingStartDelay: transcriptionStartDebounceInterval,
+                pendingStartShouldStart: { [weak self] in
+                    self?.isTranscriptionLongPressHotkeyDown == true
+                }
+            )
+            return
+        }
+
         handleTranscriptionTriggerDown(
+            triggerBehavior: behavior,
             triggerMode: behavior.legacyTriggerMode,
             allowsDoubleTapRewrite: false,
             source: "hotkey"
@@ -212,6 +262,7 @@ extension AppDelegate {
     }
 
     private func handleTranscriptionTriggerDown(
+        triggerBehavior: HotkeyPreference.TriggerBehavior,
         triggerMode: HotkeyPreference.TriggerMode,
         allowsDoubleTapRewrite: Bool,
         source: String,
@@ -237,6 +288,7 @@ extension AppDelegate {
             case .scheduleDelayedTranscriptionStart:
                 let delay = NSEvent.doubleClickInterval
                 VoxtLog.hotkey("Transcription tap entering double-tap rewrite wait window. delaySec=\(delay)")
+                pendingTranscriptionHotkeyStartBehavior = triggerBehavior
                 schedulePendingTranscriptionStart(
                     delay: delay,
                     reason: "doubleTapRewriteWait"
@@ -261,18 +313,25 @@ extension AppDelegate {
         )
         for action in actions {
             if action == .scheduleTranscriptionStart, let pendingStartDelay {
+                pendingTranscriptionHotkeyStartBehavior = triggerBehavior
                 schedulePendingTranscriptionStart(
                     delay: pendingStartDelay,
                     reason: "\(source)LongPressDebounce",
                     shouldStart: pendingStartShouldStart
                 )
             } else {
+                if action == .startTranscription || action == .scheduleTranscriptionStart {
+                    pendingTranscriptionHotkeyStartBehavior = triggerBehavior
+                }
                 performHotkeyAction(action)
             }
         }
     }
 
     func handleTranscriptionHotkeyUp(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        if behavior == .longPress {
+            isTranscriptionLongPressHotkeyDown = false
+        }
         handleTranscriptionTriggerUp(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 
@@ -493,6 +552,7 @@ extension AppDelegate {
         }
         pendingTranscriptionStartTask?.cancel()
         pendingTranscriptionStartTask = nil
+        pendingTranscriptionHotkeyStartBehavior = nil
     }
 
     nonisolated static func sessionCallbackHandlingDecision(

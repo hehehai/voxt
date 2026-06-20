@@ -55,6 +55,7 @@ extension AppDelegate {
         closeOverlayImmediately: Bool = true,
         closeLiveDetailImmediately: Bool = true
     ) {
+        hotkeyManager.setCommonStopKeyEnabled(false)
         pendingMeetingStartupTask?.cancel()
         pendingMeetingStartupTask = nil
 
@@ -273,9 +274,12 @@ extension AppDelegate {
             }
             self.pendingMeetingStartupTask = nil
             if let failureMessage {
+                self.hotkeyManager.setCommonStopKeyEnabled(false)
                 VoxtLog.meetingWarning("Meeting start failed: \(failureMessage)")
                 self.meetingOverlayWindow.hide()
                 self.showOverlayReminder(failureMessage)
+            } else {
+                self.hotkeyManager.setCommonStopKeyEnabled(true)
             }
         }
     }
@@ -304,6 +308,10 @@ extension AppDelegate {
             activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
             mlxModelState: localASRStartContext.mlxModelState,
+            selectedSherpaModelID: localASRStartContext.selectedSherpaModelID,
+            activeSherpaDownloadModelID: localASRStartContext.activeSherpaDownloadModelID,
+            isSelectedSherpaModelDownloaded: localASRStartContext.isSelectedSherpaModelDownloaded,
+            sherpaModelState: localASRStartContext.sherpaModelState,
             remoteASRProvider: remoteASRSelectedProvider,
             remoteASRConfiguration: remoteConfiguration
         )

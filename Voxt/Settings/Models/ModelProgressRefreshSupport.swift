@@ -22,6 +22,9 @@ enum ModelSettingsProgressRefreshSupport {
     static func shouldPollModelState(
         mlxState: MLXModelManager.ModelState,
         mlxHasActiveDownloadingRepos: Bool,
+        sherpaOnnxState: MLXModelManager.ModelState,
+        sherpaOnnxStateByID: [SherpaOnnxModelID: MLXModelManager.ModelState],
+        sherpaOnnxHasActiveDownloads: Bool,
         customLLMState: CustomLLMModelManager.ModelState,
         ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState],
         ggufActiveDownloadModelID: GGUFTranslationModelID?
@@ -31,6 +34,18 @@ enum ModelSettingsProgressRefreshSupport {
         }
 
         if isMLXStatePollingRequired(mlxState) {
+            return true
+        }
+
+        if sherpaOnnxHasActiveDownloads {
+            return true
+        }
+
+        if isMLXStatePollingRequired(sherpaOnnxState) {
+            return true
+        }
+
+        if sherpaOnnxStateByID.values.contains(where: { isMLXStatePollingRequired($0) }) {
             return true
         }
 

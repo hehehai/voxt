@@ -179,6 +179,64 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
 }
 
 @MainActor
+final class MeetingSherpaOnnxSegmentTranscriber: MeetingSegmentTranscribing {
+    private let transcriptionGate = MeetingRemoteTranscriptionGate()
+    private let sherpaTranscriber: SherpaOnnxTranscriber
+    private var isCancelled = false
+
+    init(modelManager: SherpaOnnxModelManager) {
+        self.sherpaTranscriber = SherpaOnnxTranscriber(modelManager: modelManager)
+        self.sherpaTranscriber.dictionaryEntryProvider = {
+            activeMeetingDictionaryEntries()
+        }
+    }
+
+    func cancelPendingWork() async {
+        isCancelled = true
+        await transcriptionGate.cancelAll()
+    }
+
+    func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment? {
+        guard !isCancelled else { return nil }
+        await transcriptionGate.acquire()
+        defer {
+            Task {
+                await transcriptionGate.release()
+            }
+        }
+        guard !isCancelled else { return nil }
+
+        do {
+            let text = try await sherpaTranscriber.transcribeBufferedChunk(
+                samples: chunk.samples,
+                sampleRate: chunk.sampleRate
+            ) ?? ""
+            let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
+                text,
+                dictionaryEntries: activeMeetingDictionaryEntries()
+            )
+            guard !sanitizedText.isEmpty else {
+                VoxtLog.meetingWarning("Meeting Sherpa ONNX transcription suppressed because it matched ASR hint guidance.")
+                return nil
+            }
+            return MeetingTranscriptSegment(
+                id: chunk.segmentID,
+                speaker: chunk.speaker,
+                startSeconds: chunk.startSeconds,
+                endSeconds: chunk.endSeconds,
+                text: sanitizedText,
+                preventsAdjacentMerge: chunk.preventsAdjacentMerge
+            )
+        } catch {
+            if !(error is CancellationError) {
+                VoxtLog.meetingError("Meeting Sherpa ONNX transcription failed: \(error.localizedDescription)")
+            }
+            return nil
+        }
+    }
+}
+
+@MainActor
 final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
     private let transcriptionGate = MeetingRemoteTranscriptionGate()
     private let remoteTranscriber: RemoteASRTranscriber = {

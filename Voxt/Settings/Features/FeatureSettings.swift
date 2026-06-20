@@ -20,6 +20,10 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
         Self(rawValue: "mlx:\(MLXModelManager.canonicalModelRepo(repo))")
     }
 
+    static func sherpaOnnx(_ modelID: SherpaOnnxModelID) -> Self {
+        Self(rawValue: "sherpa:\(modelID.rawValue)")
+    }
+
     static func whisper(_ modelID: String) -> Self {
         .mlx(MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID))
     }
@@ -43,6 +47,7 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
     enum ASRSelection: Hashable, Sendable {
         case dictation
         case mlx(repo: String)
+        case sherpaOnnx(modelID: SherpaOnnxModelID)
         case remote(provider: RemoteASRProvider)
     }
 
@@ -63,7 +68,14 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
             return .dictation
         }
         if let repo = payload(after: "mlx:") {
+            if SherpaOnnxRuntimeSupport.isAvailable,
+               SherpaOnnxModelCatalog.isLegacyFireRedMLXRepo(repo) {
+                return .sherpaOnnx(modelID: SherpaOnnxModelCatalog.fireRedModelID)
+            }
             return .mlx(repo: MLXModelManager.canonicalModelRepo(repo))
+        }
+        if let modelID = payload(after: "sherpa:") {
+            return .sherpaOnnx(modelID: SherpaOnnxModelID(rawValue: modelID))
         }
         if let modelID = payload(after: "whisper:") {
             return .mlx(repo: MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID))

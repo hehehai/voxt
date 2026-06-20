@@ -164,6 +164,8 @@ enum OnboardingFeatureSelectionResolver {
             return .dictation
         case .mlxAudio:
             return .mlx(mlxModelRepo)
+        case .sherpaOnnx:
+            return .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
         case .remote:
             return .remoteASR(remoteASRProvider)
         }
