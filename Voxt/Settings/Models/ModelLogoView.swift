@@ -221,7 +221,7 @@ enum ModelLogoKey: String {
         if value.contains("grok") || value.contains("xai") {
             return .grok
         }
-        if value.contains("qwen") || value.contains("通义") {
+        if value.contains("qwen") || value.contains("funasr") || value.contains("通义") {
             return .qwen
         }
         if value.contains("glm")
@@ -384,7 +384,10 @@ private enum ModelLogoImageStore {
 
 extension ModelCatalogEntry {
     var modelLogoKey: ModelLogoKey {
-        ModelLogoKey.resolve(title: title, engine: engine)
+        if id == FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID).rawValue {
+            return .qwen
+        }
+        return ModelLogoKey.resolve(title: title, engine: engine)
     }
 }
 
@@ -396,7 +399,10 @@ extension ModelCatalogGroupSection {
 
 extension FeatureModelSelectorEntry {
     var modelLogoKey: ModelLogoKey {
-        ModelLogoKey.resolve(title: title, engine: engine)
+        if selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID) {
+            return .qwen
+        }
+        return ModelLogoKey.resolve(title: title, engine: engine)
     }
 }
 

@@ -312,6 +312,10 @@ enum VoxtLog {
         lines.append("historyEnabled: \(defaults.object(forKey: AppPreferenceKey.historyEnabled) as? Bool ?? true)")
         lines.append("historyAudioStorageEnabled: \(defaults.object(forKey: AppPreferenceKey.historyAudioStorageEnabled) as? Bool ?? false)")
         lines.append("useHfMirror: \(defaults.bool(forKey: AppPreferenceKey.useHfMirror))")
+        let selectedDownloadSources = defaults.data(forKey: AppPreferenceKey.modelDownloadSourceSelections)
+            .flatMap { String(data: $0, encoding: .utf8) }
+            ?? "{}"
+        lines.append("modelDownloadSourceSelections: \(selectedDownloadSources)")
         lines.append("localModelIdleUnloadDelaySeconds: \(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds(defaults: defaults))")
         lines.append("mlxModel: \(mlxModelRepo) [\(MLXModelCatalog.displayTitle(for: mlxModelRepo))]")
         lines.append("customLLMModelRepo: \(nonEmptyOrPlaceholder(defaults.string(forKey: AppPreferenceKey.customLLMModelRepo)))")

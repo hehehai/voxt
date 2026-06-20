@@ -97,6 +97,7 @@ struct HotkeySettingsValidation {
         }
 
         appendDuplicateBindingMessages(groups: groups, to: &messages)
+        appendDuplicateBindingMessagesWithinGroups(groups: groups, to: &messages)
 
         if let customPasteHotkey = state.customPasteHotkey {
             appendCustomPasteDuplicateMessages(customPasteHotkey, groups: groups, to: &messages)
@@ -113,7 +114,9 @@ struct HotkeySettingsValidation {
         for group in groups {
             for binding in group.bindings {
                 if let duplicate = seen.first(where: {
-                    $0.binding.hotkey == binding.hotkey && $0.binding.behavior == binding.behavior
+                    $0.key != group.key &&
+                    $0.binding.hotkey == binding.hotkey &&
+                    $0.binding.behavior == binding.behavior
                 }) {
                     messages.append(.init(
                         id: "duplicate.\(duplicate.key).\(group.key)",
@@ -122,6 +125,25 @@ struct HotkeySettingsValidation {
                 } else {
                     seen.append((group.key, binding))
                 }
+            }
+        }
+    }
+
+    private static func appendDuplicateBindingMessagesWithinGroups(
+        groups: [(key: String, title: String, bindings: [HotkeyPreference.HotkeyBinding])],
+        to messages: inout [Message]
+    ) {
+        for group in groups {
+            var seen: [HotkeyPreference.Hotkey] = []
+            for binding in group.bindings {
+                if seen.contains(binding.hotkey) {
+                    messages.append(.init(
+                        id: "duplicate.\(group.key).\(group.key)",
+                        text: AppLocalization.localizedString("A workflow cannot use the same shortcut more than once.")
+                    ))
+                    break
+                }
+                seen.append(binding.hotkey)
             }
         }
     }

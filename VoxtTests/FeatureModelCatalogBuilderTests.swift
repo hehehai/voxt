@@ -361,6 +361,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
     ) -> FeatureModelCatalogBuilder {
         FeatureModelCatalogBuilder(
             mlxModelManager: mlxModelManager,
+            sherpaOnnxModelManager: TestModelManagers.sherpa,
             customLLMManager: TestModelManagers.customLLM,
             ggufTranslationModelManager: TestModelManagers.gguf,
             featureSettings: featureSettings,
@@ -407,6 +408,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
 @MainActor
 private enum TestModelManagers {
     static let mlx = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+    static let sherpa = SherpaOnnxModelManager(modelID: SherpaOnnxModelCatalog.defaultModelID)
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
     static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

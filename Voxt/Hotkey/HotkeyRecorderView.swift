@@ -29,7 +29,7 @@ struct HotkeyRecorderView: NSViewRepresentable {
     func updateNSView(_ nsView: KeyCaptureView, context: Context) {
         nsView.isRecording = isRecording
         nsView.onRecorderMessageChange = onRecorderMessageChange
-        UserDefaults.standard.set(isRecording, forKey: AppPreferenceKey.hotkeyCaptureInProgress)
+        HotkeyCaptureState.shared.setCaptureInProgress(isRecording)
         if isRecording {
             DispatchQueue.main.async {
                 nsView.window?.makeFirstResponder(nsView)
@@ -81,7 +81,7 @@ final class KeyCaptureView: NSView {
 
     deinit {
         stopLocalEventMonitor()
-        UserDefaults.standard.set(false, forKey: AppPreferenceKey.hotkeyCaptureInProgress)
+        HotkeyCaptureState.shared.setCaptureInProgress(false)
     }
 
     override var acceptsFirstResponder: Bool { true }

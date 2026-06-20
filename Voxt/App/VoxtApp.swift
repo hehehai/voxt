@@ -110,8 +110,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let speechTranscriber = SpeechTranscriber()
     var mlxTranscriber: MLXTranscriber?
+    var sherpaOnnxTranscriber: SherpaOnnxTranscriber?
     let remoteASRTranscriber = RemoteASRTranscriber()
     let mlxModelManager: MLXModelManager
+    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let historyStore = TranscriptionHistoryStore()
@@ -146,6 +148,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     )
     lazy var meetingSessionCoordinator = MeetingSessionCoordinator(
         mlxModelManager: mlxModelManager,
+        sherpaOnnxModelManager: sherpaOnnxModelManager,
         preferredInputDeviceIDProvider: { [weak self] in
             self?.selectedInputDeviceID
         },
@@ -223,6 +226,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionTargetApplicationPID: pid_t?
     var sessionTargetApplicationBundleID: String?
     var pendingTranscriptionStartTask: Task<Void, Never>?
+    var pendingTranscriptionHotkeyStartBehavior: HotkeyPreference.TriggerBehavior?
+    var isTranscriptionLongPressHotkeyDown = false
     var enhancementContextSnapshot: EnhancementContextSnapshot?
     var lastEnhancementPromptContext: EnhancementPromptContext?
     var selectedTextTranslationHadWritableFocusedInput = false
@@ -247,12 +252,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if repo != storedRepo {
             UserDefaults.standard.set(repo, forKey: AppPreferenceKey.mlxModelRepo)
         }
-        let useMirror = UserDefaults.standard.bool(forKey: AppPreferenceKey.useHfMirror)
-        let hubURL = useMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
-        mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: hubURL)
+        mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: MLXModelManager.defaultHubBaseURL)
+        let storedSherpaModelID = UserDefaults.standard.string(forKey: AppPreferenceKey.sherpaOnnxASRModelID)
+            ?? SherpaOnnxModelCatalog.defaultModelID.rawValue
+        let sherpaModelID = SherpaOnnxModelID(rawValue: storedSherpaModelID)
+        if sherpaModelID.rawValue != storedSherpaModelID {
+            UserDefaults.standard.set(sherpaModelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
+        }
+        sherpaOnnxModelManager = SherpaOnnxModelManager(modelID: sherpaModelID)
         let llmRepo = UserDefaults.standard.string(forKey: AppPreferenceKey.customLLMModelRepo)
             ?? CustomLLMModelManager.defaultModelRepo
-        customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: hubURL)
+        customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: CustomLLMModelManager.defaultHubBaseURL)
         let ggufModelID = GGUFTranslationModelCatalog.resolvedModelID(
             UserDefaults.standard.string(forKey: AppPreferenceKey.translationGGUFModelID)
         )
@@ -268,6 +278,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.interfaceLanguage: AppInterfaceLanguage.system.rawValue,
             AppPreferenceKey.translationTargetLanguage: TranslationTargetLanguage.english.rawValue,
             AppPreferenceKey.userMainLanguageCodes: UserMainLanguageOption.defaultStoredSelectionValue,
+            AppPreferenceKey.sherpaOnnxASRModelID: SherpaOnnxModelCatalog.defaultModelID.rawValue,
             AppPreferenceKey.translationModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.translationGGUFModelID: GGUFTranslationModelCatalog.defaultModelID.rawValue,
             AppPreferenceKey.rewriteModelProvider: RewriteModelProvider.customLLM.rawValue,

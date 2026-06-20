@@ -728,6 +728,29 @@ class CustomLLMModelManager: ObservableObject {
         fetchRemoteSize()
     }
 
+    private func downloadSourceTargetKey(for repo: String) -> String {
+        ModelDownloadSourceSelectionStore.targetKey(namespace: "custom-llm", identifier: repo)
+    }
+
+    private func clearSelectedDownloadSource(for repo: String) {
+        ModelDownloadSourceSelectionStore.clearSourceID(for: downloadSourceTargetKey(for: repo))
+    }
+
+    private func downloadSourceCandidates() -> [ModelDownloadSourceCandidate] {
+        [
+            ModelDownloadSourceCandidate(
+                id: "huggingface",
+                displayName: "Hugging Face",
+                url: Self.defaultHubBaseURL
+            ),
+            ModelDownloadSourceCandidate(
+                id: "hf-mirror",
+                displayName: "HF Mirror",
+                url: Self.mirrorHubBaseURL
+            ),
+        ]
+    }
+
     func isModelDownloaded(repo: String) -> Bool {
         primeDownloadedStateCacheIfNeeded()
         if let cached = downloadedStateByRepo[repo] {
@@ -747,6 +770,13 @@ class CustomLLMModelManager: ObservableObject {
             return false
         }
         return FileManager.default.directoryContainsRegularFiles(at: modelDir)
+    }
+
+    private func shouldReuseSavedDownloadSource(for repo: String) -> Bool {
+        if case .paused = state {
+            return true
+        }
+        return hasResumableDownload(repo: repo)
     }
 
     func modelSizeOnDisk(repo: String) -> String {
@@ -923,6 +953,7 @@ class CustomLLMModelManager: ObservableObject {
         if let modelDir = writeCacheDirectory(for: canonicalRepo) {
             try? FileManager.default.removeItem(at: modelDir)
         }
+        clearSelectedDownloadSource(for: canonicalRepo)
         clearHubCache(for: canonicalRepo)
         invalidateLocalCache(for: canonicalRepo)
     }
@@ -958,6 +989,7 @@ class CustomLLMModelManager: ObservableObject {
             downloadStopAction = .cancel
             pausedStatusMessage = nil
             state = .notDownloaded
+            clearSelectedDownloadSource(for: modelRepo)
             downloadTask?.cancel()
             cancelDownloadProgressTask()
             return
@@ -968,6 +1000,7 @@ class CustomLLMModelManager: ObservableObject {
         if let modelDir = writeCacheDirectory(for: modelRepo) {
             try? FileManager.default.removeItem(at: modelDir)
         }
+        clearSelectedDownloadSource(for: modelRepo)
         invalidateLocalCache(for: modelRepo)
         state = .notDownloaded
         VoxtLog.modelInfo("Custom LLM download cancelled from paused state: \(modelRepo)")
@@ -979,23 +1012,64 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     private func performDownloadWithFallback() async throws -> URL {
-        do {
-            return try await performDownload(using: hubBaseURL)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            guard let fallbackBaseURL = CustomLLMModelDownloadSupport.fallbackHubBaseURL(
-                from: hubBaseURL,
-                mirrorBaseURL: Self.mirrorHubBaseURL
-            ) else {
-                throw error
-            }
-            VoxtLog.modelWarning(
-                "Primary custom LLM download endpoint failed. Retrying with mirror. repo=\(modelRepo), baseURL=\(hubBaseURL.absoluteString), error=\(error.localizedDescription)"
+        let repo = modelRepo
+        let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
+            ?? Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String
+        let selection = try await ModelDownloadSourceSelector.select(
+            candidates: downloadSourceCandidates(),
+            targetKey: downloadSourceTargetKey(for: repo),
+            reuseSavedSource: shouldReuseSavedDownloadSource(for: repo)
+        ) { candidate in
+            let startedAt = Date()
+            let context = try await CustomLLMModelDownloadSupport.makeDownloadContext(
+                repo: repo,
+                baseURL: candidate.url,
+                userAgent: Self.hubUserAgent,
+                token: token
             )
-            clearHubCache(for: modelRepo)
-            return try await performDownload(using: fallbackBaseURL)
+            let elapsed = max(Date().timeIntervalSince(startedAt), 0.001)
+            return (elapsed, context.totalBytes)
         }
+
+        VoxtLog.modelInfo(
+            "Selected Custom LLM download source. repo=\(repo), source=\(selection.candidate.displayName), url=\(selection.candidate.url.absoluteString), reusedSavedSource=\(selection.reusedSavedSource), probes=\(ModelDownloadSourceSelector.logSummary(for: selection))"
+        )
+
+        var lastError: Error?
+        for candidate in downloadAttemptCandidates(from: selection) {
+            do {
+                return try await performDownload(using: candidate.url)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+                VoxtLog.modelWarning(
+                    "Custom LLM download source failed. repo=\(repo), source=\(candidate.displayName), error=\(error.localizedDescription)"
+                )
+                clearHubCache(for: repo)
+            }
+        }
+
+        clearSelectedDownloadSource(for: repo)
+        throw lastError ?? NSError(
+            domain: "CustomLLMModelManager",
+            code: 1004,
+            userInfo: [NSLocalizedDescriptionKey: "All Custom LLM download sources failed."]
+        )
+    }
+
+    private func downloadAttemptCandidates(
+        from selection: ModelDownloadSourceSelection
+    ) -> [ModelDownloadSourceCandidate] {
+        guard !selection.reusedSavedSource, !selection.probeResults.isEmpty else {
+            return [selection.candidate]
+        }
+
+        let candidates = selection.probeResults
+            .filter(\.isReachable)
+            .sorted(by: { $0.elapsed < $1.elapsed })
+            .map(\.candidate)
+        return candidates.isEmpty ? [selection.candidate] : candidates
     }
 
     private func performDownload(using baseURL: URL) async throws -> URL {
@@ -1169,6 +1243,7 @@ class CustomLLMModelManager: ObservableObject {
                 return
             }
         }
+        clearSelectedDownloadSource(for: canonicalRepo)
         invalidateLocalCache(for: canonicalRepo)
         if canonicalRepo == modelRepo {
             state = .notDownloaded

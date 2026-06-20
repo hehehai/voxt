@@ -31,6 +31,7 @@ struct MeetingASREngineContext: Equatable {
     let historyModelDescription: String
     let resolvedMode: MeetingASRResolvedMode
     let needsModelInitialization: Bool
+    var sherpaModelID: SherpaOnnxModelID? = nil
 
     var chunkingProfile: MeetingChunkingProfile {
         resolvedMode.chunkingProfile
@@ -44,7 +45,8 @@ struct MeetingASREngineContext: Equatable {
             engine: engine,
             historyModelDescription: historyModelDescription,
             resolvedMode: .chunk(profile: mode.resolvedProfile(automaticProfile: automaticProfile)),
-            needsModelInitialization: needsModelInitialization
+            needsModelInitialization: needsModelInitialization,
+            sherpaModelID: sherpaModelID
         )
     }
 }
@@ -56,6 +58,8 @@ enum MeetingASRSupport {
         mlxCurrentModelRepo: String,
         mlxIsCurrentModelLoaded: Bool,
         mlxDisplayTitle: (String) -> String,
+        sherpaModelID: SherpaOnnxModelID = SherpaOnnxModelCatalog.defaultModelID,
+        sherpaDisplayTitle: (SherpaOnnxModelID) -> String = SherpaOnnxModelCatalog.displayTitle(for:),
         remoteProvider: RemoteASRProvider,
         remoteConfiguration: RemoteProviderConfiguration
     ) -> MeetingASREngineContext {
@@ -86,6 +90,14 @@ enum MeetingASRSupport {
                 historyModelDescription: "\(remoteProvider.title) (\(model))",
                 resolvedMode: resolvedMode,
                 needsModelInitialization: false
+            )
+        case .sherpaOnnx:
+            return MeetingASREngineContext(
+                engine: .sherpaOnnx,
+                historyModelDescription: "\(sherpaDisplayTitle(sherpaModelID)) (\(sherpaModelID.rawValue))",
+                resolvedMode: .chunk(profile: .quality),
+                needsModelInitialization: false,
+                sherpaModelID: sherpaModelID
             )
         case .dictation:
             return MeetingASREngineContext(

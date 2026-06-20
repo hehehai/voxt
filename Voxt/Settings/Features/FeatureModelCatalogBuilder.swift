@@ -10,6 +10,7 @@ private func localized(_ key: String) -> String {
 @MainActor
 struct FeatureModelCatalogBuilder {
     let mlxModelManager: MLXModelManager
+    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let featureSettings: FeatureSettings
@@ -38,6 +39,8 @@ struct FeatureModelCatalogBuilder {
             return localized("Direct Dictation")
         case .mlx(let repo):
             return mlxModelManager.displayTitle(for: repo)
+        case .sherpaOnnx(let modelID):
+            return sherpaOnnxModelManager.displayTitle(for: modelID)
         case .remote(let provider):
             let configurations = RemoteModelConfigurationStore.loadConfigurations(
                 from: remoteASRProviderConfigurationsRaw,
@@ -144,6 +147,41 @@ struct FeatureModelCatalogBuilder {
                 disabledReason: availability.disabledReason
             )
         })
+
+        if SherpaOnnxRuntimeSupport.isAvailable {
+            entries.append(contentsOf: SherpaOnnxModelCatalog.allModels.map { model in
+                let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
+                let isInstalled = sherpaOnnxModelManager.isModelDownloaded(id: model.id)
+                let availability = Self.mlxSelectorAvailability(isInstalled: isInstalled)
+                return FeatureModelSelectorEntry(
+                    selectionID: selectionID,
+                    title: model.title,
+                    engine: localized("Sherpa ONNX"),
+                    sizeText: isInstalled
+                        ? (sherpaOnnxModelManager.cachedModelSizeText(id: model.id) ?? sherpaOnnxModelManager.remoteSizeText(id: model.id))
+                        : sherpaOnnxModelManager.remoteSizeText(id: model.id),
+                    ratingText: model.ratingText,
+                    filterTags: featureFilterTags(
+                        base: model.tagKeys.map(localized),
+                        installed: isInstalled,
+                        requiresConfiguration: false,
+                        configured: true,
+                        usageLabels: usageLabels(for: selectionID)
+                    ),
+                    displayTags: featureDisplayTags(
+                        base: model.tagKeys.map(localized),
+                        requiresConfiguration: false,
+                        configured: true,
+                        selectionID: selectionID
+                    ),
+                    statusText: isInstalled ? localized("Installed") : localized("Not installed"),
+                    usageLocations: usageLabels(for: selectionID),
+                    badgeText: model.id == SherpaOnnxModelCatalog.fireRedModelID ? localized("Recommended") : nil,
+                    isSelectable: availability.isSelectable,
+                    disabledReason: availability.disabledReason
+                )
+            })
+        }
 
         let remoteConfigurations = RemoteModelConfigurationStore.loadConfigurations(
             from: remoteASRProviderConfigurationsRaw,
@@ -470,6 +508,8 @@ struct FeatureModelCatalogBuilder {
             return true
         case .mlx(let repo):
             return mlxSupportsPrimaryLanguage(repo, primaryLanguage: primaryLanguage)
+        case .sherpaOnnx:
+            return true
         case .remote:
             return true
         case .none:

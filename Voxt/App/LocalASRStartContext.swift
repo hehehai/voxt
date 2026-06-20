@@ -9,10 +9,15 @@ extension AppDelegate {
         let activeMLXDownloadRepo: String?
         let isSelectedMLXModelDownloaded: Bool
         let mlxModelState: MLXModelManager.ModelState
+        let selectedSherpaModelID: SherpaOnnxModelID
+        let activeSherpaDownloadModelID: SherpaOnnxModelID?
+        let isSelectedSherpaModelDownloaded: Bool
+        let sherpaModelState: SherpaOnnxModelManager.ModelState
     }
 
     func currentLocalASRStartContext() -> LocalASRStartContext {
         let selectedMLXRepo = mlxModelManager.currentModelRepo
+        let selectedSherpaModelID = sherpaOnnxModelManager.selectedModelID
 
         return LocalASRStartContext(
             selectedMLXRepo: selectedMLXRepo,
@@ -20,7 +25,13 @@ extension AppDelegate {
                 ? selectedMLXRepo
                 : nil,
             isSelectedMLXModelDownloaded: mlxModelManager.isModelDownloaded(repo: selectedMLXRepo),
-            mlxModelState: mlxModelManager.state
+            mlxModelState: mlxModelManager.state,
+            selectedSherpaModelID: selectedSherpaModelID,
+            activeSherpaDownloadModelID: sherpaOnnxModelManager.isDownloadOperationActive(id: selectedSherpaModelID)
+                ? selectedSherpaModelID
+                : nil,
+            isSelectedSherpaModelDownloaded: sherpaOnnxModelManager.isModelDownloaded(id: selectedSherpaModelID),
+            sherpaModelState: sherpaOnnxModelManager.state
         )
     }
 }

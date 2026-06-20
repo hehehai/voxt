@@ -26,6 +26,7 @@ struct HotkeyRuntimeConfiguration {
         let translationBindings = HotkeyPreference.loadTranslationBindings(defaults: defaults)
         let rewriteBindings = HotkeyPreference.loadRewriteBindings(defaults: defaults)
         let meetingBindings = HotkeyPreference.loadMeetingBindings(defaults: defaults)
+        let rewriteActivationMode = HotkeyPreference.loadRewriteActivationMode(defaults: defaults)
 
         return HotkeyRuntimeConfiguration(
             transcriptionBindings: transcriptionBindings,
@@ -37,9 +38,9 @@ struct HotkeyRuntimeConfiguration {
             rewriteHotkey: rewriteBindings.first?.hotkey ?? HotkeyPreference.loadRewrite(),
             meetingHotkey: meetingBindings.first?.hotkey ?? HotkeyPreference.loadMeeting(),
             customPasteHotkey: customPasteEnabled ? HotkeyPreference.loadCustomPaste() : nil,
-            distinguishModifierSides: true,
+            distinguishModifierSides: HotkeyPreference.loadDistinguishModifierSides(),
             triggerMode: transcriptionBindings.first?.behavior.legacyTriggerMode ?? HotkeyPreference.loadTriggerMode(defaults: defaults),
-            rewriteActivationMode: .dedicatedHotkey
+            rewriteActivationMode: rewriteActivationMode
         )
     }
 

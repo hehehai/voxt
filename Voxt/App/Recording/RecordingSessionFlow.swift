@@ -20,12 +20,13 @@ extension AppDelegate {
     ) {
         let speechWasRecording = speechTranscriber.isRecording
         let mlxWasRecording = mlxTranscriber?.isRecording == true
+        let sherpaWasRecording = sherpaOnnxTranscriber?.isRecording == true
         let remoteWasRecording = remoteASRTranscriber.isRecording
 
-        if speechWasRecording || mlxWasRecording || remoteWasRecording {
+        if speechWasRecording || mlxWasRecording || sherpaWasRecording || remoteWasRecording {
             VoxtLog.asrWarning(
                 """
-                Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), remote=\(remoteWasRecording)
+                Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), sherpa=\(sherpaWasRecording), remote=\(remoteWasRecording)
                 """
             )
         }
@@ -37,6 +38,7 @@ extension AppDelegate {
 
         speechTranscriber.stopRecording()
         mlxTranscriber?.stopRecording()
+        sherpaOnnxTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
         if preservePendingHistoryAudio {
             VoxtLog.asr("Preserving pending history audio during residual resource release. reason=\(reason)", verbose: true)
@@ -59,6 +61,13 @@ extension AppDelegate {
     }
 
     func beginRecording(outputMode: SessionOutputMode) {
+        let transcriptionHotkeyStartBehavior = outputMode == .transcription
+            ? pendingTranscriptionHotkeyStartBehavior
+            : nil
+        if outputMode == .transcription {
+            pendingTranscriptionHotkeyStartBehavior = nil
+        }
+
         recordingRequestedAt = Date()
         VoxtLog.asr(
             "Begin recording requested. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), isSessionActive=\(isSessionActive)"
@@ -84,7 +93,11 @@ extension AppDelegate {
             selectedMLXRepo: localASRStartContext.selectedMLXRepo,
             activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
-            mlxModelState: localASRStartContext.mlxModelState
+            mlxModelState: localASRStartContext.mlxModelState,
+            selectedSherpaModelID: localASRStartContext.selectedSherpaModelID,
+            activeSherpaDownloadModelID: localASRStartContext.activeSherpaDownloadModelID,
+            isSelectedSherpaModelDownloaded: localASRStartContext.isSelectedSherpaModelDownloaded,
+            sherpaModelState: localASRStartContext.sherpaModelState
         )
         guard case .start(let recordingEngine) = startDecision else {
             if case .blocked(let reason) = startDecision {
@@ -177,6 +190,11 @@ extension AppDelegate {
         }
 
         isSessionActive = true
+        let shouldEnableCommonStopKey = outputMode == .translation ||
+            outputMode == .rewrite ||
+            transcriptionHotkeyStartBehavior == .tap ||
+            transcriptionHotkeyStartBehavior == .doubleTap
+        hotkeyManager.setCommonStopKeyEnabled(shouldEnableCommonStopKey)
         pendingSystemAudioMuteTask?.cancel()
         pendingSystemAudioMuteTask = nil
 
@@ -198,6 +216,7 @@ extension AppDelegate {
         }
         VoxtLog.asr("Recording stop requested.")
 
+        hotkeyManager.setCommonStopKeyEnabled(false)
         cancelActiveRecordingTasks()
         pendingSystemAudioMuteTask?.cancel()
         pendingSystemAudioMuteTask = nil
@@ -217,6 +236,7 @@ extension AppDelegate {
         VoxtLog.asr("Recording cancelled by Escape key.")
 
         let cancelledSessionID = activeRecordingSessionID
+        hotkeyManager.setCommonStopKeyEnabled(false)
         activeRecordingSessionID = UUID()
         invalidateActiveLLMRequest()
         pendingOutputReplacementTransaction = nil

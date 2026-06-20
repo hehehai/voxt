@@ -39,14 +39,14 @@ extension OnboardingSettingsView {
         )
     }
 
-    var missingConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue] {
-        ConfigurationTransferManager.missingConfigurationIssues(
+    var missingConfigurationIssues: [ModelConfigurationIssue] {
+        ModelConfigurationIssueResolver.missingIssues(
             mlxModelManager: mlxModelManager,
             customLLMManager: customLLMManager
         )
     }
 
-    var rewriteIssues: [ConfigurationTransferManager.MissingConfigurationIssue] {
+    var rewriteIssues: [ModelConfigurationIssue] {
         missingConfigurationIssues.filter { issue in
             switch issue.scope {
             case .rewriteRemoteLLM, .rewriteCustomLLM:
@@ -322,6 +322,8 @@ extension OnboardingSettingsView {
             return AppLocalization.localizedString("Direct Dictation")
         case .mlx(let repo):
             return mlxModelManager.displayTitle(for: repo)
+        case .sherpaOnnx(let modelID):
+            return SherpaOnnxModelCatalog.displayTitle(for: modelID)
         case .remote(let provider):
             let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: remoteASRConfigurations)
             if configuration.hasUsableModel {

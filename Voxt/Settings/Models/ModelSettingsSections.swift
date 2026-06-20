@@ -76,25 +76,6 @@ extension ModelSettingsView {
                     activeLocalASRConfigurationTarget = .mlx(repo: modelRepo)
                 }
                 .buttonStyle(SettingsPillButtonStyle())
-
-                HStack(spacing: 6) {
-                    Toggle(localized("Use China mirror"), isOn: $useHfMirror)
-                        .toggleStyle(.switch)
-
-                    Button {
-                        showMirrorInfo.toggle()
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $showMirrorInfo, arrowEdge: .top) {
-                        Text("https://hf-mirror.com/")
-                            .font(.caption)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                    }
-                }
             }
 
             Text(modelLocalizedDescription(for: modelRepo))
@@ -123,6 +104,16 @@ extension ModelSettingsView {
                 family: MLXModelFamily.family(for: repo),
                 hintSettings: asrHintSettingsBinding(for: .mlxAudio),
                 tuningSettings: mlxLocalTuningSettingsBinding(for: repo),
+                userLanguageCodes: selectedUserLanguageCodes
+            ) {
+                activeLocalASRConfigurationTarget = nil
+            }
+        case .sherpaOnnx(let modelID):
+            SherpaOnnxASRConfigurationSheetView(
+                modelID: modelID,
+                option: SherpaOnnxModelCatalog.option(for: modelID),
+                hintSettings: asrHintSettingsBinding(for: .sherpaOnnx),
+                tuningSettings: sherpaOnnxLocalTuningSettingsBinding(for: modelID),
                 userLanguageCodes: selectedUserLanguageCodes
             ) {
                 activeLocalASRConfigurationTarget = nil
@@ -411,4 +402,234 @@ private struct MLXASRConfigurationSheetView: View {
                 .multilineTextAlignment(.trailing)
         }
     }
+}
+
+private struct SherpaOnnxASRConfigurationSheetView: View {
+    private static let dictionaryTermsVariable = [
+        PromptTemplateVariableDescriptor(
+            token: AppPreferenceKey.asrDictionaryTermsTemplateVariable,
+            tipKey: "Template tip {{DICTIONARY_TERMS}}"
+        )
+    ]
+
+    let modelID: SherpaOnnxModelID
+    let option: SherpaOnnxModelOption
+    @Binding var hintSettings: ASRHintSettings
+    @Binding var tuningSettings: SherpaOnnxLocalTuningSettings
+    let userLanguageCodes: [String]
+    let onDone: () -> Void
+
+    private var mainLanguageSummary: String {
+        ASRHintResolver.selectedLanguageSummary(userLanguageCodes)
+    }
+
+    private var secondaryLanguageSummary: String {
+        ASRHintResolver.secondaryLanguageSummary(userLanguageCodes)
+    }
+
+    private var resolvedLanguage: String {
+        guard hintSettings.followsUserMainLanguage else {
+            return AppLocalization.localizedString("Automatic")
+        }
+        return ASRHintResolver.resolve(
+            target: .sherpaOnnx,
+            settings: hintSettings,
+            userLanguageCodes: userLanguageCodes
+        ).language ?? AppLocalization.localizedString("Automatic")
+    }
+
+    private var supportedLanguageSummary: String {
+        switch option.kind {
+        case .fireRedASRCTC:
+            return AppLocalization.localizedString("Automatic, zh, en")
+        case .funASRNano:
+            return AppLocalization.localizedString("Automatic, zh, en, yue, ja, ko")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(localized("Sherpa ONNX ASR Configuration"))
+                .font(.title3.weight(.semibold))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(option.title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    localInfoRow(label: localized("Supported routes"), value: supportedLanguageSummary)
+
+                    if option.kind == .funASRNano {
+                        Toggle(localized("Follow User Main Language"), isOn: $hintSettings.followsUserMainLanguage)
+                            .toggleStyle(.switch)
+
+                        HStack(alignment: .top, spacing: 16) {
+                            localInfoRow(label: localized("Primary language"), value: mainLanguageSummary)
+                            localInfoRow(label: localized("Resolved language"), value: resolvedLanguage)
+                        }
+
+                        localInfoRow(label: localized("Other languages"), value: secondaryLanguageSummary)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("Recognition Context"))
+                                .font(.subheadline.weight(.medium))
+                            PromptEditorView(text: $tuningSettings.contextBias, height: 110, variables: Self.dictionaryTermsVariable)
+                            Text(localized("Concise names, terms, and product vocabulary."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    SettingsIntegerStepperField(
+                        title: localized("Threads"),
+                        value: $tuningSettings.numThreads,
+                        range: 1...8,
+                        step: 1,
+                        help: localized("Higher values can improve offline decode speed, but also use more CPU.")
+                    )
+
+                    switch option.kind {
+                    case .fireRedASRCTC:
+                        EmptyView()
+                    case .funASRNano:
+                        funASRControls
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.trailing, 4)
+            }
+            .frame(maxHeight: SettingsUIStyle.modelConfigurationScrollMaxHeight)
+
+            SettingsDialogActionRow {
+                Button(localized("Reset to Default")) {
+                    hintSettings = ASRHintSettingsStore.defaultSettings(for: .sherpaOnnx)
+                    tuningSettings = SherpaOnnxLocalTuningSettings.defaults(for: option.kind)
+                }
+                .buttonStyle(SettingsPillButtonStyle())
+            } trailing: {
+                Button(localized("Done")) {
+                    onDone()
+                }
+                .buttonStyle(SettingsPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .settingsDialogChrome(
+            width: SettingsUIStyle.modelConfigurationDialogWidth,
+            maxHeight: SettingsUIStyle.modelConfigurationDialogMaxHeight,
+            onClose: onDone
+        )
+    }
+
+    private var funASRControls: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Toggle(localized("Enable ITN"), isOn: $tuningSettings.funASRUseITN)
+                .toggleStyle(.switch)
+            Text(localized("ITN normalizes spoken numbers, dates, and similar expressions into written form."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            SettingsIntegerStepperField(
+                title: localized("Max New Tokens"),
+                value: $tuningSettings.funASRMaxNewTokens,
+                range: 64...2048,
+                step: 64,
+                help: localized("Use a larger value only for long utterances that are being truncated.")
+            )
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(localized("Top P"))
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                    Text(String(format: "%.2f", tuningSettings.funASRTopP))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: $tuningSettings.funASRTopP, in: 0.1...1.0, step: 0.05)
+                Text(localized("Keep this conservative for stable dictation output."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func localInfoRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+private struct SettingsIntegerStepperField: View {
+    let title: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    let help: String
+
+    private var clampedValue: Binding<Int> {
+        Binding(
+            get: { value },
+            set: { value = clamped($0) }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 8) {
+                    TextField("", value: clampedValue, formatter: Self.integerFormatter)
+                        .font(.caption.monospacedDigit())
+                        .multilineTextAlignment(.trailing)
+                        .textFieldStyle(.plain)
+                        .modifier(
+                            SettingsFieldSurfaceModifier(
+                                width: 72,
+                                minHeight: 28,
+                                horizontalPadding: 8,
+                                alignment: .trailing
+                            )
+                        )
+                        .onSubmit {
+                            value = clamped(value)
+                        }
+
+                    Stepper("", value: clampedValue, in: range, step: step)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .fixedSize()
+                }
+            }
+
+            Text(help)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear {
+            value = clamped(value)
+        }
+    }
+
+    private func clamped(_ candidate: Int) -> Int {
+        min(max(candidate, range.lowerBound), range.upperBound)
+    }
+
+    private static let integerFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.allowsFloats = false
+        formatter.minimum = 0
+        return formatter
+    }()
 }

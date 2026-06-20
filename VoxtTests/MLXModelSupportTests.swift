@@ -60,6 +60,12 @@ final class MLXModelSupportTests: XCTestCase {
         )
     }
 
+    func testNemotronCatalogTagsExposeMultilingualBadge() {
+        let tagKeys = MLXModelCatalog.catalogTagKeys(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit")
+        XCTAssertTrue(tagKeys.contains("Multilingual"))
+        XCTAssertTrue(tagKeys.contains("Realtime"))
+    }
+
     func testFallbackRemoteSizeSupportsLegacyAndCuratedRepos() {
         XCTAssertEqual(
             MLXModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/FireRedASR2"),

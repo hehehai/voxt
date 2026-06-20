@@ -336,9 +336,7 @@ extension OnboardingSettingsView {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Toggle(localized("Use China mirror"), isOn: $useHfMirror)
-
-            Text(localized("Use the China mirror when downloading local models during setup."))
+            Text(localized("Model downloads automatically choose the fastest available source when installation starts."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -690,6 +688,8 @@ extension OnboardingSettingsView {
         switch localEngineSelection.wrappedValue {
         case .mlxAudio:
             return TranscriptionEngine.mlxAudio.description
+        case .sherpaOnnx:
+            return TranscriptionEngine.sherpaOnnx.description
         case .dictation, .remote:
             return ""
         }

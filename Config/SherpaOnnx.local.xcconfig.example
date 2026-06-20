@@ -1,0 +1,17 @@
+// Optional local sherpa-onnx runtime integration.
+//
+// To enable:
+// 1. Run: tools/build_sherpa_onnx_macos.sh
+// 2. Copy this file to Config/SherpaOnnx.local.xcconfig
+// 3. Build the Voxt scheme.
+//
+// The runtime artifacts are intentionally gitignored under ThirdParty/sherpa-onnx.
+
+SHERPA_ONNX_ROOT = $(PROJECT_DIR)/ThirdParty/sherpa-onnx
+SHERPA_ONNX_COPY_RUNTIME = NO
+
+HEADER_SEARCH_PATHS = $(inherited) "$(SHERPA_ONNX_ROOT)/install/include"
+LIBRARY_SEARCH_PATHS = $(inherited) "$(SHERPA_ONNX_ROOT)/install/lib"
+OTHER_LDFLAGS = $(inherited) -lsherpa-onnx -lonnxruntime -lc++ -framework Foundation
+SWIFT_OBJC_BRIDGING_HEADER = $(PROJECT_DIR)/Voxt/Voxt-SherpaOnnx-Bridging-Header.h
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) SHERPA_ONNX_AVAILABLE

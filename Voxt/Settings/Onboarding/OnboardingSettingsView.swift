@@ -29,7 +29,6 @@ struct OnboardingSettingsView: View {
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.autoCopyWhenNoFocusedInput) var autoCopyWhenNoFocusedInput = false
     @AppStorage(AppPreferenceKey.modelStorageRootPath) var modelStorageRootPath = ""
-    @AppStorage(AppPreferenceKey.useHfMirror) var useHfMirror = false
     @AppStorage(AppPreferenceKey.transcriptionEngine) var engineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.enhancementMode) var enhancementModeRaw = EnhancementMode.off.rawValue
     @AppStorage(AppPreferenceKey.mlxModelRepo) var mlxModelRepo = MLXModelManager.defaultModelRepo
@@ -136,7 +135,7 @@ struct OnboardingSettingsView: View {
         Binding(
             get: {
                 switch selectedEngine {
-                case .mlxAudio:
+                case .mlxAudio, .sherpaOnnx:
                     return .local
                 case .remote:
                     return .remote
@@ -191,13 +190,11 @@ struct OnboardingSettingsView: View {
         Binding(
             get: {
                 switch selectedEngine {
-                case .mlxAudio:
-                    return .mlxAudio
-                case .remote, .dictation:
+                case .mlxAudio, .sherpaOnnx, .remote, .dictation:
                     return .mlxAudio
                 }
             },
-            set: { engineRaw = $0.rawValue }
+            set: { _ in engineRaw = TranscriptionEngine.mlxAudio.rawValue }
         )
     }
 
@@ -260,6 +257,9 @@ struct OnboardingSettingsView: View {
     private var onboardingObservedContent: AnyView {
         let localized = AnyView(onboardingBodyContent.environment(\.locale, interfaceLanguage.locale))
         let appeared = AnyView(localized.onAppear {
+                if selectedEngine == .sherpaOnnx {
+                    engineRaw = TranscriptionEngine.mlxAudio.rawValue
+                }
                 refreshInputDevices()
                 refreshModelStorageDisplayPath()
                 syncOnboardingModelManagers()

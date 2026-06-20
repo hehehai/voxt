@@ -43,6 +43,7 @@
 		694309B92F5280180056FECC /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Localizable.strings; sourceTree = "<group>"; };
 		694309BB2F5280180056FECC /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = Localizable.strings; sourceTree = "<group>"; };
 		694309BD2F5280180056FECC /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = Localizable.strings; sourceTree = "<group>"; };
+		7C0D0E0F1011121314151617 /* SherpaOnnx.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SherpaOnnx.local.xcconfig.example; sourceTree = "<group>"; };
 		AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.shared.xcconfig; sourceTree = "<group>"; };
 		AAC0F002AAC0F002AAC0F002 /* Signing.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.local.xcconfig.example; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -215,6 +216,7 @@
 			children = (
 				AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */,
 				AAC0F002AAC0F002AAC0F002 /* Signing.local.xcconfig.example */,
+				7C0D0E0F1011121314151617 /* SherpaOnnx.local.xcconfig.example */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -228,6 +230,7 @@
 			buildPhases = (
 				31F19CC92F4D76D200E96913 /* Sources */,
 				31F19CCA2F4D76D200E96913 /* Frameworks */,
+				7C0D0E0F1011121314151618 /* Copy Sherpa ONNX Runtime */,
 				31F19CCB2F4D76D200E96913 /* Resources */,
 			);
 			buildRules = (
@@ -346,6 +349,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		7C0D0E0F1011121314151618 /* Copy Sherpa ONNX Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Sherpa ONNX Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"${SHERPA_ONNX_COPY_RUNTIME:-NO}\" != \"YES\" ]; then\n  exit 0\nfi\n\nruntime_dir=\"${SHERPA_ONNX_ROOT:-${PROJECT_DIR}/ThirdParty/sherpa-onnx}/install/lib\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\n\nmkdir -p \"$destination\"\nfound=0\nfor dylib in \"$runtime_dir\"/libonnxruntime*.dylib; do\n  if [ ! -e \"$dylib\" ]; then\n    continue\n  fi\n  cp -f \"$dylib\" \"$destination/\"\n  found=1\ndone\n\nif [ \"$found\" = \"0\" ]; then\n  echo \"error: SHERPA_ONNX_COPY_RUNTIME=YES but no libonnxruntime*.dylib was found in $runtime_dir\"\n  exit 1\nfi\n\nif [ \"${CODE_SIGNING_ALLOWED:-YES}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n  for copied in \"$destination\"/libonnxruntime*.dylib; do\n    if [ -e \"$copied\" ]; then\n      /usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$copied\"\n    fi\n  done\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		31F19CC92F4D76D200E96913 /* Sources */ = {

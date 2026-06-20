@@ -32,21 +32,22 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.remoteASRProviderConfigurations) var remoteASRProviderConfigurationsRaw = ""
     @AppStorage(AppPreferenceKey.asrHintSettings) var asrHintSettingsRaw = ASRHintSettingsStore.defaultStoredValue()
     @AppStorage(AppPreferenceKey.mlxLocalASRTuningSettings) var mlxLocalASRTuningSettingsRaw = "{}"
+    @AppStorage(AppPreferenceKey.sherpaOnnxLocalASRTuningSettings) var sherpaOnnxLocalASRTuningSettingsRaw = "{}"
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.remoteLLMSelectedProvider) var remoteLLMSelectedProviderRaw = RemoteLLMProvider.openAI.rawValue
     @AppStorage(AppPreferenceKey.remoteLLMProviderConfigurations) var remoteLLMProviderConfigurationsRaw = ""
     @AppStorage(AppPreferenceKey.translationRemoteLLMProvider) var translationRemoteLLMProviderRaw = ""
     @AppStorage(AppPreferenceKey.rewriteRemoteLLMProvider) var rewriteRemoteLLMProviderRaw = ""
-    @AppStorage(AppPreferenceKey.useHfMirror) var useHfMirror = false
     @AppStorage(AppPreferenceKey.modelStorageRootPath) var modelStorageRootPath = ""
     @AppStorage(AppPreferenceKey.interfaceLanguage) var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
 
     let mlxModelManager: MLXModelManager
+    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var mainWindowState: MainWindowVisibilityState
-    let missingConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue]
+    let missingConfigurationIssues: [ModelConfigurationIssue]
     let navigationRequest: SettingsNavigationRequest?
     let isActive: Bool
 
@@ -57,7 +58,6 @@ struct ModelSettingsView: View {
     @State var cachedRemoteLLMConfigurations = [String: RemoteProviderConfiguration]()
     @State private var modelStorageDisplayPath = ""
     @State private var modelStorageSelectionError: String?
-    @State var showMirrorInfo = false
     @State private var showIdleUnloadDelayInfo = false
     @State var editingASRProvider: RemoteASRProvider?
     @State var editingLLMProvider: RemoteLLMProvider?
@@ -66,12 +66,8 @@ struct ModelSettingsView: View {
     @State var isCustomLLMConfigurationPresented = false
     @State var customLLMConfigurationRepo: String?
     @State private var isModelDownloadSettingsPresented = false
-    @State private var isTestingGlobalDownloadEndpoint = false
-    @State private var isTestingChinaDownloadEndpoint = false
     @State private var expandedModelGroupIDs = Set<String>()
     @State private var collapsedModelGroupIDs = Set<String>()
-    @State private var globalDownloadEndpointResult: ModelDownloadEndpointCheckResult?
-    @State private var chinaDownloadEndpointResult: ModelDownloadEndpointCheckResult?
     @State var catalogSnapshot = ModelSettingsCatalogSnapshot.empty
     @State private var isCatalogRefreshScheduled = false
     @State private var isRefreshingCatalogSnapshot = false
@@ -159,6 +155,7 @@ struct ModelSettingsView: View {
     private var catalogBuilder: ModelCatalogBuilder {
         ModelCatalogBuilder(
             mlxModelManager: mlxModelManager,
+            sherpaOnnxModelManager: sherpaOnnxModelManager,
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             remoteASRConfigurations: remoteASRConfigurations,
@@ -172,6 +169,7 @@ struct ModelSettingsView: View {
             remoteLLMBadgeText: remoteLLMBadgeText(for:),
             primaryUserLanguageCode: selectedUserLanguageCodes.first,
             mlxInstallSnapshot: mlxInstallSnapshot(for:),
+            sherpaInstallSnapshot: sherpaOnnxInstallSnapshot(for:),
             customLLMInstallSnapshot: customLLMInstallSnapshot(for:),
             ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot(for:),
             catalogPrimaryAction: {
@@ -478,82 +476,6 @@ struct ModelSettingsView: View {
         }
     }
 
-    private func testGlobalDownloadEndpoint() {
-        Task {
-            await runDownloadEndpointCheck(
-                using: MLXModelManager.defaultHubBaseURL,
-                isTesting: { isTestingGlobalDownloadEndpoint = $0 },
-                setResult: { globalDownloadEndpointResult = $0 }
-            )
-        }
-    }
-
-    private func testChinaDownloadEndpoint() {
-        Task {
-            await runDownloadEndpointCheck(
-                using: MLXModelManager.mirrorHubBaseURL,
-                isTesting: { isTestingChinaDownloadEndpoint = $0 },
-                setResult: { chinaDownloadEndpointResult = $0 }
-            )
-        }
-    }
-
-    private func runDownloadEndpointCheck(
-        using baseURL: URL,
-        isTesting: @escaping (Bool) -> Void,
-        setResult: @escaping (ModelDownloadEndpointCheckResult) -> Void
-    ) async {
-        await MainActor.run { isTesting(true) }
-        let result = await measureDownloadEndpoint(baseURL: baseURL)
-        await MainActor.run {
-            setResult(result)
-            isTesting(false)
-        }
-    }
-
-    private func measureDownloadEndpoint(baseURL: URL) async -> ModelDownloadEndpointCheckResult {
-        let targetURL = baseURL.appending(path: "robots.txt")
-        var request = URLRequest(url: targetURL)
-        request.timeoutInterval = 12
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-
-        do {
-            let startedAt = Date()
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let elapsed = max(Date().timeIntervalSince(startedAt), 0.001)
-            let bytesPerSecond = Double(data.count) / elapsed
-
-            let latencyText = AppLocalization.format("Latency: %@", String(format: "%.0f ms", elapsed * 1000))
-            let throughputText = AppLocalization.format(
-                "Speed: %@/s",
-                ByteCountFormatter.string(fromByteCount: Int64(bytesPerSecond), countStyle: .file)
-            )
-
-            if let httpResponse = response as? HTTPURLResponse, !(200..<400).contains(httpResponse.statusCode) {
-                return ModelDownloadEndpointCheckResult(
-                    isReachable: false,
-                    latencyText: latencyText,
-                    throughputText: throughputText,
-                    detailText: AppLocalization.format("Request failed (HTTP %@).", String(httpResponse.statusCode))
-                )
-            }
-
-            return ModelDownloadEndpointCheckResult(
-                isReachable: true,
-                latencyText: latencyText,
-                throughputText: throughputText,
-                detailText: AppLocalization.format("Downloaded %@ to verify connectivity.", ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))
-            )
-        } catch {
-            return ModelDownloadEndpointCheckResult(
-                isReachable: false,
-                latencyText: localized("Latency: --"),
-                throughputText: localized("Speed: --"),
-                detailText: AppLocalization.format("Connection failed: %@", error.localizedDescription)
-            )
-        }
-    }
-
     private var modelTabHeader: some View {
         HStack(spacing: 10) {
             ModelCatalogTabPicker(selectedTab: $catalogTab)
@@ -620,13 +542,6 @@ struct ModelSettingsView: View {
             onChooseModelStorageDirectory: chooseModelStorageDirectory,
             localModelIdleUnloadDelaySeconds: $localModelIdleUnloadDelaySeconds,
             showIdleUnloadDelayInfo: $showIdleUnloadDelayInfo,
-            useHfMirror: $useHfMirror,
-            isTestingGlobalDownloadEndpoint: isTestingGlobalDownloadEndpoint,
-            globalDownloadEndpointResult: globalDownloadEndpointResult,
-            onTestGlobalDownloadEndpoint: testGlobalDownloadEndpoint,
-            isTestingChinaDownloadEndpoint: isTestingChinaDownloadEndpoint,
-            chinaDownloadEndpointResult: chinaDownloadEndpointResult,
-            onTestChinaDownloadEndpoint: testChinaDownloadEndpoint,
             isPresented: $isModelDownloadSettingsPresented
         )
     }
@@ -640,6 +555,9 @@ struct ModelSettingsView: View {
                 }
                 return false
             },
+            sherpaOnnxState: sherpaOnnxModelManager.state,
+            sherpaOnnxStateByID: sherpaOnnxModelManager.stateByID,
+            sherpaOnnxHasActiveDownloads: !sherpaOnnxModelManager.activeDownloadModelIDs.isEmpty,
             customLLMState: customLLMManager.state,
             ggufStateByID: ggufTranslationModelManager.stateByID,
             ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
@@ -676,7 +594,7 @@ struct ModelSettingsView: View {
     }
 
     private func missingConfigurationIssueDescription(
-        for issue: ConfigurationTransferManager.MissingConfigurationIssue
+        for issue: ModelConfigurationIssue
     ) -> String {
         switch issue.scope {
         case .remoteASRProvider(let provider):
@@ -685,6 +603,8 @@ struct ModelSettingsView: View {
             return AppLocalization.format("%@ %@: %@", provider.title, localized("LLM"), issue.message)
         case .mlxModel(let repo):
             return AppLocalization.format("%@ %@: %@", mlxModelManager.displayTitle(for: repo), localized("ASR"), issue.message)
+        case .sherpaOnnxModel(let modelID):
+            return AppLocalization.format("%@ %@: %@", sherpaOnnxModelManager.displayTitle(for: modelID), localized("ASR"), issue.message)
         case .customLLMModel(let repo):
             return AppLocalization.format("%@ %@: %@", customLLMManager.displayTitle(for: repo), localized("LLM"), issue.message)
         case .translationRemoteLLM(let provider):

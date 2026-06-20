@@ -17,6 +17,7 @@ struct SettingsView: View {
     let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
     let onCancelDictionarySuggestionsFromHistory: () -> Void
     let mlxModelManager: MLXModelManager
+    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
@@ -45,7 +46,7 @@ struct SettingsView: View {
     @State private var navigationRequest: SettingsNavigationRequest?
     @State private var hasMissingPermissions = false
     @State private var hasNoAvailableMicrophones = false
-    @State private var missingModelConfigurationIssues: [ConfigurationTransferManager.MissingConfigurationIssue] = []
+    @State private var missingModelConfigurationIssues: [ModelConfigurationIssue] = []
     @State private var languageRefreshToken = UUID()
     @State private var displayMode: SettingsDisplayMode
     @State private var initializedStaticTabs: Set<SettingsTab>
@@ -62,6 +63,7 @@ struct SettingsView: View {
         onIngestDictionarySuggestionsFromHistory: @escaping (DictionaryHistoryScanRequest, Bool) -> Void,
         onCancelDictionarySuggestionsFromHistory: @escaping () -> Void,
         mlxModelManager: MLXModelManager,
+        sherpaOnnxModelManager: SherpaOnnxModelManager,
         customLLMManager: CustomLLMModelManager,
         ggufTranslationModelManager: GGUFTranslationModelManager,
         historyStore: TranscriptionHistoryStore,
@@ -77,6 +79,7 @@ struct SettingsView: View {
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
         self.onCancelDictionarySuggestionsFromHistory = onCancelDictionarySuggestionsFromHistory
         self.mlxModelManager = mlxModelManager
+        self.sherpaOnnxModelManager = sherpaOnnxModelManager
         self.customLLMManager = customLLMManager
         self.ggufTranslationModelManager = ggufTranslationModelManager
         self.historyStore = historyStore
@@ -94,6 +97,7 @@ struct SettingsView: View {
         _activeModelDownloadCount = State(
             initialValue: SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
+                sherpaActiveDownloadModelIDs: sherpaOnnxModelManager.activeDownloadModelIDs,
                 customLLMState: customLLMManager.state,
                 ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
             )
@@ -412,14 +416,16 @@ struct SettingsView: View {
     }
 
     private var modelDownloadBadgeCountPublisher: AnyPublisher<Int, Never> {
-        Publishers.CombineLatest3(
+        Publishers.CombineLatest4(
             mlxModelManager.$activeDownloadRepos,
+            sherpaOnnxModelManager.$activeDownloadModelIDs,
             customLLMManager.$state,
             ggufTranslationModelManager.$activeDownloadModelID
         )
-        .map { mlxActiveDownloadRepos, customLLMState, ggufActiveDownloadModelID in
+        .map { mlxActiveDownloadRepos, sherpaActiveDownloadModelIDs, customLLMState, ggufActiveDownloadModelID in
             SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxActiveDownloadRepos,
+                sherpaActiveDownloadModelIDs: sherpaActiveDownloadModelIDs,
                 customLLMState: customLLMState,
                 ggufActiveDownloadModelID: ggufActiveDownloadModelID
             )
@@ -483,6 +489,7 @@ struct SettingsView: View {
                         selectedTab: selectedFeatureTab,
                         navigationRequest: navigationRequest,
                         mlxModelManager: mlxModelManager,
+                        sherpaOnnxModelManager: sherpaOnnxModelManager,
                         customLLMManager: customLLMManager,
                         ggufTranslationModelManager: ggufTranslationModelManager
                     )
@@ -493,6 +500,7 @@ struct SettingsView: View {
                 staticTabLayer(for: .model) {
                     ModelSettingsView(
                         mlxModelManager: mlxModelManager,
+                        sherpaOnnxModelManager: sherpaOnnxModelManager,
                         customLLMManager: customLLMManager,
                         ggufTranslationModelManager: ggufTranslationModelManager,
                         mainWindowState: mainWindowState,
@@ -540,6 +548,7 @@ struct SettingsView: View {
                         case .model:
                             ModelSettingsView(
                                 mlxModelManager: mlxModelManager,
+                                sherpaOnnxModelManager: sherpaOnnxModelManager,
                                 customLLMManager: customLLMManager,
                                 ggufTranslationModelManager: ggufTranslationModelManager,
                                 mainWindowState: mainWindowState,
@@ -612,8 +621,9 @@ struct SettingsView: View {
     }
 
     private func refreshModelConfigurationBadge() {
-        let issues = ConfigurationTransferManager.missingConfigurationIssues(
+        let issues = ModelConfigurationIssueResolver.missingIssues(
             mlxModelManager: mlxModelManager,
+            sherpaOnnxModelManager: sherpaOnnxModelManager,
             customLLMManager: customLLMManager
         )
         guard issues != missingModelConfigurationIssues else { return }
@@ -1125,16 +1135,7 @@ private struct SettingsSidebarTabButton: View {
                     .layoutPriority(1)
 
                 if let badgeText {
-                    Text(settingsLocalized(badgeText))
-                        .font(.system(size: 9, weight: .semibold))
-                        .textCase(.uppercase)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(Color.accentColor.opacity(isActive ? 0.20 : 0.12))
-                        )
-                        .foregroundStyle(Color.accentColor)
+                    FeatureStatusBadge(text: settingsLocalized(badgeText))
                         .fixedSize()
                 }
 

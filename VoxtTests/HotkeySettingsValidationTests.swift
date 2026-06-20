@@ -178,4 +178,34 @@ final class HotkeySettingsValidationTests: XCTestCase {
 
         XCTAssertFalse(messages.contains { $0.id.hasPrefix("duplicate.") })
     }
+
+    func testSameWorkflowCannotUseSameHotkeyWithDifferentBehaviors() {
+        let hotkey = HotkeyPreference.Hotkey(
+            keyCode: HotkeyPreference.modifierOnlyKeyCode,
+            modifiers: [.function],
+            sidedModifiers: []
+        )
+
+        let messages = HotkeySettingsValidation.messages(
+            for: .init(
+                transcriptionBindings: [
+                    .init(hotkey: hotkey, behavior: .tap),
+                    .init(hotkey: hotkey, behavior: .longPress)
+                ],
+                translationBindings: [.init(
+                    hotkey: HotkeyPreference.Hotkey(
+                        keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                        modifiers: [.function, .shift],
+                        sidedModifiers: []
+                    ),
+                    behavior: .tap
+                )],
+                meetingBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 4), behavior: .tap)],
+                rewriteBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 5), behavior: .tap)],
+                customPasteHotkey: nil
+            )
+        )
+
+        XCTAssertTrue(messages.contains { $0.id == "duplicate.transcription.transcription" })
+    }
 }

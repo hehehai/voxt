@@ -15,13 +15,6 @@ struct ModelDownloadSettingsSheet: View {
     let onChooseModelStorageDirectory: () -> Void
     @Binding var localModelIdleUnloadDelaySeconds: Int
     @Binding var showIdleUnloadDelayInfo: Bool
-    @Binding var useHfMirror: Bool
-    let isTestingGlobalDownloadEndpoint: Bool
-    let globalDownloadEndpointResult: ModelDownloadEndpointCheckResult?
-    let onTestGlobalDownloadEndpoint: () -> Void
-    let isTestingChinaDownloadEndpoint: Bool
-    let chinaDownloadEndpointResult: ModelDownloadEndpointCheckResult?
-    let onTestChinaDownloadEndpoint: () -> Void
     @Binding var isPresented: Bool
 
     var body: some View {
@@ -45,6 +38,10 @@ struct ModelDownloadSettingsSheet: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+
+                Text(modelSettingsDownloadLocalized("Model downloads automatically choose the fastest available source when installation starts."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             GeneralSettingsCard(titleText: modelSettingsDownloadLocalized("Memory")) {
@@ -80,34 +77,6 @@ struct ModelDownloadSettingsSheet: View {
                 }
             }
 
-            GeneralSectionDivider()
-
-            VStack(alignment: .leading, spacing: 16) {
-                GeneralToggleRow(
-                    title: LocalizedStringKey(modelSettingsDownloadLocalized("Use China mirror")),
-                    description: LocalizedStringKey(modelSettingsDownloadLocalized("Use the mirror for Hugging Face model downloads.")),
-                    isOn: $useHfMirror
-                )
-
-                ModelDownloadEndpointTestRow(
-                    title: modelSettingsDownloadLocalized("Global"),
-                    subtitle: "https://huggingface.co",
-                    isTesting: isTestingGlobalDownloadEndpoint,
-                    result: globalDownloadEndpointResult,
-                    actionTitle: modelSettingsDownloadLocalized("Test"),
-                    action: onTestGlobalDownloadEndpoint
-                )
-
-                ModelDownloadEndpointTestRow(
-                    title: modelSettingsDownloadLocalized("China Mirror"),
-                    subtitle: "https://hf-mirror.com",
-                    isTesting: isTestingChinaDownloadEndpoint,
-                    result: chinaDownloadEndpointResult,
-                    actionTitle: modelSettingsDownloadLocalized("Test"),
-                    action: onTestChinaDownloadEndpoint
-                )
-            }
-
             SettingsDialogActionRow {
                 Button(modelSettingsDownloadLocalized("Done")) {
                     isPresented = false
@@ -119,57 +88,6 @@ struct ModelDownloadSettingsSheet: View {
         .settingsDialogChrome(width: 560, onClose: {
             isPresented = false
         })
-    }
-}
-
-private struct ModelDownloadEndpointTestRow: View {
-    let title: String
-    let subtitle: String
-    let isTesting: Bool
-    let result: ModelDownloadEndpointCheckResult?
-    let actionTitle: String
-    let action: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.subheadline.weight(.medium))
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if isTesting {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                if let result {
-                    OnboardingPermissionStatusBadge(isGranted: result.isReachable)
-                }
-
-                Button(actionTitle, action: action)
-                    .buttonStyle(SettingsPillButtonStyle())
-                    .disabled(isTesting)
-            }
-
-            if let result {
-                Text("\(result.latencyText) · \(result.throughputText)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(result.detailText)
-                    .font(.caption)
-                    .foregroundStyle(
-                        result.isReachable
-                        ? AnyShapeStyle(.secondary)
-                        : AnyShapeStyle(Color.orange)
-                    )
-            }
-        }
     }
 }
 

@@ -5,6 +5,7 @@ import SwiftUI
 
 enum LocalModelInstallTarget: Hashable {
     case mlx(String)
+    case sherpaOnnx(SherpaOnnxModelID)
     case customLLM(String)
     case ggufTranslation(GGUFTranslationModelID)
 }
@@ -35,6 +36,7 @@ struct LocalModelInstallActionDescriptor: Equatable {
     let title: String
     var isEnabled: Bool = true
     var isDestructive: Bool = false
+    var showsProgress: Bool = false
 }
 
 struct LocalModelInstallSnapshot: Equatable {
@@ -69,7 +71,18 @@ enum ModelSettingsInstallActionResolver {
                 tableAction(for: .init(kind: .cancel, title: localized("Cancel"), isDestructive: true), target: snapshot.target, perform: perform)
             ]
         case .cancelling:
-            return [tableAction(for: .init(kind: .inactive, title: localized("Cancelling…"), isEnabled: false), target: snapshot.target, perform: perform)]
+            return [
+                tableAction(
+                    for: .init(
+                        kind: .inactive,
+                        title: localized("Cancel"),
+                        isEnabled: false,
+                        showsProgress: true
+                    ),
+                    target: snapshot.target,
+                    perform: perform
+                )
+            ]
         case .installed:
             return [
                 tableAction(
@@ -111,7 +124,12 @@ enum ModelSettingsInstallActionResolver {
         case .paused:
             descriptor = .init(kind: .resume, title: localized("Continue"))
         case .cancelling:
-            descriptor = .init(kind: .inactive, title: localized("Cancelling…"), isEnabled: false)
+            descriptor = .init(
+                kind: .inactive,
+                title: localized("Cancel"),
+                isEnabled: false,
+                showsProgress: true
+            )
         case .installed:
             descriptor = .init(kind: .uninstall, title: localized("Uninstall"), isDestructive: true)
         case .installable(let isEnabled):
@@ -152,7 +170,8 @@ enum ModelSettingsInstallActionResolver {
         ModelTableAction(
             title: descriptor.title,
             role: descriptor.isDestructive ? .destructive : nil,
-            isEnabled: descriptor.isEnabled
+            isEnabled: descriptor.isEnabled,
+            showsProgress: descriptor.showsProgress
         ) {
             guard descriptor.isEnabled else { return }
             guard descriptor.kind != .inactive else { return }

@@ -39,6 +39,47 @@ final class MeetingStartPlannerTests: XCTestCase {
         XCTAssertEqual(decision, .start(.mlxAudio))
     }
 
+    func testSherpaMeetingFollowsRecordingPlannerWhenRuntimeIsAvailable() {
+        let decision = MeetingStartPlanner.resolve(
+            selectedEngine: .sherpaOnnx,
+            selectedSherpaModelID: SherpaOnnxModelCatalog.fireRedModelID,
+            isSelectedSherpaModelDownloaded: true,
+            sherpaModelState: .downloaded,
+            mlxModelState: .notDownloaded,
+            remoteASRProvider: .openAIWhisper,
+            remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
+        )
+
+        #if SHERPA_ONNX_AVAILABLE
+        XCTAssertEqual(decision, .start(.sherpaOnnx))
+        #else
+        XCTAssertEqual(
+            decision,
+            .blocked(.recording(.sherpaModelUnavailable(detail: SherpaOnnxRuntimeSupport.unavailableDetail)))
+        )
+        #endif
+    }
+
+    func testSherpaMeetingBlocksWhenSelectedModelIsNotInstalled() {
+        let decision = MeetingStartPlanner.resolve(
+            selectedEngine: .sherpaOnnx,
+            selectedSherpaModelID: SherpaOnnxModelCatalog.fireRedModelID,
+            sherpaModelState: .notDownloaded,
+            mlxModelState: .notDownloaded,
+            remoteASRProvider: .openAIWhisper,
+            remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
+        )
+
+        #if SHERPA_ONNX_AVAILABLE
+        XCTAssertEqual(decision, .blocked(.recording(.sherpaModelNotInstalled)))
+        #else
+        XCTAssertEqual(
+            decision,
+            .blocked(.recording(.sherpaModelUnavailable(detail: SherpaOnnxRuntimeSupport.unavailableDetail)))
+        )
+        #endif
+    }
+
     func testMLXMeetingIgnoresDifferentRepoActiveDownload() {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .mlxAudio,

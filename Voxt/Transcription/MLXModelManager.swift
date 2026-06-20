@@ -254,6 +254,7 @@ class MLXModelManager: ObservableObject {
             }
         }
         invalidateLocalCache(for: canonicalRepo)
+        clearSelectedDownloadSource(for: canonicalRepo)
         clearPerRepoState(for: canonicalRepo)
     }
 
@@ -268,6 +269,7 @@ class MLXModelManager: ObservableObject {
             downloadStopActionsByRepo[canonicalRepo] = .cancel
             setPausedStatusMessage(nil, for: canonicalRepo)
             setState(.notDownloaded, for: canonicalRepo)
+            clearSelectedDownloadSource(for: canonicalRepo)
             task.cancel()
             return
         }
@@ -467,6 +469,14 @@ class MLXModelManager: ObservableObject {
             storedStates: &stateByRepo,
             storedMessages: &pausedStatusMessageByRepo
         )
+    }
+
+    private func downloadSourceTargetKey(for repo: String) -> String {
+        ModelDownloadSourceSelectionStore.targetKey(namespace: "mlx-audio", identifier: repo)
+    }
+
+    private func clearSelectedDownloadSource(for repo: String) {
+        ModelDownloadSourceSelectionStore.clearSourceID(for: downloadSourceTargetKey(for: repo))
     }
 
     func refreshStorageRoot() {
@@ -677,6 +687,7 @@ class MLXModelManager: ObservableObject {
             }
         }
         invalidateLocalCache(for: modelRepo)
+        clearSelectedDownloadSource(for: modelRepo)
         setState(.notDownloaded, for: modelRepo)
     }
 
@@ -955,6 +966,7 @@ class MLXModelManager: ObservableObject {
 
     private func cleanupPartialDownload(for repo: String) {
         resumableDownloadStateByRepo[repo] = false
+        clearSelectedDownloadSource(for: repo)
         if let tempDir = downloadTempDirectory(for: repo) {
             try? FileManager.default.removeItem(at: tempDir)
         }
@@ -1178,6 +1190,28 @@ class MLXModelManager: ObservableObject {
         return Self.mirrorHubBaseURL
     }
 
+    private func downloadSourceCandidates() -> [ModelDownloadSourceCandidate] {
+        [
+            ModelDownloadSourceCandidate(
+                id: "huggingface",
+                displayName: "Hugging Face",
+                url: Self.defaultHubBaseURL
+            ),
+            ModelDownloadSourceCandidate(
+                id: "hf-mirror",
+                displayName: "HF Mirror",
+                url: Self.mirrorHubBaseURL
+            ),
+        ]
+    }
+
+    private func shouldReuseSavedDownloadSource(for repo: String) -> Bool {
+        if case .paused = state(for: repo) {
+            return true
+        }
+        return hasResumableDownload(repo: repo, isDownloaded: downloadedStateByRepo[repo] ?? false)
+    }
+
     private func loadRemoteSizeInfo(
         repo: String,
         preferredBaseURL: URL? = nil
@@ -1207,20 +1241,64 @@ class MLXModelManager: ObservableObject {
     }
 
     private func performDownloadWithFallback(for repo: String) async throws -> URL {
-        do {
-            return try await performDownload(using: hubBaseURL, for: repo)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            guard let fallbackBaseURL = fallbackHubBaseURL(from: hubBaseURL) else {
-                throw error
-            }
-            VoxtLog.modelWarning(
-                "Primary model download endpoint failed. Retrying with mirror. repo=\(repo), baseURL=\(hubBaseURL.absoluteString), error=\(error.localizedDescription)"
+        let selection = try await ModelDownloadSourceSelector.select(
+            candidates: downloadSourceCandidates(),
+            targetKey: downloadSourceTargetKey(for: repo),
+            reuseSavedSource: shouldReuseSavedDownloadSource(for: repo)
+        ) { candidate in
+            let startedAt = Date()
+            let session = MLXModelDownloadSupport.makeDownloadSession(for: candidate.url)
+            let entries = try await MLXModelDownloadSupport.fetchModelEntries(
+                repo: repo,
+                baseURL: candidate.url,
+                session: session,
+                userAgent: Self.hubUserAgent
             )
-            clearHubCache(for: repo)
-            return try await performDownload(using: fallbackBaseURL, for: repo)
+            let elapsed = max(Date().timeIntervalSince(startedAt), 0.001)
+            let bytes = entries.reduce(Int64(0)) { partial, entry in
+                partial + max(entry.size ?? 0, 0)
+            }
+            return (elapsed, bytes)
         }
+        VoxtLog.modelInfo(
+            "Selected MLX Audio download source. repo=\(repo), source=\(selection.candidate.displayName), url=\(selection.candidate.url.absoluteString), reusedSavedSource=\(selection.reusedSavedSource), probes=\(ModelDownloadSourceSelector.logSummary(for: selection))"
+        )
+
+        var lastError: Error?
+        for candidate in downloadAttemptCandidates(from: selection) {
+            do {
+                return try await performDownload(using: candidate.url, for: repo)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+                VoxtLog.modelWarning(
+                    "MLX Audio download source failed. repo=\(repo), source=\(candidate.displayName), error=\(error.localizedDescription)"
+                )
+                clearHubCache(for: repo)
+            }
+        }
+
+        clearSelectedDownloadSource(for: repo)
+        throw lastError ?? NSError(
+            domain: "MLXModelManager",
+            code: 1004,
+            userInfo: [NSLocalizedDescriptionKey: "All MLX Audio download sources failed."]
+        )
+    }
+
+    private func downloadAttemptCandidates(
+        from selection: ModelDownloadSourceSelection
+    ) -> [ModelDownloadSourceCandidate] {
+        guard !selection.reusedSavedSource, !selection.probeResults.isEmpty else {
+            return [selection.candidate]
+        }
+
+        let candidates = selection.probeResults
+            .filter(\.isReachable)
+            .sorted(by: { $0.elapsed < $1.elapsed })
+            .map(\.candidate)
+        return candidates.isEmpty ? [selection.candidate] : candidates
     }
 
     private func performDownload(using baseURL: URL, for repo: String) async throws -> URL {

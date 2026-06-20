@@ -7,6 +7,7 @@ import AVFoundation
 struct ASRDebugModelOption: Identifiable, Hashable {
     enum Selection: Hashable {
         case mlx(repo: String)
+        case sherpaOnnx(modelID: SherpaOnnxModelID)
         case remote(provider: RemoteASRProvider, configuration: RemoteProviderConfiguration)
     }
 
@@ -180,6 +181,7 @@ enum LLMDebugPresetStore {
 enum ModelDebugCatalog {
     static func availableASRModels(
         mlxModelManager: MLXModelManager,
+        sherpaOnnxModelManager: SherpaOnnxModelManager? = nil,
         remoteASRConfigurations: [String: RemoteProviderConfiguration]
     ) -> [ASRDebugModelOption] {
         let downloadedMLXRepos = Set(
@@ -190,12 +192,14 @@ enum ModelDebugCatalog {
 
         return availableASRModels(
             downloadedMLXRepos: downloadedMLXRepos,
+            downloadedSherpaModelIDs: downloadedSherpaModelIDs(from: sherpaOnnxModelManager),
             remoteASRConfigurations: remoteASRConfigurations
         )
     }
 
     static func availableASRModels(
         downloadedMLXRepos: Set<String>,
+        downloadedSherpaModelIDs: Set<SherpaOnnxModelID> = [],
         remoteASRConfigurations: [String: RemoteProviderConfiguration]
     ) -> [ASRDebugModelOption] {
         var options: [ASRDebugModelOption] = []
@@ -210,6 +214,21 @@ enum ModelDebugCatalog {
             )
         }
         options.append(contentsOf: localMLX)
+
+        let localSherpa = SherpaOnnxModelCatalog.allModels.compactMap { model -> ASRDebugModelOption? in
+            guard SherpaOnnxRuntimeSupport.isAvailable,
+                  downloadedSherpaModelIDs.contains(model.id)
+            else {
+                return nil
+            }
+            return ASRDebugModelOption(
+                id: "sherpa:\(model.id.rawValue)",
+                title: model.title,
+                subtitle: AppLocalization.localizedString("Local Sherpa ONNX"),
+                selection: .sherpaOnnx(modelID: model.id)
+            )
+        }
+        options.append(contentsOf: localSherpa)
 
         let remote = RemoteASRProvider.allCases.compactMap { provider -> ASRDebugModelOption? in
             let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(
@@ -227,6 +246,17 @@ enum ModelDebugCatalog {
         options.append(contentsOf: remote)
 
         return options
+    }
+
+    private static func downloadedSherpaModelIDs(
+        from manager: SherpaOnnxModelManager?
+    ) -> Set<SherpaOnnxModelID> {
+        guard let manager, SherpaOnnxRuntimeSupport.isAvailable else { return [] }
+        return Set(
+            SherpaOnnxModelCatalog.allModels.compactMap { model in
+                manager.isModelDownloaded(id: model.id) ? model.id : nil
+            }
+        )
     }
 
     static func availableLLMModels(

@@ -51,6 +51,7 @@ extension AppDelegate {
     }
 
     func handleMeetingSessionFinished(_ result: MeetingSessionResult) {
+        hotkeyManager.setCommonStopKeyEnabled(false)
         let disposition = pendingMeetingSessionCompletionDisposition
         pendingMeetingSessionCompletionDisposition = .save
 

@@ -21,7 +21,6 @@ struct OnboardingGuideView: View {
 
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
-    @AppStorage(AppPreferenceKey.useHfMirror) private var useHfMirror = false
     @AppStorage(AppPreferenceKey.transcriptionEngine) private var engineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.mlxModelRepo) private var mlxModelRepo = MLXModelManager.defaultModelRepo
     @AppStorage(AppPreferenceKey.customLLMModelRepo) private var customLLMRepo = CustomLLMModelManager.defaultModelRepo
