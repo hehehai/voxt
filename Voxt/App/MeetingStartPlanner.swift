@@ -94,11 +94,11 @@ enum MeetingStartPlanner {
     ) -> MeetingStartDecision {
         switch RecordingStartPlanner.resolve(
             selectedEngine: .sherpaOnnx,
+            mlxModelState: .notDownloaded,
             selectedSherpaModelID: selectedSherpaModelID,
             activeSherpaDownloadModelID: activeSherpaDownloadModelID,
             isSelectedSherpaModelDownloaded: isSelectedSherpaModelDownloaded,
-            sherpaModelState: sherpaModelState,
-            mlxModelState: .notDownloaded
+            sherpaModelState: sherpaModelState
         ) {
         case .start:
             return .start(.sherpaOnnx)
