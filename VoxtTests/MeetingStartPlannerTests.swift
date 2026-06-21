@@ -42,10 +42,10 @@ final class MeetingStartPlannerTests: XCTestCase {
     func testSherpaMeetingFollowsRecordingPlannerWhenRuntimeIsAvailable() {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .sherpaOnnx,
+            mlxModelState: .notDownloaded,
             selectedSherpaModelID: SherpaOnnxModelCatalog.fireRedModelID,
             isSelectedSherpaModelDownloaded: true,
             sherpaModelState: .downloaded,
-            mlxModelState: .notDownloaded,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
@@ -63,9 +63,9 @@ final class MeetingStartPlannerTests: XCTestCase {
     func testSherpaMeetingBlocksWhenSelectedModelIsNotInstalled() {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .sherpaOnnx,
+            mlxModelState: .notDownloaded,
             selectedSherpaModelID: SherpaOnnxModelCatalog.fireRedModelID,
             sherpaModelState: .notDownloaded,
-            mlxModelState: .notDownloaded,
             remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
