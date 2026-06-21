@@ -194,11 +194,11 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-4bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-1.7B-6bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-1.7B-8bit"))
-        XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertTrue(modelIDs.contains("mlx-community/SenseVoiceSmall"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v3"))
+        XCTAssertFalse(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertFalse(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
         XCTAssertFalse(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
     }
@@ -208,6 +208,7 @@ final class MLXModelManagerTests: XCTestCase {
 
         XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
         XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/GLM-ASR-Nano-2512-4bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-bf16"))
