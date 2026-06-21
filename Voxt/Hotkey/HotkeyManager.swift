@@ -199,6 +199,7 @@ nonisolated final class HotkeyManager {
     private var sawNonModifierKeyDuringFunctionChord = false
     private var sawUnexpectedModifierDuringFunctionChord = false
     private var shouldIgnoreNextFunctionTranscriptionRelease = false
+    private var shouldEmitTranscriptionTapForStaleFunctionRelease = false
     private var currentSidedModifiers: SidedModifierFlags = []
     private var suppressTranscriptionTapUntil = Date.distantPast
     private var pendingModifierOnlyLongPressDownTask: Task<Void, Never>?
@@ -822,6 +823,10 @@ nonisolated final class HotkeyManager {
             guard binding.hotkey.mouseButtonNumber == buttonNumber else { continue }
             if type == .otherMouseUp, activeMouseButtonNumber(for: business) == buttonNumber {
                 setActiveMouseButton(nil, for: business)
+                if business == .customPaste, binding.behavior == .tap {
+                    setActiveBehavior(nil, for: business)
+                    return true
+                }
                 completeBindingRelease(binding, business: business)
                 return true
             }
@@ -930,6 +935,17 @@ nonisolated final class HotkeyManager {
         switch binding.behavior {
         case .tap, .doubleTap:
             if business == .transcription,
+               binding.behavior == .tap,
+               !comboIsDown,
+               HotkeyPreference.cgFlags(from: binding.hotkey.modifiers) == .maskSecondaryFn,
+               HotkeyModifierInterpreter.isFunctionKeyEvent(keyCode),
+               shouldEmitTranscriptionTapForStaleFunctionRelease {
+                shouldEmitTranscriptionTapForStaleFunctionRelease = false
+                emitDown(for: business, behavior: binding.behavior)
+                return true
+            }
+
+            if business == .transcription,
                !comboIsDown,
                HotkeyModifierInterpreter.isFunctionKeyEvent(keyCode),
                shouldIgnoreNextFunctionTranscriptionRelease {
@@ -949,6 +965,14 @@ nonisolated final class HotkeyManager {
                 if binding.behavior == .tap {
                     setBusinessKeyDown(true, for: business)
                 }
+                return true
+            }
+
+            if !comboIsDown,
+               modifierOnlyBindingPartiallyMatches(
+                binding.hotkey,
+                flags: flags
+               ) {
                 return true
             }
 
@@ -1001,6 +1025,28 @@ nonisolated final class HotkeyManager {
             }
             return comboIsDown
         }
+    }
+
+    private func modifierOnlyBindingPartiallyMatches(
+        _ hotkey: HotkeyPreference.Hotkey,
+        flags: CGEventFlags
+    ) -> Bool {
+        guard HotkeyModifierInterpreter.isModifierOnly(hotkey) else { return false }
+        let requiredFlags = HotkeyPreference.cgFlags(from: hotkey.modifiers)
+        let relevantFlags = flags.intersection([
+            .maskSecondaryFn,
+            .maskShift,
+            .maskControl,
+            .maskAlternate,
+            .maskCommand
+        ])
+        guard !relevantFlags.isEmpty,
+              relevantFlags != requiredFlags,
+              requiredFlags.isSuperset(of: relevantFlags)
+        else {
+            return false
+        }
+        return true
     }
 
     private func hasMoreSpecificModifierOnlyBinding(
@@ -1404,9 +1450,13 @@ nonisolated final class HotkeyManager {
             return
         }
 
+        let shouldRecoverFunctionRelease =
+            HotkeyModifierInterpreter.isFunctionKeyEvent(keyCode) &&
+            !incomingFlags.contains(.maskSecondaryFn)
         resetTransientState(
             reason: "idleGapRecovery gapMs=\(Int(idleDuration * 1000)) keyCode=\(keyCode) flags=\(HotkeyEventSupport.debugDescription(for: incomingFlags))"
         )
+        shouldEmitTranscriptionTapForStaleFunctionRelease = shouldRecoverFunctionRelease
     }
 
     private var hasTransientTapState: Bool {
@@ -1607,6 +1657,7 @@ nonisolated final class HotkeyManager {
         sawNonModifierKeyDuringFunctionChord = false
         sawUnexpectedModifierDuringFunctionChord = false
         shouldIgnoreNextFunctionTranscriptionRelease = false
+        shouldEmitTranscriptionTapForStaleFunctionRelease = false
         currentSidedModifiers = []
         suppressTranscriptionTapUntil = .distantPast
         lastEventAt = Date()
