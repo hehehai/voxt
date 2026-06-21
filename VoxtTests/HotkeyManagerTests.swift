@@ -1505,7 +1505,7 @@ final class HotkeyManagerTests: XCTestCase {
             .init(
                 hotkey: HotkeyPreference.Hotkey(
                     keyCode: HotkeyPreference.modifierOnlyKeyCode,
-                    modifiers: [.function, .shift],
+                    modifiers: [.function, .command],
                     sidedModifiers: []
                 ),
                 behavior: .tap
@@ -1519,10 +1519,10 @@ final class HotkeyManagerTests: XCTestCase {
         manager.onKeyDown = { transcriptionDownCount += 1 }
         manager.onCommonStopKeyDown = { commonStopCount += 1 }
 
-        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn))
-        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Shift), flags: combinedFlags(.maskSecondaryFn, .maskShift)))
-        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Shift), flags: .maskSecondaryFn))
-        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: []))
+        XCTAssertFalse(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Command), flags: combinedFlags(.maskSecondaryFn, .maskCommand)))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Command), flags: .maskSecondaryFn))
+        XCTAssertFalse(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: []))
 
         XCTAssertEqual(commonStopCount, 1)
         XCTAssertEqual(transcriptionDownCount, 0)
