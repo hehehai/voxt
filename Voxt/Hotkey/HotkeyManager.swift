@@ -968,14 +968,6 @@ nonisolated final class HotkeyManager {
                 return true
             }
 
-            if !comboIsDown,
-               modifierOnlyBindingPartiallyMatches(
-                binding.hotkey,
-                flags: flags
-               ) {
-                return true
-            }
-
             if binding.behavior == .doubleTap,
                !comboIsDown,
                modifierTapCandidate(for: business) {
@@ -1025,28 +1017,6 @@ nonisolated final class HotkeyManager {
             }
             return comboIsDown
         }
-    }
-
-    private func modifierOnlyBindingPartiallyMatches(
-        _ hotkey: HotkeyPreference.Hotkey,
-        flags: CGEventFlags
-    ) -> Bool {
-        guard HotkeyModifierInterpreter.isModifierOnly(hotkey) else { return false }
-        let requiredFlags = HotkeyPreference.cgFlags(from: hotkey.modifiers)
-        let relevantFlags = flags.intersection([
-            .maskSecondaryFn,
-            .maskShift,
-            .maskControl,
-            .maskAlternate,
-            .maskCommand
-        ])
-        guard !relevantFlags.isEmpty,
-              relevantFlags != requiredFlags,
-              requiredFlags.isSuperset(of: relevantFlags)
-        else {
-            return false
-        }
-        return true
     }
 
     private func hasMoreSpecificModifierOnlyBinding(
