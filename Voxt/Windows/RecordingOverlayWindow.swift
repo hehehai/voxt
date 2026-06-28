@@ -225,6 +225,143 @@ class RecordingOverlayWindow: NSPanel {
     }
 }
 
+enum FloatingToastKind {
+    case success
+    case warning
+
+    var systemImageName: String {
+        switch self {
+        case .success:
+            return "checkmark.circle.fill"
+        case .warning:
+            return "exclamationmark.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .success:
+            return Color(nsColor: .systemGreen)
+        case .warning:
+            return Color(nsColor: .systemOrange)
+        }
+    }
+}
+
+class FloatingToastWindow: NSPanel {
+    private var hostingView: NSHostingView<FloatingToastContent>?
+    private let panelSize = CGSize(width: 240, height: 52)
+
+    init() {
+        super.init(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        level = .floating
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        isMovableByWindowBackground = false
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        ignoresMouseEvents = true
+    }
+
+    override var canBecomeKey: Bool { false }
+
+    func show(message: String, kind: FloatingToastKind, position: OverlayPosition) {
+        let content = FloatingToastContent(message: message, kind: kind)
+        if let hostingView {
+            hostingView.rootView = content
+        } else {
+            let hosting = NSHostingView(rootView: content)
+            hosting.translatesAutoresizingMaskIntoConstraints = true
+            hosting.autoresizingMask = [.width, .height]
+            contentView = hosting
+            hostingView = hosting
+        }
+
+        setFrame(frame(for: panelSize, position: position), display: true)
+        alphaValue = 1
+        orderFrontRegardless()
+    }
+
+    func hide() {
+        orderOut(nil)
+    }
+
+    private func frame(for size: CGSize, position: OverlayPosition) -> CGRect {
+        let visibleFrame = NSScreen.main?.visibleFrame ?? .zero
+        guard !visibleFrame.isEmpty else {
+            return CGRect(origin: frame.origin, size: size)
+        }
+
+        let edgeInset = overlayScreenEdgeInset
+        let x = visibleFrame.midX - size.width / 2
+        let y: CGFloat
+        switch position {
+        case .bottom:
+            y = visibleFrame.minY + edgeInset
+        case .top:
+            y = visibleFrame.maxY - size.height - edgeInset
+        }
+        return CGRect(origin: CGPoint(x: x, y: y), size: size)
+    }
+
+    private var overlayScreenEdgeInset: CGFloat {
+        let storedValue = UserDefaults.standard.object(forKey: AppPreferenceKey.overlayScreenEdgeInset) as? Int ?? 30
+        return CGFloat(min(max(storedValue, 0), 120))
+    }
+}
+
+private struct FloatingToastContent: View {
+    @AppStorage(AppPreferenceKey.overlayCardOpacity) private var overlayCardOpacity = 82
+    @AppStorage(AppPreferenceKey.overlayCardCornerRadius) private var overlayCardCornerRadius = 24
+
+    let message: String
+    let kind: FloatingToastKind
+    @State private var appeared = false
+
+    private var cornerRadius: CGFloat { CGFloat(min(max(overlayCardCornerRadius, 0), 40)) }
+    private var cardOpacity: Double { Double(min(max(overlayCardOpacity, 0), 100)) / 100.0 }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: kind.systemImageName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(kind.color)
+            Text(message)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundStyle(.white.opacity(0.94))
+        }
+        .frame(width: 240, height: 52)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+        .scaleEffect(appeared ? 1.0 : 0.88, anchor: .bottom)
+        .opacity(appeared ? 1.0 : 0.0)
+        .animation(.spring(response: 0.35, dampingFraction: 0.62, blendDuration: 0.1), value: appeared)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                appeared = true
+            }
+        }
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(.black.opacity(cardOpacity))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+            )
+    }
+}
+
 private extension CGRect {
     func isApproximatelyEqual(to other: CGRect, tolerance: CGFloat = 0.5) -> Bool {
         abs(origin.x - other.origin.x) <= tolerance &&

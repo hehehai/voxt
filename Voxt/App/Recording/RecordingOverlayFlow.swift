@@ -37,6 +37,22 @@ extension AppDelegate {
         }
     }
 
+    func showFloatingToast(
+        _ message: String,
+        kind: FloatingToastKind = .success,
+        clearAfter seconds: TimeInterval = 1.8
+    ) {
+        toastDismissTask?.cancel()
+        toastWindow.show(message: message, kind: kind, position: overlayPosition)
+        toastDismissTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self.toastWindow.hide()
+            self.toastDismissTask = nil
+        }
+    }
+
     func setEnhancingState(_ isEnhancing: Bool) {
         overlayState.isEnhancing = isEnhancing
         if overlayState.displayMode != .answer {

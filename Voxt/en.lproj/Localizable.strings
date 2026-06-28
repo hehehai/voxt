@@ -128,6 +128,9 @@
 "Thanks" = "Thanks";
 "Logs" = "Logs";
 "View Logs" = "View Logs";
+"Added to Dictionary: %@" = "Added: %@";
+"Already in Dictionary: %@" = "Already added: %@";
+"Failed to add to Dictionary." = "Failed to add to Dictionary.";
 "Export Latest Logs (2000)" = "Export Latest Logs (2000)";
 "No logs yet" = "No logs yet";
 "Export canceled" = "Export canceled";

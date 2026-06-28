@@ -128,6 +128,9 @@
 "Thanks" = "感谢";
 "Logs" = "日志";
 "View Logs" = "查看日志";
+"Added to Dictionary: %@" = "已添加：%@";
+"Already in Dictionary: %@" = "已存在：%@";
+"Failed to add to Dictionary." = "添加到词典失败。";
 "Export Latest Logs (2000)" = "导出最新日志（2000条）";
 "No logs yet" = "暂无日志";
 "Export canceled" = "导出已取消";

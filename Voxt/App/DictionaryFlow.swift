@@ -3,7 +3,55 @@
 
 import Foundation
 
+enum SelectedTextDictionaryHotkeySupport {
+    static let maxCharacterCount = 30
+
+    static func candidateTerm(from selectedText: String?) -> String? {
+        let trimmed = selectedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty, trimmed.count <= maxCharacterCount else { return nil }
+        return trimmed
+    }
+}
+
 extension AppDelegate {
+    @discardableResult
+    func addSelectedShortTextToDictionaryIfPossible() -> Bool {
+        guard !isSessionActive, pendingTranscriptionStartTask == nil else { return false }
+        guard let term = SelectedTextDictionaryHotkeySupport.candidateTerm(
+            from: selectedTextFromSystemSelection()
+        ) else {
+            return false
+        }
+
+        let scope = currentDictionaryScope()
+        let category = dictionaryStore.ensureCategory(id: scope.groupID, name: scope.groupName)
+
+        do {
+            let result = try dictionaryStore.createOrReinforceAutoEntry(
+                term: term,
+                categoryID: category.id,
+                categoryNameSnapshot: category.name,
+                groupID: scope.groupID,
+                groupNameSnapshot: scope.groupName
+            )
+            let message = result.added
+                ? AppLocalization.format("Added to Dictionary: %@", result.term)
+                : AppLocalization.format("Already in Dictionary: %@", result.term)
+            showFloatingToast(message)
+            VoxtLog.dictionary(
+                "Selected text dictionary hotkey handled. added=\(result.added), termChars=\(term.count), groupID=\(scope.groupID?.uuidString ?? "nil")"
+            )
+        } catch {
+            showFloatingToast(
+                AppLocalization.localizedString("Failed to add to Dictionary."),
+                kind: .warning
+            )
+            VoxtLog.dictionaryWarning("Selected text dictionary hotkey failed: \(error)")
+        }
+
+        return true
+    }
+
     func dictionaryGlossaryText(
         for sourceText: String,
         purpose: DictionaryGlossaryPurpose,
