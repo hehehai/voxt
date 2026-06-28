@@ -96,6 +96,8 @@ struct ASRDebugWindowView: View {
             }
             .frame(height: 54)
 
+            ASRDebugVADSnapshotView(snapshot: viewModel.vadSnapshot)
+
             ScrollView {
                 Group {
                     if viewModel.results.isEmpty {

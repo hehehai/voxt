@@ -123,6 +123,8 @@ extension AppDelegate {
         firstLiveASRPartialReceivedAt = nil
         sessionFinalOutputDeliveredAt = nil
         sessionLLMExecutionTimings = []
+        localVADObservedFramesInCurrentSession = false
+        localVADObservedSpeechInCurrentSession = false
         didCommitSessionOutput = false
         isSessionCancellationRequested = false
         activeRecordingSessionID = UUID()
@@ -214,10 +216,10 @@ extension AppDelegate {
             VoxtLog.hotkey("Recording stop ignored: session is already stopping.")
             return
         }
+        let stoppingSessionID = activeRecordingSessionID
         VoxtLog.asr("Recording stop requested.")
 
         hotkeyManager.setCommonStopKeyEnabled(false)
-        cancelActiveRecordingTasks()
         pendingSystemAudioMuteTask?.cancel()
         pendingSystemAudioMuteTask = nil
         recordingStoppedAt = Date()
@@ -228,7 +230,7 @@ extension AppDelegate {
         overlayState.presentProcessing(iconMode: RecordingSessionSupport.overlayIconMode(for: sessionOutputMode))
         voiceEndCommandState.lastDetectedCommand = false
         enhancementContextSnapshot = captureEnhancementContextSnapshot()
-        stopActiveRecordingTranscriber()
+        stopActiveRecordingTranscriberAfterPendingVADFlush(sessionID: stoppingSessionID)
     }
 
     func cancelActiveRecordingSession() {

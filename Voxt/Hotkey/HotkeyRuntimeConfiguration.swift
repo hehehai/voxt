@@ -5,7 +5,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-struct HotkeyRuntimeConfiguration {
+nonisolated struct HotkeyRuntimeConfiguration {
     let transcriptionBindings: [HotkeyPreference.HotkeyBinding]
     let translationBindings: [HotkeyPreference.HotkeyBinding]
     let rewriteBindings: [HotkeyPreference.HotkeyBinding]

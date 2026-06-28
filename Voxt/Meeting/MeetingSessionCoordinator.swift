@@ -431,7 +431,8 @@ final class MeetingSessionCoordinator {
                 sampleRate: sampleRate,
                 speaker: speaker,
                 fallbackLevel: level,
-                fallbackThreshold: Self.speechThreshold(for: speaker)
+                fallbackThreshold: Self.speechThreshold(for: speaker),
+                serverVADActive: await MainActor.run { self.serverVADActive }
             )
             let chunk: BufferedMeetingChunk?
             if speaker == .me {
@@ -1083,7 +1084,8 @@ final class MeetingSessionCoordinator {
             sampleRate: asset.sampleRate,
             speaker: speaker,
             fallbackLevel: fallbackLevel,
-            fallbackThreshold: Self.speechThreshold(for: speaker)
+            fallbackThreshold: Self.speechThreshold(for: speaker),
+            serverVADActive: serverVADActive
         )
         return decision.isSpeech
     }
@@ -1239,6 +1241,10 @@ final class MeetingSessionCoordinator {
 
     private var usesLiveSessionPath: Bool {
         activeEngineContext?.resolvedMode.usesLiveSessions == true || liveSessionFactory != nil
+    }
+
+    private var serverVADActive: Bool {
+        activeEngineContext?.resolvedMode.usesLiveSessions == true
     }
 
     private var activeCaptureSpeakers: [MeetingSpeaker] {

@@ -44,7 +44,7 @@ actor SortformerMeetingSpeakerDiarizationEngine: MeetingSpeakerDiarizationEngine
         options _: MeetingSpeakerDiarizationOptions
     ) async throws -> [MeetingSpeakerTurn] {
         let model = try await loadModelIfAvailable()
-        let prepared = MeetingAudioSampleRateConverter.resample(
+        let prepared = ASRVoiceActivitySampleRateConverter.resample(
             samples: asset.samples,
             from: asset.sampleRate,
             to: 16_000

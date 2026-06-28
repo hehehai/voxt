@@ -21,6 +21,74 @@ final class ModelDebugSupportTests: XCTestCase {
         try body(defaults)
     }
 
+    func testVADSnapshotExposesGlobalModeAndEffectiveBackend() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.automatic, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .mlxAudio,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .automatic)
+            XCTAssertEqual(snapshot.backend, .mlxSilero)
+            XCTAssertEqual(snapshot.backendRawValue, ASRVoiceActivityBackendKind.mlxSilero.rawValue)
+            XCTAssertEqual(snapshot.frameBackend, .mlxSilero)
+            XCTAssertEqual(snapshot.localGatePolicy, .enabled)
+            XCTAssertFalse(snapshot.providerUsesServerVAD)
+        }
+    }
+
+    func testVADSnapshotShowsOffMode() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.off, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .mlxAudio,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .off)
+            XCTAssertEqual(snapshot.backend, .off)
+            XCTAssertEqual(snapshot.frameBackend, .off)
+            XCTAssertEqual(snapshot.localGatePolicy, .disabled(reason: "local-vad-off"))
+        }
+    }
+
+    func testVADSnapshotDisablesLocalGateForRemoteASR() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.silero, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .remote,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .silero)
+            XCTAssertEqual(snapshot.backend, .mlxSilero)
+            XCTAssertEqual(snapshot.localGatePolicy, .disabled(reason: "non-local-asr"))
+        }
+    }
+
+    func testVADSnapshotMarksServerVADWhenProviderUsesRealtimeProfile() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.silero, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .remote,
+                providerUsesServerVAD: true
+            )
+
+            XCTAssertTrue(snapshot.providerUsesServerVAD)
+            XCTAssertEqual(snapshot.frameBackend, .mlxSilero)
+            XCTAssertEqual(snapshot.localGatePolicy, .disabled(reason: "server-vad"))
+        }
+    }
+
     func testLLMDebugPresetsIncludeBuiltinsAndSavedGroups() throws {
         let defaults = UserDefaults.standard
         let previousGroups = defaults.data(forKey: AppPreferenceKey.appBranchGroups)

@@ -5,7 +5,7 @@ import Foundation
 import AppKit
 import ApplicationServices
 
-enum AccessibilityPermissionManager {
+nonisolated enum AccessibilityPermissionManager {
     static func isTrusted() -> Bool {
         AXIsProcessTrusted()
     }
@@ -51,7 +51,7 @@ enum AccessibilityPermissionManager {
     }
 }
 
-enum EventListeningPermissionManager {
+nonisolated enum EventListeningPermissionManager {
     struct Status {
         let accessibilityGranted: Bool
         let inputMonitoringGranted: Bool
@@ -89,7 +89,7 @@ enum EventListeningPermissionManager {
     }
 }
 
-extension CGEventTapLocation {
+nonisolated extension CGEventTapLocation {
     var debugName: String {
         switch self {
         case .cghidEventTap:

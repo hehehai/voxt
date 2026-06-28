@@ -6,7 +6,7 @@ import AppKit
 import ApplicationServices
 import Carbon
 
-enum HotkeyEventSupport {
+nonisolated enum HotkeyEventSupport {
     static func shouldLogFlagsChangedEvent(
         keyCode: UInt16,
         flags: CGEventFlags,

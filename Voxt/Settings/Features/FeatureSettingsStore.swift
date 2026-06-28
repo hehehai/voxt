@@ -35,8 +35,8 @@ enum FeatureSettingsStore {
            let raw = String(data: data, encoding: .utf8) {
             defaults.set(raw, forKey: AppPreferenceKey.featureSettings)
         }
-        // Keep feature-specific legacy keys in sync so runtime flows and debug tools
-        // that still read them see the latest prompt/provider settings immediately.
+        // Keep feature-specific keys that runtime flows still read in sync.
+        // VAD mode is global and is not read from or written to meeting settings.
         syncLegacyTranscription(storageReady.transcription, defaults: defaults)
         syncLegacyTranslation(storageReady.translation, defaults: defaults)
         syncLegacyRewrite(storageReady.rewrite, defaults: defaults)

@@ -214,7 +214,7 @@ actor MeetingRealtimeDiarizationStage {
         source: TranscriptAudioSource
     ) async throws -> [MeetingSpeakerTurn] {
         let model = try await loadModelIfAvailable()
-        let prepared = MeetingAudioSampleRateConverter.resample(
+        let prepared = ASRVoiceActivitySampleRateConverter.resample(
             samples: chunk.samples,
             from: chunk.sampleRate,
             to: 16_000

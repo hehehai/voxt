@@ -561,6 +561,28 @@ struct GeneralLoggingCard: View {
     }
 }
 
+struct GeneralVADCard: View {
+    @Binding var localVADMode: LocalVADMode
+
+    var body: some View {
+        GeneralSettingsCard(title: localizedKey("VAD")) {
+            GeneralFieldRow(
+                title: localizedKey("VAD Mode"),
+                description: LocalizedStringKey(localVADMode.detail)
+            ) {
+                SettingsMenuPicker(
+                    selection: $localVADMode,
+                    options: LocalVADMode.allCases.map { mode in
+                        SettingsMenuOption(value: mode, title: mode.title)
+                    },
+                    selectedTitle: localVADMode.title,
+                    width: 180
+                )
+            }
+        }
+    }
+}
+
 struct GeneralProxyCard: View {
     @Binding var networkProxyMode: VoxtNetworkSession.ProxyMode
     @Binding var customProxyScheme: VoxtNetworkSession.ProxyScheme

@@ -74,6 +74,12 @@ extension AppDelegate {
         overlayState.statusMessage = ""
         mlx.transcribedText = ""
         mlx.sessionAllowsRealtimeTextDisplay = transcriptionCapturePipeline.usesLiveDisplay
+        let localVADMode = LocalVADMode.stored()
+        let localVADGatePolicy = ASRVoiceActivityRuntimePolicy.localGatePolicy(
+            transcriptionEngine: .mlxAudio,
+            mode: localVADMode
+        )
+        mlx.configureVoiceActivityFinalizationFiltering(enabled: localVADGatePolicy.isEnabled)
         mlx.setPreferredInputDevice(selectedInputDeviceID)
         mlx.onPartialTranscription = { [weak self] text in
             self?.handleLiveASRPartialTranscription(text, sessionID: sessionID)
@@ -329,6 +335,24 @@ extension AppDelegate {
         }
     }
 
+    func stopActiveRecordingTranscriberAfterPendingVADFlush(sessionID: UUID) {
+        Task { [weak self] in
+            guard let self else { return }
+            guard self.activeRecordingSessionID == sessionID else { return }
+
+            let monitorTask = self.silenceMonitorTask
+            self.silenceMonitorTask?.cancel()
+            self.silenceMonitorTask = nil
+            self.pauseLLMTask?.cancel()
+            self.pauseLLMTask = nil
+            await monitorTask?.value
+
+            guard self.activeRecordingSessionID == sessionID else { return }
+            await self.flushPendingRecordingVoiceActivityFramesBeforeStop()
+            self.stopActiveRecordingTranscriber()
+        }
+    }
+
     func updateActiveRecordingTranscriberTranscribedText(_ text: String) {
         switch transcriptionEngine {
         case .remote:
@@ -421,11 +445,30 @@ extension AppDelegate {
         cancelActiveRecordingTasks()
 
         resetSilenceMonitoringState()
+        let localVADMode = LocalVADMode.stored()
+        let localVADGatePolicy = ASRVoiceActivityRuntimePolicy.localGatePolicy(
+            transcriptionEngine: transcriptionEngine,
+            mode: localVADMode
+        )
+        let localVADGateActive = localVADGatePolicy.isEnabled
+        VoxtLog.asr(
+            "Recording local VAD gate \(localVADGateActive ? "enabled" : "disabled"). mode=\(localVADMode.rawValue), output=\(RecordingSessionSupport.outputLabel(for: sessionOutputMode))",
+            verbose: true
+        )
+
+        prepareRecordingVoiceActivityProcessing(
+            mode: localVADMode,
+            useCase: voiceActivityUseCase
+        )
 
         silenceMonitorTask = Task { [weak self] in
             guard let self else { return }
+            var observedSpeechEnd = false
             while !Task.isCancelled, self.isSessionActive {
                 guard self.overlayState.isRecording else {
+                    self.recordingVoiceActivitySegmenter?.reset()
+                    await self.recordingVoiceActivityFrameDecider?.reset()
+                    observedSpeechEnd = false
                     do {
                         try await Task.sleep(for: .milliseconds(200))
                     } catch {
@@ -435,20 +478,58 @@ extension AppDelegate {
                 }
 
                 let level = self.overlayState.audioLevel
-                if level > self.silenceAudioLevelThreshold {
+                let voiceActivityResult = await self.processPendingRecordingVoiceActivityFrames(
+                    localVADGateActive: localVADGateActive,
+                    level: level,
+                    logEvents: true
+                )
+                let vadEvents = voiceActivityResult.events
+                let sawSpeechFrame = voiceActivityResult.sawSpeechFrame
+                let sawVoiceActivityFrame = voiceActivityResult.sawVoiceActivityFrame
+                let shouldUseLevelTiming = ASRVoiceActivityRuntimePolicy.shouldUseLevelTiming(
+                    localVADGateActive: localVADGateActive,
+                    hasVoiceActivityFrames: sawVoiceActivityFrame
+                )
+                if !localVADGateActive {
+                    self.recordingVoiceActivitySegmenter?.reset()
+                    observedSpeechEnd = false
+                }
+                if vadEvents.contains(where: { event in
+                    if case .speechEnded = event { return true }
+                    return false
+                }) {
+                    observedSpeechEnd = true
+                }
+                if sawVoiceActivityFrame {
+                    self.localVADObservedFramesInCurrentSession = true
+                }
+                if sawSpeechFrame {
+                    self.localVADObservedSpeechInCurrentSession = true
+                }
+                if sawSpeechFrame || (shouldUseLevelTiming && level > self.silenceAudioLevelThreshold) {
+                    observedSpeechEnd = false
                     self.lastSignificantAudioAt = Date()
                     self.didTriggerPauseTranscription = false
                     self.didTriggerPauseLLM = false
                     self.pauseLLMTask?.cancel()
                     self.pauseLLMTask = nil
                     self.setEnhancingState(false)
-                } else {
+                } else if sawVoiceActivityFrame || shouldUseLevelTiming {
                     let silentDuration = Date().timeIntervalSince(self.lastSignificantAudioAt)
 
-                    if self.transcriptionEngine == .mlxAudio,
-                       silentDuration >= 2.0,
-                       !self.didTriggerPauseTranscription {
+                    if ASRLocalIntermediateGatePolicy.shouldTriggerIntermediateTranscription(
+                        transcriptionEngine: self.transcriptionEngine,
+                        localVADGateActive: localVADGateActive,
+                        silentDuration: silentDuration,
+                        didTriggerPauseTranscription: self.didTriggerPauseTranscription,
+                        observedSpeechEnd: observedSpeechEnd
+                    ) {
                         self.didTriggerPauseTranscription = true
+                        observedSpeechEnd = false
+                        VoxtLog.asr(
+                            "Recording VAD triggered intermediate transcription after trailing silence. silentDurationSec=\(String(format: "%.3f", silentDuration))",
+                            verbose: true
+                        )
                         self.mlxTranscriber?.forceIntermediateTranscription()
                     }
 
@@ -472,7 +553,24 @@ extension AppDelegate {
         lastSignificantAudioAt = Date()
         didTriggerPauseTranscription = false
         didTriggerPauseLLM = false
+        localVADObservedFramesInCurrentSession = false
+        localVADObservedSpeechInCurrentSession = false
+        recordingVoiceActivityFrameDecider = nil
+        recordingVoiceActivitySegmenter = nil
+        recordingVoiceActivityMode = nil
+        recordingVoiceActivityUseCase = nil
         voiceEndCommandState.lastDetectedCommand = false
+    }
+
+    private var voiceActivityUseCase: ASRVoiceActivityUseCase {
+        switch sessionOutputMode {
+        case .transcription:
+            return .transcription
+        case .translation:
+            return .translation
+        case .rewrite:
+            return .rewrite
+        }
     }
 
     private func triggerVoiceEndCommandStop() {
@@ -482,4 +580,240 @@ extension AppDelegate {
         endRecording()
     }
 
+    private func prepareRecordingVoiceActivityProcessing(
+        mode: LocalVADMode,
+        useCase: ASRVoiceActivityUseCase
+    ) {
+        recordingVoiceActivityMode = mode
+        recordingVoiceActivityUseCase = useCase
+        recordingVoiceActivityFrameDecider = RecordingVoiceActivityFrameDecider(
+            mode: mode,
+            useCase: useCase,
+            energyThreshold: silenceAudioLevelThreshold
+        )
+        recordingVoiceActivitySegmenter = ASRVoiceActivitySegmenter(
+            configuration: ASRVoiceActivityConfiguration.profile(for: useCase)
+        )
+    }
+
+    func flushPendingRecordingVoiceActivityFramesBeforeStop() async {
+        guard transcriptionEngine == .mlxAudio else { return }
+        let localVADMode = LocalVADMode.stored()
+        let localVADGatePolicy = ASRVoiceActivityRuntimePolicy.localGatePolicy(
+            transcriptionEngine: transcriptionEngine,
+            mode: localVADMode
+        )
+        guard localVADGatePolicy.isEnabled else { return }
+
+        if recordingVoiceActivityFrameDecider == nil || recordingVoiceActivitySegmenter == nil {
+            prepareRecordingVoiceActivityProcessing(
+                mode: localVADMode,
+                useCase: voiceActivityUseCase
+            )
+        }
+
+        let result = await processPendingRecordingVoiceActivityFrames(
+            localVADGateActive: true,
+            level: overlayState.audioLevel,
+            logEvents: true
+        )
+        if result.sawVoiceActivityFrame {
+            VoxtLog.asr(
+                "Recording VAD stop flush processed pending frames. speech=\(result.sawSpeechFrame), events=\(result.events.count)",
+                verbose: true
+            )
+        }
+        mlxTranscriber?.finishVoiceActivityFinalizationFiltering()
+    }
+
+    private func processPendingRecordingVoiceActivityFrames(
+        localVADGateActive: Bool,
+        level: Float,
+        logEvents: Bool
+    ) async -> RecordingVoiceActivityDrainResult {
+        guard localVADGateActive,
+              let mlxTranscriber,
+              let frameDecider = recordingVoiceActivityFrameDecider
+        else {
+            recordingVoiceActivitySegmenter?.reset()
+            return .empty
+        }
+
+        let frames = mlxTranscriber.consumeVoiceActivityFrames()
+        guard !frames.isEmpty else { return .empty }
+
+        if recordingVoiceActivitySegmenter == nil {
+            recordingVoiceActivitySegmenter = ASRVoiceActivitySegmenter(
+                configuration: ASRVoiceActivityConfiguration.profile(for: voiceActivityUseCase)
+            )
+        }
+        var segmenter = recordingVoiceActivitySegmenter ?? ASRVoiceActivitySegmenter(
+            configuration: ASRVoiceActivityConfiguration.profile(for: voiceActivityUseCase)
+        )
+        var events: [ASRVoiceActivityEvent] = []
+        var sawSpeechFrame = false
+        var sawVoiceActivityFrame = false
+
+        for frame in frames {
+            guard let result = await frameDecider.decision(for: frame) else {
+                continue
+            }
+            sawVoiceActivityFrame = true
+            let segmenterResult = segmenter.appendWithResolvedSpeechState(result.decision)
+            if segmenterResult.isSpeech {
+                sawSpeechFrame = true
+            }
+            mlxTranscriber.appendVoiceActivityFinalizationFrame(
+                frame,
+                isSpeech: segmenterResult.isSpeech
+            )
+            if logEvents {
+                for event in segmenterResult.events {
+                    VoxtLog.asr(
+                        "Recording VAD event. \(event.telemetrySummary), source=\(result.source.telemetryName), level=\(String(format: "%.3f", frame.level ?? level)), probability=\(result.probabilityText), threshold=\(String(format: "%.3f", silenceAudioLevelThreshold))",
+                        verbose: true
+                    )
+                }
+            }
+            events.append(contentsOf: segmenterResult.events)
+        }
+
+        recordingVoiceActivitySegmenter = segmenter
+        if sawVoiceActivityFrame {
+            localVADObservedFramesInCurrentSession = true
+        }
+        if sawSpeechFrame {
+            localVADObservedSpeechInCurrentSession = true
+        }
+        return RecordingVoiceActivityDrainResult(
+            events: events,
+            sawSpeechFrame: sawSpeechFrame,
+            sawVoiceActivityFrame: sawVoiceActivityFrame
+        )
+    }
+
+}
+
+private struct RecordingVoiceActivityDrainResult: Sendable {
+    let events: [ASRVoiceActivityEvent]
+    let sawSpeechFrame: Bool
+    let sawVoiceActivityFrame: Bool
+
+    static let empty = RecordingVoiceActivityDrainResult(
+        events: [],
+        sawSpeechFrame: false,
+        sawVoiceActivityFrame: false
+    )
+}
+
+struct RecordingVoiceActivityDecisionResult: Sendable {
+    let decision: ASRVoiceActivityFrameDecision
+    let source: Source
+
+    enum Source: Sendable {
+        case energy
+        case silero
+        case fallbackEnergy
+
+        var telemetryName: String {
+            switch self {
+            case .energy:
+                return "energy"
+            case .silero:
+                return "silero"
+            case .fallbackEnergy:
+                return "fallback-energy"
+            }
+        }
+    }
+
+    var probabilityText: String {
+        decision.probability.map { String(format: "%.3f", $0) } ?? "nil"
+    }
+}
+
+actor RecordingVoiceActivityFrameDecider {
+    private let mode: LocalVADMode
+    private let useCase: ASRVoiceActivityUseCase
+    private let energyBackend: ASREnergyVoiceActivityBackend
+    private let sileroThreshold: Float
+    private let sileroDetector = ASRSileroStreamingVoiceActivityDetector()
+    private var sileroFallbackWarningLogged = false
+
+    init(
+        mode: LocalVADMode,
+        useCase: ASRVoiceActivityUseCase,
+        energyThreshold: Float
+    ) {
+        self.mode = mode
+        self.useCase = useCase
+        self.energyBackend = ASREnergyVoiceActivityBackend(threshold: energyThreshold)
+        self.sileroThreshold = ASRVoiceActivityConfiguration.profile(for: useCase).onsetProbabilityThreshold
+    }
+
+    func reset() async {
+        await sileroDetector.reset()
+        sileroFallbackWarningLogged = false
+    }
+
+    func decision(for frame: ASRVoiceActivityAudioFrame) async -> RecordingVoiceActivityDecisionResult? {
+        switch ASRVoiceActivityRuntimePolicy.effectiveBackend(mode: mode, useCase: useCase) {
+        case .off:
+            return nil
+        case .energy:
+            return await energyDecision(for: frame, source: .energy)
+        case .mlxSilero:
+            if let sileroDecision = await sileroDecision(for: frame) {
+                return sileroDecision
+            }
+            return await energyDecision(for: frame, source: .fallbackEnergy)
+        }
+    }
+
+    private func sileroDecision(for frame: ASRVoiceActivityAudioFrame) async -> RecordingVoiceActivityDecisionResult? {
+        do {
+            if let probability = try await sileroDetector.probability(
+                samples: frame.samples,
+                sampleRate: frame.sampleRate,
+                streamID: "recording-\(useCase.rawValue)"
+            ) {
+                return RecordingVoiceActivityDecisionResult(
+                    decision: ASRVoiceActivityFrameDecision(
+                        startSeconds: frame.startSeconds,
+                        endSeconds: frame.endSeconds,
+                        isSpeech: probability >= sileroThreshold,
+                        probability: probability
+                    ),
+                    source: .silero
+                )
+            }
+        } catch {
+            if shouldLogSileroFallback(error) {
+                VoxtLog.asrWarning("Recording Silero VAD failed; falling back to energy VAD. error=\(error.localizedDescription)")
+                sileroFallbackWarningLogged = true
+            }
+            await sileroDetector.reset()
+        }
+        return nil
+    }
+
+    private func energyDecision(
+        for frame: ASRVoiceActivityAudioFrame,
+        source: RecordingVoiceActivityDecisionResult.Source
+    ) async -> RecordingVoiceActivityDecisionResult? {
+        guard let decision = try? await energyBackend.decision(for: frame) else {
+            return nil
+        }
+        return RecordingVoiceActivityDecisionResult(decision: decision, source: source)
+    }
+
+    private func shouldLogSileroFallback(_ error: Error) -> Bool {
+        if let modelError = error as? MeetingVADModelError {
+            switch modelError {
+            case .modelNotDownloaded, .runtimeUnavailable:
+                return false
+            }
+        }
+        return !sileroFallbackWarningLogged
+    }
 }

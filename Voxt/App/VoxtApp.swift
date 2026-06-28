@@ -200,6 +200,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var lastSignificantAudioAt = Date()
     var didTriggerPauseTranscription = false
     var didTriggerPauseLLM = false
+    var localVADObservedFramesInCurrentSession = false
+    var localVADObservedSpeechInCurrentSession = false
+    var recordingVoiceActivityFrameDecider: RecordingVoiceActivityFrameDecider?
+    var recordingVoiceActivitySegmenter: ASRVoiceActivitySegmenter?
+    var recordingVoiceActivityMode: LocalVADMode?
+    var recordingVoiceActivityUseCase: ASRVoiceActivityUseCase?
     var voiceEndCommandState = VoiceEndCommandState()
     let silenceAudioLevelThreshold: Float = 0.06
     let sessionFinishDelay: TimeInterval = 1.2
