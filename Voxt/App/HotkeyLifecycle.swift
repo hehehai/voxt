@@ -202,6 +202,7 @@ extension AppDelegate {
             endRecording()
             return
         }
+        guard !addSelectedShortTextToDictionaryIfPossible() else { return }
         pendingTranscriptionHotkeyStartBehavior = .tap
         beginRecording(outputMode: .transcription)
     }
@@ -311,6 +312,10 @@ extension AppDelegate {
                 canStopTapSession: !shouldIgnoreTapStop() && !isSessionStopInProgress
             )
         )
+        if actions.contains(where: { $0 == .startTranscription || $0 == .scheduleTranscriptionStart }),
+           addSelectedShortTextToDictionaryIfPossible() {
+            return
+        }
         for action in actions {
             if action == .scheduleTranscriptionStart, let pendingStartDelay {
                 pendingTranscriptionHotkeyStartBehavior = triggerBehavior

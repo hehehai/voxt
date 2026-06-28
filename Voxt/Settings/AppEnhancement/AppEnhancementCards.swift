@@ -256,7 +256,7 @@ extension AppEnhancementSettingsView {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "globe")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 24, height: 24)
                 Text(item.pattern)

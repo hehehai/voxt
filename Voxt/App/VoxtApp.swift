@@ -128,6 +128,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let hotkeyManager = HotkeyManager()
     let overlayWindow = RecordingOverlayWindow()
+    let toastWindow = FloatingToastWindow()
     let meetingOverlayWindow = MeetingOverlayWindow()
     let meetingDetailWindowManager = MeetingDetailWindowManager.shared
     let overlayState = OverlayState()
@@ -193,6 +194,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var remoteLLMWarmupTasksByKey: [String: Task<Void, Never>] = [:]
     var overlayReminderTask: Task<Void, Never>?
     var overlayStatusClearTask: Task<Void, Never>?
+    var toastDismissTask: Task<Void, Never>?
     var pendingSystemAudioMuteTask: Task<Void, Never>?
     var pendingSelectedTextTranslationRefreshTask: Task<Void, Never>?
     var pendingMeetingStartupTask: Task<Void, Never>?
