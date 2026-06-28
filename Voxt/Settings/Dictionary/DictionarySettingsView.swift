@@ -24,7 +24,8 @@ struct DictionarySettingsView: View {
     let onCancelIngestSuggestionsFromHistory: () -> Void
     let navigationRequest: SettingsNavigationRequest?
 
-    @State private var selectedFilter: DictionaryFilter = .all
+    @State private var selectedTab: DictionaryEntriesTab = .hotwords
+    @State private var selectedHotwordCategoryID: UUID?
     @State private var dialog: DictionaryDialog?
     @State private var categoryDialog: DictionaryCategoryDialog?
     @State private var pendingDeleteCategory: DictionaryCategory?
@@ -133,7 +134,10 @@ struct DictionarySettingsView: View {
             )
         }
         .onAppear(perform: reloadContentAsync)
-        .onChange(of: selectedFilter) { _, _ in
+        .onChange(of: selectedTab) { _, newValue in
+            if newValue == .replacements {
+                selectedHotwordCategoryID = nil
+            }
             reloadDictionaryEntries(reset: true)
         }
         .onChange(of: dictionarySearchText) { _, _ in
@@ -197,26 +201,21 @@ struct DictionarySettingsView: View {
 
     private var dictionaryListCard: some View {
         DictionaryEntriesCard(
-            selectedFilter: $selectedFilter,
-            categorizedEntries: dictionaryStore.entriesByCategory(
-                filter: selectedFilter,
-                query: dictionarySearchText
-            ),
-            totalEntryCount: dictionaryStore.entryCount(filter: selectedFilter, query: dictionarySearchText),
+            selectedTab: $selectedTab,
+            selectedHotwordCategoryID: $selectedHotwordCategoryID,
+            hotwordSections: dictionaryStore.hotwordEntriesByCategory(query: dictionarySearchText),
+            replacementEntries: selectedTab == .replacements ? visibleEntries : [],
             searchText: dictionarySearchText,
             isLoadingEntries: isLoadingEntries,
             onSearch: { showDictionarySearchDialog = true },
             onClearSearch: { dictionarySearchText = "" },
-            onCreate: { dialog = .create(categoryID: nil) },
+            onCreate: createDictionaryEntry,
             onCreateCategory: { categoryDialog = .create },
             onOpenIngest: openDictionaryIngestDialog,
             onOpenSettings: openDictionaryAdvancedSettings,
             onImport: importDictionary,
             onExport: exportDictionary,
-            onCreateInCategory: { category in dialog = .create(categoryID: category.id) },
-            onToggleCategory: { category in
-                dictionaryStore.setCategoryExpanded(id: category.id, expanded: !category.isExpanded)
-            },
+            onCreateInCategory: { category in dialog = .create(categoryID: category.id, mode: .hotword) },
             onEditCategory: { category in categoryDialog = .edit(category) },
             onDeleteCategory: { category in pendingDeleteCategory = category },
             onEdit: { entry in dialog = .edit(entry) },
@@ -282,33 +281,28 @@ struct DictionarySettingsView: View {
             switch dialog {
             case .create:
                 for term in terms {
-                    let result = try dictionaryStore.createOrReinforceManualEntry(
+                    try dictionaryStore.createManualEntry(
                         term: term,
-                        replacementTerms: replacementTerms,
+                        replacementTerms: dialog.mode == .replacement ? replacementTerms : [],
                         categoryID: selectedCategoryID,
                         categoryNameSnapshot: dictionaryStore.categoryName(for: selectedCategoryID),
-                        groupID: selectedGroupID,
-                        groupNameSnapshot: selectedGroupName
+                        groupID: dialog.mode == .replacement ? selectedGroupID : nil,
+                        groupNameSnapshot: dialog.mode == .replacement ? selectedGroupName : nil
                     )
-                    if !result.added {
-                        showDictionaryToast(AppLocalization.format(
-                            "Reinforced existing dictionary term: %@.",
-                            result.term
-                        ))
-                    }
                 }
             case .edit(let entry):
                 guard let term = terms.first else {
                     throw DictionaryStoreError.emptyTerm
                 }
+                let dialogMode = entry.replacementTerms.isEmpty ? DictionaryTermDialogMode.hotword : .replacement
                 try dictionaryStore.updateEntry(
                     id: entry.id,
                     term: term,
-                    replacementTerms: replacementTerms,
+                    replacementTerms: dialogMode == .replacement ? replacementTerms : [],
                     categoryID: selectedCategoryID,
                     categoryNameSnapshot: dictionaryStore.categoryName(for: selectedCategoryID),
-                    groupID: selectedGroupID,
-                    groupNameSnapshot: selectedGroupName
+                    groupID: dialogMode == .replacement ? selectedGroupID : nil,
+                    groupNameSnapshot: dialogMode == .replacement ? selectedGroupName : nil
                 )
             }
         } catch {
@@ -335,12 +329,12 @@ struct DictionarySettingsView: View {
     private func loadDictionaryEntries(offset: Int, limit: Int, reset: Bool) {
         entryPageGeneration += 1
         let generation = entryPageGeneration
-        let filter = selectedFilter
+        let requiringReplacementTerms = selectedTab == .replacements
         let query = dictionarySearchText
         isLoadingEntries = true
 
         dictionaryStore.loadEntries(
-            filter: filter,
+            requiringReplacementTerms: requiringReplacementTerms,
             query: query,
             limit: limit,
             offset: offset
@@ -349,6 +343,15 @@ struct DictionarySettingsView: View {
             totalEntryCount = count
             visibleEntries = reset ? page : visibleEntries + page
             isLoadingEntries = false
+        }
+    }
+
+    private func createDictionaryEntry() {
+        switch selectedTab {
+        case .hotwords:
+            dialog = .create(categoryID: selectedHotwordCategoryID, mode: .hotword)
+        case .replacements:
+            dialog = .create(categoryID: nil, mode: .replacement)
         }
     }
 

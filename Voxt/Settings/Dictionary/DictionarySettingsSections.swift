@@ -5,9 +5,10 @@ import SwiftUI
 import AppKit
 
 struct DictionaryEntriesCard: View {
-    @Binding var selectedFilter: DictionaryFilter
-    let categorizedEntries: [(category: DictionaryCategory, entries: [DictionaryEntry])]
-    let totalEntryCount: Int
+    @Binding var selectedTab: DictionaryEntriesTab
+    @Binding var selectedHotwordCategoryID: UUID?
+    let hotwordSections: [(category: DictionaryCategory, entries: [DictionaryEntry])]
+    let replacementEntries: [DictionaryEntry]
     let searchText: String
     let isLoadingEntries: Bool
     let onSearch: () -> Void
@@ -19,86 +20,15 @@ struct DictionaryEntriesCard: View {
     let onImport: () -> Void
     let onExport: () -> Void
     let onCreateInCategory: (DictionaryCategory) -> Void
-    let onToggleCategory: (DictionaryCategory) -> Void
     let onEditCategory: (DictionaryCategory) -> Void
     let onDeleteCategory: (DictionaryCategory) -> Void
     let onEdit: (DictionaryEntry) -> Void
     let onDelete: (DictionaryEntry) -> Void
 
-    private let columnCount = 3
-
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    DictionaryFilterPicker(selectedFilter: $selectedFilter)
-
-                    Spacer(minLength: 12)
-
-                    DictionaryHeaderIconButton(
-                        tooltip: AppLocalization.localizedString("Search Dictionary"),
-                        action: {
-                            onSearch()
-                        }
-                    ) {
-                        SettingsSearchIconView()
-                    }
-                    .frame(width: 32, height: 32)
-
-                    DictionaryHeaderIconButton(
-                        tooltip: AppLocalization.localizedString("Create Category"),
-                        action: {
-                            onCreateCategory()
-                        }
-                    ) {
-                        DictionaryActionIcon(kind: .createCategory, size: 16)
-                    }
-                    .frame(width: 32, height: 32)
-
-                    DictionaryHeaderIconButton(
-                        tooltip: AppLocalization.localizedString("Create Dictionary Term"),
-                        action: {
-                            onCreate()
-                        }
-                    ) {
-                        DictionaryActionIcon(kind: .createTerm, size: 16)
-                    }
-                    .frame(width: 32, height: 32)
-
-                    Rectangle()
-                        .fill(SettingsUIStyle.subtleBorderColor)
-                        .frame(width: 1, height: 20)
-                        .padding(.horizontal, 4)
-
-                    DictionaryHeaderIconButton(
-                        tooltip: AppLocalization.localizedString("One-Click Ingest"),
-                        action: {
-                            onOpenIngest()
-                        }
-                    ) {
-                        SettingsOneClickIngestIconView(size: 16)
-                    }
-                    .frame(width: 32, height: 32)
-
-                    DictionaryHeaderIconButton(
-                        tooltip: AppLocalization.localizedString("Dictionary Advanced Settings"),
-                        action: {
-                            onOpenSettings()
-                        }
-                    ) {
-                        SettingsSparkleSettingsIconView(size: 16)
-                    }
-                    .frame(width: 32, height: 32)
-
-                    DictionaryHeaderActionMenuButton(
-                        actions: [
-                            DictionaryHeaderMenuAction(title: AppLocalization.localizedString("Import"), handler: onImport),
-                            DictionaryHeaderMenuAction(title: AppLocalization.localizedString("Export"), handler: onExport)
-                        ]
-                    )
-                    .frame(width: 32, height: 32)
-                    .help(AppLocalization.localizedString("More"))
-                }
+                toolbar
 
                 if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     HStack(spacing: 8) {
@@ -113,7 +43,7 @@ struct DictionaryEntriesCard: View {
                     }
                 }
 
-                if totalEntryCount == 0 && !isLoadingEntries {
+                if isContentEmpty && !isLoadingEntries {
                     SettingsEmptyStateView(
                         illustration: .dictionary,
                         title: emptyStateTitle,
@@ -121,21 +51,7 @@ struct DictionaryEntriesCard: View {
                     )
                 } else {
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 10) {
-                            ForEach(categorizedEntries, id: \.category.id) { section in
-                                DictionaryCategorySection(
-                                    category: section.category,
-                                    entries: section.entries,
-                                    columnCount: columnCount,
-                                    onToggle: { onToggleCategory(section.category) },
-                                    onCreate: { onCreateInCategory(section.category) },
-                                    onEditCategory: { onEditCategory(section.category) },
-                                    onDeleteCategory: { onDeleteCategory(section.category) },
-                                    onEditEntry: onEdit,
-                                    onDeleteEntry: onDelete
-                                )
-                            }
-                        }
+                        content
                         .padding(.vertical, 2)
                     }
                     .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity, alignment: .top)
@@ -147,16 +63,241 @@ struct DictionaryEntriesCard: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
+    @ViewBuilder
+    private var toolbar: some View {
+        if selectedTab == .hotwords, let selectedHotwordSection {
+            HStack(spacing: 8) {
+                Button {
+                    selectedHotwordCategoryID = nil
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 30))
+                .accessibilityLabel(AppLocalization.localizedString("Back"))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedHotwordSection.category.name)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .lineLimit(1)
+                    Text(AppLocalization.format("%d terms", selectedHotwordSection.entries.count))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 12)
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: AppLocalization.localizedString("Search Current Category"),
+                    action: onSearch
+                ) {
+                    SettingsSearchIconView()
+                }
+                .frame(width: 30, height: 30)
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: AppLocalization.localizedString("Create Hot Word in This Category"),
+                    action: { onCreateInCategory(selectedHotwordSection.category) }
+                ) {
+                    DictionaryActionIcon(kind: .createTerm, size: 15)
+                }
+                .frame(width: 30, height: 30)
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: AppLocalization.localizedString("Edit Dictionary Category"),
+                    action: { onEditCategory(selectedHotwordSection.category) }
+                ) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                }
+                .frame(width: 30, height: 30)
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: AppLocalization.localizedString("Delete Dictionary Category"),
+                    action: {
+                        if !selectedHotwordSection.category.isDefault {
+                            onDeleteCategory(selectedHotwordSection.category)
+                        }
+                    }
+                ) {
+                    DictionaryActionIcon(kind: .deleteCategory, size: 15)
+                }
+                .frame(width: 30, height: 30)
+            }
+        } else {
+            HStack {
+                DictionaryEntriesTabPicker(selectedTab: $selectedTab)
+
+                Spacer(minLength: 12)
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: searchAccessibilityLabel,
+                    action: onSearch
+                ) {
+                    SettingsSearchIconView()
+                }
+                .frame(width: 30, height: 30)
+
+                if selectedTab == .hotwords {
+                    DictionaryHeaderIconButton(
+                        accessibilityLabel: AppLocalization.localizedString("Create Category"),
+                        action: onCreateCategory
+                    ) {
+                        DictionaryActionIcon(kind: .createCategory, size: 15)
+                    }
+                    .frame(width: 30, height: 30)
+                }
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: createTermAccessibilityLabel,
+                    action: onCreate
+                ) {
+                    DictionaryActionIcon(kind: .createTerm, size: 15)
+                }
+                .frame(width: 30, height: 30)
+
+                Rectangle()
+                    .fill(SettingsUIStyle.subtleBorderColor)
+                    .frame(width: 1, height: 20)
+                    .padding(.horizontal, 4)
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: AppLocalization.localizedString("One-Click Ingest"),
+                    action: onOpenIngest
+                ) {
+                    SettingsOneClickIngestIconView(size: 15)
+                }
+                .frame(width: 30, height: 30)
+
+                DictionaryHeaderIconButton(
+                    accessibilityLabel: AppLocalization.localizedString("Dictionary Advanced Settings"),
+                    action: onOpenSettings
+                ) {
+                    SettingsSparkleSettingsIconView(size: 15)
+                }
+                .frame(width: 30, height: 30)
+
+                DictionaryHeaderActionMenuButton(
+                    actions: [
+                        DictionaryHeaderMenuAction(
+                            title: AppLocalization.localizedString("Import"),
+                            handler: onImport
+                        ),
+                        DictionaryHeaderMenuAction(
+                            title: AppLocalization.localizedString("Export"),
+                            handler: onExport
+                        )
+                    ],
+                    accessibilityLabel: AppLocalization.localizedString("More")
+                )
+                .frame(width: 30, height: 30)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch selectedTab {
+        case .hotwords:
+            if let selectedHotwordSection {
+                HotwordCategoryDetail(
+                    entries: selectedHotwordSection.entries,
+                    onEditEntry: onEdit,
+                    onDeleteEntry: onDelete
+                )
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: 10, alignment: .top)],
+                    alignment: .leading,
+                    spacing: 10
+                ) {
+                    ForEach(displayedHotwordSections, id: \.category.id) { section in
+                        HotwordCategoryCard(
+                            category: section.category,
+                            entries: section.entries,
+                            onOpen: { selectedHotwordCategoryID = section.category.id }
+                        )
+                    }
+                }
+            }
+        case .replacements:
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 240, maximum: 360), spacing: 8, alignment: .top)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                ForEach(replacementEntries) { entry in
+                    DictionaryReplacementRow(
+                        entry: entry,
+                        onEdit: { onEdit(entry) },
+                        onDelete: { onDelete(entry) }
+                    )
+                }
+            }
+        }
+    }
+
+    private var displayedHotwordSections: [(category: DictionaryCategory, entries: [DictionaryEntry])] {
+        guard isSearchActive else { return hotwordSections }
+        return hotwordSections.filter { !$0.entries.isEmpty }
+    }
+
+    private var selectedHotwordSection: (category: DictionaryCategory, entries: [DictionaryEntry])? {
+        guard let selectedHotwordCategoryID else { return nil }
+        return hotwordSections.first(where: { $0.category.id == selectedHotwordCategoryID })
+    }
+
+    private var isContentEmpty: Bool {
+        switch selectedTab {
+        case .hotwords:
+            if selectedHotwordSection != nil {
+                return false
+            }
+            return displayedHotwordSections.allSatisfy { $0.entries.isEmpty }
+        case .replacements:
+            return replacementEntries.isEmpty
+        }
+    }
+
+    private var createTermAccessibilityLabel: String {
+        switch selectedTab {
+        case .hotwords:
+            return AppLocalization.localizedString("Create Hot Word")
+        case .replacements:
+            return AppLocalization.localizedString("Create Replacement Term")
+        }
+    }
+
+    private var searchAccessibilityLabel: String {
+        switch selectedTab {
+        case .hotwords:
+            return AppLocalization.localizedString("Search Hot Words")
+        case .replacements:
+            return AppLocalization.localizedString("Search Replacement Terms")
+        }
+    }
+
     private var emptyStateTitle: String {
         if !isSearchActive {
-            return AppLocalization.localizedString("Dictionary is empty")
+            switch selectedTab {
+            case .hotwords:
+                return AppLocalization.localizedString("No hot words yet")
+            case .replacements:
+                return AppLocalization.localizedString("No replacement terms yet")
+            }
         }
         return AppLocalization.localizedString("No matching dictionary terms")
     }
 
     private var emptyStateMessage: String {
         if !isSearchActive {
-            return AppLocalization.localizedString("Create a term to help Voxt recognize names, jargon, and product words.")
+            switch selectedTab {
+            case .hotwords:
+                return AppLocalization.localizedString("Create a hot word to help Voxt recognize names, jargon, and product words.")
+            case .replacements:
+                return AppLocalization.localizedString("Create a replacement term to normalize final transcription results.")
+            }
         }
         return AppLocalization.localizedString("Try another keyword or clear the search filter.")
     }
@@ -167,120 +308,146 @@ struct DictionaryEntriesCard: View {
 
 }
 
-private struct DictionaryCategorySection: View {
+private struct HotwordCategoryCard: View {
     let category: DictionaryCategory
     let entries: [DictionaryEntry]
-    let columnCount: Int
-    let onToggle: () -> Void
-    let onCreate: () -> Void
-    let onEditCategory: () -> Void
-    let onDeleteCategory: () -> Void
+    let onOpen: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(category.name)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .lineLimit(1)
+
+                Text(AppLocalization.format("%d terms", entries.count))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .center)
+        .contentShape(Rectangle())
+        .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
+        .brightness(isHovering ? 0.035 : 0)
+        .overlay {
+            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(isHovering ? 0.42 : 0), lineWidth: 1)
+        }
+        .onHover { isHovering = $0 }
+        .onTapGesture(perform: onOpen)
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+    }
+}
+
+private struct HotwordCategoryDetail: View {
+    let entries: [DictionaryEntry]
     let onEditEntry: (DictionaryEntry) -> Void
     let onDeleteEntry: (DictionaryEntry) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Button(action: onToggle) {
-                    Image(systemName: category.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 20, height: 20)
+        Group {
+            if entries.isEmpty {
+                Text(AppLocalization.localizedString("No dictionary terms yet."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 160, maximum: 240), spacing: 8, alignment: .top)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                ForEach(entries) { entry in
+                    DictionaryRow(
+                        entry: entry,
+                        onEdit: { onEditEntry(entry) },
+                        onDelete: { onDeleteEntry(entry) }
+                    )
                 }
-                .buttonStyle(.plain)
-                .help(category.isExpanded
-                    ? AppLocalization.localizedString("Collapse")
-                    : AppLocalization.localizedString("Expand"))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(category.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                    Text(AppLocalization.format("%d terms", entries.count))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 8)
-
-                Button {
-                    onCreate()
-                } label: {
-                    DictionaryActionIcon(kind: .createTerm, size: 15)
-                }
-                .buttonStyle(SettingsCompactIconButtonStyle(size: 28))
-                .help(AppLocalization.localizedString("Create Dictionary Term"))
-
-                Button {
-                    onEditCategory()
-                } label: {
-                    Image(systemName: "pencil")
-                }
-                .buttonStyle(SettingsCompactIconButtonStyle(size: 28))
-                .help(AppLocalization.localizedString("Edit Dictionary Category"))
-
-                Button(role: .destructive) {
-                    onDeleteCategory()
-                } label: {
-                    DictionaryActionIcon(kind: .deleteCategory, size: 15)
-                }
-                .buttonStyle(SettingsCompactIconButtonStyle(tone: .destructive, size: 28))
-                .disabled(category.isDefault)
-                .help(AppLocalization.localizedString("Delete"))
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 38)
-            .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
-
-            if category.isExpanded {
-                if entries.isEmpty {
-                    Text(AppLocalization.localizedString("No dictionary terms yet."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                } else {
-                    ForEach(entryRows) { row in
-                        HStack(alignment: .top, spacing: 8) {
-                            ForEach(row.entries) { entry in
-                                DictionaryRow(
-                                    entry: entry,
-                                    onEdit: { onEditEntry(entry) },
-                                    onDelete: { onDeleteEntry(entry) }
-                                )
-                            }
-
-                            ForEach(0..<row.placeholderCount, id: \.self) { _ in
-                                Color.clear
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            }
-                        }
-                    }
                 }
             }
-        }
-    }
-
-    private var entryRows: [DictionaryEntryGridRow] {
-        stride(from: 0, to: entries.count, by: columnCount).map { startIndex in
-            let endIndex = min(startIndex + columnCount, entries.count)
-            return DictionaryEntryGridRow(
-                entries: Array(entries[startIndex..<endIndex]),
-                columnCount: columnCount
-            )
         }
     }
 }
 
-private struct DictionaryEntryGridRow: Identifiable {
-    let entries: [DictionaryEntry]
-    let columnCount: Int
+private struct DictionaryReplacementRow: View {
+    let entry: DictionaryEntry
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
-    var id: String {
-        entries.map { $0.id.uuidString }.joined(separator: "-")
+    @State private var isHovering = false
+    @State private var isDeleteHovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(entry.term)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .lineLimit(1)
+
+                Text(scopeText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 28)
+            }
+
+            Text(replacementText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
+        .brightness(isHovering ? 0.035 : 0)
+        .overlay {
+            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(isHovering ? 0.42 : 0), lineWidth: 1)
+        }
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .onTapGesture(perform: onEdit)
+        .overlay(alignment: .topTrailing) {
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isDeleteHovering ? Color.red : Color.secondary)
+                    .frame(width: 20, height: 20)
+                    .background(
+                        Circle()
+                            .fill(Color.red.opacity(isDeleteHovering ? 0.12 : 0))
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(AppLocalization.localizedString("Delete"))
+            .onHover { isDeleteHovering = $0 }
+            .padding(6)
+        }
     }
 
-    var placeholderCount: Int {
-        max(0, columnCount - entries.count)
+    private var replacementText: String {
+        entry.replacementTerms.map(\.text).joined(separator: ", ")
+    }
+
+    private var scopeText: String {
+        guard entry.groupID != nil else {
+            return AppLocalization.localizedString("Global")
+        }
+        return entry.groupNameSnapshot ?? AppLocalization.localizedString("Missing Group")
     }
 }
 
@@ -516,147 +683,53 @@ private struct DictionaryHeaderSettingsIconShape: Shape {
     }
 }
 
-private struct DictionaryHeaderIconButton<Icon: View>: NSViewRepresentable {
-    let tooltip: String
+private struct DictionaryHeaderIconButton<Icon: View>: View {
+    let accessibilityLabel: String
     let action: () -> Void
     @ViewBuilder let icon: () -> Icon
 
-    func makeNSView(context: Context) -> DictionaryHeaderIconButtonHostView {
-        let hostView = DictionaryHeaderIconButtonHostView()
-        hostView.update(icon: AnyView(icon()), tooltip: tooltip, action: action)
-        return hostView
-    }
-
-    func updateNSView(_ nsView: DictionaryHeaderIconButtonHostView, context: Context) {
-        nsView.update(icon: AnyView(icon()), tooltip: tooltip, action: action)
-    }
-
-    func sizeThatFits(
-        _ proposal: ProposedViewSize,
-        nsView: DictionaryHeaderIconButtonHostView,
-        context: Context
-    ) -> CGSize? {
-        CGSize(width: 32, height: 32)
+    var body: some View {
+        Button(action: action) {
+            icon()
+                .frame(width: 15, height: 15)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(DictionaryHeaderIconButtonStyle())
+                .accessibilityLabel(accessibilityLabel)
     }
 }
 
-private final class DictionaryHeaderIconButtonHostView: NSView {
-    private let iconView = NSHostingView(rootView: AnyView(EmptyView()))
-    private var trackingAreaRef: NSTrackingArea?
-    private var action: (() -> Void)?
-    private var isHovered = false {
-        didSet { updateAppearance() }
+private struct DictionaryHeaderIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        DictionaryHeaderIconButtonStyleBody(configuration: configuration)
     }
-    private var isPressed = false {
-        didSet { updateAppearance() }
-    }
+}
 
-    override var isFlipped: Bool {
-        true
-    }
+private struct DictionaryHeaderIconButtonStyleBody: View {
+    let configuration: ButtonStyle.Configuration
+    @State private var isHovered = false
 
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: 32, height: 32)
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        setContentHuggingPriority(.required, for: .horizontal)
-        setContentHuggingPriority(.required, for: .vertical)
-        setContentCompressionResistancePriority(.required, for: .horizontal)
-        setContentCompressionResistancePriority(.required, for: .vertical)
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(iconView)
-
-        NSLayoutConstraint.activate([
-            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16)
-        ])
-
-        updateAppearance()
+    var body: some View {
+        configuration.label
+            .foregroundStyle(Color.secondary)
+            .background(fillColor)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onHover { isHovered = $0 }
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func layout() {
-        super.layout()
-        layer?.cornerRadius = 9
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaRef {
-            removeTrackingArea(trackingAreaRef)
+    private var fillColor: Color {
+        if configuration.isPressed {
+            return SettingsUIStyle.subtleFillColor.opacity(0.92)
         }
-
-        let trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        trackingAreaRef = trackingArea
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        bounds.contains(point) ? self : nil
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovered = false
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        isPressed = true
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        let clickLocation = convert(event.locationInWindow, from: nil)
-        let shouldPerformAction = isPressed && bounds.contains(clickLocation)
-        isPressed = false
-        if shouldPerformAction {
-            action?()
+        if isHovered {
+            return SettingsUIStyle.subtleFillColor.opacity(0.72)
         }
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        updateAppearance()
-    }
-
-    func update(icon: AnyView, tooltip: String, action: @escaping () -> Void) {
-        iconView.rootView = icon
-        toolTip = tooltip
-        self.action = action
-        setAccessibilityElement(true)
-        setAccessibilityRole(.button)
-        setAccessibilityLabel(tooltip)
-    }
-
-    private func updateAppearance() {
-        let fillColor: NSColor
-        if isPressed {
-            fillColor = SettingsUIStyle.subtleFillNSColor.blended(withFraction: 0.18, of: .labelColor) ?? SettingsUIStyle.subtleFillNSColor
-        } else if isHovered {
-            fillColor = SettingsUIStyle.subtleFillNSColor.blended(withFraction: 0.08, of: .labelColor) ?? SettingsUIStyle.subtleFillNSColor
-        } else {
-            fillColor = SettingsUIStyle.subtleFillNSColor
-        }
-
-        layer?.backgroundColor = fillColor.cgColor
-        layer?.borderColor = SettingsUIStyle.subtleBorderNSColor.cgColor
-        layer?.borderWidth = 1
+        return SettingsUIStyle.subtleFillColor
     }
 }
 

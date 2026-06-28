@@ -534,6 +534,22 @@ final class DictionaryStore: ObservableObject {
         }
     }
 
+    func hotwordEntriesByCategory(
+        query: String = ""
+    ) -> [(category: DictionaryCategory, entries: [DictionaryEntry])] {
+        let filtered = DictionaryEntryCollection.searchEntries(
+            entries.filter { $0.replacementTerms.isEmpty },
+            query: query
+        )
+        let entriesByCategoryID = Dictionary(grouping: filtered, by: \.categoryID)
+        return resolvedCategories().map { category in
+            (
+                category,
+                DictionaryEntryCollection.sortedEntries(entriesByCategoryID[category.id] ?? [])
+            )
+        }
+    }
+
     func categoryName(for categoryID: UUID) -> String {
         resolvedCategories().first(where: { $0.id == categoryID })?.name
             ?? entries.first(where: { $0.categoryID == categoryID })?.categoryNameSnapshot
@@ -656,12 +672,46 @@ final class DictionaryStore: ObservableObject {
         return Array(searchedEntries.dropFirst(offset).prefix(limit))
     }
 
+    func entries(
+        requiringReplacementTerms: Bool,
+        query: String = "",
+        limit: Int,
+        offset: Int
+    ) -> [DictionaryEntry] {
+        if let repository,
+           let pagedEntries = try? repository.entries(
+            requiringReplacementTerms: requiringReplacementTerms,
+            query: query,
+            limit: limit,
+            offset: offset
+           ) {
+            return pagedEntries
+        }
+
+        let filteredEntries = entries.filter { $0.replacementTerms.isEmpty != requiringReplacementTerms }
+        let searchedEntries = DictionaryEntryCollection.searchEntries(filteredEntries, query: query)
+        guard offset < searchedEntries.count else { return [] }
+        return Array(searchedEntries.dropFirst(offset).prefix(limit))
+    }
+
     func entryCount(filter: DictionaryFilter, query: String = "") -> Int {
         if let repository,
            let count = try? repository.entryCount(filter: filter, query: query) {
             return count
         }
         return DictionaryEntryCollection.searchEntries(filteredEntries(for: filter), query: query).count
+    }
+
+    func entryCount(requiringReplacementTerms: Bool, query: String = "") -> Int {
+        if let repository,
+           let count = try? repository.entryCount(
+            requiringReplacementTerms: requiringReplacementTerms,
+            query: query
+           ) {
+            return count
+        }
+        let filteredEntries = entries.filter { $0.replacementTerms.isEmpty != requiringReplacementTerms }
+        return DictionaryEntryCollection.searchEntries(filteredEntries, query: query).count
     }
 
     func loadEntries(
@@ -683,6 +733,40 @@ final class DictionaryStore: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             let count = (try? repository.entryCount(filter: filter, query: query)) ?? 0
             let page = (try? repository.entries(filter: filter, query: query, limit: limit, offset: offset)) ?? []
+            DispatchQueue.main.async {
+                completion(count, page)
+            }
+        }
+    }
+
+    func loadEntries(
+        requiringReplacementTerms: Bool,
+        query: String = "",
+        limit: Int,
+        offset: Int,
+        completion: @escaping (Int, [DictionaryEntry]) -> Void
+    ) {
+        guard let repository else {
+            let filteredEntries = entries.filter { $0.replacementTerms.isEmpty != requiringReplacementTerms }
+            let searchedEntries = DictionaryEntryCollection.searchEntries(filteredEntries, query: query)
+            let page = offset < searchedEntries.count
+                ? Array(searchedEntries.dropFirst(offset).prefix(limit))
+                : []
+            completion(searchedEntries.count, page)
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let count = (try? repository.entryCount(
+                requiringReplacementTerms: requiringReplacementTerms,
+                query: query
+            )) ?? 0
+            let page = (try? repository.entries(
+                requiringReplacementTerms: requiringReplacementTerms,
+                query: query,
+                limit: limit,
+                offset: offset
+            )) ?? []
             DispatchQueue.main.async {
                 completion(count, page)
             }

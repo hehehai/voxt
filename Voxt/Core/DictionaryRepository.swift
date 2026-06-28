@@ -10,6 +10,8 @@ protocol DictionaryRepositoryProtocol: AnyObject, Sendable {
     func allTerms(limit: Int?) throws -> [String]
     func entries(filter: DictionaryFilter, query: String, limit: Int, offset: Int) throws -> [DictionaryEntry]
     func entryCount(filter: DictionaryFilter, query: String) throws -> Int
+    func entries(requiringReplacementTerms: Bool, query: String, limit: Int, offset: Int) throws -> [DictionaryEntry]
+    func entryCount(requiringReplacementTerms: Bool, query: String) throws -> Int
     func matchingEntries(sourceText: String, activeGroupID: UUID?, limit: Int) throws -> [DictionaryEntry]
     func activeEntriesForRemoteRequest(activeGroupID: UUID?, limit: Int) throws -> [DictionaryEntry]
     func upsert(_ entry: DictionaryEntry) throws
@@ -159,6 +161,78 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
         }
 
         let whereSQL = whereClauses.isEmpty ? "" : "WHERE \(whereClauses.joined(separator: " AND "))"
+        return try database.dbQueue.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM dictionary_entries \(whereSQL)",
+                arguments: arguments
+            ) ?? 0
+        }
+    }
+
+    func entries(requiringReplacementTerms: Bool, query: String = "", limit: Int, offset: Int) throws -> [DictionaryEntry] {
+        var whereClauses: [String] = [
+            requiringReplacementTerms
+                ? "EXISTS (SELECT 1 FROM dictionary_replacement_terms r WHERE r.entryID = dictionary_entries.id)"
+                : "NOT EXISTS (SELECT 1 FROM dictionary_replacement_terms r WHERE r.entryID = dictionary_entries.id)"
+        ]
+        var arguments: StatementArguments = []
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) {
+            let searchIDs = try database.dbQueue.read { db in
+                try String.fetchAll(
+                    db,
+                    sql: "SELECT entryID FROM dictionary_search WHERE dictionary_search MATCH ?",
+                    arguments: [ftsQuery]
+                )
+            }
+            if searchIDs.isEmpty {
+                return []
+            }
+            whereClauses.append("id IN \(sqlPlaceholders(count: searchIDs.count))")
+            arguments += StatementArguments(searchIDs)
+        }
+
+        let whereSQL = "WHERE \(whereClauses.joined(separator: " AND "))"
+        arguments += [limit, offset]
+
+        return try fetchEntries(
+            sql: """
+                SELECT id FROM dictionary_entries
+                \(whereSQL)
+                ORDER BY updatedAt DESC, term COLLATE NOCASE ASC
+                LIMIT ? OFFSET ?
+                """,
+            arguments: arguments
+        )
+    }
+
+    func entryCount(requiringReplacementTerms: Bool, query: String = "") throws -> Int {
+        var whereClauses: [String] = [
+            requiringReplacementTerms
+                ? "EXISTS (SELECT 1 FROM dictionary_replacement_terms r WHERE r.entryID = dictionary_entries.id)"
+                : "NOT EXISTS (SELECT 1 FROM dictionary_replacement_terms r WHERE r.entryID = dictionary_entries.id)"
+        ]
+        var arguments: StatementArguments = []
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) {
+            let searchIDs = try database.dbQueue.read { db in
+                try String.fetchAll(
+                    db,
+                    sql: "SELECT entryID FROM dictionary_search WHERE dictionary_search MATCH ?",
+                    arguments: [ftsQuery]
+                )
+            }
+            if searchIDs.isEmpty {
+                return 0
+            }
+            whereClauses.append("id IN \(sqlPlaceholders(count: searchIDs.count))")
+            arguments += StatementArguments(searchIDs)
+        }
+
+        let whereSQL = "WHERE \(whereClauses.joined(separator: " AND "))"
         return try database.dbQueue.read { db in
             try Int.fetchOne(
                 db,

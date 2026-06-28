@@ -13,6 +13,7 @@ struct DictionaryTermDialogView: View {
     let availableGroups: [AppBranchGroup]
     let onCancel: () -> Void
     let onSave: ([String], [String], UUID, UUID?) throws -> Void
+    private let mode: DictionaryTermDialogMode
 
     @State private var draftTerm: String
     @State private var draftReplacementTermInput = ""
@@ -36,18 +37,21 @@ struct DictionaryTermDialogView: View {
         self.availableGroups = availableGroups
         self.onCancel = onCancel
         self.onSave = onSave
+        self.mode = dialog.mode
 
         switch dialog {
-        case .create(let categoryID):
+        case .create(let categoryID, let mode):
             _draftTerm = State(initialValue: "")
             _draftReplacementTerms = State(initialValue: [])
             _selectedCategoryID = State(initialValue: categoryID ?? DictionaryCategory.defaultID)
             _selectedGroupOptionID = State(initialValue: Self.globalGroupOptionID)
+            _isAdvancedExpanded = State(initialValue: mode == .replacement)
         case .edit(let entry):
             _draftTerm = State(initialValue: entry.term)
             _draftReplacementTerms = State(initialValue: entry.replacementTerms.map(\.text))
             _selectedCategoryID = State(initialValue: entry.categoryID)
             _selectedGroupOptionID = State(initialValue: Self.groupOptionID(for: entry.groupID))
+            _isAdvancedExpanded = State(initialValue: !entry.replacementTerms.isEmpty)
         }
     }
 
@@ -68,7 +72,7 @@ struct DictionaryTermDialogView: View {
             .padding(.vertical, 8)
             .settingsFieldSurface(minHeight: 96, alignment: .topLeading)
 
-            advancedSection
+            editorOptionsSection
 
             if let errorMessage, !errorMessage.isEmpty {
                 Text(errorMessage)
@@ -77,13 +81,15 @@ struct DictionaryTermDialogView: View {
             }
 
             SettingsDialogActionRow {
-                SettingsMenuPicker(
-                    selection: $selectedCategoryID,
-                    options: dictionaryCategoryOptions,
-                    selectedTitle: selectedDictionaryCategoryTitle,
-                    width: 190
-                )
-                .help(localizedDictionaryTermDialog("Category"))
+                if mode == .hotword {
+                    SettingsMenuPicker(
+                        selection: $selectedCategoryID,
+                        options: dictionaryCategoryOptions,
+                        selectedTitle: selectedDictionaryCategoryTitle,
+                        width: 190
+                    )
+                    .help(localizedDictionaryTermDialog("Category"))
+                }
             } trailing: {
                 Button {
                     onCancel()
@@ -108,9 +114,19 @@ struct DictionaryTermDialogView: View {
     private var dictionaryTermPlaceholder: String {
         switch dialog {
         case .create:
-            return localizedDictionaryTermDialog("One dictionary term per line")
+            switch mode {
+            case .hotword:
+                return localizedDictionaryTermDialog("One hot word per line")
+            case .replacement:
+                return localizedDictionaryTermDialog("Replacement target term")
+            }
         case .edit:
-            return localizedDictionaryTermDialog("Dictionary Term")
+            switch mode {
+            case .hotword:
+                return localizedDictionaryTermDialog("Hot Word")
+            case .replacement:
+                return localizedDictionaryTermDialog("Replacement target term")
+            }
         }
     }
 
@@ -156,7 +172,17 @@ struct DictionaryTermDialogView: View {
         return UUID(uuidString: selectedGroupOptionID)
     }
 
-    private var advancedSection: some View {
+    @ViewBuilder
+    private var editorOptionsSection: some View {
+        switch mode {
+        case .hotword:
+            EmptyView()
+        case .replacement:
+            replacementEditorSection
+        }
+    }
+
+    private var replacementEditorSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
                 withAnimation(.easeInOut(duration: 0.14)) {
@@ -169,7 +195,7 @@ struct DictionaryTermDialogView: View {
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isAdvancedExpanded ? 90 : 0))
 
-                    Text(verbatim: localizedDictionaryTermDialog("Advanced"))
+                    Text(verbatim: localizedDictionaryTermDialog("Replacement Settings"))
                         .font(.system(size: 13, weight: .semibold))
 
                     if replacementTermCount > 0 {
@@ -264,6 +290,10 @@ struct DictionaryTermDialogView: View {
     private var trimmedDictionaryTerms: [String] {
         switch dialog {
         case .create:
+            if mode == .replacement {
+                let term = draftTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+                return term.isEmpty ? [] : [term]
+            }
             return draftTerm
                 .split(whereSeparator: \.isNewline)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -279,6 +309,10 @@ struct DictionaryTermDialogView: View {
             let terms = trimmedDictionaryTerms
             guard !terms.isEmpty else {
                 errorMessage = AppLocalization.localizedString("Dictionary term cannot be empty.")
+                return
+            }
+            if mode == .replacement && draftReplacementTerms.isEmpty {
+                errorMessage = AppLocalization.localizedString("Replacement match term cannot be empty.")
                 return
             }
             try onSave(terms, draftReplacementTerms, selectedCategoryID, selectedGroupID)

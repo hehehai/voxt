@@ -7,18 +7,39 @@ private func localized(_ key: String) -> String {
     AppLocalization.localizedString(key)
 }
 
-struct DictionaryFilterPicker: View {
-    @Binding var selectedFilter: DictionaryFilter
+enum DictionaryEntriesTab: String, CaseIterable, Identifiable {
+    case hotwords
+    case replacements
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .hotwords:
+            return "Hot Words"
+        case .replacements:
+            return "Replacement Terms"
+        }
+    }
+}
+
+enum DictionaryTermDialogMode: String {
+    case hotword
+    case replacement
+}
+
+struct DictionaryEntriesTabPicker: View {
+    @Binding var selectedTab: DictionaryEntriesTab
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(DictionaryFilter.allCases) { filter in
+            ForEach(DictionaryEntriesTab.allCases) { tab in
                 Button {
-                    selectedFilter = filter
+                    selectedTab = tab
                 } label: {
-                    Text(LocalizedStringKey(filter.titleKey))
+                    Text(LocalizedStringKey(tab.titleKey))
                 }
-                .buttonStyle(DictionaryFilterSegmentedButtonStyle(isSelected: selectedFilter == filter))
+                .buttonStyle(DictionarySegmentedButtonStyle(isSelected: selectedTab == tab))
             }
         }
         .padding(2)
@@ -26,16 +47,16 @@ struct DictionaryFilterPicker: View {
     }
 }
 
-private struct DictionaryFilterSegmentedButtonStyle: ButtonStyle {
+private struct DictionarySegmentedButtonStyle: ButtonStyle {
     let isSelected: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        DictionaryFilterSegmentedButtonBody(configuration: configuration, isSelected: isSelected)
+        DictionarySegmentedButtonBody(configuration: configuration, isSelected: isSelected)
     }
 }
 
-private struct DictionaryFilterSegmentedButtonBody: View {
-    let configuration: DictionaryFilterSegmentedButtonStyle.Configuration
+private struct DictionarySegmentedButtonBody: View {
+    let configuration: DictionarySegmentedButtonStyle.Configuration
     let isSelected: Bool
 
     @State private var isHovered = false
@@ -157,24 +178,40 @@ struct DictionarySuggestionRow: View {
 }
 
 enum DictionaryDialog: Identifiable {
-    case create(categoryID: UUID?)
+    case create(categoryID: UUID?, mode: DictionaryTermDialogMode)
     case edit(DictionaryEntry)
 
     var id: String {
         switch self {
-        case .create(let categoryID):
-            return "create-\(categoryID?.uuidString ?? "default")"
+        case .create(let categoryID, let mode):
+            return "create-\(mode.rawValue)-\(categoryID?.uuidString ?? "default")"
         case .edit(let entry):
             return "edit-\(entry.id.uuidString)"
         }
     }
 
+    var mode: DictionaryTermDialogMode {
+        switch self {
+        case .create(_, let mode):
+            return mode
+        case .edit(let entry):
+            return entry.replacementTerms.isEmpty ? .hotword : .replacement
+        }
+    }
+
     var title: String {
         switch self {
-        case .create:
-            return localized("Create Dictionary Term")
-        case .edit:
-            return localized("Edit Dictionary Term")
+        case .create(_, let mode):
+            switch mode {
+            case .hotword:
+                return localized("Create Hot Word")
+            case .replacement:
+                return localized("Create Replacement Term")
+            }
+        case .edit(let entry):
+            return entry.replacementTerms.isEmpty
+                ? localized("Edit Hot Word")
+                : localized("Edit Replacement Term")
         }
     }
 
