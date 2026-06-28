@@ -93,7 +93,10 @@ enum TestFactories {
         name: String,
         prompt: String,
         appBundleIDs: [String] = [],
-        urlPatternIDs: [UUID] = []
+        urlPatternIDs: [UUID] = [],
+        autoPressReturnEnabled: Bool = false,
+        autoKeyPressEnabled: Bool? = nil,
+        autoKeyPressHotkey: HotkeyPreference.Hotkey = AppBranchGroup.defaultAutoKeyPressHotkey
     ) -> AppBranchGroup {
         AppBranchGroup(
             id: id,
@@ -102,6 +105,9 @@ enum TestFactories {
             appBundleIDs: appBundleIDs,
             appRefs: appBundleIDs.map { AppBranchAppRef(bundleID: $0, displayName: $0) },
             urlPatternIDs: urlPatternIDs,
+            autoPressReturnEnabled: autoPressReturnEnabled,
+            autoKeyPressEnabled: autoKeyPressEnabled,
+            autoKeyPressHotkey: autoKeyPressHotkey,
             isExpanded: true
         )
     }

@@ -1895,6 +1895,11 @@
 "Keep this conservative for stable dictation output." = "安定したディクテーション出力のため、控えめな設定にしてください。";
 "Automatic, zh, en" = "自動、zh、en";
 "Automatic, zh, en, yue, ja, ko" = "自動、zh、en、yue、ja、ko";
+"Auto Return" = "自動 Return";
+"Press Return automatically after Voxt inserts text for this group." = "このグループで Voxt がテキストを挿入した後、自動的に Return キーを押します。";
+"Auto Key" = "自動キー";
+"Press the configured key automatically after Voxt inserts text for this group. Defaults to Return." = "このグループで Voxt がテキストを挿入した後、設定したキーを自動的に押します。デフォルトは Return です。";
+"Automatically press this key after transcription ends." = "文字起こし終了後にこのキーを自動的に押します。";
 "Context On" = "コンテキストオン";
 "Context Off" = "コンテキストオフ";
 "ITN On" = "ITN オン";

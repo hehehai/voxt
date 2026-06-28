@@ -152,6 +152,13 @@ extension AppDelegate {
             verbose: true
         )
         if promptResolution.delivery == EnhancementPromptResolution.Delivery.skipEnhancement {
+            if let sessionID,
+               autoKeyPressHotkeyForCurrentAppBranchSession() != nil {
+                applyEnhancementOverlayIconIfNeeded(
+                    match: lastEnhancementPromptContext?.overlayIconMatch,
+                    sessionID: sessionID
+                )
+            }
             return text
         }
         if let sessionID {

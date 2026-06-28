@@ -4,6 +4,7 @@
 import Foundation
 import AppKit
 import ApplicationServices
+import Carbon
 
 extension AppDelegate {
     private static let axMessagingTimeout: Float = 0.05
@@ -963,6 +964,66 @@ extension AppDelegate {
                 }
             )
         }
+    }
+
+    func pressAutoKeyAfterTextInjection(
+        _ hotkey: HotkeyPreference.Hotkey,
+        delay: TimeInterval = 0.12
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard AccessibilityPermissionManager.isTrusted() else {
+                VoxtLog.inputWarning("Auto Key skipped: accessibility permission missing.")
+                return
+            }
+            guard let source = CGEventSource(stateID: .hidSystemState) else {
+                VoxtLog.error("Auto Key failed: unable to create CGEventSource")
+                return
+            }
+            guard case .keyboard(let keyCode) = hotkey.input,
+                  keyCode != HotkeyPreference.modifierOnlyKeyCode
+            else {
+                VoxtLog.inputWarning("Auto Key skipped: unsupported shortcut input.")
+                return
+            }
+
+            let cgKeyCode = CGKeyCode(keyCode)
+            let flags = Self.cgEventFlags(for: hotkey.modifiers)
+            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: cgKeyCode, keyDown: true)
+            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: cgKeyCode, keyDown: false)
+
+            guard let keyDown, let keyUp else {
+                VoxtLog.error("Auto Key failed: unable to create key events")
+                return
+            }
+
+            keyDown.flags = flags
+            keyUp.flags = flags
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+            VoxtLog.input(
+                "Auto Key event posted after text injection. hotkey=\(HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: false))"
+            )
+        }
+    }
+
+    private static func cgEventFlags(for modifiers: NSEvent.ModifierFlags) -> CGEventFlags {
+        var flags: CGEventFlags = []
+        if modifiers.contains(.control) {
+            flags.insert(.maskControl)
+        }
+        if modifiers.contains(.option) {
+            flags.insert(.maskAlternate)
+        }
+        if modifiers.contains(.shift) {
+            flags.insert(.maskShift)
+        }
+        if modifiers.contains(.command) {
+            flags.insert(.maskCommand)
+        }
+        if modifiers.contains(.function) {
+            flags.insert(.maskSecondaryFn)
+        }
+        return flags
     }
 
     func beginOverlayOutputDelivery() {

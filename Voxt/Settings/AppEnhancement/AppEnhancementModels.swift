@@ -3,6 +3,7 @@
 
 import Foundation
 import AppKit
+import Carbon
 
 enum SourceTab: String, CaseIterable, Identifiable {
     case apps
@@ -43,7 +44,19 @@ struct AppBranchGroup: Identifiable, Codable, Equatable {
     var appBundleIDs: [String]
     var appRefs: [AppBranchAppRef]
     var urlPatternIDs: [UUID]
+    var autoKeyPressEnabled: Bool
+    var autoKeyPressHotkey: HotkeyPreference.Hotkey
     var isExpanded: Bool
+
+    static let defaultAutoKeyPressHotkey = HotkeyPreference.Hotkey(
+        keyCode: UInt16(kVK_Return),
+        modifiers: [],
+        sidedModifiers: []
+    )
+
+    var autoPressReturnEnabled: Bool {
+        autoKeyPressEnabled && autoKeyPressHotkey == Self.defaultAutoKeyPressHotkey
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -52,6 +65,9 @@ struct AppBranchGroup: Identifiable, Codable, Equatable {
         case appBundleIDs
         case appRefs
         case urlPatternIDs
+        case autoPressReturnEnabled
+        case autoKeyPressEnabled
+        case autoKeyPressHotkey
         case isExpanded
     }
 
@@ -62,6 +78,9 @@ struct AppBranchGroup: Identifiable, Codable, Equatable {
         appBundleIDs: [String],
         appRefs: [AppBranchAppRef],
         urlPatternIDs: [UUID],
+        autoPressReturnEnabled: Bool = false,
+        autoKeyPressEnabled: Bool? = nil,
+        autoKeyPressHotkey: HotkeyPreference.Hotkey = AppBranchGroup.defaultAutoKeyPressHotkey,
         isExpanded: Bool
     ) {
         self.id = id
@@ -70,6 +89,8 @@ struct AppBranchGroup: Identifiable, Codable, Equatable {
         self.appBundleIDs = appBundleIDs
         self.appRefs = appRefs
         self.urlPatternIDs = urlPatternIDs
+        self.autoKeyPressEnabled = autoKeyPressEnabled ?? autoPressReturnEnabled
+        self.autoKeyPressHotkey = autoKeyPressHotkey
         self.isExpanded = isExpanded
     }
 
@@ -86,7 +107,27 @@ struct AppBranchGroup: Identifiable, Codable, Equatable {
             appRefs = decodedRefs
         }
         urlPatternIDs = try container.decodeIfPresent([UUID].self, forKey: .urlPatternIDs) ?? []
+        let legacyAutoReturnEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoPressReturnEnabled) ?? false
+        autoKeyPressEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoKeyPressEnabled) ?? legacyAutoReturnEnabled
+        autoKeyPressHotkey = try container.decodeIfPresent(
+            HotkeyPreference.Hotkey.self,
+            forKey: .autoKeyPressHotkey
+        ) ?? Self.defaultAutoKeyPressHotkey
         isExpanded = try container.decodeIfPresent(Bool.self, forKey: .isExpanded) ?? true
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(prompt, forKey: .prompt)
+        try container.encode(appBundleIDs, forKey: .appBundleIDs)
+        try container.encode(appRefs, forKey: .appRefs)
+        try container.encode(urlPatternIDs, forKey: .urlPatternIDs)
+        try container.encode(autoPressReturnEnabled, forKey: .autoPressReturnEnabled)
+        try container.encode(autoKeyPressEnabled, forKey: .autoKeyPressEnabled)
+        try container.encode(autoKeyPressHotkey, forKey: .autoKeyPressHotkey)
+        try container.encode(isExpanded, forKey: .isExpanded)
     }
 }
 

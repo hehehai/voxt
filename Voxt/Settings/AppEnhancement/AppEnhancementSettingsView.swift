@@ -20,6 +20,8 @@ struct AppEnhancementSettingsView: View {
     @State var modal: AppBranchModal?
     @State var groupNameDraft = ""
     @State var groupPromptDraft = ""
+    @State var groupAutoKeyPressEnabledDraft = false
+    @State var groupAutoKeyPressHotkeyDraft = AppBranchGroup.defaultAutoKeyPressHotkey
     @State var urlDraft = ""
     @State var modalErrorMessage: String?
 

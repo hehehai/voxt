@@ -152,6 +152,8 @@ extension AppEnhancementSettingsView {
             appBundleIDs: sourceGroup.appBundleIDs,
             appRefs: sourceGroup.appRefs,
             urlPatternIDs: sourceGroup.urlPatternIDs,
+            autoKeyPressEnabled: sourceGroup.autoKeyPressEnabled,
+            autoKeyPressHotkey: sourceGroup.autoKeyPressHotkey,
             isExpanded: true
         )
         groups.append(duplicatedGroup)
@@ -174,6 +176,8 @@ extension AppEnhancementSettingsView {
                     appBundleIDs: [],
                     appRefs: [],
                     urlPatternIDs: [],
+                    autoKeyPressEnabled: groupAutoKeyPressEnabledDraft,
+                    autoKeyPressHotkey: groupAutoKeyPressHotkeyDraft,
                     isExpanded: true
                 )
             )
@@ -181,6 +185,8 @@ extension AppEnhancementSettingsView {
             guard let index = groups.firstIndex(where: { $0.id == groupID }) else { break }
             groups[index].name = trimmedName
             groups[index].prompt = groupPromptDraft
+            groups[index].autoKeyPressEnabled = groupAutoKeyPressEnabledDraft
+            groups[index].autoKeyPressHotkey = groupAutoKeyPressHotkeyDraft
         default:
             break
         }

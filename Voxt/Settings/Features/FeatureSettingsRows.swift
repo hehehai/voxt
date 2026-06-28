@@ -380,6 +380,7 @@ struct SettingsShortcutCaptureField: View {
     var isReadOnly: Bool = false
     var modeButtonTitle: String? = nil
     var isModeButtonSelected = false
+    var showsTitle = true
     var onModeButtonToggle: (() -> Void)? = nil
     var controlWidth: CGFloat = 320
     let onFocus: () -> Void
@@ -390,10 +391,12 @@ struct SettingsShortcutCaptureField: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 18) {
-            Text(title)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.primary.opacity(0.92))
-            Spacer()
+            if showsTitle {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary.opacity(0.92))
+                Spacer()
+            }
 
             HStack(spacing: 8) {
                 if let modeButtonTitle, let onModeButtonToggle {
