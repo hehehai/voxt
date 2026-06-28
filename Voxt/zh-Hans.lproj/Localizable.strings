@@ -1937,6 +1937,11 @@
 "Keep this conservative for stable dictation output." = "为保证听写输出稳定，建议保持保守设置。";
 "Automatic, zh, en" = "自动、zh、en";
 "Automatic, zh, en, yue, ja, ko" = "自动、zh、en、yue、ja、ko";
+"Auto Return" = "自动回车";
+"Press Return automatically after Voxt inserts text for this group." = "Voxt 为该分组插入文本后，自动按下回车键。";
+"Auto Key" = "自动按键";
+"Press the configured key automatically after Voxt inserts text for this group. Defaults to Return." = "Voxt 为该分组插入文本后，自动按下配置的按键。默认是回车。";
+"Automatically press this key after transcription ends." = "转录结束后会自动按下该按键。";
 "Context On" = "上下文开";
 "Context Off" = "上下文关";
 "ITN On" = "ITN 开";

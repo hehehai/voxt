@@ -2,16 +2,21 @@
 // Provides App Enhancement Sheets for app enhancement settings.
 
 import SwiftUI
+import AppKit
 
 struct GroupEditorSheet: View {
     let title: String
     let actionTitle: String
     @Binding var name: String
     @Binding var prompt: String
+    @Binding var autoKeyPressEnabled: Bool
+    @Binding var autoKeyPressHotkey: HotkeyPreference.Hotkey
     let errorMessage: String?
     let onCancel: () -> Void
     let onSave: () -> Void
     @State private var selectedPresetID = Self.placeholderPresetID
+    @State private var isAutoKeyRecording = false
+    @State private var pendingAutoKeyHotkey: HotkeyPreference.Hotkey?
 
     private static let placeholderPresetID = "choose-template"
     private let dialogPadding: CGFloat = 0
@@ -105,6 +110,79 @@ struct GroupEditorSheet: View {
                     )
                 }
 
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(AppLocalization.localizedString("Auto Key"))
+                                .font(.headline)
+
+                            Text(AppLocalization.localizedString("Automatically press this key after transcription ends."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if autoKeyPressEnabled {
+                            SettingsShortcutCaptureField(
+                                title: "",
+                                hotkey: pendingAutoKeyHotkey ?? autoKeyPressHotkey,
+                                isRecording: isAutoKeyRecording,
+                                isPendingConfirmation: pendingAutoKeyHotkey != nil,
+                                distinguishModifierSides: false,
+                                showsTitle: false,
+                                controlWidth: 240,
+                                onFocus: {
+                                    pendingAutoKeyHotkey = nil
+                                    isAutoKeyRecording = true
+                                },
+                                onReset: {
+                                    autoKeyPressHotkey = AppBranchGroup.defaultAutoKeyPressHotkey
+                                    pendingAutoKeyHotkey = nil
+                                    isAutoKeyRecording = false
+                                },
+                                onCancelPending: {
+                                    pendingAutoKeyHotkey = nil
+                                    isAutoKeyRecording = false
+                                },
+                                onConfirmPending: {
+                                    if let pendingAutoKeyHotkey {
+                                        autoKeyPressHotkey = pendingAutoKeyHotkey
+                                    }
+                                    pendingAutoKeyHotkey = nil
+                                    isAutoKeyRecording = false
+                                }
+                            )
+                        }
+
+                        Toggle("", isOn: $autoKeyPressEnabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .onChange(of: autoKeyPressEnabled) { _, enabled in
+                                if enabled, autoKeyPressHotkey.keyCode == HotkeyPreference.modifierOnlyKeyCode {
+                                    autoKeyPressHotkey = AppBranchGroup.defaultAutoKeyPressHotkey
+                                }
+                                if !enabled {
+                                    pendingAutoKeyHotkey = nil
+                                    isAutoKeyRecording = false
+                                }
+                            }
+                    }
+
+                    HotkeyRecorderView(
+                        isRecording: $isAutoKeyRecording,
+                        onCapture: { capturedHotkey in
+                            pendingAutoKeyHotkey = capturedHotkey
+                        },
+                        onCancelCapture: {
+                            pendingAutoKeyHotkey = nil
+                            isAutoKeyRecording = false
+                        },
+                        onRecorderMessageChange: { _ in }
+                    )
+                    .frame(width: 0, height: 0)
+                }
+
                 if let errorMessage, !errorMessage.isEmpty {
                     Text(errorMessage)
                         .font(.caption)
@@ -157,6 +235,10 @@ struct URLBatchEditorSheet: View {
     let onSave: () -> Void
     @State private var testInput = ""
     @State private var isTestInputHovered = false
+    @State private var testFaviconOrigin: String?
+    @State private var testFaviconImage: NSImage?
+    @State private var isLoadingTestFavicon = false
+    @State private var testFaviconLookupID = UUID()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -191,9 +273,19 @@ struct URLBatchEditorSheet: View {
                         .contentShape(RoundedRectangle(cornerRadius: SettingsUIStyle.controlCornerRadius, style: .continuous))
                         .onHover { isTestInputHovered = $0 }
 
-                    Text(testFeedbackText)
-                        .font(.caption)
-                        .foregroundStyle(testFeedbackColor)
+                    HStack(spacing: 6) {
+                        testFeedbackIcon
+
+                        Text(testFeedbackText)
+                            .font(.caption)
+                            .foregroundStyle(testFeedbackColor)
+                    }
+                    .onChange(of: testInput) { _, _ in
+                        refreshTestFavicon()
+                    }
+                    .onChange(of: text) { _, _ in
+                        refreshTestFavicon()
+                    }
                 }
             }
 
@@ -284,10 +376,87 @@ struct URLBatchEditorSheet: View {
         return AppLocalization.localizedString("No pattern matched.")
     }
 
+    @ViewBuilder
+    private var testFeedbackIcon: some View {
+        switch testStatus {
+        case .matched:
+            if let testFaviconImage {
+                Image(nsImage: testFaviconImage)
+                    .resizable()
+                    .frame(width: 16, height: 16)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            } else if isLoadingTestFavicon {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.55)
+                    .frame(width: 16, height: 16)
+            } else {
+                Image(systemName: "globe")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(testFeedbackColor)
+                    .frame(width: 16, height: 16)
+            }
+        case .unmatched:
+            Image(systemName: "xmark.circle")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(testFeedbackColor)
+                .frame(width: 16, height: 16)
+        case .idle:
+            Image(systemName: "globe")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(testFeedbackColor)
+                .frame(width: 16, height: 16)
+        }
+    }
+
     private var testStatus: URLPatternTestStatus {
         guard !testInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .idle }
         guard !normalizedPatterns.isEmpty, normalizedCandidate != nil else { return .idle }
         return matchedPattern == nil ? .unmatched : .matched
+    }
+
+    private var testFaviconOriginCandidate: String? {
+        guard testStatus == .matched else { return nil }
+        let trimmed = testInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let urlString = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        return EnhancementOverlayIconResolver.faviconOrigin(fromPageURL: urlString)
+    }
+
+    private func refreshTestFavicon() {
+        guard let origin = testFaviconOriginCandidate else {
+            testFaviconOrigin = nil
+            testFaviconImage = nil
+            isLoadingTestFavicon = false
+            testFaviconLookupID = UUID()
+            return
+        }
+
+        if origin == testFaviconOrigin, testFaviconImage != nil {
+            return
+        }
+
+        testFaviconOrigin = origin
+        testFaviconLookupID = UUID()
+        let lookupID = testFaviconLookupID
+
+        if let cached = EnhancementOverlayIconResolver.cachedFavicon(forOrigin: origin) {
+            testFaviconImage = cached
+            isLoadingTestFavicon = false
+            return
+        }
+
+        testFaviconImage = nil
+        isLoadingTestFavicon = true
+
+        Task {
+            let image = await EnhancementOverlayIconResolver.favicon(forOrigin: origin)
+            await MainActor.run {
+                guard testFaviconLookupID == lookupID else { return }
+                testFaviconImage = image
+                isLoadingTestFavicon = false
+            }
+        }
     }
 }
 

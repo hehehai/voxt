@@ -308,7 +308,7 @@ nonisolated struct HotkeyPreference {
         }
     }
 
-    struct Hotkey: Equatable {
+    struct Hotkey: Equatable, Codable {
         enum Input: Equatable {
             case keyboard(UInt16)
             case mouseButton(Int)
@@ -331,6 +331,14 @@ nonisolated struct HotkeyPreference {
         let input: Input
         let modifiers: NSEvent.ModifierFlags
         let sidedModifiers: SidedModifierFlags
+
+        private enum CodingKeys: String, CodingKey {
+            case inputType
+            case keyCode
+            case mouseButtonNumber
+            case modifiers
+            case sidedModifiers
+        }
 
         init(
             input: Input,
@@ -378,6 +386,37 @@ nonisolated struct HotkeyPreference {
 
         var isMouseButton: Bool {
             mouseButtonNumber != nil
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let inputType = try container.decodeIfPresent(String.self, forKey: .inputType)
+            let keyCode = try container.decodeIfPresent(UInt16.self, forKey: .keyCode) ?? HotkeyPreference.modifierOnlyKeyCode
+            let mouseButtonNumber = try container.decodeIfPresent(Int.self, forKey: .mouseButtonNumber)
+            if Input.Kind(rawValue: inputType ?? "") == .mouseButton,
+               let mouseButtonNumber,
+               mouseButtonNumber >= HotkeyPreference.middleMouseButtonNumber {
+                input = .mouseButton(mouseButtonNumber)
+            } else {
+                input = .keyboard(keyCode)
+            }
+            let modifiersRaw = try container.decodeIfPresent(UInt.self, forKey: .modifiers) ?? 0
+            modifiers = NSEvent.ModifierFlags(rawValue: modifiersRaw).intersection(.hotkeyRelevant)
+            let sidedRaw = try container.decodeIfPresent(Int.self, forKey: .sidedModifiers) ?? 0
+            sidedModifiers = SidedModifierFlags(rawValue: sidedRaw).filtered(by: modifiers)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(input.kind.rawValue, forKey: .inputType)
+            switch input {
+            case .keyboard(let keyCode):
+                try container.encode(keyCode, forKey: .keyCode)
+            case .mouseButton(let buttonNumber):
+                try container.encode(buttonNumber, forKey: .mouseButtonNumber)
+            }
+            try container.encode(modifiers.rawValue, forKey: .modifiers)
+            try container.encode(sidedModifiers.filtered(by: modifiers).rawValue, forKey: .sidedModifiers)
         }
     }
 

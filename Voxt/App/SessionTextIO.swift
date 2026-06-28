@@ -485,10 +485,16 @@ extension AppDelegate {
 
         switch delivery {
         case .typeText:
+            let autoKeyPressHotkey = sessionOutputMode == .transcription
+                ? autoKeyPressHotkeyForCurrentAppBranchSession()
+                : nil
             beginOverlayOutputDelivery()
             typeText(context.outputText) { [weak self] didInject in
                 self?.sessionFinalOutputDeliveredAt = Date()
                 self?.endOverlayOutputDelivery()
+                if didInject, let autoKeyPressHotkey {
+                    self?.pressAutoKeyAfterTextInjection(autoKeyPressHotkey)
+                }
                 completion?(didInject)
             }
         case .answerOverlay:

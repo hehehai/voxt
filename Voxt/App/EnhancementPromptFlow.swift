@@ -9,6 +9,13 @@ extension AppDelegate {
     static let rawTranscriptionTemplateVariable = EnhancementPromptResolver.rawTranscriptionTemplateVariable
     static let userMainLanguageTemplateVariable = EnhancementPromptResolver.userMainLanguageTemplateVariable
 
+    private struct AppBranchAutoKeyPressMatch {
+        let group: AppBranchGroup
+        let matchedAppGroupName: String?
+        let matchedURLGroupName: String?
+        let overlayIconMatch: OverlayEnhancementIconMatch?
+    }
+
     struct EnhancementPromptResolution {
         enum Delivery {
             case systemPrompt
@@ -167,6 +174,28 @@ extension AppDelegate {
         return (nil, nil)
     }
 
+    func autoKeyPressHotkeyForCurrentAppBranchSession() -> HotkeyPreference.Hotkey? {
+        guard appEnhancementEnabled else { return nil }
+        guard let match = currentAppBranchAutoKeyPressMatch() else { return nil }
+
+        if match.group.autoKeyPressEnabled {
+            lastEnhancementPromptContext = EnhancementPromptContext(
+                focusedAppName: currentEnhancementContext().appName,
+                focusedAppBundleID: currentEnhancementContext().bundleID,
+                matchedGroupID: match.group.id,
+                matchedGroupName: match.matchedURLGroupName ?? match.matchedAppGroupName,
+                matchedAppGroupName: match.matchedAppGroupName,
+                matchedURLGroupName: match.matchedURLGroupName,
+                overlayIconMatch: match.overlayIconMatch
+            )
+            VoxtLog.input(
+                "Auto Key enabled for app branch group. group=\(match.group.name), hotkey=\(HotkeyPreference.displayString(for: match.group.autoKeyPressHotkey, distinguishModifierSides: false))"
+            )
+        }
+
+        return match.group.autoKeyPressEnabled ? match.group.autoKeyPressHotkey : nil
+    }
+
     private func resolveEnhancementPromptVariables(in prompt: String, rawTranscription: String) -> String {
         prompt
             .replacingOccurrences(of: Self.rawTranscriptionTemplateVariable, with: rawTranscription)
@@ -200,6 +229,59 @@ extension AppDelegate {
             }
         }
         return captureEnhancementContextSnapshot()
+    }
+
+    private func currentAppBranchAutoKeyPressMatch() -> AppBranchAutoKeyPressMatch? {
+        let groups = loadAppBranchGroups()
+        guard !groups.isEmpty else { return nil }
+
+        let urlsByID = loadAppBranchURLsByID()
+        let context = currentEnhancementContext()
+        let frontmostBundleID = context.bundleID
+
+        if isBrowserBundleID(frontmostBundleID) {
+            let activeURL = activeBrowserTabURL(frontmostBundleID: frontmostBundleID)
+            guard let normalizedActiveURL = AppBranchURLPatternService.normalizedURLForMatching(activeURL),
+                  let urlMatch = AppBranchURLPatternService.firstGroupMatch(
+                    groups: groups,
+                    urlsByID: urlsByID,
+                    normalizedURL: normalizedActiveURL
+                  ),
+                  let group = groups.first(where: { $0.id == urlMatch.groupID })
+            else {
+                return nil
+            }
+
+            return AppBranchAutoKeyPressMatch(
+                group: group,
+                matchedAppGroupName: nil,
+                matchedURLGroupName: urlMatch.groupName,
+                overlayIconMatch: frontmostBundleID.map {
+                    OverlayEnhancementIconMatch(
+                        kind: .url,
+                        bundleID: $0,
+                        urlOrigin: EnhancementOverlayIconResolver.faviconOrigin(fromPageURL: activeURL)
+                    )
+                }
+            )
+        }
+
+        guard let frontmostBundleID,
+              let group = groups.first(where: { $0.appBundleIDs.contains(frontmostBundleID) })
+        else {
+            return nil
+        }
+
+        return AppBranchAutoKeyPressMatch(
+            group: group,
+            matchedAppGroupName: group.name,
+            matchedURLGroupName: nil,
+            overlayIconMatch: OverlayEnhancementIconMatch(
+                kind: .app,
+                bundleID: frontmostBundleID,
+                urlOrigin: nil
+            )
+        )
     }
 
     private func overlayIconMatch(

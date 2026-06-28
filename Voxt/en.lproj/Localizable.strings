@@ -1937,6 +1937,11 @@
 "Keep this conservative for stable dictation output." = "Keep this conservative for stable dictation output.";
 "Automatic, zh, en" = "Automatic, zh, en";
 "Automatic, zh, en, yue, ja, ko" = "Automatic, zh, en, yue, ja, ko";
+"Auto Return" = "Auto Return";
+"Press Return automatically after Voxt inserts text for this group." = "Press Return automatically after Voxt inserts text for this group.";
+"Auto Key" = "Auto Key";
+"Press the configured key automatically after Voxt inserts text for this group. Defaults to Return." = "Press the configured key automatically after Voxt inserts text for this group. Defaults to Return.";
+"Automatically press this key after transcription ends." = "Automatically press this key after transcription ends.";
 "Context On" = "Context On";
 "Context Off" = "Context Off";
 "ITN On" = "ITN On";

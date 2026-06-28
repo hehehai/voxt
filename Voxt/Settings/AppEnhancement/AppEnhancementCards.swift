@@ -125,6 +125,8 @@ extension AppEnhancementSettingsView {
                     Button(AppLocalization.localizedString("Create Group")) {
                         groupNameDraft = ""
                         groupPromptDraft = ""
+                        groupAutoKeyPressEnabledDraft = false
+                        groupAutoKeyPressHotkeyDraft = AppBranchGroup.defaultAutoKeyPressHotkey
                         modalErrorMessage = nil
                         modal = .createGroup
                     }
@@ -321,6 +323,15 @@ extension AppEnhancementSettingsView {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
+                if group.autoKeyPressEnabled {
+                    Label(
+                        "\(AppLocalization.localizedString("Auto Key")): \(HotkeyPreference.displayString(for: group.autoKeyPressHotkey, distinguishModifierSides: false))",
+                        systemImage: "keyboard"
+                    )
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+
                 Spacer()
 
                 Button(AppLocalization.localizedString("Copy")) {
@@ -331,6 +342,8 @@ extension AppEnhancementSettingsView {
                 Button(AppLocalization.localizedString("Edit")) {
                     groupNameDraft = group.name
                     groupPromptDraft = group.prompt
+                    groupAutoKeyPressEnabledDraft = group.autoKeyPressEnabled
+                    groupAutoKeyPressHotkeyDraft = group.autoKeyPressHotkey
                     modalErrorMessage = nil
                     modal = .editGroup(group.id)
                 }
@@ -410,6 +423,8 @@ extension AppEnhancementSettingsView {
                 actionTitle: currentModal.actionTitle,
                 name: $groupNameDraft,
                 prompt: $groupPromptDraft,
+                autoKeyPressEnabled: $groupAutoKeyPressEnabledDraft,
+                autoKeyPressHotkey: $groupAutoKeyPressHotkeyDraft,
                 errorMessage: modalErrorMessage,
                 onCancel: {
                     modal = nil

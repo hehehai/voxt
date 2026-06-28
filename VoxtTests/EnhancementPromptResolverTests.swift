@@ -2,6 +2,7 @@
 // Provides Enhancement Prompt Resolver Tests for Voxt test coverage.
 
 import XCTest
+import Carbon
 @testable import Voxt
 
 final class EnhancementPromptResolverTests: XCTestCase {
@@ -260,6 +261,70 @@ final class EnhancementPromptResolverTests: XCTestCase {
         XCTAssertContains(output.content, "Docs cleanup")
         XCTAssertContains(output.content, "Other user languages: None.")
         XCTAssertContains(output.content, "It is guidance only, not a translation target.")
+    }
+
+    func testAppBranchGroupDecodesMissingAutoReturnAsDisabled() throws {
+        let json = """
+        [{
+            "id": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+            "name": "Chat",
+            "prompt": "",
+            "appBundleIDs": ["com.example.chat"],
+            "appRefs": [{"bundleID": "com.example.chat", "displayName": "Chat"}],
+            "urlPatternIDs": [],
+            "isExpanded": true
+        }]
+        """
+
+        let groups = try JSONDecoder().decode([AppBranchGroup].self, from: Data(json.utf8))
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertFalse(groups[0].autoPressReturnEnabled)
+        XCTAssertFalse(groups[0].autoKeyPressEnabled)
+        XCTAssertEqual(groups[0].autoKeyPressHotkey, AppBranchGroup.defaultAutoKeyPressHotkey)
+    }
+
+    func testAppBranchGroupMigratesLegacyAutoReturnSetting() throws {
+        let json = """
+        [{
+            "id": "\(UUID().uuidString)",
+            "name": "Chat",
+            "prompt": "",
+            "appBundleIDs": ["com.example.chat"],
+            "appRefs": [{"bundleID": "com.example.chat", "displayName": "Chat"}],
+            "urlPatternIDs": [],
+            "autoPressReturnEnabled": true,
+            "isExpanded": true
+        }]
+        """
+
+        let groups = try JSONDecoder().decode([AppBranchGroup].self, from: Data(json.utf8))
+
+        XCTAssertTrue(groups[0].autoKeyPressEnabled)
+        XCTAssertEqual(groups[0].autoKeyPressHotkey, AppBranchGroup.defaultAutoKeyPressHotkey)
+        XCTAssertTrue(groups[0].autoPressReturnEnabled)
+    }
+
+    func testAppBranchGroupPreservesAutoKeyPressSetting() throws {
+        let customHotkey = HotkeyPreference.Hotkey(
+            keyCode: UInt16(kVK_Return),
+            modifiers: [.control],
+            sidedModifiers: []
+        )
+        let group = TestFactories.makeAppBranchGroup(
+            name: "Chat",
+            prompt: "",
+            appBundleIDs: ["com.example.chat"],
+            autoKeyPressEnabled: true,
+            autoKeyPressHotkey: customHotkey
+        )
+
+        let data = try JSONEncoder().encode([group])
+        let decoded = try JSONDecoder().decode([AppBranchGroup].self, from: data)
+
+        XCTAssertTrue(decoded[0].autoKeyPressEnabled)
+        XCTAssertEqual(decoded[0].autoKeyPressHotkey, customHotkey)
+        XCTAssertFalse(decoded[0].autoPressReturnEnabled)
     }
 
     func testFaviconOriginKeepsSchemeAndHostOnly() {
