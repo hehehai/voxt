@@ -93,7 +93,6 @@ struct DictionaryEntriesCard: View {
                 ) {
                     SettingsSearchIconView()
                 }
-                .frame(width: 30, height: 30)
 
                 DictionaryHeaderIconButton(
                     accessibilityLabel: AppLocalization.localizedString("Create Hot Word in This Category"),
@@ -101,7 +100,6 @@ struct DictionaryEntriesCard: View {
                 ) {
                     DictionaryActionIcon(kind: .createTerm, size: 15)
                 }
-                .frame(width: 30, height: 30)
 
                 DictionaryHeaderIconButton(
                     accessibilityLabel: AppLocalization.localizedString("Edit Dictionary Category"),
@@ -111,7 +109,6 @@ struct DictionaryEntriesCard: View {
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(Color.secondary)
                 }
-                .frame(width: 30, height: 30)
 
                 DictionaryHeaderIconButton(
                     accessibilityLabel: AppLocalization.localizedString("Delete Dictionary Category"),
@@ -123,7 +120,6 @@ struct DictionaryEntriesCard: View {
                 ) {
                     DictionaryActionIcon(kind: .deleteCategory, size: 15)
                 }
-                .frame(width: 30, height: 30)
             }
         } else {
             HStack {
@@ -137,7 +133,6 @@ struct DictionaryEntriesCard: View {
                 ) {
                     SettingsSearchIconView()
                 }
-                .frame(width: 30, height: 30)
 
                 if selectedTab == .hotwords {
                     DictionaryHeaderIconButton(
@@ -146,7 +141,6 @@ struct DictionaryEntriesCard: View {
                     ) {
                         DictionaryActionIcon(kind: .createCategory, size: 15)
                     }
-                    .frame(width: 30, height: 30)
                 }
 
                 DictionaryHeaderIconButton(
@@ -155,7 +149,6 @@ struct DictionaryEntriesCard: View {
                 ) {
                     DictionaryActionIcon(kind: .createTerm, size: 15)
                 }
-                .frame(width: 30, height: 30)
 
                 Rectangle()
                     .fill(SettingsUIStyle.subtleBorderColor)
@@ -168,7 +161,6 @@ struct DictionaryEntriesCard: View {
                 ) {
                     SettingsOneClickIngestIconView(size: 15)
                 }
-                .frame(width: 30, height: 30)
 
                 DictionaryHeaderIconButton(
                     accessibilityLabel: AppLocalization.localizedString("Dictionary Advanced Settings"),
@@ -176,7 +168,6 @@ struct DictionaryEntriesCard: View {
                 ) {
                     SettingsSparkleSettingsIconView(size: 15)
                 }
-                .frame(width: 30, height: 30)
 
                 DictionaryHeaderActionMenuButton(
                     actions: [
@@ -191,7 +182,6 @@ struct DictionaryEntriesCard: View {
                     ],
                     accessibilityLabel: AppLocalization.localizedString("More")
                 )
-                .frame(width: 30, height: 30)
             }
         }
     }
@@ -695,7 +685,7 @@ private struct DictionaryHeaderIconButton<Icon: View>: View {
                 .frame(width: 30, height: 30)
         }
         .buttonStyle(DictionaryHeaderIconButtonStyle())
-                .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

@@ -657,11 +657,14 @@ extension RemoteProviderConfigurationSheet {
            generationThinkingBudgetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return AppLocalization.format("%@ must be a positive integer.", AppLocalization.localizedString("Thinking Budget"))
         }
-        for (text, fieldName) in positiveIntFields where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            guard let value = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)), value > 0 else {
-                return AppLocalization.format("%@ must be a positive integer.", fieldName)
-            }
+        if let message = validateTrimmedFields(
+            positiveIntFields,
+            message: "%@ must be a positive integer.",
+            isValid: { Int($0).map { $0 > 0 } == true }
+        ) {
+            return message
         }
+
         var integerFields = [(String, String)]()
         if capabilities.supportsSeed {
             integerFields.append((generationSeedText, AppLocalization.localizedString("Seed")))
@@ -669,11 +672,14 @@ extension RemoteProviderConfigurationSheet {
         if capabilities.supportsLogprobs && generationLogprobsEnabled {
             integerFields.append((generationTopLogprobsText, AppLocalization.localizedString("Top Logprobs")))
         }
-        for (text, fieldName) in integerFields where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            guard let value = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)), value >= 0 else {
-                return AppLocalization.format("%@ must be a non-negative integer.", fieldName)
-            }
+        if let message = validateTrimmedFields(
+            integerFields,
+            message: "%@ must be a non-negative integer.",
+            isValid: { Int($0).map { $0 >= 0 } == true }
+        ) {
+            return message
         }
+
         var doubleFields = [(String, String)]()
         if capabilities.supportsTemperature {
             doubleFields.append((generationTemperatureText, AppLocalization.localizedString("Temperature")))
@@ -691,11 +697,14 @@ extension RemoteProviderConfigurationSheet {
                 doubleFields.append((generationRepetitionPenaltyText, AppLocalization.localizedString("Repetition Penalty")))
             }
         }
-        for (text, fieldName) in doubleFields where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            guard Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) != nil else {
-                return AppLocalization.format("%@ must be a number.", fieldName)
-            }
+        if let message = validateTrimmedFields(
+            doubleFields,
+            message: "%@ must be a number.",
+            isValid: { Double($0) != nil }
+        ) {
+            return message
         }
+
         if capabilities.supportsExtraBody,
            let extraBodyMessage = validateJSONObjectField(
                generationExtraBodyJSON,
@@ -711,6 +720,21 @@ extension RemoteProviderConfigurationSheet {
                requiresValue: false
            ) {
             return extraOptionsMessage
+        }
+        return nil
+    }
+
+    private func validateTrimmedFields(
+        _ fields: [(String, String)],
+        message: String,
+        isValid: (String) -> Bool
+    ) -> String? {
+        for (text, fieldName) in fields {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard isValid(trimmed) else {
+                return AppLocalization.format(message, fieldName)
+            }
         }
         return nil
     }

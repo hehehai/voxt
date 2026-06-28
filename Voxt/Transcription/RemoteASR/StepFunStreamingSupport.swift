@@ -15,9 +15,10 @@ extension RemoteASRTranscriber {
             throw NSError(domain: "Voxt.RemoteASR", code: -6, userInfo: [NSLocalizedDescriptionKey: "StepFun API key is empty."])
         }
 
-        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty
             ? "step-asr-1.1-stream"
-            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            : configuredModel
         let endpoint = RemoteASREndpointSupport.resolvedStepFunRealtimeEndpoint(configuration.endpoint)
         guard let wsURL = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.RemoteASR", code: -5, userInfo: [NSLocalizedDescriptionKey: "Invalid StepFun realtime endpoint URL."])

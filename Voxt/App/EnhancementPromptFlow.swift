@@ -179,9 +179,10 @@ extension AppDelegate {
         guard let match = currentAppBranchAutoKeyPressMatch() else { return nil }
 
         if match.group.autoKeyPressEnabled {
+            let context = currentEnhancementContext()
             lastEnhancementPromptContext = EnhancementPromptContext(
-                focusedAppName: currentEnhancementContext().appName,
-                focusedAppBundleID: currentEnhancementContext().bundleID,
+                focusedAppName: context.appName,
+                focusedAppBundleID: context.bundleID,
                 matchedGroupID: match.group.id,
                 matchedGroupName: match.matchedURLGroupName ?? match.matchedAppGroupName,
                 matchedAppGroupName: match.matchedAppGroupName,

@@ -127,9 +127,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let configuration = selectedProviderConfiguration(for: provider)
         let hintPayload = resolvedHintPayload(for: provider, configuration: configuration)
         activeProvider = provider
-        let resolvedModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedModel = configuredModel.isEmpty
             ? provider.suggestedModel
-            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            : configuredModel
         let resolvedEndpoint = configuration.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let routeSummary: String
         if provider == .aliyunBailianASR {
@@ -765,9 +766,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             )
         }
 
-        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty
             ? RemoteASRProvider.stepFunASR.suggestedModel
-            : configuration.model
+            : configuredModel
 
         let wavData = try Data(contentsOf: fileURL)
         let pcmData = try StepFunSupport.extractPCMData(fromWAV: wavData)
@@ -978,9 +980,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func transcribeAliyunBailian(fileURL: URL, configuration: RemoteProviderConfiguration) async throws -> String {
-        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty
             ? RemoteASRProvider.aliyunBailianASR.suggestedModel
-            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            : configuredModel
         guard RemoteASREndpointSupport.isAliyunFunRealtimeModel(model)
                 || RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: model) != nil
                 || RemoteASREndpointSupport.isAliyunFileTranscriptionModel(model)
@@ -1086,9 +1089,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             throw NSError(domain: "Voxt.RemoteASR", code: -40, userInfo: [NSLocalizedDescriptionKey: "Aliyun Bailian API key is empty."])
         }
 
-        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty
             ? RemoteASRProvider.aliyunBailianASR.suggestedModel
-            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            : configuredModel
         let endpoint = RemoteASREndpointSupport.resolvedAliyunFunRealtimeEndpoint(configuration.endpoint)
         guard let wsURL = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.RemoteASR", code: -41, userInfo: [NSLocalizedDescriptionKey: "Invalid Aliyun realtime WebSocket endpoint URL."])
@@ -1308,9 +1312,10 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             throw NSError(domain: "Voxt.RemoteASR", code: -44, userInfo: [NSLocalizedDescriptionKey: "Aliyun Bailian API key is empty."])
         }
 
-        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty
             ? "qwen3-asr-flash-realtime"
-            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            : configuredModel
         let endpoint = RemoteASREndpointSupport.resolvedAliyunQwenRealtimeEndpoint(configuration.endpoint, model: model)
         guard let wsURL = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.RemoteASR", code: -45, userInfo: [NSLocalizedDescriptionKey: "Invalid Aliyun Qwen realtime WebSocket endpoint URL."])

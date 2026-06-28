@@ -82,10 +82,6 @@ enum DictionaryEntryInputPreparer {
             resolvedValidationIndex = DictionaryValidationIndex(entries: entries ?? [], excluding: excludedID)
         }
 
-        if resolvedValidationIndex.contains(normalized, groupID: groupID) {
-            throw DictionaryStoreError.duplicateTerm
-        }
-
         var preparedReplacementTerms: [DictionaryReplacementTerm] = []
         var seenReplacementKeys = Set<String>()
 

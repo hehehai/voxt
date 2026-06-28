@@ -749,9 +749,10 @@ private final class AliyunFunMeetingRemoteLiveSession: BaseMeetingRemoteLiveSess
         policy: MeetingLiveSessionPolicy
     ) {
         self.token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.model = configuredModel.isEmpty
             ? RemoteASRProvider.aliyunBailianASR.suggestedModel
-            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            : configuredModel
         self.endpoint = MeetingAliyunRemoteSupport.resolvedFunRealtimeEndpoint(configuration.endpoint)
         super.init(
             speaker: speaker,
@@ -946,9 +947,10 @@ private final class AliyunQwenMeetingRemoteLiveSession: BaseMeetingRemoteLiveSes
         timelineOffsetSeconds: TimeInterval,
         policy: MeetingLiveSessionPolicy
     ) {
-        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty
             ? "qwen3-asr-flash-realtime"
-            : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            : configuredModel
         self.token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.endpoint = MeetingAliyunRemoteSupport.resolvedQwenRealtimeEndpoint(configuration.endpoint, model: model)
         self.sessionKind = RemoteASREndpointSupport.aliyunQwenRealtimeSessionKind(for: model) ?? .qwenASR

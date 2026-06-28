@@ -169,10 +169,7 @@ final class SherpaOnnxModelManager: ObservableObject {
             do {
                 try await performDownload(id: id)
                 cancelDownloadProgressTask(for: id)
-                setPausedStatusMessage(nil, for: id)
-                downloadedStateByID[id] = true
-                localSizeTextByID[id] = nil
-                setState(.downloaded, for: id)
+                markModelDownloaded(id: id)
             } catch is CancellationError {
                 cancelDownloadProgressTask(for: id)
                 switch downloadStopActionsByID[id] {
@@ -181,9 +178,7 @@ final class SherpaOnnxModelManager: ObservableObject {
                     setPausedState(from: state(for: id), option: option, for: id)
                 case .cancel, .none:
                     cleanupDownload(id: id)
-                    downloadedStateByID[id] = false
-                    setPausedStatusMessage(nil, for: id)
-                    setState(.notDownloaded, for: id)
+                    markModelNotDownloaded(id: id)
                 }
             } catch {
                 cancelDownloadProgressTask(for: id)
@@ -214,9 +209,7 @@ final class SherpaOnnxModelManager: ObservableObject {
         }
         cleanupDownload(id: id)
         clearSelectedDownloadSource(for: id)
-        downloadedStateByID[id] = false
-        setPausedStatusMessage(nil, for: id)
-        setState(.notDownloaded, for: id)
+        markModelNotDownloaded(id: id)
     }
 
     func deleteModel(id: SherpaOnnxModelID) {
@@ -225,9 +218,7 @@ final class SherpaOnnxModelManager: ObservableObject {
             try? FileManager.default.removeItem(at: directory)
         }
         clearSelectedDownloadSource(for: id)
-        downloadedStateByID[id] = false
-        localSizeTextByID[id] = nil
-        setState(.notDownloaded, for: id)
+        markModelNotDownloaded(id: id, clearsLocalSize: true)
     }
 
     func openModelDirectory(id: SherpaOnnxModelID) {
@@ -580,6 +571,22 @@ final class SherpaOnnxModelManager: ObservableObject {
         } else {
             pausedStatusMessageByID[id] = message
         }
+    }
+
+    private func markModelDownloaded(id: SherpaOnnxModelID) {
+        setPausedStatusMessage(nil, for: id)
+        downloadedStateByID[id] = true
+        localSizeTextByID[id] = nil
+        setState(.downloaded, for: id)
+    }
+
+    private func markModelNotDownloaded(id: SherpaOnnxModelID, clearsLocalSize: Bool = false) {
+        downloadedStateByID[id] = false
+        if clearsLocalSize {
+            localSizeTextByID[id] = nil
+        }
+        setPausedStatusMessage(nil, for: id)
+        setState(.notDownloaded, for: id)
     }
 
     private func completedBytes(from state: ModelState) -> Int64 {

@@ -99,15 +99,7 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
             arguments += [DictionaryEntrySource.manual.rawValue]
         }
 
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) {
-            let searchIDs = try database.dbQueue.read { db in
-                try String.fetchAll(
-                    db,
-                    sql: "SELECT entryID FROM dictionary_search WHERE dictionary_search MATCH ?",
-                    arguments: [ftsQuery]
-                )
-            }
+        if let searchIDs = try searchEntryIDs(query: query) {
             if searchIDs.isEmpty {
                 return []
             }
@@ -144,15 +136,7 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
             arguments += [DictionaryEntrySource.manual.rawValue]
         }
 
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) {
-            let searchIDs = try database.dbQueue.read { db in
-                try String.fetchAll(
-                    db,
-                    sql: "SELECT entryID FROM dictionary_search WHERE dictionary_search MATCH ?",
-                    arguments: [ftsQuery]
-                )
-            }
+        if let searchIDs = try searchEntryIDs(query: query) {
             if searchIDs.isEmpty {
                 return 0
             }
@@ -178,15 +162,7 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
         ]
         var arguments: StatementArguments = []
 
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) {
-            let searchIDs = try database.dbQueue.read { db in
-                try String.fetchAll(
-                    db,
-                    sql: "SELECT entryID FROM dictionary_search WHERE dictionary_search MATCH ?",
-                    arguments: [ftsQuery]
-                )
-            }
+        if let searchIDs = try searchEntryIDs(query: query) {
             if searchIDs.isEmpty {
                 return []
             }
@@ -216,15 +192,7 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
         ]
         var arguments: StatementArguments = []
 
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) {
-            let searchIDs = try database.dbQueue.read { db in
-                try String.fetchAll(
-                    db,
-                    sql: "SELECT entryID FROM dictionary_search WHERE dictionary_search MATCH ?",
-                    arguments: [ftsQuery]
-                )
-            }
+        if let searchIDs = try searchEntryIDs(query: query) {
             if searchIDs.isEmpty {
                 return 0
             }
@@ -475,6 +443,20 @@ final class DictionaryRepository: DictionaryRepositoryProtocol, @unchecked Senda
                 arguments: [group, normalizedTerm]
             ) ?? 0
             return replacementCount > 0
+        }
+    }
+
+    private func searchEntryIDs(query: String) throws -> [String]? {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) else {
+            return nil
+        }
+        return try database.dbQueue.read { db in
+            try String.fetchAll(
+                db,
+                sql: "SELECT entryID FROM dictionary_search WHERE dictionary_search MATCH ?",
+                arguments: [ftsQuery]
+            )
         }
     }
 

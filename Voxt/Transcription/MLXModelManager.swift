@@ -541,14 +541,7 @@ class MLXModelManager: ObservableObject {
                     downloadSizeTolerance: downloadSizeTolerance,
                     fileManager: .default
                 )
-                downloadedStateByRepo[canonicalRepo] = true
-                resumableDownloadStateByRepo[canonicalRepo] = false
-                localSizeTextByRepo.removeValue(forKey: canonicalRepo)
-                if canonicalRepo == modelRepo {
-                    checkExistingModel()
-                } else {
-                    setState(.downloaded, for: canonicalRepo)
-                }
+                markDownloadCompleted(for: canonicalRepo)
                 VoxtLog.modelInfo("Download complete. repo=\(canonicalRepo)")
             } catch is CancellationError {
                 switch downloadStopActionsByRepo[canonicalRepo] {
@@ -559,12 +552,7 @@ class MLXModelManager: ObservableObject {
                     setPausedStatusMessage(nil, for: canonicalRepo)
                     cleanupPartialDownload(for: canonicalRepo)
                     clearHubCache(for: canonicalRepo)
-                    invalidateLocalCache(for: canonicalRepo)
-                    if canonicalRepo == modelRepo {
-                        checkExistingModel()
-                    } else {
-                        setState(.notDownloaded, for: canonicalRepo)
-                    }
+                    markCancelledDownloadUnavailable(for: canonicalRepo)
                     VoxtLog.modelInfo("Download cancelled. repo=\(canonicalRepo)")
                 }
             } catch {
@@ -710,6 +698,26 @@ class MLXModelManager: ObservableObject {
         downloadedStateByRepo.removeValue(forKey: repo)
         resumableDownloadStateByRepo.removeValue(forKey: repo)
         localSizeTextByRepo.removeValue(forKey: repo)
+    }
+
+    private func markDownloadCompleted(for repo: String) {
+        downloadedStateByRepo[repo] = true
+        resumableDownloadStateByRepo[repo] = false
+        localSizeTextByRepo.removeValue(forKey: repo)
+        if repo == modelRepo {
+            checkExistingModel()
+        } else {
+            setState(.downloaded, for: repo)
+        }
+    }
+
+    private func markCancelledDownloadUnavailable(for repo: String) {
+        invalidateLocalCache(for: repo)
+        if repo == modelRepo {
+            checkExistingModel()
+        } else {
+            setState(.notDownloaded, for: repo)
+        }
     }
 
     private func primeDownloadedStateCacheIfNeeded() {

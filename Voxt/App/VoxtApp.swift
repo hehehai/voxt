@@ -551,119 +551,67 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupHotkey()
         setupLifecycleRecoveryObservers()
         setupEscapeKeyMonitoring()
-        overlayWindow.onRequestClose = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.dismissAnswerOverlay()
-            }
+        overlayWindow.onRequestClose = mainActorCallback { $0.dismissAnswerOverlay() }
+        overlayWindow.onRequestInject = mainActorCallback { $0.injectAnswerOverlayContent() }
+        overlayWindow.onRequestContinue = mainActorCallback { $0.continueRewriteConversation() }
+        overlayWindow.onRequestConversationRecordToggle = mainActorCallback { $0.toggleRewriteConversationRecording() }
+        overlayWindow.onRequestDetail = mainActorCallback { $0.showCurrentTranscriptionDetailWindow() }
+        overlayWindow.onRequestSessionTranslationTargetPickerToggle = mainActorCallback { $0.toggleSessionTranslationTargetPicker() }
+        overlayWindow.onRequestSessionTranslationTargetLanguageSelect = mainActorCallback { appDelegate, language in
+            appDelegate.selectSessionTranslationTargetLanguage(language)
         }
-        overlayWindow.onRequestInject = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.injectAnswerOverlayContent()
-            }
+        overlayWindow.onRequestSessionTranslationTargetPickerDismiss = mainActorCallback {
+            $0.dismissSessionTranslationTargetPicker()
         }
-        overlayWindow.onRequestContinue = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.continueRewriteConversation()
-            }
+        meetingOverlayWindow.onRequestClose = mainActorCallback { $0.requestMeetingSessionCloseConfirmation() }
+        meetingOverlayWindow.onRequestCollapseToggle = mainActorCallback { $0.toggleMeetingOverlayCollapse() }
+        meetingOverlayWindow.onRequestPauseToggle = mainActorCallback { $0.toggleMeetingPause() }
+        meetingOverlayWindow.onRequestDetail = mainActorCallback { $0.showLiveMeetingDetailWindow() }
+        meetingOverlayWindow.onRequestRealtimeTranslateToggle = mainActorCallback { appDelegate, isEnabled in
+            appDelegate.handleMeetingRealtimeTranslationToggle(isEnabled)
         }
-        overlayWindow.onRequestConversationRecordToggle = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.toggleRewriteConversationRecording()
-            }
+        meetingOverlayWindow.onRequestCaptureModeChange = mainActorCallback { appDelegate, mode in
+            appDelegate.handleMeetingCaptureModeSelection(mode)
         }
-        overlayWindow.onRequestDetail = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.showCurrentTranscriptionDetailWindow()
-            }
+        meetingOverlayWindow.onRequestCaptureModePickerToggle = mainActorCallback { $0.toggleMeetingCaptureModePicker() }
+        meetingOverlayWindow.onRequestCaptureModePickerDismiss = mainActorCallback { $0.dismissMeetingCaptureModePicker() }
+        meetingOverlayWindow.onRequestRealtimeTranslationLanguageConfirm = mainActorCallback {
+            $0.confirmMeetingRealtimeTranslationLanguageSelection()
         }
-        overlayWindow.onRequestSessionTranslationTargetPickerToggle = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.toggleSessionTranslationTargetPicker()
-            }
+        meetingOverlayWindow.onRequestRealtimeTranslationLanguageCancel = mainActorCallback {
+            $0.cancelMeetingRealtimeTranslationLanguageSelection()
         }
-        overlayWindow.onRequestSessionTranslationTargetLanguageSelect = { [weak self] language in
-            Task { @MainActor [weak self] in
-                self?.selectSessionTranslationTargetLanguage(language)
-            }
+        meetingOverlayWindow.onRequestCancelMeeting = mainActorCallback { $0.cancelMeetingSessionWithoutSaving() }
+        meetingOverlayWindow.onRequestFinishMeeting = mainActorCallback { $0.finishMeetingSessionAndOpenDetail() }
+        meetingOverlayWindow.onRequestDismissCloseConfirmation = mainActorCallback {
+            $0.dismissMeetingSessionCloseConfirmation()
         }
-        overlayWindow.onRequestSessionTranslationTargetPickerDismiss = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.dismissSessionTranslationTargetPicker()
-            }
-        }
-        meetingOverlayWindow.onRequestClose = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.requestMeetingSessionCloseConfirmation()
-            }
-        }
-        meetingOverlayWindow.onRequestCollapseToggle = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.toggleMeetingOverlayCollapse()
-            }
-        }
-        meetingOverlayWindow.onRequestPauseToggle = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.toggleMeetingPause()
-            }
-        }
-        meetingOverlayWindow.onRequestDetail = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.showLiveMeetingDetailWindow()
-            }
-        }
-        meetingOverlayWindow.onRequestRealtimeTranslateToggle = { [weak self] isEnabled in
-            Task { @MainActor [weak self] in
-                self?.handleMeetingRealtimeTranslationToggle(isEnabled)
-            }
-        }
-        meetingOverlayWindow.onRequestCaptureModeChange = { [weak self] mode in
-            Task { @MainActor [weak self] in
-                self?.handleMeetingCaptureModeSelection(mode)
-            }
-        }
-        meetingOverlayWindow.onRequestCaptureModePickerToggle = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.toggleMeetingCaptureModePicker()
-            }
-        }
-        meetingOverlayWindow.onRequestCaptureModePickerDismiss = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.dismissMeetingCaptureModePicker()
-            }
-        }
-        meetingOverlayWindow.onRequestRealtimeTranslationLanguageConfirm = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.confirmMeetingRealtimeTranslationLanguageSelection()
-            }
-        }
-        meetingOverlayWindow.onRequestRealtimeTranslationLanguageCancel = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.cancelMeetingRealtimeTranslationLanguageSelection()
-            }
-        }
-        meetingOverlayWindow.onRequestCancelMeeting = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.cancelMeetingSessionWithoutSaving()
-            }
-        }
-        meetingOverlayWindow.onRequestFinishMeeting = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.finishMeetingSessionAndOpenDetail()
-            }
-        }
-        meetingOverlayWindow.onRequestDismissCloseConfirmation = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.dismissMeetingSessionCloseConfirmation()
-            }
-        }
-        meetingOverlayWindow.onRequestCopySegment = { [weak self] segment in
-            Task { @MainActor [weak self] in
-                self?.copyMeetingSegment(segment)
-            }
+        meetingOverlayWindow.onRequestCopySegment = mainActorCallback { appDelegate, segment in
+            appDelegate.copyMeetingSegment(segment)
         }
         presentMainWindowOnLaunchIfNeeded()
         scheduleLLMIdleWarmupIfNeeded()
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
+    }
+
+    private func mainActorCallback(_ action: @escaping @MainActor (AppDelegate) -> Void) -> () -> Void {
+        { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                action(self)
+            }
+        }
+    }
+
+    private func mainActorCallback<Value>(
+        _ action: @escaping @MainActor (AppDelegate, Value) -> Void
+    ) -> (Value) -> Void {
+        { [weak self] value in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                action(self, value)
+            }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

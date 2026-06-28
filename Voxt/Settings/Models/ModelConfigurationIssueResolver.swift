@@ -44,6 +44,14 @@ struct ModelConfigurationIssue: Identifiable, Hashable {
 }
 
 enum ModelConfigurationIssueResolver {
+    private static var modelNeedsInstallMessage: String {
+        AppLocalization.localizedString("Model needs to be installed.")
+    }
+
+    private static var configurationRequiredMessage: String {
+        AppLocalization.localizedString("Configuration required.")
+    }
+
     static func missingIssues(
         defaults: UserDefaults = .standard,
         mlxModelManager: MLXModelManager,
@@ -122,16 +130,16 @@ enum ModelConfigurationIssueResolver {
         case .mlx(let repo):
             let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
             if !mlxModelManager.isModelDownloaded(repo: canonicalRepo) {
-                issues.append(.init(scope: .mlxModel(canonicalRepo), message: AppLocalization.localizedString("Model needs to be installed.")))
+                issues.append(.init(scope: .mlxModel(canonicalRepo), message: modelNeedsInstallMessage))
             }
         case .sherpaOnnx(let modelID):
             if let sherpaOnnxModelManager, !sherpaOnnxModelManager.isModelDownloaded(id: modelID) {
-                issues.append(.init(scope: .sherpaOnnxModel(modelID), message: AppLocalization.localizedString("Model needs to be installed.")))
+                issues.append(.init(scope: .sherpaOnnxModel(modelID), message: modelNeedsInstallMessage))
             }
         case .remote(let provider):
             let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: remoteASR)
             if !configuration.isConfigured {
-                issues.append(.init(scope: .remoteASRProvider(provider), message: AppLocalization.localizedString("Configuration required.")))
+                issues.append(.init(scope: .remoteASRProvider(provider), message: configurationRequiredMessage))
             }
         }
     }
@@ -147,14 +155,14 @@ enum ModelConfigurationIssueResolver {
             return
         case .localLLM(let repo):
             if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .customLLMModel(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
+                issues.append(.init(scope: .customLLMModel(repo), message: modelNeedsInstallMessage))
             }
         case .remoteLLM(let provider):
             if !RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
                 provider: provider,
                 stored: remoteLLM
             ) {
-                issues.append(.init(scope: .remoteLLMProvider(provider), message: AppLocalization.localizedString("Configuration required.")))
+                issues.append(.init(scope: .remoteLLMProvider(provider), message: configurationRequiredMessage))
             }
         }
     }
@@ -170,7 +178,7 @@ enum ModelConfigurationIssueResolver {
             return
         case .localLLM(let repo):
             if !customLLMManager.isModelDownloaded(repo: repo) {
-                issues.append(.init(scope: .translationCustomLLM(repo), message: AppLocalization.localizedString("Model needs to be installed.")))
+                issues.append(.init(scope: .translationCustomLLM(repo), message: modelNeedsInstallMessage))
             }
         case .localGGUF:
             return
@@ -179,7 +187,7 @@ enum ModelConfigurationIssueResolver {
                 provider: provider,
                 stored: remoteLLM
             ) {
-                issues.append(.init(scope: .translationRemoteLLM(provider), message: AppLocalization.localizedString("Configuration required.")))
+                issues.append(.init(scope: .translationRemoteLLM(provider), message: configurationRequiredMessage))
             }
         }
     }
