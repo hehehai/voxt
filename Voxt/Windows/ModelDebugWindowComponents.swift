@@ -432,6 +432,77 @@ struct LLMDebugVariableEditor: View {
     }
 }
 
+struct ASRDebugVADSnapshotView: View {
+    let snapshot: VADDebugSnapshot
+
+    private var gateText: String {
+        switch snapshot.localGatePolicy {
+        case .enabled:
+            return modelDebugLocalized("Enabled")
+        case .disabled(let reason):
+            return AppLocalization.format("Disabled: %@", reason)
+        }
+    }
+
+    private var frameVADText: String {
+        snapshot.providerUsesServerVAD
+            ? modelDebugLocalized("Server VAD")
+            : snapshot.frameBackend.title
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+                ASRDebugVADBadge(
+                    title: modelDebugLocalized("VAD Mode"),
+                    value: snapshot.mode.title
+                )
+                ASRDebugVADBadge(
+                    title: modelDebugLocalized("Frame VAD"),
+                    value: frameVADText
+                )
+                ASRDebugVADBadge(
+                    title: modelDebugLocalized("Local Gate"),
+                    value: gateText
+                )
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(DetailPanelUIStyle.controlFillColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(DetailPanelUIStyle.borderColor, lineWidth: 1)
+        )
+    }
+}
+
+private struct ASRDebugVADBadge: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+}
+
 struct ASRDebugResultCard: View {
     let result: ASRDebugResult
     let onClose: () -> Void

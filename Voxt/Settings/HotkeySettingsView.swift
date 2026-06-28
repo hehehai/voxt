@@ -119,7 +119,6 @@ struct HotkeySettingsView: View {
     @State private var pendingCapturedField: RecordingField?
     @State private var pendingCapturedHotkey: HotkeyPreference.Hotkey?
     @State private var recorderMessageKey: String?
-    @State private var isAdvancedExpanded = false
     @State private var hotkeyToastMessage = ""
     @State private var hotkeyToastDismissTask: Task<Void, Never>?
     @State private var transcriptionBindings = HotkeyPreference.loadTranscriptionBindings()
@@ -491,12 +490,10 @@ struct HotkeySettingsView: View {
                             .toggleStyle(.switch)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VoiceEndCommandSettingsSection()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            GeneralAdvancedCard(isExpanded: $isAdvancedExpanded) {
-                VoiceEndCommandSettingsSection()
             }
         }
         .id(interfaceLanguageRaw)

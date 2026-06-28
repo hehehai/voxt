@@ -6,7 +6,7 @@ import Carbon
 import SwiftUI
 import IOKit.hidsystem
 
-struct SidedModifierFlags: OptionSet, Equatable {
+nonisolated struct SidedModifierFlags: OptionSet, Equatable {
     let rawValue: Int
 
     static let leftShift = SidedModifierFlags(rawValue: 1 << 0)
@@ -152,7 +152,7 @@ struct SidedModifierFlags: OptionSet, Equatable {
     }
 }
 
-struct HotkeyPreference {
+nonisolated struct HotkeyPreference {
     enum TriggerBehavior: String, CaseIterable, Identifiable, Codable {
         case tap
         case longPress
@@ -1315,6 +1315,6 @@ struct HotkeyPreference {
     }
 }
 
-extension NSEvent.ModifierFlags {
+nonisolated extension NSEvent.ModifierFlags {
     static let hotkeyRelevant: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
 }

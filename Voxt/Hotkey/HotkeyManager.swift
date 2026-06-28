@@ -10,7 +10,7 @@ import IOKit.hid
 /// Monitors a global hotkey via a CGEvent tap.
 /// - Press and hold hotkey key  → calls `onKeyDown`
 /// - Release hotkey key         → calls `onKeyUp`
-nonisolated final class HotkeyManager {
+nonisolated final class HotkeyManager: @unchecked Sendable {
     enum EventTapRecoveryResult: Equatable {
         case reenabled
         case unavailable
@@ -44,7 +44,23 @@ nonisolated final class HotkeyManager {
         let binding: HotkeyPreference.HotkeyBinding
     }
 
-    private final class EventTapRunLoop {
+    private struct HotkeyEventSnapshot: @unchecked Sendable {
+        let type: CGEventType
+        let keyCode: UInt16
+        let mouseButtonNumber: Int
+        let flags: CGEventFlags
+        let isAutoRepeat: Bool
+
+        init(type: CGEventType, event: CGEvent) {
+            self.type = type
+            keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+            mouseButtonNumber = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+            flags = event.flags
+            isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        }
+    }
+
+    private final class EventTapRunLoop: @unchecked Sendable {
         private let condition = NSCondition()
         private var thread: Thread?
         private var runLoop: CFRunLoop?
@@ -213,6 +229,9 @@ nonisolated final class HotkeyManager {
     private var cachedConfiguration: HotkeyRuntimeConfiguration?
     private var cachedRoutedBindings: [RoutedHotkeyBinding]?
     private var dispatchCallbacksAsynchronously = true
+    private let eventTapRecoveryQueue = DispatchQueue(label: "com.voxt.hotkey.eventTapRecovery")
+    private let deferredEventProcessingQueue = DispatchQueue(label: "com.voxt.hotkey.deferredEventProcessing")
+    private let eventTapStateLockWaitTimeout: TimeInterval = 0.015
     private var didPromptAccessibility = false
     private var didPromptInputMonitoring = false
     private var lastEventAt: Date?
@@ -369,6 +388,12 @@ nonisolated final class HotkeyManager {
         }
     }
 
+    private func scheduleEventTapRecovery(disabledEventType: CGEventType) {
+        eventTapRecoveryQueue.async { [weak self] in
+            _ = self?.recoverEventTapIfNeeded(disabledEventType: disabledEventType)
+        }
+    }
+
     private func preflightAndPromptPermissionsIfNeeded() -> Bool {
         let currentStatus = EventListeningPermissionManager.status()
         let accessibilityGranted = currentStatus.accessibilityGranted
@@ -418,6 +443,14 @@ nonisolated final class HotkeyManager {
         return body()
     }
 
+    private func withEventTapStateLock<T>(_ body: () -> T) -> T? {
+        guard stateLock.lock(before: Date(timeIntervalSinceNow: eventTapStateLockWaitTimeout)) else {
+            return nil
+        }
+        defer { stateLock.unlock() }
+        return body()
+    }
+
     private func runtimeConfiguration() -> HotkeyRuntimeConfiguration {
         if let cachedConfiguration {
             return cachedConfiguration
@@ -433,7 +466,7 @@ nonisolated final class HotkeyManager {
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                manager.recoverEventTapIfNeeded(disabledEventType: type)
+                manager.scheduleEventTapRecovery(disabledEventType: type)
                 return Unmanaged.passUnretained(event)
             }
             let consumed = manager.handleEvent(type: type, event: event)
@@ -457,30 +490,49 @@ nonisolated final class HotkeyManager {
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) -> Bool {
-        withStateLock {
-            guard !captureState.isCaptureInProgress else {
-                return false
-            }
-            var eventWasConsumed = false
-            switch type {
-            case .otherMouseDown, .otherMouseUp:
-                handleResolvedMouseEvent(
-                    type: type,
-                    buttonNumber: Int(event.getIntegerValueField(.mouseEventButtonNumber)),
-                    flags: event.flags,
-                    eventWasConsumed: &eventWasConsumed
-                )
-            default:
-                handleResolvedEvent(
-                    type: type,
-                    keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
-                    flags: event.flags,
-                    isAutoRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
-                    eventWasConsumed: &eventWasConsumed
-                )
-            }
-            return eventWasConsumed
+        let snapshot = HotkeyEventSnapshot(type: type, event: event)
+        if let consumed = withEventTapStateLock({
+            handleEventSnapshot(snapshot)
+        }) {
+            return consumed
         }
+
+        scheduleDeferredEventHandling(snapshot)
+        return false
+    }
+
+    private func scheduleDeferredEventHandling(_ snapshot: HotkeyEventSnapshot) {
+        deferredEventProcessingQueue.async { [weak self] in
+            self?.withStateLock {
+                guard self?.eventTap != nil else { return }
+                _ = self?.handleEventSnapshot(snapshot)
+            }
+        }
+    }
+
+    private func handleEventSnapshot(_ snapshot: HotkeyEventSnapshot) -> Bool {
+        guard !captureState.isCaptureInProgress else {
+            return false
+        }
+        var eventWasConsumed = false
+        switch snapshot.type {
+        case .otherMouseDown, .otherMouseUp:
+            handleResolvedMouseEvent(
+                type: snapshot.type,
+                buttonNumber: snapshot.mouseButtonNumber,
+                flags: snapshot.flags,
+                eventWasConsumed: &eventWasConsumed
+            )
+        default:
+            handleResolvedEvent(
+                type: snapshot.type,
+                keyCode: snapshot.keyCode,
+                flags: snapshot.flags,
+                isAutoRepeat: snapshot.isAutoRepeat,
+                eventWasConsumed: &eventWasConsumed
+            )
+        }
+        return eventWasConsumed
     }
 
     private func handleResolvedEvent(

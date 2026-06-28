@@ -579,4 +579,5 @@ struct FeatureSettings: Codable, Hashable, Sendable {
             meeting: meeting
         )
     }
+
 }

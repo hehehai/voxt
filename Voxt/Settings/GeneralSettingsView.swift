@@ -30,6 +30,7 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.autoCheckForUpdates) private var autoCheckForUpdates = true
     @AppStorage(AppPreferenceKey.hotkeyDebugLoggingEnabled) private var hotkeyDebugLoggingEnabled = false
     @AppStorage(AppPreferenceKey.llmDebugLoggingEnabled) private var llmDebugLoggingEnabled = false
+    @AppStorage(AppPreferenceKey.localVADMode) private var localVADModeRaw = LocalVADMode.defaultMode.rawValue
     @AppStorage(AppPreferenceKey.networkProxyMode) private var networkProxyModeRaw = VoxtNetworkSession.ProxyMode.system.rawValue
     @AppStorage(AppPreferenceKey.customProxyScheme) private var customProxySchemeRaw = VoxtNetworkSession.ProxyScheme.http.rawValue
     @AppStorage(AppPreferenceKey.customProxyHost) private var customProxyHost = ""
@@ -79,6 +80,13 @@ struct GeneralSettingsView: View {
         Binding(
             get: { VoxtNetworkSession.ProxyScheme(rawValue: customProxySchemeRaw) ?? .http },
             set: { customProxySchemeRaw = $0.rawValue }
+        )
+    }
+
+    private var localVADMode: Binding<LocalVADMode> {
+        Binding(
+            get: { LocalVADMode.resolved(rawValue: localVADModeRaw) },
+            set: { LocalVADMode.save($0) }
         )
     }
 
@@ -166,6 +174,10 @@ struct GeneralSettingsView: View {
                     onViewLogs: { isLogsViewerPresented = true }
                 )
                 .settingsNavigationAnchor(.generalLogging)
+
+                Divider()
+
+                GeneralVADCard(localVADMode: localVADMode)
 
                 Divider()
 

@@ -29,6 +29,15 @@ struct LLMDebugModelOption: Identifiable, Hashable {
     let selection: Selection
 }
 
+struct VADDebugSnapshot: Equatable {
+    let mode: LocalVADMode
+    let backend: ASRVoiceActivityBackendKind
+    let backendRawValue: String
+    let frameBackend: ASRVoiceActivityBackendKind
+    let localGatePolicy: ASRVoiceActivityLocalGatePolicy
+    let providerUsesServerVAD: Bool
+}
+
 enum LLMDebugPresetKind: Hashable {
     case custom
     case enhancement
@@ -179,6 +188,32 @@ enum LLMDebugPresetStore {
 }
 
 enum ModelDebugCatalog {
+    static func vadSnapshot(
+        defaults: UserDefaults = .standard,
+        transcriptionEngine: TranscriptionEngine,
+        providerUsesServerVAD: Bool
+    ) -> VADDebugSnapshot {
+        let mode = LocalVADMode.stored(defaults: defaults)
+        let backend = ASRVoiceActivityRuntimePolicy.effectiveBackend(
+            mode: mode,
+            useCase: .meeting
+        )
+        let localGatePolicy: ASRVoiceActivityLocalGatePolicy = providerUsesServerVAD
+            ? .disabled(reason: "server-vad")
+            : ASRVoiceActivityRuntimePolicy.localGatePolicy(
+                transcriptionEngine: transcriptionEngine,
+                mode: mode
+            )
+        return VADDebugSnapshot(
+            mode: mode,
+            backend: backend,
+            backendRawValue: backend.rawValue,
+            frameBackend: backend,
+            localGatePolicy: localGatePolicy,
+            providerUsesServerVAD: providerUsesServerVAD
+        )
+    }
+
     static func availableASRModels(
         mlxModelManager: MLXModelManager,
         sherpaOnnxModelManager: SherpaOnnxModelManager? = nil,
@@ -873,7 +908,7 @@ struct DebugRewriteImageAttachmentPayload: Codable {
     }
 }
 
-enum DebugAudioClipIO {
+nonisolated enum DebugAudioClipIO {
     static func temporaryClipURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("Voxt-Debug-\(UUID().uuidString)")

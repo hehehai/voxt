@@ -54,13 +54,7 @@ enum AppBehaviorController {
     @MainActor
     static func activateCurrentApp(ignoringOtherApps: Bool = false) {
         if ignoringOtherApps {
-            if #available(macOS 14.0, *) {
-                NSApp.activate()
-                return
-            }
-            var options: NSApplication.ActivationOptions = [.activateAllWindows]
-            options.insert(.activateIgnoringOtherApps)
-            _ = NSRunningApplication.current.activate(options: options)
+            NSApp.activate()
             return
         }
 

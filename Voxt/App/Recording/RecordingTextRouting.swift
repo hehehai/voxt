@@ -76,6 +76,15 @@ extension AppDelegate {
             userMainLanguage: userMainLanguage
         )
         let text = sanitizedFinalTranscriptionText(displayText)
+        if shouldSuppressFinalTranscriptionForLocalVAD(text) {
+            VoxtLog.asr(
+                "Transcription result suppressed because local VAD observed no speech. chars=\(text.count)",
+                verbose: true
+            )
+            setEnhancingState(false)
+            finishSession(after: 0)
+            return
+        }
         guard !text.isEmpty else {
             if let runtimeFailureMessage = consumeActiveRecordingRuntimeFailureMessage() {
                 if isCurrentTranscriptionNoteSessionActive {
@@ -127,6 +136,20 @@ extension AppDelegate {
 
         VoxtLog.asr("Transcription flow dispatch: standard. characters=\(text.count), enhancementMode=\(enhancementMode.rawValue)", verbose: true)
         processStandardTranscription(text, sessionID: sessionID)
+    }
+
+    private func shouldSuppressFinalTranscriptionForLocalVAD(_ text: String) -> Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let localVADMode = LocalVADMode.stored()
+        let localVADGatePolicy = ASRVoiceActivityRuntimePolicy.localGatePolicy(
+            transcriptionEngine: transcriptionEngine,
+            mode: localVADMode
+        )
+        return ASRVoiceActivityRuntimePolicy.shouldSuppressFinalTranscription(
+            localVADGateActive: localVADGatePolicy.isEnabled,
+            observedVoiceActivityFrames: localVADObservedFramesInCurrentSession,
+            observedSpeech: localVADObservedSpeechInCurrentSession
+        )
     }
 
     func startPauseLLMIfNeeded() {

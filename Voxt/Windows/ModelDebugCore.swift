@@ -270,6 +270,35 @@ final class ASRDebugViewModel: ObservableObject {
         selectedClipItem?.displayTitle ?? modelDebugLocalized("Select Audio")
     }
 
+    var vadSnapshot: VADDebugSnapshot {
+        let option = options.first(where: { $0.id == selectedModelID })
+        let engine: TranscriptionEngine
+        let providerUsesServerVAD: Bool
+        switch option?.selection {
+        case .remote(let provider, let configuration):
+            engine = .remote
+            providerUsesServerVAD = RemoteASRRealtimeSupport.usesRealtimeMeetingProfile(
+                provider: provider,
+                configuration: configuration
+            )
+        case .mlx:
+            engine = .mlxAudio
+            providerUsesServerVAD = false
+        case .sherpaOnnx:
+            engine = .sherpaOnnx
+            providerUsesServerVAD = false
+        case .none:
+            engine = TranscriptionEngine(rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.transcriptionEngine) ?? "")
+                ?? .mlxAudio
+            providerUsesServerVAD = false
+        }
+        return ModelDebugCatalog.vadSnapshot(
+            defaults: .standard,
+            transcriptionEngine: engine,
+            providerUsesServerVAD: providerUsesServerVAD
+        )
+    }
+
     func toggleRecording() {
         if isRecording {
             stopRecordingAndRun()

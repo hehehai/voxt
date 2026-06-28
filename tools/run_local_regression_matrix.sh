@@ -7,6 +7,8 @@ PROJECT="$ROOT/Voxt.xcodeproj"
 SCHEME="Voxt"
 CONFIGURATION="TestDebug"
 DESTINATION="platform=macOS"
+SPM_CACHE_PATH="${VOXT_SPM_CACHE_PATH:-$ROOT/tmp/regression/spm-cache}"
+SPM_CLONE_PATH="${VOXT_SPM_CLONE_PATH:-$ROOT/tmp/regression/spm-source-packages}"
 
 if [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
   echo "Local regression matrix is intended for local machines only." >&2
@@ -20,10 +22,74 @@ run_tests() {
   shift
   echo
   echo "==> Running $label"
-  xcodebuild test \
+  if model_tests_enabled; then
+    run_tests_with_model_gate "$label" "$@"
+  else
+    mkdir -p "$SPM_CACHE_PATH" "$SPM_CLONE_PATH"
+    xcodebuild test \
+      -project "$PROJECT" \
+      -scheme "$SCHEME" \
+      -configuration "$CONFIGURATION" \
+      -destination "$DESTINATION" \
+      -clonedSourcePackagesDirPath "$SPM_CLONE_PATH" \
+      -packageCachePath "$SPM_CACHE_PATH" \
+      "$@"
+  fi
+}
+
+model_tests_enabled() {
+  case "${VOXT_RUN_MODEL_TESTS:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+plist_set_or_add() {
+  local plist="$1"
+  local key_path="$2"
+  local value="$3"
+  /usr/libexec/PlistBuddy -c "Set $key_path $value" "$plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add $key_path string $value" "$plist"
+}
+
+run_tests_with_model_gate() {
+  local label="$1"
+  shift
+  local stamp
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  local derived_data="$ROOT/tmp/regression/model-derived-$stamp"
+  rm -rf "$derived_data"
+  mkdir -p "$SPM_CACHE_PATH" "$SPM_CLONE_PATH"
+
+  echo "==> Building test products for $label with VOXT_RUN_MODEL_TESTS=1"
+  xcodebuild build-for-testing \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
+    -destination "$DESTINATION" \
+    -derivedDataPath "$derived_data" \
+    -clonedSourcePackagesDirPath "$SPM_CLONE_PATH" \
+    -packageCachePath "$SPM_CACHE_PATH" \
+    CODE_SIGNING_ALLOWED=NO \
+    "$@"
+
+  local xctestrun
+  xctestrun="$(find "$derived_data/Build/Products" -name '*.xctestrun' -print -quit)"
+  if [[ -z "$xctestrun" ]]; then
+    echo "Could not find .xctestrun under $derived_data/Build/Products" >&2
+    return 1
+  fi
+
+  plist_set_or_add "$xctestrun" ":VoxtTests:EnvironmentVariables:VOXT_RUN_MODEL_TESTS" "1"
+  plist_set_or_add "$xctestrun" ":VoxtTests:TestingEnvironmentVariables:VOXT_RUN_MODEL_TESTS" "1"
+
+  echo "==> Running $label from $xctestrun"
+  xcodebuild test-without-building \
+    -xctestrun "$xctestrun" \
     -destination "$DESTINATION" \
     "$@"
 }
@@ -63,6 +129,9 @@ run_core() {
     -only-testing:VoxtTests/EnhancementPromptResolverTests \
     -only-testing:VoxtTests/PromptBuildersTests \
     -only-testing:VoxtTests/AppPromptDefaultsTests \
+    -only-testing:VoxtTests/ASRVoiceActivityPlanningTests \
+    -only-testing:VoxtTests/FeatureSettingsStoreTests \
+    -only-testing:VoxtTests/MLXTranscriptionPlanningTests \
     -only-testing:VoxtTests/ModelDebugSupportTests
 }
 
@@ -73,6 +142,13 @@ run_mlx() {
     -only-testing:VoxtTests/MLXFinalOnlyReplayIntegrationTests \
     -only-testing:VoxtTests/MLXRealtimeReplayIntegrationTests \
     -only-testing:VoxtTests/MLXPipelineMetricsIntegrationTests
+}
+
+run_vad() {
+  run_tests "local VAD planning regression" \
+    -only-testing:VoxtTests/ASRVoiceActivityPlanningTests \
+    -only-testing:VoxtTests/FeatureSettingsStoreTests \
+    -only-testing:VoxtTests/ModelDebugSupportTests
 }
 
 run_whisper() {
@@ -95,6 +171,9 @@ case "$GROUP" in
   mlx)
     run_mlx
     ;;
+  vad)
+    run_vad
+    ;;
   whisper)
     run_whisper
     ;;
@@ -107,13 +186,14 @@ case "$GROUP" in
   all)
     run_core
     run_mlx
+    run_vad
     ;;
   full)
-    run_group_collecting_failures run_core run_mlx run_whisper run_installed_matrix
+    run_group_collecting_failures run_core run_mlx run_vad run_whisper run_installed_matrix
     ;;
   *)
     echo "Unknown group: $GROUP" >&2
-    echo "Usage: $0 [core|mlx|whisper|installed|diagnostic|all|full]" >&2
+    echo "Usage: $0 [core|mlx|vad|whisper|installed|diagnostic|all|full]" >&2
     exit 2
     ;;
 esac

@@ -124,6 +124,22 @@ final class FeatureSettingsStoreTests: XCTestCase {
         }
     }
 
+    func testLocalVADModeDefaultsToAutomatic() throws {
+        try withEphemeralDefaults { defaults in
+            _ = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertEqual(LocalVADMode.stored(defaults: defaults), .automatic)
+        }
+    }
+
+    func testLocalVADModeCanBeDisabledGlobally() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.off, defaults: defaults)
+
+            XCTAssertEqual(LocalVADMode.stored(defaults: defaults), .off)
+        }
+    }
+
     func testSaveSyncsLegacyPromptKeysFromFeatureSettingsPayload() throws {
         try withEphemeralDefaults { defaults in
             var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
@@ -210,16 +226,15 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertFalse(settings.enabled)
     }
 
-    func testMeetingChunkingModeDefaultsAndSyncsToRuntimePreference() throws {
+    func testMeetingRuntimePreferencesDoNotUseMeetingVADBackend() throws {
         try withEphemeralDefaults { defaults in
             XCTAssertEqual(MeetingChunkingMode.stored(in: defaults), .quality)
             XCTAssertEqual(MeetingDiarizationMode.stored(in: defaults), .offlineVBx)
 
             defaults.set(MeetingChunkingMode.quality.rawValue, forKey: AppPreferenceKey.meetingChunkingMode)
             defaults.set(MeetingDiarizationMode.sortformerV2.rawValue, forKey: AppPreferenceKey.meetingRealtimeDiarizationMode)
-            defaults.set("fireRed", forKey: "meetingVADMode")
-            defaults.set("responsive", forKey: "meetingSileroVADSensitivity")
-            defaults.set("stable", forKey: "meetingServerVADMode")
+            defaults.set("responsive", forKey: AppPreferenceKey.meetingSileroVADSensitivity)
+            defaults.set("stable", forKey: AppPreferenceKey.meetingServerVADMode)
             defaults.set("sensitive", forKey: "meetingSpeakerDiarizationSensitivity")
             defaults.set("maxThree", forKey: "meetingSpeakerCountHint")
             defaults.set(true, forKey: "meetingSpeakerDiarizationDebugEnabled")
@@ -239,9 +254,8 @@ final class FeatureSettingsStoreTests: XCTestCase {
 
             XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingChunkingMode), MeetingChunkingMode.realtime.rawValue)
             XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingSpeakerDiarizationModel), MeetingDiarizationMode.offlineVBx.rawValue)
-            XCTAssertEqual(defaults.string(forKey: "meetingVADMode"), "fireRed")
-            XCTAssertEqual(defaults.string(forKey: "meetingSileroVADSensitivity"), "responsive")
-            XCTAssertEqual(defaults.string(forKey: "meetingServerVADMode"), "stable")
+            XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingSileroVADSensitivity), "responsive")
+            XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingServerVADMode), "stable")
             XCTAssertEqual(defaults.string(forKey: "meetingSpeakerDiarizationSensitivity"), "sensitive")
             XCTAssertEqual(defaults.string(forKey: "meetingSpeakerCountHint"), "maxThree")
             XCTAssertTrue(defaults.bool(forKey: "meetingSpeakerDiarizationDebugEnabled"))
@@ -252,7 +266,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
         }
     }
 
-    func testMeetingSettingsDecodeLegacyPayloadWithoutChunkingMode() throws {
+    func testMeetingSettingsDecodePayloadWithoutNewRuntimeFieldsUsesDefaults() throws {
         let payload = """
         {
           "asrSelectionID": "mlx:mlx-community/SenseVoiceSmall",
@@ -271,6 +285,28 @@ final class FeatureSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.chunkingMode, .quality)
         XCTAssertEqual(settings.speakerDiarizationModel, .offlineVBx)
         XCTAssertTrue(settings.finalTranscriptOptimizationEnabled)
+    }
+
+    func testMeetingSettingsStorageDoesNotEncodeVADBackend() throws {
+        try withEphemeralDefaults { defaults in
+            let settings = FeatureSettingsStore.load(defaults: defaults)
+            FeatureSettingsStore.save(settings, defaults: defaults)
+            let raw = try XCTUnwrap(defaults.string(forKey: AppPreferenceKey.featureSettings))
+
+            XCTAssertFalse(raw.contains("vadBackendRawValue"))
+        }
+    }
+
+    func testMeetingVADIgnoresObsoleteModeKey() throws {
+        try withEphemeralDefaults { defaults in
+            defaults.set("legacyExperimentalBackend", forKey: "meetingVADMode")
+
+            let settings = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertEqual(defaults.string(forKey: "meetingVADMode"), "legacyExperimentalBackend")
+            FeatureSettingsStore.save(settings, defaults: defaults)
+            XCTAssertFalse(defaults.string(forKey: AppPreferenceKey.featureSettings)?.contains("meetingVADMode") ?? true)
+        }
     }
 
     func testMeetingDiarizationModeIgnoresLegacyRealtimeKey() throws {

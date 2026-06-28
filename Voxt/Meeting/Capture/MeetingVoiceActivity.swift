@@ -12,19 +12,44 @@ struct MeetingVoiceActivityDecision: Equatable, Sendable {
     let source: Source
 
     enum Source: Equatable, Sendable {
+        case off
+        case server
         case energy
         case silero
         case fallbackEnergy
     }
 }
 
+private extension MeetingVoiceActivityDecision.Source {
+    nonisolated var telemetryName: String {
+        switch self {
+        case .off:
+            return "off"
+        case .server:
+            return "server"
+        case .energy:
+            return "energy"
+        case .silero:
+            return "silero"
+        case .fallbackEnergy:
+            return "fallback-energy"
+        }
+    }
+}
+
 actor MeetingVoiceActivityDetector {
     private static let sileroBalancedThreshold: Float = 0.5
 
-    private var sileroDetector = MeetingSileroStreamingDetector()
+    private var sileroDetector = ASRSileroStreamingVoiceActivityDetector()
+    private var mode = currentModeFromSettings()
     private var sileroFallbackWarningLogged = false
 
     func refreshFromPreferences() async {
+        let nextMode = Self.currentModeFromSettings()
+        if nextMode != mode {
+            await sileroDetector.reset()
+        }
+        mode = nextMode
         sileroFallbackWarningLogged = false
     }
 
@@ -33,23 +58,122 @@ actor MeetingVoiceActivityDetector {
         sileroFallbackWarningLogged = false
     }
 
+    private nonisolated static func currentModeFromSettings() -> LocalVADMode {
+        MainActorSync.run {
+            LocalVADMode.stored()
+        }
+    }
+
     func activity(
         samples: [Float],
         sampleRate: Double,
         speaker: MeetingSpeaker,
         fallbackLevel: Float,
-        fallbackThreshold: Float
+        fallbackThreshold: Float,
+        serverVADActive: Bool = false
     ) async -> MeetingVoiceActivityDecision {
+        let startedAt = ProcessInfo.processInfo.systemUptime
         let fallback = MeetingVoiceActivityDecision(
             isSpeech: fallbackLevel >= fallbackThreshold,
             probability: nil,
             source: .energy
         )
+        let frameBackend = ASRVoiceActivityRuntimePolicy.effectiveBackend(
+            mode: mode,
+            useCase: .meeting
+        )
+        if serverVADActive {
+            return finishActivity(
+                MeetingVoiceActivityDecision(
+                    isSpeech: true,
+                    probability: nil,
+                    source: .server
+                ),
+                startedAt: startedAt,
+                speaker: speaker,
+                sampleCount: samples.count,
+                frameBackend: frameBackend
+            )
+        }
+
+        switch frameBackend {
+        case .off:
+            return finishActivity(
+                MeetingVoiceActivityDecision(
+                    isSpeech: true,
+                    probability: nil,
+                    source: .off
+                ),
+                startedAt: startedAt,
+                speaker: speaker,
+                sampleCount: samples.count,
+                frameBackend: frameBackend
+            )
+        case .energy:
+            return finishActivity(
+                fallback,
+                startedAt: startedAt,
+                speaker: speaker,
+                sampleCount: samples.count,
+                frameBackend: frameBackend
+            )
+        case .mlxSilero:
+            break
+        }
+
+        if let decision = await mlxSileroActivity(
+            samples: samples,
+            sampleRate: sampleRate,
+            speaker: speaker
+        ) {
+            return finishActivity(
+                decision,
+                startedAt: startedAt,
+                speaker: speaker,
+                sampleCount: samples.count,
+                frameBackend: frameBackend
+            )
+        }
+
+        return finishActivity(
+            MeetingVoiceActivityDecision(
+                isSpeech: fallback.isSpeech,
+                probability: nil,
+                source: .fallbackEnergy
+            ),
+            startedAt: startedAt,
+            speaker: speaker,
+            sampleCount: samples.count,
+            frameBackend: frameBackend
+        )
+    }
+
+    private func finishActivity(
+        _ decision: MeetingVoiceActivityDecision,
+        startedAt: TimeInterval,
+        speaker: MeetingSpeaker,
+        sampleCount: Int,
+        frameBackend: ASRVoiceActivityBackendKind
+    ) -> MeetingVoiceActivityDecision {
+        let elapsedMilliseconds = max(0, (ProcessInfo.processInfo.systemUptime - startedAt) * 1000)
+        let probabilityText = decision.probability.map { String(format: "%.3f", $0) } ?? "nil"
+        VoxtLog.meeting(
+            "Meeting VAD decision. mode=\(mode.rawValue), frameBackend=\(frameBackend.rawValue), source=\(decision.source.telemetryName), speaker=\(speaker.rawValue), speech=\(decision.isSpeech), probability=\(probabilityText), sampleCount=\(sampleCount), elapsedMs=\(String(format: "%.2f", elapsedMilliseconds))",
+            verbose: true
+        )
+        return decision
+    }
+
+    private func mlxSileroActivity(
+        samples: [Float],
+        sampleRate: Double,
+        speaker: MeetingSpeaker
+    ) async -> MeetingVoiceActivityDecision? {
         do {
             if let probability = try await sileroDetector.probability(
                 samples: samples,
                 sampleRate: sampleRate,
-                speaker: speaker
+                streamID: speaker.rawValue
             ) {
                 return MeetingVoiceActivityDecision(
                     isSpeech: probability >= Self.sileroBalancedThreshold,
@@ -64,12 +188,7 @@ actor MeetingVoiceActivityDetector {
             }
             await sileroDetector.reset()
         }
-
-        return MeetingVoiceActivityDecision(
-            isSpeech: fallback.isSpeech,
-            probability: nil,
-            source: .fallbackEnergy
-        )
+        return nil
     }
 
     private func shouldLogSileroFallback(_ error: Error) -> Bool {
@@ -83,13 +202,13 @@ actor MeetingVoiceActivityDetector {
     }
 }
 
-private actor MeetingSileroStreamingDetector {
+actor ASRSileroStreamingVoiceActivityDetector {
     private let sampleRate = 16_000
     private let chunkSize = 512
     private var model: SileroVAD?
-    private var states: [MeetingSpeaker: SileroVADStreamingState] = [:]
-    private var pendingSamples: [MeetingSpeaker: [Float]] = [:]
-    private var lastProbabilities: [MeetingSpeaker: Float] = [:]
+    private var states: [String: SileroVADStreamingState] = [:]
+    private var pendingSamples: [String: [Float]] = [:]
+    private var lastProbabilities: [String: Float] = [:]
 
     func reset() {
         states.removeAll()
@@ -100,25 +219,26 @@ private actor MeetingSileroStreamingDetector {
     func probability(
         samples: [Float],
         sampleRate inputSampleRate: Double,
-        speaker: MeetingSpeaker
+        streamID: String = "default"
     ) async throws -> Float? {
         guard !samples.isEmpty else { return nil }
+        guard inputSampleRate.isFinite, inputSampleRate > 0 else { return nil }
         let model = try await loadModelIfAvailable()
-        let prepared = MeetingAudioSampleRateConverter.resample(
+        let prepared = ASRVoiceActivitySampleRateConverter.resample(
             samples: samples,
             from: inputSampleRate,
             to: Double(sampleRate)
         )
-        guard !prepared.isEmpty else { return lastProbabilities[speaker] }
+        guard !prepared.isEmpty else { return lastProbabilities[streamID] }
 
-        var pending = pendingSamples[speaker] ?? []
+        var pending = pendingSamples[streamID] ?? []
         pending.append(contentsOf: prepared)
         var latestProbability: Float?
 
         while pending.count >= chunkSize {
             let chunk = Array(pending.prefix(chunkSize))
             pending.removeFirst(chunkSize)
-            let state = states[speaker]
+            let state = states[streamID]
             let (probabilityArray, nextState) = try model.feed(
                 chunk: MLXArray(chunk),
                 state: state,
@@ -128,12 +248,12 @@ private actor MeetingSileroStreamingDetector {
             if let probability = probabilityArray.asArray(Float.self).first {
                 latestProbability = probability
             }
-            states[speaker] = nextState
+            states[streamID] = nextState
         }
 
-        pendingSamples[speaker] = pending
+        pendingSamples[streamID] = pending
         if let latestProbability {
-            lastProbabilities[speaker] = latestProbability
+            lastProbabilities[streamID] = latestProbability
             return latestProbability
         }
         return nil
@@ -230,30 +350,5 @@ enum MeetingVADModelStorage {
     static func clearHubCache(rootDirectory: URL = ModelStorageDirectoryManager.resolvedWriteRootURL()) {
         guard let repoID = Repo.ID(rawValue: repo) else { return }
         MLXModelStorageSupport.clearHubCache(for: repoID, rootDirectory: rootDirectory)
-    }
-}
-
-enum MeetingAudioSampleRateConverter {
-    nonisolated static func resample(samples: [Float], from inputRate: Double, to outputRate: Double) -> [Float] {
-        guard !samples.isEmpty, inputRate > 0, outputRate > 0 else { return samples }
-        if abs(inputRate - outputRate) <= 1 {
-            return samples
-        }
-
-        let ratio = outputRate / inputRate
-        let outputCount = max(Int(Double(samples.count) * ratio), 1)
-        var output = [Float](repeating: 0, count: outputCount)
-
-        for index in 0..<outputCount {
-            let position = Double(index) / ratio
-            let lowerIndex = min(Int(position), samples.count - 1)
-            let upperIndex = min(lowerIndex + 1, samples.count - 1)
-            let fraction = Float(position - Double(lowerIndex))
-            let lower = samples[lowerIndex]
-            let upper = samples[upperIndex]
-            output[index] = lower + (upper - lower) * fraction
-        }
-
-        return output
     }
 }

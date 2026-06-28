@@ -4,7 +4,7 @@
 import Foundation
 import AVFoundation
 
-enum AudioLevelMeter {
+nonisolated enum AudioLevelMeter {
     private static let defaultNoiseGate: Float = 0.010
     private static let defaultGain: Float = 8.5
     private static let defaultExponent: Float = 0.88
