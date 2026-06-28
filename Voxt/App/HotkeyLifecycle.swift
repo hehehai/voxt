@@ -4,6 +4,71 @@
 import AppKit
 import Carbon
 
+final class OverlayShortcutEventGate: @unchecked Sendable {
+    struct KeySignature: Hashable {
+        let keyCode: UInt16
+        let modifiersRawValue: UInt
+
+        init(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
+            self.keyCode = keyCode
+            self.modifiersRawValue = modifiers.intersection(.hotkeyRelevant).rawValue
+        }
+    }
+
+    private let lock = NSLock()
+    private var signatures: Set<KeySignature> = [
+        KeySignature(keyCode: UInt16(kVK_Escape), modifiers: [])
+    ]
+
+    func update(
+        answerContinueShortcut: HotkeyPreference.Hotkey,
+        noteShortcut: HotkeyPreference.Hotkey?
+    ) {
+        var updatedSignatures: Set<KeySignature> = [
+            KeySignature(keyCode: UInt16(kVK_Escape), modifiers: [])
+        ]
+        updatedSignatures.insert(
+            KeySignature(
+                keyCode: answerContinueShortcut.keyCode,
+                modifiers: answerContinueShortcut.modifiers
+            )
+        )
+        if let noteShortcut {
+            updatedSignatures.insert(
+                KeySignature(
+                    keyCode: noteShortcut.keyCode,
+                    modifiers: noteShortcut.modifiers
+                )
+            )
+        }
+
+        lock.lock()
+        signatures = updatedSignatures
+        lock.unlock()
+    }
+
+    func shouldDispatch(_ event: NSEvent) -> Bool {
+        shouldDispatch(
+            keyCode: event.keyCode,
+            modifiers: event.modifierFlags,
+            isRepeat: event.isARepeat
+        )
+    }
+
+    func shouldDispatch(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags,
+        isRepeat: Bool = false
+    ) -> Bool {
+        guard !isRepeat else { return false }
+        let signature = KeySignature(keyCode: keyCode, modifiers: modifiers)
+        lock.lock()
+        let shouldDispatch = signatures.contains(signature)
+        lock.unlock()
+        return shouldDispatch
+    }
+}
+
 @MainActor
 extension AppDelegate {
     enum SessionCallbackHandlingDecision: Equatable {
@@ -125,18 +190,42 @@ extension AppDelegate {
     }
 
     func setupEscapeKeyMonitoring() {
+        refreshOverlayShortcutEventGate()
+        let overlayShortcutEventGate = self.overlayShortcutEventGate
         globalEscapeKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard overlayShortcutEventGate.shouldDispatch(event) else { return }
             guard let self else { return }
             Task { @MainActor [weak self] in
                 self?.handleOverlayShortcutEvent(event)
             }
         }
         localEscapeKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleOverlayShortcutEvent(event, shouldConsume: true) ?? event
+            guard overlayShortcutEventGate.shouldDispatch(event) else { return event }
+            return self?.handleOverlayShortcutEvent(event, shouldConsume: true) ?? event
         }
     }
 
+    func refreshOverlayShortcutEventGate() {
+        let noteShortcut = noteFeatureSettings.enabled
+            ? noteFeatureSettings.triggerShortcut.hotkey
+            : nil
+        overlayShortcutEventGate.update(
+            answerContinueShortcut: rewriteContinueShortcutSettings.hotkey,
+            noteShortcut: noteShortcut
+        )
+    }
+
     func handleOverlayShortcutEvent(_ event: NSEvent, shouldConsume: Bool = false) -> NSEvent? {
+        let startedAt = Date()
+        defer {
+            let elapsed = Date().timeIntervalSince(startedAt)
+            if elapsed >= 0.04 {
+                VoxtLog.hotkey(
+                    "Overlay shortcut handling was slow. elapsedMs=\(Int(elapsed * 1000)), keyCode=\(event.keyCode), modifiers=\(event.modifierFlags.intersection(.hotkeyRelevant).rawValue), consume=\(shouldConsume)"
+                )
+            }
+        }
+
         if shouldHandleAnswerOverlayContinueShortcut(event),
            overlayWindow.handleAnswerSpaceShortcut() {
             return shouldConsume ? nil : event

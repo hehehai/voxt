@@ -180,6 +180,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var audioInputDevicesObserver: AudioInputDeviceObserver?
     var globalEscapeKeyMonitor: Any?
     var localEscapeKeyMonitor: Any?
+    let overlayShortcutEventGate = OverlayShortcutEventGate()
     var inputDevicesRefreshTask: Task<Void, Never>?
     var inputDevicesSnapshot: [AudioInputDevice] = []
     var microphoneResolvedState = MicrophoneResolvedState.empty
@@ -543,6 +544,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.refreshOverlayShortcutEventGate()
                 self?.buildMenu()
                 self?.scheduleLLMIdleWarmupIfNeeded()
             }

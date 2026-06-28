@@ -6,6 +6,45 @@ import AppKit
 import ApplicationServices
 
 private enum FocusedInputCDPSupport {
+    static let missingRemoteDebuggingPortCacheTTL: TimeInterval = 30
+    static let remoteDebuggingPortCacheTTL: TimeInterval = 5
+    static let remoteDebuggingPortCache = RemoteDebuggingPortCache()
+
+    final class RemoteDebuggingPortCache: @unchecked Sendable {
+        private struct Entry {
+            let port: Int?
+            let expiresAt: Date
+        }
+
+        private let lock = NSLock()
+        private var entries: [pid_t: Entry] = [:]
+
+        func lookup(processIdentifier: pid_t, resolver: () -> Int?) -> Int? {
+            let now = Date()
+            lock.lock()
+            if let entry = entries[processIdentifier], entry.expiresAt > now {
+                let port = entry.port
+                lock.unlock()
+                return port
+            }
+            lock.unlock()
+
+            let port = resolver()
+            let ttl = port == nil
+                ? FocusedInputCDPSupport.missingRemoteDebuggingPortCacheTTL
+                : FocusedInputCDPSupport.remoteDebuggingPortCacheTTL
+
+            lock.lock()
+            entries[processIdentifier] = Entry(
+                port: port,
+                expiresAt: now.addingTimeInterval(ttl)
+            )
+            lock.unlock()
+
+            return port
+        }
+    }
+
     static let inputSnapshotJavaScript = """
     (() => {
         const deepActiveElement = (root) => {
@@ -161,7 +200,16 @@ extension AppDelegate {
         processIdentifier: pid_t?
     ) async -> FocusedInputTextSnapshot? {
         guard let processIdentifier else { return nil }
-        guard let port = commandLineRemoteDebuggingPort(for: processIdentifier) else {
+        let portLookupStartedAt = Date()
+        let port = await Self.cachedCommandLineRemoteDebuggingPort(for: processIdentifier)
+        let portLookupElapsed = Date().timeIntervalSince(portLookupStartedAt)
+        if portLookupElapsed >= 0.04 {
+            VoxtLog.input(
+                "Focused input CDP port lookup was slow. elapsedMs=\(Int(portLookupElapsed * 1000)), bundleID=\(bundleIdentifier ?? "unknown"), pid=\(processIdentifier)"
+            )
+        }
+
+        guard let port else {
             VoxtLog.input(
                 "Focused input CDP fallback unavailable: remote debugging port missing. bundleID=\(bundleIdentifier ?? "unknown"), pid=\(processIdentifier)"
             )
@@ -212,7 +260,15 @@ extension AppDelegate {
         }
     }
 
-    private func commandLineRemoteDebuggingPort(for processIdentifier: pid_t) -> Int? {
+    private nonisolated static func cachedCommandLineRemoteDebuggingPort(for processIdentifier: pid_t) async -> Int? {
+        await Task.detached(priority: .utility) {
+            FocusedInputCDPSupport.remoteDebuggingPortCache.lookup(processIdentifier: processIdentifier) {
+                commandLineRemoteDebuggingPort(for: processIdentifier)
+            }
+        }.value
+    }
+
+    private nonisolated static func commandLineRemoteDebuggingPort(for processIdentifier: pid_t) -> Int? {
         guard let commandLine = processCommandLine(for: processIdentifier) else { return nil }
         let patterns = [
             #"--remote-debugging-port=(\d+)"#,
@@ -231,7 +287,7 @@ extension AppDelegate {
         return nil
     }
 
-    private func processCommandLine(for processIdentifier: pid_t) -> String? {
+    private nonisolated static func processCommandLine(for processIdentifier: pid_t) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
         process.arguments = ["-ww", "-o", "command=", "-p", String(processIdentifier)]

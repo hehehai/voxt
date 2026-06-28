@@ -266,6 +266,17 @@ extension AppDelegate {
     func currentFocusedInputTextSnapshotForAutomaticDictionaryLearning(
         expectedBundleID: String? = nil
     ) async -> FocusedInputTextSnapshot? {
+        let startedAt = Date()
+        defer {
+            let elapsed = Date().timeIntervalSince(startedAt)
+            if elapsed >= 0.08 {
+                let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
+                VoxtLog.input(
+                    "Automatic dictionary focused input snapshot was slow. elapsedMs=\(Int(elapsed * 1000)), bundleID=\(bundleID), expectedBundleID=\(expectedBundleID ?? "nil")"
+                )
+            }
+        }
+
         guard let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
             return nil
         }
