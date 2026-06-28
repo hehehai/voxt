@@ -7,6 +7,20 @@ import ApplicationServices
 import Carbon
 
 nonisolated enum HotkeyEventSupport {
+    private static let voxtInjectedEventUserData: Int64 = 0x566F7874_496E6A
+
+    static func markAsVoxtInjected(_ event: CGEvent?) {
+        event?.setIntegerValueField(.eventSourceUserData, value: voxtInjectedEventUserData)
+    }
+
+    static func isVoxtInjected(_ event: CGEvent) -> Bool {
+        event.getIntegerValueField(.eventSourceUserData) == voxtInjectedEventUserData
+    }
+
+    static func isVoxtInjected(eventSourceUserData: Int64) -> Bool {
+        eventSourceUserData == voxtInjectedEventUserData
+    }
+
     static func shouldLogFlagsChangedEvent(
         keyCode: UInt16,
         flags: CGEventFlags,

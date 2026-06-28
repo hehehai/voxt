@@ -111,6 +111,8 @@ extension AppDelegate {
         cmdUp?.flags = .maskCommand
         guard cmdDown != nil, cmdUp != nil else { return nil }
 
+        HotkeyEventSupport.markAsVoxtInjected(cmdDown)
+        HotkeyEventSupport.markAsVoxtInjected(cmdUp)
         cmdDown?.post(tap: .cgAnnotatedSessionEventTap)
         cmdUp?.post(tap: .cgAnnotatedSessionEventTap)
 
@@ -998,6 +1000,8 @@ extension AppDelegate {
 
             keyDown.flags = flags
             keyUp.flags = flags
+            HotkeyEventSupport.markAsVoxtInjected(keyDown)
+            HotkeyEventSupport.markAsVoxtInjected(keyUp)
             keyDown.post(tap: .cgAnnotatedSessionEventTap)
             keyUp.post(tap: .cgAnnotatedSessionEventTap)
             VoxtLog.input(
@@ -1095,6 +1099,8 @@ extension AppDelegate {
             return
         }
 
+        HotkeyEventSupport.markAsVoxtInjected(cmdDown)
+        HotkeyEventSupport.markAsVoxtInjected(cmdUp)
         cmdDown?.post(tap: .cgAnnotatedSessionEventTap)
         cmdUp?.post(tap: .cgAnnotatedSessionEventTap)
         completion?(true)

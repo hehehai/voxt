@@ -95,6 +95,17 @@ final class HotkeyManagerTests: XCTestCase {
         return manager
     }
 
+    private func voxtInjectedEventSourceUserData() -> Int64 {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let event = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Return), keyDown: true)
+        else {
+            XCTFail("Unable to create CGEvent for injected event marker test.")
+            return 0
+        }
+        HotkeyEventSupport.markAsVoxtInjected(event)
+        return event.getIntegerValueField(.eventSourceUserData)
+    }
+
     func testTapTranscriptionNonModifierDoesNotConsumeReleaseWithoutMatchingKeyDown() {
         let defaults = UserDefaults.standard
         defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
@@ -851,6 +862,40 @@ final class HotkeyManagerTests: XCTestCase {
 
         await fulfillment(of: [callbackExpectation], timeout: 1.0)
         XCTAssertEqual(customPasteDownCount, 1)
+    }
+
+    func testVoxtInjectedKeyboardEventsBypassHotkeyRouting() {
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: AppPreferenceKey.customPasteHotkeyEnabled)
+        defaults.set(Int(UInt16(kVK_ANSI_V)), forKey: AppPreferenceKey.customPasteHotkeyKeyCode)
+        defaults.set(Int(NSEvent.ModifierFlags([.control, .command]).rawValue), forKey: AppPreferenceKey.customPasteHotkeyModifiers)
+        defaults.set(0, forKey: AppPreferenceKey.customPasteHotkeySidedModifiers)
+
+        let manager = makeManager()
+        let injectedUserData = voxtInjectedEventSourceUserData()
+        var customPasteDownCount = 0
+        manager.onCustomPasteKeyDown = {
+            customPasteDownCount += 1
+        }
+
+        let flags = CGEventFlags.maskCommand.union(.maskControl)
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyDown,
+                keyCode: UInt16(kVK_ANSI_V),
+                flags: flags,
+                eventSourceUserData: injectedUserData
+            )
+        )
+        XCTAssertFalse(
+            manager.testingHandleEvent(
+                type: .keyUp,
+                keyCode: UInt16(kVK_ANSI_V),
+                flags: flags,
+                eventSourceUserData: injectedUserData
+            )
+        )
+        XCTAssertEqual(customPasteDownCount, 0)
     }
 
     func testRightCommandTapRemainsStableAcrossDuplicateFlagsChangedEvents() async {

@@ -50,6 +50,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         let mouseButtonNumber: Int
         let flags: CGEventFlags
         let isAutoRepeat: Bool
+        let eventSourceUserData: Int64
 
         init(type: CGEventType, event: CGEvent) {
             self.type = type
@@ -57,6 +58,27 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             mouseButtonNumber = Int(event.getIntegerValueField(.mouseEventButtonNumber))
             flags = event.flags
             isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            eventSourceUserData = event.getIntegerValueField(.eventSourceUserData)
+        }
+
+        init(
+            type: CGEventType,
+            keyCode: UInt16,
+            mouseButtonNumber: Int = 0,
+            flags: CGEventFlags,
+            isAutoRepeat: Bool = false,
+            eventSourceUserData: Int64 = 0
+        ) {
+            self.type = type
+            self.keyCode = keyCode
+            self.mouseButtonNumber = mouseButtonNumber
+            self.flags = flags
+            self.isAutoRepeat = isAutoRepeat
+            self.eventSourceUserData = eventSourceUserData
+        }
+
+        var isVoxtInjected: Bool {
+            HotkeyEventSupport.isVoxtInjected(eventSourceUserData: eventSourceUserData)
         }
     }
 
@@ -239,14 +261,16 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
 
     init(captureState: HotkeyCaptureState = .shared) {
         self.captureState = captureState
+        cachedConfiguration = HotkeyRuntimeConfiguration.load()
         defaultsDidChangeObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: UserDefaults.standard,
             queue: .main
         ) { [weak self] _ in
+            let configuration = HotkeyRuntimeConfiguration.load()
             self?.withStateLock {
                 self?.captureState.refreshFromDefaults()
-                self?.cachedConfiguration = nil
+                self?.cachedConfiguration = configuration
                 self?.cachedRoutedBindings = nil
             }
         }
@@ -491,6 +515,9 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
 
     private func handleEvent(type: CGEventType, event: CGEvent) -> Bool {
         let snapshot = HotkeyEventSnapshot(type: type, event: event)
+        guard !snapshot.isVoxtInjected else {
+            return false
+        }
         if let consumed = withEventTapStateLock({
             handleEventSnapshot(snapshot)
         }) {
@@ -511,6 +538,9 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
     }
 
     private func handleEventSnapshot(_ snapshot: HotkeyEventSnapshot) -> Bool {
+        guard !snapshot.isVoxtInjected else {
+            return false
+        }
         guard !captureState.isCaptureInProgress else {
             return false
         }
@@ -1711,7 +1741,8 @@ extension HotkeyManager {
         type: CGEventType,
         keyCode: UInt16,
         flags: CGEventFlags,
-        isAutoRepeat: Bool = false
+        isAutoRepeat: Bool = false,
+        eventSourceUserData: Int64 = 0
     ) -> Bool {
         withStateLock {
             let previousDispatchMode = dispatchCallbacksAsynchronously
@@ -1723,9 +1754,14 @@ extension HotkeyManager {
                 _ = recoverEventTapIfNeeded(disabledEventType: type)
                 return false
             }
-            var eventWasConsumed = false
-            handleResolvedEvent(type: type, keyCode: keyCode, flags: flags, isAutoRepeat: isAutoRepeat, eventWasConsumed: &eventWasConsumed)
-            return eventWasConsumed
+            let snapshot = HotkeyEventSnapshot(
+                type: type,
+                keyCode: keyCode,
+                flags: flags,
+                isAutoRepeat: isAutoRepeat,
+                eventSourceUserData: eventSourceUserData
+            )
+            return handleEventSnapshot(snapshot)
         }
     }
 
@@ -1757,22 +1793,22 @@ extension HotkeyManager {
         type: CGEventType,
         keyCode: UInt16,
         flags: CGEventFlags,
-        isAutoRepeat: Bool = false
+        isAutoRepeat: Bool = false,
+        eventSourceUserData: Int64 = 0
     ) -> Bool {
         withStateLock {
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 _ = recoverEventTapIfNeeded(disabledEventType: type)
                 return false
             }
-            var eventWasConsumed = false
-            handleResolvedEvent(
+            let snapshot = HotkeyEventSnapshot(
                 type: type,
                 keyCode: keyCode,
                 flags: flags,
                 isAutoRepeat: isAutoRepeat,
-                eventWasConsumed: &eventWasConsumed
+                eventSourceUserData: eventSourceUserData
             )
-            return eventWasConsumed
+            return handleEventSnapshot(snapshot)
         }
     }
 
