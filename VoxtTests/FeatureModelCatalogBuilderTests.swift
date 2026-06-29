@@ -193,6 +193,40 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
+    func testASRSelectorShowsSherpaModelsEvenWhenRuntimeUnavailable() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .dictation)
+        )
+
+        let entries = builder.entries(for: .transcriptionASR)
+        let fireRed = try XCTUnwrap(
+            entries.first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID) })
+        )
+        let funASR = try XCTUnwrap(
+            entries.first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID) })
+        )
+
+        XCTAssertEqual(fireRed.title, "FireRed 2 Mini")
+        XCTAssertEqual(funASR.title, "FunASR Nano")
+        XCTAssertEqual(fireRed.engine, AppLocalization.localizedString("Sherpa"))
+        XCTAssertEqual(funASR.engine, AppLocalization.localizedString("Sherpa"))
+
+        if SherpaOnnxRuntimeSupport.isAvailable {
+            XCTAssertNotEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            XCTAssertNotEqual(funASR.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            if fireRed.isSelectable {
+                XCTAssertNil(fireRed.disabledReason)
+            } else {
+                XCTAssertEqual(fireRed.disabledReason, AppLocalization.localizedString("Install this model in Model settings first."))
+            }
+        } else {
+            XCTAssertFalse(fireRed.isSelectable)
+            XCTAssertFalse(funASR.isSelectable)
+            XCTAssertEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            XCTAssertEqual(fireRed.disabledReason, SherpaOnnxRuntimeSupport.unavailableDetail)
+        }
+    }
+
     func testLLMSelectorUsesCuratedRatingAndTags() throws {
         let repo = "mlx-community/MiniCPM4-8B-4bit"
         let builder = makeBuilder(
@@ -352,6 +386,35 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(gemmaGroup.badgeText, recommended)
     }
 
+    func testSelectorGroupsFireRedMiniAndOriginalAcrossLocalEngines() throws {
+        let items = LocalModelSeriesGrouping.featureSelectorItems(
+            from: [
+                makeSelectorEntry(
+                    selectionID: .mlx("mlx-community/FireRedASR2-AED-mlx"),
+                    title: "FireRed 2",
+                    engine: AppLocalization.localizedString("MLX Audio")
+                ),
+                makeSelectorEntry(
+                    selectionID: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID),
+                    title: "FireRed 2 Mini",
+                    engine: AppLocalization.localizedString("Sherpa")
+                )
+            ],
+            selectedID: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
+        )
+
+        let group = try XCTUnwrap(
+            items.compactMap { item -> FeatureModelSelectorGroupSection? in
+                guard case .group(let group) = item, group.title == "FireRed" else { return nil }
+                return group
+            }.first
+        )
+
+        XCTAssertEqual(group.id, LocalModelSeriesClassifier.fireRedSeriesID)
+        XCTAssertEqual(group.engine, AppLocalization.localizedString("Local"))
+        XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["Mini", "Original"])
+    }
+
     private func makeBuilder(
         mlxModelManager: MLXModelManager = TestModelManagers.mlx,
         featureSettings: FeatureSettings,
@@ -400,6 +463,27 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
                 prompt: AppPreferenceKey.defaultRewritePrompt,
                 appEnhancementEnabled: true
             )
+        )
+    }
+
+    private func makeSelectorEntry(
+        selectionID: FeatureModelSelectionID,
+        title: String,
+        engine: String
+    ) -> FeatureModelSelectorEntry {
+        FeatureModelSelectorEntry(
+            selectionID: selectionID,
+            title: title,
+            engine: engine,
+            sizeText: "1 GB",
+            ratingText: "4.8",
+            filterTags: [AppLocalization.localizedString("Local")],
+            displayTags: [AppLocalization.localizedString("Local")],
+            statusText: "",
+            usageLocations: [],
+            badgeText: nil,
+            isSelectable: true,
+            disabledReason: nil
         )
     }
 

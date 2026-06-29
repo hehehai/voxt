@@ -72,13 +72,9 @@ extension ModelCatalogBuilder {
     }
 
     func sherpaOnnxASREntries() -> [ModelCatalogEntry] {
-        guard SherpaOnnxRuntimeSupport.isAvailable else {
-            return []
-        }
-
         return SherpaOnnxModelCatalog.allModels.map { model in
             let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
-            let installSnapshot = sherpaInstallSnapshot(model.id)
+            let installSnapshot = sherpaOnnxCatalogSnapshot(for: model.id)
             let decoration = catalogDecoration(
                 base: model.tagKeys.map { localizedModelCatalog($0) },
                 installed: installSnapshot.isInstalled,
@@ -90,12 +86,12 @@ extension ModelCatalogBuilder {
             return ModelCatalogEntry(
                 id: selectionID.rawValue,
                 title: model.title,
-                engine: localizedModelCatalog("Sherpa ONNX"),
+                engine: localizedModelCatalog("Sherpa"),
                 sizeText: sherpaOnnxASRSizeText(id: model.id, isInstalled: installSnapshot.isInstalled),
                 ratingText: model.ratingText,
                 filterTags: decoration.filterTags,
                 displayTags: decoration.displayTags,
-                statusText: installSnapshot.statusText,
+                statusText: sherpaOnnxASRStatusText(installSnapshot.statusText),
                 usageLocations: decoration.usageLocations,
                 badgeText: installSnapshot.badgeText
                     ?? (model.id == SherpaOnnxModelCatalog.fireRedModelID ? localizedModelCatalog("Recommended") : nil),
@@ -133,6 +129,33 @@ extension ModelCatalogBuilder {
             return sherpaOnnxModelManager.cachedModelSizeText(id: id) ?? sherpaOnnxModelManager.remoteSizeText(id: id)
         }
         return sherpaOnnxModelManager.remoteSizeText(id: id)
+    }
+
+    private func sherpaOnnxASRStatusText(_ statusText: String) -> String {
+        let genericStatuses = Set([
+            localizedModelCatalog("Installed"),
+            localizedModelCatalog("Not installed")
+        ])
+        return genericStatuses.contains(statusText) ? "" : statusText
+    }
+
+    private func sherpaOnnxCatalogSnapshot(for modelID: SherpaOnnxModelID) -> LocalModelInstallSnapshot {
+        if SherpaOnnxRuntimeSupport.isAvailable {
+            return sherpaInstallSnapshot(modelID)
+        }
+
+        return LocalModelInstallSnapshot(
+            target: .sherpaOnnx(modelID),
+            state: .installable(isEnabled: false),
+            isInstalled: false,
+            isCurrentSelection: false,
+            statusText: SherpaOnnxRuntimeSupport.unavailableDetail ?? localizedModelCatalog("Not available"),
+            badgeText: localizedModelCatalog("Not available"),
+            downloadStatus: nil,
+            canOpenLocation: false,
+            canConfigure: false,
+            configureActionTitle: nil
+        )
     }
 
 }

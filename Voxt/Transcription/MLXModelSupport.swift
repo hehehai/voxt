@@ -186,7 +186,7 @@ struct MLXModelCatalog {
         ),
         Option(
             id: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16",
-            title: "Cohere 03-2026 (fp16)",
+            title: "Cohere 03-2026",
             description: "High-accuracy multilingual encoder-decoder model with punctuation enabled.",
             visibility: .hiddenSupport
         ),
@@ -251,13 +251,13 @@ struct MLXModelCatalog {
         ),
         Option(
             id: "mlx-community/granite-4.0-1b-speech-5bit",
-            title: "Granite 4.0 1B (5bit)",
+            title: "Granite 4",
             description: "Speech model for English, French, German, Spanish, Portuguese, and Japanese.",
             visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
-            title: "Nemotron 0.6B (8bit)",
+            title: "Nemotron",
             description: "Streaming ASR model with cache-aware NeMo-family decoding."
         ),
         Option(

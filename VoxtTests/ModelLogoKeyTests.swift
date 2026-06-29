@@ -4,7 +4,7 @@ import XCTest
 final class ModelLogoKeyTests: XCTestCase {
     func testNemotronASRUsesNvidiaLogo() {
         XCTAssertEqual(
-            ModelLogoKey.resolve(title: "Nemotron 0.6B (8bit)", engine: "MLX Audio"),
+            ModelLogoKey.resolve(title: "Nemotron", engine: "MLX Audio"),
             .nvidia
         )
     }
@@ -13,8 +13,8 @@ final class ModelLogoKeyTests: XCTestCase {
         let selectionID = FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID)
         let catalogEntry = ModelCatalogEntry(
             id: selectionID.rawValue,
-            title: "FunASR Nano (int8)",
-            engine: "Sherpa ONNX",
+            title: "FunASR Nano",
+            engine: "Sherpa",
             sizeText: "",
             ratingText: "",
             filterTags: [],
@@ -27,8 +27,8 @@ final class ModelLogoKeyTests: XCTestCase {
         )
         let selectorEntry = FeatureModelSelectorEntry(
             selectionID: selectionID,
-            title: "FunASR Nano (int8)",
-            engine: "Sherpa ONNX",
+            title: "FunASR Nano",
+            engine: "Sherpa",
             sizeText: "",
             ratingText: "",
             filterTags: [],

@@ -259,7 +259,7 @@ enum ModelDebugCatalog {
             return ASRDebugModelOption(
                 id: "sherpa:\(model.id.rawValue)",
                 title: model.title,
-                subtitle: AppLocalization.localizedString("Local Sherpa ONNX"),
+                subtitle: AppLocalization.localizedString("Local Sherpa"),
                 selection: .sherpaOnnx(modelID: model.id)
             )
         }

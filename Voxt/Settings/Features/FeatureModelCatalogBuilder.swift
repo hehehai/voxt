@@ -148,40 +148,41 @@ struct FeatureModelCatalogBuilder {
             )
         })
 
-        if SherpaOnnxRuntimeSupport.isAvailable {
-            entries.append(contentsOf: SherpaOnnxModelCatalog.allModels.map { model in
-                let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
-                let isInstalled = sherpaOnnxModelManager.isModelDownloaded(id: model.id)
-                let availability = Self.mlxSelectorAvailability(isInstalled: isInstalled)
-                return FeatureModelSelectorEntry(
-                    selectionID: selectionID,
-                    title: model.title,
-                    engine: localized("Sherpa ONNX"),
-                    sizeText: isInstalled
-                        ? (sherpaOnnxModelManager.cachedModelSizeText(id: model.id) ?? sherpaOnnxModelManager.remoteSizeText(id: model.id))
-                        : sherpaOnnxModelManager.remoteSizeText(id: model.id),
-                    ratingText: model.ratingText,
-                    filterTags: featureFilterTags(
-                        base: model.tagKeys.map(localized),
-                        installed: isInstalled,
-                        requiresConfiguration: false,
-                        configured: true,
-                        usageLabels: usageLabels(for: selectionID)
-                    ),
-                    displayTags: featureDisplayTags(
-                        base: model.tagKeys.map(localized),
-                        requiresConfiguration: false,
-                        configured: true,
-                        selectionID: selectionID
-                    ),
-                    statusText: isInstalled ? localized("Installed") : localized("Not installed"),
-                    usageLocations: usageLabels(for: selectionID),
-                    badgeText: model.id == SherpaOnnxModelCatalog.fireRedModelID ? localized("Recommended") : nil,
-                    isSelectable: availability.isSelectable,
-                    disabledReason: availability.disabledReason
-                )
-            })
-        }
+        entries.append(contentsOf: SherpaOnnxModelCatalog.allModels.map { model in
+            let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
+            let isRuntimeAvailable = SherpaOnnxRuntimeSupport.isAvailable
+            let isInstalled = isRuntimeAvailable && sherpaOnnxModelManager.isModelDownloaded(id: model.id)
+            let availability = Self.sherpaOnnxSelectorAvailability(isRuntimeAvailable: isRuntimeAvailable, isInstalled: isInstalled)
+            return FeatureModelSelectorEntry(
+                selectionID: selectionID,
+                title: model.title,
+                engine: localized("Sherpa"),
+                sizeText: isInstalled
+                    ? (sherpaOnnxModelManager.cachedModelSizeText(id: model.id) ?? sherpaOnnxModelManager.remoteSizeText(id: model.id))
+                    : sherpaOnnxModelManager.remoteSizeText(id: model.id),
+                ratingText: model.ratingText,
+                filterTags: featureFilterTags(
+                    base: model.tagKeys.map(localized),
+                    installed: isInstalled,
+                    requiresConfiguration: false,
+                    configured: true,
+                    usageLabels: usageLabels(for: selectionID)
+                ),
+                displayTags: featureDisplayTags(
+                    base: model.tagKeys.map(localized),
+                    requiresConfiguration: false,
+                    configured: true,
+                    selectionID: selectionID
+                ),
+                statusText: isRuntimeAvailable
+                    ? (isInstalled ? localized("Installed") : localized("Not installed"))
+                    : (SherpaOnnxRuntimeSupport.unavailableDetail ?? localized("Not available")),
+                usageLocations: usageLabels(for: selectionID),
+                badgeText: model.id == SherpaOnnxModelCatalog.fireRedModelID ? localized("Recommended") : nil,
+                isSelectable: availability.isSelectable,
+                disabledReason: availability.disabledReason
+            )
+        })
 
         let remoteConfigurations = RemoteModelConfigurationStore.loadConfigurations(
             from: remoteASRProviderConfigurationsRaw,
@@ -196,7 +197,7 @@ struct FeatureModelCatalogBuilder {
             return FeatureModelSelectorEntry(
                 selectionID: selectionID,
                 title: provider.title,
-                engine: localized("Remote ASR"),
+                engine: localized("Remote"),
                 sizeText: configuration.hasUsableModel ? configuration.model : localized("Cloud"),
                 ratingText: provider == .openAIWhisper ? "4.6" : "4.4",
                 filterTags: featureFilterTags(
@@ -228,6 +229,19 @@ struct FeatureModelCatalogBuilder {
             isSelectable: isInstalled,
             disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
         )
+    }
+
+    static func sherpaOnnxSelectorAvailability(
+        isRuntimeAvailable: Bool,
+        isInstalled: Bool
+    ) -> (isSelectable: Bool, disabledReason: String?) {
+        guard isRuntimeAvailable else {
+            return (
+                false,
+                SherpaOnnxRuntimeSupport.unavailableDetail ?? localized("Not available")
+            )
+        }
+        return mlxSelectorAvailability(isInstalled: isInstalled)
     }
 
     private func llmEntries(includeAppleIntelligence: Bool) -> [FeatureModelSelectorEntry] {

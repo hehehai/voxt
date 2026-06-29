@@ -56,6 +56,40 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(directDictation.displayTags.contains(AppLocalization.localizedString("In Use")))
     }
 
+    func testASRCatalogShowsSherpaModelsEvenWhenRuntimeUnavailable() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(
+                transcriptionASR: .dictation
+            )
+        )
+
+        let entries = builder.asrEntries()
+        let fireRed = try XCTUnwrap(
+            entries.first(where: { $0.id == FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID).rawValue })
+        )
+        let funASR = try XCTUnwrap(
+            entries.first(where: { $0.id == FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID).rawValue })
+        )
+
+        XCTAssertEqual(fireRed.title, "FireRed 2 Mini")
+        XCTAssertEqual(funASR.title, "FunASR Nano")
+        XCTAssertEqual(fireRed.engine, AppLocalization.localizedString("Sherpa"))
+        XCTAssertEqual(funASR.engine, AppLocalization.localizedString("Sherpa"))
+
+        if !SherpaOnnxRuntimeSupport.isAvailable {
+            XCTAssertEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            XCTAssertEqual(funASR.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            XCTAssertEqual(fireRed.badgeText, AppLocalization.localizedString("Not available"))
+            XCTAssertEqual(fireRed.primaryAction?.title, AppLocalization.localizedString("Install"))
+            XCTAssertEqual(fireRed.primaryAction?.isEnabled, false)
+        } else {
+            XCTAssertNotEqual(fireRed.statusText, AppLocalization.localizedString("Installed"))
+            XCTAssertNotEqual(funASR.statusText, AppLocalization.localizedString("Installed"))
+            XCTAssertNotEqual(fireRed.statusText, AppLocalization.localizedString("Not installed"))
+            XCTAssertNotEqual(funASR.statusText, AppLocalization.localizedString("Not installed"))
+        }
+    }
+
     func testConfiguredRemoteASREntryShowsNeedsSetupBadgeWhenProviderHasConfigurationIssue() throws {
         let remoteASRConfigurations: [String: RemoteProviderConfiguration] = [
             RemoteASRProvider.aliyunBailianASR.rawValue: TestFactories.makeRemoteConfiguration(
@@ -394,6 +428,32 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(gemmaGroup.badgeText, recommended)
     }
 
+    func testCatalogGroupsFireRedMiniAndOriginalAcrossLocalEngines() throws {
+        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.mlx("mlx-community/FireRedASR2-AED-mlx").rawValue,
+                title: "FireRed 2",
+                engine: AppLocalization.localizedString("MLX Audio")
+            ),
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID).rawValue,
+                title: "FireRed 2 Mini",
+                engine: AppLocalization.localizedString("Sherpa")
+            )
+        ])
+
+        let group = try XCTUnwrap(
+            items.compactMap { item -> ModelCatalogGroupSection? in
+                guard case .group(let group) = item, group.title == "FireRed" else { return nil }
+                return group
+            }.first
+        )
+
+        XCTAssertEqual(group.id, LocalModelSeriesClassifier.fireRedSeriesID)
+        XCTAssertEqual(group.engine, AppLocalization.localizedString("Local"))
+        XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["Mini", "Original"])
+    }
+
     private func makeBuilder(
         featureSettings: FeatureSettings,
         remoteASRConfigurations: [String: RemoteProviderConfiguration] = [:],
@@ -550,6 +610,27 @@ final class ModelCatalogBuilderTests: XCTestCase {
             configureASRProvider: { _ in },
             configureLLMProvider: { _ in },
             showASRHintTarget: { _ in }
+        )
+    }
+
+    private func makeCatalogEntry(
+        id: String,
+        title: String,
+        engine: String
+    ) -> ModelCatalogEntry {
+        ModelCatalogEntry(
+            id: id,
+            title: title,
+            engine: engine,
+            sizeText: "1 GB",
+            ratingText: "4.8",
+            filterTags: [AppLocalization.localizedString("Local")],
+            displayTags: [AppLocalization.localizedString("Local")],
+            statusText: "",
+            usageLocations: [],
+            badgeText: nil,
+            primaryAction: nil,
+            secondaryActions: []
         )
     }
 

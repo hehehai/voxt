@@ -22,17 +22,17 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         case .mlxAudio:
             return AppLocalization.localizedString("MLX Audio")
         case .sherpaOnnx:
-            return AppLocalization.localizedString("Sherpa ONNX")
+            return AppLocalization.localizedString("Sherpa")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI Transcribe")
         case .glmASR:
             return AppLocalization.localizedString("Z ai")
         case .doubaoASR:
-            return AppLocalization.localizedString("Doubao ASR")
+            return AppLocalization.localizedString("Doubao")
         case .aliyunBailianASR:
             return AppLocalization.localizedString("Aliyun Bailian ASR")
         case .stepFunASR:
-            return AppLocalization.localizedString("StepFun ASR")
+            return AppLocalization.localizedString("StepFun")
         }
     }
 
@@ -69,7 +69,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         case .mlxAudio:
             return AppLocalization.localizedString("MLX uses language hints by default. Some model families also expose model-specific local tuning in the Configure dialog.")
         case .sherpaOnnx:
-            return AppLocalization.localizedString("Sherpa ONNX runs local offline ASR models. Prompt editing is not applied.")
+            return AppLocalization.localizedString("Sherpa runs local offline ASR models. Prompt editing is not applied.")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition.")
         case .glmASR:

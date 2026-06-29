@@ -22,8 +22,8 @@ enum TranscriptionEngine: String, CaseIterable, Identifiable {
         switch self {
         case .dictation: return "Direct Dictation"
         case .mlxAudio: return "MLX Audio (On-device)"
-        case .sherpaOnnx: return "Sherpa ONNX (On-device)"
-        case .remote: return "Remote ASR"
+        case .sherpaOnnx: return "Sherpa"
+        case .remote: return "Remote"
         }
     }
 
@@ -31,8 +31,8 @@ enum TranscriptionEngine: String, CaseIterable, Identifiable {
         switch self {
         case .dictation: return AppLocalization.localizedString("Direct Dictation")
         case .mlxAudio: return AppLocalization.localizedString("MLX Audio (On-device)")
-        case .sherpaOnnx: return AppLocalization.localizedString("Sherpa ONNX (On-device)")
-        case .remote: return AppLocalization.localizedString("Remote ASR")
+        case .sherpaOnnx: return AppLocalization.localizedString("Sherpa")
+        case .remote: return AppLocalization.localizedString("Remote")
         }
     }
 

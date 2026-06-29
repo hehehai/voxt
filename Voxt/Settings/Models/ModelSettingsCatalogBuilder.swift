@@ -63,7 +63,7 @@ struct ModelCatalogBuilder {
             return ModelCatalogEntry(
                 id: "remote-asr:\(provider.rawValue)",
                 title: provider.title,
-                engine: localizedModelCatalog("Remote ASR"),
+                engine: localizedModelCatalog("Remote"),
                 sizeText: configuration.hasUsableModel ? configuration.model : localizedModelCatalog("Cloud"),
                 ratingText: provider == .openAIWhisper ? "4.6" : "4.4",
                 filterTags: decoration.filterTags,

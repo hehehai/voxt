@@ -541,6 +541,10 @@
 "Access Token" = "Access Token";
 "Paste access token" = "粘贴 Access Token";
 "Not available" = "不可用";
+"Sherpa" = "Sherpa";
+"Sherpa runs local offline ASR models. Prompt editing is not applied." = "Sherpa 运行本地离线 ASR 模型。不应用提示词编辑。";
+"Local Sherpa" = "本地 Sherpa";
+"Sherpa ONNX runtime is not bundled in this build." = "此构建未内置 Sherpa ONNX 运行时。";
 "Doubao Access Token is required for testing." = "测试需要填写豆包 Access Token。";
 "Doubao App ID is required for testing." = "测试需要填写豆包 App ID。";
 "Connection test succeeded (Doubao WebSocket reachable)." = "连接测试成功（豆包 WebSocket 可达）。";
@@ -561,7 +565,7 @@
 "Invalid Google endpoint URL." = "Google 端点 URL 无效。";
 "Invalid endpoint URL." = "端点 URL 无效。";
 "Invalid WebSocket endpoint URL." = "WebSocket 端点 URL 无效。";
-"Remote ASR" = "远程 ASR";
+"Remote ASR" = "远程";
 "Remote LLM" = "远程 LLM";
 "Uses remote speech recognition providers and cloud-hosted ASR models." = "使用远程语音识别服务商和云端 ASR 模型。";
 "Remote ASR Providers" = "远程 ASR 服务商";
@@ -583,6 +587,7 @@
 "Default" = "默认";
 "OpenAI Whisper" = "OpenAI Whisper";
 "OpenAI Transcribe" = "OpenAI Transcribe";
+"Doubao" = "豆包";
 "Doubao ASR" = "豆包 ASR";
 "GLM ASR" = "GLM ASR";
 "Z ai" = "智普";
@@ -1049,7 +1054,7 @@
 "Local Text Model" = "本地文本模型";
 "Used for enhancement, translation, and rewrite when you stay on the local path." = "保持本地路径时，用于增强、翻译和转写。";
 "Best when you want to start quickly without downloading local speech models." = "适合想快速开始且不想下载本地语音模型的场景。";
-"Remote ASR" = "远程语音识别";
+"Remote ASR" = "远程";
 "Remote LLM" = "远程 LLM";
 "Used for enhancement, translation, and rewrite when you stay on the remote path." = "保持远程路径时，用于增强、翻译和转写。";
 "Current Text Model Path" = "当前文本模型路径";
@@ -1935,7 +1940,7 @@
 "Voxt is ready. You can revisit this guide from the main window at any time." = "Voxt 已准备好。你可以随时从主窗口重新打开这个引导。";
 "Voxt shortcut detected" = "已检测到 Voxt 快捷键";
 "Workflows" = "工作流";
-"Sherpa ONNX ASR Configuration" = "Sherpa ONNX ASR 配置";
+"Sherpa ASR Configuration" = "Sherpa ASR 配置";
 "Threads" = "线程数";
 "Max New Tokens" = "最大新 Token";
 "Higher values can improve offline decode speed, but also use more CPU." = "更高的值可以提升离线解码速度，但会使用更多 CPU。";

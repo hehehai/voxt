@@ -449,7 +449,7 @@ private struct SherpaOnnxASRConfigurationSheetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(localized("Sherpa ONNX ASR Configuration"))
+            Text(localized("Sherpa ASR Configuration"))
                 .font(.title3.weight(.semibold))
 
             ScrollView {

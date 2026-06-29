@@ -59,8 +59,8 @@ enum SherpaOnnxModelCatalog {
     nonisolated static let allModels: [SherpaOnnxModelOption] = [
         SherpaOnnxModelOption(
             id: fireRedModelID,
-            title: "FireRed ASR 2 (CTC int8)",
-            description: "Sherpa-ONNX FireRed ASR 2 CTC int8 model for Chinese and English offline transcription.",
+            title: "FireRed 2 Mini",
+            description: "Sherpa FireRed 2 Mini CTC int8 model for Chinese and English offline transcription.",
             kind: .fireRedASRCTC,
             downloadSources: [
                 ModelDownloadSourceCandidate(
@@ -83,8 +83,8 @@ enum SherpaOnnxModelCatalog {
         ),
         SherpaOnnxModelOption(
             id: funASRNanoModelID,
-            title: "FunASR Nano (int8)",
-            description: "Sherpa-ONNX FunASR Nano int8 model with a compact encoder and Qwen tokenizer assets.",
+            title: "FunASR Nano",
+            description: "Sherpa FunASR Nano int8 model with a compact encoder and Qwen tokenizer assets.",
             kind: .funASRNano,
             downloadSources: [
                 ModelDownloadSourceCandidate(

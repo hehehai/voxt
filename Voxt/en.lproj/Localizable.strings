@@ -541,6 +541,10 @@
 "Access Token" = "Access Token";
 "Paste access token" = "Paste access token";
 "Not available" = "Not available";
+"Sherpa" = "Sherpa";
+"Sherpa runs local offline ASR models. Prompt editing is not applied." = "Sherpa runs local offline ASR models. Prompt editing is not applied.";
+"Local Sherpa" = "Local Sherpa";
+"Sherpa ONNX runtime is not bundled in this build." = "Sherpa ONNX runtime is not bundled in this build.";
 "Doubao Access Token is required for testing." = "Doubao Access Token is required for testing.";
 "Doubao App ID is required for testing." = "Doubao App ID is required for testing.";
 "Connection test succeeded (Doubao WebSocket reachable)." = "Connection test succeeded (Doubao WebSocket reachable).";
@@ -583,6 +587,7 @@
 "Default" = "Default";
 "OpenAI Whisper" = "OpenAI Whisper";
 "OpenAI Transcribe" = "OpenAI Transcribe";
+"Doubao" = "Doubao";
 "Doubao ASR" = "Doubao ASR";
 "GLM ASR" = "GLM ASR";
 "Z ai" = "Z ai";
@@ -1935,7 +1940,7 @@
 "Voxt is ready. You can revisit this guide from the main window at any time." = "Voxt is ready. You can revisit this guide from the main window at any time.";
 "Voxt shortcut detected" = "Voxt shortcut detected";
 "Workflows" = "Workflows";
-"Sherpa ONNX ASR Configuration" = "Sherpa ONNX ASR Configuration";
+"Sherpa ASR Configuration" = "Sherpa ASR Configuration";
 "Threads" = "Threads";
 "Max New Tokens" = "Max New Tokens";
 "Higher values can improve offline decode speed, but also use more CPU." = "Higher values can improve offline decode speed, but also use more CPU.";

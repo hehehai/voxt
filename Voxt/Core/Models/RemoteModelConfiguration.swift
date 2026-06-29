@@ -22,13 +22,13 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI Transcribe")
         case .doubaoASR:
-            return AppLocalization.localizedString("Doubao ASR")
+            return AppLocalization.localizedString("Doubao")
         case .glmASR:
             return AppLocalization.localizedString("Z ai")
         case .aliyunBailianASR:
             return AppLocalization.localizedString("Aliyun Bailian ASR")
         case .stepFunASR:
-            return AppLocalization.localizedString("StepFun ASR")
+            return AppLocalization.localizedString("StepFun")
         }
     }
 

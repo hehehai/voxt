@@ -138,7 +138,10 @@ enum LocalModelSeriesGrouping {
                 continue
             }
             guard emittedIDs.insert(descriptor.id).inserted else { continue }
-            let groupEntries = groupedEntries[descriptor.id]?.map { $0.1 } ?? [entry]
+            let groupEntries = orderedGroupEntries(
+                descriptor: descriptor,
+                entries: groupedEntries[descriptor.id]?.map { $0.1 } ?? [entry]
+            )
             items.append(
                 .group(
                     ModelCatalogGroupSection(
@@ -180,7 +183,10 @@ enum LocalModelSeriesGrouping {
                 continue
             }
             guard emittedIDs.insert(descriptor.id).inserted else { continue }
-            let groupEntries = groupedEntries[descriptor.id]?.map { $0.1 } ?? [entry]
+            let groupEntries = orderedGroupEntries(
+                descriptor: descriptor,
+                entries: groupedEntries[descriptor.id]?.map { $0.1 } ?? [entry]
+            )
             items.append(
                 .group(
                     FeatureModelSelectorGroupSection(
@@ -250,6 +256,37 @@ enum LocalModelSeriesGrouping {
         var seen = Set<String>()
         return values.filter { seen.insert($0).inserted }
     }
+
+    private static func orderedGroupEntries(
+        descriptor: LocalModelSeriesDescriptor,
+        entries: [ModelCatalogEntry]
+    ) -> [ModelCatalogEntry] {
+        guard descriptor.id == LocalModelSeriesClassifier.fireRedSeriesID else {
+            return entries
+        }
+        return entries.sorted { fireRedVariantRank($0.groupedVariantTitle) < fireRedVariantRank($1.groupedVariantTitle) }
+    }
+
+    private static func orderedGroupEntries(
+        descriptor: LocalModelSeriesDescriptor,
+        entries: [FeatureModelSelectorEntry]
+    ) -> [FeatureModelSelectorEntry] {
+        guard descriptor.id == LocalModelSeriesClassifier.fireRedSeriesID else {
+            return entries
+        }
+        return entries.sorted { fireRedVariantRank($0.groupedVariantTitle) < fireRedVariantRank($1.groupedVariantTitle) }
+    }
+
+    private static func fireRedVariantRank(_ title: String) -> Int {
+        switch title {
+        case "Mini":
+            return 0
+        case "Original":
+            return 1
+        default:
+            return 2
+        }
+    }
 }
 
 extension ModelCatalogEntry {
@@ -273,7 +310,18 @@ extension FeatureModelSelectorEntry {
 }
 
 enum LocalModelSeriesClassifier {
+    static let fireRedSeriesID = "local-asr:FireRed"
+
     static func classify(title: String, engine: String) -> LocalModelSeriesDescriptor? {
+        if let fireRed = fireRedFamily(title: title) {
+            return LocalModelSeriesDescriptor(
+                id: fireRedSeriesID,
+                title: fireRed.title,
+                variantTitle: fireRed.variantTitle,
+                engine: localized("Local")
+            )
+        }
+
         guard let family = familyInfo(title: title, engine: engine) else { return nil }
         return LocalModelSeriesDescriptor(
             id: "\(engine):\(family.title)",
@@ -331,6 +379,17 @@ enum LocalModelSeriesClassifier {
         }
 
         return nil
+    }
+
+    private static func fireRedFamily(title: String) -> (title: String, variantTitle: String)? {
+        switch title {
+        case "FireRed 2 Mini":
+            return (title: "FireRed", variantTitle: "Mini")
+        case "FireRed 2":
+            return (title: "FireRed", variantTitle: "Original")
+        default:
+            return nil
+        }
     }
 
     private static func prefixedFamily(

@@ -29,6 +29,7 @@ fi
 
 (
   cd "$SOURCE_DIR"
+  rm -rf build-swift-macos/sherpa-onnx.xcframework
   ./build-swift-macos.sh
 )
 
