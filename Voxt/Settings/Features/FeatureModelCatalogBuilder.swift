@@ -123,9 +123,7 @@ struct FeatureModelCatalogBuilder {
                 engine: MLXWhisperMigrationSupport.isWhisperRepo(model.id)
                     ? localized("Whisper (MLX)")
                     : localized("MLX Audio"),
-                sizeText: isInstalled
-                    ? (mlxModelManager.cachedModelSizeText(repo: model.id) ?? mlxModelManager.remoteSizeText(repo: model.id))
-                    : mlxModelManager.remoteSizeText(repo: model.id),
+                sizeText: mlxModelManager.remoteSizeText(repo: model.id),
                 ratingText: MLXModelManager.ratingText(for: model.id),
                 filterTags: featureFilterTags(
                     base: [localized("Local")] + mlxSpeedTags(for: model.id),
@@ -157,9 +155,7 @@ struct FeatureModelCatalogBuilder {
                 selectionID: selectionID,
                 title: model.title,
                 engine: localized("Sherpa"),
-                sizeText: isInstalled
-                    ? (sherpaOnnxModelManager.cachedModelSizeText(id: model.id) ?? sherpaOnnxModelManager.remoteSizeText(id: model.id))
-                    : sherpaOnnxModelManager.remoteSizeText(id: model.id),
+                sizeText: sherpaOnnxModelManager.remoteSizeText(id: model.id),
                 ratingText: model.ratingText,
                 filterTags: featureFilterTags(
                     base: model.tagKeys.map(localized),
@@ -270,16 +266,14 @@ struct FeatureModelCatalogBuilder {
             )
         }
 
-        entries.append(contentsOf: CustomLLMModelManager.availableModels.map { model in
+        entries.append(contentsOf: customLLMDisplayModelsIncludingFeatureSelections().map { model in
             let selectionID = FeatureModelSelectionID.localLLM(model.id)
             let isInstalled = customLLMManager.isModelDownloaded(repo: model.id)
             return FeatureModelSelectorEntry(
                 selectionID: selectionID,
                 title: model.title,
                 engine: localized("Local LLM"),
-                sizeText: isInstalled
-                    ? (customLLMManager.cachedModelSizeText(repo: model.id) ?? customLLMManager.remoteSizeText(repo: model.id))
-                    : customLLMManager.remoteSizeText(repo: model.id),
+                sizeText: customLLMManager.remoteSizeText(repo: model.id),
                 ratingText: CustomLLMModelManager.ratingText(for: model.id),
                 filterTags: featureFilterTags(
                     base: [localized("Local")] + llmSpeedTags(for: model.id),
@@ -355,6 +349,30 @@ struct FeatureModelCatalogBuilder {
         return entries
     }
 
+    private func customLLMDisplayModelsIncludingFeatureSelections() -> [CustomLLMModelCatalog.Option] {
+        var includedRepos = Set(
+            customLLMManager.displayModelsIncludingInstalled()
+                .map { CustomLLMModelManager.canonicalModelRepo($0.id) }
+        )
+
+        func includeLocalLLMSelection(_ selectionID: FeatureModelSelectionID) {
+            guard case .localLLM(let repo)? = selectionID.textSelection else { return }
+            includedRepos.insert(CustomLLMModelManager.canonicalModelRepo(repo))
+        }
+
+        if featureSettings.transcription.llmEnabled {
+            includeLocalLLMSelection(featureSettings.transcription.llmSelectionID)
+        }
+        if featureSettings.transcription.notes.enabled {
+            includeLocalLLMSelection(featureSettings.transcription.notes.titleModelSelectionID)
+        }
+        includeLocalLLMSelection(featureSettings.translation.modelSelectionID)
+        includeLocalLLMSelection(featureSettings.rewrite.llmSelectionID)
+        includeLocalLLMSelection(featureSettings.meeting.summaryModelSelectionID)
+
+        return CustomLLMModelManager.displayModels(includingInstalled: includedRepos)
+    }
+
     private func translationEntries(
         selectedASR: FeatureModelSelectionID,
         targetLanguage: TranslationTargetLanguage
@@ -369,7 +387,7 @@ struct FeatureModelCatalogBuilder {
                 selectionID: selectionID,
                 title: model.title,
                 engine: localized("Local GGUF"),
-                sizeText: ggufTranslationModelManager.cachedModelSizeText(id: model.id) ?? model.sizeText,
+                sizeText: model.sizeText,
                 ratingText: model.ratingText,
                 filterTags: featureFilterTags(
                     base: model.tags,

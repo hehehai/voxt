@@ -78,39 +78,6 @@ enum CustomLLMModelDownloadSupport {
         )
     }
 
-    static func fetchRemoteSizeInfo(
-        repo: String,
-        preferredBaseURL: URL,
-        mirrorBaseURL: URL,
-        userAgent: String,
-        formatByteCount: @Sendable (Int64) -> String
-    ) async throws -> (bytes: Int64, text: String) {
-        do {
-            return try await MLXModelDownloadSupport.fetchModelSizeInfo(
-                repo: repo,
-                baseURL: preferredBaseURL,
-                userAgent: userAgent,
-                formatByteCount: formatByteCount
-            )
-        } catch {
-            guard let fallbackBaseURL = fallbackHubBaseURL(
-                from: preferredBaseURL,
-                mirrorBaseURL: mirrorBaseURL
-            ) else {
-                throw error
-            }
-            VoxtLog.modelWarning(
-                "Primary custom LLM metadata endpoint failed. Retrying with mirror. repo=\(repo), baseURL=\(preferredBaseURL.absoluteString), error=\(error.localizedDescription)"
-            )
-            return try await MLXModelDownloadSupport.fetchModelSizeInfo(
-                repo: repo,
-                baseURL: fallbackBaseURL,
-                userAgent: userAgent,
-                formatByteCount: formatByteCount
-            )
-        }
-    }
-
     static func hasUsableChatTemplate(in directory: URL, fileManager: FileManager = .default) -> Bool {
         for fileName in chatTemplateFileNames {
             if fileManager.fileExists(atPath: directory.appendingPathComponent(fileName).path) {

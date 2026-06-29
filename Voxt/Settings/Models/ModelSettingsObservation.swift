@@ -16,11 +16,14 @@ extension ModelSettingsView {
         .map { _ in () }
         .eraseToAnyPublisher()
 
-        let customLLM = customLLMManager.$state
-            .map(ModelSettingsManagerRefreshSupport.phase(for:))
-            .removeDuplicates()
-            .map { _ in () }
-            .eraseToAnyPublisher()
+        let customLLM = Publishers.CombineLatest(
+            customLLMManager.$activeDownloadRepos.removeDuplicates(),
+            customLLMManager.$state
+                .map(ModelSettingsManagerRefreshSupport.phase(for:))
+                .removeDuplicates()
+        )
+        .map { _ in () }
+        .eraseToAnyPublisher()
 
         let sherpa = Publishers.CombineLatest(
             sherpaOnnxModelManager.$activeDownloadModelIDs
@@ -69,10 +72,17 @@ extension ModelSettingsView {
             .map { _ in () }
             .eraseToAnyPublisher()
 
-        let customLLMPauseMessage = customLLMManager.$pausedStatusMessage
-            .removeDuplicates()
-            .map { _ in () }
-            .eraseToAnyPublisher()
+        let customLLMPauseMessage = Publishers.Merge(
+            customLLMManager.$pausedStatusMessage
+                .removeDuplicates()
+                .map { _ in () }
+                .eraseToAnyPublisher(),
+            customLLMManager.$pausedStatusMessageByRepo
+                .removeDuplicates()
+                .map { _ in () }
+                .eraseToAnyPublisher()
+        )
+        .eraseToAnyPublisher()
 
         let sherpaStateByID = sherpaOnnxModelManager.$stateByID
             .removeDuplicates()
@@ -290,6 +300,8 @@ extension ModelSettingsView {
             sherpaState: sherpaOnnxModelManager.state,
             sherpaActiveDownloadModelIDs: sherpaOnnxModelManager.activeDownloadModelIDs,
             customLLMState: customLLMManager.state,
+            customLLMStateByRepo: customLLMManager.stateByRepo,
+            customLLMActiveDownloadRepos: customLLMManager.activeDownloadRepos,
             ggufStateByID: ggufTranslationModelManager.stateByID,
             ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
         )

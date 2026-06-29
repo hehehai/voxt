@@ -125,7 +125,7 @@ extension ModelSettingsView {
     }
 
     var customLLMRows: [ModelTableRow] {
-        CustomLLMModelManager.displayModels(including: customLLMRepo).map { model in
+        customLLMManager.displayModelsIncludingInstalled().map { model in
             let snapshot = customLLMInstallSnapshot(for: model.id)
             return modelTableRow(
                 id: model.id,
@@ -329,19 +329,11 @@ extension ModelSettingsView {
     }
 
     func isDownloadingCustomLLM(_ repo: String) -> Bool {
-        customLLMInstallSnapshot(for: repo).state == .downloading
+        customLLMManager.isDownloading(repo: repo)
     }
 
     func isPausedCustomLLM(_ repo: String) -> Bool {
-        customLLMInstallSnapshot(for: repo).state == .paused
-    }
-
-    func isAnotherCustomLLMDownloading(_ repo: String) -> Bool {
-        ModelDownloadStateRouting.isAnotherCustomLLMDownloadActive(
-            repo: repo,
-            managerRepo: customLLMManager.currentModelRepo,
-            state: customLLMManager.state
-        )
+        customLLMManager.isPaused(repo: repo)
     }
 
     func customLLMStatusText(for repo: String) -> String {
@@ -510,7 +502,7 @@ extension ModelSettingsView {
             mlxModelManager.checkExistingModel()
         }
 
-        if case .downloading = customLLMManager.state {
+        if !customLLMManager.activeDownloadRepos.isEmpty {
             // Keep current transient state during active downloads.
         } else if case .paused = customLLMManager.state {
             // Preserve paused state while download cancellation settles.
@@ -547,7 +539,7 @@ extension ModelSettingsView {
         var parts = [String]()
         switch settings.thinking.mode {
         case .providerDefault:
-            parts.append(AppLocalization.localizedString("Think: Model Default"))
+            parts.append(AppLocalization.localizedString("Think: Off"))
         case .off:
             parts.append(AppLocalization.localizedString("Think: Off"))
         case .on:

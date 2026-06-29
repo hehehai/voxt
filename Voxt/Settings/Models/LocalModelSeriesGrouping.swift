@@ -357,18 +357,11 @@ enum LocalModelSeriesClassifier {
             if let family = prefixedFamily(title: title, prefix: "Qwen", family: "Qwen") {
                 return family
             }
-            if let family = prefixedFamily(title: title, prefix: "GLM", family: "GLM") {
-                return family
-            }
-            if let family = prefixedFamily(title: title, prefix: "Mistral ", family: "Mistral") {
-                return family
-            }
             if let family = prefixedFamily(title: title, prefix: "Gemma ", family: "Gemma") {
                 return family
             }
-            if title.contains("Llama") {
-                let normalized = title.replacingOccurrences(of: "Meta ", with: "")
-                return prefixedFamily(title: normalized, prefix: "Llama ", family: "Llama")
+            if let family = prefixedFamily(title: title, prefix: "LFM2 ", family: "LFM2") {
+                return family
             }
         }
 

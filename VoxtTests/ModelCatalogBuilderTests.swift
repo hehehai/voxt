@@ -265,6 +265,25 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(entry.primaryAction?.title, AppLocalization.localizedString("Pause"))
     }
 
+    func testCustomLLMCatalogAllowsInstallingAnotherModelWhileDownloadIsActive() throws {
+        let downloadingRepo = "mlx-community/Qwen3.5-4B-4bit"
+        let installableRepo = "mlx-community/LFM2-1.2B-4bit"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(translationModel: .localLLM(downloadingRepo)),
+            isDownloadingCustomLLM: { repo in
+                repo == downloadingRepo
+            }
+        )
+
+        let entry = try XCTUnwrap(
+            builder.llmEntries().first(where: { $0.id == "local-llm:\(installableRepo)" })
+        )
+
+        XCTAssertEqual(entry.primaryAction?.title, AppLocalization.localizedString("Install"))
+        XCTAssertEqual(entry.primaryAction?.isEnabled, true)
+    }
+
+
     func testCustomLLMCatalogInstalledModelIncludesConfigureAction() throws {
         let repo = "mlx-community/Qwen3.5-4B-OptiQ-4bit"
         var configuredRepo: String?
@@ -317,6 +336,25 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(entry.ratingText, "4.8")
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
+    }
+
+    func testGGUFTranslationCatalogHidesQ6UnlessInstalled() throws {
+        let builder = makeBuilder(featureSettings: makeFeatureSettings())
+        let ids = Set(builder.llmEntries().map(\.id))
+
+        XCTAssertTrue(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q4KM.rawValue)"))
+        XCTAssertTrue(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q8_0.rawValue)"))
+        XCTAssertFalse(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q6K.rawValue)"))
+    }
+
+    func testGGUFTranslationCatalogShowsHiddenQ6WhenInstalled() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(),
+            isGGUFTranslationInstalled: { $0 == .hyMT2Q6K }
+        )
+        let ids = Set(builder.llmEntries().map(\.id))
+
+        XCTAssertTrue(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q6K.rawValue)"))
     }
 
     func testMLXCatalogUsesCuratedRatingAndTags() throws {
@@ -395,7 +433,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
                 transcriptionASR: .mlx("mlx-community/whisper-large-v3-turbo"),
-                translationModel: .localLLM("mlx-community/gemma-2-2b-it-4bit")
+                translationModel: .localLLM("mlx-community/gemma-4-e2b-it-4bit")
             )
         )
 
@@ -454,6 +492,83 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["Mini", "Original"])
     }
 
+    func testCatalogDoesNotGroupGLMModels() {
+        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.localLLM("mlx-community/GLM-4-9B-0414-4bit").rawValue,
+                title: "GLM 4 9B",
+                engine: AppLocalization.localizedString("Local LLM")
+            ),
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.localLLM("mlx-community/GLM-Z1-9B-0414-4bit").rawValue,
+                title: "GLM-Z1 9B (4bit)",
+                engine: AppLocalization.localizedString("Local LLM")
+            )
+        ])
+
+        XCTAssertEqual(items.count, 2)
+        XCTAssertTrue(items.allSatisfy { item in
+            if case .row = item {
+                return true
+            }
+            return false
+        })
+    }
+
+    func testCatalogDoesNotGroupMistralOrLlamaModels() {
+        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.localLLM("mlx-community/Ministral-3-3B-Instruct-2512-4bit").rawValue,
+                title: "Mistral 3 3B",
+                engine: AppLocalization.localizedString("Local LLM")
+            ),
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.localLLM("mlx-community/Mistral-Nemo-Instruct-2407-4bit").rawValue,
+                title: "Mistral Nemo Instruct 2407 (4bit)",
+                engine: AppLocalization.localizedString("Local LLM")
+            ),
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.localLLM("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit").rawValue,
+                title: "Meta Llama 3.1 8B Instruct (4bit)",
+                engine: AppLocalization.localizedString("Local LLM")
+            )
+        ])
+
+        XCTAssertEqual(items.count, 3)
+        XCTAssertTrue(items.allSatisfy { item in
+            if case .row = item {
+                return true
+            }
+            return false
+        })
+    }
+
+    func testCatalogGroupsLFMModels() throws {
+        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.localLLM("mlx-community/LFM2-1.2B-4bit").rawValue,
+                title: "LFM2 1.2B (4bit)",
+                engine: AppLocalization.localizedString("Local LLM")
+            ),
+            makeCatalogEntry(
+                id: FeatureModelSelectionID.localLLM("mlx-community/LFM2-8B-A1B-3bit-MLX").rawValue,
+                title: "LFM2 8B A1B (3bit)",
+                engine: AppLocalization.localizedString("Local LLM")
+            )
+        ])
+
+        let group = try XCTUnwrap(
+            items.compactMap { item -> ModelCatalogGroupSection? in
+                guard case .group(let group) = item, group.title == "LFM2" else { return nil }
+                return group
+            }.first
+        )
+
+        XCTAssertEqual(group.engine, AppLocalization.localizedString("Local LLM"))
+        XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["1.2B (4bit)", "8B A1B (3bit)"])
+        XCTAssertEqual(group.modelLogoKey, .liquid)
+    }
+
     private func makeBuilder(
         featureSettings: FeatureSettings,
         remoteASRConfigurations: [String: RemoteProviderConfiguration] = [:],
@@ -464,8 +579,10 @@ final class ModelCatalogBuilderTests: XCTestCase {
         isPausedModel: @escaping (String) -> Bool = { _ in false },
         isDownloadingCustomLLM: @escaping (String) -> Bool = { _ in false },
         isPausedCustomLLM: @escaping (String) -> Bool = { _ in false },
-        isAnotherCustomLLMDownloading: @escaping (String) -> Bool = { _ in false },
         isCustomLLMInstalled: @escaping (String) -> Bool = { _ in false },
+        isDownloadingGGUFTranslation: @escaping (GGUFTranslationModelID) -> Bool = { _ in false },
+        isPausedGGUFTranslation: @escaping (GGUFTranslationModelID) -> Bool = { _ in false },
+        isGGUFTranslationInstalled: @escaping (GGUFTranslationModelID) -> Bool = { _ in false },
         isUninstallingModel: @escaping (String) -> Bool = { _ in false },
         isUninstallingCustomLLM: @escaping (String) -> Bool = { _ in false },
         pauseModelDownload: @escaping (String) -> Void = { _ in },
@@ -533,7 +650,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
             } else if isInstalled {
                 state = .installed
             } else {
-                state = .installable(isEnabled: !isAnotherCustomLLMDownloading(canonicalRepo))
+                state = .installable(isEnabled: true)
             }
             return LocalModelInstallSnapshot(
                 target: .customLLM(canonicalRepo),
@@ -550,15 +667,28 @@ final class ModelCatalogBuilderTests: XCTestCase {
         }
 
         let ggufTranslationInstallSnapshot: (GGUFTranslationModelID) -> LocalModelInstallSnapshot = { modelID in
-            LocalModelInstallSnapshot(
+            let isDownloading = isDownloadingGGUFTranslation(modelID)
+            let isPaused = isPausedGGUFTranslation(modelID)
+            let isInstalled = !isDownloading && !isPaused && isGGUFTranslationInstalled(modelID)
+            let state: LocalModelInstallState
+            if isDownloading {
+                state = .downloading
+            } else if isPaused {
+                state = .paused
+            } else if isInstalled {
+                state = .installed
+            } else {
+                state = .installable(isEnabled: true)
+            }
+            return LocalModelInstallSnapshot(
                 target: .ggufTranslation(modelID),
-                state: .installable(isEnabled: true),
-                isInstalled: false,
-                isCurrentSelection: false,
+                state: state,
+                isInstalled: isInstalled,
+                isCurrentSelection: featureSettings.translation.modelSelectionID == .localGGUFTranslation(modelID),
                 statusText: "",
                 badgeText: nil,
                 downloadStatus: nil,
-                canOpenLocation: false,
+                canOpenLocation: isInstalled,
                 canConfigure: false,
                 configureActionTitle: nil
             )

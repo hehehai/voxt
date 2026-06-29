@@ -94,6 +94,32 @@ class CustomLLMModelManager: ObservableObject {
         case error(String)
     }
 
+    struct CatalogSnapshot: Equatable {
+        let repo: String
+        let isDownloaded: Bool
+        let hasResumableDownload: Bool
+        let state: ModelState
+        let pausedStatusMessage: String?
+        let hasActiveDownloadTask: Bool
+
+        var isDownloading: Bool {
+            if hasActiveDownloadTask {
+                return true
+            }
+            if case .downloading = state {
+                return true
+            }
+            return false
+        }
+
+        var isPaused: Bool {
+            if case .paused = state {
+                return true
+            }
+            return hasResumableDownload
+        }
+    }
+
     private enum DownloadStopAction {
         case pause
         case cancel
@@ -116,20 +142,23 @@ class CustomLLMModelManager: ObservableObject {
     @Published private(set) var sizeState: ModelSizeState = .unknown
     @Published private(set) var remoteSizeTextByRepo: [String: String] = [:]
     @Published private(set) var pausedStatusMessage: String?
+    @Published private(set) var pausedStatusMessageByRepo: [String: String] = [:]
+    @Published private(set) var activeDownloadRepos: Set<String> = []
     @Published private(set) var lastRunDiagnostics: CustomLLMRunDiagnostics?
     @Published var generationTuning = CustomLLMGenerationTuning.default
 
+    private(set) var stateByRepo: [String: ModelState] = [:]
     private var downloadedStateByRepo: [String: Bool] = [:]
     private var downloadedStateCachePrimed = false
     private var localSizeTextByRepo: [String: String] = [:]
     private var modelRepo: String
     private var hubBaseURL: URL
-    private var downloadTask: Task<Void, Never>?
-    private var downloadProgressTask: Task<Void, Never>?
+    private var downloadTasksByRepo: [String: Task<Void, Never>] = [:]
+    private var downloadProgressTasksByRepo: [String: Task<Void, Never>] = [:]
     private var sizeTask: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
-    private var downloadStopAction: DownloadStopAction?
+    private var downloadStopActionsByRepo: [String: DownloadStopAction] = [:]
     private var inferenceContainer: ModelContainer?
     private var inferenceModelRepo: String?
     private var lastLoggedModelPresence: (repo: String, downloaded: Bool)?
@@ -682,6 +711,19 @@ class CustomLLMModelManager: ObservableObject {
         CustomLLMModelCatalog.displayModels(including: repo)
     }
 
+    nonisolated static func displayModels(includingInstalled repos: Set<String>) -> [ModelOption] {
+        CustomLLMModelCatalog.displayModels(includingInstalled: repos)
+    }
+
+    func displayModelsIncludingInstalled() -> [ModelOption] {
+        let localStateRepos = Set(Self.supportedModels.compactMap { model -> String? in
+            let repo = Self.canonicalModelRepo(model.id)
+            let snapshot = catalogSnapshot(for: repo)
+            return snapshot.isDownloaded || snapshot.isDownloading || snapshot.isPaused ? repo : nil
+        })
+        return Self.displayModels(includingInstalled: localStateRepos.union([Self.canonicalModelRepo(modelRepo)]))
+    }
+
     nonisolated static func releaseStatus(for repo: String) -> CustomLLMModelCatalog.ReleaseStatus {
         CustomLLMModelCatalog.releaseStatus(for: repo)
     }
@@ -752,13 +794,14 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func isModelDownloaded(repo: String) -> Bool {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
         primeDownloadedStateCacheIfNeeded()
-        if let cached = downloadedStateByRepo[repo] {
+        if let cached = downloadedStateByRepo[canonicalRepo] {
             return cached
         }
-        guard let modelDir = readableCacheDirectory(for: repo, requireValid: true) else { return false }
+        guard let modelDir = readableCacheDirectory(for: canonicalRepo, requireValid: true) else { return false }
         let isDownloaded = CustomLLMModelStorageSupport.isModelDirectoryValid(modelDir)
-        downloadedStateByRepo[repo] = isDownloaded
+        downloadedStateByRepo[canonicalRepo] = isDownloaded
         return isDownloaded
     }
 
@@ -773,71 +816,55 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     private func shouldReuseSavedDownloadSource(for repo: String) -> Bool {
-        if case .paused = state {
+        if case .paused = state(for: repo) {
             return true
         }
         return hasResumableDownload(repo: repo)
     }
 
     func modelSizeOnDisk(repo: String) -> String {
-        if let cached = localSizeTextByRepo[repo] {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        if let cached = localSizeTextByRepo[canonicalRepo] {
             return cached
         }
-        guard let modelDir = readableCacheDirectory(for: repo, requireValid: true),
+        guard let modelDir = readableCacheDirectory(for: canonicalRepo, requireValid: true),
               let size = try? FileManager.default.allocatedSizeOfDirectory(at: modelDir),
               size > 0
         else {
             return ""
         }
         let text = CustomLLMModelStorageSupport.formatByteCount(Int64(size))
-        localSizeTextByRepo[repo] = text
+        localSizeTextByRepo[canonicalRepo] = text
         return text
     }
 
     func cachedModelSizeText(repo: String) -> String? {
-        localSizeTextByRepo[repo]
+        localSizeTextByRepo[Self.canonicalModelRepo(repo)]
     }
 
     func modelDirectoryURL(repo: String) -> URL? {
-        if let modelDir = readableCacheDirectory(for: repo, requireValid: true),
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        if let modelDir = readableCacheDirectory(for: canonicalRepo, requireValid: true),
            FileManager.default.fileExists(atPath: modelDir.path) {
             return modelDir
         }
-        guard let modelDir = readableCacheDirectory(for: repo, requireValid: false),
+        guard let modelDir = readableCacheDirectory(for: canonicalRepo, requireValid: false),
               FileManager.default.fileExists(atPath: modelDir.path)
         else { return nil }
         return modelDir
     }
 
     func remoteSizeText(repo: String) -> String {
-        if let cached = remoteSizeTextByRepo[repo] {
-            return cached
-        }
-        guard repo == modelRepo else { return Self.fallbackRemoteSizeText(repo: repo) ?? "Unknown" }
-        switch sizeState {
-        case .unknown:
-            return Self.fallbackRemoteSizeText(repo: repo) ?? "Unknown"
-        case .loading:
-            return "Loading…"
-        case .ready(_, let text):
-            return text
-        case .error:
-            return Self.fallbackRemoteSizeText(repo: repo) ?? "Unknown"
-        }
+        Self.fallbackRemoteSizeText(repo: repo) ?? "Unknown"
     }
 
     func ensureRemoteSizeLoaded(repo: String) {
-        guard CustomLLMRemoteSizeCache.shouldPrefetch(repo: repo, cache: remoteSizeTextByRepo) else { return }
-
-        Task { [weak self] in
-            guard let self else { return }
-            await self.loadRemoteSize(for: repo, updatesVisibleState: false)
-        }
+        _ = repo
     }
 
     func checkExistingModel() {
         guard writeCacheDirectory(for: modelRepo) != nil else {
-            setStateIfNeeded(.error("Invalid model identifier"))
+            setState(.error("Invalid model identifier"), for: modelRepo)
             downloadedStateByRepo[modelRepo] = false
             if lastInvalidRepoLogged != modelRepo {
                 VoxtLog.modelError("Invalid custom LLM repo identifier: \(modelRepo)")
@@ -849,18 +876,19 @@ class CustomLLMModelManager: ObservableObject {
         let isDownloaded = readableCacheDirectory(for: modelRepo, requireValid: true) != nil
         downloadedStateByRepo[modelRepo] = isDownloaded
         if isDownloaded {
-            setStateIfNeeded(.downloaded)
-        } else if downloadTask == nil, hasResumableDownload(repo: modelRepo) {
+            setState(.downloaded, for: modelRepo)
+        } else if downloadTasksByRepo[modelRepo] == nil, hasResumableDownload(repo: modelRepo) {
             setPausedState(
                 progress: 0,
                 completed: 0,
                 total: 0,
                 currentFile: nil,
                 completedFiles: 0,
-                totalFiles: 0
+                totalFiles: 0,
+                for: modelRepo
             )
         } else {
-            setStateIfNeeded(.notDownloaded)
+            setState(.notDownloaded, for: modelRepo)
         }
         let downloaded = (state == .downloaded)
         if lastLoggedModelPresence?.repo != modelRepo || lastLoggedModelPresence?.downloaded != downloaded {
@@ -869,24 +897,79 @@ class CustomLLMModelManager: ObservableObject {
         }
     }
 
-    func downloadModel() async {
-        if downloadTask != nil { return }
+    func state(for repo: String) -> ModelState {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        return catalogSnapshot(for: canonicalRepo).state
+    }
 
-        downloadTask = Task { [weak self] in
+    func catalogSnapshot(for repo: String) -> CatalogSnapshot {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        let isDownloaded = isModelDownloaded(repo: canonicalRepo)
+        let hasResumableDownload = hasResumableDownload(repo: canonicalRepo)
+        let resolvedState = MLXModelPerRepoStateSupport.resolvedState(
+            for: canonicalRepo,
+            currentRepo: modelRepo,
+            currentState: state,
+            storedStates: stateByRepo,
+            isDownloaded: { _ in isDownloaded },
+            hasResumableDownload: { _ in hasResumableDownload }
+        )
+        return CatalogSnapshot(
+            repo: canonicalRepo,
+            isDownloaded: isDownloaded,
+            hasResumableDownload: hasResumableDownload,
+            state: resolvedState,
+            pausedStatusMessage: pausedStatusMessage(for: canonicalRepo),
+            hasActiveDownloadTask: downloadTasksByRepo[canonicalRepo] != nil
+        )
+    }
+
+    func pausedStatusMessage(for repo: String) -> String? {
+        MLXModelPerRepoStateSupport.pausedStatusMessage(
+            for: repo,
+            storedMessages: pausedStatusMessageByRepo,
+            canonicalize: Self.canonicalModelRepo(_:)
+        )
+    }
+
+    func isDownloading(repo: String) -> Bool {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        if downloadTasksByRepo[canonicalRepo] != nil { return true }
+        if case .downloading = state(for: canonicalRepo) { return true }
+        return false
+    }
+
+    func isPaused(repo: String) -> Bool {
+        if case .paused = state(for: repo) { return true }
+        return false
+    }
+
+    func downloadModel() async {
+        await performDownload(forRepo: modelRepo)
+    }
+
+    private func performDownload(forRepo repo: String) async {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        if downloadTasksByRepo[canonicalRepo] != nil { return }
+
+        let task = Task { [weak self] in
             guard let self else { return }
             defer {
-                cancelDownloadProgressTask()
-                downloadTask = nil
-                downloadStopAction = nil
+                cancelDownloadProgressTask(for: canonicalRepo)
+                downloadTasksByRepo[canonicalRepo] = nil
+                downloadStopActionsByRepo[canonicalRepo] = nil
+                activeDownloadRepos.remove(canonicalRepo)
             }
-            if let pausedState = pausedDownloadSnapshot {
+            activeDownloadRepos.insert(canonicalRepo)
+            if let pausedState = pausedDownloadSnapshot(for: canonicalRepo) {
                 setDownloadingState(
                     progress: pausedState.progress,
                     completed: pausedState.completed,
                     total: pausedState.total,
                     currentFile: pausedState.currentFile,
                     completedFiles: pausedState.completedFiles,
-                    totalFiles: pausedState.totalFiles
+                    totalFiles: pausedState.totalFiles,
+                    for: canonicalRepo
                 )
             } else {
                 setDownloadingState(
@@ -895,58 +978,62 @@ class CustomLLMModelManager: ObservableObject {
                     total: 0,
                     currentFile: nil,
                     completedFiles: 0,
-                    totalFiles: 0
+                    totalFiles: 0,
+                    for: canonicalRepo
                 )
             }
 
             do {
-                pausedStatusMessage = nil
-                let modelDir = try await performDownloadWithFallback()
+                setPausedStatusMessage(nil, for: canonicalRepo)
+                let modelDir = try await performDownloadWithFallback(for: canonicalRepo)
                 guard CustomLLMModelStorageSupport.isModelDirectoryValid(modelDir) else {
-                    pausedStatusMessage = nil
-                    state = .error("Downloaded files are incomplete.")
-                    VoxtLog.modelError("Custom LLM download produced incomplete files: \(modelRepo)")
+                    setPausedStatusMessage(nil, for: canonicalRepo)
+                    setState(.error("Downloaded files are incomplete."), for: canonicalRepo)
+                    VoxtLog.modelError("Custom LLM download produced incomplete files: \(canonicalRepo)")
                     return
                 }
-                invalidateLocalCache(for: modelRepo)
-                checkExistingModel()
-                VoxtLog.modelInfo("Custom LLM download completed: \(modelRepo)")
+                markDownloadCompleted(for: canonicalRepo)
+                VoxtLog.modelInfo("Custom LLM download completed: \(canonicalRepo)")
             } catch is CancellationError {
-                cancelDownloadProgressTask()
-                switch downloadStopAction {
+                cancelDownloadProgressTask(for: canonicalRepo)
+                switch downloadStopActionsByRepo[canonicalRepo] {
                 case .pause:
-                    pausedStatusMessage = nil
-                    VoxtLog.modelInfo("Custom LLM download paused: \(modelRepo)")
+                    setPausedStatusMessage(nil, for: canonicalRepo)
+                    VoxtLog.modelInfo("Custom LLM download paused: \(canonicalRepo)")
                 case .cancel, .none:
-                    pausedStatusMessage = nil
-                    if let modelDir = writeCacheDirectory(for: modelRepo) {
-                        try? FileManager.default.removeItem(at: modelDir)
-                    }
-                    invalidateLocalCache(for: modelRepo)
-                    state = .notDownloaded
-                    VoxtLog.modelWarning("Custom LLM download cancelled: \(modelRepo)")
+                    setPausedStatusMessage(nil, for: canonicalRepo)
+                    cleanupPartialDownload(for: canonicalRepo)
+                    clearSelectedDownloadSource(for: canonicalRepo)
+                    markCancelledDownloadUnavailable(for: canonicalRepo)
+                    VoxtLog.modelWarning("Custom LLM download cancelled: \(canonicalRepo)")
                 }
             } catch {
-                cancelDownloadProgressTask()
-                if pauseDownloadIfNetworkIssue(error) {
+                cancelDownloadProgressTask(for: canonicalRepo)
+                if pauseDownloadIfNetworkIssue(error, repo: canonicalRepo) {
                     return
                 }
-                pausedStatusMessage = nil
-                state = .error("Download failed: \(error.localizedDescription)")
-                VoxtLog.modelError("Custom LLM download failed: \(modelRepo), error=\(error.localizedDescription)")
+                setPausedStatusMessage(nil, for: canonicalRepo)
+                clearHubCache(for: canonicalRepo)
+                setState(.error("Download failed: \(error.localizedDescription)"), for: canonicalRepo)
+                VoxtLog.modelError("Custom LLM download failed: \(canonicalRepo), error=\(error.localizedDescription)")
             }
         }
+        downloadTasksByRepo[canonicalRepo] = task
+        await task.value
     }
 
     func downloadModel(repo: String) async {
-        updateModel(repo: repo)
-        await downloadModel()
+        await performDownload(forRepo: repo)
     }
 
     func cancelDownload(repo: String) {
         let canonicalRepo = Self.canonicalModelRepo(repo)
-        if canonicalRepo == modelRepo {
-            cancelDownload()
+        if let task = downloadTasksByRepo[canonicalRepo] {
+            downloadStopActionsByRepo[canonicalRepo] = .cancel
+            setPausedStatusMessage(nil, for: canonicalRepo)
+            setState(.notDownloaded, for: canonicalRepo)
+            clearSelectedDownloadSource(for: canonicalRepo)
+            task.cancel()
             return
         }
 
@@ -956,73 +1043,67 @@ class CustomLLMModelManager: ObservableObject {
         clearSelectedDownloadSource(for: canonicalRepo)
         clearHubCache(for: canonicalRepo)
         invalidateLocalCache(for: canonicalRepo)
+        setState(.notDownloaded, for: canonicalRepo)
     }
 
     func refreshStorageRoot() {
         downloadedStateByRepo.removeAll()
         downloadedStateCachePrimed = false
         localSizeTextByRepo.removeAll()
+        MLXModelPerRepoStateSupport.resetCustomLLMStorageRootState(
+            currentPausedStatusMessage: &pausedStatusMessage,
+            storedStates: &stateByRepo,
+            storedMessages: &pausedStatusMessageByRepo
+        )
         checkExistingModel()
     }
 
     func pauseDownload() {
-        guard downloadTask != nil else { return }
-        downloadStopAction = .pause
-        pausedStatusMessage = nil
-        if let snapshot = downloadingSnapshot {
+        pauseDownload(repo: modelRepo)
+    }
+
+    func pauseDownload(repo: String) {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        guard let task = downloadTasksByRepo[canonicalRepo] else { return }
+        downloadStopActionsByRepo[canonicalRepo] = .pause
+        setPausedStatusMessage(nil, for: canonicalRepo)
+        if let snapshot = downloadingSnapshot(for: canonicalRepo) {
             setPausedState(
                 progress: snapshot.progress,
                 completed: snapshot.completed,
                 total: snapshot.total,
                 currentFile: snapshot.currentFile,
                 completedFiles: snapshot.completedFiles,
-                totalFiles: snapshot.totalFiles
+                totalFiles: snapshot.totalFiles,
+                for: canonicalRepo
             )
         }
-        downloadTask?.cancel()
-        cancelDownloadProgressTask()
+        task.cancel()
+        cancelDownloadProgressTask(for: canonicalRepo)
     }
 
     func cancelDownload() {
-        VoxtLog.modelInfo("Custom LLM download cancellation requested: \(modelRepo)")
-        if downloadTask != nil {
-            downloadStopAction = .cancel
-            pausedStatusMessage = nil
-            state = .notDownloaded
-            clearSelectedDownloadSource(for: modelRepo)
-            downloadTask?.cancel()
-            cancelDownloadProgressTask()
-            return
-        }
-
-        guard pausedDownloadSnapshot != nil else { return }
-        pausedStatusMessage = nil
-        if let modelDir = writeCacheDirectory(for: modelRepo) {
-            try? FileManager.default.removeItem(at: modelDir)
-        }
-        clearSelectedDownloadSource(for: modelRepo)
-        invalidateLocalCache(for: modelRepo)
-        state = .notDownloaded
-        VoxtLog.modelInfo("Custom LLM download cancelled from paused state: \(modelRepo)")
+        cancelDownload(repo: modelRepo)
     }
 
-    private func cancelDownloadProgressTask() {
-        downloadProgressTask?.cancel()
-        downloadProgressTask = nil
+    private func cancelDownloadProgressTask(for repo: String) {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        downloadProgressTasksByRepo[canonicalRepo]?.cancel()
+        downloadProgressTasksByRepo[canonicalRepo] = nil
     }
 
-    private func performDownloadWithFallback() async throws -> URL {
-        let repo = modelRepo
+    private func performDownloadWithFallback(for repo: String) async throws -> URL {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
         let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
             ?? Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String
         let selection = try await ModelDownloadSourceSelector.select(
             candidates: downloadSourceCandidates(),
-            targetKey: downloadSourceTargetKey(for: repo),
-            reuseSavedSource: shouldReuseSavedDownloadSource(for: repo)
+            targetKey: downloadSourceTargetKey(for: canonicalRepo),
+            reuseSavedSource: shouldReuseSavedDownloadSource(for: canonicalRepo)
         ) { candidate in
             let startedAt = Date()
             let context = try await CustomLLMModelDownloadSupport.makeDownloadContext(
-                repo: repo,
+                repo: canonicalRepo,
                 baseURL: candidate.url,
                 userAgent: Self.hubUserAgent,
                 token: token
@@ -1032,25 +1113,25 @@ class CustomLLMModelManager: ObservableObject {
         }
 
         VoxtLog.modelInfo(
-            "Selected Custom LLM download source. repo=\(repo), source=\(selection.candidate.displayName), url=\(selection.candidate.url.absoluteString), reusedSavedSource=\(selection.reusedSavedSource), probes=\(ModelDownloadSourceSelector.logSummary(for: selection))"
+            "Selected Custom LLM download source. repo=\(canonicalRepo), source=\(selection.candidate.displayName), url=\(selection.candidate.url.absoluteString), reusedSavedSource=\(selection.reusedSavedSource), probes=\(ModelDownloadSourceSelector.logSummary(for: selection))"
         )
 
         var lastError: Error?
         for candidate in downloadAttemptCandidates(from: selection) {
             do {
-                return try await performDownload(using: candidate.url)
+                return try await performDownload(using: candidate.url, repo: canonicalRepo)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
                 lastError = error
                 VoxtLog.modelWarning(
-                    "Custom LLM download source failed. repo=\(repo), source=\(candidate.displayName), error=\(error.localizedDescription)"
+                    "Custom LLM download source failed. repo=\(canonicalRepo), source=\(candidate.displayName), error=\(error.localizedDescription)"
                 )
-                clearHubCache(for: repo)
+                clearHubCache(for: canonicalRepo)
             }
         }
 
-        clearSelectedDownloadSource(for: repo)
+        clearSelectedDownloadSource(for: canonicalRepo)
         throw lastError ?? NSError(
             domain: "CustomLLMModelManager",
             code: 1004,
@@ -1072,11 +1153,12 @@ class CustomLLMModelManager: ObservableObject {
         return candidates.isEmpty ? [selection.candidate] : candidates
     }
 
-    private func performDownload(using baseURL: URL) async throws -> URL {
+    private func performDownload(using baseURL: URL, repo: String) async throws -> URL {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
         let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
             ?? Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String
         let context = try await CustomLLMModelDownloadSupport.makeDownloadContext(
-            repo: modelRepo,
+            repo: canonicalRepo,
             baseURL: baseURL,
             userAgent: Self.hubUserAgent,
             token: token
@@ -1087,7 +1169,7 @@ class CustomLLMModelManager: ObservableObject {
         let totalFiles = context.entries.count
         var completedBytes: Int64 = 0
 
-        guard let modelDir = writeCacheDirectory(for: modelRepo) else {
+        guard let modelDir = writeCacheDirectory(for: canonicalRepo) else {
             throw NSError(
                 domain: "Voxt.CustomLLM",
                 code: 1002,
@@ -1106,7 +1188,8 @@ class CustomLLMModelManager: ObservableObject {
                 total: totalBytes,
                 currentFile: entry.path,
                 completedFiles: index,
-                totalFiles: totalFiles
+                totalFiles: totalFiles,
+                for: canonicalRepo
             )
 
             let destination = try CustomLLMModelStorageSupport.destinationFileURL(
@@ -1126,13 +1209,14 @@ class CustomLLMModelManager: ObservableObject {
                     total: totalBytes,
                     currentFile: nil,
                     completedFiles: index + 1,
-                    totalFiles: totalFiles
+                    totalFiles: totalFiles,
+                    for: canonicalRepo
                 )
                 VoxtLog.modelInfo("Custom LLM download resume reused existing file: \(entry.path)", verbose: true)
                 continue
             }
-            cancelDownloadProgressTask()
-            downloadProgressTask = Task { [weak self] in
+            cancelDownloadProgressTask(for: canonicalRepo)
+            downloadProgressTasksByRepo[canonicalRepo] = Task { [weak self] in
                 let startTime = Date()
                 while !Task.isCancelled {
                     await MainActor.run {
@@ -1152,7 +1236,8 @@ class CustomLLMModelManager: ObservableObject {
                             total: totalBytes,
                             currentFile: entry.path,
                             completedFiles: index,
-                            totalFiles: totalFiles
+                            totalFiles: totalFiles,
+                            for: canonicalRepo
                         )
                     }
                     try? await Task.sleep(for: .milliseconds(200))
@@ -1167,7 +1252,7 @@ class CustomLLMModelManager: ObservableObject {
                 baseURL: baseURL,
                 bearerToken: token
             )
-            cancelDownloadProgressTask()
+            cancelDownloadProgressTask(for: canonicalRepo)
 
             let delta = max(expectedFileBytes, max(progress.completedUnitCount, 0))
             completedBytes += max(delta, 0)
@@ -1177,7 +1262,8 @@ class CustomLLMModelManager: ObservableObject {
                 total: totalBytes,
                 currentFile: nil,
                 completedFiles: index + 1,
-                totalFiles: totalFiles
+                totalFiles: totalFiles,
+                for: canonicalRepo
             )
         }
 
@@ -1212,15 +1298,15 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func deleteModel() {
-        pausedStatusMessage = nil
+        setPausedStatusMessage(nil, for: modelRepo)
         deleteModel(repo: modelRepo)
-        state = .notDownloaded
+        setState(.notDownloaded, for: modelRepo)
     }
 
     func deleteModel(repo: String) {
-        let canonicalRepo = repo
+        let canonicalRepo = Self.canonicalModelRepo(repo)
         if canonicalRepo == modelRepo {
-            pausedStatusMessage = nil
+            setPausedStatusMessage(nil, for: canonicalRepo)
         }
         VoxtLog.modelInfo("Deleting custom LLM model cache: \(canonicalRepo)")
         if canonicalRepo == inferenceModelRepo {
@@ -1237,7 +1323,7 @@ class CustomLLMModelManager: ObservableObject {
                 VoxtLog.modelInfo("Deleted custom LLM model directory. repo=\(canonicalRepo), path=\(modelDir.path)")
             } catch {
                 if canonicalRepo == modelRepo {
-                    state = .error("Couldn't uninstall local LLM. It may still be in use.")
+                    setState(.error("Couldn't uninstall local LLM. It may still be in use."), for: canonicalRepo)
                 }
                 VoxtLog.modelError("Failed to delete custom LLM model directory. repo=\(canonicalRepo), error=\(error.localizedDescription)")
                 return
@@ -1245,14 +1331,38 @@ class CustomLLMModelManager: ObservableObject {
         }
         clearSelectedDownloadSource(for: canonicalRepo)
         invalidateLocalCache(for: canonicalRepo)
-        if canonicalRepo == modelRepo {
-            state = .notDownloaded
-        }
+        clearPerRepoState(for: canonicalRepo)
+        setState(.notDownloaded, for: canonicalRepo)
     }
 
     private func invalidateLocalCache(for repo: String) {
         downloadedStateByRepo.removeValue(forKey: repo)
         localSizeTextByRepo.removeValue(forKey: repo)
+    }
+
+    private func markDownloadCompleted(for repo: String) {
+        downloadedStateByRepo[repo] = true
+        localSizeTextByRepo.removeValue(forKey: repo)
+        if repo == modelRepo {
+            checkExistingModel()
+        } else {
+            setState(.downloaded, for: repo)
+        }
+    }
+
+    private func markCancelledDownloadUnavailable(for repo: String) {
+        invalidateLocalCache(for: repo)
+        if repo == modelRepo {
+            checkExistingModel()
+        } else {
+            setState(.notDownloaded, for: repo)
+        }
+    }
+
+    private func cleanupPartialDownload(for repo: String) {
+        if let modelDir = writeCacheDirectory(for: repo) {
+            try? FileManager.default.removeItem(at: modelDir)
+        }
     }
 
     private func primeDownloadedStateCacheIfNeeded() {
@@ -1274,36 +1384,16 @@ class CustomLLMModelManager: ObservableObject {
     private func fetchRemoteSize() {
         sizeTask?.cancel()
         let repo = modelRepo
-        if let cachedState = CustomLLMRemoteSizeCache.cachedState(for: repo, cache: remoteSizeTextByRepo) {
-            sizeState = cachedState
-            return
-        }
-        sizeState = .loading
-
-        sizeTask = Task { [weak self] in
-            guard let self else { return }
-            await loadRemoteSize(for: repo, updatesVisibleState: true)
+        if let fallback = CustomLLMModelCatalog.fallbackRemoteSizeInfo(repo: repo) {
+            sizeState = .ready(bytes: fallback.bytes, text: fallback.text)
+        } else {
+            sizeState = .error("Size unavailable")
         }
     }
 
     func prefetchAllModelSizes() {
-        guard prefetchTask == nil else { return }
-        let repos = Self.availableModels
-            .map(\.id)
-            .filter { CustomLLMRemoteSizeCache.shouldPrefetch(repo: $0, cache: remoteSizeTextByRepo) }
-        guard !repos.isEmpty else { return }
-
-        prefetchTask = Task(priority: .utility) { [weak self] in
-            defer {
-                Task { @MainActor [weak self] in
-                    self?.prefetchTask = nil
-                }
-            }
-            for repo in repos {
-                guard let self else { return }
-                await self.loadRemoteSize(for: repo, updatesVisibleState: false)
-            }
-        }
+        prefetchTask?.cancel()
+        prefetchTask = nil
     }
 
     private func setDownloadingState(
@@ -1312,9 +1402,12 @@ class CustomLLMModelManager: ObservableObject {
         total: Int64,
         currentFile: String?,
         completedFiles: Int,
-        totalFiles: Int
+        totalFiles: Int,
+        for repo: String
     ) {
-        guard downloadTask != nil, downloadStopAction == nil else { return }
+        let canonicalRepo = Self.canonicalModelRepo(repo)
+        guard downloadTasksByRepo[canonicalRepo] != nil,
+              downloadStopActionsByRepo[canonicalRepo] == nil else { return }
         let nextState = ModelState.downloading(
             progress: progress,
             completed: completed,
@@ -1323,9 +1416,7 @@ class CustomLLMModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
-        if state != nextState {
-            state = nextState
-        }
+        setState(nextState, for: canonicalRepo)
     }
 
     private func setPausedState(
@@ -1334,7 +1425,8 @@ class CustomLLMModelManager: ObservableObject {
         total: Int64,
         currentFile: String?,
         completedFiles: Int,
-        totalFiles: Int
+        totalFiles: Int,
+        for repo: String
     ) {
         let nextState = ModelState.paused(
             progress: progress,
@@ -1344,23 +1436,47 @@ class CustomLLMModelManager: ObservableObject {
             completedFiles: completedFiles,
             totalFiles: totalFiles
         )
-        if state != nextState {
-            state = nextState
-        }
+        setState(nextState, for: repo)
     }
 
-    private func setStateIfNeeded(_ nextState: ModelState) {
-        if state != nextState {
-            state = nextState
-        }
+    private func setState(_ nextState: ModelState, for repo: String) {
+        MLXModelPerRepoStateSupport.applyState(
+            nextState,
+            for: repo,
+            currentRepo: modelRepo,
+            currentState: &state,
+            storedStates: &stateByRepo
+        )
     }
 
-    private func pauseDownloadIfNetworkIssue(_ error: Error) -> Bool {
+    private func setPausedStatusMessage(_ message: String?, for repo: String) {
+        MLXModelPerRepoStateSupport.applyPausedStatusMessage(
+            message,
+            for: repo,
+            currentRepo: modelRepo,
+            currentMessage: &pausedStatusMessage,
+            storedMessages: &pausedStatusMessageByRepo,
+            canonicalize: Self.canonicalModelRepo(_:)
+        )
+    }
+
+    private func clearPerRepoState(for repo: String) {
+        MLXModelPerRepoStateSupport.clearCustomLLMState(
+            for: repo,
+            currentRepo: modelRepo,
+            currentPausedStatusMessage: &pausedStatusMessage,
+            storedStates: &stateByRepo,
+            storedMessages: &pausedStatusMessageByRepo
+        )
+    }
+
+    private func pauseDownloadIfNetworkIssue(_ error: Error, repo: String) -> Bool {
+        let canonicalRepo = Self.canonicalModelRepo(repo)
         guard let message = MLXModelDownloadSupport.pauseMessageForInterruptedDownload(error) else {
             return false
         }
-        let snapshot = downloadingSnapshot ?? pausedDownloadSnapshot
-        pausedStatusMessage = message
+        let snapshot = downloadingSnapshot(for: canonicalRepo) ?? pausedDownloadSnapshot(for: canonicalRepo)
+        setPausedStatusMessage(message, for: canonicalRepo)
         if let snapshot {
             setPausedState(
                 progress: snapshot.progress,
@@ -1368,7 +1484,8 @@ class CustomLLMModelManager: ObservableObject {
                 total: snapshot.total,
                 currentFile: snapshot.currentFile,
                 completedFiles: snapshot.completedFiles,
-                totalFiles: snapshot.totalFiles
+                totalFiles: snapshot.totalFiles,
+                for: canonicalRepo
             )
         } else {
             setPausedState(
@@ -1377,14 +1494,15 @@ class CustomLLMModelManager: ObservableObject {
                 total: 0,
                 currentFile: nil,
                 completedFiles: 0,
-                totalFiles: 0
+                totalFiles: 0,
+                for: canonicalRepo
             )
         }
-        VoxtLog.modelWarning("Custom LLM download auto-paused after network issue. repo=\(modelRepo), error=\(error.localizedDescription)")
+        VoxtLog.modelWarning("Custom LLM download auto-paused after network issue. repo=\(canonicalRepo), error=\(error.localizedDescription)")
         return true
     }
 
-    private var downloadingSnapshot: (
+    private func downloadingSnapshot(for repo: String) -> (
         progress: Double,
         completed: Int64,
         total: Int64,
@@ -1399,13 +1517,13 @@ class CustomLLMModelManager: ObservableObject {
             let currentFile,
             let completedFiles,
             let totalFiles
-        ) = state else {
+        ) = state(for: repo) else {
             return nil
         }
         return (progress, completed, total, currentFile, completedFiles, totalFiles)
     }
 
-    private var pausedDownloadSnapshot: (
+    private func pausedDownloadSnapshot(for repo: String) -> (
         progress: Double,
         completed: Int64,
         total: Int64,
@@ -1420,7 +1538,7 @@ class CustomLLMModelManager: ObservableObject {
             let currentFile,
             let completedFiles,
             let totalFiles
-        ) = state else {
+        ) = state(for: repo) else {
             return nil
         }
         return (progress, completed, total, currentFile, completedFiles, totalFiles)
@@ -1456,13 +1574,13 @@ class CustomLLMModelManager: ObservableObject {
     ) -> [String: any Sendable]? {
         switch settings.thinking.mode {
         case .providerDefault:
-            return behavior.additionalContext
+            return CustomLLMModelBehavior.thinkingOffAdditionalContext
         case .off:
-            return ["enable_thinking": false]
+            return CustomLLMModelBehavior.thinkingOffAdditionalContext
         case .on:
-            return ["enable_thinking": true]
+            return CustomLLMModelBehavior.thinkingOnAdditionalContext
         case .effort, .budget:
-            return behavior.additionalContext
+            return CustomLLMModelBehavior.thinkingOffAdditionalContext
         }
     }
 
@@ -1672,65 +1790,6 @@ class CustomLLMModelManager: ObservableObject {
             activeInferenceCount = 0
         }
         Memory.clearCache()
-    }
-
-    private func updateRemoteSizeCache(
-        for repo: String,
-        bytes _: Int64,
-        text: String
-    ) {
-        remoteSizeTextByRepo = CustomLLMRemoteSizeCache.updatedCache(
-            remoteSizeTextByRepo,
-            repo: repo,
-            text: text
-        )
-        CustomLLMModelStorageSupport.savePersistedRemoteSizeCache(remoteSizeTextByRepo)
-    }
-
-    private func markRemoteSizeUnavailable(
-        for repo: String,
-        logMessage: String
-    ) {
-        remoteSizeTextByRepo = CustomLLMRemoteSizeCache.updatedCache(
-            remoteSizeTextByRepo,
-            repo: repo,
-            text: Self.fallbackRemoteSizeText(repo: repo) ?? CustomLLMRemoteSizeCache.unknownText
-        )
-        VoxtLog.modelWarning(logMessage)
-    }
-
-    private func loadRemoteSize(
-        for repo: String,
-        updatesVisibleState: Bool
-    ) async {
-        do {
-            let info = try await CustomLLMModelDownloadSupport.fetchRemoteSizeInfo(
-                repo: repo,
-                preferredBaseURL: hubBaseURL,
-                mirrorBaseURL: Self.mirrorHubBaseURL,
-                userAgent: Self.hubUserAgent,
-                formatByteCount: CustomLLMModelStorageSupport.formatByteCount
-            )
-            if Task.isCancelled { return }
-            updateRemoteSizeCache(for: repo, bytes: info.bytes, text: info.text)
-            if updatesVisibleState {
-                sizeState = .ready(bytes: info.bytes, text: info.text)
-            }
-        } catch is CancellationError {
-            return
-        } catch {
-            markRemoteSizeUnavailable(
-                for: repo,
-                logMessage: "Failed to \(updatesVisibleState ? "fetch" : "prefetch") custom LLM remote size: repo=\(repo), error=\(error.localizedDescription)"
-            )
-            if updatesVisibleState {
-                if let fallback = CustomLLMModelCatalog.fallbackRemoteSizeInfo(repo: repo) {
-                    sizeState = .ready(bytes: fallback.bytes, text: fallback.text)
-                } else {
-                    sizeState = .error("Size unavailable")
-                }
-            }
-        }
     }
 
     private func unloadInferenceContainerIfIdle(expectedRepo: String?, reason: String) {

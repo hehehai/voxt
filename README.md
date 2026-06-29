@@ -161,19 +161,18 @@ Common local ASR errors / states:
 
 | Model | Repository ID | Size | Language Bias | Speed | Recommendation | Best For |
 | --- | --- | --- | --- | --- | --- | --- |
-| Qwen2 1.5B Instruct | `Qwen/Qwen2-1.5B-Instruct` | 1.5B | Balanced Chinese / English | Fast | High | Lightweight cleanup and simple translation |
-| Qwen2.5 3B Instruct | `Qwen/Qwen2.5-3B-Instruct` | 3B | Balanced Chinese / English | Medium-fast | High | More stable enhancement and formatting |
-| Qwen3 4B (4bit) | `mlx-community/Qwen3-4B-4bit` | 4B / 4bit | Chinese / English / multilingual | Medium-fast | Very high | Best overall local balance for enhancement and translation |
-| Qwen3 8B (4bit) | `mlx-community/Qwen3-8B-4bit` | 8B / 4bit | Chinese / English / multilingual | Medium-slow | Very high | Stronger rewriting, translation, and structured output |
-| GLM-4 9B (4bit) | `mlx-community/GLM-4-9B-0414-4bit` | 9B / 4bit | Chinese / English / multilingual | Slow | Very high | Chinese rewriting and more complex prompt workflows |
-| Llama 3.2 3B Instruct (4bit) | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 3B / 4bit | English-first, multilingual usable | Medium-fast | Medium-high | Lightweight local rewriting |
-| Llama 3.2 1B Instruct (4bit) | `mlx-community/Llama-3.2-1B-Instruct-4bit` | 1B / 4bit | English-first, multilingual usable | Very fast | Medium | Lowest-resource local enhancement |
-| Meta Llama 3 8B Instruct (4bit) | `mlx-community/Meta-Llama-3-8B-Instruct-4bit` | 8B / 4bit | English-first, multilingual usable | Medium-slow | Medium-high | General enhancement, summarization, rewriting |
-| Meta Llama 3.1 8B Instruct (4bit) | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | 8B / 4bit | English-first, multilingual usable | Medium-slow | High | Stable general-purpose local LLM |
-| Mistral 7B Instruct v0.3 (4bit) | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 7B / 4bit | Stronger in English and European languages | Medium | High | Concise rewrites and formatting cleanup |
-| Mistral Nemo Instruct 2407 (4bit) | `mlx-community/Mistral-Nemo-Instruct-2407-4bit` | Nemo family / 4bit | English-first, multilingual usable | Medium-slow | High | More complex local enhancement tasks |
-| Gemma 2 2B IT (4bit) | `mlx-community/gemma-2-2b-it-4bit` | 2B / 4bit | English-first, multilingual usable | Fast | Medium-high | Lightweight text cleanup |
-| Gemma 2 9B IT (4bit) | `mlx-community/gemma-2-9b-it-4bit` | 9B / 4bit | English-first, multilingual usable | Slow | High | Higher-quality local polishing and translation |
+| Qwen3.5 2B (4bit) | `mlx-community/Qwen3.5-2B-4bit` | 2B / 4bit | Chinese / English / multilingual | Fast | High | Lightweight local enhancement with steadier output |
+| Qwen3.5 4B OptiQ (4bit) | `mlx-community/Qwen3.5-4B-OptiQ-4bit` | 4B / 4bit | Chinese / English / multilingual | Medium-fast | Very high | Default local balance for enhancement and translation |
+| Qwen3.5 9B OptiQ (4bit) | `mlx-community/Qwen3.5-9B-OptiQ-4bit` | 9B / 4bit | Chinese / English / multilingual | Medium-slow | Very high | Higher-quality rewriting, translation, and structured output |
+| Qwen3 VL 4B Instruct (4bit) | `lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit` | 4B / 4bit | Chinese / English / vision | Medium | High | Local text plus image-context workflows |
+| GLM 4 9B | `mlx-community/GLM-4-9B-0414-4bit` | 9B / 4bit | Chinese / English / multilingual | Slow | Very high | Chinese rewriting and more complex prompt workflows |
+| Mistral 3 3B | `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 3B / 4bit | English / European languages / multilingual | Medium-fast | High | Lightweight non-Qwen local cleanup |
+| LFM2 1.2B (4bit) | `mlx-community/LFM2-1.2B-4bit` | 1.2B / 4bit | English-first / multilingual | Very fast | Medium | Very lightweight local generation |
+| LFM2 8B A1B (3bit) | `mlx-community/LFM2-8B-A1B-3bit-MLX` | 8B-A1B / 3bit | English-first / multilingual | Medium-fast | Medium-high | Compact MoE local generation |
+| Qwen3.6 27B (4bit) | `mlx-community/Qwen3.6-27B-4bit` | 27B / 4bit | Chinese / English / multilingual | Very slow | Very high | High-end local generation on large-memory Macs |
+| Gemma 4 E2B IT (4bit) | `mlx-community/gemma-4-e2b-it-4bit` | E2B / 4bit | English-first, multilingual and vision usable | Fast | Medium-high | Lightweight non-Qwen local cleanup |
+| Gemma 4 E4B IT (4bit) | `mlx-community/gemma-4-e4b-it-4bit` | E4B / 4bit | English-first, multilingual and vision usable | Medium | High | Balanced non-Qwen local polishing and translation |
+| Gemma 4 12B IT OptiQ (4bit) | `mlx-community/gemma-4-12B-it-OptiQ-4bit` | 12B / 4bit | English-first, multilingual and vision usable | Slow | High | Higher-quality non-Qwen local generation |
 
 Common local LLM errors / states:
 

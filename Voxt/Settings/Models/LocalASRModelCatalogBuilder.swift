@@ -118,16 +118,12 @@ extension ModelCatalogBuilder {
     }
 
     private func mlxASRSizeText(repo: String, isInstalled: Bool) -> String {
-        if isInstalled {
-            return mlxModelManager.cachedModelSizeText(repo: repo) ?? mlxModelManager.remoteSizeText(repo: repo)
-        }
+        _ = isInstalled
         return mlxModelManager.remoteSizeText(repo: repo)
     }
 
     private func sherpaOnnxASRSizeText(id: SherpaOnnxModelID, isInstalled: Bool) -> String {
-        if isInstalled {
-            return sherpaOnnxModelManager.cachedModelSizeText(id: id) ?? sherpaOnnxModelManager.remoteSizeText(id: id)
-        }
+        _ = isInstalled
         return sherpaOnnxModelManager.remoteSizeText(id: id)
     }
 

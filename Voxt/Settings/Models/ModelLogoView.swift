@@ -32,6 +32,7 @@ enum ModelLogoKey: String {
     case lmStudio
     case alibaba
     case stepFun
+    case liquid
     case generic
 
     var resourceName: String? {
@@ -90,6 +91,8 @@ enum ModelLogoKey: String {
             return "alibaba"
         case .stepFun:
             return "stepfun"
+        case .liquid:
+            return "liquid"
         case .generic:
             return nil
         }
@@ -97,7 +100,7 @@ enum ModelLogoKey: String {
 
     var isTemplate: Bool {
         switch self {
-        case .apple, .openAI, .grok, .ollama, .openRouter, .lmStudio, .kimi:
+        case .apple, .openAI, .grok, .ollama, .openRouter, .lmStudio, .kimi, .liquid:
             return true
         case .anthropic, .google, .gemini, .qwen, .zhipu, .deepSeek, .cohere, .granite, .fireRed, .sense,
              .mistral, .gemma, .meta, .nvidia, .minimax, .doubao, .volcengine, .alibaba, .stepFun, .generic:
@@ -163,6 +166,8 @@ enum ModelLogoKey: String {
             return "阿"
         case .stepFun:
             return "阶"
+        case .liquid:
+            return "L"
         case .generic:
             return "M"
         }
@@ -199,6 +204,9 @@ enum ModelLogoKey: String {
         }
         if value.contains("lm studio") || value.contains("lmstudio") {
             return .lmStudio
+        }
+        if value.contains("lfm") || value.contains("liquid") {
+            return .liquid
         }
         if value.contains("minimax") {
             return .minimax

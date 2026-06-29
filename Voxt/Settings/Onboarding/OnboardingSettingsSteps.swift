@@ -167,7 +167,7 @@ extension OnboardingSettingsView {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
                 },
                 onPause: {
-                    mlxModelManager.pauseDownload()
+                    mlxModelManager.pauseDownload(repo: mlxModelRepo)
                 },
                 onResume: {
                     Task { await mlxModelManager.downloadModel(repo: mlxModelRepo) }
@@ -230,7 +230,7 @@ extension OnboardingSettingsView {
                 showsCardSurface: false,
                 isInstalling: isSelectedCustomLLMDownloading,
                 isPaused: isSelectedCustomLLMPaused,
-                isInstallEnabled: !isAnotherCustomLLMDownloading,
+                isInstallEnabled: true,
                 installLabel: "Download",
                 openLabel: "Open Folder",
                 downloadStatus: customLLMDownloadStatus,
@@ -261,13 +261,13 @@ extension OnboardingSettingsView {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
                 },
                 onPause: {
-                    customLLMManager.pauseDownload()
+                    customLLMManager.pauseDownload(repo: customLLMRepo)
                 },
                 onResume: {
                     Task { await customLLMManager.downloadModel(repo: customLLMRepo) }
                 },
                 onCancel: {
-                    customLLMManager.cancelDownload()
+                    customLLMManager.cancelDownload(repo: customLLMRepo)
                 },
                 onUninstall: {
                     customLLMManager.deleteModel(repo: customLLMRepo)
@@ -762,31 +762,23 @@ extension OnboardingSettingsView {
     }
 
     var isSelectedCustomLLMDownloading: Bool {
-        guard case .downloading = customLLMManager.state else { return false }
-        return customLLMManager.currentModelRepo == customLLMRepo
-    }
-
-    var isAnotherCustomLLMDownloading: Bool {
-        guard case .downloading = customLLMManager.state else { return false }
-        return customLLMManager.currentModelRepo != customLLMRepo
+        customLLMManager.isDownloading(repo: customLLMRepo)
     }
 
     var isSelectedCustomLLMPaused: Bool {
-        guard case .paused = customLLMManager.state else { return false }
-        return customLLMManager.currentModelRepo == customLLMRepo
+        customLLMManager.isPaused(repo: customLLMRepo)
     }
 
     var customLLMDownloadStatus: ModelDownloadStatusSnapshot? {
         guard isSelectedCustomLLMDownloading || isSelectedCustomLLMPaused else { return nil }
         return ModelDownloadStatusSnapshot.fromCustomLLMState(
-            customLLMManager.state,
-            pauseMessage: customLLMManager.pausedStatusMessage
+            customLLMManager.state(for: customLLMRepo),
+            pauseMessage: customLLMManager.pausedStatusMessage(for: customLLMRepo)
         )
     }
 
     var customLLMDownloadErrorMessage: String? {
-        guard customLLMManager.currentModelRepo == customLLMRepo,
-              case .error(let message) = customLLMManager.state else {
+        guard case .error(let message) = customLLMManager.state(for: customLLMRepo) else {
             return nil
         }
         return message

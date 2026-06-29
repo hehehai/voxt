@@ -60,6 +60,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             sherpaState: .notDownloaded,
             sherpaActiveDownloadModelIDs: [],
             customLLMState: .downloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
@@ -76,6 +78,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             sherpaState: .notDownloaded,
             sherpaActiveDownloadModelIDs: [],
             customLLMState: .downloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
@@ -97,6 +101,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             sherpaState: .notDownloaded,
             sherpaActiveDownloadModelIDs: [],
             customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
@@ -113,6 +119,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             sherpaState: .notDownloaded,
             sherpaActiveDownloadModelIDs: [],
             customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
@@ -127,6 +135,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             sherpaState: .notDownloaded,
             sherpaActiveDownloadModelIDs: [],
             customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
@@ -146,6 +156,8 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 SherpaOnnxModelCatalog.fireRedModelID,
             ],
             customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
             ggufStateByID: [:],
             ggufActiveDownloadModelID: nil
         )
@@ -157,6 +169,32 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
             [
                 SherpaOnnxModelCatalog.fireRedModelID.rawValue,
                 SherpaOnnxModelCatalog.funASRNanoModelID.rawValue,
+            ]
+        )
+    }
+
+    func testDownloadLifecycleTokenTracksCustomLLMActiveRepos() {
+        let token = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
+            mlxState: .notDownloaded,
+            mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [
+                "mlx-community/LFM2-1.2B-4bit",
+                "mlx-community/Qwen3.5-4B-4bit",
+            ],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
+        )
+
+        XCTAssertEqual(token.customLLMPhase, .downloading)
+        XCTAssertEqual(
+            token.customLLMActiveDownloadRepos,
+            [
+                "mlx-community/LFM2-1.2B-4bit",
+                "mlx-community/Qwen3.5-4B-4bit",
             ]
         )
     }

@@ -86,7 +86,7 @@ struct ModelCatalogBuilder {
     func llmEntries() -> [ModelCatalogEntry] {
         var entries = [ModelCatalogEntry]()
 
-        entries.append(contentsOf: CustomLLMModelManager.availableModels.map { model in
+        entries.append(contentsOf: customLLMDisplayModelsIncludingInstalled().map { model in
             let repo = model.id
             let selectionID = FeatureModelSelectionID.localLLM(repo)
             let snapshot = customLLMInstallSnapshot(repo)
@@ -102,9 +102,7 @@ struct ModelCatalogBuilder {
                 id: "local-llm:\(repo)",
                 title: customLLMManager.displayTitle(for: repo),
                 engine: localizedModelCatalog("Local LLM"),
-                sizeText: snapshot.isInstalled
-                    ? (customLLMManager.cachedModelSizeText(repo: repo) ?? customLLMManager.remoteSizeText(repo: repo))
-                    : customLLMManager.remoteSizeText(repo: repo),
+                sizeText: customLLMManager.remoteSizeText(repo: repo),
                 ratingText: CustomLLMModelManager.ratingText(for: repo),
                 filterTags: decoration.filterTags,
                 displayTags: decoration.displayTags,
@@ -116,7 +114,7 @@ struct ModelCatalogBuilder {
             )
         })
 
-        entries.append(contentsOf: GGUFTranslationModelCatalog.allModels.map { model in
+        entries.append(contentsOf: ggufTranslationDisplayModelsIncludingInstalled().map { model in
             let selectionID = FeatureModelSelectionID.localGGUFTranslation(model.id)
             let snapshot = ggufTranslationInstallSnapshot(model.id)
 
@@ -132,9 +130,7 @@ struct ModelCatalogBuilder {
                 id: "local-gguf-translation:\(model.id.rawValue)",
                 title: model.title,
                 engine: localizedModelCatalog("Local GGUF"),
-                sizeText: snapshot.isInstalled
-                    ? (ggufTranslationModelManager.cachedModelSizeText(id: model.id) ?? model.sizeText)
-                    : model.sizeText,
+                sizeText: model.sizeText,
                 ratingText: model.ratingText,
                 filterTags: decoration.filterTags,
                 displayTags: decoration.displayTags,
@@ -185,6 +181,55 @@ struct ModelCatalogBuilder {
         })
 
         return entries
+    }
+
+    private func customLLMDisplayModelsIncludingInstalled() -> [CustomLLMModelCatalog.Option] {
+        var includedRepos = Set(CustomLLMModelManager.supportedModels.compactMap { model -> String? in
+            let repo = CustomLLMModelManager.canonicalModelRepo(model.id)
+            let snapshot = customLLMInstallSnapshot(repo)
+            switch snapshot.state {
+            case .installed, .downloading, .paused:
+                return repo
+            case .installable, .cancelling, .uninstalling:
+                return nil
+            }
+        })
+        includedRepos.insert(CustomLLMModelManager.canonicalModelRepo(customLLMManager.currentModelRepo))
+
+        if featureSettings.transcription.llmEnabled,
+           case .localLLM(let repo)? = featureSettings.transcription.llmSelectionID.textSelection {
+            includedRepos.insert(CustomLLMModelManager.canonicalModelRepo(repo))
+        }
+        if case .localLLM(let repo)? = featureSettings.translation.modelSelectionID.translationSelection {
+            includedRepos.insert(CustomLLMModelManager.canonicalModelRepo(repo))
+        }
+        if case .localLLM(let repo)? = featureSettings.rewrite.llmSelectionID.textSelection {
+            includedRepos.insert(CustomLLMModelManager.canonicalModelRepo(repo))
+        }
+        if case .localLLM(let repo)? = featureSettings.meeting.summaryModelSelectionID.textSelection {
+            includedRepos.insert(CustomLLMModelManager.canonicalModelRepo(repo))
+        }
+
+        return CustomLLMModelManager.displayModels(includingInstalled: includedRepos)
+    }
+
+    private func ggufTranslationDisplayModelsIncludingInstalled() -> [GGUFTranslationModelOption] {
+        var includedIDs = Set(GGUFTranslationModelCatalog.allModels.compactMap { model -> GGUFTranslationModelID? in
+            let snapshot = ggufTranslationInstallSnapshot(model.id)
+            switch snapshot.state {
+            case .installed, .downloading, .paused:
+                return model.id
+            case .installable, .cancelling, .uninstalling:
+                return nil
+            }
+        })
+        includedIDs.insert(ggufTranslationModelManager.selectedModelID)
+
+        if case .localGGUF(let modelID)? = featureSettings.translation.modelSelectionID.translationSelection {
+            includedIDs.insert(modelID)
+        }
+
+        return GGUFTranslationModelCatalog.displayModels(includingInstalled: includedIDs)
     }
 
     func usageLocations(for selectionID: FeatureModelSelectionID) -> [String] {

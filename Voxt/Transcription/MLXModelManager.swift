@@ -1089,108 +1089,26 @@ class MLXModelManager: ObservableObject {
 
     private func fetchRemoteSize() {
         sizeTask?.cancel()
-        sizeState = .loading
         let repo = modelRepo
-
-        sizeTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let sizeInfo = try await loadRemoteSizeInfo(repo: repo)
-                if Task.isCancelled { return }
-                sizeState = .ready(bytes: sizeInfo.bytes, text: sizeInfo.text)
-                updateRemoteSizeCache(repo: repo, text: sizeInfo.text)
-            } catch is CancellationError {
-                return
-            } catch {
-                if let fallback = MLXModelCatalog.fallbackRemoteSizeInfo(repo: repo) {
-                    sizeState = .ready(bytes: fallback.bytes, text: fallback.text)
-                    updateRemoteSizeCache(repo: repo, text: fallback.text)
-                } else {
-                    sizeState = .error("Size unavailable")
-                    updateRemoteSizeCache(repo: repo, text: "Unknown")
-                }
-            }
+        if let fallback = MLXModelCatalog.fallbackRemoteSizeInfo(repo: repo) {
+            sizeState = .ready(bytes: fallback.bytes, text: fallback.text)
+        } else {
+            sizeState = .error("Size unavailable")
         }
     }
 
     func remoteSizeText(repo: String) -> String {
         let canonicalRepo = Self.canonicalModelRepo(repo)
-        if let cached = remoteSizeTextByRepo[canonicalRepo] {
-            return cached
-        }
-        if canonicalRepo == modelRepo {
-            switch sizeState {
-            case .unknown:
-                return Self.fallbackRemoteSizeText(repo: canonicalRepo) ?? "Unknown"
-            case .loading:
-                return "Loading…"
-            case .ready(_, let text):
-                return text
-            case .error:
-                return Self.fallbackRemoteSizeText(repo: canonicalRepo) ?? "Unknown"
-            }
-        }
         return Self.fallbackRemoteSizeText(repo: canonicalRepo) ?? "Unknown"
     }
 
     func ensureRemoteSizeLoaded(repo: String) {
-        let canonicalRepo = Self.canonicalModelRepo(repo)
-        guard remoteSizeTextByRepo[canonicalRepo] == nil else { return }
-
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let info = try await loadRemoteSizeInfo(repo: canonicalRepo)
-                await MainActor.run {
-                    self.updateRemoteSizeCache(repo: canonicalRepo, text: info.text)
-                }
-            } catch {
-                await MainActor.run {
-                    self.updateRemoteSizeCache(
-                        repo: canonicalRepo,
-                        text: Self.fallbackRemoteSizeText(repo: canonicalRepo) ?? "Unknown"
-                    )
-                }
-            }
-        }
+        _ = repo
     }
 
     func prefetchAllModelSizes() {
-        guard prefetchTask == nil else { return }
-        let repos = Self.availableModels
-            .map { Self.canonicalModelRepo($0.id) }
-            .filter { remoteSizeTextByRepo[$0] == nil }
-        guard !repos.isEmpty else { return }
-
-        let baseURL = hubBaseURL
-        prefetchTask = Task(priority: .utility) { [weak self] in
-            defer {
-                Task { @MainActor [weak self] in
-                    self?.prefetchTask = nil
-                }
-            }
-            for repo in repos {
-                guard let self else { return }
-                do {
-                    let info = try await self.loadRemoteSizeInfo(repo: repo, preferredBaseURL: baseURL)
-                    await MainActor.run {
-                        self.updateRemoteSizeCache(repo: repo, text: info.text)
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.updateRemoteSizeCache(
-                            repo: repo,
-                            text: Self.fallbackRemoteSizeText(repo: repo) ?? "Unknown"
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private func updateRemoteSizeCache(repo: String, text: String) {
-        remoteSizeTextByRepo[repo] = text
-        MLXModelStorageSupport.savePersistedRemoteSizeCache(remoteSizeTextByRepo)
+        prefetchTask?.cancel()
+        prefetchTask = nil
     }
 
     private func fallbackHubBaseURL(from baseURL: URL) -> URL? {
@@ -1218,34 +1136,6 @@ class MLXModelManager: ObservableObject {
             return true
         }
         return hasResumableDownload(repo: repo, isDownloaded: downloadedStateByRepo[repo] ?? false)
-    }
-
-    private func loadRemoteSizeInfo(
-        repo: String,
-        preferredBaseURL: URL? = nil
-    ) async throws -> (bytes: Int64, text: String) {
-        let baseURL = preferredBaseURL ?? hubBaseURL
-        do {
-            return try await MLXModelDownloadSupport.fetchModelSizeInfo(
-                repo: repo,
-                baseURL: baseURL,
-                userAgent: Self.hubUserAgent,
-                formatByteCount: MLXModelStorageSupport.formatByteCount
-            )
-        } catch {
-            guard let fallbackBaseURL = fallbackHubBaseURL(from: baseURL) else {
-                throw error
-            }
-            VoxtLog.modelWarning(
-                "Primary model metadata endpoint failed. Retrying with mirror. repo=\(repo), baseURL=\(baseURL.absoluteString), error=\(error.localizedDescription)"
-            )
-            return try await MLXModelDownloadSupport.fetchModelSizeInfo(
-                repo: repo,
-                baseURL: fallbackBaseURL,
-                userAgent: Self.hubUserAgent,
-                formatByteCount: MLXModelStorageSupport.formatByteCount
-            )
-        }
     }
 
     private func performDownloadWithFallback(for repo: String) async throws -> URL {

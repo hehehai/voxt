@@ -32,19 +32,19 @@
 |---|---:|---|---|---|
 | DeepSeek R1 Distill Qwen 7B | 2025-02-26 | `4bit` 8.58 GB | 未接入本地 Custom LLM | 可选接入。适合推理/代码，但体积偏大 |
 | DeepSeek R1 | 2025-02-26 | `4bit` 419.54 GB | 未接入本地 Custom LLM | 不建议内置。体积过大，只适合外部服务 |
-| Gemma 3 1B | 2025-04-18 | `qat-4bit` 0.77 GB | 未接入 | 可选轻量档，但优先级低于 Qwen3.5 0.8B / 2B |
+| Gemma 3 1B | 2025-04-18 | `qat-4bit` 0.77 GB | 未接入 | 可选轻量档，但优先级低于 Qwen3.5 2B |
 | Gemma 3n E2B | 2025-06-29 | `4bit` 2.55 GB, `bf16` 8.95 GB | 未接入 | 可选。Gemma 4 已更新，优先级中低 |
 | Gemma 3n E4B | 2025-06-29 | `4bit` 3.90 GB, `bf16` 13.77 GB | 未接入 | 可选。若接入 Gemma 4，可不接入 |
 | Gemma 4 E2B | 2026-05-19 | `4bit` 3.61 GB, `bf16` 10.28 GB, `OptiQ-4bit` 16.95 GB, `nvfp4` size unavailable | 已接入 `4bit` | 保留。建议继续保留 `4bit`，暂不内置大体积 OptiQ |
 | Gemma 4 E4B | 2026-05-19 | `4bit` 5.25 GB, `bf16` 16.02 GB, `OptiQ-4bit` 22.71 GB, `nvfp4` 6.90 GB | 已接入 `4bit` | 保留。适合作为 Gemma 主推高质量档 |
 | Gemma 4 12B | 2026-06-03 | `4bit` 44.02 GB, `bf16` 95.74 GB, `OptiQ-4bit` 8.89 GB, `nvfp4` 44.02 GB | 未接入 | 谨慎接入。仅 `OptiQ-4bit` 体积可接受，但需实测质量/稳定性 |
 | Gemma 4 26B-A4B | 2026-05-19 | `4bit` 30.98 GB, `bf16` 51.64 GB, `OptiQ-4bit` 58.96 GB, `nvfp4` 30.98 GB | 未接入 | 不建议默认内置。体积过大 |
-| Qwen3 0.6B | 2025-04-28 | `4bit` 0.68 GB | 已接入 | 保留为极速/低内存档 |
-| Qwen3 1.7B | 2025-04-28 | `4bit` 0.98 GB | 已接入 | 保留为轻量实用档 |
-| Qwen3 4B | 2025-04-28 | `4bit` 2.27 GB | 已接入 | 保留，但推荐位可被 Qwen3.5 4B 替代 |
-| Qwen3 8B | 2025-04-28 | `4bit` 4.62 GB | 已接入 | 保留。高质量档仍有价值 |
+| Qwen3 0.6B | 2025-04-28 | `4bit` 0.68 GB | 已接入为隐藏兼容 | 被 Qwen3.5 2B 覆盖 |
+| Qwen3 1.7B | 2025-04-28 | `4bit` 0.98 GB | 已接入为隐藏兼容 | 被 Qwen3.5 2B 覆盖 |
+| Qwen3 4B | 2025-04-28 | `4bit` 2.27 GB | 已接入为隐藏兼容 | 被 Qwen3.5 4B OptiQ 替代 |
+| Qwen3 8B | 2025-04-28 | `4bit` 4.62 GB | 已接入为隐藏兼容 | 被 Qwen3.5 9B OptiQ 替代 |
 | Qwen3 30B-A3B | 2025-04-29 | `4bit` 17.19 GB | 已接入为隐藏兼容 | 保持隐藏兼容。体积偏大，不适合默认推荐 |
-| Qwen3.5 0.8B | 2026-03-02 | `4bit` 0.65 GB, `bf16` 1.73 GB, `OptiQ-4bit` 1.94 GB, `nvfp4` 0.65 GB | 疑似未正确接入：本地 ID 是 `Qwen3.5-0.8B-4bit-OptiQ`，上游实际为 `Qwen3.5-0.8B-OptiQ-4bit` | 优先修正 ID。适合作为新的超轻量默认候选 |
+| Qwen3.5 0.8B | 2026-03-02 | `4bit` 0.65 GB, `bf16` 1.73 GB, `OptiQ-4bit` 886.1 MB, `nvfp4` 0.65 GB | 已接入为隐藏兼容，旧错误 ID 保留 alias | 低配入口改为 Qwen3.5 2B |
 | Qwen3.5 2B | 2026-03-02 | `4bit` 1.74 GB, `bf16` 4.45 GB, `OptiQ-4bit` 4.64 GB, `nvfp4` 1.74 GB | 已接入 `4bit` | 保留。建议作为轻量质量档 |
 | Qwen3.5 4B | 2026-03-02 | `4bit` 3.05 GB, `bf16` 9.10 GB, `OptiQ-4bit` 6.32 GB | 已接入 `4bit` 和 `OptiQ-4bit` | 强烈保留。建议作为多数用户主推荐 |
 | Qwen3.5 9B | 2026-03-02 | `4bit` 5.97 GB, `bf16` 18.84 GB, `OptiQ-4bit` 13.35 GB, `nvfp4` size unavailable | 已接入 `OptiQ-4bit` | 保留为高质量档，但不设默认 |
@@ -56,13 +56,12 @@
 | Qwen3.6 35B-A3B | 2026-04-16 | `4bit` 20.42 GB, `bf16` 70.23 GB, `OptiQ-4bit` 44.93 GB, `nvfp4` 20.42 GB | 未接入 | 不建议默认内置 |
 | Llama 3.2 1B | 2025-03-05 | `Instruct-4bit` 1.41 GB | 已接入 | 可保留为兼容，但推荐位低于 Qwen3/Qwen3.5 |
 | Llama 3.2 3B | 2025-03-05 | `Instruct-4bit` 5.44 GB | 已接入 | 可保留，但不应主推 |
-| Granite 3.3 2B | 2025-04-16 | `instruct-4bit` 1.43 GB | 已接入 | 保留。适合结构化/低体积备用 |
-| MiMo 7B SFT | 2025-05-02 | `4bit` 4.30 GB | 已接入 | 保留但需实测中文增强质量 |
-| GLM-4 9B 0414 | 2025-04-17 | `4bit` 5.31 GB | 已接入 | 保留。中文/多语言备用价值高 |
-| AceReason Nemotron 7B | 2025-05-26 | `4bit` 4.30 GB | 已接入 | 保留。推理向备用，默认关闭 thinking 的策略已覆盖 |
+| Granite 3.3 2B | 2025-04-16 | `instruct-4bit` 1.43 GB | 已接入 | 隐藏兼容。结构化能力不够支撑默认展示 |
+| MiMo 7B SFT | 2025-05-02 | `4bit` 4.30 GB | 已接入 | 隐藏兼容。保留旧选择，不进默认列表 |
+| GLM 4 9B | 2025-04-17 | `4bit` 5.31 GB | 已接入 | 保留。中文/多语言备用价值高 |
+| AceReason Nemotron 7B | 2025-05-26 | `4bit` 4.30 GB | 已接入 | 隐藏兼容。推理向备用，不进默认列表 |
 | BitNet b1.58 2B-4T | 2025-06-10 | `4bit` 0.72 GB | 未接入 | 可选实验接入。极小体积，但需要重点验证输出稳定性 |
 | Baichuan M1 14B | 2025-07-13 | `Instruct-4bit-ft` 8.16 GB | 未接入 | 可选。中文生态价值有，但体积偏大 |
-| SmolLM3 3B | 2025-07-08 | `4bit` 1.75 GB | 未接入 | 建议接入。轻量、体积合理，可补充非 Qwen 小模型 |
 | ERNIE 4.5 0.3B | 2025-07-13 | `PT-bf16-ft` 0.73 GB | 未接入 | 不建议主推。PT 非 Instruct，应用在改写/翻译上风险较高 |
 | LFM2 1.2B | 2025-07-11 | `4bit` 0.66 GB | 未接入 | 可选接入。轻量备用 |
 | EXAONE 4.0 1.2B | 2025-07-15 | `4bit` 0.72 GB | 未接入 | 可选接入。需要实测中文任务 |
@@ -72,7 +71,7 @@
 | Granite 4.0 H Tiny | 2025-10-03 | `4bit-DWQ` 3.91 GB | 未接入 | 建议评估接入。比 Granite 3.3 更新，可替代 Granite 3.3 |
 | LFM2 8B-A1B | 2025-10-08 | `3bit-MLX` 4.17 GB | 未接入 | 可选评估。MoE/A1B 体积合理 |
 | nanochat d20 | 2025-10-15 | MLX 1.12 GB | 未接入 | 不建议主推。更适合作为实验/开发参考 |
-| gpt-oss 20B | 2026-03-19 | `MXFP4-Q8` 12.10 GB | 未接入本地；远程 oMLX 有 GPT-OSS 120B 预设 | 建议评估接入。开放模型、体积尚可，但需实测延迟和内存 |
+| gpt-oss 20B | 2026-03-19 | `MXFP4-Q8` 12.10 GB | 不接入本地 | 当前本地输出格式不稳定，不进入 Voxt 本地 LLM 支持计划 |
 | AI21 Jamba Reasoning 3B | 2025-10-14 | `4bit` 1.74 GB, `bf16` 6.06 GB | 未接入 | 建议接入 `4bit`。小体积推理向补位 |
 
 ## Voxt 当前本地模型覆盖统计
@@ -81,19 +80,17 @@
 |---|---:|---:|---:|---:|
 | MLX ASR / STT | 25 个本地 MLX ASR 选项 | 22 个 2025+ 上游 STT 变体已接入 | 2 个 Nemotron ASR 变体未接入 | 0 |
 | MLX Whisper ASR | 5 个 MLX Whisper 选项 | MLX Whisper family | 已接入 | 旧短 ID 迁移到 MLX repo |
-| Custom LLM | 30 个可见本地 LLM，另有 3 个隐藏兼容 | 已覆盖 Qwen3、部分 Qwen3.5、Gemma4 E2/E4、Llama3.2、Granite3.3、MiMo、GLM4、AceReason | 未覆盖 Gemma3/3n、Gemma4 12B/26B、Qwen3.6、SmolLM3、BitNet、Jamba、gpt-oss 20B 等 | 1 个 Qwen3.5 0.8B OptiQ repo ID 疑似错误 |
+| Custom LLM | 可见本地 LLM 已收敛，旧模型隐藏兼容 | 默认可见覆盖 Qwen3.5、Qwen3 VL、Gemma4 E2/E4/12B、GLM4、Mistral3 | MiniCPM、Phi、InternLM、Granite、MiMo、AceReason Nemotron 均转隐藏兼容 | Qwen3.5 0.8B OptiQ repo ID 已修正 |
 
 ## 最值得优先接入
 
 | 优先级 | 类型 | 模型 / 系列 | 原因 | 建议动作 |
 |---:|---|---|---|---|
 | P0 | ASR | Nemotron 3.5 ASR Streaming 0.6B | 上游最新，体积小，streaming 方向清晰，可补足 Voxt 本地 ASR 的新实时路线 | 接入 base 与 `8bit`，先作为实验/新模型标记 |
-| P0 | LLM | 修正 Qwen3.5 0.8B OptiQ repo ID | 当前本地 ID 与上游 HF 命名不一致，可能导致下载失败或体积缓存失准 | 将 `Qwen3.5-0.8B-4bit-OptiQ` 修正为 `Qwen3.5-0.8B-OptiQ-4bit`，加兼容 alias |
+| P0 | LLM | 修正 Qwen3.5 0.8B OptiQ repo ID | 已验证旧 ID 不可访问，新 ID 可访问 | 已将 `Qwen3.5-0.8B-4bit-OptiQ` alias 到 `Qwen3.5-0.8B-OptiQ-4bit` |
 | P0 | LLM | Qwen3.5 4B / 9B OptiQ | 质量/体积比最好，适合 Voxt 的增强、改写、翻译主路径 | 继续主推 4B OptiQ；9B OptiQ 放高质量档 |
-| P1 | LLM | SmolLM3 3B | 1.75 GB，补充非 Qwen 轻量 Instruct 路线 | 接入为轻量备选 |
 | P1 | LLM | AI21 Jamba Reasoning 3B 4bit | 1.74 GB，推理向小模型，体积适中 | 接入并实测结构化输出 |
 | P1 | LLM | Granite 4.0 H Tiny | 比 Granite 3.3 更新，体积 3.91 GB | 评估替代 Granite 3.3 |
-| P2 | LLM | gpt-oss 20B MXFP4-Q8 | 12.10 GB，开放模型，适合高端本地用户 | 先隐藏接入或仅 oMLX 推荐 |
 | P2 | LLM | Qwen3.6 27B 4bit / nvfp4 | 高质量高端模型，体积 16.07 GB | 隐藏接入，按大内存设备展示 |
 
 ## 已接入但建议淘汰或降级维护
@@ -110,8 +107,8 @@
 | LLM | Qwen2.5 7B hidden compat | 已是隐藏兼容，且 Qwen3/Qwen3.5 更合适 | Qwen3.5 4B / 9B | 继续隐藏，不恢复可见 |
 | LLM | Gemma 2 2B / 9B | Gemma 4 已进入上游 2026 支持，提示行为更新 | Gemma 4 E2B / E4B | 降级维护或隐藏旧 Gemma2 |
 | LLM | Llama 3 / Llama 3.1 8B | 2024 系列，体积 4.5-5.3 GB，Voxt 任务上未必优于 Qwen3.5 | Qwen3.5 4B / 9B、Gemma4 E4B | 降级为兼容选项 |
-| LLM | Mistral 7B / Mistral Nemo | 2024 系列，仍可用但不是 MLX 2025+ 重点 | Qwen3.5、Gemma4、SmolLM3 | 降低推荐位 |
-| LLM | Phi 3.5 Mini | 2024 系列，轻量但能力和生态更新度不如 Qwen3.5 | Qwen3.5 0.8B / 2B、SmolLM3 | 隐藏或降级维护 |
+| LLM | Mistral 7B / Mistral Nemo | 2024 系列，仍可用但不是 MLX 2025+ 重点 | Mistral 3 3B | 降级为隐藏兼容 |
+| LLM | Phi 3.5 Mini | 2024 系列，轻量但能力和生态更新度不如 Qwen3.5 | Qwen3.5 2B、LFM2 1.2B | 隐藏或降级维护 |
 
 ## 建议的目标组合
 
@@ -121,10 +118,10 @@
 | 平衡本地 ASR | Qwen3-ASR 1.7B `6bit` |
 | 实时/流式 ASR | Qwen3-ASR 0.6B `4bit` 现用；新增 Nemotron 3.5 ASR Streaming 后做 A/B |
 | 英文轻量 ASR | Parakeet 110M 或 Parakeet 0.6B `tdt-v3` |
-| 默认本地 LLM | Qwen3.5 4B `4bit` 或 `OptiQ-4bit` |
-| 低内存本地 LLM | Qwen3.5 0.8B OptiQ、Qwen3 1.7B、SmolLM3 3B |
-| 高质量本地 LLM | Qwen3.5 9B OptiQ、Gemma4 E4B、GLM-4 9B |
-| 高端/实验本地 LLM | Qwen3.6 27B、gpt-oss 20B、Gemma4 12B OptiQ |
+| 默认本地 LLM | Qwen3.5 4B `OptiQ-4bit` |
+| 低内存本地 LLM | Qwen3.5 2B、LFM2 1.2B |
+| 高质量本地 LLM | Qwen3.5 9B OptiQ、Gemma4 E4B、GLM 4 9B |
+| 高端/实验本地 LLM | Qwen3.6 27B、Gemma4 12B OptiQ |
 
 ## 最终目标模型列表
 
@@ -168,49 +165,49 @@
 
 | 状态 | 模型 | repo / ID | 角色 |
 |---|---|---|---|
-| 最终可见 | Qwen3.5 0.8B OptiQ 4bit | `mlx-community/Qwen3.5-0.8B-OptiQ-4bit` | 新默认候选之一，超轻量低内存 |
 | 最终可见 | Qwen3.5 2B 4bit | `mlx-community/Qwen3.5-2B-4bit` | 轻量质量档 |
-| 最终可见 | Qwen3.5 4B 4bit | `mlx-community/Qwen3.5-4B-4bit` | 主推平衡档 |
 | 最终可见 | Qwen3.5 4B OptiQ 4bit | `mlx-community/Qwen3.5-4B-OptiQ-4bit` | 主推质量/体积比最佳档 |
 | 最终可见 | Qwen3.5 9B OptiQ 4bit | `mlx-community/Qwen3.5-9B-OptiQ-4bit` | 高质量本地档 |
-| 最终可见 | Qwen3 1.7B 4bit | `mlx-community/Qwen3-1.7B-4bit` | 轻量兼容和低内存备用 |
-| 最终可见 | Qwen3 8B 4bit | `mlx-community/Qwen3-8B-4bit` | 当前 Qwen3 高质量备用 |
+| 最终可见 | Qwen3 VL 4B Instruct | `lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit` | 视觉入口，不替代文本默认模型 |
 | 最终可见 | Gemma 4 E2B IT 4bit | `mlx-community/gemma-4-e2b-it-4bit` | Gemma 轻量路线 |
 | 最终可见 | Gemma 4 E4B IT 4bit | `mlx-community/gemma-4-e4b-it-4bit` | Gemma 主推质量档 |
-| 最终可见 | GLM-4 9B 0414 4bit | `mlx-community/GLM-4-9B-0414-4bit` | 中文/多语言高质量备用 |
-| 最终可见 | GLM-Z1 9B 0414 4bit | `mlx-community/GLM-Z1-9B-0414-4bit` | 推理向中文备用 |
-| 最终可见 | AceReason Nemotron 7B 4bit | `mlx-community/AceReason-Nemotron-7B-4bit` | 推理向备用 |
-| 最终可见 | SmolLM3 3B 4bit | `mlx-community/SmolLM3-3B-4bit` | 新增非 Qwen 轻量 Instruct |
-| 最终可见 | AI21 Jamba Reasoning 3B 4bit | `mlx-community/AI21-Jamba-Reasoning-3B-4bit` | 新增小体积推理向模型 |
-| 最终可见 | Granite 4.0 H Tiny 4bit DWQ | `mlx-community/Granite-4.0-H-Tiny-4bit-DWQ` | 替代 Granite 3.3 的新 IBM Granite 路线 |
+| 最终可见 | Gemma 4 12B IT OptiQ 4bit | `mlx-community/gemma-4-12B-it-OptiQ-4bit` | Gemma 高端质量档，约 8.96 GB |
+| 最终可见 | GLM 4 9B | `mlx-community/GLM-4-9B-0414-4bit` | 中文/多语言高质量备用 |
+| 隐藏兼容 | GLM-Z1 9B 0414 4bit | `mlx-community/GLM-Z1-9B-0414-4bit` | 推理向中文备用，不进入默认入口 |
+| 隐藏兼容 | AceReason Nemotron 7B 4bit | `mlx-community/AceReason-Nemotron-7B-4bit` | 推理向备用，不进入默认入口 |
+| 最终可见 | LFM2 1.2B 4bit | `mlx-community/LFM2-1.2B-4bit` | 极轻量 LFM2 入口 |
+| 最终可见 | LFM2 8B A1B 3bit | `mlx-community/LFM2-8B-A1B-3bit-MLX` | MoE LFM2 入口 |
+| 最终可见 | Qwen3.6 27B 4bit | `mlx-community/Qwen3.6-27B-4bit` | 高端大内存 Qwen 入口 |
+| 隐藏兼容 | Granite 4.0 H Tiny 4bit DWQ | `mlx-community/Granite-4.0-H-Tiny-4bit-DWQ` | 有实验价值，但不进入默认入口 |
 | 隐藏兼容 | Qwen3 0.6B 4bit | `mlx-community/Qwen3-0.6B-4bit` | 能力偏弱，保留旧配置 |
+| 隐藏兼容 | Qwen3 1.7B 4bit | `mlx-community/Qwen3-1.7B-4bit` | 被 Qwen3.5 2B 覆盖 |
 | 隐藏兼容 | Qwen3 4B 4bit | `mlx-community/Qwen3-4B-4bit` | 被 Qwen3.5 4B 替代 |
+| 隐藏兼容 | Qwen3 8B 4bit | `mlx-community/Qwen3-8B-4bit` | 被 Qwen3.5 9B 替代 |
 | 隐藏兼容 | Qwen3 30B-A3B 4bit | `mlx-community/Qwen3-30B-A3B-4bit` | 体积偏大，保留旧配置 |
-| 隐藏兼容 | Qwen3.6 27B 4bit | `mlx-community/Qwen3.6-27B-4bit` | 高端大内存实验档 |
-| 隐藏兼容 | Gemma 4 12B OptiQ 4bit | `mlx-community/gemma-4-12b-it-OptiQ-4bit` | 高端实验档，需实测 |
-| 隐藏兼容 | gpt-oss 20B MXFP4-Q8 | `mlx-community/gpt-oss-20b-MXFP4-Q8` | 高端开放模型实验档 |
+| 隐藏兼容 | Qwen3.5 4B 4bit | `mlx-community/Qwen3.5-4B-4bit` | 默认入口使用 Qwen3.5 4B OptiQ |
 | 隐藏兼容 | MiMo 7B SFT 4bit | `mlx-community/MiMo-7B-SFT-4bit` | 保留但不主推，需实测中文质量 |
-| 隐藏兼容 | LFM2 1.2B 4bit | `mlx-community/LFM2-1.2B-4bit` | 轻量实验备用 |
 | 隐藏兼容 | EXAONE 4.0 1.2B 4bit | `mlx-community/exaone-4.0-1.2b-4bit` | 轻量实验备用 |
 | 隐藏兼容 | BitNet b1.58 2B-4T 4bit | `mlx-community/bitnet-b1.58-2B-4T-4bit` | 极小体积实验档，需验证稳定性 |
 | 剔除/不推荐 | Qwen2 1.5B Instruct | `Qwen/Qwen2-1.5B-Instruct` | 被 Qwen3 / Qwen3.5 替代 |
 | 剔除/不推荐 | Qwen2.5 3B Instruct | `Qwen/Qwen2.5-3B-Instruct` | 体积/质量比低于 Qwen3.5 4B |
 | 剔除/不推荐 | Qwen2.5 7B Instruct 4bit | `mlx-community/Qwen2.5-7B-Instruct-4bit` | 被 Qwen3.5 替代 |
 | 剔除/不推荐 | Gemma 2 2B / 9B | `mlx-community/gemma-2-2b-it-4bit`, `mlx-community/gemma-2-9b-it-4bit` | 被 Gemma 4 E2B / E4B 替代 |
-| 剔除/不推荐 | Llama 3 / Llama 3.1 8B | `mlx-community/Meta-Llama-3-8B-Instruct-4bit`, `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | 2024 系列，不再作为本地主推 |
-| 剔除/不推荐 | Llama 3.2 1B / 3B | `mlx-community/Llama-3.2-1B-Instruct-4bit`, `mlx-community/Llama-3.2-3B-Instruct-4bit` | 被 Qwen3.5 0.8B / 2B、SmolLM3 替代 |
-| 剔除/不推荐 | Mistral 7B / Mistral Nemo | `mlx-community/Mistral-7B-Instruct-v0.3-4bit`, `mlx-community/Mistral-Nemo-Instruct-2407-4bit` | 2024 系列，不再作为本地主推 |
-| 剔除/不推荐 | Phi 3.5 Mini | `mlx-community/Phi-3.5-mini-instruct-4bit` | 被 Qwen3.5 轻量档替代 |
-| 剔除/不推荐 | Granite 3.3 2B | `mlx-community/granite-3.3-2b-instruct-4bit` | 被 Granite 4.0 H Tiny 替代 |
-| 剔除/不推荐 | InternLM2.5 7B | `mlx-community/internlm2_5-7b-chat-4bit` | 非本轮上游 `LLMRegistry` 2025+ 主清单 |
-| 剔除/不推荐 | MiniCPM4 8B | `mlx-community/MiniCPM4-8B-4bit` | 非本轮上游 `LLMRegistry` 2025+ 主清单 |
-| 剔除/不推荐 | GLM-4 9B Chat 1M | `mlx-community/glm-4-9b-chat-1m-4bit` | 非本轮上游 `LLMRegistry` 2025+ 主清单，先不保留为目标模型 |
+| 隐藏兼容 | Llama 3 / Llama 3.1 8B | `mlx-community/Meta-Llama-3-8B-Instruct-4bit`, `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | 2024 系列，不再作为本地主推 |
+| 隐藏兼容 | Llama 3.2 1B / 3B | `mlx-community/Llama-3.2-1B-Instruct-4bit`, `mlx-community/Llama-3.2-3B-Instruct-4bit` | 被 Qwen3.5 2B、LFM2 轻量入口替代 |
+| 最终可见 | Mistral 3 3B | `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 新 Mistral3 轻量入口 |
+| 隐藏兼容 | Mistral 7B / Mistral Nemo | `mlx-community/Mistral-7B-Instruct-v0.3-4bit`, `mlx-community/Mistral-Nemo-Instruct-2407-4bit` | 2024 系列，不再作为本地主推 |
+| 隐藏兼容 | Phi 3.5 Mini | `mlx-community/Phi-3.5-mini-instruct-4bit` | 被 Qwen3.5 轻量档替代 |
+| 隐藏兼容 | Granite 3.3 2B | `mlx-community/granite-3.3-2b-instruct-4bit` | 默认价值不足，保留兼容 |
+| 隐藏兼容 | InternLM2.5 7B | `mlx-community/internlm2_5-7b-chat-4bit` | 与 Qwen3.5 / GLM 重叠，保留兼容 |
+| 隐藏兼容 | MiniCPM4 8B | `mlx-community/MiniCPM4-8B-4bit` | 与 Qwen3.5 / GLM 重叠，保留兼容 |
+| 隐藏兼容 | GLM-4 9B Chat 1M | `mlx-community/glm-4-9b-chat-1m-4bit` | 超长上下文不是 Voxt 当前核心需求，保留旧配置 / 已安装显示 |
 | 剔除/不推荐 | Baichuan M1 14B | `mlx-community/Baichuan-M1-14B-Instruct-4bit-ft` | 体积偏大，优先级低 |
 | 剔除/不推荐 | ERNIE 4.5 0.3B PT | `mlx-community/ERNIE-4.5-0.3B-PT-bf16-ft` | PT 非 Instruct，不适合作为 Voxt 改写/翻译主路径 |
 | 剔除/不推荐 | Lille 130M | `mlx-community/lille-130m-instruct-bf16` | 能力预期不足 |
 | 剔除/不推荐 | OLMoE 1B-7B 0125 | `mlx-community/OLMoE-1B-7B-0125-Instruct-4bit` | 不是优先接入项 |
 | 剔除/不推荐 | Ling-mini 2.0 | `mlx-community/Ling-mini-2.0-2bit-DWQ` | 特殊量化，先不进入目标列表 |
 | 剔除/不推荐 | nanochat d20 | `dnakov/nanochat-d20-mlx` | 实验/开发参考价值高于产品价值 |
+| 剔除/不推荐 | AI21 Jamba Reasoning 3B 4bit | `mlx-community/AI21-Jamba-Reasoning-3B-4bit` | 推理向定位和当前 Voxt 默认任务重叠，暂不进入本批 5 个 |
 | 剔除/不推荐 | Qwen3.5 27B+ / 35B+ / 122B+ / 397B+ | 见上游清单 | 本地体积过大，保留 oMLX/外部服务路径 |
 | 剔除/不推荐 | Qwen3.6 35B-A3B | `mlx-community/Qwen3.6-35B-A3B-4bit` 等 | 体积过大，不进入目标列表 |
 
@@ -234,17 +231,17 @@
 | ASR / STT | 英文专用 ASR | Parakeet | 只保留 0.6B `tdt-v3` 可见，其余同尺寸解码变体隐藏或剔除 |
 | ASR / STT | 高准确率批处理 | Cohere Transcribe | 只保留一个 fp16 入口，面向高性能和高准确率场景 |
 | LLM | 核心通用 LLM | Qwen3.5、Qwen3.6 | Qwen3.5 是主线；Qwen3.6 只保留一个高端入口 |
-| LLM | 非 Qwen 备用 | Gemma 4、GLM-4、SmolLM3 | 覆盖不同提示风格、中文/多语言和轻量非 Qwen 路线 |
-| LLM | 推理 / 实验池 | AceReason Nemotron、AI21 Jamba、Granite 4、gpt-oss、BitNet、LFM2、EXAONE | 默认隐藏，保留后续 A/B 和高级用户入口 |
+| LLM | 非 Qwen 备用 | Gemma 4、GLM-4、Mistral 3、LFM2 | 覆盖不同提示风格、中文/多语言和轻量非 Qwen 路线 |
+| LLM | 推理 / 实验池 | AceReason Nemotron、AI21 Jamba、Granite 4、BitNet、LFM2、EXAONE | 默认隐藏，保留后续 A/B 和高级用户入口 |
 | LLM | 历史兼容 | Qwen2 / Qwen2.5、Gemma 2、Llama 3.x、Mistral、Phi、Granite 3.3 等 | 不再主动展示；旧配置解析优先通过隐藏兼容完成 |
 
 ### 设备阶段推荐
 
 | 设备阶段 | ASR / STT 主推 | LLM 主推 | 说明 |
 |---|---|---|---|
-| 低性能电脑 | Qwen3-ASR 0.6B 4bit；需要流式时用 Nemotron 3.5 ASR Streaming 8bit | Qwen3.5 0.8B 4bit；需要更稳输出时用 Qwen3.5 2B 4bit | 低下载体积、低内存、低配置成本 |
-| 中性能电脑 | Qwen3-ASR 1.7B 6bit；实时多语言用 Voxtral Mini 4B 6bit | Qwen3.5 4B 4bit；中文/多语言备用用 GLM-4 9B 4bit；非 Qwen 备用用 Gemma 4 E4B 4bit | 主推档，覆盖大多数用户 |
-| 高性能电脑 | Qwen3-ASR 1.7B 8bit；高准确率批处理用 Cohere Transcribe fp16 | Qwen3.5 9B 4bit；高端实验用 Qwen3.6 27B 4bit | 只保留少量高性能入口，不展开大模型全家桶 |
+| 低性能电脑 | Qwen3-ASR 0.6B 4bit；需要流式时用 Nemotron 3.5 ASR Streaming 8bit | Qwen3.5 2B 4bit | 低下载体积、低内存、低配置成本 |
+| 中性能电脑 | Qwen3-ASR 1.7B 6bit；实时多语言用 Voxtral Mini 4B 6bit | Qwen3.5 4B OptiQ；中文/多语言备用用 GLM 4 9B；非 Qwen 备用用 Gemma 4 E4B 4bit | 主推档，覆盖大多数用户 |
+| 高性能电脑 | Qwen3-ASR 1.7B 8bit；高准确率批处理用 Cohere Transcribe fp16 | Qwen3.5 9B OptiQ；高端实验用 Qwen3.6 27B 4bit | 只保留少量高性能入口，不展开大模型全家桶 |
 
 ### ASR / STT 最终可见模型
 
@@ -278,31 +275,31 @@
 
 | 组 | 阶段 | 系列 | 保留模型 | repo / ID | 包体积 | 保留原因 |
 |---|---|---|---|---|---:|---|
-| 核心通用 LLM | 低性能 | Qwen3.5 0.8B | 4bit | `mlx-community/Qwen3.5-0.8B-4bit` | 0.65 GB | 比 OptiQ 版更小，更适合低配默认 |
 | 核心通用 LLM | 低性能 | Qwen3.5 2B | 4bit | `mlx-community/Qwen3.5-2B-4bit` | 1.74 GB | 轻量但输出更稳，作为低配质量档 |
-| 非 Qwen 备用 | 低 / 中性能 | SmolLM3 3B | 4bit | `mlx-community/SmolLM3-3B-4bit` | 1.75 GB | 非 Qwen 轻量 Instruct 备用 |
-| 核心通用 LLM | 中性能 | Qwen3.5 4B | 4bit | `mlx-community/Qwen3.5-4B-4bit` | 3.05 GB | 主推默认 LLM，比 4B OptiQ 更便于安装 |
+| 核心通用 LLM | 中性能 | Qwen3.5 4B | OptiQ 4bit | `mlx-community/Qwen3.5-4B-OptiQ-4bit` | 6.32 GB | 主推默认 LLM，普通 4bit 仅隐藏兼容 |
 | 非 Qwen 备用 | 中性能 | Gemma 4 E4B IT | 4bit | `mlx-community/gemma-4-e4b-it-4bit` | 5.25 GB | 非 Qwen 主线备用，能力和体积平衡 |
-| 非 Qwen 备用 | 中 / 高性能 | GLM-4 9B 0414 | 4bit | `mlx-community/GLM-4-9B-0414-4bit` | 5.31 GB | 中文/多语言高质量备用，配置简单 |
-| 核心通用 LLM | 高性能 | Qwen3.5 9B | 4bit | `mlx-community/Qwen3.5-9B-4bit` | 5.97 GB | 高质量本地档，比 9B OptiQ 更方便安装 |
+| 非 Qwen 备用 | 中 / 高性能 | GLM 4 9B | 4bit | `mlx-community/GLM-4-9B-0414-4bit` | 5.31 GB | 中文/多语言高质量备用，配置简单 |
+| 核心通用 LLM | 高性能 | Qwen3.5 9B | OptiQ 4bit | `mlx-community/Qwen3.5-9B-OptiQ-4bit` | 13.35 GB | 高质量本地档 |
 | 核心通用 LLM | 高性能实验 | Qwen3.6 27B | 4bit | `mlx-community/Qwen3.6-27B-4bit` | 16.07 GB | 只保留一个高端大内存入口 |
 
 ### LLM 系列收敛结论
 
 | 处理 | 系列 / 模型 | 原因 |
 |---|---|---|
-| 可见保留 | Qwen3.5 0.8B / 2B / 4B / 9B 普通 4bit | 形成低配、轻量质量、默认主推、高质量四个清晰档位 |
-| 隐藏兼容 | Qwen3.5 0.8B OptiQ、Qwen3.5 4B OptiQ、Qwen3.5 9B OptiQ | OptiQ 体积更大或解释成本更高，默认可见优先普通 4bit |
+| 可见保留 | Qwen3.5 2B / 4B OptiQ / 9B OptiQ | 形成低配质量、默认主推、高质量三个清晰档位 |
+| 隐藏兼容 | Qwen3.5 0.8B OptiQ | 低配入口改为 2B，0.8B 仅保留历史选择 / 已安装显示 |
+| 隐藏兼容 | Qwen3.5 4B 普通 4bit | 默认可见优先 Qwen3.5 4B OptiQ |
 | 隐藏兼容 | Qwen3 1.7B / 4B / 8B / 30B-A3B | Qwen3.5 已覆盖主线能力，Qwen3 只保留旧配置 |
 | 可见保留 | Qwen3.6 27B 4bit | 高端阶段只保留一个大模型入口 |
 | 剔除/不推荐 | Qwen3.5 27B+ / 35B+ / 122B+ / 397B+、Qwen3.6 35B-A3B | 本地体积过大，保留 oMLX/外部服务路径 |
-| 可见保留 | Gemma 4 E4B 4bit、GLM-4 9B 4bit、SmolLM3 3B 4bit | 分别覆盖非 Qwen 主线、中文/多语言高质量、轻量非 Qwen |
+| 可见保留 | Gemma 4 E4B 4bit、GLM 4 9B、Mistral 3 3B、LFM2 1.2B / 8B A1B | 分别覆盖非 Qwen 主线、中文/多语言高质量、Mistral 轻量入口、轻量非 Qwen |
 | 隐藏兼容 | Gemma 4 E2B、Gemma 4 12B OptiQ | E2B 与 Qwen3.5 2B / Gemma E4B 重叠；12B 仅高端实验 |
 | 隐藏兼容 | AceReason Nemotron 7B、AI21 Jamba Reasoning 3B、Granite 4.0 H Tiny | 能力有价值，但与 Qwen3.5 / GLM / Gemma 主线重叠，先作为实验池 |
-| 隐藏兼容 | gpt-oss 20B MXFP4-Q8、LFM2 1.2B、EXAONE 1.2B、BitNet 2B、MiMo 7B | 保留实验价值，不进入默认可见列表 |
+| 隐藏兼容 | LFM2 1.2B、EXAONE 1.2B、BitNet 2B、MiMo 7B | 保留实验价值，不进入默认可见列表 |
 | 剔除/不推荐 | Qwen2 / Qwen2.5 系列 | 被 Qwen3.5 全面替代 |
-| 剔除/不推荐 | Gemma 2、Llama 3 / 3.1 / 3.2、Mistral 7B / Nemo、Phi 3.5 | 旧系列或同能力下不如 Qwen3.5 / Gemma4 方便 |
-| 剔除/不推荐 | Granite 3.3、InternLM2.5、MiniCPM4、GLM-4 Chat 1M | 不在精简主线，或已有更清晰替代 |
+| 隐藏兼容 | Llama 3 / 3.1 / 3.2、Mistral 7B / Nemo | 保留旧配置 / 已安装显示，不进入默认入口 |
+| 隐藏兼容 | Gemma 2、Phi 3.5 | 旧系列或同能力下不如 Qwen3.5 / Gemma4 方便 |
+| 隐藏兼容 | Granite 3.3、InternLM2.5、MiniCPM4、GLM-4 Chat 1M | 不在精简主线，或已有更清晰替代 |
 | 剔除/不推荐 | Baichuan M1、ERNIE 4.5 PT、Lille、OLMoE、Ling-mini、nanochat | 体积、任务适配、量化形态或产品价值不适合作为 Voxt 主列表 |
 
 ### 分组后数量统计
@@ -316,10 +313,10 @@
 
 | 优先级 | 动作 | 范围 |
 |---:|---|---|
-| P0 | 将最终可见模型列表作为模型选择器默认展示口径 | ASR 7 个、LLM 8 个 |
+| P0 | 将最终可见模型列表作为模型选择器默认展示口径 | ASR 7 个、LLM 11 个 |
 | P0 | 修正 Qwen3.5 0.8B OptiQ repo ID，并把 OptiQ 系列降为隐藏兼容 | LLM |
 | P1 | 接入 Nemotron 3.5 ASR Streaming 0.6B 8bit | ASR |
-| P1 | 接入 Qwen3.5 9B 4bit、SmolLM3 3B 4bit | LLM |
+| P1 | 接入 Qwen3.5 9B 4bit、LFM2 系列 | LLM |
 | P1 | 将同系列重复变体转为隐藏兼容 | Qwen3-ASR、Parakeet、Voxtral、Qwen3、Qwen3.5 OptiQ |
 | P2 | 删除或不再展示剔除/不推荐组 | MLX Whisper Tiny/Base、旧 LLM 系列、非主线实验模型 |
 

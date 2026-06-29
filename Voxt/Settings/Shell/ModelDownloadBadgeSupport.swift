@@ -7,14 +7,12 @@ enum SettingsModelDownloadBadgeSupport {
     static func activeDownloadCount(
         mlxActiveDownloadRepos: Set<String>,
         sherpaActiveDownloadModelIDs: Set<SherpaOnnxModelID> = [],
-        customLLMState: CustomLLMModelManager.ModelState,
+        customLLMActiveDownloadRepos: Set<String>,
         ggufActiveDownloadModelID: GGUFTranslationModelID?
     ) -> Int {
-        var count = mlxActiveDownloadRepos.count + sherpaActiveDownloadModelIDs.count
-
-        if case .downloading = customLLMState {
-            count += 1
-        }
+        var count = mlxActiveDownloadRepos.count
+            + sherpaActiveDownloadModelIDs.count
+            + customLLMActiveDownloadRepos.count
 
         if ggufActiveDownloadModelID != nil {
             count += 1

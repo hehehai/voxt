@@ -323,6 +323,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-8B-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-2B-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-0.8B-4bit-OptiQ").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-OptiQ-4bit").disablesThinking)
@@ -338,7 +339,8 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit").family, .glm4)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Llama-3.2-3B-Instruct-4bit").family, .llama)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Mistral-Nemo-Instruct-2407-4bit").family, .mistral)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/gemma-2-2b-it-4bit").family, .gemma)
+        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Ministral-3-3B-Instruct-2512-4bit").family, .mistral)
+        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/gemma-4-e2b-it-4bit").family, .gemma)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct").disablesThinking)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2.5-3B-Instruct").disablesThinking)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-4-9B-0414-4bit").disablesThinking)
@@ -352,8 +354,50 @@ final class MLXModelManagerTests: XCTestCase {
         let qwen2Behavior = CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct")
 
         XCTAssertEqual(qwen3Behavior.additionalContext?["enable_thinking"] as? Bool, false)
+        XCTAssertEqual(qwen3Behavior.additionalContext?["reasoning_effort"] as? String, "low")
         XCTAssertEqual(glmZ1Behavior.additionalContext?["enable_thinking"] as? Bool, false)
         XCTAssertNil(qwen2Behavior.additionalContext)
+    }
+
+    func testCustomLLMGenerationSettingsDefaultToThinkingOff() {
+        XCTAssertEqual(CustomLLMGenerationSettingsStore.defaultSettings.thinking.mode, .off)
+        XCTAssertEqual(CustomLLMGenerationSettingsStore.resolvedSettings(from: nil).thinking.mode, .off)
+        XCTAssertEqual(
+            CustomLLMGenerationSettingsStore.sanitized(
+                LLMGenerationSettings(thinking: .providerDefault)
+            ).thinking.mode,
+            .off
+        )
+        for repo in [
+            "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit",
+            "mlx-community/LFM2-1.2B-4bit",
+            "mlx-community/LFM2-8B-A1B-3bit-MLX",
+            "mlx-community/Qwen3.6-27B-4bit",
+        ] {
+            XCTAssertEqual(
+                CustomLLMGenerationSettingsStore.resolvedSettings(
+                    for: repo,
+                    rawByRepo: nil,
+                    legacyRaw: nil
+                ).thinking.mode,
+                .off,
+                repo
+            )
+        }
+        XCTAssertEqual(
+            CustomLLMGenerationSettingsStore.resolvedSettings(
+                for: "mlx-community/Qwen3.5-4B-OptiQ-4bit",
+                rawByRepo: nil,
+                legacyRaw: nil
+            ).thinking.mode,
+            .off
+        )
+        XCTAssertEqual(
+            CustomLLMGenerationSettingsStore.resolvedSettings(
+                from: CustomLLMGenerationSettingsStore.defaultStoredValue()
+            ).thinking.mode,
+            .off
+        )
     }
 
     func testCustomLLMGenerationSettingsStoreKeepsOnlyLocalSupportedFields() {

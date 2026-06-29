@@ -47,12 +47,11 @@
 
 | 阶段 | 场景 | 推荐保留 | repo / ID | 当前体积 | 结论 |
 |---|---|---|---|---:|---|
-| 低性能 | 超轻量文本清理 | Qwen3.5 0.8B OptiQ 4bit | `mlx-community/Qwen3.5-0.8B-4bit-OptiQ` | 598 MB | 保留，但需核对 repo 命名 |
-| 低性能 | 轻量质量档 | Qwen3.5 2B 4bit | `mlx-community/Qwen3.5-2B-4bit` | 未内置 | 保留 |
+| 低性能 | 轻量质量档 | Qwen3.5 2B 4bit | `mlx-community/Qwen3.5-2B-4bit` | 1.74 GB | 保留 |
 | 中性能 | 默认本地 LLM | Qwen3.5 4B OptiQ 4bit | `mlx-community/Qwen3.5-4B-OptiQ-4bit` | 2.97 GB | 保留为主推默认 |
 | 高性能 | 高质量本地 LLM | Qwen3.5 9B OptiQ 4bit | `mlx-community/Qwen3.5-9B-OptiQ-4bit` | 6.04 GB | 保留 |
 | 中 / 高性能 | 非 Qwen 备用 | Gemma 4 E4B IT 4bit | `mlx-community/gemma-4-e4b-it-4bit` | 未内置 | 保留 |
-| 高性能 | 中文 / 多语言备用 | GLM-4 9B 0414 4bit | `mlx-community/GLM-4-9B-0414-4bit` | 5.31 GB | 保留 |
+| 高性能 | 中文 / 多语言备用 | GLM 4 9B | `mlx-community/GLM-4-9B-0414-4bit` | 5.31 GB | 保留 |
 
 ## ASR 系列评估
 
@@ -103,27 +102,28 @@
 | Qwen2 / Qwen2.5 | Qwen2.5 3B Instruct | 剔除 / 不推荐 | 58 | 6.18 GB 体积不适合 3B 定位 |
 | Qwen2 / Qwen2.5 | Qwen2.5 7B Instruct 4bit | 隐藏兼容 | 62 | 旧配置兼容即可，被 Qwen3.5 9B 覆盖 |
 | Qwen2.5 VL | Qwen2.5 VL 3B 4bit | 隐藏兼容 | 68 | 视觉能力有差异，但 Voxt 主路径不是视觉输入 |
-| Qwen3 | 0.6B 4bit | 隐藏兼容 | 67 | 低配阶段被 Qwen3.5 0.8B OptiQ 覆盖 |
+| Qwen3 | 0.6B 4bit | 隐藏兼容 | 67 | 低配阶段被 Qwen3.5 2B 覆盖 |
 | Qwen3 | 1.7B 4bit | 隐藏兼容 | 72 | 轻量可用，但 Qwen3.5 2B 更适合作为主线 |
 | Qwen3 | 4B 4bit | 隐藏兼容 | 76 | 被 Qwen3.5 4B OptiQ 替代 |
 | Qwen3 | 8B 4bit | 隐藏兼容 | 78 | 被 Qwen3.5 9B OptiQ 替代 |
 | Qwen3 | 30B-A3B 4bit | 隐藏兼容 | 70 | 强性能实验，但体积和解释成本过高 |
 | Qwen3 VL | Qwen3 VL 4B Instruct 4bit | 隐藏兼容 | 72 | 有视觉差异化；除非产品明确展示图像输入，否则不进默认 |
-| Qwen3.5 | 0.8B OptiQ 4bit | 可见保留 | 85 | 超轻量低性能入口，需先核对 repo 命名是否可下载 |
+| Qwen3.5 | 0.8B OptiQ 4bit | 隐藏兼容 | 75 | 低配入口改为 2B，0.8B 仅保留历史选择 / 已安装显示 |
 | Qwen3.5 | 2B 4bit | 可见保留 | 88 | 低配质量档，适合改写和翻译的最低稳定入口 |
 | Qwen3.5 | 4B 4bit | 隐藏兼容 | 84 | 可作为普通 4bit 兼容；默认优先 4B OptiQ |
 | Qwen3.5 | 4B OptiQ 4bit | 可见保留 | 94 | 中性能主推，体积略低于普通 4bit，评分更高 |
 | Qwen3.5 | 9B OptiQ 4bit | 可见保留 | 91 | 高性能质量档，阶段边界清晰 |
-| GLM | GLM-4 9B 0414 4bit | 可见保留 | 86 | 中文 / 多语言备用价值明确 |
-| GLM | GLM-4 9B Chat 1M 4bit | 隐藏兼容 | 72 | 长上下文不是 Voxt 当前核心需求，和 GLM-4 9B 重叠 |
+| GLM | GLM 4 9B | 可见保留 | 86 | 中文 / 多语言备用价值明确 |
+| GLM | GLM-4 9B Chat 1M 4bit | 隐藏兼容 | 72 | 长上下文不是 Voxt 当前核心需求，和 GLM 4 9B 重叠 |
 | GLM | GLM-Z1 9B 0414 4bit | 隐藏兼容 | 74 | 推理向，但改写/翻译不需要默认展示 |
 | GLM | GLM-4.7 Flash 4bit | 隐藏兼容 | 68 | 16.9 GB，强性能兼容即可 |
-| Llama | Llama 3.2 1B 4bit | 剔除 / 不推荐 | 60 | 低配阶段被 Qwen3.5 0.8B / 2B 覆盖 |
-| Llama | Llama 3.2 3B 4bit | 剔除 / 不推荐 | 62 | 非主线轻量模型，和 Qwen3.5 2B / 4B 重叠 |
-| Llama | Llama 3 8B 4bit | 剔除 / 不推荐 | 66 | 旧 8B，默认价值低于 Qwen3.5 9B / GLM-4 9B |
-| Llama | Llama 3.1 8B 4bit | 隐藏兼容 | 68 | 可保留兼容，不建议默认展示 |
+| Llama | Llama 3.2 1B 4bit | 隐藏兼容 | 60 | 低配阶段被 Qwen3.5 2B 覆盖 |
+| Llama | Llama 3.2 3B 4bit | 隐藏兼容 | 62 | 非主线轻量模型，和 Qwen3.5 2B / 4B 重叠 |
+| Llama | Llama 3 8B 4bit | 隐藏兼容 | 66 | 旧 8B，默认价值低于 Qwen3.5 9B / GLM 4 9B |
+| Llama | Llama 3.1 8B 4bit | 隐藏兼容 | 68 | 保留兼容，不默认展示 |
 | Mistral | Mistral 7B Instruct v0.3 4bit | 隐藏兼容 | 70 | 稳定但非主线，默认价值低于 Qwen3.5 / Gemma4 |
 | Mistral | Mistral Nemo 2407 4bit | 隐藏兼容 | 72 | 高质量备用，但 6.91 GB 体积偏重 |
+| Mistral | Mistral 3 3B | 可见保留 | 82 | 新 Mistral3 轻量入口，直接显示不分组 |
 | Gemma | Gemma 2 2B 4bit | 剔除 / 不推荐 | 61 | 被 Gemma 4 E2B 和 Qwen3.5 2B 替代 |
 | Gemma | Gemma 2 9B 4bit | 剔除 / 不推荐 | 66 | 被 Gemma 4 E4B 和 Qwen3.5 9B 替代 |
 | Gemma | Gemma 4 E2B 4bit | 隐藏兼容 | 76 | 轻量视觉备用，但默认低配优先 Qwen3.5 2B |
@@ -133,10 +133,10 @@
 
 | 模型 | repo / ID | 推荐动作 | 精简评分 | 理由 |
 |---|---|---:|---:|---|
-| Phi 3.5 Mini Instruct 4bit | `mlx-community/Phi-3.5-mini-instruct-4bit` | 剔除 / 不推荐 | 60 | 轻量价值被 Qwen3.5 0.8B / 2B 覆盖 |
-| InternLM2.5 7B Chat 4bit | `mlx-community/internlm2_5-7b-chat-4bit` | 隐藏兼容 | 70 | 中文友好，但和 GLM-4 9B、Qwen3.5 高配重叠 |
+| Phi 3.5 Mini Instruct 4bit | `mlx-community/Phi-3.5-mini-instruct-4bit` | 隐藏兼容 | 60 | 轻量价值被 Qwen3.5 2B 覆盖 |
+| InternLM2.5 7B Chat 4bit | `mlx-community/internlm2_5-7b-chat-4bit` | 隐藏兼容 | 70 | 中文友好，但和 GLM 4 9B、Qwen3.5 高配重叠 |
 | MiniCPM4 8B 4bit | `mlx-community/MiniCPM4-8B-4bit` | 隐藏兼容 | 72 | 双语能力可能有价值，但默认列表已有 GLM / Qwen |
-| Granite 3.3 2B Instruct 4bit | `mlx-community/granite-3.3-2b-instruct-4bit` | 剔除 / 不推荐 | 59 | 结构化能力不够支撑默认展示，且版本较旧 |
+| Granite 3.3 2B Instruct 4bit | `mlx-community/granite-3.3-2b-instruct-4bit` | 隐藏兼容 | 59 | 结构化能力不够支撑默认展示，且版本较旧 |
 | MiMo 7B SFT 4bit | `mlx-community/MiMo-7B-SFT-4bit` | 隐藏兼容 | 69 | 需要实测中文改写质量，先不默认展示 |
 | AceReason Nemotron 7B 4bit | `mlx-community/AceReason-Nemotron-7B-4bit` | 隐藏兼容 | 73 | 推理向模型，适合实验池，不适合作为改写/翻译默认 |
 
@@ -145,8 +145,8 @@
 | 优先级 | 动作 | 范围 |
 |---:|---|---|
 | P0 | 将默认可见 ASR 收敛为 11 个入口 | MLX Audio 11 个：Qwen3-ASR 3 个、Voxtral 1 个、Parakeet 1 个、Nemotron 1 个、FireRed 1 个、SenseVoice 1 个、MLX Whisper 3 个 |
-| P0 | 将默认可见 LLM 收敛为 6 个入口 | Qwen3.5 4 个、Gemma4 E4B、GLM-4 9B |
-| P0 | 核对并修正 Qwen3.5 0.8B OptiQ repo ID | 当前代码是 `mlx-community/Qwen3.5-0.8B-4bit-OptiQ`，历史文档提到 `mlx-community/Qwen3.5-0.8B-OptiQ-4bit` |
+| P0 | 将默认可见 LLM 收敛为精简入口 | Qwen3.5、Gemma4、GLM 4 9B、Mistral 3 3B |
+| P0 | 已修正 Qwen3.5 0.8B OptiQ repo ID | 当前代码使用 `mlx-community/Qwen3.5-0.8B-OptiQ-4bit`，并为旧 `mlx-community/Qwen3.5-0.8B-4bit-OptiQ` 保留 alias |
 | P1 | 将旧系列移入隐藏兼容 | Qwen2 / Qwen2.5、Qwen3、Llama、Mistral、Gemma2、MLX Whisper 旧档位 |
 | P1 | UI 上按阶段展示，而不是平铺模型名 | 低性能 / 中性能 / 高性能 / 强性能或实验 |
 | P2 | 增加迁移说明和旧配置解析测试 | 确保已选模型不会因为隐藏而失效 |

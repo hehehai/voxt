@@ -559,6 +559,8 @@ struct ModelSettingsView: View {
             sherpaOnnxStateByID: sherpaOnnxModelManager.stateByID,
             sherpaOnnxHasActiveDownloads: !sherpaOnnxModelManager.activeDownloadModelIDs.isEmpty,
             customLLMState: customLLMManager.state,
+            customLLMStateByRepo: customLLMManager.stateByRepo,
+            customLLMHasActiveDownloadingRepos: !customLLMManager.activeDownloadRepos.isEmpty,
             ggufStateByID: ggufTranslationModelManager.stateByID,
             ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
         )

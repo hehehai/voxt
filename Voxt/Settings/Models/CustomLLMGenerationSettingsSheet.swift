@@ -23,14 +23,13 @@ struct CustomLLMGenerationSettingsSheet: View {
 
     private var thinkingOptions: [SettingsMenuOption<String>] {
         [
-            SettingsMenuOption(value: LLMThinkingMode.providerDefault.rawValue, title: customLLMLocalized("Model Default")),
             SettingsMenuOption(value: LLMThinkingMode.off.rawValue, title: customLLMLocalized("Off")),
             SettingsMenuOption(value: LLMThinkingMode.on.rawValue, title: customLLMLocalized("On"))
         ]
     }
 
     private var selectedThinkingTitle: String {
-        thinkingOptions.first(where: { $0.value == thinkingMode })?.title ?? customLLMLocalized("Model Default")
+        thinkingOptions.first(where: { $0.value == thinkingMode })?.title ?? customLLMLocalized("Off")
     }
 
     var body: some View {
@@ -133,7 +132,7 @@ struct CustomLLMGenerationSettingsSheet: View {
 
             SettingsDialogActionRow {
                 Button(customLLMLocalized("Reset to Default")) {
-                    applySettings(LLMGenerationSettings())
+                    applySettings(CustomLLMGenerationSettingsStore.defaultSettings)
                 }
                 .buttonStyle(SettingsPillButtonStyle())
             } trailing: {

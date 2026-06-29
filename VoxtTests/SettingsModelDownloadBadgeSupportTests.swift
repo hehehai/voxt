@@ -11,7 +11,7 @@ final class SettingsModelDownloadBadgeSupportTests: XCTestCase {
                 MLXModelManager.canonicalModelRepo("openai/whisper-tiny"),
                 MLXModelManager.canonicalModelRepo("mlx-community/FireRedASR")
             ],
-            customLLMState: .notDownloaded,
+            customLLMActiveDownloadRepos: [],
             ggufActiveDownloadModelID: nil
         )
 
@@ -23,10 +23,23 @@ final class SettingsModelDownloadBadgeSupportTests: XCTestCase {
             mlxActiveDownloadRepos: [
                 MLXModelManager.canonicalModelRepo("mlx-community/FireRedASR")
             ],
-            customLLMState: .notDownloaded,
+            customLLMActiveDownloadRepos: [],
             ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(count, 1)
+    }
+
+    func testActiveDownloadCountTracksConcurrentCustomLLMDownloads() {
+        let count = SettingsModelDownloadBadgeSupport.activeDownloadCount(
+            mlxActiveDownloadRepos: [],
+            customLLMActiveDownloadRepos: [
+                CustomLLMModelManager.canonicalModelRepo("mlx-community/Qwen3.5-4B-4bit"),
+                CustomLLMModelManager.canonicalModelRepo("mlx-community/LFM2-1.2B-4bit")
+            ],
+            ggufActiveDownloadModelID: nil
+        )
+
+        XCTAssertEqual(count, 2)
     }
 }

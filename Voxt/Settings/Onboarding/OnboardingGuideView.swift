@@ -83,8 +83,8 @@ struct OnboardingGuideView: View {
     ]
 
     private static let localLLMRepos = [
-        "mlx-community/gemma-2-2b-it-4bit",
-        "mlx-community/gemma-4-e2b-it-4bit"
+        "mlx-community/gemma-4-e2b-it-4bit",
+        "mlx-community/gemma-4-e4b-it-4bit"
     ]
 
     private static let defaultTranscriptionEnhancementPromptKey = """
@@ -1512,7 +1512,7 @@ private extension OnboardingGuideView {
                 syncFeatureSelections()
                 Task { await customLLMManager.downloadModel(repo: canonicalRepo) }
             },
-            onPause: { customLLMManager.pauseDownload() },
+            onPause: { customLLMManager.pauseDownload(repo: repo) },
             onCancel: { customLLMManager.cancelDownload(repo: repo) }
         )
     }
@@ -1962,12 +1962,11 @@ private extension OnboardingGuideView {
     }
 
     func customLLMDownloadStatus(for repo: String) -> ModelDownloadStatusSnapshot? {
-        guard customLLMManager.currentModelRepo == CustomLLMModelManager.canonicalModelRepo(repo) else { return nil }
-        switch customLLMManager.state {
+        switch customLLMManager.state(for: repo) {
         case .downloading, .paused:
             return ModelDownloadStatusSnapshot.fromCustomLLMState(
-                customLLMManager.state,
-                pauseMessage: customLLMManager.pausedStatusMessage
+                customLLMManager.state(for: repo),
+                pauseMessage: customLLMManager.pausedStatusMessage(for: repo)
             )
         default:
             return nil
@@ -1982,8 +1981,7 @@ private extension OnboardingGuideView {
     }
 
     func customLLMDownloadErrorMessage(for repo: String) -> String? {
-        guard CustomLLMModelManager.canonicalModelRepo(customLLMManager.currentModelRepo) == CustomLLMModelManager.canonicalModelRepo(repo),
-              case .error(let message) = customLLMManager.state
+        guard case .error(let message) = customLLMManager.state(for: repo)
         else { return nil }
         return message
     }

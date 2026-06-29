@@ -60,23 +60,12 @@ extension ModelSettingsView {
 
     func customLLMInstallSnapshot(for repo: String) -> LocalModelInstallSnapshot {
         let canonicalRepo = CustomLLMModelManager.canonicalModelRepo(repo)
-        let isInstalled = customLLMManager.isModelDownloaded(repo: canonicalRepo)
+        let catalogSnapshot = customLLMManager.catalogSnapshot(for: canonicalRepo)
+        let isInstalled = catalogSnapshot.isDownloaded
         let isUninstalling = isUninstallingCustomLLM(canonicalRepo)
         let target = LocalModelInstallTarget.customLLM(canonicalRepo)
-        let isDownloading = ModelDownloadStateRouting.isCustomLLMDownloading(
-            repo: canonicalRepo,
-            managerRepo: customLLMManager.currentModelRepo,
-            state: customLLMManager.state
-        )
-        let isPaused = ModelDownloadStateRouting.isCustomLLMPaused(
-            repo: canonicalRepo,
-            managerRepo: customLLMManager.currentModelRepo,
-            state: customLLMManager.state
-        ) || customLLMManager.hasResumableDownload(repo: canonicalRepo)
-        let isOperationTarget = ModelDownloadStateRouting.isCustomLLMOperationTarget(
-            repo: canonicalRepo,
-            managerRepo: customLLMManager.currentModelRepo
-        )
+        let isDownloading = catalogSnapshot.isDownloading
+        let isPaused = catalogSnapshot.isPaused
 
         let state: LocalModelInstallState
         if isUninstalling {
@@ -90,28 +79,17 @@ extension ModelSettingsView {
         } else if isInstalled {
             state = .installed
         } else {
-            state = .installable(isEnabled: !isAnotherCustomLLMDownloading(canonicalRepo))
+            state = .installable(isEnabled: true)
         }
 
         let resolvedDownloadStatus: ModelDownloadStatusSnapshot?
-        if isOperationTarget {
+        switch catalogSnapshot.state {
+        case .downloading, .paused:
             resolvedDownloadStatus = ModelDownloadStatusSnapshot.fromCustomLLMState(
-                customLLMManager.state,
-                pauseMessage: customLLMManager.pausedStatusMessage
+                catalogSnapshot.state,
+                pauseMessage: catalogSnapshot.pausedStatusMessage
             )
-        } else if isPaused {
-            resolvedDownloadStatus = ModelDownloadStatusSnapshot.fromCustomLLMState(
-                .paused(
-                    progress: 0,
-                    completed: 0,
-                    total: 0,
-                    currentFile: nil,
-                    completedFiles: 0,
-                    totalFiles: 0
-                ),
-                pauseMessage: AppLocalization.localizedString("Paused. Ready to continue.")
-            )
-        } else {
+        default:
             resolvedDownloadStatus = nil
         }
 
@@ -125,7 +103,8 @@ extension ModelSettingsView {
                 isCancelling: isCancellationPending(for: target),
                 isDownloading: isDownloading,
                 isPaused: isPaused,
-                isOperationTarget: isOperationTarget
+                state: catalogSnapshot.state,
+                pauseMessage: catalogSnapshot.pausedStatusMessage
             ),
             badgeText: customLLMBadgeText(for: canonicalRepo),
             downloadStatus: isCancellationPending(for: target) ? nil : resolvedDownloadStatus,
@@ -270,8 +249,8 @@ extension ModelSettingsView {
             useCustomLLM(repo)
         case (.customLLM(let repo), .install), (.customLLM(let repo), .resume):
             downloadCustomLLM(repo)
-        case (.customLLM, .pause):
-            customLLMManager.pauseDownload()
+        case (.customLLM(let repo), .pause):
+            customLLMManager.pauseDownload(repo: repo)
             refreshCatalogSnapshot()
         case (.customLLM(let repo), .cancel):
             cancellingInstallTargets.insert(.customLLM(repo))
@@ -408,7 +387,8 @@ extension ModelSettingsView {
         isCancelling: Bool,
         isDownloading: Bool,
         isPaused: Bool,
-        isOperationTarget: Bool
+        state: CustomLLMModelManager.ModelState,
+        pauseMessage: String?
     ) -> String {
         if isUninstalling {
             return AppLocalization.localizedString("Uninstalling…")
@@ -419,20 +399,19 @@ extension ModelSettingsView {
         }
 
         if isDownloading,
-           case .downloading(_, let completed, let total, _, _, _) = customLLMManager.state {
+           case .downloading(_, let completed, let total, _, _, _) = state {
             return ModelDownloadPresentationSupport.statusText(
                 downloadState: .downloading(completed: completed, total: total)
             )
         }
 
         if isPaused,
-           case .paused(_, let completed, let total, _, _, _) = customLLMManager.state,
-           isOperationTarget {
+           case .paused(_, let completed, let total, _, _, _) = state {
             return ModelDownloadPresentationSupport.statusText(
                 downloadState: .paused(
                     completed: completed,
                     total: total,
-                    pauseMessage: customLLMManager.pausedStatusMessage
+                    pauseMessage: pauseMessage
                 )
             )
         }
@@ -447,7 +426,7 @@ extension ModelSettingsView {
             )
         }
 
-        if isOperationTarget, case .error(let message) = customLLMManager.state {
+        if case .error(let message) = state {
             return ModelDownloadPresentationSupport.statusText(
                 downloadState: .idle,
                 errorMessage: message
@@ -465,15 +444,8 @@ extension ModelSettingsView {
             let snapshot = sherpaOnnxModelManager.catalogSnapshot(for: modelID)
             return snapshot.isDownloading || snapshot.isPaused
         case .customLLM(let repo):
-            return ModelDownloadStateRouting.isCustomLLMDownloading(
-                repo: repo,
-                managerRepo: customLLMManager.currentModelRepo,
-                state: customLLMManager.state
-            ) || ModelDownloadStateRouting.isCustomLLMPaused(
-                repo: repo,
-                managerRepo: customLLMManager.currentModelRepo,
-                state: customLLMManager.state
-            ) || customLLMManager.hasResumableDownload(repo: repo)
+            let snapshot = customLLMManager.catalogSnapshot(for: repo)
+            return snapshot.isDownloading || snapshot.isPaused
         case .ggufTranslation(let modelID):
             let state = ggufTranslationModelManager.state(for: modelID)
             if case .downloading = state {

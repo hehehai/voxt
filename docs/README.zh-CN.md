@@ -158,19 +158,18 @@ Whisper 相关说明：
 
 | 模型 | 仓库 ID | 大小 | 语言倾向 | 速度 | 推荐度 | 适合场景 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Qwen2 1.5B Instruct | `Qwen/Qwen2-1.5B-Instruct` | 1.5B | 中文 / 英文均衡 | 快 | 高 | 轻量文本清洗、简单翻译 |
-| Qwen2.5 3B Instruct | `Qwen/Qwen2.5-3B-Instruct` | 3B | 中文 / 英文均衡 | 中快 | 高 | 更稳的增强与格式整理 |
-| Qwen3 4B (4bit) | `mlx-community/Qwen3-4B-4bit` | 4B / 4bit | 中文 / 英文 / 多语言 | 中快 | 很高 | 本地增强、翻译的均衡选项 |
-| Qwen3 8B (4bit) | `mlx-community/Qwen3-8B-4bit` | 8B / 4bit | 中文 / 英文 / 多语言 | 中慢 | 很高 | 更强的改写、翻译和结构化输出 |
-| GLM-4 9B (4bit) | `mlx-community/GLM-4-9B-0414-4bit` | 9B / 4bit | 中文 / 英文 / 多语言 | 慢 | 很高 | 中文改写、复杂提示词场景 |
-| Llama 3.2 3B Instruct (4bit) | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 3B / 4bit | 英文优先，多语言可用 | 中快 | 中高 | 轻量本地改写 |
-| Llama 3.2 1B Instruct (4bit) | `mlx-community/Llama-3.2-1B-Instruct-4bit` | 1B / 4bit | 英文优先，多语言可用 | 很快 | 中 | 最省资源的本地增强 |
-| Meta Llama 3 8B Instruct (4bit) | `mlx-community/Meta-Llama-3-8B-Instruct-4bit` | 8B / 4bit | 英文优先，多语言可用 | 中慢 | 中高 | 通用增强、摘要、改写 |
-| Meta Llama 3.1 8B Instruct (4bit) | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | 8B / 4bit | 英文优先，多语言可用 | 中慢 | 高 | 比较稳妥的通用本地 LLM |
-| Mistral 7B Instruct v0.3 (4bit) | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 7B / 4bit | 英文 / 欧洲语系更强 | 中 | 高 | 简洁改写、格式修正 |
-| Mistral Nemo Instruct 2407 (4bit) | `mlx-community/Mistral-Nemo-Instruct-2407-4bit` | Nemo 系列 / 4bit | 英文优先，多语言可用 | 中慢 | 高 | 更复杂的本地增强任务 |
-| Gemma 2 2B IT (4bit) | `mlx-community/gemma-2-2b-it-4bit` | 2B / 4bit | 英文优先，多语言可用 | 快 | 中高 | 轻量文本整理 |
-| Gemma 2 9B IT (4bit) | `mlx-community/gemma-2-9b-it-4bit` | 9B / 4bit | 英文优先，多语言可用 | 慢 | 高 | 更高质量的本地润色与翻译 |
+| Qwen3.5 2B (4bit) | `mlx-community/Qwen3.5-2B-4bit` | 2B / 4bit | 中文 / 英文 / 多语言 | 快 | 高 | 轻量本地增强，输出更稳 |
+| Qwen3.5 4B OptiQ (4bit) | `mlx-community/Qwen3.5-4B-OptiQ-4bit` | 4B / 4bit | 中文 / 英文 / 多语言 | 中快 | 很高 | 默认本地增强、翻译均衡选项 |
+| Qwen3.5 9B OptiQ (4bit) | `mlx-community/Qwen3.5-9B-OptiQ-4bit` | 9B / 4bit | 中文 / 英文 / 多语言 | 中慢 | 很高 | 更强的改写、翻译和结构化输出 |
+| Qwen3 VL 4B Instruct (4bit) | `lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit` | 4B / 4bit | 中文 / 英文 / 视觉 | 中 | 高 | 本地图文上下文任务 |
+| GLM 4 9B | `mlx-community/GLM-4-9B-0414-4bit` | 9B / 4bit | 中文 / 英文 / 多语言 | 慢 | 很高 | 中文改写、复杂提示词场景 |
+| Mistral 3 3B | `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 3B / 4bit | 英文 / 欧洲语系 / 多语言 | 中快 | 高 | 轻量非 Qwen 本地清理 |
+| LFM2 1.2B (4bit) | `mlx-community/LFM2-1.2B-4bit` | 1.2B / 4bit | 英文优先 / 多语言 | 很快 | 中 | 极轻量本地生成 |
+| LFM2 8B A1B (3bit) | `mlx-community/LFM2-8B-A1B-3bit-MLX` | 8B-A1B / 3bit | 英文优先 / 多语言 | 中快 | 中高 | 紧凑 MoE 本地生成 |
+| Qwen3.6 27B (4bit) | `mlx-community/Qwen3.6-27B-4bit` | 27B / 4bit | 中文 / 英文 / 多语言 | 很慢 | 很高 | 大内存 Mac 高端本地生成 |
+| Gemma 4 E2B IT (4bit) | `mlx-community/gemma-4-e2b-it-4bit` | E2B / 4bit | 英文优先，多语言和视觉可用 | 快 | 中高 | 轻量非 Qwen 本地清理 |
+| Gemma 4 E4B IT (4bit) | `mlx-community/gemma-4-e4b-it-4bit` | E4B / 4bit | 英文优先，多语言和视觉可用 | 中 | 高 | 均衡的非 Qwen 本地润色与翻译 |
+| Gemma 4 12B IT OptiQ (4bit) | `mlx-community/gemma-4-12B-it-OptiQ-4bit` | 12B / 4bit | 英文优先，多语言和视觉可用 | 慢 | 高 | 更高质量的非 Qwen 本地生成 |
 
 本地 LLM 常见报错 / 状态：
 

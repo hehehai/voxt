@@ -9,6 +9,13 @@ final class ModelLogoKeyTests: XCTestCase {
         )
     }
 
+    func testLFMUsesLiquidLogo() {
+        XCTAssertEqual(
+            ModelLogoKey.resolve(title: "LFM2 1.2B (4bit)", engine: "Local LLM"),
+            .liquid
+        )
+    }
+
     func testFunASRNanoEntriesUseQwenLogo() {
         let selectionID = FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID)
         let catalogEntry = ModelCatalogEntry(

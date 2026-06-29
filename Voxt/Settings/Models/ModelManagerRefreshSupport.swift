@@ -18,6 +18,7 @@ struct ModelSettingsDownloadLifecycleToken: Equatable {
     let sherpaPhase: ModelSettingsManagerActivityPhase
     let sherpaActiveDownloadModelIDs: [String]
     let customLLMPhase: ModelSettingsManagerActivityPhase
+    let customLLMActiveDownloadRepos: [String]
     let ggufPhase: ModelSettingsManagerActivityPhase
     let ggufActiveDownloadModelID: String?
 }
@@ -55,6 +56,35 @@ enum ModelSettingsManagerRefreshSupport {
         case .error:
             return .error
         }
+    }
+
+    static func phase(for stateByRepo: [String: CustomLLMModelManager.ModelState]) -> ModelSettingsManagerActivityPhase {
+        if stateByRepo.values.contains(where: {
+            if case .downloading = $0 { return true }
+            return false
+        }) {
+            return .downloading
+        }
+
+        if stateByRepo.values.contains(where: {
+            if case .paused = $0 { return true }
+            return false
+        }) {
+            return .paused
+        }
+
+        if stateByRepo.values.contains(where: {
+            if case .error = $0 { return true }
+            return false
+        }) {
+            return .error
+        }
+
+        if stateByRepo.values.contains(.downloaded) {
+            return .downloaded
+        }
+
+        return .idle
     }
 
     static func phase(for state: GGUFTranslationModelManager.ModelState) -> ModelSettingsManagerActivityPhase {
@@ -107,15 +137,21 @@ enum ModelSettingsManagerRefreshSupport {
         sherpaState: SherpaOnnxModelManager.ModelState,
         sherpaActiveDownloadModelIDs: Set<SherpaOnnxModelID>,
         customLLMState: CustomLLMModelManager.ModelState,
+        customLLMStateByRepo: [String: CustomLLMModelManager.ModelState],
+        customLLMActiveDownloadRepos: Set<String>,
         ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState],
         ggufActiveDownloadModelID: GGUFTranslationModelID?
     ) -> ModelSettingsDownloadLifecycleToken {
-        ModelSettingsDownloadLifecycleToken(
+        let customLLMPhase = customLLMActiveDownloadRepos.isEmpty
+            ? phase(for: customLLMStateByRepo)
+            : .downloading
+        return ModelSettingsDownloadLifecycleToken(
             mlxPhase: phase(for: mlxState),
             mlxActiveDownloadRepos: mlxActiveDownloadRepos.sorted(),
             sherpaPhase: phase(for: sherpaState),
             sherpaActiveDownloadModelIDs: sherpaActiveDownloadModelIDs.map(\.rawValue).sorted(),
-            customLLMPhase: phase(for: customLLMState),
+            customLLMPhase: customLLMPhase == .idle ? phase(for: customLLMState) : customLLMPhase,
+            customLLMActiveDownloadRepos: customLLMActiveDownloadRepos.sorted(),
             ggufPhase: phase(for: ggufStateByID),
             ggufActiveDownloadModelID: ggufActiveDownloadModelID?.rawValue
         )

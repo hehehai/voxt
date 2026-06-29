@@ -98,7 +98,7 @@ struct SettingsView: View {
             initialValue: SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
                 sherpaActiveDownloadModelIDs: sherpaOnnxModelManager.activeDownloadModelIDs,
-                customLLMState: customLLMManager.state,
+                customLLMActiveDownloadRepos: customLLMManager.activeDownloadRepos,
                 ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
             )
         )
@@ -419,14 +419,14 @@ struct SettingsView: View {
         Publishers.CombineLatest4(
             mlxModelManager.$activeDownloadRepos,
             sherpaOnnxModelManager.$activeDownloadModelIDs,
-            customLLMManager.$state,
+            customLLMManager.$activeDownloadRepos,
             ggufTranslationModelManager.$activeDownloadModelID
         )
-        .map { mlxActiveDownloadRepos, sherpaActiveDownloadModelIDs, customLLMState, ggufActiveDownloadModelID in
+        .map { mlxActiveDownloadRepos, sherpaActiveDownloadModelIDs, customLLMActiveDownloadRepos, ggufActiveDownloadModelID in
             SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxActiveDownloadRepos,
                 sherpaActiveDownloadModelIDs: sherpaActiveDownloadModelIDs,
-                customLLMState: customLLMState,
+                customLLMActiveDownloadRepos: customLLMActiveDownloadRepos,
                 ggufActiveDownloadModelID: ggufActiveDownloadModelID
             )
         }

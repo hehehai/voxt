@@ -26,6 +26,8 @@ enum ModelSettingsProgressRefreshSupport {
         sherpaOnnxStateByID: [SherpaOnnxModelID: MLXModelManager.ModelState],
         sherpaOnnxHasActiveDownloads: Bool,
         customLLMState: CustomLLMModelManager.ModelState,
+        customLLMStateByRepo: [String: CustomLLMModelManager.ModelState],
+        customLLMHasActiveDownloadingRepos: Bool,
         ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState],
         ggufActiveDownloadModelID: GGUFTranslationModelID?
     ) -> Bool {
@@ -49,7 +51,15 @@ enum ModelSettingsProgressRefreshSupport {
             return true
         }
 
+        if customLLMHasActiveDownloadingRepos {
+            return true
+        }
+
         if isCustomLLMStatePollingRequired(customLLMState) {
+            return true
+        }
+
+        if customLLMStateByRepo.values.contains(where: { isCustomLLMStatePollingRequired($0) }) {
             return true
         }
 

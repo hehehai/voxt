@@ -8,9 +8,19 @@ struct CustomLLMModelBehavior: Equatable {
     let family: CustomLLMModelFamily
     let disablesThinking: Bool
 
+    static let thinkingOffAdditionalContext: [String: any Sendable] = [
+        "enable_thinking": false,
+        "reasoning_effort": "low"
+    ]
+
+    static let thinkingOnAdditionalContext: [String: any Sendable] = [
+        "enable_thinking": true,
+        "reasoning_effort": "medium"
+    ]
+
     var additionalContext: [String: any Sendable]? {
         guard disablesThinking else { return nil }
-        return ["enable_thinking": false]
+        return Self.thinkingOffAdditionalContext
     }
 }
 
@@ -503,7 +513,7 @@ enum CustomLLMModelFamily: Equatable {
             return .glm4
         }
         if normalizedRepo.contains("llama") { return .llama }
-        if normalizedRepo.contains("mistral") { return .mistral }
+        if normalizedRepo.contains("mistral") || normalizedRepo.contains("ministral") { return .mistral }
         if normalizedRepo.contains("gemma") { return .gemma }
         return .other
     }
@@ -536,7 +546,7 @@ enum CustomLLMOutputSanitizer {
 struct CustomLLMModelCatalog {
     enum Visibility: String, Hashable {
         case visible
-        case hiddenCompat
+        case hiddenSupport
     }
 
     enum ReleaseStatus: String, Hashable {
@@ -558,66 +568,18 @@ struct CustomLLMModelCatalog {
         let tagKeys: [String]
     }
 
-    nonisolated static let defaultModelRepo = "Qwen/Qwen2-1.5B-Instruct"
+    nonisolated static let defaultModelRepo = "mlx-community/Qwen3.5-4B-OptiQ-4bit"
 
     nonisolated private static let compatibilityAliases: [String: String] = [
         "Qwen/Qwen3-8B-4bit": "mlx-community/Qwen3-8B-4bit",
         "Qwen/Qwen2.5-7B-Instruct": "mlx-community/Qwen2.5-7B-Instruct-4bit",
         "mlx-community/Qwen3.5-2B-MLX-4bit": "mlx-community/Qwen3.5-2B-4bit",
+        "mlx-community/Qwen3.5-0.8B-4bit-OptiQ": "mlx-community/Qwen3.5-0.8B-OptiQ-4bit",
     ]
 
     nonisolated private static let deprecatedSoonRepos: Set<String> = []
 
     nonisolated private static let visibleModels: [Option] = [
-        Option(
-            id: "Qwen/Qwen2-1.5B-Instruct",
-            title: "Qwen2 1.5B Instruct",
-            description: "General-purpose instruction model for prompt-based text cleanup.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "Qwen/Qwen2.5-3B-Instruct",
-            title: "Qwen2.5 3B Instruct",
-            description: "Larger instruction model with stronger reasoning and formatting quality.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
-            title: "Qwen2.5 VL 3B Instruct (4bit)",
-            description: "Compact Qwen vision-language model for local text-and-image context.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/Qwen3-0.6B-4bit",
-            title: "Qwen3 0.6B (4bit)",
-            description: "Smallest official Qwen3 local model for fast low-memory prompts.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/Qwen3-1.7B-4bit",
-            title: "Qwen3 1.7B (4bit)",
-            description: "Compact Qwen3 model with better quality than 0.6B while staying lightweight.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/Qwen3-4B-4bit",
-            title: "Qwen3 4B (4bit)",
-            description: "Balanced Qwen3 model for quality and performance.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/Qwen3-8B-4bit",
-            title: "Qwen3 8B (4bit)",
-            description: "Higher-quality Qwen3 model for stronger enhancement results.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
         Option(
             id: "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit",
             title: "Qwen3 VL 4B Instruct (4bit)",
@@ -629,20 +591,6 @@ struct CustomLLMModelCatalog {
             id: "mlx-community/Qwen3.5-2B-4bit",
             title: "Qwen3.5 2B (4bit)",
             description: "Official Qwen3.5 local model using the upstream-supported inference path.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/Qwen3.5-4B-4bit",
-            title: "Qwen3.5 4B (4bit)",
-            description: "Recommended Qwen3.5 upgrade for most home Macs with a strong quality-to-size balance.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/Qwen3.5-0.8B-4bit-OptiQ",
-            title: "Qwen3.5 0.8B OptiQ (4bit)",
-            description: "Ultra-light Qwen3.5 option for low-storage Macs that still benefits from mixed-precision OptiQ quantization.",
             visibility: .visible,
             releaseStatus: .new
         ),
@@ -662,80 +610,38 @@ struct CustomLLMModelCatalog {
         ),
         Option(
             id: "mlx-community/GLM-4-9B-0414-4bit",
-            title: "GLM-4 9B (4bit)",
+            title: "GLM 4 9B",
             description: "GLM-4 model variant with strong multilingual instruction following.",
             visibility: .visible,
             releaseStatus: .standard
         ),
         Option(
-            id: "mlx-community/glm-4-9b-chat-1m-4bit",
-            title: "GLM-4 9B Chat 1M (4bit)",
-            description: "Long-context GLM option that stays within home-Mac-friendly download size limits.",
+            id: "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+            title: "Mistral 3 3B",
+            description: "Current compact Mistral-family model for lightweight non-Qwen local generation.",
             visibility: .visible,
             releaseStatus: .new
         ),
         Option(
-            id: "mlx-community/GLM-Z1-9B-0414-4bit",
-            title: "GLM-Z1 9B (4bit)",
-            description: "Reasoning-oriented GLM variant that keeps bilingual quality while staying under the home-Mac size target.",
+            id: "mlx-community/LFM2-1.2B-4bit",
+            title: "LFM2 1.2B (4bit)",
+            description: "Very lightweight LFM2 model for low-memory local generation.",
             visibility: .visible,
             releaseStatus: .new
         ),
         Option(
-            id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
-            title: "Llama 3.2 3B Instruct (4bit)",
-            description: "Lightweight Llama 3.2 model for fast local enhancement.",
+            id: "mlx-community/LFM2-8B-A1B-3bit-MLX",
+            title: "LFM2 8B A1B (3bit)",
+            description: "Compact LFM2 MoE model with a small active-parameter footprint.",
             visibility: .visible,
-            releaseStatus: .standard
+            releaseStatus: .new
         ),
         Option(
-            id: "mlx-community/Llama-3.2-1B-Instruct-4bit",
-            title: "Llama 3.2 1B Instruct (4bit)",
-            description: "Smallest Llama 3.2 option with minimal memory footprint.",
+            id: "mlx-community/Qwen3.6-27B-4bit",
+            title: "Qwen3.6 27B (4bit)",
+            description: "High-end Qwen3.6 model for large-memory Macs and stronger local quality.",
             visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/Meta-Llama-3-8B-Instruct-4bit",
-            title: "Meta Llama 3 8B Instruct (4bit)",
-            description: "General-purpose 8B instruction model with strong quality.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
-            title: "Meta Llama 3.1 8B Instruct (4bit)",
-            description: "Refined 8B Llama 3.1 instruction model.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
-            title: "Mistral 7B Instruct v0.3 (4bit)",
-            description: "Reliable 7B instruction model for concise formatting tasks.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/Mistral-Nemo-Instruct-2407-4bit",
-            title: "Mistral Nemo Instruct 2407 (4bit)",
-            description: "Nemo-based Mistral model with improved instruction quality.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/gemma-2-2b-it-4bit",
-            title: "Gemma 2 2B IT (4bit)",
-            description: "Compact Gemma 2 instruction-tuned model.",
-            visibility: .visible,
-            releaseStatus: .standard
-        ),
-        Option(
-            id: "mlx-community/gemma-2-9b-it-4bit",
-            title: "Gemma 2 9B IT (4bit)",
-            description: "Higher-capacity Gemma 2 model for better quality output.",
-            visibility: .visible,
-            releaseStatus: .standard
+            releaseStatus: .new
         ),
         Option(
             id: "mlx-community/gemma-4-e2b-it-4bit",
@@ -752,76 +658,239 @@ struct CustomLLMModelCatalog {
             releaseStatus: .new
         ),
         Option(
-            id: "mlx-community/Phi-3.5-mini-instruct-4bit",
-            title: "Phi 3.5 Mini Instruct (4bit)",
-            description: "Compact Phi 3.5 model suitable for lightweight local generation tasks.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/internlm2_5-7b-chat-4bit",
-            title: "InternLM2.5 7B Chat (4bit)",
-            description: "Chinese-friendly 7B chat model that adds a strong new bilingual option for home Macs.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/MiniCPM4-8B-4bit",
-            title: "MiniCPM4 8B (4bit)",
-            description: "Recommended MiniCPM family model with practical size and strong bilingual general-purpose quality.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/granite-3.3-2b-instruct-4bit",
-            title: "Granite 3.3 2B Instruct (4bit)",
-            description: "Compact IBM Granite model for structured local text generation.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/MiMo-7B-SFT-4bit",
-            title: "MiMo 7B SFT (4bit)",
-            description: "MiMo family model newly supported by upstream MLX Swift LM.",
-            visibility: .visible,
-            releaseStatus: .new
-        ),
-        Option(
-            id: "mlx-community/AceReason-Nemotron-7B-4bit",
-            title: "AceReason Nemotron 7B (4bit)",
-            description: "Nemotron-based reasoning model now available in the official upstream path.",
+            id: "mlx-community/gemma-4-12B-it-OptiQ-4bit",
+            title: "Gemma 4 12B IT OptiQ (4bit)",
+            description: "High-end Gemma 4 unified multimodal model for stronger local quality on higher-memory Macs.",
             visibility: .visible,
             releaseStatus: .new
         ),
     ]
 
-    nonisolated private static let hiddenCompatibilityModels: [Option] = [
+    nonisolated private static let hiddenSupportModels: [Option] = [
+        Option(
+            id: "Qwen/Qwen2-1.5B-Instruct",
+            title: "Qwen2 1.5B Instruct",
+            description: "Compatibility-only Qwen2 model preserved for existing selections.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "Qwen/Qwen2.5-3B-Instruct",
+            title: "Qwen2.5 3B Instruct",
+            description: "Compatibility-only Qwen2.5 model preserved for existing selections.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+            title: "Qwen2.5 VL 3B Instruct (4bit)",
+            description: "Compatibility-only Qwen2.5 vision-language model hidden behind the Qwen3 VL entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
         Option(
             id: "mlx-community/Qwen2.5-7B-Instruct-4bit",
             title: "Qwen2.5 7B Instruct (4bit)",
             description: "Compatibility-only official Qwen2.5 model preserved for existing selections.",
-            visibility: .hiddenCompat,
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Qwen3-0.6B-4bit",
+            title: "Qwen3 0.6B (4bit)",
+            description: "Compatibility-only Qwen3 model hidden behind the Qwen3.5 lineup.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Qwen3-1.7B-4bit",
+            title: "Qwen3 1.7B (4bit)",
+            description: "Compatibility-only Qwen3 model hidden behind the Qwen3.5 lineup.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Qwen3-4B-4bit",
+            title: "Qwen3 4B (4bit)",
+            description: "Compatibility-only Qwen3 model hidden behind the Qwen3.5 4B entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Qwen3-8B-4bit",
+            title: "Qwen3 8B (4bit)",
+            description: "Compatibility-only Qwen3 model hidden behind the Qwen3.5 9B entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Qwen3.5-4B-4bit",
+            title: "Qwen3.5 4B (4bit)",
+            description: "Compatibility-only plain 4bit Qwen3.5 4B variant hidden behind the OptiQ default.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit",
+            title: "Qwen3.5 0.8B OptiQ (4bit)",
+            description: "Compatibility-only ultra-light Qwen3.5 model hidden behind the Qwen3.5 2B entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/gemma-2-2b-it-4bit",
+            title: "Gemma 2 2B IT (4bit)",
+            description: "Compatibility-only Gemma 2 model preserved for existing selections.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/gemma-2-9b-it-4bit",
+            title: "Gemma 2 9B IT (4bit)",
+            description: "Compatibility-only Gemma 2 model preserved for existing selections.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/gemma-3-1b-it-qat-4bit",
+            title: "Gemma 3 1B IT QAT (4bit)",
+            description: "Compatibility-only Gemma 3 model hidden behind the current Gemma 4 lineup.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/gemma-3n-E2B-it-lm-4bit",
+            title: "Gemma 3n E2B IT LM (4bit)",
+            description: "Compatibility-only Gemma 3n model hidden behind the current Gemma 4 lineup.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/gemma-3n-E4B-it-lm-4bit",
+            title: "Gemma 3n E4B IT LM (4bit)",
+            description: "Compatibility-only Gemma 3n model hidden behind the current Gemma 4 lineup.",
+            visibility: .hiddenSupport,
             releaseStatus: .standard
         ),
         Option(
             id: "mlx-community/Qwen3-30B-A3B-4bit",
             title: "Qwen3 30B A3B (4bit)",
             description: "Compatibility-only Qwen3 MoE model hidden from the main picker because its download size is too large for most home Macs.",
-            visibility: .hiddenCompat,
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/glm-4-9b-chat-1m-4bit",
+            title: "GLM-4 9B Chat 1M (4bit)",
+            description: "Compatibility-only long-context GLM model hidden behind the standard GLM 4 9B entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/GLM-Z1-9B-0414-4bit",
+            title: "GLM-Z1 9B (4bit)",
+            description: "Compatibility-only reasoning-oriented GLM model hidden behind the standard GLM 4 9B entry.",
+            visibility: .hiddenSupport,
             releaseStatus: .standard
         ),
         Option(
             id: "mlx-community/GLM-4.7-Flash-4bit",
             title: "GLM-4.7 Flash (4bit)",
             description: "Compatibility-only GLM model hidden from the main picker because its download size is too large for most home Macs.",
-            visibility: .hiddenCompat,
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
+            title: "Llama 3.2 3B Instruct (4bit)",
+            description: "Compatibility-only Llama model hidden behind the current Qwen3.5 and Gemma lineup.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Llama-3.2-1B-Instruct-4bit",
+            title: "Llama 3.2 1B Instruct (4bit)",
+            description: "Compatibility-only Llama model hidden behind the Qwen3.5 2B entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Meta-Llama-3-8B-Instruct-4bit",
+            title: "Meta Llama 3 8B Instruct (4bit)",
+            description: "Compatibility-only Llama 3 model preserved for existing selections.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+            title: "Meta Llama 3.1 8B Instruct (4bit)",
+            description: "Compatibility-only Llama 3.1 model preserved for existing selections.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+            title: "Mistral 7B Instruct v0.3 (4bit)",
+            description: "Compatibility-only older Mistral model hidden behind the Mistral 3 3B entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Mistral-Nemo-Instruct-2407-4bit",
+            title: "Mistral Nemo Instruct 2407 (4bit)",
+            description: "Compatibility-only Mistral Nemo model hidden behind the Mistral 3 3B entry.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/Phi-3.5-mini-instruct-4bit",
+            title: "Phi 3.5 Mini Instruct (4bit)",
+            description: "Compatibility-only Phi model hidden behind the current Qwen3.5 and Gemma lineup.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/internlm2_5-7b-chat-4bit",
+            title: "InternLM2.5 7B Chat (4bit)",
+            description: "Compatibility-only InternLM model hidden behind the current Qwen3.5 and GLM entries.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/MiniCPM4-8B-4bit",
+            title: "MiniCPM4 8B (4bit)",
+            description: "Compatibility-only MiniCPM model hidden behind the current Qwen3.5 and GLM entries.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/granite-3.3-2b-instruct-4bit",
+            title: "Granite 3.3 2B Instruct (4bit)",
+            description: "Compatibility-only Granite model hidden from the main picker.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/MiMo-7B-SFT-4bit",
+            title: "MiMo 7B SFT (4bit)",
+            description: "Compatibility-only MiMo model kept for existing selections and installed models.",
+            visibility: .hiddenSupport,
+            releaseStatus: .standard
+        ),
+        Option(
+            id: "mlx-community/AceReason-Nemotron-7B-4bit",
+            title: "AceReason Nemotron 7B (4bit)",
+            description: "Compatibility-only reasoning model kept for existing selections and installed models.",
+            visibility: .hiddenSupport,
             releaseStatus: .standard
         ),
     ]
 
-    nonisolated static let availableModels: [Option] = visibleModels
+    nonisolated private static let allModels: [Option] = visibleModels + hiddenSupportModels
 
-    nonisolated static let supportedModels: [Option] = visibleModels + hiddenCompatibilityModels
+    nonisolated static let availableModels: [Option] = allModels.filter { $0.visibility == .visible }
+
+    nonisolated static let supportedModels: [Option] = allModels
 
     nonisolated private static let presentationByRepo: [String: PresentationMetadata] = [
         "Qwen/Qwen2-1.5B-Instruct": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
@@ -834,7 +903,7 @@ struct CustomLLMModelCatalog {
         "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Balanced", "Vision"]),
         "mlx-community/Qwen3.5-2B-4bit": PresentationMetadata(ratingText: "4.3", tagKeys: ["Fast"]),
         "mlx-community/Qwen3.5-4B-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Balanced"]),
-        "mlx-community/Qwen3.5-0.8B-4bit-OptiQ": PresentationMetadata(ratingText: "4.1", tagKeys: ["Fast"]),
+        "mlx-community/Qwen3.5-0.8B-OptiQ-4bit": PresentationMetadata(ratingText: "4.1", tagKeys: ["Fast"]),
         "mlx-community/Qwen3.5-4B-OptiQ-4bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Balanced"]),
         "mlx-community/Qwen3.5-9B-OptiQ-4bit": PresentationMetadata(ratingText: "4.9", tagKeys: ["Accurate"]),
         "mlx-community/GLM-4-9B-0414-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
@@ -844,12 +913,17 @@ struct CustomLLMModelCatalog {
         "mlx-community/Llama-3.2-1B-Instruct-4bit": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
         "mlx-community/Meta-Llama-3-8B-Instruct-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
         "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Accurate"]),
+        "mlx-community/Ministral-3-3B-Instruct-2512-4bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Balanced", "Vision"]),
         "mlx-community/Mistral-7B-Instruct-v0.3-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Balanced"]),
         "mlx-community/Mistral-Nemo-Instruct-2407-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
         "mlx-community/gemma-2-2b-it-4bit": PresentationMetadata(ratingText: "4.1", tagKeys: ["Fast"]),
         "mlx-community/gemma-2-9b-it-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
         "mlx-community/gemma-4-e2b-it-4bit": PresentationMetadata(ratingText: "4.3", tagKeys: ["Fast", "Vision"]),
         "mlx-community/gemma-4-e4b-it-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Balanced", "Vision"]),
+        "mlx-community/gemma-4-12B-it-OptiQ-4bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Accurate", "Vision"]),
+        "mlx-community/gemma-3-1b-it-qat-4bit": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
+        "mlx-community/gemma-3n-E2B-it-lm-4bit": PresentationMetadata(ratingText: "4.2", tagKeys: ["Fast"]),
+        "mlx-community/gemma-3n-E4B-it-lm-4bit": PresentationMetadata(ratingText: "4.4", tagKeys: ["Balanced"]),
         "mlx-community/Phi-3.5-mini-instruct-4bit": PresentationMetadata(ratingText: "4.2", tagKeys: ["Fast"]),
         "mlx-community/internlm2_5-7b-chat-4bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Accurate"]),
         "mlx-community/MiniCPM4-8B-4bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Accurate"]),
@@ -859,16 +933,24 @@ struct CustomLLMModelCatalog {
         "mlx-community/Qwen2.5-7B-Instruct-4bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Balanced"]),
         "mlx-community/Qwen3-30B-A3B-4bit": PresentationMetadata(ratingText: "4.9", tagKeys: ["Accurate"]),
         "mlx-community/GLM-4.7-Flash-4bit": PresentationMetadata(ratingText: "4.8", tagKeys: ["Accurate"]),
+        "mlx-community/LFM2-1.2B-4bit": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
+        "mlx-community/LFM2-8B-A1B-3bit-MLX": PresentationMetadata(ratingText: "4.4", tagKeys: ["Balanced"]),
+        "mlx-community/Qwen3.6-27B-4bit": PresentationMetadata(ratingText: "4.9", tagKeys: ["Accurate"]),
     ]
 
     nonisolated private static let knownRemoteSizeBytesByRepo: [String: Int64] = [
         "Qwen/Qwen2-1.5B-Instruct": 3_098_962_420,
         "Qwen/Qwen2.5-3B-Instruct": 6_183_464_935,
         "mlx-community/Qwen2.5-VL-3B-Instruct-4bit": 3_900_000_000,
+        "mlx-community/Qwen2.5-7B-Instruct-4bit": 4_284_346_255,
+        "mlx-community/Qwen3-0.6B-4bit": 682_323_786,
+        "mlx-community/Qwen3-1.7B-4bit": 979_502_864,
         "mlx-community/Qwen3-4B-4bit": 2_278_972_183,
         "mlx-community/Qwen3-8B-4bit": 4_623_784_971,
+        "mlx-community/Qwen3-30B-A3B-4bit": 17_186_203_322,
         "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit": 4_900_000_000,
-        "mlx-community/Qwen3.5-0.8B-4bit-OptiQ": 598_000_000,
+        "mlx-community/Qwen3.5-0.8B-OptiQ-4bit": 886_118_292,
+        "mlx-community/Qwen3.5-2B-4bit": 1_742_261_128,
         "mlx-community/Qwen3.5-4B-4bit": 3_060_000_000,
         "mlx-community/Qwen3.5-4B-OptiQ-4bit": 2_970_000_000,
         "mlx-community/Qwen3.5-9B-OptiQ-4bit": 6_040_000_000,
@@ -880,12 +962,26 @@ struct CustomLLMModelCatalog {
         "mlx-community/Llama-3.2-1B-Instruct-4bit": 712_593_855,
         "mlx-community/Meta-Llama-3-8B-Instruct-4bit": 5_281_878_323,
         "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit": 4_526_698_444,
+        "mlx-community/Ministral-3-3B-Instruct-2512-4bit": 2_745_210_934,
         "mlx-community/Mistral-7B-Instruct-v0.3-4bit": 4_080_222_853,
         "mlx-community/Mistral-Nemo-Instruct-2407-4bit": 6_905_203_123,
+        "mlx-community/Phi-3.5-mini-instruct-4bit": 2_150_195_856,
         "mlx-community/internlm2_5-7b-chat-4bit": 4_350_000_000,
         "mlx-community/MiniCPM4-8B-4bit": 4_610_000_000,
+        "mlx-community/granite-3.3-2b-instruct-4bit": 1_425_458_043,
+        "mlx-community/MiMo-7B-SFT-4bit": 4_300_000_274,
+        "mlx-community/AceReason-Nemotron-7B-4bit": 4_295_769_570,
         "mlx-community/gemma-2-2b-it-4bit": 1_492_852_888,
         "mlx-community/gemma-2-9b-it-4bit": 5_217_089_310,
+        "mlx-community/gemma-3-1b-it-qat-4bit": 732_577_304,
+        "mlx-community/gemma-3n-E2B-it-lm-4bit": 2_507_515_399,
+        "mlx-community/gemma-3n-E4B-it-lm-4bit": 3_863_598_176,
+        "mlx-community/gemma-4-e2b-it-4bit": 3_581_101_896,
+        "mlx-community/gemma-4-e4b-it-4bit": 5_217_361_182,
+        "mlx-community/gemma-4-12B-it-OptiQ-4bit": 8_964_644_918,
+        "mlx-community/LFM2-1.2B-4bit": 663_392_070,
+        "mlx-community/LFM2-8B-A1B-3bit-MLX": 4_176_559_875,
+        "mlx-community/Qwen3.6-27B-4bit": 16_081_490_064,
     ]
 
     nonisolated static func canonicalModelRepo(_ repo: String) -> String {
@@ -901,10 +997,14 @@ struct CustomLLMModelCatalog {
 
     nonisolated static func displayModels(including repo: String? = nil) -> [Option] {
         guard let repo else { return availableModels }
-        guard let option = option(for: repo), option.visibility == .hiddenCompat else {
-            return availableModels
+        return displayModels(includingInstalled: [repo])
+    }
+
+    nonisolated static func displayModels(includingInstalled repos: Set<String>) -> [Option] {
+        let canonicalRepos = Set(repos.map(canonicalModelRepo))
+        return supportedModels.filter { option in
+            option.visibility == .visible || canonicalRepos.contains(canonicalModelRepo(option.id))
         }
-        return availableModels + [option]
     }
 
     nonisolated static func displayTitle(for repo: String) -> String {

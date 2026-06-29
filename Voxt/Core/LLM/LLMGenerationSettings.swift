@@ -214,6 +214,8 @@ enum LLMProviderCapabilityRegistry {
 }
 
 enum CustomLLMGenerationSettingsStore {
+    static let defaultSettings = LLMGenerationSettings(thinking: .off)
+
     static func resolvedSettings(
         for repo: String,
         rawByRepo: String?,
@@ -232,7 +234,7 @@ enum CustomLLMGenerationSettingsStore {
               let data = rawValue.data(using: .utf8),
               let decoded = try? JSONDecoder().decode(LLMGenerationSettings.self, from: data)
         else {
-            return LLMGenerationSettings()
+            return defaultSettings
         }
         return sanitized(decoded)
     }
@@ -279,7 +281,7 @@ enum CustomLLMGenerationSettingsStore {
     }
 
     static func defaultStoredValue() -> String {
-        storageValue(for: LLMGenerationSettings())
+        storageValue(for: defaultSettings)
     }
 
     static func sanitized(_ settings: LLMGenerationSettings) -> LLMGenerationSettings {
@@ -301,7 +303,14 @@ enum CustomLLMGenerationSettingsStore {
         sanitized.extraOptionsJSON = ""
 
         switch settings.thinking.mode {
-        case .providerDefault, .off, .on:
+        case .providerDefault, .off:
+            sanitized.thinking = LLMThinkingSettings(
+                mode: .off,
+                effort: nil,
+                budgetTokens: nil,
+                exposeReasoning: false
+            )
+        case .on:
             sanitized.thinking = LLMThinkingSettings(
                 mode: settings.thinking.mode,
                 effort: nil,
