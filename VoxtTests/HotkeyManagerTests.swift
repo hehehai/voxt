@@ -1631,6 +1631,32 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(transcriptionDownCount, 2)
     }
 
+    func testBareKeyboardBindingDoesNotConsumeGlobalTyping() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: UInt16(kVK_ANSI_X),
+                    modifiers: [],
+                    sidedModifiers: []
+                ),
+                behavior: .doubleTap
+            )
+        ])
+
+        let manager = makeManager()
+        var transcriptionDownCount = 0
+        manager.onKeyDown = { transcriptionDownCount += 1 }
+
+        XCTAssertFalse(manager.testingHandleEvent(type: .keyDown, keyCode: UInt16(kVK_ANSI_X), flags: []))
+        XCTAssertFalse(manager.testingHandleEvent(type: .keyUp, keyCode: UInt16(kVK_ANSI_X), flags: []))
+        XCTAssertFalse(manager.testingHandleEvent(type: .keyDown, keyCode: UInt16(kVK_ANSI_X), flags: []))
+        XCTAssertFalse(manager.testingHandleEvent(type: .keyUp, keyCode: UInt16(kVK_ANSI_X), flags: []))
+
+        XCTAssertEqual(transcriptionDownCount, 0)
+    }
+
     func testTranscriptionBindingsKeepIndependentTriggerBehaviors() async {
         let defaults = UserDefaults.standard
         defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
@@ -1666,6 +1692,221 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: []))
 
         XCTAssertEqual(events, ["down:tap", "up:tap", "down:longPress", "up:longPress"])
+    }
+
+    func testFnTapTranscriptionStillWorksWithRightCommandLongPressBinding() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            ),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.command],
+                    sidedModifiers: [.rightCommand]
+                ),
+                behavior: .longPress
+            )
+        ])
+
+        let manager = makeManager()
+        var events: [String] = []
+        manager.onKeyDownWithBehavior = { events.append("down:\($0.rawValue)") }
+        manager.onKeyUpWithBehavior = { events.append("up:\($0.rawValue)") }
+
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: []))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: []))
+
+        XCTAssertEqual(events, ["down:tap", "down:longPress", "up:longPress"])
+    }
+
+    func testRightCommandLongPressReleaseWorksWithResidualGenericCommandFlag() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            ),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.command],
+                    sidedModifiers: [.rightCommand]
+                ),
+                behavior: .longPress
+            )
+        ])
+
+        let manager = makeManager()
+        var events: [String] = []
+        manager.onKeyDownWithBehavior = { events.append("down:\($0.rawValue)") }
+        manager.onKeyUpWithBehavior = { events.append("up:\($0.rawValue)") }
+
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: .maskCommand))
+
+        XCTAssertEqual(events, ["down:longPress", "up:longPress"])
+    }
+
+    func testRightCommandLongPressReleaseWorksWhenSidedFlagAlsoLingersButKeyIsUp() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            ),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.command],
+                    sidedModifiers: [.rightCommand]
+                ),
+                behavior: .longPress
+            )
+        ])
+
+        let manager = makeManager()
+        manager.testingSetModifierKeyStateProvider { _ in false }
+        var events: [String] = []
+        manager.onKeyDownWithBehavior = { events.append("down:\($0.rawValue)") }
+        manager.onKeyUpWithBehavior = { events.append("up:\($0.rawValue)") }
+
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+
+        XCTAssertEqual(events, ["down:longPress", "up:longPress"])
+    }
+
+    func testRightCommandLongPressReleaseIsNotClearedByIdleGapRecovery() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            ),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.command],
+                    sidedModifiers: [.rightCommand]
+                ),
+                behavior: .longPress
+            )
+        ])
+
+        let manager = makeManager()
+        var events: [String] = []
+        manager.onKeyDownWithBehavior = { events.append("down:\($0.rawValue)") }
+        manager.onKeyUpWithBehavior = { events.append("up:\($0.rawValue)") }
+
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+        manager.testingSetLastEventAt(Date().addingTimeInterval(-6))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: []))
+
+        XCTAssertEqual(events, ["down:longPress", "up:longPress"])
+    }
+
+    func testTranscriptionLongPressReleaseDoesNotEmitCommonStopWhenEnabled() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            ),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.command],
+                    sidedModifiers: [.rightCommand]
+                ),
+                behavior: .longPress
+            )
+        ])
+
+        let manager = makeManager()
+        var events: [String] = []
+        var commonStopCount = 0
+        manager.setCommonStopKeyEnabled(true)
+        manager.onKeyDownWithBehavior = { events.append("down:\($0.rawValue)") }
+        manager.onKeyUpWithBehavior = { events.append("up:\($0.rawValue)") }
+        manager.onCommonStopKeyDown = { commonStopCount += 1 }
+
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: []))
+
+        XCTAssertEqual(events, ["down:longPress", "up:longPress"])
+        XCTAssertEqual(commonStopCount, 0)
+    }
+
+    func testFnTapTranscriptionStillWorksWithRightCommandDoubleTapBinding() {
+        let defaults = UserDefaults.standard
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: AppPreferenceKey.hotkeyPreset)
+        defaults.set(true, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
+        HotkeyPreference.saveTranscriptionBindings([
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.function],
+                    sidedModifiers: []
+                ),
+                behavior: .tap
+            ),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.command],
+                    sidedModifiers: [.rightCommand]
+                ),
+                behavior: .doubleTap
+            )
+        ])
+
+        let manager = makeManager()
+        var events: [String] = []
+        manager.onKeyDownWithBehavior = { events.append("down:\($0.rawValue)") }
+
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: .maskSecondaryFn))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_Function), flags: []))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: []))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: commandFlags(for: .rightCommand)))
+        XCTAssertTrue(manager.testingHandleEvent(type: .flagsChanged, keyCode: UInt16(kVK_RightCommand), flags: []))
+
+        XCTAssertEqual(events, ["down:tap", "down:doubleTap"])
     }
 
     func testKeyboardChordWinsOverModifierOnlyTapPrefix() {

@@ -1958,6 +1958,7 @@
 "Context Off" = "上下文关";
 "ITN On" = "ITN 开";
 "ITN Off" = "ITN 关";
+"Keyboard shortcuts must include at least one modifier key." = "键盘快捷键必须至少包含一个修饰键。";
 "A workflow cannot use the same shortcut more than once." = "同一功能不能重复使用同一个快捷键。";
 "VAD Backend" = "VAD 后端";
 "Frame VAD" = "帧级 VAD";

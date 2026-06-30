@@ -492,6 +492,18 @@ nonisolated struct HotkeyPreference {
     static let defaultPreset: Preset = .fnCombo
     static let middleMouseButtonNumber = 2
 
+    static func isAllowedGlobalShortcut(_ hotkey: Hotkey) -> Bool {
+        switch hotkey.input {
+        case .keyboard(let keyCode):
+            if keyCode == modifierOnlyKeyCode {
+                return !hotkey.modifiers.isEmpty
+            }
+            return !hotkey.modifiers.isEmpty
+        case .mouseButton(let buttonNumber):
+            return buttonNumber >= middleMouseButtonNumber
+        }
+    }
+
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
             AppPreferenceKey.hotkeyInputType: Hotkey.Input.Kind.keyboard.rawValue,

@@ -7,6 +7,34 @@ import Carbon
 @testable import Voxt
 
 final class HotkeySettingsValidationTests: XCTestCase {
+    func testBareKeyboardShortcutReportsInvalidGlobalShortcut() {
+        let messages = HotkeySettingsValidation.messages(
+            for: .init(
+                transcriptionBindings: [.init(
+                    hotkey: HotkeyPreference.Hotkey(
+                        keyCode: UInt16(kVK_ANSI_X),
+                        modifiers: [],
+                        sidedModifiers: []
+                    ),
+                    behavior: .doubleTap
+                )],
+                translationBindings: [.init(
+                    hotkey: HotkeyPreference.Hotkey(
+                        keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                        modifiers: [.function, .shift],
+                        sidedModifiers: []
+                    ),
+                    behavior: .tap
+                )],
+                meetingBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 4), behavior: .tap)],
+                rewriteBindings: [.init(hotkey: HotkeyPreference.Hotkey(mouseButtonNumber: 5), behavior: .tap)],
+                customPasteHotkey: nil
+            )
+        )
+
+        XCTAssertTrue(messages.contains { $0.id == "invalid.transcription.0" })
+    }
+
     func testDoubleTapWakeSuppressesRewriteSpecificMessages() {
         let transcriptionHotkey = HotkeyPreference.Hotkey(
             keyCode: HotkeyPreference.modifierOnlyKeyCode,

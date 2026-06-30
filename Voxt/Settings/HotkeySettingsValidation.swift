@@ -79,6 +79,12 @@ struct HotkeySettingsValidation {
 
         for group in groups {
             for (index, binding) in group.bindings.enumerated() {
+                appendInvalidShortcutMessage(
+                    for: binding.hotkey,
+                    formatKey: group.title,
+                    id: "invalid.\(group.key).\(index)",
+                    to: &messages
+                )
                 appendConflictMessage(
                     for: binding.hotkey,
                     formatKey: group.title,
@@ -88,6 +94,12 @@ struct HotkeySettingsValidation {
             }
         }
         if let customPasteHotkey = state.customPasteHotkey {
+            appendInvalidShortcutMessage(
+                for: customPasteHotkey,
+                formatKey: "Custom paste shortcut: %@",
+                id: "invalid.customPaste",
+                to: &messages
+            )
             appendConflictMessage(
                 for: customPasteHotkey,
                 formatKey: "Custom paste shortcut: %@",
@@ -194,6 +206,22 @@ struct HotkeySettingsValidation {
     ) {
         guard let conflictMessage = conflictMessage(for: hotkey) else { return }
         messages.append(.init(id: id, text: AppLocalization.format(formatKey, conflictMessage)))
+    }
+
+    private static func appendInvalidShortcutMessage(
+        for hotkey: HotkeyPreference.Hotkey,
+        formatKey: String,
+        id: String,
+        to messages: inout [Message]
+    ) {
+        guard !HotkeyPreference.isAllowedGlobalShortcut(hotkey) else { return }
+        messages.append(.init(
+            id: id,
+            text: AppLocalization.format(
+                formatKey,
+                AppLocalization.localizedString("Keyboard shortcuts must include at least one modifier key.")
+            )
+        ))
     }
 
     private static func appendEqualityMessage(

@@ -1958,6 +1958,7 @@
 "Context Off" = "Context Off";
 "ITN On" = "ITN On";
 "ITN Off" = "ITN Off";
+"Keyboard shortcuts must include at least one modifier key." = "Keyboard shortcuts must include at least one modifier key.";
 "A workflow cannot use the same shortcut more than once." = "A workflow cannot use the same shortcut more than once.";
 "VAD Backend" = "VAD Backend";
 "Frame VAD" = "Frame VAD";

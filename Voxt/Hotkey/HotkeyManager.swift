@@ -229,6 +229,11 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
     private var activeCustomPasteBehavior: HotkeyPreference.TriggerBehavior?
     private var activeCustomPasteKeyCode: UInt16?
     private var activeCustomPasteMouseButtonNumber: Int?
+    private var activeTranscriptionBindingID: UUID?
+    private var activeTranslationBindingID: UUID?
+    private var activeRewriteBindingID: UUID?
+    private var activeMeetingBindingID: UUID?
+    private var activeCustomPasteBindingID: UUID?
     private var hasTranscriptionModifierTapCandidate = false
     private var hasTranslationModifierTapCandidate = false
     private var hasRewriteModifierTapCandidate = false
@@ -250,6 +255,9 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
     private var defaultsDidChangeObserver: NSObjectProtocol?
     private var cachedConfiguration: HotkeyRuntimeConfiguration?
     private var cachedRoutedBindings: [RoutedHotkeyBinding]?
+    private var modifierKeyStateProvider: (UInt16) -> Bool = { keyCode in
+        CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keyCode))
+    }
     private var dispatchCallbacksAsynchronously = true
     private let eventTapRecoveryQueue = DispatchQueue(label: "com.voxt.hotkey.eventTapRecovery")
     private let deferredEventProcessingQueue = DispatchQueue(label: "com.voxt.hotkey.deferredEventProcessing")
@@ -707,20 +715,22 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         for business: RoutedHotkeyBusiness,
         configuration: HotkeyRuntimeConfiguration
     ) -> [HotkeyPreference.HotkeyBinding] {
+        let resolved: [HotkeyPreference.HotkeyBinding]
         switch business {
         case .translation:
-            return configuration.translationBindings
+            resolved = configuration.translationBindings
         case .rewrite:
-            return configuration.rewriteBindings
+            resolved = configuration.rewriteBindings
         case .meeting:
-            return configuration.meetingBindings
+            resolved = configuration.meetingBindings
         case .customPaste:
-            return configuration.customPasteHotkey.map {
+            resolved = configuration.customPasteHotkey.map {
                 [HotkeyPreference.HotkeyBinding(hotkey: $0, behavior: .tap)]
             } ?? []
         case .transcription:
-            return configuration.transcriptionBindings
+            resolved = configuration.transcriptionBindings
         }
+        return resolved.filter { HotkeyPreference.isAllowedGlobalShortcut($0.hotkey) }
     }
 
     private func routedBindings(configuration: HotkeyRuntimeConfiguration) -> [RoutedHotkeyBinding] {
@@ -811,6 +821,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         let routedBindings = routedBindings(configuration: configuration)
         if handleActiveModifierOnlyLongPressRelease(
             type: type,
+            keyCode: keyCode,
             flags: flags,
             routedBindings: routedBindings,
             distinguishModifierSides: configuration.distinguishModifierSides
@@ -851,6 +862,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
 
     private func handleActiveModifierOnlyLongPressRelease(
         type: CGEventType,
+        keyCode: UInt16,
         flags: CGEventFlags,
         routedBindings: [RoutedHotkeyBinding],
         distinguishModifierSides: Bool
@@ -863,6 +875,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             guard binding.behavior == .longPress,
                   HotkeyModifierInterpreter.isModifierOnly(binding.hotkey),
                   activeBehavior(for: business) == .longPress,
+                  activeBindingID(for: business) == binding.id,
                   isBusinessKeyDown(business),
                   activeKeyCode(for: business) == nil,
                   activeMouseButtonNumber(for: business) == nil
@@ -870,13 +883,14 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
                 continue
             }
 
-            let comboIsDown = HotkeyPreference.hotkeyMatches(
-                binding.hotkey,
-                eventFlags: flags,
-                sidedModifiers: currentSidedModifiers,
+            guard modifierOnlyLongPressBindingIsReleased(
+                binding,
+                keyCode: keyCode,
+                flags: flags,
                 distinguishModifierSides: distinguishModifierSides
-            )
-            guard !comboIsDown else { continue }
+            ) else {
+                continue
+            }
 
             let wasPending = pendingModifierOnlyLongPressBindingID == binding.id
             cancelPendingModifierOnlyLongPressDown(except: nil, resetKeyState: false)
@@ -884,12 +898,45 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             if business != .meeting, !wasPending {
                 emitUp(for: business, behavior: binding.behavior)
             }
-            emitCommonStopIfNeeded(for: binding, business: business)
             setActiveBehavior(nil, for: business)
+            setActiveBindingID(nil, for: business)
             return true
         }
 
         return false
+    }
+
+    private func modifierOnlyLongPressBindingIsReleased(
+        _ binding: HotkeyPreference.HotkeyBinding,
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        distinguishModifierSides: Bool
+    ) -> Bool {
+        if distinguishModifierSides,
+           !binding.hotkey.sidedModifiers.isEmpty,
+           let changedModifier = SidedModifierFlags.fromModifierKeyCode(keyCode),
+           !changedModifier.sided.isEmpty,
+           binding.hotkey.sidedModifiers.contains(changedModifier.sided),
+           currentSidedModifiers.contains(changedModifier.sided) {
+            if !modifierKeyStateProvider(keyCode) ||
+               !SidedModifierFlags.from(eventFlags: flags).contains(changedModifier.sided) {
+                currentSidedModifiers.subtract(changedModifier.sided)
+                return true
+            }
+        } else if let changedModifier = SidedModifierFlags.fromModifierKeyCode(keyCode),
+                  changedModifier.sided.isEmpty,
+                  binding.hotkey.modifiers.contains(changedModifier.modifiers),
+                  !modifierKeyStateProvider(keyCode) {
+            return true
+        }
+
+        let comboIsDown = HotkeyPreference.hotkeyMatches(
+            binding.hotkey,
+            eventFlags: flags,
+            sidedModifiers: currentSidedModifiers,
+            distinguishModifierSides: distinguishModifierSides
+        )
+        return !comboIsDown
     }
 
     private func handleBindingRoutedMouseEvent(
@@ -907,6 +954,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
                 setActiveMouseButton(nil, for: business)
                 if business == .customPaste, binding.behavior == .tap {
                     setActiveBehavior(nil, for: business)
+                    setActiveBindingID(nil, for: business)
                     return true
                 }
                 completeBindingRelease(binding, business: business)
@@ -924,6 +972,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             case .otherMouseDown:
                 setActiveMouseButton(buttonNumber, for: business)
                 setActiveBehavior(binding.behavior, for: business)
+                setActiveBindingID(binding.id, for: business)
                 if binding.behavior == .tap {
                     emitDown(for: business, behavior: binding.behavior)
                 } else if binding.behavior == .longPress {
@@ -966,6 +1015,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             }
             setActiveKeyCode(keyCode, for: business)
             setActiveBehavior(binding.behavior, for: business)
+            setActiveBindingID(binding.id, for: business)
             switch binding.behavior {
             case .tap:
                 if business != .customPaste {
@@ -1034,6 +1084,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
                 shouldIgnoreNextFunctionTranscriptionRelease = false
                 setModifierTapCandidate(false, for: business)
                 setBusinessKeyDown(false, for: business)
+                setActiveBindingID(nil, for: business)
                 return true
             }
 
@@ -1043,6 +1094,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
                 cancelPendingModifierOnlyLongPressDown(except: binding.id, resetKeyState: true)
                 cancelLowerPriorityTranscriptionCandidateIfNeeded(for: business)
                 setActiveBehavior(binding.behavior, for: business)
+                setActiveBindingID(binding.id, for: business)
                 setModifierTapCandidate(true, for: business)
                 if binding.behavior == .tap {
                     setBusinessKeyDown(true, for: business)
@@ -1052,28 +1104,34 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
 
             if binding.behavior == .doubleTap,
                !comboIsDown,
+               activeBindingID(for: business) == binding.id,
                modifierTapCandidate(for: business) {
                 completeBindingRelease(binding, business: business)
                 setModifierTapCandidate(false, for: business)
                 setActiveBehavior(nil, for: business)
+                setActiveBindingID(nil, for: business)
                 return true
             }
 
-            if !comboIsDown, isBusinessKeyDown(business) {
+            if !comboIsDown,
+               isBusinessKeyDown(business),
+               activeBindingID(for: business) == binding.id {
                 if modifierTapCandidate(for: business) {
                     completeBindingRelease(binding, business: business)
                 }
                 setModifierTapCandidate(false, for: business)
                 setBusinessKeyDown(false, for: business)
                 setActiveBehavior(nil, for: business)
+                setActiveBindingID(nil, for: business)
                 return true
             }
-            return comboIsDown || isBusinessKeyDown(business)
+            return comboIsDown || (isBusinessKeyDown(business) && activeBindingID(for: business) == binding.id)
         case .longPress:
             if comboIsDown && !isBusinessKeyDown(business) {
                 cancelLowerPriorityTranscriptionCandidateIfNeeded(for: business)
                 setBusinessKeyDown(true, for: business)
                 setActiveBehavior(binding.behavior, for: business)
+                setActiveBindingID(binding.id, for: business)
                 if hasMoreSpecificModifierOnlyBinding(
                     than: binding,
                     in: allRoutedBindings,
@@ -1086,15 +1144,17 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
                 }
                 return true
             }
-            if !comboIsDown, isBusinessKeyDown(business) {
+            if !comboIsDown,
+               isBusinessKeyDown(business),
+               activeBindingID(for: business) == binding.id {
                 let wasPending = pendingModifierOnlyLongPressBindingID == binding.id
                 cancelPendingModifierOnlyLongPressDown(except: nil, resetKeyState: false)
                 setBusinessKeyDown(false, for: business)
                 if business != .meeting, !wasPending {
                     emitUp(for: business, behavior: binding.behavior)
                 }
-                emitCommonStopIfNeeded(for: binding, business: business)
                 setActiveBehavior(nil, for: business)
+                setActiveBindingID(nil, for: business)
                 return true
             }
             return comboIsDown
@@ -1156,7 +1216,8 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             guard let self else { return }
             self.withStateLock {
                 guard self.pendingModifierOnlyLongPressBindingID == binding.id,
-                      self.isBusinessKeyDown(business)
+                      self.isBusinessKeyDown(business),
+                      self.activeBindingID(for: business) == binding.id
                 else {
                     return
                 }
@@ -1186,6 +1247,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
 
         if resetKeyState, let business {
             setBusinessKeyDown(false, for: business)
+            setActiveBindingID(nil, for: business)
         }
     }
 
@@ -1212,7 +1274,6 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
                 setBusinessKeyDown(false, for: business)
                 emitUp(for: business, behavior: binding.behavior)
             }
-            emitCommonStopIfNeeded(for: binding, business: business)
         case .doubleTap:
             emitCommonStopIfNeeded(for: binding, business: business)
             if completeDoubleTap(for: binding.id) {
@@ -1220,6 +1281,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             }
         }
         setActiveBehavior(nil, for: business)
+        setActiveBindingID(nil, for: business)
     }
 
     @discardableResult
@@ -1228,6 +1290,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         business: RoutedHotkeyBusiness
     ) -> Bool {
         guard business == .transcription,
+              binding.behavior != .longPress,
               HotkeyModifierInterpreter.isModifierOnly(binding.hotkey),
               isCommonStopKeyEnabled
         else {
@@ -1266,6 +1329,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             isKeyDown = false
         }
         activeTranscriptionBehavior = nil
+        activeTranscriptionBindingID = nil
     }
 
     private func isBusinessKeyDown(_ business: RoutedHotkeyBusiness) -> Bool {
@@ -1325,6 +1389,36 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
             return activeCustomPasteBehavior
         case .transcription:
             return activeTranscriptionBehavior
+        }
+    }
+
+    private func setActiveBindingID(_ bindingID: UUID?, for business: RoutedHotkeyBusiness) {
+        switch business {
+        case .translation:
+            activeTranslationBindingID = bindingID
+        case .rewrite:
+            activeRewriteBindingID = bindingID
+        case .meeting:
+            activeMeetingBindingID = bindingID
+        case .customPaste:
+            activeCustomPasteBindingID = bindingID
+        case .transcription:
+            activeTranscriptionBindingID = bindingID
+        }
+    }
+
+    private func activeBindingID(for business: RoutedHotkeyBusiness) -> UUID? {
+        switch business {
+        case .translation:
+            return activeTranslationBindingID
+        case .rewrite:
+            return activeRewriteBindingID
+        case .meeting:
+            return activeMeetingBindingID
+        case .customPaste:
+            return activeCustomPasteBindingID
+        case .transcription:
+            return activeTranscriptionBindingID
         }
     }
 
@@ -1490,7 +1584,8 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         keyCode: UInt16
     ) {
         guard triggerMode == .tap,
-              let lastEventAt
+              let lastEventAt,
+              !hasActiveLongPressState
         else {
             return
         }
@@ -1524,6 +1619,14 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         sawUnexpectedModifierDuringFunctionChord ||
         shouldIgnoreNextFunctionTranscriptionRelease ||
         !currentSidedModifiers.isEmpty
+    }
+
+    private var hasActiveLongPressState: Bool {
+        (isKeyDown && activeTranscriptionBehavior == .longPress) ||
+        (isTranslationKeyDown && activeTranslationBehavior == .longPress) ||
+        (isRewriteKeyDown && activeRewriteBehavior == .longPress) ||
+        (isMeetingKeyDown && activeMeetingBehavior == .longPress) ||
+        (isCustomPasteKeyDown && activeCustomPasteBehavior == .longPress)
     }
 
     private func cancelPendingTranscriptionTap(resetKeyState: Bool) {
@@ -1661,6 +1764,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         activeMeetingBehavior = nil
         activeMeetingKeyCode = nil
         activeMeetingMouseButtonNumber = nil
+        activeMeetingBindingID = nil
         hasMeetingModifierTapCandidate = false
     }
 
@@ -1669,6 +1773,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         activeRewriteBehavior = nil
         activeRewriteKeyCode = nil
         activeRewriteMouseButtonNumber = nil
+        activeRewriteBindingID = nil
         hasRewriteModifierTapCandidate = false
     }
 
@@ -1677,6 +1782,7 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         activeCustomPasteBehavior = nil
         activeCustomPasteKeyCode = nil
         activeCustomPasteMouseButtonNumber = nil
+        activeCustomPasteBindingID = nil
         hasCustomPasteModifierTapCandidate = false
     }
 
@@ -1685,22 +1791,27 @@ nonisolated final class HotkeyManager: @unchecked Sendable {
         activeTranscriptionBehavior = nil
         activeKeyCode = nil
         activeMouseButtonNumber = nil
+        activeTranscriptionBindingID = nil
         isTranslationKeyDown = false
         activeTranslationBehavior = nil
         activeTranslationKeyCode = nil
         activeTranslationMouseButtonNumber = nil
+        activeTranslationBindingID = nil
         isRewriteKeyDown = false
         activeRewriteBehavior = nil
         activeRewriteKeyCode = nil
         activeRewriteMouseButtonNumber = nil
+        activeRewriteBindingID = nil
         isMeetingKeyDown = false
         activeMeetingBehavior = nil
         activeMeetingKeyCode = nil
         activeMeetingMouseButtonNumber = nil
+        activeMeetingBindingID = nil
         isCustomPasteKeyDown = false
         activeCustomPasteBehavior = nil
         activeCustomPasteKeyCode = nil
         activeCustomPasteMouseButtonNumber = nil
+        activeCustomPasteBindingID = nil
         hasTranscriptionModifierTapCandidate = false
         hasTranslationModifierTapCandidate = false
         hasRewriteModifierTapCandidate = false
@@ -1840,6 +1951,10 @@ extension HotkeyManager {
 
     func testingSetLastEventAt(_ date: Date?) {
         lastEventAt = date
+    }
+
+    func testingSetModifierKeyStateProvider(_ provider: @escaping (UInt16) -> Bool) {
+        modifierKeyStateProvider = provider
     }
 
     func testingTransientStateSnapshot() -> TransientStateSnapshot {

@@ -438,6 +438,13 @@ struct HotkeySettingsView: View {
                         isRecording: isRecordingBinding,
                         onCapture: { capturedHotkey in
                             guard let field = recordingField else { return }
+                            guard HotkeyPreference.isAllowedGlobalShortcut(capturedHotkey) else {
+                                pendingCapturedField = nil
+                                pendingCapturedHotkey = nil
+                                recordingField = nil
+                                showHotkeyToast(localized("Keyboard shortcuts must include at least one modifier key."))
+                                return
+                            }
                             pendingCapturedField = field
                             pendingCapturedHotkey = capturedHotkey
                             showHotkeyToast(localized("Shortcut captured. Press another shortcut to replace it, or choose Confirm / Cancel."))
@@ -611,6 +618,11 @@ struct HotkeySettingsView: View {
 
     private func confirmPendingCapture() {
         guard let field = pendingCapturedField, let hotkey = pendingCapturedHotkey else { return }
+        guard HotkeyPreference.isAllowedGlobalShortcut(hotkey) else {
+            discardPendingCapture()
+            showHotkeyToast(localized("Keyboard shortcuts must include at least one modifier key."))
+            return
+        }
 
         switch field {
         case .binding(let kind, let id):

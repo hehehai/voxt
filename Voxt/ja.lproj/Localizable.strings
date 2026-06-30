@@ -1916,6 +1916,7 @@
 "Context Off" = "コンテキストオフ";
 "ITN On" = "ITN オン";
 "ITN Off" = "ITN オフ";
+"Keyboard shortcuts must include at least one modifier key." = "キーボードショートカットには少なくとも 1 つの修飾キーが必要です。";
 "A workflow cannot use the same shortcut more than once." = "1 つの機能で同じショートカットを複数回使用することはできません。";
 "VAD Backend" = "VAD バックエンド";
 "Frame VAD" = "フレーム VAD";
