@@ -1,5 +1,6 @@
 import Foundation
 import CoreAudio
+import AVFoundation
 
 struct AudioInputDevice: Identifiable, Hashable, Sendable {
     let id: AudioDeviceID
@@ -143,6 +144,55 @@ enum AudioInputDeviceManager {
 
     static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
         snapshotAvailableInputDevices().contains(where: { $0.id == deviceID })
+    }
+
+    nonisolated static func nominalSampleRate(for deviceID: AudioDeviceID?) -> Double? {
+        guard let deviceID,
+              deviceID != AudioDeviceID(kAudioObjectUnknown)
+        else {
+            return nil
+        }
+
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var sampleRate = Float64(0)
+        var dataSize = UInt32(MemoryLayout<Float64>.size)
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &propertyAddress,
+            0,
+            nil,
+            &dataSize,
+            &sampleRate
+        )
+        guard status == noErr, sampleRate.isFinite, sampleRate > 0 else {
+            return nil
+        }
+        return sampleRate
+    }
+
+    nonisolated static func captureTapFormat(
+        nodeOutputFormat: AVAudioFormat,
+        hardwareSampleRate: Double?
+    ) -> AVAudioFormat {
+        guard let hardwareSampleRate,
+              hardwareSampleRate.isFinite,
+              hardwareSampleRate > 0,
+              abs(hardwareSampleRate - nodeOutputFormat.sampleRate) > 1
+        else {
+            return nodeOutputFormat
+        }
+
+        return AVAudioFormat(
+            commonFormat: nodeOutputFormat.commonFormat,
+            sampleRate: hardwareSampleRate,
+            channels: nodeOutputFormat.channelCount,
+            interleaved: nodeOutputFormat.isInterleaved
+        ) ?? nodeOutputFormat
     }
 
     static func makeDevicesObserver(onChange: @escaping @Sendable () -> Void) -> AudioInputDeviceObserver? {
