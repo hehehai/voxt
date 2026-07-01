@@ -140,7 +140,7 @@ final class EnhancementPromptResolverTests: XCTestCase {
         XCTAssertContains(output.content, "Xcode cleanup")
     }
 
-    func testAppGroupWithEmptyPromptSkipsEnhancementButKeepsMatchedContext() {
+    func testAppGroupWithEmptyPromptFallsBackToGlobalPromptAndKeepsMatchedContext() {
         let group = TestFactories.makeAppBranchGroup(
             name: "Xcode",
             prompt: "   ",
@@ -164,14 +164,15 @@ final class EnhancementPromptResolverTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(output.delivery, .skipEnhancement)
+        XCTAssertEqual(output.delivery, .userMessage)
         XCTAssertEqual(output.promptContext.matchedGroupID, group.id)
         XCTAssertEqual(output.promptContext.matchedAppGroupName, "Xcode")
-        XCTAssertEqual(output.source, .appGroupPromptDisabled(groupName: "Xcode", bundleID: "com.apple.dt.Xcode"))
-        XCTAssertEqual(output.content, "")
+        XCTAssertEqual(output.source, .appGroupFallback(groupName: "Xcode", bundleID: "com.apple.dt.Xcode"))
+        XCTAssertContains(output.content, "Global rewrite")
+        XCTAssertContains(output.content, "Other user languages: None.")
     }
 
-    func testBrowserURLMatchWithEmptyPromptSkipsEnhancementButKeepsMatchedContext() {
+    func testBrowserURLMatchWithEmptyPromptFallsBackToGlobalPromptAndKeepsMatchedContext() {
         let docsID = UUID()
         let docsGroup = TestFactories.makeAppBranchGroup(
             name: "Docs",
@@ -196,18 +197,19 @@ final class EnhancementPromptResolverTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(output.delivery, .skipEnhancement)
+        XCTAssertEqual(output.delivery, .userMessage)
         XCTAssertEqual(output.promptContext.matchedGroupID, docsGroup.id)
         XCTAssertEqual(output.promptContext.matchedURLGroupName, "Docs")
         XCTAssertEqual(
             output.source,
-            .urlGroupPromptDisabled(
+            .urlGroupFallback(
                 groupName: "Docs",
                 pattern: "example.com/docs/*",
                 url: "example.com/docs/page"
             )
         )
-        XCTAssertEqual(output.content, "")
+        XCTAssertContains(output.content, "Global fix this")
+        XCTAssertContains(output.content, "Other user languages: None.")
     }
 
     func testLanguagePreservationRulesTreatMainLanguageAsGuidanceOnly() {

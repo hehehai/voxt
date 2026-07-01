@@ -103,12 +103,12 @@ extension AppDelegate {
             VoxtLog.info("Enhancement prompt source: global/default (no group match), bundleID=\(bundleID ?? "nil")")
         case .appGroup(let groupName, let bundleID):
             VoxtLog.info("Enhancement prompt source: group(app) group=\(groupName), bundleID=\(bundleID)")
-        case .appGroupPromptDisabled(let groupName, let bundleID):
-            VoxtLog.info("Enhancement prompt skipped: matched app group has empty prompt. group=\(groupName), bundleID=\(bundleID)")
+        case .appGroupFallback(let groupName, let bundleID):
+            VoxtLog.info("Enhancement prompt source: global/default (matched app group has empty prompt), group=\(groupName), bundleID=\(bundleID)")
         case .urlGroup(let groupName, let pattern, let url):
             VoxtLog.info("Enhancement prompt source: group(url) group=\(groupName), pattern=\(pattern), url=\(url)")
-        case .urlGroupPromptDisabled(let groupName, let pattern, let url):
-            VoxtLog.info("Enhancement prompt skipped: matched url group has empty prompt. group=\(groupName), pattern=\(pattern), url=\(url)")
+        case .urlGroupFallback(let groupName, let pattern, let url):
+            VoxtLog.info("Enhancement prompt source: global/default (matched url group has empty prompt), group=\(groupName), pattern=\(pattern), url=\(url)")
         }
 
         return EnhancementPromptResolution(
@@ -291,20 +291,20 @@ extension AppDelegate {
         activeBrowserURL: String?
     ) -> OverlayEnhancementIconMatch? {
         switch source {
-        case .appGroup(_, let bundleID):
+        case .appGroup(_, let bundleID), .appGroupFallback(_, let bundleID):
             return OverlayEnhancementIconMatch(
                 kind: .app,
                 bundleID: bundleID,
                 urlOrigin: nil
             )
-        case .urlGroup:
+        case .urlGroup, .urlGroupFallback:
             guard let bundleID = frontmostBundleID else { return nil }
             return OverlayEnhancementIconMatch(
                 kind: .url,
                 bundleID: bundleID,
                 urlOrigin: EnhancementOverlayIconResolver.faviconOrigin(fromPageURL: activeBrowserURL)
             )
-        case .globalDefault, .appGroupPromptDisabled, .urlGroupPromptDisabled:
+        case .globalDefault:
             return nil
         }
     }

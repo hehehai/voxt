@@ -21,9 +21,9 @@ struct EnhancementPromptResolver {
     enum Source: Equatable {
         case globalDefault(GlobalFallbackReason)
         case appGroup(groupName: String, bundleID: String)
-        case appGroupPromptDisabled(groupName: String, bundleID: String)
+        case appGroupFallback(groupName: String, bundleID: String)
         case urlGroup(groupName: String, pattern: String, url: String)
-        case urlGroupPromptDisabled(groupName: String, pattern: String, url: String)
+        case urlGroupFallback(groupName: String, pattern: String, url: String)
     }
 
     struct PromptContext: Equatable {
@@ -124,15 +124,20 @@ struct EnhancementPromptResolver {
                 normalizedURL: normalizedActiveURL
             ) {
                 return Output(
-                    content: "",
-                    delivery: .skipEnhancement,
+                    content: resolvedPrompt(
+                        template: fallbackPrompt,
+                        rawTranscription: input.rawTranscription,
+                        userMainLanguagePromptValue: input.userMainLanguagePromptValue,
+                        userOtherLanguagesPromptValue: input.userOtherLanguagesPromptValue
+                    ),
+                    delivery: fallbackDelivery,
                     promptContext: PromptContext(
                         focusedAppName: input.focusedAppName,
                         matchedGroupID: match.groupID,
                         matchedAppGroupName: nil,
                         matchedURLGroupName: match.groupName
                     ),
-                    source: .urlGroupPromptDisabled(
+                    source: .urlGroupFallback(
                         groupName: match.groupName,
                         pattern: match.pattern,
                         url: normalizedActiveURL
@@ -166,15 +171,20 @@ struct EnhancementPromptResolver {
             }
 
             return Output(
-                content: "",
-                delivery: .skipEnhancement,
+                content: resolvedPrompt(
+                    template: fallbackPrompt,
+                    rawTranscription: input.rawTranscription,
+                    userMainLanguagePromptValue: input.userMainLanguagePromptValue,
+                    userOtherLanguagesPromptValue: input.userOtherLanguagesPromptValue
+                ),
+                delivery: fallbackDelivery,
                 promptContext: PromptContext(
                     focusedAppName: input.focusedAppName,
                     matchedGroupID: group.id,
                     matchedAppGroupName: group.name,
                     matchedURLGroupName: nil
                 ),
-                source: .appGroupPromptDisabled(groupName: group.name, bundleID: bundleID)
+                source: .appGroupFallback(groupName: group.name, bundleID: bundleID)
             )
         }
 
