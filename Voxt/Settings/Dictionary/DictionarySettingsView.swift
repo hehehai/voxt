@@ -41,10 +41,11 @@ struct DictionarySettingsView: View {
     @State private var pendingHistoryScanCount = 0
     @State private var dictionarySearchText = ""
     @State private var showDictionarySearchDialog = false
-    @State private var visibleEntries: [DictionaryEntry] = []
-    @State private var totalEntryCount = 0
-    @State private var isLoadingEntries = false
-    @State private var entryPageGeneration = 0
+    @State private var visibleReplacementEntries: [DictionaryEntry] = []
+    @State private var totalReplacementEntryCount = 0
+    @State private var isLoadingReplacementEntries = false
+    @State private var loadingReplacementEntriesQuery: String?
+    @State private var replacementEntryPageGeneration = 0
     @State private var suppressedStoreEntryReloadCount = 0
 
     private let entryPageSize = 80
@@ -137,18 +138,18 @@ struct DictionarySettingsView: View {
         .onChange(of: selectedTab) { _, newValue in
             if newValue == .replacements {
                 selectedHotwordCategoryID = nil
+                reloadReplacementEntries(reset: true)
             }
-            reloadDictionaryEntries(reset: true)
         }
         .onChange(of: dictionarySearchText) { _, _ in
-            reloadDictionaryEntries(reset: true)
+            reloadReplacementEntries(reset: true)
         }
         .onReceive(dictionaryStore.$entries) { _ in
             if suppressedStoreEntryReloadCount > 0 {
                 suppressedStoreEntryReloadCount -= 1
                 return
             }
-            reloadDictionaryEntries(reset: true)
+            reloadReplacementEntries(reset: true)
         }
         .alert(
             localized("Delete Dictionary Category?"),
@@ -162,14 +163,14 @@ struct DictionarySettingsView: View {
                     dictionaryStore.deleteCategory(id: pendingDeleteCategory.id, deleteEntries: false)
                 }
                 pendingDeleteCategory = nil
-                reloadDictionaryEntries(reset: true)
+                reloadReplacementEntries(reset: true)
             }
             Button(localized("Delete Terms Too"), role: .destructive) {
                 if let pendingDeleteCategory {
                     dictionaryStore.deleteCategory(id: pendingDeleteCategory.id, deleteEntries: true)
                 }
                 pendingDeleteCategory = nil
-                reloadDictionaryEntries(reset: true)
+                reloadReplacementEntries(reset: true)
             }
             Button(localized("Cancel"), role: .cancel) {
                 pendingDeleteCategory = nil
@@ -204,9 +205,9 @@ struct DictionarySettingsView: View {
             selectedTab: $selectedTab,
             selectedHotwordCategoryID: $selectedHotwordCategoryID,
             hotwordSections: dictionaryStore.hotwordEntriesByCategory(query: dictionarySearchText),
-            replacementEntries: selectedTab == .replacements ? visibleEntries : [],
+            replacementEntries: visibleReplacementEntries,
             searchText: dictionarySearchText,
-            isLoadingEntries: isLoadingEntries,
+            isLoadingEntries: selectedTab == .replacements && isLoadingReplacementEntries,
             onSearch: { showDictionarySearchDialog = true },
             onClearSearch: { dictionarySearchText = "" },
             onCreate: createDictionaryEntry,
@@ -315,34 +316,40 @@ struct DictionarySettingsView: View {
     private func reloadContentAsync() {
         dictionarySuggestionStore.reloadAsync()
         refreshLocalContentState()
-        reloadDictionaryEntries(reset: true)
+        reloadReplacementEntries(reset: true)
     }
 
-    private func reloadDictionaryEntries(reset: Bool) {
-        let offset = reset ? 0 : visibleEntries.count
-        guard reset || offset < totalEntryCount else { return }
-        guard reset || !isLoadingEntries else { return }
+    private func reloadReplacementEntries(reset: Bool) {
+        let offset = reset ? 0 : visibleReplacementEntries.count
+        guard reset || offset < totalReplacementEntryCount else { return }
+        guard reset || !isLoadingReplacementEntries else { return }
+        if reset,
+           isLoadingReplacementEntries,
+           loadingReplacementEntriesQuery == dictionarySearchText {
+            return
+        }
 
-        loadDictionaryEntries(offset: offset, limit: entryPageSize, reset: reset)
+        loadReplacementEntries(offset: offset, limit: entryPageSize, reset: reset)
     }
 
-    private func loadDictionaryEntries(offset: Int, limit: Int, reset: Bool) {
-        entryPageGeneration += 1
-        let generation = entryPageGeneration
-        let requiringReplacementTerms = selectedTab == .replacements
+    private func loadReplacementEntries(offset: Int, limit: Int, reset: Bool) {
+        replacementEntryPageGeneration += 1
+        let generation = replacementEntryPageGeneration
         let query = dictionarySearchText
-        isLoadingEntries = true
+        isLoadingReplacementEntries = true
+        loadingReplacementEntriesQuery = query
 
         dictionaryStore.loadEntries(
-            requiringReplacementTerms: requiringReplacementTerms,
+            requiringReplacementTerms: true,
             query: query,
             limit: limit,
             offset: offset
         ) { count, page in
-            guard generation == entryPageGeneration else { return }
-            totalEntryCount = count
-            visibleEntries = reset ? page : visibleEntries + page
-            isLoadingEntries = false
+            guard generation == replacementEntryPageGeneration else { return }
+            totalReplacementEntryCount = count
+            visibleReplacementEntries = reset ? page : visibleReplacementEntries + page
+            isLoadingReplacementEntries = false
+            loadingReplacementEntriesQuery = nil
         }
     }
 
@@ -362,21 +369,23 @@ struct DictionarySettingsView: View {
             return
         }
 
-        guard let removedIndex = visibleEntries.firstIndex(where: { $0.id == entry.id }) else {
-            reloadDictionaryEntries(reset: true)
+        guard !entry.replacementTerms.isEmpty else { return }
+
+        guard let removedIndex = visibleReplacementEntries.firstIndex(where: { $0.id == entry.id }) else {
+            reloadReplacementEntries(reset: true)
             return
         }
 
-        visibleEntries.remove(at: removedIndex)
-        totalEntryCount = max(0, totalEntryCount - 1)
+        visibleReplacementEntries.remove(at: removedIndex)
+        totalReplacementEntryCount = max(0, totalReplacementEntryCount - 1)
 
-        guard visibleEntries.count < totalEntryCount else { return }
-        loadDictionaryEntries(offset: visibleEntries.count, limit: 1, reset: false)
+        guard visibleReplacementEntries.count < totalReplacementEntryCount else { return }
+        loadReplacementEntries(offset: visibleReplacementEntries.count, limit: 1, reset: false)
     }
 
     private func refreshDictionaryEntriesAfterMutation() {
-        let retainedVisibleCount = max(entryPageSize, visibleEntries.count)
-        loadDictionaryEntries(offset: 0, limit: retainedVisibleCount, reset: true)
+        let retainedVisibleCount = max(entryPageSize, visibleReplacementEntries.count)
+        loadReplacementEntries(offset: 0, limit: retainedVisibleCount, reset: true)
     }
 
     private func refreshLocalContentState() {
@@ -523,7 +532,7 @@ struct DictionarySettingsView: View {
             let text = try String(contentsOf: url, encoding: .utf8)
             let result = try dictionaryStore.importTransferJSONString(text)
             refreshLocalContentState()
-            reloadDictionaryEntries(reset: true)
+            reloadReplacementEntries(reset: true)
             showDictionaryToast(AppLocalization.format(
                 "Imported %d terms and skipped %d duplicates.",
                 result.addedCount,

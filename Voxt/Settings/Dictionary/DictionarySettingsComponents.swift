@@ -35,7 +35,11 @@ struct DictionaryEntriesTabPicker: View {
         HStack(spacing: 2) {
             ForEach(DictionaryEntriesTab.allCases) { tab in
                 Button {
-                    selectedTab = tab
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        selectedTab = tab
+                    }
                 } label: {
                     Text(LocalizedStringKey(tab.titleKey))
                 }
