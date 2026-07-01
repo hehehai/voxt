@@ -12,6 +12,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
     case doubaoASR
     case aliyunBailianASR
     case stepFunASR
+    case xiaomiMiMoASR
 
     var id: String { rawValue }
 
@@ -33,6 +34,8 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("Aliyun Bailian ASR")
         case .stepFunASR:
             return AppLocalization.localizedString("StepFun")
+        case .xiaomiMiMoASR:
+            return AppLocalization.localizedString("Xiaomi MiMo")
         }
     }
 
@@ -40,7 +43,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .openAIWhisper, .glmASR:
             return true
-        case .dictation, .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR:
+        case .dictation, .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR:
             return false
         }
     }
@@ -57,7 +60,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppPromptDefaults.text(for: .openAIASRHint)
         case .glmASR:
             return AppPromptDefaults.text(for: .glmASRHint)
-        case .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR:
+        case .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR:
             return ""
         }
     }
@@ -80,6 +83,8 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("Aliyun ASR uses language hints derived from your selected user languages.")
         case .stepFunASR:
             return AppLocalization.localizedString("StepFun ASR uses language hints derived from your selected user languages.")
+        case .xiaomiMiMoASR:
+            return AppLocalization.localizedString("Xiaomi MiMo ASR uses auto, Chinese, or English language hints derived from your selected user language.")
         }
     }
 
@@ -87,7 +92,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .dictation:
             return AppLocalization.localizedString("Dictation Settings")
-        case .mlxAudio, .sherpaOnnx, .openAIWhisper, .glmASR, .doubaoASR, .aliyunBailianASR, .stepFunASR:
+        case .mlxAudio, .sherpaOnnx, .openAIWhisper, .glmASR, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR:
             return AppLocalization.localizedString("Engine Hint Settings")
         }
     }
@@ -112,6 +117,8 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
                 return .aliyunBailianASR
             case .stepFunASR:
                 return .stepFunASR
+            case .xiaomiMiMoASR:
+                return .xiaomiMiMoASR
             }
         }
     }
@@ -263,7 +270,7 @@ enum ASRHintSettingsStore {
             return .openAIASRHint
         case .glmASR:
             return .glmASRHint
-        case .dictation, .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR:
+        case .dictation, .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR:
             return .openAIASRHint
         }
     }

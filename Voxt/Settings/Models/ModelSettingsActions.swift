@@ -568,6 +568,8 @@ extension ModelSettingsView {
             return AppLocalization.localizedString("Doubao uses App ID + Access Token for streaming API.")
         case .aliyunBailianASR:
             return AppLocalization.localizedString("Aliyun ASR in Voxt uses realtime WebSocket only: Qwen models use /api-ws/v1/realtime, Fun/Paraformer models use /api-ws/v1/inference.")
+        case .xiaomiMiMoASR:
+            return AppLocalization.localizedString("Xiaomi MiMo ASR uses a MiMo API Key and the OpenAI-compatible chat completions audio endpoint.")
         case .openAIWhisper, .glmASR, .stepFunASR:
             return nil
         }

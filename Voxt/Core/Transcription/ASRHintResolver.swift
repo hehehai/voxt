@@ -119,6 +119,12 @@ enum ASRHintResolver {
                 otherLanguages: otherLanguages,
                 contextualPhrases: terms
             )
+        case .xiaomiMiMoASR:
+            return ResolvedASRHintPayload(
+                language: usesExplicitSingleLanguageHint ? resolvedXiaomiMiMoLanguage(mainLanguage) : "auto",
+                prompt: nil,
+                otherLanguages: otherLanguages
+            )
         }
     }
 
@@ -368,6 +374,15 @@ enum ASRHintResolver {
 
     private static func resolvedStepFunLanguage(_ language: UserMainLanguageOption) -> String {
         language.baseLanguageCode
+    }
+
+    private static func resolvedXiaomiMiMoLanguage(_ language: UserMainLanguageOption) -> String {
+        switch language.baseLanguageCode {
+        case "zh", "en":
+            return language.baseLanguageCode
+        default:
+            return "auto"
+        }
     }
 
     private static func resolvedMLXLanguage(mainLanguage: UserMainLanguageOption, modelRepo: String?) -> String? {

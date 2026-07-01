@@ -105,6 +105,19 @@ struct RemoteProviderConnectivityTester {
                 token: configuration.apiKey,
                 model: configuration.model.isEmpty ? RemoteASRProvider.stepFunASR.suggestedModel : configuration.model
             )
+        case .xiaomiMiMoASR:
+            guard !configuration.apiKey.isEmpty else {
+                throw NSError(
+                    domain: "Voxt.Settings",
+                    code: -8,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Xiaomi MiMo API Key is required for testing.")]
+                )
+            }
+            return try await testXiaomiMiMoASRReachability(
+                endpoint: RemoteProviderConnectivityTestEndpoints.resolvedXiaomiMiMoASREndpoint(configuration.endpoint),
+                apiKey: configuration.apiKey,
+                model: configuration.model.isEmpty ? RemoteASRProvider.xiaomiMiMoASR.suggestedModel : configuration.model
+            )
         }
     }
 
@@ -409,6 +422,25 @@ struct RemoteProviderConnectivityTester {
         ]
     }
 
+    private func testXiaomiMiMoASRReachability(
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async throws -> String {
+        let body = RemoteASRTextSupport.xiaomiMiMoASRPayload(
+            model: model,
+            audioData: silentTestWavData(),
+            mimeType: "audio/wav",
+            hintPayload: ResolvedASRHintPayload(language: "auto")
+        )
+        return try await testJSONPOSTReachability(
+            endpoint: endpoint,
+            headers: ["Authorization": "Bearer \(apiKey)"],
+            body: body,
+            successMessage: AppLocalization.localizedString("Connection test succeeded (Xiaomi MiMo ASR reachable).")
+        )
+    }
+
     private func makeASRTestMultipartBody(boundary: String, model: String) -> Data {
         var body = Data()
 
@@ -491,7 +523,7 @@ struct RemoteProviderConnectivityTester {
             }
             headers["Authorization"] = "Bearer \(configuration.apiKey)"
             return try await testMiniMaxReachability(endpoint: endpoint, headers: headers, model: model)
-        case .openAI, .codex, .ollama, .omlx, .deepseek, .openrouter, .grok, .zai, .volcengine, .kimi, .lmStudio, .aliyunBailian, .stepFun:
+        case .openAI, .codex, .ollama, .omlx, .deepseek, .openrouter, .grok, .zai, .volcengine, .kimi, .lmStudio, .aliyunBailian, .stepFun, .xiaomiMiMo:
             if !configuration.apiKey.isEmpty {
                 headers["Authorization"] = "Bearer \(configuration.apiKey)"
             }

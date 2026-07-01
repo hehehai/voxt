@@ -625,6 +625,27 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertTrue(capabilities.supportsResponseFormat)
     }
 
+    func testXiaomiMiMoUsesChatCompletionModelCatalogAndCapabilities() {
+        XCTAssertEqual(RemoteASRProvider.xiaomiMiMoASR.suggestedModel, "mimo-v2.5-asr")
+        XCTAssertEqual(RemoteASRProvider.xiaomiMiMoASR.modelOptions.map(\.id), ["mimo-v2.5-asr"])
+
+        XCTAssertEqual(RemoteLLMProvider.xiaomiMiMo.suggestedModel, "mimo-v2.5-pro")
+        XCTAssertFalse(RemoteLLMProvider.xiaomiMiMo.usesResponsesAPI)
+        XCTAssertFalse(RemoteLLMProvider.xiaomiMiMo.supportsHostedSearch)
+
+        let ids = RemoteLLMProvider.xiaomiMiMo.modelOptions.map(\.id)
+        XCTAssertTrue(ids.contains("mimo-v2.5-pro"))
+        XCTAssertTrue(ids.contains("mimo-v2.5"))
+
+        let capabilities = LLMProviderCapabilityRegistry.capabilities(for: .xiaomiMiMo)
+        XCTAssertTrue(capabilities.supportsThinkingToggle)
+        XCTAssertFalse(capabilities.supportsThinkingEffort)
+        XCTAssertFalse(capabilities.supportsThinkingBudget)
+        XCTAssertTrue(capabilities.supportsPenalties)
+        XCTAssertFalse(capabilities.supportsLogprobs)
+        XCTAssertTrue(capabilities.supportsResponseFormat)
+    }
+
     func testStepFunLLMConfigurationDefaultsThinkingToOff() {
         let resolved = RemoteModelConfigurationStore.resolvedLLMConfiguration(
             provider: .stepFun,

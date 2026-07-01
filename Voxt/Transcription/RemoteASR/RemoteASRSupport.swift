@@ -83,6 +83,56 @@ enum AliyunFunRealtimePayloadSupport {
 }
 
 enum RemoteASRTextSupport {
+    static func xiaomiMiMoASRPayload(
+        model: String,
+        audioData: Data,
+        mimeType: String,
+        hintPayload: ResolvedASRHintPayload,
+        stream: Bool = false
+    ) -> [String: Any] {
+        let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? RemoteASRProvider.xiaomiMiMoASR.suggestedModel
+            : model
+        let language = xiaomiMiMoLanguage(from: hintPayload.language)
+        let audioDataURI = "data:\(mimeType);base64,\(audioData.base64EncodedString())"
+
+        var payload: [String: Any] = [
+            "model": effectiveModel,
+            "messages": [
+                [
+                    "role": "user",
+                    "content": [
+                        [
+                            "type": "input_audio",
+                            "input_audio": [
+                                "data": audioDataURI
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            "asr_options": [
+                "language": language
+            ]
+        ]
+        if stream {
+            payload["stream"] = true
+        }
+        return payload
+    }
+
+    static func xiaomiMiMoLanguage(from language: String?) -> String {
+        let normalized = language?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        switch normalized {
+        case "zh", "en":
+            return normalized
+        default:
+            return "auto"
+        }
+    }
+
     static func openAITranscriptionMultipartFields(
         model: String,
         hintPayload: ResolvedASRHintPayload
@@ -688,8 +738,35 @@ enum RemoteASREndpointSupport {
         DoubaoASRConfiguration.resolvedStreamingEndpoint(configuration.endpoint, model: configuration.model)
     }
 
+    static func resolvedXiaomiMiMoASREndpoint(_ endpoint: String) -> String {
+        normalizedChatCompletionsEndpoint(
+            endpoint,
+            defaultValue: "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+    }
+
     private static func appendingPath(_ value: String, suffix: String) -> String {
         value.hasSuffix("/") ? value + suffix.dropFirst() : value + suffix
+    }
+
+    private static func normalizedChatCompletionsEndpoint(_ value: String, defaultValue: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return defaultValue }
+        guard let url = URL(string: trimmed) else { return trimmed }
+        let normalizedPath = url.path.lowercased()
+        if normalizedPath.hasSuffix("/chat/completions") {
+            return trimmed
+        }
+        if normalizedPath.hasSuffix("/models") {
+            return replacingPathSuffix(in: trimmed, oldSuffix: "/models", newSuffix: "/chat/completions")
+        }
+        if normalizedPath.hasSuffix("/v1") {
+            return appendingPath(trimmed, suffix: "/chat/completions")
+        }
+        if normalizedPath.isEmpty || normalizedPath == "/" {
+            return appendingPath(trimmed, suffix: "/v1/chat/completions")
+        }
+        return trimmed
     }
 
     private static func replacingPathSuffix(in value: String, oldSuffix: String, newSuffix: String) -> String {

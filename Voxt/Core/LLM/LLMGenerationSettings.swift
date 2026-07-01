@@ -190,6 +190,12 @@ enum LLMProviderCapabilityRegistry {
                 supportsLogprobs: true,
                 supportsResponseFormat: true
             )
+        case .xiaomiMiMo:
+            return LLMProviderCapabilities(
+                supportsThinkingToggle: true,
+                supportsPenalties: true,
+                supportsResponseFormat: true
+            )
         case .stepFun:
             return LLMProviderCapabilities(
                 supportsThinkingEffort: true,

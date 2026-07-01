@@ -39,6 +39,8 @@ extension RemoteLLMRuntimeClient {
             return "https://dashscope.aliyuncs.com/compatible-mode/v1/responses"
         case .stepFun:
             return "https://api.stepfun.com/v1/chat/completions"
+        case .xiaomiMiMo:
+            return "https://api.xiaomimimo.com/v1/chat/completions"
         }
     }
 
@@ -167,7 +169,7 @@ extension RemoteLLMRuntimeClient {
             if path.hasSuffix("/v1") { return appendingPath(base, suffix: "/chat/completions") }
             if path.isEmpty || path == "/" { return base }
             return base
-        case .omlx, .deepseek, .openrouter, .grok, .zai, .kimi, .lmStudio, .stepFun:
+        case .omlx, .deepseek, .openrouter, .grok, .zai, .kimi, .lmStudio, .stepFun, .xiaomiMiMo:
             if path.hasSuffix("/v1/chat/completions") || path.hasSuffix("/chat/completions") {
                 return base
             }

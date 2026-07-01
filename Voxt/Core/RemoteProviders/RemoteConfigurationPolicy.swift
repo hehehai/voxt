@@ -172,6 +172,10 @@ enum RemoteProviderConfigurationPolicy {
                     RemoteEndpointPreset(id: "aliyun-llm-ap-southeast-1", title: AppLocalization.localizedString("Singapore"), url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses"),
                     RemoteEndpointPreset(id: "aliyun-llm-us-east-1", title: AppLocalization.localizedString("US (Virginia)"), url: "https://dashscope-us.aliyuncs.com/compatible-mode/v1/responses")
                 ]
+            case .xiaomiMiMo:
+                return [
+                    RemoteEndpointPreset(id: "xiaomi-mimo-chat-completions", title: AppLocalization.localizedString("Default"), url: "https://api.xiaomimimo.com/v1/chat/completions")
+                ]
             case .volcengine:
                 return [
                     RemoteEndpointPreset(id: "volcengine-llm-cn-beijing", title: AppLocalization.localizedString("Beijing"), url: "https://ark.cn-beijing.volces.com/api/v3/responses")
@@ -209,6 +213,8 @@ enum RemoteProviderConfigurationPolicy {
                 return "https://..."
             case .stepFunASR:
                 return "https://api.stepfun.com/v1/audio/asr/sse"
+            case .xiaomiMiMoASR:
+                return "https://api.xiaomimimo.com/v1/chat/completions"
             }
         case .llm(let provider):
             return RemoteLLMRuntimeClient().resolvedLLMEndpoint(

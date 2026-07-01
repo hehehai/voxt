@@ -129,6 +129,10 @@ enum RemoteProviderConnectivityTestEndpoints {
         )
     }
 
+    static func resolvedXiaomiMiMoASREndpoint(_ endpoint: String) -> String {
+        RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint(endpoint)
+    }
+
     private static func replacingPathSuffix(in value: String, oldSuffix: String, newSuffix: String) -> String {
         guard value.lowercased().hasSuffix(oldSuffix) else { return value }
         return String(value.dropLast(oldSuffix.count)) + newSuffix

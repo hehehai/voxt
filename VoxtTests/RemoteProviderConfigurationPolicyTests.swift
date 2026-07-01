@@ -340,6 +340,26 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
         )
     }
 
+    func testXiaomiMiMoEndpointPresetsUseOfficialChatCompletionsAPI() {
+        let llmPresets = RemoteProviderConfigurationPolicy.endpointPresets(
+            target: .llm(.xiaomiMiMo),
+            resolvedModel: "mimo-v2.5-pro"
+        )
+
+        XCTAssertEqual(
+            llmPresets.map(\.url),
+            ["https://api.xiaomimimo.com/v1/chat/completions"]
+        )
+
+        XCTAssertEqual(
+            RemoteProviderConfigurationPolicy.endpointPlaceholder(
+                target: .asr(.xiaomiMiMoASR),
+                resolvedModel: "mimo-v2.5-asr"
+            ),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+    }
+
     func testStepFunSheetUsesDocumentedEffortControls() {
         let sheet = makeSheet(
             target: .llm(.stepFun),

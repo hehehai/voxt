@@ -163,4 +163,57 @@ final class RemoteASRSupportTests: XCTestCase {
             "wss://api.stepfun.com/v1/realtime/asr/stream"
         )
     }
+
+    func testXiaomiMiMoASRPayloadUsesChatAudioShapeAndLanguage() throws {
+        let payload = RemoteASRTextSupport.xiaomiMiMoASRPayload(
+            model: "",
+            audioData: Data([0x01, 0x02, 0x03]),
+            mimeType: "audio/wav",
+            hintPayload: ResolvedASRHintPayload(language: "zh")
+        )
+
+        XCTAssertEqual(payload["model"] as? String, "mimo-v2.5-asr")
+        XCTAssertNil(payload["stream"])
+
+        let options = try XCTUnwrap(payload["asr_options"] as? [String: Any])
+        XCTAssertEqual(options["language"] as? String, "zh")
+
+        let messages = try XCTUnwrap(payload["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.first?["role"] as? String, "user")
+
+        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "input_audio")
+
+        let inputAudio = try XCTUnwrap(content.first?["input_audio"] as? [String: Any])
+        XCTAssertEqual(inputAudio["data"] as? String, "data:audio/wav;base64,AQID")
+    }
+
+    func testXiaomiMiMoASRPayloadFallsBackToAutoForUnsupportedLanguage() throws {
+        let payload = RemoteASRTextSupport.xiaomiMiMoASRPayload(
+            model: "mimo-v2.5-asr",
+            audioData: Data([0x00]),
+            mimeType: "audio/wav",
+            hintPayload: ResolvedASRHintPayload(language: "ja"),
+            stream: true
+        )
+
+        let options = try XCTUnwrap(payload["asr_options"] as? [String: Any])
+        XCTAssertEqual(options["language"] as? String, "auto")
+        XCTAssertEqual(payload["stream"] as? Bool, true)
+    }
+
+    func testXiaomiMiMoASREndpointNormalizesChatCompletions() {
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint(""),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint("https://api.xiaomimimo.com"),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint("https://api.xiaomimimo.com/v1/models"),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+    }
 }

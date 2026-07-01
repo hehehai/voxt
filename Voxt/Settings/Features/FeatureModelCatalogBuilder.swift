@@ -510,6 +510,8 @@ struct FeatureModelCatalogBuilder {
                 tags.append(localized("Realtime"))
             }
             tags.append(contentsOf: [localized("Accurate"), localized("Multilingual")])
+        case .xiaomiMiMoASR:
+            tags.append(contentsOf: [localized("Accurate"), localized("Multilingual")])
         }
         return deduplicatedFeatureTags(tags)
     }

@@ -183,6 +183,39 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         )
     }
 
+    func testResolvedLLMEndpointBuildsXiaomiMiMoChatCompletionsFromOfficialBaseURL() {
+        let client = RemoteLLMRuntimeClient()
+
+        XCTAssertEqual(
+            client.providerDefaultEndpoint(.xiaomiMiMo),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .xiaomiMiMo,
+                endpoint: "",
+                model: "mimo-v2.5-pro"
+            ),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .xiaomiMiMo,
+                endpoint: "https://api.xiaomimimo.com",
+                model: "mimo-v2.5-pro"
+            ),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            client.resolvedLLMEndpoint(
+                provider: .xiaomiMiMo,
+                endpoint: "https://api.xiaomimimo.com/v1/models",
+                model: "mimo-v2.5-pro"
+            ),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+    }
+
     func testResolvedLLMEndpointDefaultsOllamaToBaseEndpoint() {
         let client = RemoteLLMRuntimeClient()
 
@@ -1511,6 +1544,75 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(responseFormat["type"] as? String, "json_object")
         let provider = try XCTUnwrap(payload["provider"] as? [String: Any])
         XCTAssertEqual(provider["order"] as? [String], ["openai"])
+    }
+
+    func testXiaomiMiMoGenerationSettingsMapDocumentedChatCompletionFields() throws {
+        let client = RemoteLLMRuntimeClient()
+        var payload = client.openAICompatiblePayload(
+            model: "mimo-v2.5-pro",
+            systemPrompt: "",
+            userPrompt: "hi",
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            streamingEnabled: false
+        )
+
+        try client.applyOpenAICompatibleGenerationSettings(
+            to: &payload,
+            provider: .xiaomiMiMo,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.xiaomiMiMo.rawValue,
+                model: "mimo-v2.5-pro",
+                generationSettings: LLMGenerationSettings(
+                    maxOutputTokens: 333,
+                    temperature: 1.0,
+                    topP: 0.95,
+                    thinking: .off
+                )
+            ),
+            tuning: .init(maxTokens: 256, temperature: 0.2, topP: 0.9),
+            responseFormat: nil
+        )
+
+        XCTAssertNil(payload["max_tokens"])
+        XCTAssertEqual(payload["max_completion_tokens"] as? Int, 333)
+        XCTAssertEqual(payload["temperature"] as? Double, 1.0)
+        XCTAssertEqual(payload["top_p"] as? Double, 0.95)
+
+        let thinking = try XCTUnwrap(payload["thinking"] as? [String: Any])
+        XCTAssertEqual(thinking["type"] as? String, "disabled")
+    }
+
+    func testXiaomiMiMoGenerationSettingsDoNotSendUnsupportedThinkingTuning() throws {
+        let client = RemoteLLMRuntimeClient()
+        var payload = client.openAICompatiblePayload(
+            model: "mimo-v2.5-pro",
+            systemPrompt: "",
+            userPrompt: "hi",
+            tuning: .init(maxTokens: 256, temperature: 1.0, topP: 0.95),
+            streamingEnabled: false
+        )
+
+        try client.applyOpenAICompatibleGenerationSettings(
+            to: &payload,
+            provider: .xiaomiMiMo,
+            configuration: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteLLMProvider.xiaomiMiMo.rawValue,
+                model: "mimo-v2.5-pro",
+                generationSettings: LLMGenerationSettings(
+                    thinking: LLMThinkingSettings(
+                        mode: .effort,
+                        effort: "high",
+                        budgetTokens: nil,
+                        exposeReasoning: false
+                    )
+                )
+            ),
+            tuning: .init(maxTokens: 256, temperature: 1.0, topP: 0.95),
+            responseFormat: nil
+        )
+
+        XCTAssertNil(payload["thinking"])
+        XCTAssertNil(payload["reasoning_effort"])
     }
 
     func testStepFunGenerationSettingsMapDocumentedChatCompletionFields() throws {

@@ -14,6 +14,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
     case glmASR
     case aliyunBailianASR
     case stepFunASR
+    case xiaomiMiMoASR
 
     nonisolated var id: String { rawValue }
 
@@ -29,6 +30,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("Aliyun Bailian ASR")
         case .stepFunASR:
             return AppLocalization.localizedString("StepFun")
+        case .xiaomiMiMoASR:
+            return AppLocalization.localizedString("Xiaomi MiMo")
         }
     }
 
@@ -44,6 +47,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return "fun-asr-realtime"
         case .stepFunASR:
             return "stepaudio-2.5-asr"
+        case .xiaomiMiMoASR:
+            return "mimo-v2.5-asr"
         }
     }
 
@@ -91,6 +96,10 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "stepaudio-2-asr-pro", title: "StepAudio 2 ASR Pro (SSE)"),
                 RemoteModelOption(id: "step-asr-1.1-stream", title: "Step ASR 1.1 Stream (WebSocket)")
             ]
+        case .xiaomiMiMoASR:
+            return [
+                RemoteModelOption(id: "mimo-v2.5-asr", title: "MiMo V2.5 ASR")
+            ]
         }
     }
 }
@@ -112,6 +121,7 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
     case minimax
     case aliyunBailian
     case stepFun
+    case xiaomiMiMo
 
     var id: String { rawValue }
 
@@ -195,6 +205,8 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("Aliyun Bailian")
         case .stepFun:
             return AppLocalization.localizedString("StepFun")
+        case .xiaomiMiMo:
+            return AppLocalization.localizedString("Xiaomi MiMo")
         }
     }
 
@@ -232,6 +244,8 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
             return "qwen-plus-latest"
         case .stepFun:
             return "step-3.5-flash"
+        case .xiaomiMiMo:
+            return "mimo-v2.5-pro"
         }
     }
 
@@ -365,6 +379,11 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "step-3.5-flash-2603", title: "Step 3.5 Flash 2603"),
                 RemoteModelOption(id: "stepaudio-2.5-chat", title: "StepAudio 2.5 Chat")
             ]
+        case .xiaomiMiMo:
+            return [
+                RemoteModelOption(id: "mimo-v2.5-pro", title: "MiMo V2.5 Pro"),
+                RemoteModelOption(id: "mimo-v2.5", title: "MiMo V2.5")
+            ]
         }
     }
 
@@ -457,6 +476,8 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "step-2-16k", title: "Step 2 16K"),
                 RemoteModelOption(id: "step-1-8k", title: "Step 1 8K")
             ]
+        case .xiaomiMiMo:
+            return []
         }
     }
 
@@ -534,6 +555,8 @@ enum RemoteLLMProvider: String, CaseIterable, Identifiable {
                 RemoteModelOption(id: "step-1-32k", title: "Step 1 32K"),
                 RemoteModelOption(id: "step-router-v1", title: "Step Router V1 (Step Plan)")
             ]
+        case .xiaomiMiMo:
+            return []
         }
     }
 }

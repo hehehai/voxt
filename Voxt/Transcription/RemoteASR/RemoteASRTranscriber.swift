@@ -526,6 +526,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return try await transcribeAliyunBailian(fileURL: fileURL, configuration: configuration)
         case .stepFunASR:
             return try await transcribeStepFun(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
+        case .xiaomiMiMoASR:
+            return try await transcribeXiaomiMiMo(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
         }
     }
 
@@ -745,6 +747,65 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             model: configuration.model,
             extraFields: extraFields
         )
+    }
+
+    private func transcribeXiaomiMiMo(
+        fileURL: URL,
+        configuration: RemoteProviderConfiguration,
+        hintPayload: ResolvedASRHintPayload
+    ) async throws -> String {
+        let endpointValue = RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint(configuration.endpoint)
+        guard let endpoint = URL(string: endpointValue) else {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -70,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Xiaomi MiMo ASR endpoint URL."]
+            )
+        }
+
+        let token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            throw NSError(domain: "Voxt.RemoteASR", code: -71, userInfo: [NSLocalizedDescriptionKey: "Xiaomi MiMo API key is empty."])
+        }
+
+        let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty ? RemoteASRProvider.xiaomiMiMoASR.suggestedModel : configuredModel
+        let audioData = try Data(contentsOf: fileURL)
+        let payload = RemoteASRTextSupport.xiaomiMiMoASRPayload(
+            model: model,
+            audioData: audioData,
+            mimeType: RemoteASREndpointSupport.audioMIMEType(for: fileURL),
+            hintPayload: hintPayload
+        )
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await VoxtNetworkSession.active.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "Voxt.RemoteASR", code: -72, userInfo: [NSLocalizedDescriptionKey: "Invalid Xiaomi MiMo ASR HTTP response."])
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let message = String(data: data.prefix(500), encoding: .utf8) ?? ""
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "Xiaomi MiMo ASR request failed (HTTP \(http.statusCode)): \(message)"]
+            )
+        }
+
+        let object = try JSONSerialization.jsonObject(with: data)
+        if let text = RemoteASRTextSupport.extractText(in: object),
+           let normalized = RemoteASRTextSupport.normalizedTextFragment(text),
+           !normalized.isEmpty {
+            return normalized
+        }
+        throw NSError(domain: "Voxt.RemoteASR", code: -73, userInfo: [NSLocalizedDescriptionKey: "Xiaomi MiMo ASR returned no text content."])
     }
 
     private func transcribeStepFun(

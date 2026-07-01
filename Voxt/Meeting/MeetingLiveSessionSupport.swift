@@ -46,7 +46,7 @@ struct MeetingLiveSessionPolicy: Equatable, Sendable {
                 prebufferDuration: 1.0,
                 segmentSilenceSplitThreshold: isRealtimeModel ? 1.2 : 0
             )
-        case .openAIWhisper, .glmASR, .stepFunASR:
+        case .openAIWhisper, .glmASR, .stepFunASR, .xiaomiMiMoASR:
             return MeetingLiveSessionPolicy(
                 idleKeepaliveEnabled: false,
                 idleKeepaliveInterval: 0,

@@ -1689,6 +1689,10 @@ struct RemoteLLMRuntimeClient {
             payload["response_format"] = ["type": "json_object"]
         }
 
+        if provider == .xiaomiMiMo, let maxTokens = payload.removeValue(forKey: "max_tokens") {
+            payload["max_completion_tokens"] = maxTokens
+        }
+
         applyOpenAICompatibleThinkingSettings(
             to: &payload,
             provider: provider,
@@ -1783,6 +1787,15 @@ struct RemoteLLMRuntimeClient {
                     payload["reasoning_effort"] = effort
                 }
             case .providerDefault:
+                break
+            }
+        case .xiaomiMiMo:
+            switch settings.thinking.mode {
+            case .off:
+                payload["thinking"] = ["type": "disabled"]
+            case .on:
+                payload["thinking"] = ["type": "enabled"]
+            case .providerDefault, .effort, .budget:
                 break
             }
         case .grok:
@@ -2111,7 +2124,7 @@ struct RemoteLLMRuntimeClient {
 
     func requestTimeoutInterval(for provider: RemoteLLMProvider) -> TimeInterval {
         switch provider {
-        case .zai, .volcengine:
+        case .zai, .volcengine, .xiaomiMiMo:
             return 30
         default:
             return 40
@@ -2150,6 +2163,8 @@ struct RemoteLLMRuntimeClient {
         case .volcengine:
             // Favor low latency and deterministic rewrite/translation behavior.
             return GenerationTuning(maxTokens: outputBudget, temperature: 0.1, topP: 0.3)
+        case .xiaomiMiMo:
+            return GenerationTuning(maxTokens: outputBudget, temperature: 1.0, topP: 0.95)
         case .zai:
             return GenerationTuning(maxTokens: outputBudget, temperature: 0.2, topP: 0.7)
         default:
