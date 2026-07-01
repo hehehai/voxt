@@ -1167,11 +1167,24 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         let shouldUsePreferredInputDevice = usePreferredInputDevice ?? activeCaptureUsesPreferredInputDevice
         activeCaptureUsesPreferredInputDevice = shouldUsePreferredInputDevice
-        if shouldUsePreferredInputDevice {
-            applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        }
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let didApplyPreferredInputDevice = shouldUsePreferredInputDevice
+            ? applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+            : false
+        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
+        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
+        let hardwareSampleRate = AudioInputDeviceManager.nominalSampleRate(for: activeInputDeviceID)
+        let recordingFormat = AudioInputDeviceManager.captureTapFormat(
+            nodeOutputFormat: nodeOutputFormat,
+            hardwareSampleRate: hardwareSampleRate
+        )
         inputSampleRate = recordingFormat.sampleRate
+
+        if abs(recordingFormat.sampleRate - nodeOutputFormat.sampleRate) > 1 {
+            VoxtLog.warning(
+                "MLX transcriber adjusted input tap format. deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default"), hardwareSampleRate=\(hardwareSampleRate.map { String(Int($0.rounded())) } ?? "unknown"), nodeSampleRate=\(Int(nodeOutputFormat.sampleRate.rounded())), tapSampleRate=\(Int(recordingFormat.sampleRate.rounded()))"
+            )
+        }
+
         let sampleStore = self.sampleStore
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -1198,7 +1211,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         audioEngine.prepare()
-        return (recordingFormat, shouldUsePreferredInputDevice)
+        return (recordingFormat, didApplyPreferredInputDevice)
     }
 
     private func logCaptureStarted(format: AVAudioFormat, usedPreferredDevice: Bool) {
@@ -2268,9 +2281,15 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         value.isEmpty ? "\"\"" : "\"\(value)\""
     }
 
-    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
-        guard let preferredInputDeviceID else { return }
-        guard let audioUnit = inputNode.audioUnit else { return }
+    @discardableResult
+    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) -> Bool {
+        guard let preferredInputDeviceID,
+              preferredInputDeviceID != AudioDeviceID(kAudioObjectUnknown),
+              AudioInputDeviceManager.isAvailableInputDevice(preferredInputDeviceID)
+        else {
+            return false
+        }
+        guard let audioUnit = inputNode.audioUnit else { return false }
         var deviceID = preferredInputDeviceID
         let status = AudioUnitSetProperty(
             audioUnit,
@@ -2282,6 +2301,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         )
         if status != noErr {
             VoxtLog.warning("Unable to switch input device. status=\(status)")
+            return false
         }
+        return true
     }
 }

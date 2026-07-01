@@ -1229,8 +1229,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     private func startAliyunAudioCapture(context: AliyunFunStreamingContext) throws {
         let inputNode = audioEngine.inputNode
-        applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let didApplyPreferredInputDevice = applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
+        let inputFormat = inputCaptureTapFormat(
+            inputNode: inputNode,
+            activeInputDeviceID: activeInputDeviceID,
+            logContext: "Aliyun fun transcriber"
+        )
         streamingInputSampleRate = inputFormat.sampleRate
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
@@ -1454,8 +1459,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     private func startAliyunQwenAudioCapture(context: AliyunQwenStreamingContext) throws {
         let inputNode = audioEngine.inputNode
-        applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let didApplyPreferredInputDevice = applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
+        let inputFormat = inputCaptureTapFormat(
+            inputNode: inputNode,
+            activeInputDeviceID: activeInputDeviceID,
+            logContext: "Aliyun qwen transcriber"
+        )
         streamingInputSampleRate = inputFormat.sampleRate
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
@@ -1896,10 +1906,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let inputNode = audioEngine.inputNode
         let shouldUsePreferredInputDevice = usePreferredInputDevice ?? (preferredInputDeviceID != nil)
         doubaoCaptureUsesPreferredInputDevice = shouldUsePreferredInputDevice
-        if shouldUsePreferredInputDevice {
-            applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        }
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let didApplyPreferredInputDevice = shouldUsePreferredInputDevice
+            ? applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+            : false
+        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
+        let inputFormat = inputCaptureTapFormat(
+            inputNode: inputNode,
+            activeInputDeviceID: activeInputDeviceID,
+            logContext: "Doubao transcriber"
+        )
         streamingInputSampleRate = inputFormat.sampleRate
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
@@ -1995,9 +2010,36 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
-        guard let preferredInputDeviceID else { return }
-        guard let audioUnit = inputNode.audioUnit else { return }
+    func inputCaptureTapFormat(
+        inputNode: AVAudioInputNode,
+        activeInputDeviceID: AudioDeviceID?,
+        logContext: String
+    ) -> AVAudioFormat {
+        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
+        let hardwareSampleRate = AudioInputDeviceManager.nominalSampleRate(for: activeInputDeviceID)
+        let tapFormat = AudioInputDeviceManager.captureTapFormat(
+            nodeOutputFormat: nodeOutputFormat,
+            hardwareSampleRate: hardwareSampleRate
+        )
+
+        if abs(tapFormat.sampleRate - nodeOutputFormat.sampleRate) > 1 {
+            VoxtLog.warning(
+                "\(logContext) adjusted input tap format. deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default"), hardwareSampleRate=\(hardwareSampleRate.map { String(Int($0.rounded())) } ?? "unknown"), nodeSampleRate=\(Int(nodeOutputFormat.sampleRate.rounded())), tapSampleRate=\(Int(tapFormat.sampleRate.rounded()))"
+            )
+        }
+
+        return tapFormat
+    }
+
+    @discardableResult
+    func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) -> Bool {
+        guard let preferredInputDeviceID,
+              preferredInputDeviceID != AudioDeviceID(kAudioObjectUnknown),
+              AudioInputDeviceManager.isAvailableInputDevice(preferredInputDeviceID)
+        else {
+            return false
+        }
+        guard let audioUnit = inputNode.audioUnit else { return false }
         var deviceID = preferredInputDeviceID
         let status = AudioUnitSetProperty(
             audioUnit,
@@ -2009,7 +2051,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
         if status != noErr {
             VoxtLog.warning("Remote ASR failed to switch preferred input device. status=\(status)")
+            return false
         }
+        return true
     }
 
     private func receiveDoubaoMessages(

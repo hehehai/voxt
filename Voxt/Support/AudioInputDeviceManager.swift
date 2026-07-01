@@ -179,6 +179,10 @@ enum AudioInputDeviceManager {
         nodeOutputFormat: AVAudioFormat,
         hardwareSampleRate: Double?
     ) -> AVAudioFormat {
+        // AVAudioInputNode can report 48 kHz even when the active input hardware is
+        // running at 44.1 kHz. Installing a tap with the node format in that state
+        // raises "Input HW format and tap format not matching", so prefer the
+        // hardware sample rate while preserving the node channel/layout format.
         guard let hardwareSampleRate,
               hardwareSampleRate.isFinite,
               hardwareSampleRate > 0,

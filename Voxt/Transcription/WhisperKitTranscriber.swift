@@ -1313,9 +1313,22 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         inputNode.removeTap(onBus: 0)
         audioEngine.reset()
 
-        applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let didApplyPreferredInputDevice = applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
+        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
+        let hardwareSampleRate = AudioInputDeviceManager.nominalSampleRate(for: activeInputDeviceID)
+        let recordingFormat = AudioInputDeviceManager.captureTapFormat(
+            nodeOutputFormat: nodeOutputFormat,
+            hardwareSampleRate: hardwareSampleRate
+        )
         inputSampleRate = recordingFormat.sampleRate
+
+        if abs(recordingFormat.sampleRate - nodeOutputFormat.sampleRate) > 1 {
+            VoxtLog.warning(
+                "WhisperKit transcriber adjusted input tap format. deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default"), hardwareSampleRate=\(hardwareSampleRate.map { String(Int($0.rounded())) } ?? "unknown"), nodeSampleRate=\(Int(nodeOutputFormat.sampleRate.rounded())), tapSampleRate=\(Int(recordingFormat.sampleRate.rounded()))"
+            )
+        }
+
         let sampleStore = self.sampleStore
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -1968,9 +1981,15 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         return hintPayload.language
     }
 
-    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
-        guard let preferredInputDeviceID else { return }
-        guard let audioUnit = inputNode.audioUnit else { return }
+    @discardableResult
+    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) -> Bool {
+        guard let preferredInputDeviceID,
+              preferredInputDeviceID != AudioDeviceID(kAudioObjectUnknown),
+              AudioInputDeviceManager.isAvailableInputDevice(preferredInputDeviceID)
+        else {
+            return false
+        }
+        guard let audioUnit = inputNode.audioUnit else { return false }
         var deviceID = preferredInputDeviceID
         let status = AudioUnitSetProperty(
             audioUnit,
@@ -1982,7 +2001,9 @@ final class WhisperKitTranscriber: ObservableObject, TranscriberProtocol {
         )
         if status != noErr {
             VoxtLog.warning("Unable to switch input device. status=\(status)")
+            return false
         }
+        return true
     }
 
     private static func resample(samples: [Float], from inputRate: Double, to outputRate: Double) -> [Float] {

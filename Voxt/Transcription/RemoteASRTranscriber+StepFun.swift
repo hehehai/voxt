@@ -181,10 +181,15 @@ extension RemoteASRTranscriber {
         audioEngine.reset()
 
         let inputNode = audioEngine.inputNode
-        if preferredInputDeviceID != nil {
-            applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        }
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let didApplyPreferredInputDevice = preferredInputDeviceID != nil
+            ? applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+            : false
+        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
+        let inputFormat = inputCaptureTapFormat(
+            inputNode: inputNode,
+            activeInputDeviceID: activeInputDeviceID,
+            logContext: "StepFun transcriber"
+        )
         streamingInputSampleRate = inputFormat.sampleRate
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
