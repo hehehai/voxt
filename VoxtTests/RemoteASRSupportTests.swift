@@ -193,13 +193,12 @@ final class RemoteASRSupportTests: XCTestCase {
             model: "mimo-v2.5-asr",
             audioData: Data([0x00]),
             mimeType: "audio/wav",
-            hintPayload: ResolvedASRHintPayload(language: "ja"),
-            stream: true
+            hintPayload: ResolvedASRHintPayload(language: "ja")
         )
 
         let options = try XCTUnwrap(payload["asr_options"] as? [String: Any])
         XCTAssertEqual(options["language"] as? String, "auto")
-        XCTAssertEqual(payload["stream"] as? Bool, true)
+        XCTAssertNil(payload["stream"])
     }
 
     func testXiaomiMiMoASREndpointNormalizesChatCompletions() {

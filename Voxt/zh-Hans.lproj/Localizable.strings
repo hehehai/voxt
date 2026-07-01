@@ -1976,3 +1976,13 @@
 "Search Current Category" = "搜索当前分类";
 "Create Hot Word in This Category" = "在当前分类中创建热词";
 "Delete Dictionary Category" = "删除词典分类";
+"Xiaomi MiMo" = "小米 MiMo";
+"Xiaomi MiMo ASR uses a MiMo API Key and the OpenAI-compatible chat completions audio endpoint." = "小米 MiMo ASR 使用 MiMo API Key，并通过 OpenAI 兼容的 chat completions 音频端点调用。";
+"Xiaomi MiMo ASR uses auto, Chinese, or English language hints derived from your selected user language." = "小米 MiMo ASR 会根据你选择的用户主语言使用 auto、中文或英文语言提示。";
+"Xiaomi MiMo API Key is required for testing." = "测试需要填写小米 MiMo API Key。";
+"Connection test succeeded (Xiaomi MiMo ASR reachable)." = "连接测试成功（小米 MiMo ASR 可访问）。";
+"Invalid Xiaomi MiMo ASR endpoint URL." = "小米 MiMo ASR 端点 URL 无效。";
+"Xiaomi MiMo API key is empty." = "小米 MiMo API Key 为空。";
+"Invalid Xiaomi MiMo ASR HTTP response." = "小米 MiMo ASR HTTP 响应无效。";
+"Xiaomi MiMo ASR request failed (HTTP %d): %@" = "小米 MiMo ASR 请求失败（HTTP %d）：%@";
+"Xiaomi MiMo ASR returned no text content." = "小米 MiMo ASR 未返回文本内容。";

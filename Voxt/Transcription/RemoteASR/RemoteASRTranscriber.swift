@@ -759,13 +759,17 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             throw NSError(
                 domain: "Voxt.RemoteASR",
                 code: -70,
-                userInfo: [NSLocalizedDescriptionKey: "Invalid Xiaomi MiMo ASR endpoint URL."]
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid Xiaomi MiMo ASR endpoint URL.")]
             )
         }
 
         let token = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else {
-            throw NSError(domain: "Voxt.RemoteASR", code: -71, userInfo: [NSLocalizedDescriptionKey: "Xiaomi MiMo API key is empty."])
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -71,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Xiaomi MiMo API key is empty.")]
+            )
         }
 
         let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -788,14 +792,24 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
         let (data, response) = try await VoxtNetworkSession.active.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "Voxt.RemoteASR", code: -72, userInfo: [NSLocalizedDescriptionKey: "Invalid Xiaomi MiMo ASR HTTP response."])
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -72,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid Xiaomi MiMo ASR HTTP response.")]
+            )
         }
         guard (200...299).contains(http.statusCode) else {
             let message = String(data: data.prefix(500), encoding: .utf8) ?? ""
             throw NSError(
                 domain: "Voxt.RemoteASR",
                 code: http.statusCode,
-                userInfo: [NSLocalizedDescriptionKey: "Xiaomi MiMo ASR request failed (HTTP \(http.statusCode)): \(message)"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: AppLocalization.format(
+                        "Xiaomi MiMo ASR request failed (HTTP %d): %@",
+                        http.statusCode,
+                        message
+                    )
+                ]
             )
         }
 
@@ -805,7 +819,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
            !normalized.isEmpty {
             return normalized
         }
-        throw NSError(domain: "Voxt.RemoteASR", code: -73, userInfo: [NSLocalizedDescriptionKey: "Xiaomi MiMo ASR returned no text content."])
+        throw NSError(
+            domain: "Voxt.RemoteASR",
+            code: -73,
+            userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Xiaomi MiMo ASR returned no text content.")]
+        )
     }
 
     private func transcribeStepFun(

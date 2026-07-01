@@ -1934,3 +1934,13 @@
 "Search Current Category" = "現在のカテゴリを検索";
 "Create Hot Word in This Category" = "このカテゴリにホットワードを作成";
 "Delete Dictionary Category" = "辞書カテゴリを削除";
+"Xiaomi MiMo" = "Xiaomi MiMo";
+"Xiaomi MiMo ASR uses a MiMo API Key and the OpenAI-compatible chat completions audio endpoint." = "Xiaomi MiMo ASR は MiMo API Key を使用し、OpenAI 互換の chat completions 音声エンドポイントを呼び出します。";
+"Xiaomi MiMo ASR uses auto, Chinese, or English language hints derived from your selected user language." = "Xiaomi MiMo ASR は、選択したユーザー主言語に基づいて auto、中国語、または英語の言語ヒントを使用します。";
+"Xiaomi MiMo API Key is required for testing." = "テストには Xiaomi MiMo API Key が必要です。";
+"Connection test succeeded (Xiaomi MiMo ASR reachable)." = "接続テストに成功しました（Xiaomi MiMo ASR に到達できます）。";
+"Invalid Xiaomi MiMo ASR endpoint URL." = "Xiaomi MiMo ASR エンドポイント URL が無効です。";
+"Xiaomi MiMo API key is empty." = "Xiaomi MiMo API Key が空です。";
+"Invalid Xiaomi MiMo ASR HTTP response." = "Xiaomi MiMo ASR の HTTP レスポンスが無効です。";
+"Xiaomi MiMo ASR request failed (HTTP %d): %@" = "Xiaomi MiMo ASR リクエストに失敗しました（HTTP %d）：%@";
+"Xiaomi MiMo ASR returned no text content." = "Xiaomi MiMo ASR はテキスト内容を返しませんでした。";

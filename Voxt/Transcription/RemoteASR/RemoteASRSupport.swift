@@ -87,8 +87,7 @@ enum RemoteASRTextSupport {
         model: String,
         audioData: Data,
         mimeType: String,
-        hintPayload: ResolvedASRHintPayload,
-        stream: Bool = false
+        hintPayload: ResolvedASRHintPayload
     ) -> [String: Any] {
         let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? RemoteASRProvider.xiaomiMiMoASR.suggestedModel
@@ -96,7 +95,7 @@ enum RemoteASRTextSupport {
         let language = xiaomiMiMoLanguage(from: hintPayload.language)
         let audioDataURI = "data:\(mimeType);base64,\(audioData.base64EncodedString())"
 
-        var payload: [String: Any] = [
+        return [
             "model": effectiveModel,
             "messages": [
                 [
@@ -115,10 +114,6 @@ enum RemoteASRTextSupport {
                 "language": language
             ]
         ]
-        if stream {
-            payload["stream"] = true
-        }
-        return payload
     }
 
     static func xiaomiMiMoLanguage(from language: String?) -> String {

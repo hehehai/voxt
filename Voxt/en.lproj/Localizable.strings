@@ -1976,3 +1976,13 @@
 "Search Current Category" = "Search Current Category";
 "Create Hot Word in This Category" = "Create Hot Word in This Category";
 "Delete Dictionary Category" = "Delete Dictionary Category";
+"Xiaomi MiMo" = "Xiaomi MiMo";
+"Xiaomi MiMo ASR uses a MiMo API Key and the OpenAI-compatible chat completions audio endpoint." = "Xiaomi MiMo ASR uses a MiMo API Key and the OpenAI-compatible chat completions audio endpoint.";
+"Xiaomi MiMo ASR uses auto, Chinese, or English language hints derived from your selected user language." = "Xiaomi MiMo ASR uses auto, Chinese, or English language hints derived from your selected user language.";
+"Xiaomi MiMo API Key is required for testing." = "Xiaomi MiMo API Key is required for testing.";
+"Connection test succeeded (Xiaomi MiMo ASR reachable)." = "Connection test succeeded (Xiaomi MiMo ASR reachable).";
+"Invalid Xiaomi MiMo ASR endpoint URL." = "Invalid Xiaomi MiMo ASR endpoint URL.";
+"Xiaomi MiMo API key is empty." = "Xiaomi MiMo API key is empty.";
+"Invalid Xiaomi MiMo ASR HTTP response." = "Invalid Xiaomi MiMo ASR HTTP response.";
+"Xiaomi MiMo ASR request failed (HTTP %d): %@" = "Xiaomi MiMo ASR request failed (HTTP %d): %@";
+"Xiaomi MiMo ASR returned no text content." = "Xiaomi MiMo ASR returned no text content.";
