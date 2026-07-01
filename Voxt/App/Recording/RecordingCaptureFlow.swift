@@ -168,6 +168,7 @@ extension AppDelegate {
             }
             self.remoteASRTranscriber.transcribedText = ""
             self.remoteASRTranscriber.sessionAllowsRealtimeTextDisplay = self.transcriptionCapturePipeline.usesLiveDisplay
+            self.remoteASRTranscriber.voiceActivityUseCase = self.voiceActivityUseCase
             self.remoteASRTranscriber.onTranscriptionFinished = { [weak self] text in
                 self?.stashPendingCompletedHistoryAudioArchive(self?.remoteASRTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)

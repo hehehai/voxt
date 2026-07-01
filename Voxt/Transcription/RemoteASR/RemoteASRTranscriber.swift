@@ -45,6 +45,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     var onRuntimeFailure: ((String) -> Void)?
     var dictionaryEntryProvider: (() -> [DictionaryEntry])?
     var doubaoDictionaryEntryProvider: (() -> [DictionaryEntry])?
+    var voiceActivityUseCase: ASRVoiceActivityUseCase = .transcription
 
     private var recorder: AVAudioRecorder?
     let audioEngine = AVAudioEngine()
@@ -301,8 +302,25 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         isRequesting = true
         transcribeTask = Task { [weak self] in
             guard let self else { return }
+            let uploadPreparation = await self.prepareUploadAudioForRemoteASR(originalFileURL: fileURL)
+            defer {
+                uploadPreparation.cleanupTemporaryUploadFileIfNeeded()
+            }
+            guard uploadPreparation.shouldRequestRemoteASR else {
+                await MainActor.run {
+                    guard self.isCurrentGeneration(generationID) else { return }
+                    VoxtLog.asr(
+                        "Remote ASR request skipped because upload VAD observed no speech. provider=\((self.activeProvider ?? self.selectedProvider).rawValue), originalSec=\(Self.telemetrySeconds(uploadPreparation.originalDurationSeconds))",
+                        verbose: true
+                    )
+                    self.completedAudioArchiveURL = fileURL
+                    self.transcribedText = ""
+                    self.finish(with: "", generationID: generationID)
+                }
+                return
+            }
             do {
-                let result = try await self.transcribeRecordedAudio(fileURL: fileURL)
+                let result = try await self.transcribeRecordedAudio(fileURL: uploadPreparation.uploadFileURL)
                 await MainActor.run {
                     guard self.isCurrentGeneration(generationID) else { return }
                     self.transcribedText = result
@@ -318,6 +336,38 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                     self.finish(with: self.transcribedText, generationID: generationID)
                 }
             }
+        }
+    }
+
+    private func prepareUploadAudioForRemoteASR(originalFileURL: URL) async -> RemoteASRAudioUploadPreparation {
+        let provider = activeProvider ?? selectedProvider
+        let configuration = selectedProviderConfiguration(for: provider)
+        let localVADMode = LocalVADMode.stored()
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        do {
+            let preparation = try await RemoteASRAudioUploadPreprocessor.prepareUploadAudio(
+                originalFileURL: originalFileURL,
+                provider: provider,
+                configuration: configuration,
+                localVADMode: localVADMode,
+                useCase: voiceActivityUseCase
+            )
+            let elapsed = max(0, ProcessInfo.processInfo.systemUptime - startedAt)
+            VoxtLog.asr(
+                """
+                Remote ASR upload audio prepared. provider=\(provider.rawValue), model=\(configuration.model), policy=\(preparation.policy.telemetryName), originalSec=\(Self.telemetrySeconds(preparation.originalDurationSeconds)), uploadSec=\(Self.telemetrySeconds(preparation.uploadDurationSeconds)), segments=\(preparation.speechSegmentCount), observedSpeech=\(preparation.observedSpeech.map(String.init(describing:)) ?? "nil"), elapsedMs=\(String(format: "%.1f", elapsed * 1000))
+                """,
+                verbose: true
+            )
+            return preparation
+        } catch {
+            VoxtLog.asrWarning(
+                "Remote ASR upload VAD preprocessing failed; using original audio. provider=\(provider.rawValue), model=\(configuration.model), error=\(error.localizedDescription)"
+            )
+            return .original(
+                fileURL: originalFileURL,
+                policy: .disabled(reason: "preprocessor-error")
+            )
         }
     }
 
@@ -3199,6 +3249,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         withUnsafeBytes(of: bytes) { raw in
             data.replaceSubrange(offset..<(offset + 4), with: raw)
         }
+    }
+
+    private nonisolated static func telemetrySeconds(_ value: TimeInterval?) -> String {
+        guard let value, value.isFinite else { return "nil" }
+        return String(format: "%.3f", value)
     }
 
     private func finish(with text: String, generationID: UUID) {
