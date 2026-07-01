@@ -696,4 +696,61 @@ final class ASRVoiceActivityPlanningTests: XCTestCase {
         XCTAssertEqual(rejectedSegments.count, burstCount)
         XCTAssertNil(segmenter.finish(at: Double(burstCount) * cycleSeconds))
     }
+
+    func testSampleFilterKeepsOnlySpeechSegments() {
+        let samples = Array(repeating: Float(0), count: 50)
+        let decisions = [
+            ASRVoiceActivityFrameDecision(startSeconds: 0, endSeconds: 1, isSpeech: false),
+            ASRVoiceActivityFrameDecision(startSeconds: 1, endSeconds: 2, isSpeech: true),
+            ASRVoiceActivityFrameDecision(startSeconds: 2, endSeconds: 3, isSpeech: false),
+            ASRVoiceActivityFrameDecision(startSeconds: 3, endSeconds: 5, isSpeech: false)
+        ]
+        let result = ASRVoiceActivitySampleFilter.filter(
+            samples: samples,
+            sampleRate: 10,
+            decisions: decisions,
+            configuration: ASRVoiceActivityConfiguration(
+                onsetProbabilityThreshold: 0.5,
+                offsetProbabilityThreshold: 0.35,
+                minSpeechSeconds: 0.2,
+                minSilenceSeconds: 0.5,
+                speechPadSeconds: 0,
+                maxSegmentSeconds: nil
+            )
+        )
+
+        XCTAssertTrue(result.observedFrames)
+        XCTAssertTrue(result.observedSpeech)
+        XCTAssertEqual(result.speechSegments.count, 1)
+        XCTAssertEqual(result.samples.count, 10)
+        XCTAssertEqual(result.originalDurationSeconds, 5, accuracy: 0.001)
+        XCTAssertEqual(result.filteredDurationSeconds, 1, accuracy: 0.001)
+    }
+
+    func testSampleFilterReturnsEmptyWhenNoSpeechObserved() {
+        let samples = Array(repeating: Float(0), count: 40)
+        let decisions = [
+            ASRVoiceActivityFrameDecision(startSeconds: 0, endSeconds: 1, isSpeech: false),
+            ASRVoiceActivityFrameDecision(startSeconds: 1, endSeconds: 2, isSpeech: false),
+            ASRVoiceActivityFrameDecision(startSeconds: 2, endSeconds: 4, isSpeech: false)
+        ]
+        let result = ASRVoiceActivitySampleFilter.filter(
+            samples: samples,
+            sampleRate: 10,
+            decisions: decisions,
+            configuration: ASRVoiceActivityConfiguration(
+                onsetProbabilityThreshold: 0.5,
+                offsetProbabilityThreshold: 0.35,
+                minSpeechSeconds: 0.2,
+                minSilenceSeconds: 0.5,
+                speechPadSeconds: 0,
+                maxSegmentSeconds: nil
+            )
+        )
+
+        XCTAssertTrue(result.observedFrames)
+        XCTAssertFalse(result.observedSpeech)
+        XCTAssertTrue(result.speechSegments.isEmpty)
+        XCTAssertTrue(result.samples.isEmpty)
+    }
 }
