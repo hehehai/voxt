@@ -2,6 +2,7 @@
 // Provides Audio Input Device Manager Tests for Voxt test coverage.
 
 import XCTest
+import AVFoundation
 @testable import Voxt
 
 final class AudioInputDeviceManagerTests: XCTestCase {
@@ -93,5 +94,44 @@ final class AudioInputDeviceManagerTests: XCTestCase {
                 name: "MacBook Air麦克风"
             )
         )
+    }
+
+    func testCaptureTapFormatUsesHardwareSampleRateWhenNodeFormatDiffers() throws {
+        let nodeFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 48_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+
+        let tapFormat = AudioInputDeviceManager.captureTapFormat(
+            nodeOutputFormat: nodeFormat,
+            hardwareSampleRate: 44_100
+        )
+
+        XCTAssertEqual(tapFormat.sampleRate, 44_100, accuracy: 0.1)
+        XCTAssertEqual(tapFormat.channelCount, nodeFormat.channelCount)
+        XCTAssertEqual(tapFormat.commonFormat, nodeFormat.commonFormat)
+        XCTAssertEqual(tapFormat.isInterleaved, nodeFormat.isInterleaved)
+    }
+
+    func testCaptureTapFormatKeepsNodeFormatWhenHardwareSampleRateIsUnavailable() throws {
+        let nodeFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 48_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+
+        let tapFormat = AudioInputDeviceManager.captureTapFormat(
+            nodeOutputFormat: nodeFormat,
+            hardwareSampleRate: nil
+        )
+
+        XCTAssertEqual(tapFormat.sampleRate, nodeFormat.sampleRate, accuracy: 0.1)
     }
 }

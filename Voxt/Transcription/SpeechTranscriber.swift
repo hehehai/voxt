@@ -210,6 +210,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             audioEngine.stop()
             audioEngine.inputNode.removeTap(onBus: 0)
         }
+        audioEngine.reset()
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = settings.reportsPartialResults
@@ -222,9 +223,23 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         recognitionRequest = request
 
         let inputNode = audioEngine.inputNode
-        applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        inputSampleRate = inputNode.outputFormat(forBus: 0).sampleRate
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+        let didApplyPreferredInputDevice = applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
+        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
+        let hardwareSampleRate = AudioInputDeviceManager.nominalSampleRate(for: activeInputDeviceID)
+        let tapFormat = AudioInputDeviceManager.captureTapFormat(
+            nodeOutputFormat: nodeOutputFormat,
+            hardwareSampleRate: hardwareSampleRate
+        )
+        inputSampleRate = tapFormat.sampleRate
+
+        if abs(tapFormat.sampleRate - nodeOutputFormat.sampleRate) > 1 {
+            VoxtLog.warning(
+                "Speech transcriber adjusted input tap format. deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default"), hardwareSampleRate=\(hardwareSampleRate.map { String(Int($0.rounded())) } ?? "unknown"), nodeSampleRate=\(Int(nodeOutputFormat.sampleRate.rounded())), tapSampleRate=\(Int(tapFormat.sampleRate.rounded()))"
+            )
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
             guard let self else { return }
             self.recognitionRequest?.append(buffer)
 
@@ -293,9 +308,15 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         recognitionRequest = nil
     }
 
-    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
-        guard let preferredInputDeviceID else { return }
-        guard let audioUnit = inputNode.audioUnit else { return }
+    @discardableResult
+    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) -> Bool {
+        guard let preferredInputDeviceID,
+              preferredInputDeviceID != AudioDeviceID(kAudioObjectUnknown),
+              AudioInputDeviceManager.isAvailableInputDevice(preferredInputDeviceID)
+        else {
+            return false
+        }
+        guard let audioUnit = inputNode.audioUnit else { return false }
         var deviceID = preferredInputDeviceID
         let status = AudioUnitSetProperty(
             audioUnit,
@@ -307,7 +328,9 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         )
         if status != noErr {
             VoxtLog.asrWarning("Unable to switch input device. status=\(status)")
+            return false
         }
+        return true
     }
 
     private func resolvedDictationSettings() -> ResolvedDictationSettings {
