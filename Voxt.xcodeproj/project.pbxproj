@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		3A1A2B3C4D5E6F708090A0B0C /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A1A2B3C4D5E6F708090A0B0A /* XCTest.framework */; };
 		3C1A2B3C4D5E6F708090A0B0C /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3C1A2B3C4D5E6F708090A0B0A /* AppIntents.framework */; };
+		8A0000000000000000000001 /* VoxtWidgetsExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 8A0000000000000000000002 /* VoxtWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8A0000000000000000000003 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A0000000000000000000004 /* WidgetKit.framework */; };
+		8A0000000000000000000005 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A0000000000000000000006 /* SwiftUI.framework */; };
 		A1B2C3D4E5F6078901234567 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F6078901234568 /* MLXAudioCore */; };
 		A1B2C3D4E5F6078901234569 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F607890123456A /* MLXAudioSTT */; };
 		A1B2C3D4E5F6078901234570 /* MLXAudioVAD in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F6078901234571 /* MLXAudioVAD */; };
@@ -33,13 +36,37 @@
 			remoteGlobalIDString = 31F19CCC2F4D76D200E96913;
 			remoteInfo = Voxt;
 		};
+		8A0000000000000000000007 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 31F19CC52F4D76D200E96913 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A0000000000000000000008;
+			remoteInfo = VoxtWidgetsExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		8A0000000000000000000009 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				8A0000000000000000000001 /* VoxtWidgetsExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		31F19CCD2F4D76D200E96913 /* Voxt Dev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Voxt Dev.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A1A2B3C4D5E6F708090A0B0A /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		3A1A2B3C4D5E6F708090A0B0B /* VoxtTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoxtTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C1A2B3C4D5E6F708090A0B0A /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		8A0000000000000000000002 /* VoxtWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VoxtWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A0000000000000000000004 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		8A0000000000000000000006 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		694309B92F5280180056FECC /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Localizable.strings; sourceTree = "<group>"; };
 		694309BB2F5280180056FECC /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = Localizable.strings; sourceTree = "<group>"; };
 		694309BD2F5280180056FECC /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = Localizable.strings; sourceTree = "<group>"; };
@@ -100,6 +127,14 @@
 			);
 			target = 3A1A2B3C4D5E6F708090A0B0E /* VoxtTests */;
 		};
+		8A000000000000000000000A /* Exceptions for "VoxtWidgets" folder in "VoxtWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				VoxtWidgets.entitlements,
+			);
+			target = 8A0000000000000000000008 /* VoxtWidgetsExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -117,6 +152,19 @@
 				D4A1B2C42F7A100100ABCDEF /* Exceptions for "VoxtTests" folder in "VoxtTests" target */,
 			);
 			path = VoxtTests;
+			sourceTree = "<group>";
+		};
+		8A000000000000000000000B /* VoxtWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8A000000000000000000000A /* Exceptions for "VoxtWidgets" folder in "VoxtWidgetsExtension" target */,
+			);
+			path = VoxtWidgets;
+			sourceTree = "<group>";
+		};
+		8A000000000000000000000C /* VoxtWidgetShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = VoxtWidgetShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -152,6 +200,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8A000000000000000000000D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A0000000000000000000003 /* WidgetKit.framework in Frameworks */,
+				8A0000000000000000000005 /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -159,6 +216,8 @@
 			isa = PBXGroup;
 			children = (
 				31F19CCF2F4D76D200E96913 /* Voxt */,
+				8A000000000000000000000B /* VoxtWidgets */,
+				8A000000000000000000000C /* VoxtWidgetShared */,
 				3A1A2B3C4D5E6F708090A0B0D /* VoxtTests */,
 				AAC0F003AAC0F003AAC0F003 /* Config */,
 				31F19CCE2F4D76D200E96913 /* Products */,
@@ -174,6 +233,7 @@
 			children = (
 				3A1A2B3C4D5E6F708090A0B0B /* VoxtTests.xctest */,
 				31F19CCD2F4D76D200E96913 /* Voxt Dev.app */,
+				8A0000000000000000000002 /* VoxtWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -205,6 +265,8 @@
 		69F408702F54090100EC2B3D /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
+				8A0000000000000000000004 /* WidgetKit.framework */,
+				8A0000000000000000000006 /* SwiftUI.framework */,
 				3C1A2B3C4D5E6F708090A0B0A /* AppIntents.framework */,
 				3A1A2B3C4D5E6F708090A0B0A /* XCTest.framework */,
 			);
@@ -232,13 +294,16 @@
 				31F19CCA2F4D76D200E96913 /* Frameworks */,
 				7C0D0E0F1011121314151618 /* Copy Sherpa ONNX Runtime */,
 				31F19CCB2F4D76D200E96913 /* Resources */,
+				8A0000000000000000000009 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8A000000000000000000000E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				31F19CCF2F4D76D200E96913 /* Voxt */,
+				8A000000000000000000000C /* VoxtWidgetShared */,
 			);
 			name = Voxt;
 			packageProductDependencies = (
@@ -282,6 +347,29 @@
 			productReference = 3A1A2B3C4D5E6F708090A0B0B /* VoxtTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		8A0000000000000000000008 /* VoxtWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8A000000000000000000000F /* Build configuration list for PBXNativeTarget "VoxtWidgetsExtension" */;
+			buildPhases = (
+				8A0000000000000000000010 /* Sources */,
+				8A000000000000000000000D /* Frameworks */,
+				8A0000000000000000000011 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8A000000000000000000000B /* VoxtWidgets */,
+				8A000000000000000000000C /* VoxtWidgetShared */,
+			);
+			name = VoxtWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = VoxtWidgetsExtension;
+			productReference = 8A0000000000000000000002 /* VoxtWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -296,6 +384,9 @@
 						CreatedOnToolsVersion = 26.2;
 					};
 					3A1A2B3C4D5E6F708090A0B0E = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					8A0000000000000000000008 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -329,6 +420,7 @@
 			targets = (
 				31F19CCC2F4D76D200E96913 /* Voxt */,
 				3A1A2B3C4D5E6F708090A0B0E /* VoxtTests */,
+				8A0000000000000000000008 /* VoxtWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -342,6 +434,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		3A1A2B3C4D5E6F708090A0B12 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A0000000000000000000011 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -387,6 +486,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8A0000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -394,6 +500,11 @@
 			isa = PBXTargetDependency;
 			target = 31F19CCC2F4D76D200E96913 /* Voxt */;
 			targetProxy = 3A1A2B3C4D5E6F708090A0B14 /* PBXContainerItemProxy */;
+		};
+		8A000000000000000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8A0000000000000000000008 /* VoxtWidgetsExtension */;
+			targetProxy = 8A0000000000000000000007 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -569,6 +680,7 @@
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Voxt needs reminders access to sync notes into Apple Reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
+				INFOPLIST_KEY_VOXTAppGroupIdentifier = "$(VOXT_APP_GROUP_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -612,6 +724,7 @@
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Voxt needs reminders access to sync notes into Apple Reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
+				INFOPLIST_KEY_VOXTAppGroupIdentifier = "$(VOXT_APP_GROUP_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -655,6 +768,7 @@
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voxt needs microphone access to transcribe your speech.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Voxt needs reminders access to sync notes into Apple Reminders.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Voxt uses speech recognition for direct dictation.";
+				INFOPLIST_KEY_VOXTAppGroupIdentifier = "$(VOXT_APP_GROUP_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -937,6 +1051,145 @@
 			};
 			name = TestDebug;
 		};
+		8A0000000000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_ENTITLEMENTS = VoxtWidgets/VoxtWidgets.entitlements;
+				CURRENT_PROJECT_VERSION = 101200102;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VoxtWidgets/Info.plist;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/PlugIns";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.12.1;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt.dev.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		8A0000000000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_ENTITLEMENTS = VoxtWidgets/VoxtWidgets.entitlements;
+				CURRENT_PROJECT_VERSION = 101200102;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VoxtWidgets/Info.plist;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/PlugIns";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.12.1;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		8A0000000000000000000014 /* TestDebug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_ENTITLEMENTS = VoxtWidgets/VoxtWidgets.entitlements;
+				CURRENT_PROJECT_VERSION = 101200102;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VoxtWidgets/Info.plist;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/PlugIns";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.12.1;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt.testhost.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = TestDebug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -966,6 +1219,16 @@
 				3B1A2B3C4D5E6F708090A0B15 /* Debug */,
 				3B1A2B3C4D5E6F708090A0B16 /* Release */,
 				3B1A2B3C4D5E6F708090A0B18 /* TestDebug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8A000000000000000000000F /* Build configuration list for PBXNativeTarget "VoxtWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8A0000000000000000000012 /* Debug */,
+				8A0000000000000000000013 /* Release */,
+				8A0000000000000000000014 /* TestDebug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -368,13 +368,18 @@ final class TranscriptionHistoryStore: ObservableObject {
     private let defaults = UserDefaults.standard
     private let repository: HistoryRepositoryProtocol
     private let audioArchive: HistoryAudioArchiveManaging
+    private let activitySnapshotRefresher: ASRActivitySnapshotRefreshing
 
     init(
         repository: HistoryRepositoryProtocol? = nil,
-        audioArchive: HistoryAudioArchiveManaging? = nil
+        audioArchive: HistoryAudioArchiveManaging? = nil,
+        activitySnapshotRefresher: ASRActivitySnapshotRefreshing? = nil
     ) {
-        self.repository = repository ?? HistoryRepository()
+        let resolvedRepository = repository ?? HistoryRepository()
+        self.repository = resolvedRepository
         self.audioArchive = audioArchive ?? HistoryAudioArchiveService()
+        self.activitySnapshotRefresher = activitySnapshotRefresher
+            ?? ASRActivitySnapshotRefreshService(repository: resolvedRepository)
         reload()
     }
 
@@ -653,6 +658,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         refreshEntryIndexes()
         publishVisibleEntries()
         removed.map(audioArchive.removeArchive(for:))
+        refreshActivitySnapshot()
         return true
     }
 
@@ -670,6 +676,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         totalEntryCount = 0
         refreshEntryIndexes()
         publishVisibleEntries()
+        refreshActivitySnapshot()
     }
 
     func importAudioArchive(
@@ -945,6 +952,7 @@ final class TranscriptionHistoryStore: ObservableObject {
     private func persistEntry(_ entry: TranscriptionHistoryEntry) {
         do {
             try repository.upsert(entry)
+            refreshActivitySnapshot()
         } catch {
             // Keep UI responsive even if persistence fails.
         }
@@ -978,6 +986,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         loadedCount = min(targetLoadedCount, allEntries.count)
         refreshEntryIndexes()
         publishVisibleEntries()
+        refreshActivitySnapshot()
     }
 
     private func applyLoadedEntries(
@@ -999,6 +1008,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         refreshEntryIndexes()
         publishVisibleEntries()
         cleanupRetainedEntriesIfNeeded()
+        refreshActivitySnapshot()
     }
 
     private func cleanupRetainedEntriesIfNeeded(referenceDate: Date = Date()) {
@@ -1015,6 +1025,11 @@ final class TranscriptionHistoryStore: ObservableObject {
         loadedCount = min(loadedCount, allEntries.count)
         refreshEntryIndexes()
         publishVisibleEntries()
+        refreshActivitySnapshot()
+    }
+
+    private func refreshActivitySnapshot() {
+        activitySnapshotRefresher.refresh()
     }
 
     private func refreshEntryIndexes() {

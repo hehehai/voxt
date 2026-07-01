@@ -14,6 +14,7 @@ protocol HistoryRepositoryProtocol: AnyObject, Sendable {
     func entry(id: UUID) throws -> TranscriptionHistoryEntry?
     func latestEntryText() throws -> String?
     func audioRelativePaths() throws -> [String]
+    func activityEntries(since startDate: Date) throws -> [TranscriptionHistoryEntry]
     func entryCount(kind: TranscriptionHistoryKind?, query: String) throws -> Int
     func pendingNormalEntryCount(after checkpoint: DictionaryHistoryScanCheckpoint?) throws -> Int
     func pendingNormalEntries(after checkpoint: DictionaryHistoryScanCheckpoint?) throws -> [TranscriptionHistoryEntry]
@@ -138,6 +139,30 @@ final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
                     WHERE path IS NOT NULL AND path != ''
                     """
             )
+        }
+    }
+
+    func activityEntries(since startDate: Date) throws -> [TranscriptionHistoryEntry] {
+        try database.dbQueue.read { db in
+            let jsonEntries = try String.fetchAll(
+                db,
+                sql: """
+                    SELECT entryJSON
+                    FROM history_entries
+                    WHERE createdAt >= ?
+                      AND kind IN (?, ?, ?)
+                    ORDER BY createdAt ASC
+                    """,
+                arguments: [
+                    startDate.timeIntervalSince1970,
+                    TranscriptionHistoryKind.normal.rawValue,
+                    TranscriptionHistoryKind.translation.rawValue,
+                    TranscriptionHistoryKind.rewrite.rawValue
+                ]
+            )
+            return try jsonEntries.map {
+                try VoxtPersistenceCoding.decodeJSON(TranscriptionHistoryEntry.self, from: $0)
+            }
         }
     }
 

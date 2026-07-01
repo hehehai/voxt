@@ -4,6 +4,7 @@
 VOXT_CODE_SIGN_STYLE = Automatic
 VOXT_DEVELOPMENT_TEAM = RY2TQTYSKQ
 VOXT_CODE_SIGN_IDENTITY =
+VOXT_APP_GROUP_IDENTIFIER = group.com.voxt.Voxt
 
 #include? "Signing.local.xcconfig"
 #include? "SherpaOnnx.local.xcconfig"
