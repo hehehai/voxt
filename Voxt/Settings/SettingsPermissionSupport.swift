@@ -54,7 +54,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
         case .screenCapture:
             return "Required only when Screenshot Context is enabled for rewrite app context."
         case .systemAudioCapture:
-            return "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording."
+            return "Required to capture system audio for Meeting and to mute other apps' media audio during recording."
         case .reminders:
             return "Required to sync Voxt notes into Apple Reminders."
         }

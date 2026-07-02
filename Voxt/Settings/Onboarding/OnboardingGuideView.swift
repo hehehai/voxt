@@ -77,16 +77,6 @@ struct OnboardingGuideView: View {
 
     @FocusState private var focusedField: OnboardingGuideFocusField?
 
-    private static let localASRRepos = [
-        "mlx-community/Qwen3-ASR-1.7B-6bit",
-        "mlx-community/SenseVoiceSmall"
-    ]
-
-    private static let localLLMRepos = [
-        "mlx-community/gemma-4-e2b-it-4bit",
-        "mlx-community/gemma-4-e4b-it-4bit"
-    ]
-
     private static let defaultTranscriptionEnhancementPromptKey = """
     Clean up the dictated text while preserving meaning. Fix punctuation, casing, repeated words, spoken filler, and obvious number or unit formatting.
     """
@@ -167,10 +157,30 @@ struct OnboardingGuideView: View {
     }
 
     private var remoteModelReady: Bool {
-        isRemoteASRConfigured(selectedRemoteASRProvider) || RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
+        isRemoteASRConfigured(selectedRemoteASRProvider) && RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
             provider: selectedRemoteLLMProvider,
             stored: remoteLLMConfigurations
         )
+    }
+
+    private var localASRRepos: [String] {
+        var repos = mlxModelManager.displayModelsIncludingInstalled()
+            .map { MLXModelManager.canonicalModelRepo($0.id) }
+        let selectedRepo = MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        if !repos.contains(selectedRepo) {
+            repos.insert(selectedRepo, at: 0)
+        }
+        return repos
+    }
+
+    private var localLLMRepos: [String] {
+        var repos = customLLMManager.displayModelsIncludingInstalled()
+            .map { CustomLLMModelManager.canonicalModelRepo($0.id) }
+        let selectedRepo = CustomLLMModelManager.canonicalModelRepo(customLLMRepo)
+        if !repos.contains(selectedRepo) {
+            repos.insert(selectedRepo, at: 0)
+        }
+        return repos
     }
 
     private var modelStepReady: Bool {
@@ -536,7 +546,7 @@ struct OnboardingGuideView: View {
             guideTextEditor(text: $appEnhancementInput, prompt: guideLocalized("Try: please draft an update email for the launch delay."))
                 .focused($focusedField, equals: .appEnhancement)
         case .meeting:
-            placeholderVisual(systemImage: "person.2.wave.2", title: guideLocalized("Meeting setup placeholder"))
+            meetingVisual
         case .finish:
             finishVisual
         case .models:
@@ -574,6 +584,33 @@ struct OnboardingGuideView: View {
                 }
                 Divider()
             }
+        }
+        .padding(16)
+    }
+
+    private var meetingVisual: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "person.2.wave.2")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(guideLocalized("Meeting Setup"))
+                        .font(.headline)
+                    Text(guideLocalized("These settings are used when you start meeting capture."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            GuideInfoRow(title: guideLocalized("Audio Model"), value: asrSelectionSummary(featureSettings.meeting.asrSelectionID))
+            GuideInfoRow(title: guideLocalized("Summary Model"), value: llmSelectionSummary(featureSettings.meeting.summaryModelSelectionID))
+            GuideInfoRow(title: guideLocalized("Segmentation Mode"), value: featureSettings.meeting.chunkingMode.title)
+            GuideInfoRow(title: guideLocalized("Speaker Separation"), value: featureSettings.meeting.speakerDiarizationModel.title)
+            GuideInfoRow(
+                title: guideLocalized("Auto Summary"),
+                value: featureSettings.meeting.summaryAutoGenerate ? guideLocalized("Enabled") : guideLocalized("Disabled")
+            )
         }
         .padding(16)
     }
@@ -777,10 +814,15 @@ struct OnboardingGuideView: View {
     private var meetingActions: some View {
         VStack(alignment: .leading, spacing: 10) {
             GuideInfoRow(title: guideLocalized("Shortcut"), value: shortcutDisplay(for: .meeting))
-            Text(guideLocalized("Meeting capture will use fn + option by default. This onboarding step is reserved for the upcoming meeting walkthrough."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            GuideBullet(text: guideLocalized("Meeting uses the selected speech model for live transcript capture."))
+            GuideBullet(text: guideLocalized("Summaries use the selected summary model and can auto-generate after recording."))
+            GuideBullet(text: guideLocalized("Speaker separation runs after recording when the selected model is ready."))
+
+            if completedInteractionSteps.contains(.meeting) {
+                Label(guideLocalized("Meeting shortcut detected"), systemImage: "checkmark.circle.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.green)
+            }
         }
     }
 
@@ -793,6 +835,12 @@ struct OnboardingGuideView: View {
             GuideInfoRow(title: guideLocalized("Translation"), value: shortcutDisplay(for: .translation))
             GuideInfoRow(title: guideLocalized("Rewrite"), value: shortcutDisplay(for: .rewrite))
             GuideInfoRow(title: guideLocalized("Meeting"), value: shortcutDisplay(for: .meeting))
+            Divider()
+            GuideInfoRow(title: guideLocalized("Speech Model"), value: asrSelectionSummary(featureSettings.transcription.asrSelectionID))
+            GuideInfoRow(title: guideLocalized("Text Enhancement"), value: featureSettings.transcription.llmEnabled ? llmSelectionSummary(featureSettings.transcription.llmSelectionID) : guideLocalized("Disabled"))
+            GuideInfoRow(title: guideLocalized("Translation Model"), value: translationSelectionSummary(featureSettings.translation.modelSelectionID))
+            GuideInfoRow(title: guideLocalized("Notes"), value: featureSettings.transcription.notes.enabled ? guideLocalized("Enabled") : guideLocalized("Disabled"))
+            GuideInfoRow(title: guideLocalized("Meeting Summary"), value: llmSelectionSummary(featureSettings.meeting.summaryModelSelectionID))
         }
     }
 
@@ -810,7 +858,7 @@ struct OnboardingGuideView: View {
             modelBlock(
                 focus: .remote,
                 title: guideLocalized("Remote"),
-                subtitle: guideLocalized("Fast to start. Configure at least one remote ASR or LLM provider.")
+                subtitle: guideLocalized("Fast to start. Configure the selected remote ASR and LLM providers before continuing.")
             ) {
                 remoteModelActions
             }
@@ -880,7 +928,7 @@ struct OnboardingGuideView: View {
             Text(guideLocalized("ASR"))
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
-            ForEach(Self.localASRRepos, id: \.self) { repo in
+            ForEach(localASRRepos, id: \.self) { repo in
                 localASRModelRow(repo: repo)
             }
 
@@ -889,7 +937,7 @@ struct OnboardingGuideView: View {
             Text(guideLocalized("LLM"))
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
-            ForEach(Self.localLLMRepos, id: \.self) { repo in
+            ForEach(localLLMRepos, id: \.self) { repo in
                 localLLMModelRow(repo: repo)
             }
         }
@@ -1030,6 +1078,11 @@ struct OnboardingGuideView: View {
                 isAppPromptDialogPresented = true
             }
             .buttonStyle(SettingsPillButtonStyle())
+        case .meeting:
+            Button(guideLocalized("Change Shortcut")) {
+                editingShortcut = .meeting
+            }
+            .buttonStyle(SettingsPillButtonStyle())
         default:
             EmptyView()
         }
@@ -1044,7 +1097,7 @@ struct OnboardingGuideView: View {
         case .models:
             return modelFocus == .local
                 ? guideLocalized("Install the selected ASR and LLM local models to continue.")
-                : guideLocalized("Configure at least one remote ASR or LLM provider to continue.")
+                : guideLocalized("Configure the selected remote ASR and LLM providers to continue.")
         case .translationSelection, .rewriteSelection:
             return guideLocalized("Select text in the test input first.")
         default:
@@ -1377,7 +1430,9 @@ private extension OnboardingGuideView {
                 .buttonStyle(SettingsPrimaryButtonStyle())
             }
         }
-        .settingsDialogChrome(width: 420)
+        .settingsDialogChrome(width: 420, onClose: {
+            isModelStorageDialogPresented = false
+        })
     }
 
     func promptSheet(title: String, text: Binding<String>) -> some View {
@@ -1395,7 +1450,10 @@ private extension OnboardingGuideView {
                 .buttonStyle(SettingsPrimaryButtonStyle())
             }
         }
-        .settingsDialogChrome(width: 480)
+        .settingsDialogChrome(width: 480, onClose: {
+            isPromptDialogPresented = false
+            isAppPromptDialogPresented = false
+        })
     }
 
     func shortcutSheet(for kind: OnboardingGuideShortcutKind) -> some View {
@@ -1416,7 +1474,9 @@ private extension OnboardingGuideView {
                 .buttonStyle(SettingsPrimaryButtonStyle())
             }
         }
-        .settingsDialogChrome(width: 460)
+        .settingsDialogChrome(width: 460, onClose: {
+            editingShortcut = nil
+        })
     }
 
     func hotkeyBinding(for kind: OnboardingGuideShortcutKind) -> Binding<HotkeyPreference.Hotkey> {
@@ -1643,8 +1703,60 @@ private extension OnboardingGuideView {
             if NSApplication.shared.isActive {
                 completedInteractionSteps.insert(.appEnhancement)
             }
+        case (.meeting, .meeting):
+            completedInteractionSteps.insert(.meeting)
         default:
             break
+        }
+    }
+
+    func asrSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.asrSelection {
+        case .dictation:
+            return guideLocalized("Direct Dictation")
+        case .mlx(let repo):
+            return mlxModelManager.displayTitle(for: repo)
+        case .sherpaOnnx(let modelID):
+            return SherpaOnnxModelCatalog.displayTitle(for: modelID)
+        case .remote(let provider):
+            let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: remoteASRConfigurations)
+            if configuration.hasUsableModel {
+                return "\(provider.title) · \(configuration.model)"
+            }
+            return "\(provider.title) · \(guideLocalized("Needs Setup"))"
+        case .none:
+            return guideLocalized("Not selected")
+        }
+    }
+
+    func llmSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.textSelection {
+        case .appleIntelligence:
+            return guideLocalized("Apple Intelligence")
+        case .localLLM(let repo):
+            return customLLMManager.displayTitle(for: repo)
+        case .remoteLLM(let provider):
+            guard RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
+                provider: provider,
+                stored: remoteLLMConfigurations
+            ) else {
+                return "\(provider.title) · \(guideLocalized("Needs Setup"))"
+            }
+            let configuration = RemoteModelConfigurationStore.resolvedLLMConfiguration(provider: provider, stored: remoteLLMConfigurations)
+            return "\(provider.title) · \(configuration.model)"
+        case .none:
+            return guideLocalized("Not selected")
+        }
+    }
+
+    func translationSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.translationSelection {
+        case .localGGUF(let modelID):
+            return GGUFTranslationModelCatalog.option(for: modelID).title
+        case .localLLM, .remoteLLM:
+            return llmSelectionSummary(selectionID)
+        case .none:
+            return guideLocalized("Not selected")
         }
     }
 }

@@ -106,7 +106,7 @@ enum OnboardingGuideStep: String, CaseIterable, Identifiable {
         case .appEnhancement:
             return AppLocalization.localizedString("Test temporary app-aware instructions while Voxt is focused.")
         case .meeting:
-            return AppLocalization.localizedString("Meeting capture is coming next; this step is reserved for the final flow.")
+            return AppLocalization.localizedString("Check the meeting shortcut and confirm the audio, summary, and speaker separation setup.")
         case .finish:
             return AppLocalization.localizedString("Review the active shortcuts and start using Voxt.")
         }
@@ -154,4 +154,3 @@ enum OnboardingGuideModelFocus {
     case local
     case remote
 }
-

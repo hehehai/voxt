@@ -37,7 +37,7 @@ extension AppEnhancementSettingsView {
                             modalErrorMessage = nil
                             modal = .addURLs
                         }
-                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 28))
+                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
                     }
                 }
 

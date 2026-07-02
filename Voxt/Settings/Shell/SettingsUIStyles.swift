@@ -248,6 +248,7 @@ struct SettingsDialogChromeModifier: ViewModifier {
     var height: CGFloat?
     var maxHeight: CGFloat?
     var onClose: (() -> Void)?
+    @Environment(\.dismiss) private var dismiss
 
     func body(content: Content) -> some View {
         content
@@ -264,18 +265,25 @@ struct SettingsDialogChromeModifier: ViewModifier {
                     .strokeBorder(SettingsUIStyle.dialogBorderColor, lineWidth: 0.7)
             )
             .overlay(alignment: .topTrailing) {
-                if let onClose {
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .buttonStyle(SettingsDialogCloseButtonStyle())
-                    .keyboardShortcut(.cancelAction)
-                    .padding(.top, 16)
-                    .padding(.trailing, 16)
-                    .help(AppLocalization.localizedString("Close"))
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
                 }
+                .buttonStyle(SettingsDialogCloseButtonStyle())
+                .keyboardShortcut(.cancelAction)
+                .padding(.top, SettingsUIStyle.dialogPadding)
+                .padding(.trailing, SettingsUIStyle.dialogPadding)
+                .help(AppLocalization.localizedString("Close"))
+                .accessibilityLabel(AppLocalization.localizedString("Close"))
             }
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
     }
 }
 

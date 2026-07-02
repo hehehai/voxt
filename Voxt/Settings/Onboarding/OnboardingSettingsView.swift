@@ -661,6 +661,8 @@ private extension OnboardingStep {
             return .translation
         case .rewrite:
             return .rewrite
+        case .meeting:
+            return .meeting
         case .appEnhancement:
             return .appEnhancement
         case .finish:

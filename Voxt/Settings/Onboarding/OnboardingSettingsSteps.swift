@@ -22,6 +22,8 @@ extension OnboardingSettingsView {
             translationStep
         case .rewrite:
             rewriteStep
+        case .meeting:
+            meetingStep
         case .appEnhancement:
             appEnhancementStep
         case .finish:
@@ -572,6 +574,48 @@ extension OnboardingSettingsView {
         }
     }
 
+    var meetingStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            GeneralSettingsCard(title: "Meeting") {
+                Text(localized("Meeting captures live audio into a transcript, then uses the selected summary model and speaker separation settings for meeting details."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                OnboardingSummaryCard(
+                    title: "Current Meeting Setup",
+                    lines: [
+                        AppLocalization.format("Shortcut: %@", formattedMeetingHotkey),
+                        AppLocalization.format("Audio model: %@", meetingASRSummary),
+                        AppLocalization.format("Summary model: %@", meetingSummaryModelSummary),
+                        AppLocalization.format("Segmentation: %@", featureSettings.meeting.chunkingMode.title),
+                        AppLocalization.format("Speaker separation: %@", featureSettings.meeting.speakerDiarizationModel.title),
+                        AppLocalization.format(
+                            "Auto summary: %@",
+                            featureSettings.meeting.summaryAutoGenerate ? localized("Enabled") : localized("Disabled")
+                        )
+                    ]
+                )
+            }
+
+            GeneralSettingsCard(title: "Behavior") {
+                OnboardingExampleRow(
+                    title: "Live Transcript",
+                    detail: "The meeting audio model is separate from translation and rewrite, and Direct Dictation is not used for Meeting mode."
+                )
+                Divider()
+                OnboardingExampleRow(
+                    title: "Summary",
+                    detail: "Meeting summaries use the selected text model and can be generated automatically after recording."
+                )
+                Divider()
+                OnboardingExampleRow(
+                    title: "Speaker Separation",
+                    detail: "Speaker labels are produced after recording when the selected speaker separation model is ready."
+                )
+            }
+        }
+    }
+
     var finishStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             GeneralSettingsCard(title: "You're Ready") {
@@ -586,7 +630,8 @@ extension OnboardingSettingsView {
                         AppLocalization.format("ASR: %@", onboardingASRSummary),
                         AppLocalization.format("LLM: %@", onboardingLLMSummary),
                         AppLocalization.format("Translation: %@", translationProviderSummary),
-                        AppLocalization.format("Rewrite: %@", rewriteProviderSummary)
+                        AppLocalization.format("Rewrite: %@", rewriteProviderSummary),
+                        AppLocalization.format("Meeting summary: %@", meetingSummaryModelSummary)
                     ]
                 )
 

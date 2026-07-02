@@ -39,6 +39,13 @@ extension OnboardingSettingsView {
         )
     }
 
+    var formattedMeetingHotkey: String {
+        HotkeyPreference.displayString(
+            for: HotkeyPreference.loadMeeting(),
+            distinguishModifierSides: true
+        )
+    }
+
     var missingConfigurationIssues: [ModelConfigurationIssue] {
         ModelConfigurationIssueResolver.missingIssues(
             mlxModelManager: mlxModelManager,
