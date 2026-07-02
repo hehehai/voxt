@@ -6,6 +6,23 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-07-02
+
+### English
+
+#### Fixed
+- Fixed recording startup with 44.1 kHz input devices across MLX, WhisperKit, and remote ASR providers by matching capture taps to the active microphone hardware sample rate.
+
+### 简体中文
+
+#### 修复
+- 修复输入设备为 44.1 kHz 时 MLX、WhisperKit 和远程 ASR 录音启动失败的问题，现在采集 tap 会匹配当前麦克风硬件采样率。
+
+### 日本語
+
+#### 修正
+- 入力デバイスが 44.1 kHz の場合に MLX、WhisperKit、リモート ASR の録音開始が失敗する問題を修正し、キャプチャ tap が現在のマイクのハードウェアサンプルレートに合わせられるようにしました。
+
 ## [1.12.1-beta.2] - 2026-07-01
 
 ### English
