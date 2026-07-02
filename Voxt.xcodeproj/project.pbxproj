@@ -1018,7 +1018,7 @@
 			repositoryURL = "https://github.com/jaywcjlove/PermissionFlow.git";
 			requirement = {
 				kind = exactVersion;
-				version = 2.4.0;
+				version = 2.6.0;
 			};
 		};
 		F1A2B3C4D5E6F708090A0B0E /* XCRemoteSwiftPackageReference "FaviconFinder" */ = {
