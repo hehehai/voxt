@@ -6,6 +6,23 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.0-beta.2] - 2026-07-02
+
+### English
+
+#### Fixed
+- Fixed beta release packaging so Sherpa ONNX local ASR is enabled in the signed app build.
+
+### 简体中文
+
+#### 修复
+- 修复 beta 发布包打包流程，现在签名后的 App 会启用 Sherpa ONNX 本地 ASR。
+
+### 日本語
+
+#### 修正
+- beta リリースのパッケージングを修正し、署名済みアプリで Sherpa ONNX ローカル ASR が有効になるようにしました。
+
 ## [1.13.0-beta.1] - 2026-07-02
 
 ### English
