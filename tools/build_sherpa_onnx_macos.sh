@@ -21,11 +21,14 @@ done
 mkdir -p "$THIRD_PARTY_DIR"
 
 if [ ! -d "$SOURCE_DIR/.git" ]; then
-  git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$SOURCE_DIR"
-else
-  git -C "$SOURCE_DIR" fetch --depth 1 origin "$REPO_REF"
-  git -C "$SOURCE_DIR" checkout FETCH_HEAD
+  git init "$SOURCE_DIR"
+  git -C "$SOURCE_DIR" remote add origin "$REPO_URL"
 fi
+
+git -C "$SOURCE_DIR" remote set-url origin "$REPO_URL"
+git -C "$SOURCE_DIR" fetch --depth 1 origin "$REPO_REF"
+git -C "$SOURCE_DIR" checkout --detach FETCH_HEAD
+RESOLVED_REF="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
 
 (
   cd "$SOURCE_DIR"
@@ -39,6 +42,8 @@ cp -R "$SOURCE_DIR/build-swift-macos/sherpa-onnx.xcframework" "$THIRD_PARTY_DIR/
 
 cat <<EOF
 sherpa-onnx macOS runtime is ready:
+  source: $REPO_URL
+  ref: $RESOLVED_REF
   $THIRD_PARTY_DIR/install
   $THIRD_PARTY_DIR/sherpa-onnx.xcframework
 

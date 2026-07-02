@@ -175,6 +175,7 @@ jobs:
       APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
       NOTARY_PROFILE_NAME: ${{ secrets.NOTARY_PROFILE_NAME }}
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      SHERPA_ONNX_REF: 49ebd5baaa7d21b1edcf71ec800a63400f8397af
     steps:
       - uses: actions/checkout@v4
 
@@ -226,6 +227,19 @@ jobs:
           TAG_BASE_VERSION="$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
           if [ "$MARKETING_VERSION" != "$TAG_BASE_VERSION" ]; then
             echo "::error::MARKETING_VERSION($MARKETING_VERSION) does not match tag base version($TAG_BASE_VERSION)"
+            exit 1
+          fi
+
+      - name: Prepare Sherpa ONNX runtime
+        run: |
+          set -euo pipefail
+          tools/build_sherpa_onnx_macos.sh
+          cp Config/SherpaOnnx.local.xcconfig.example Config/SherpaOnnx.local.xcconfig
+
+          mkdir -p build
+          xcodebuild -project Voxt.xcodeproj -scheme Voxt -configuration Release -showBuildSettings > build/sherpa-build-settings.txt
+          if ! grep -E 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = .*SHERPA_ONNX_AVAILABLE' build/sherpa-build-settings.txt >/dev/null; then
+            echo "::error::Release build settings do not enable SHERPA_ONNX_AVAILABLE"
             exit 1
           fi
 
@@ -297,6 +311,28 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
+
+      - name: Validate Sherpa ONNX runtime symbols
+        run: |
+          set -euo pipefail
+          APP_EXECUTABLE="build/DerivedData/Build/Products/Release/Voxt.app/Contents/MacOS/Voxt"
+          if [ ! -f "$APP_EXECUTABLE" ]; then
+            echo "::error::Voxt executable not found at $APP_EXECUTABLE"
+            exit 1
+          fi
+
+          SYMBOLS_FILE="$(mktemp)"
+          trap 'rm -f "$SYMBOLS_FILE"' EXIT
+          nm -gU "$APP_EXECUTABLE" > "$SYMBOLS_FILE"
+
+          if ! grep -F "_SherpaOnnxCreateOfflineRecognizer" "$SYMBOLS_FILE" >/dev/null; then
+            echo "::error::Sherpa ONNX C API symbols are missing from the release app"
+            exit 1
+          fi
+          if ! grep -F "_OrtGetApiBase" "$SYMBOLS_FILE" >/dev/null; then
+            echo "::error::ONNX Runtime symbols are missing from the release app"
+            exit 1
+          fi
 
       - name: Validate Sparkle Info.plist keys
         run: |
