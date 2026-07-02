@@ -396,6 +396,18 @@ jobs:
           sign_if_exists "$SPARKLE_FRAMEWORK/Versions/B/Updater.app"
           sign_if_exists "$SPARKLE_FRAMEWORK"
 
+          FRAMEWORKS_DIR="$APP_PATH/Contents/Frameworks"
+          if [ -d "$FRAMEWORKS_DIR" ]; then
+            while IFS= read -r -d '' embedded_code; do
+              sign_if_exists "$embedded_code"
+            done < <(
+              find "$FRAMEWORKS_DIR" -mindepth 1 -maxdepth 1 \
+                \( \( -type d -name "*.framework" \) -o \( -type f -name "*.dylib" \) \) \
+                ! -path "$SPARKLE_FRAMEWORK" \
+                -print0
+            )
+          fi
+
           codesign \
             --force \
             --options runtime \
