@@ -8,7 +8,7 @@ private func localized(_ key: String) -> String {
     AppLocalization.localizedString(key)
 }
 
-enum HistoryFilterTab: String, CaseIterable, Identifiable {
+enum HistoryFilterTab: String, CaseIterable, Hashable, Identifiable {
     case transcription
     case translation
     case transcript

@@ -106,11 +106,18 @@ struct SettingsNavigationTarget: Hashable {
     let tab: SettingsTab
     let section: SettingsNavigationSection?
     let featureTab: FeatureSettingsTab?
+    let historyFilter: HistoryFilterTab?
 
-    init(tab: SettingsTab, section: SettingsNavigationSection? = nil, featureTab: FeatureSettingsTab? = nil) {
+    init(
+        tab: SettingsTab,
+        section: SettingsNavigationSection? = nil,
+        featureTab: FeatureSettingsTab? = nil,
+        historyFilter: HistoryFilterTab? = nil
+    ) {
         self.tab = tab
         self.section = section
         self.featureTab = featureTab ?? Self.defaultFeatureTab(for: tab, section: section)
+        self.historyFilter = historyFilter
     }
 
     init?(notification: Notification) {
@@ -136,14 +143,28 @@ struct SettingsNavigationTarget: Hashable {
             featureTab = Self.defaultFeatureTab(for: tab, section: section)
         }
 
-        self.init(tab: tab == .appEnhancement ? .feature : tab, section: section, featureTab: featureTab)
+        let historyFilter: HistoryFilterTab?
+        if let rawHistoryFilter = notification.userInfo?["historyFilter"] as? String,
+           !rawHistoryFilter.isEmpty {
+            historyFilter = HistoryFilterTab(rawValue: rawHistoryFilter)
+        } else {
+            historyFilter = nil
+        }
+
+        self.init(
+            tab: tab == .appEnhancement ? .feature : tab,
+            section: section,
+            featureTab: featureTab,
+            historyFilter: historyFilter
+        )
     }
 
     var userInfo: [String: String] {
         [
             "tab": tab.rawValue,
             "section": section?.rawValue ?? "",
-            "featureTab": featureTab?.rawValue ?? ""
+            "featureTab": featureTab?.rawValue ?? "",
+            "historyFilter": historyFilter?.rawValue ?? ""
         ]
     }
 

@@ -296,6 +296,7 @@
 "Required to attach active app screenshots for rewrite app context." = "Required to attach active app screenshots for rewrite app context.";
 "Required to mute other apps' media audio during recording." = "Required to mute other apps' media audio during recording.";
 "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording." = "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording.";
+"Required to capture system audio for Meeting and to mute other apps' media audio during recording." = "Required to capture system audio for Meeting and to mute other apps' media audio during recording.";
 "fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut." = "fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut.";
 "Enabled" = "Enabled";
 "Disabled" = "Disabled";

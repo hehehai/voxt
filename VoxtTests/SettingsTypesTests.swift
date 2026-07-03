@@ -416,6 +416,21 @@ final class SettingsTypesTests: XCTestCase {
         XCTAssertEqual(target.featureTab, .appEnhancement)
     }
 
+    func testHistoryNavigationTargetRoundTripsFilterThroughUserInfo() {
+        let target = SettingsNavigationTarget(
+            tab: .history,
+            section: .historyEntries,
+            historyFilter: .note
+        )
+        let notification = Notification(name: .voxtSettingsNavigate, object: nil, userInfo: target.userInfo)
+
+        let parsedTarget = SettingsNavigationTarget(notification: notification)
+
+        XCTAssertEqual(parsedTarget?.tab, .history)
+        XCTAssertEqual(parsedTarget?.section, .historyEntries)
+        XCTAssertEqual(parsedTarget?.historyFilter, .note)
+    }
+
     func testPermissionRequirementResolverAggregatesFeatureSelections() {
         let context = SettingsPermissionRequirementContext(
             selectedEngine: .mlxAudio,

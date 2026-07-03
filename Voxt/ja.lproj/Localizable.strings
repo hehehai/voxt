@@ -291,6 +291,7 @@
 "Required to attach active app screenshots for rewrite app context." = "転写の App コンテキストに現在の App のスクリーンショットを添付するために必要です。";
 "Required to mute other apps' media audio during recording." = "録音中に他アプリのメディア音声をミュートするために必要です。";
 "Required to capture system audio for Meeting Notes and to mute other apps' media audio during recording." = "Meeting Notes でシステム音声を取得し、録音中に他アプリのメディア音声をミュートするために必要です。";
+"Required to capture system audio for Meeting and to mute other apps' media audio during recording." = "会議でシステム音声を取得し、録音中に他アプリのメディア音声をミュートするために必要です。";
 "fn+space may conflict with macOS Globe or input source switching. If capture is unreliable, enable Input Monitoring and remap the system shortcut." = "fn+space は macOS の Globe または入力ソース切替と競合することがあります。取得が不安定な場合は、入力監視を有効にし、システムショートカットを再割り当てしてください。";
 "Enabled" = "有効";
 "Disabled" = "無効";
