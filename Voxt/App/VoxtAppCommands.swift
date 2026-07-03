@@ -143,6 +143,15 @@ struct MainWindowNavigationCommands: Commands {
                 Button(AppLocalization.localizedString("History Entries")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .history, section: .historyEntries))
                 }
+                Button(AppLocalization.localizedString("Notes")) {
+                    appDelegate.openMainWindow(
+                        target: SettingsNavigationTarget(
+                            tab: .history,
+                            section: .historyEntries,
+                            historyFilter: .note
+                        )
+                    )
+                }
             }
 
             Menu(AppLocalization.localizedString("Permissions")) {

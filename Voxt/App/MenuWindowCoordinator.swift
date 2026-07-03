@@ -101,15 +101,13 @@ extension AppDelegate {
         featureItem.target = self
         menu.addItem(featureItem)
 
-        if noteFeatureSettings.enabled {
-            let notesItem = NSMenuItem(
-                title: AppLocalization.localizedString("Notes"),
-                action: #selector(openNotesFromMenu),
-                keyEquivalent: ""
-            )
-            notesItem.target = self
-            menu.addItem(notesItem)
-        }
+        let notesItem = NSMenuItem(
+            title: AppLocalization.localizedString("Notes"),
+            action: #selector(openNotesHistoryFromMenu),
+            keyEquivalent: ""
+        )
+        notesItem.target = self
+        menu.addItem(notesItem)
 
         let dictionaryItem = NSMenuItem(
             title: AppLocalization.localizedString("Dictionary"),
@@ -333,9 +331,15 @@ extension AppDelegate {
         }
     }
 
-    @objc private func openNotesFromMenu() {
+    @objc private func openNotesHistoryFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
+            self.openMainWindowFromStatusMenu(
+                target: SettingsNavigationTarget(
+                    tab: .history,
+                    section: .historyEntries,
+                    historyFilter: .note
+                )
+            )
         }
     }
 

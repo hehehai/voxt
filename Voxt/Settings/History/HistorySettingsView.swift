@@ -326,12 +326,16 @@ struct HistorySettingsView: View {
             )
         }
         .onAppear {
+            applyNavigationTarget(navigationRequest?.target)
             if !HistoryRetentionPeriod.allCases.contains(where: { $0.rawValue == historyRetentionPeriodRaw }) {
                 historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
             }
             refreshHistoryAudioStorageDisplayPath()
             refreshHistoryAudioStorageStats()
             reloadHistoryEntries(reset: true)
+        }
+        .onChange(of: navigationRequest?.id) { _, _ in
+            applyNavigationTarget(navigationRequest?.target)
         }
         .onChange(of: selectedFilter) { _, _ in
             reloadHistoryEntries(reset: true)
@@ -490,6 +494,16 @@ struct HistorySettingsView: View {
                 proxy.scrollTo(section.rawValue, anchor: .top)
             }
         }
+    }
+
+    private func applyNavigationTarget(_ target: SettingsNavigationTarget?) {
+        guard target?.tab == .history,
+              let historyFilter = target?.historyFilter
+        else {
+            return
+        }
+
+        selectedFilter = historyFilter
     }
 
     private func confirmBulkDeletion(_ target: HistoryBulkDeletionTarget) {
