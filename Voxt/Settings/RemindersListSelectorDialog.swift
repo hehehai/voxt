@@ -1,3 +1,6 @@
+// RemindersListSelectorDialog.swift
+// Provides Reminders List Selector Dialog for settings screens.
+
 import SwiftUI
 
 struct RemindersListSelectorDialog: View {

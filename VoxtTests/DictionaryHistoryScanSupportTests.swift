@@ -1,3 +1,6 @@
+// DictionaryHistoryScanSupportTests.swift
+// Provides Dictionary History Scan Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

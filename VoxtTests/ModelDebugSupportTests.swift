@@ -1,3 +1,6 @@
+// ModelDebugSupportTests.swift
+// Provides Model Debug Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -16,6 +19,92 @@ final class ModelDebugSupportTests: XCTestCase {
             defaults.removePersistentDomain(forName: suiteName)
         }
         try body(defaults)
+    }
+
+    func testVADSnapshotExposesGlobalModeAndEffectiveBackend() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.automatic, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .mlxAudio,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .automatic)
+            XCTAssertEqual(snapshot.backend, .mlxSilero)
+            XCTAssertEqual(snapshot.backendRawValue, ASRVoiceActivityBackendKind.mlxSilero.rawValue)
+            XCTAssertEqual(snapshot.frameBackend, .mlxSilero)
+            XCTAssertEqual(snapshot.localGatePolicy, .enabled)
+            XCTAssertFalse(snapshot.providerUsesServerVAD)
+        }
+    }
+
+    func testVADSnapshotShowsOffMode() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.off, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .mlxAudio,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .off)
+            XCTAssertEqual(snapshot.backend, .off)
+            XCTAssertEqual(snapshot.frameBackend, .off)
+            XCTAssertEqual(snapshot.localGatePolicy, .disabled(reason: "local-vad-off"))
+        }
+    }
+
+    func testVADSnapshotShowsOmniBackend() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.omni, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .mlxAudio,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .omni)
+            XCTAssertEqual(snapshot.backend, .omniStream)
+            XCTAssertEqual(snapshot.backendRawValue, ASRVoiceActivityBackendKind.omniStream.rawValue)
+            XCTAssertEqual(snapshot.frameBackend, .omniStream)
+            XCTAssertEqual(snapshot.localGatePolicy, .enabled)
+        }
+    }
+
+    func testVADSnapshotDisablesLocalGateForRemoteASR() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.silero, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .remote,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .silero)
+            XCTAssertEqual(snapshot.backend, .mlxSilero)
+            XCTAssertEqual(snapshot.localGatePolicy, .disabled(reason: "non-local-asr"))
+        }
+    }
+
+    func testVADSnapshotMarksServerVADWhenProviderUsesRealtimeProfile() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.silero, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .remote,
+                providerUsesServerVAD: true
+            )
+
+            XCTAssertTrue(snapshot.providerUsesServerVAD)
+            XCTAssertEqual(snapshot.frameBackend, .mlxSilero)
+            XCTAssertEqual(snapshot.localGatePolicy, .disabled(reason: "server-vad"))
+        }
     }
 
     func testLLMDebugPresetsIncludeBuiltinsAndSavedGroups() throws {
@@ -420,6 +509,61 @@ final class ModelDebugSupportTests: XCTestCase {
 
         XCTAssertTrue(resolved.content.contains("write a short reply"))
         XCTAssertEqual(resolved.inputSummary, "write a short reply")
+        XCTAssertEqual(resolved.requestMetadata?.spokenInstruction, "write a short reply")
+        XCTAssertEqual(resolved.requestMetadata?.sourceText, "")
+    }
+
+    func testPromptResolverIncludesRewriteAppContextAndImageAttachmentInCompiledPreview() throws {
+        let preset = LLMDebugPresetOption(
+            id: "builtin:rewrite",
+            title: "Rewrite",
+            subtitle: "Built-in preset",
+            kind: .rewrite,
+            promptTemplate: AppPromptDefaults.text(for: .rewrite, language: .english),
+            variables: ModelSettingsPromptVariables.rewrite,
+            defaultValues: [:]
+        )
+        let payload = DebugRewriteAppContextPayload(
+            textContext: """
+            App: WeChat
+
+            Visible text:
+            - Alice: Can you send the update?
+            """,
+            attachments: [
+                .image(
+                    DebugRewriteImageAttachmentPayload(
+                        base64Data: Data("preview-image".utf8).base64EncodedString(),
+                        mimeType: "image/jpeg",
+                        detail: LLMImageAttachmentDetail.low.rawValue,
+                        filename: "wechat.jpg"
+                    )
+                )
+            ]
+        )
+        let payloadData = try XCTUnwrap(try? JSONEncoder().encode(payload))
+        let payloadString = try XCTUnwrap(String(data: payloadData, encoding: .utf8))
+
+        let resolved = ModelDebugPromptResolver.resolve(
+            preset: preset,
+            values: [
+                "{{DICTATED_PROMPT}}": "make it warmer",
+                "{{SOURCE_TEXT}}": "Can you send the update by 5?",
+                ModelDebugRuntimeValueKey.rewriteAppContextCapture: payloadString
+            ]
+        )
+
+        let compiled = try XCTUnwrap(resolved.compiledRequest)
+        XCTAssertContains(compiled.instructions, "### App context usage rules")
+        XCTAssertContains(compiled.instructions, "### Active app context")
+        XCTAssertContains(compiled.instructions, "App: WeChat")
+        XCTAssertEqual(compiled.attachments.count, 1)
+        XCTAssertContains(resolved.content, "[attachments]")
+        XCTAssertContains(resolved.content, "wechat.jpg")
+        XCTAssertEqual(resolved.requestMetadata?.appContextCharacterCount, payload.textContext.count)
+        XCTAssertEqual(resolved.requestMetadata?.imageAttachmentCount, 1)
+        XCTAssertEqual(resolved.requestMetadata?.imagePreviews.count, 1)
+        XCTAssertEqual(resolved.requestMetadata?.imagePreviews.first?.filename, "wechat.jpg")
     }
 
     func testRemoteDebugModelCatalogFiltersUnavailableProviders() {
@@ -460,7 +604,7 @@ final class ModelDebugSupportTests: XCTestCase {
 
         let asrOptions = ModelDebugCatalog.availableASRModels(
             downloadedMLXRepos: [],
-            downloadedWhisperModelIDs: [],
+            downloadedSherpaModelIDs: [],
             remoteASRConfigurations: remoteASRConfigurations
         )
         let llmOptions = ModelDebugCatalog.availableLLMModels(
@@ -474,5 +618,20 @@ final class ModelDebugSupportTests: XCTestCase {
         XCTAssertTrue(llmOptions.contains(where: { $0.id == "remote-llm:\(RemoteLLMProvider.openAI.rawValue)" }))
         XCTAssertFalse(llmOptions.contains(where: { $0.id == "remote-llm:\(RemoteLLMProvider.aliyunBailian.rawValue)" }))
         XCTAssertTrue(llmOptions.contains(where: { $0.id == "remote-llm:\(RemoteLLMProvider.ollama.rawValue)" }))
+    }
+
+    func testASRDebugCatalogIncludesDownloadedSherpaModelsWhenRuntimeIsAvailable() {
+        let options = ModelDebugCatalog.availableASRModels(
+            downloadedMLXRepos: [],
+            downloadedSherpaModelIDs: [SherpaOnnxModelCatalog.funASRNanoModelID],
+            remoteASRConfigurations: [:]
+        )
+
+        #if SHERPA_ONNX_AVAILABLE
+        let option = options.first(where: { $0.id == "sherpa:\(SherpaOnnxModelCatalog.funASRNanoModelID.rawValue)" })
+        XCTAssertEqual(option?.selection, .sherpaOnnx(modelID: SherpaOnnxModelCatalog.funASRNanoModelID))
+        #else
+        XCTAssertFalse(options.contains(where: { $0.id.hasPrefix("sherpa:") }))
+        #endif
     }
 }

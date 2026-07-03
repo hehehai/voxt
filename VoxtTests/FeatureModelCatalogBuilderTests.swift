@@ -1,9 +1,12 @@
+// FeatureModelCatalogBuilderTests.swift
+// Provides Feature Model Catalog Builder Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
 @MainActor
 final class FeatureModelCatalogBuilderTests: XCTestCase {
-    func testTranslationEntriesDisableWhisperDirectTranslateWithoutWhisperASR() throws {
+    func testTranslationEntriesDoNotExposeWhisperDirectTranslate() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
                 translationASR: .mlx(MLXModelManager.defaultModelRepo),
@@ -12,37 +15,34 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             )
         )
 
-        let directTranslate = try XCTUnwrap(
+        XCTAssertNil(
             builder.entries(for: .translationModel)
-                .first(where: { $0.selectionID == .whisperDirectTranslate })
-        )
-
-        XCTAssertFalse(directTranslate.isSelectable)
-        XCTAssertEqual(
-            directTranslate.disabledReason,
-            AppLocalization.localizedString("Whisper direct translation requires Whisper as the translation ASR model.")
+                .first(where: { $0.selectionID.rawValue == "whisper-direct-translate" })
         )
     }
 
-    func testTranslationEntriesDisableWhisperDirectTranslateForNonEnglishOutput() throws {
+    func testLegacyWhisperTranslationSelectionIsNotDisplayed() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
-                translationASR: .whisper(WhisperKitModelManager.defaultModelID),
+                translationASR: .mlx(MLXWhisperMigrationSupport.defaultRepo),
                 translationModel: .remoteLLM(.openAI),
                 translationTarget: .japanese
             )
         )
 
-        let directTranslate = try XCTUnwrap(
+        XCTAssertNil(
             builder.entries(for: .translationModel)
-                .first(where: { $0.selectionID == .whisperDirectTranslate })
+                .first(where: { $0.selectionID.rawValue == "whisper-direct-translate" })
         )
+    }
 
-        XCTAssertFalse(directTranslate.isSelectable)
-        XCTAssertEqual(
-            directTranslate.disabledReason,
-            AppLocalization.localizedString("Whisper direct translation only supports English output.")
-        )
+    func testMeetingASREntriesDoNotExposeLegacyWhisperModels() throws {
+        let builder = makeBuilder(featureSettings: makeFeatureSettings())
+
+        let whisperEntries = builder.entries(for: .meetingASR)
+            .filter { $0.selectionID.rawValue.hasPrefix("whisper:") }
+
+        XCTAssertTrue(whisperEntries.isEmpty)
     }
 
     func testConfiguredRemoteEntriesExposeUsageAndSelectionSummary() throws {
@@ -193,8 +193,42 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
+    func testASRSelectorShowsSherpaModelsEvenWhenRuntimeUnavailable() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .dictation)
+        )
+
+        let entries = builder.entries(for: .transcriptionASR)
+        let fireRed = try XCTUnwrap(
+            entries.first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID) })
+        )
+        let funASR = try XCTUnwrap(
+            entries.first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID) })
+        )
+
+        XCTAssertEqual(fireRed.title, "FireRed 2 Mini")
+        XCTAssertEqual(funASR.title, "FunASR Nano")
+        XCTAssertEqual(fireRed.engine, AppLocalization.localizedString("Sherpa"))
+        XCTAssertEqual(funASR.engine, AppLocalization.localizedString("Sherpa"))
+
+        if SherpaOnnxRuntimeSupport.isAvailable {
+            XCTAssertNotEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            XCTAssertNotEqual(funASR.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            if fireRed.isSelectable {
+                XCTAssertNil(fireRed.disabledReason)
+            } else {
+                XCTAssertEqual(fireRed.disabledReason, AppLocalization.localizedString("Install this model in Model settings first."))
+            }
+        } else {
+            XCTAssertFalse(fireRed.isSelectable)
+            XCTAssertFalse(funASR.isSelectable)
+            XCTAssertEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
+            XCTAssertEqual(fireRed.disabledReason, SherpaOnnxRuntimeSupport.unavailableDetail)
+        }
+    }
+
     func testLLMSelectorUsesCuratedRatingAndTags() throws {
-        let repo = "mlx-community/MiniCPM4-8B-4bit"
+        let repo = "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(translationModel: .localLLM(repo))
         )
@@ -204,13 +238,47 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
                 .first(where: { $0.selectionID == .localLLM(repo) })
         )
 
-        XCTAssertEqual(entry.ratingText, "4.8")
-        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
+        XCTAssertEqual(entry.ratingText, "4.5")
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
     }
 
+    func testLLMSelectorIncludesHiddenLocalLLMFeatureSelection() throws {
+        let repo = "mlx-community/gemma-2-2b-it-4bit"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(translationModel: .localLLM(repo))
+        )
+
+        XCTAssertFalse(CustomLLMModelManager.availableModels.contains { $0.id == repo })
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .translationModel)
+                .first(where: { $0.selectionID == .localLLM(repo) })
+        )
+
+        XCTAssertEqual(entry.title, CustomLLMModelCatalog.displayTitle(for: repo))
+        XCTAssertTrue(entry.usageLocations.contains(AppLocalization.localizedString("Translation")))
+    }
+
+    func testMeetingSummarySelectorIncludesHiddenLocalLLMFeatureSelection() throws {
+        let repo = "mlx-community/Mistral-Nemo-Instruct-2407-4bit"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(meetingSummary: .localLLM(repo))
+        )
+
+        XCTAssertFalse(CustomLLMModelManager.availableModels.contains { $0.id == repo })
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .meetingSummary)
+                .first(where: { $0.selectionID == .localLLM(repo) })
+        )
+
+        XCTAssertEqual(entry.title, CustomLLMModelCatalog.displayTitle(for: repo))
+        XCTAssertTrue(entry.usageLocations.contains(AppLocalization.localizedString("Meeting")))
+    }
+
     func testMLXSelectorUsesCuratedRatingAndTags() throws {
-        let repo = "mlx-community/GLM-ASR-Nano-2512-4bit"
+        let repo = "mlx-community/parakeet-tdt-0.6b-v3"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo))
         )
@@ -220,7 +288,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
                 .first(where: { $0.selectionID == .mlx(repo) })
         )
 
-        XCTAssertEqual(entry.ratingText, "4.1")
+        XCTAssertEqual(entry.ratingText, "4.3")
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
     }
@@ -239,20 +307,31 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Realtime")))
     }
 
-    func testWhisperSelectorUsesCuratedRatingAndTags() throws {
+    func testInstalledHiddenMLXWhisperModelRemainsSelectableInSelector() throws {
+        let repo = "mlx-community/whisper-base-mlx"
+        let availability = FeatureModelCatalogBuilder.mlxSelectorAvailability(isInstalled: true)
+
+        XCTAssertFalse(MLXModelManager.isAvailableModelRepo(repo))
+        XCTAssertTrue(availability.isSelectable)
+        XCTAssertNil(availability.disabledReason)
+    }
+
+    func testLegacyWhisperSelectionSummaryUsesMigratedMLXWhisperModel() throws {
         let modelID = "medium"
         let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(transcriptionASR: .whisper(modelID))
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID)))
         )
 
+        let repo = MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID)
         let entry = try XCTUnwrap(
             builder.entries(for: .transcriptionASR)
-                .first(where: { $0.selectionID == .whisper(modelID) })
+                .first(where: { $0.selectionID == .mlx(repo) })
         )
 
-        XCTAssertEqual(entry.ratingText, "4.7")
-        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
-        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+        XCTAssertEqual(builder.asrSelectionSummary(.mlx(repo)), MLXModelCatalog.displayTitle(for: repo))
+        XCTAssertEqual(entry.ratingText, "4.8")
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
     }
 
     func testSelectorEntriesShowRecommendedBadgesForTargetedSinglesAndProviders() throws {
@@ -298,27 +377,33 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(aliyun.badgeText, recommended)
     }
 
-    func testSelectorGroupedFamiliesShowRecommendedBadgesForQwenASRAndGemma() throws {
+    func testSelectorGroupedFamiliesShowRecommendedBadgesForWhisperQwenASRAndGemma() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
-                transcriptionASR: .mlx("mlx-community/Qwen3-ASR-0.6B-4bit"),
-                translationModel: .localLLM("mlx-community/gemma-2-2b-it-4bit")
+                transcriptionASR: .mlx("mlx-community/whisper-large-v3-turbo"),
+                translationModel: .localLLM("mlx-community/gemma-4-e2b-it-4bit")
             )
         )
 
         let asrGroups = LocalModelSeriesGrouping.featureSelectorItems(
             from: builder.entries(for: .transcriptionASR),
-            selectedID: .mlx("mlx-community/Qwen3-ASR-0.6B-4bit")
+            selectedID: .mlx("mlx-community/whisper-large-v3-turbo")
         )
         let llmGroups = LocalModelSeriesGrouping.featureSelectorItems(
             from: builder.entries(for: .translationModel),
-            selectedID: .localLLM("mlx-community/gemma-2-2b-it-4bit")
+            selectedID: .localLLM("mlx-community/gemma-4-e2b-it-4bit")
         )
         let recommended = AppLocalization.localizedString("Recommended")
 
+        let whisperGroup = try XCTUnwrap(
+            asrGroups.compactMap { item -> FeatureModelSelectorGroupSection? in
+                guard case .group(let group) = item, group.title == "Whisper" else { return nil }
+                return group
+            }.first
+        )
         let qwenGroup = try XCTUnwrap(
             asrGroups.compactMap { item -> FeatureModelSelectorGroupSection? in
-                guard case .group(let group) = item, group.title == "Qwen3-ASR" else { return nil }
+                guard case .group(let group) = item, group.title == "Qwen3" else { return nil }
                 return group
             }.first
         )
@@ -329,20 +414,110 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             }.first
         )
 
+        XCTAssertEqual(whisperGroup.badgeText, recommended)
+        XCTAssertEqual(whisperGroup.entries.map(\.groupedVariantTitle), ["Large v3 Turbo", "Large v3", "Small"])
         XCTAssertEqual(qwenGroup.badgeText, recommended)
         XCTAssertEqual(gemmaGroup.badgeText, recommended)
     }
 
+    func testSelectorGroupsFireRedMiniAndOriginalAcrossLocalEngines() throws {
+        let items = LocalModelSeriesGrouping.featureSelectorItems(
+            from: [
+                makeSelectorEntry(
+                    selectionID: .mlx("mlx-community/FireRedASR2-AED-mlx"),
+                    title: "FireRed 2",
+                    engine: AppLocalization.localizedString("MLX Audio")
+                ),
+                makeSelectorEntry(
+                    selectionID: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID),
+                    title: "FireRed 2 Mini",
+                    engine: AppLocalization.localizedString("Sherpa")
+                )
+            ],
+            selectedID: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
+        )
+
+        let group = try XCTUnwrap(
+            items.compactMap { item -> FeatureModelSelectorGroupSection? in
+                guard case .group(let group) = item, group.title == "FireRed" else { return nil }
+                return group
+            }.first
+        )
+
+        XCTAssertEqual(group.id, LocalModelSeriesClassifier.fireRedSeriesID)
+        XCTAssertEqual(group.engine, AppLocalization.localizedString("Local"))
+        XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["Mini", "Original"])
+    }
+
+    func testSelectorDoesNotGroupGLMModels() {
+        let items = LocalModelSeriesGrouping.featureSelectorItems(
+            from: [
+                makeSelectorEntry(
+                    selectionID: .localLLM("mlx-community/GLM-4-9B-0414-4bit"),
+                    title: "GLM 4 9B",
+                    engine: AppLocalization.localizedString("Local LLM")
+                ),
+                makeSelectorEntry(
+                    selectionID: .localLLM("mlx-community/GLM-Z1-9B-0414-4bit"),
+                    title: "GLM-Z1 9B (4bit)",
+                    engine: AppLocalization.localizedString("Local LLM")
+                )
+            ],
+            selectedID: .localLLM("mlx-community/GLM-4-9B-0414-4bit")
+        )
+
+        XCTAssertEqual(items.count, 2)
+        XCTAssertTrue(items.allSatisfy { item in
+            if case .row = item {
+                return true
+            }
+            return false
+        })
+    }
+
+    func testSelectorDoesNotGroupMistralOrLlamaModels() {
+        let items = LocalModelSeriesGrouping.featureSelectorItems(
+            from: [
+                makeSelectorEntry(
+                    selectionID: .localLLM("mlx-community/Ministral-3-3B-Instruct-2512-4bit"),
+                    title: "Mistral 3 3B",
+                    engine: AppLocalization.localizedString("Local LLM")
+                ),
+                makeSelectorEntry(
+                    selectionID: .localLLM("mlx-community/Mistral-Nemo-Instruct-2407-4bit"),
+                    title: "Mistral Nemo Instruct 2407 (4bit)",
+                    engine: AppLocalization.localizedString("Local LLM")
+                ),
+                makeSelectorEntry(
+                    selectionID: .localLLM("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"),
+                    title: "Meta Llama 3.1 8B Instruct (4bit)",
+                    engine: AppLocalization.localizedString("Local LLM")
+                )
+            ],
+            selectedID: .localLLM("mlx-community/Ministral-3-3B-Instruct-2512-4bit")
+        )
+
+        XCTAssertEqual(items.count, 3)
+        XCTAssertTrue(items.allSatisfy { item in
+            if case .row = item {
+                return true
+            }
+            return false
+        })
+    }
+
     private func makeBuilder(
+        mlxModelManager: MLXModelManager = TestModelManagers.mlx,
         featureSettings: FeatureSettings,
         remoteASRConfigurationsRaw: String = "",
         remoteLLMConfigurationsRaw: String = "",
         primaryUserLanguageCode: String? = "en"
     ) -> FeatureModelCatalogBuilder {
         FeatureModelCatalogBuilder(
-            mlxModelManager: TestModelManagers.mlx,
-            whisperModelManager: TestModelManagers.whisper,
+            mlxModelManager: mlxModelManager,
+            sherpaOnnxModelManager: TestModelManagers.sherpa,
             customLLMManager: TestModelManagers.customLLM,
+            ggufTranslationModelManager: TestModelManagers.gguf,
             featureSettings: featureSettings,
             remoteASRProviderConfigurationsRaw: remoteASRConfigurationsRaw,
             remoteLLMProviderConfigurationsRaw: remoteLLMConfigurationsRaw,
@@ -358,7 +533,8 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
         translationTarget: TranslationTargetLanguage = .english,
         rewriteASR: FeatureModelSelectionID = .dictation,
-        rewriteLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
+        rewriteLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
+        meetingSummary: FeatureModelSelectionID? = nil
     ) -> FeatureSettings {
         FeatureSettings(
             transcription: .init(
@@ -378,17 +554,46 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
                 llmSelectionID: rewriteLLM,
                 prompt: AppPreferenceKey.defaultRewritePrompt,
                 appEnhancementEnabled: true
+            ),
+            meeting: .init(
+                asrSelectionID: transcriptionASR,
+                summaryModelSelectionID: meetingSummary ?? transcriptionLLM,
+                summaryPrompt: "",
+                summaryAutoGenerate: true,
+                realtimeTranslateEnabled: false,
+                realtimeTargetLanguageRawValue: "",
+                hideOverlayFromScreenSharing: false
             )
         )
     }
+
+    private func makeSelectorEntry(
+        selectionID: FeatureModelSelectionID,
+        title: String,
+        engine: String
+    ) -> FeatureModelSelectorEntry {
+        FeatureModelSelectorEntry(
+            selectionID: selectionID,
+            title: title,
+            engine: engine,
+            sizeText: "1 GB",
+            ratingText: "4.8",
+            filterTags: [AppLocalization.localizedString("Local")],
+            displayTags: [AppLocalization.localizedString("Local")],
+            statusText: "",
+            usageLocations: [],
+            badgeText: nil,
+            isSelectable: true,
+            disabledReason: nil
+        )
+    }
+
 }
 
 @MainActor
 private enum TestModelManagers {
     static let mlx = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
-    static let whisper = WhisperKitModelManager(
-        modelID: WhisperKitModelManager.defaultModelID,
-        hubBaseURL: URL(string: "https://huggingface.co")!
-    )
+    static let sherpa = SherpaOnnxModelManager(modelID: SherpaOnnxModelCatalog.defaultModelID)
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
+    static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

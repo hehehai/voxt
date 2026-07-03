@@ -1,3 +1,6 @@
+// RecordingStartPlannerTests.swift
+// Provides Recording Start Planner Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -5,8 +8,7 @@ final class RecordingStartPlannerTests: XCTestCase {
     func testMLXAudioNotDownloadedBlocksRecordingStart() {
         let decision = RecordingStartPlanner.resolve(
             selectedEngine: .mlxAudio,
-            mlxModelState: .notDownloaded,
-            whisperModelState: .notDownloaded
+            mlxModelState: .notDownloaded
         )
 
         XCTAssertEqual(decision, .blocked(.mlxModelNotInstalled))
@@ -15,8 +17,7 @@ final class RecordingStartPlannerTests: XCTestCase {
     func testMLXAudioErrorBlocksRecordingStart() {
         let decision = RecordingStartPlanner.resolve(
             selectedEngine: .mlxAudio,
-            mlxModelState: .error("broken"),
-            whisperModelState: .notDownloaded
+            mlxModelState: .error("broken")
         )
 
         XCTAssertEqual(decision, .blocked(.mlxModelUnavailable(detail: "broken")))
@@ -25,8 +26,7 @@ final class RecordingStartPlannerTests: XCTestCase {
     func testMLXAudioDownloadedStartsWithMLXAudio() {
         let decision = RecordingStartPlanner.resolve(
             selectedEngine: .mlxAudio,
-            mlxModelState: .downloaded,
-            whisperModelState: .notDownloaded
+            mlxModelState: .downloaded
         )
 
         XCTAssertEqual(decision, .start(.mlxAudio))
@@ -44,8 +44,7 @@ final class RecordingStartPlannerTests: XCTestCase {
                 currentFile: "weights.bin",
                 completedFiles: 1,
                 totalFiles: 2
-            ),
-            whisperModelState: .notDownloaded
+            )
         )
 
         XCTAssertEqual(decision, .blocked(.mlxModelDownloading))
@@ -64,8 +63,7 @@ final class RecordingStartPlannerTests: XCTestCase {
                 currentFile: "weights.bin",
                 completedFiles: 1,
                 totalFiles: 2
-            ),
-            whisperModelState: .notDownloaded
+            )
         )
 
         XCTAssertEqual(decision, .start(.mlxAudio))
@@ -83,8 +81,7 @@ final class RecordingStartPlannerTests: XCTestCase {
                 currentFile: "weights.bin",
                 completedFiles: 1,
                 totalFiles: 2
-            ),
-            whisperModelState: .notDownloaded
+            )
         )
 
         XCTAssertEqual(decision, .blocked(.mlxModelDownloading))
@@ -93,41 +90,55 @@ final class RecordingStartPlannerTests: XCTestCase {
     func testDictationStartIgnoresMLXModelState() {
         let decision = RecordingStartPlanner.resolve(
             selectedEngine: .dictation,
-            mlxModelState: .notDownloaded,
-            whisperModelState: .notDownloaded
+            mlxModelState: .notDownloaded
         )
 
         XCTAssertEqual(decision, .start(.dictation))
     }
 
-    func testWhisperNotDownloadedBlocksRecordingStart() {
+    func testLegacyWhisperUsesMLXAvailabilityWhenNotDownloaded() {
         let decision = RecordingStartPlanner.resolve(
-            selectedEngine: .whisperKit,
-            mlxModelState: .downloaded,
-            whisperModelState: .notDownloaded
+            selectedEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
+            mlxModelState: .notDownloaded
         )
 
-        XCTAssertEqual(decision, .blocked(.whisperModelNotInstalled))
+        XCTAssertEqual(decision, .blocked(.mlxModelNotInstalled))
     }
 
-    func testWhisperErrorBlocksRecordingStart() {
+    func testLegacyWhisperUsesMLXAvailabilityWhenUnavailable() {
         let decision = RecordingStartPlanner.resolve(
-            selectedEngine: .whisperKit,
-            mlxModelState: .downloaded,
-            whisperModelState: .error("broken")
+            selectedEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
+            mlxModelState: .error("broken")
         )
 
-        XCTAssertEqual(decision, .blocked(.whisperModelUnavailable(detail: "broken")))
+        XCTAssertEqual(decision, .blocked(.mlxModelUnavailable(detail: "broken")))
     }
 
-    func testWhisperDownloadedStartsWithWhisperEngine() {
+    func testLegacyWhisperDownloadedStartsWithMLXEngine() {
         let decision = RecordingStartPlanner.resolve(
-            selectedEngine: .whisperKit,
-            mlxModelState: .downloaded,
-            whisperModelState: .downloaded
+            selectedEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
+            mlxModelState: .downloaded
         )
 
-        XCTAssertEqual(decision, .start(.whisperKit))
+        XCTAssertEqual(decision, .start(.mlxAudio))
+    }
+
+    func testSherpaOnnxRuntimeUnavailableBlocksRecordingStart() {
+        #if SHERPA_ONNX_AVAILABLE
+        #else
+        let decision = RecordingStartPlanner.resolve(
+            selectedEngine: .sherpaOnnx,
+            mlxModelState: .downloaded,
+            selectedSherpaModelID: SherpaOnnxModelCatalog.fireRedModelID,
+            isSelectedSherpaModelDownloaded: true,
+            sherpaModelState: .downloaded
+        )
+        let expected: RecordingStartDecision = .blocked(
+            .sherpaModelUnavailable(detail: "Sherpa ONNX runtime is not bundled in this build.")
+        )
+
+        XCTAssertEqual(decision, expected)
+        #endif
     }
 
     func testMLXUnavailableMessageIncludesErrorDetail() {

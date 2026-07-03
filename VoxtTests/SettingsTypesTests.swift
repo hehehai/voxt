@@ -1,3 +1,6 @@
+// SettingsTypesTests.swift
+// Provides Settings Types Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -386,11 +389,11 @@ final class SettingsTypesTests: XCTestCase {
     func testFeatureVisibleTabsOnlyIncludeCurrentFeatureTabs() {
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, noteEnabled: false),
-            [.transcription, .translation, .rewrite]
+            [.transcription, .translation, .rewrite, .meeting]
         )
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true),
-            [.transcription, .note, .translation, .rewrite, .appEnhancement]
+            [.transcription, .note, .translation, .rewrite, .appEnhancement, .meeting]
         )
     }
 
@@ -402,7 +405,7 @@ final class SettingsTypesTests: XCTestCase {
     func testHotkeyShortcutVisibilityOnlyIncludesCurrentFeatureKinds() {
         XCTAssertEqual(
             HotkeyShortcutVisibility.visibleKinds(),
-            [.transcription, .translation, .rewrite]
+            [.transcription, .translation, .rewrite, .meeting]
         )
     }
 
@@ -411,6 +414,21 @@ final class SettingsTypesTests: XCTestCase {
 
         XCTAssertEqual(target.tab, .feature)
         XCTAssertEqual(target.featureTab, .appEnhancement)
+    }
+
+    func testHistoryNavigationTargetRoundTripsFilterThroughUserInfo() {
+        let target = SettingsNavigationTarget(
+            tab: .history,
+            section: .historyEntries,
+            historyFilter: .note
+        )
+        let notification = Notification(name: .voxtSettingsNavigate, object: nil, userInfo: target.userInfo)
+
+        let parsedTarget = SettingsNavigationTarget(notification: notification)
+
+        XCTAssertEqual(parsedTarget?.tab, .history)
+        XCTAssertEqual(parsedTarget?.section, .historyEntries)
+        XCTAssertEqual(parsedTarget?.historyFilter, .note)
     }
 
     func testPermissionRequirementResolverAggregatesFeatureSelections() {

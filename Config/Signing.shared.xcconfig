@@ -6,6 +6,7 @@ VOXT_DEVELOPMENT_TEAM = RY2TQTYSKQ
 VOXT_CODE_SIGN_IDENTITY =
 
 #include? "Signing.local.xcconfig"
+#include? "SherpaOnnx.local.xcconfig"
 
 CODE_SIGN_STYLE = $(VOXT_CODE_SIGN_STYLE)
 DEVELOPMENT_TEAM = $(VOXT_DEVELOPMENT_TEAM)

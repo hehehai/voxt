@@ -1,3 +1,6 @@
+// HistoryCorrectionPresentationTests.swift
+// Provides History Correction Presentation Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

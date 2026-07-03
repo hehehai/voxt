@@ -1,15 +1,6 @@
 {
-  "originHash" : "0d6e25bbf0e674f950eaa4c8bda959a86a88326c397b8ebfffe1a4ea915a76e3",
+  "originHash" : "203fbb697f6677dcb0a77a58ad1192d606352b0922206ee57bf302b41d816365",
   "pins" : [
-    {
-      "identity" : "argmax-oss-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/argmaxinc/argmax-oss-swift.git",
-      "state" : {
-        "revision" : "25c62997041c134b03ca82731ce2f6fd2cae1eb9",
-        "version" : "1.0.0"
-      }
-    },
     {
       "identity" : "eventsource",
       "kind" : "remoteSourceControl",
@@ -29,12 +20,29 @@
       }
     },
     {
+      "identity" : "fluidaudio",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FluidInference/FluidAudio.git",
+      "state" : {
+        "revision" : "ab29cead3c17304536c52c97eb1d93470e4d9afe"
+      }
+    },
+    {
       "identity" : "grdb.swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/groue/GRDB.swift.git",
       "state" : {
-        "revision" : "36e30a6f1ef10e4194f6af0cff90888526f0c115",
-        "version" : "7.10.0"
+        "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
+        "version" : "7.11.1"
+      }
+    },
+    {
+      "identity" : "llama.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/llama.swift.git",
+      "state" : {
+        "revision" : "08baa34a2ffb8d0051b6177dd6036ceac7df24ac",
+        "version" : "2.9669.0"
       }
     },
     {
@@ -42,7 +50,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/hehehai/mlx-audio-swift.git",
       "state" : {
-        "revision" : "a1c7b11b68b16f1591bb0ff586372dde9b265135"
+        "revision" : "3e693624ecb6b3fabf0e844b333c23334952d38d"
       }
     },
     {
@@ -50,8 +58,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift.git",
       "state" : {
-        "revision" : "61b9e011e09a62b489f6bd647958f1555bdf2896",
-        "version" : "0.31.3"
+        "revision" : "dc43e62d7055353c7f99fa071a4e71d29dfddc44",
+        "version" : "0.31.4"
       }
     },
     {
@@ -59,8 +67,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift-lm.git",
       "state" : {
-        "revision" : "1c05248bb0899e2a7a4962b84d319cf12f4e12aa",
-        "version" : "3.31.3"
+        "revision" : "124880582175726b709015a632c5ba9f3069a319"
       }
     },
     {
@@ -68,8 +75,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/jaywcjlove/PermissionFlow.git",
       "state" : {
-        "revision" : "164d39937c2edef736f0ac6a5b144013162a6654",
-        "version" : "2.4.0"
+        "revision" : "a3ba66315b757d7f5e5893d0f4ff5df8cf93f9ea",
+        "version" : "2.6.0"
       }
     },
     {
@@ -77,17 +84,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/sparkle-project/Sparkle.git",
       "state" : {
-        "revision" : "6276ba2b404829d139c45ff98427cf90e2efc59b",
-        "version" : "2.9.2"
-      }
-    },
-    {
-      "identity" : "swift-argument-parser",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser.git",
-      "state" : {
-        "revision" : "ca37474853a4b5f59a22c74bfdd449b1f6bc4cc2",
-        "version" : "1.8.1"
+        "revision" : "d46d456107feacc80711b21847b82b07bd9fb46e",
+        "version" : "2.9.3"
       }
     },
     {
@@ -145,6 +143,15 @@
       }
     },
     {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log.git",
+      "state" : {
+        "revision" : "a878e7f8f46cfc0e1125e565b5c08e7d5272dc9a",
+        "version" : "1.14.0"
+      }
+    },
+    {
       "identity" : "swift-nio",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-nio.git",
@@ -167,8 +174,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftlang/swift-syntax.git",
       "state" : {
-        "revision" : "0687f71944021d616d34d922343dcef086855920",
-        "version" : "600.0.1"
+        "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
+        "version" : "603.0.2"
       }
     },
     {

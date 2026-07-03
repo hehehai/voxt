@@ -1,16 +1,75 @@
+// MLXModelSupport.swift
+// Provides MLXModel Support for transcription engines.
+
 import Foundation
 import HuggingFace
 
 enum MLXLiveMode: Equatable {
     case batchPreview
     case nativeQwenLive
+    case nativeNemotronLive
+}
+
+enum MLXWhisperMigrationSupport {
+    nonisolated static let defaultRepo = "mlx-community/whisper-large-v3-turbo"
+    nonisolated static let defaultLegacyModelID = "large-v3"
+
+    nonisolated private static let legacyWhisperModelMap: [String: String] = [
+        "tiny": "mlx-community/whisper-tiny-mlx",
+        "base": "mlx-community/whisper-base-mlx",
+        "small": "mlx-community/whisper-small-mlx",
+        "medium": defaultRepo,
+        "large-v3": "mlx-community/whisper-large-v3-mlx",
+    ]
+
+    nonisolated static func canonicalLegacyModelID(_ modelID: String) -> String {
+        let raw = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return defaultLegacyModelID }
+        var normalized = raw
+            .replacingOccurrences(of: "openai_whisper-", with: "")
+            .replacingOccurrences(of: "openai/whisper-", with: "")
+        if normalized == "large-v3-v20240930" {
+            normalized = "large-v3"
+        }
+        if legacyWhisperModelMap[normalized] != nil {
+            return normalized
+        }
+        return defaultLegacyModelID
+    }
+
+    nonisolated static func repo(forLegacyWhisperModelID modelID: String) -> String {
+        let canonicalModelID = canonicalLegacyModelID(modelID)
+        return legacyWhisperModelMap[canonicalModelID] ?? defaultRepo
+    }
+
+    nonisolated static func isWhisperRepo(_ repo: String) -> Bool {
+        MLXModelCatalog.canonicalModelRepo(repo).localizedCaseInsensitiveContains("whisper")
+    }
 }
 
 struct MLXModelCatalog {
+    enum Visibility: String, Hashable {
+        case visible
+        case hiddenSupport
+    }
+
     struct Option: Identifiable, Hashable {
         let id: String
         let title: String
         let description: String
+        let visibility: Visibility
+
+        init(
+            id: String,
+            title: String,
+            description: String,
+            visibility: Visibility = .visible
+        ) {
+            self.id = id
+            self.title = title
+            self.description = description
+            self.visibility = visibility
+        }
     }
 
     private struct PresentationMetadata {
@@ -24,6 +83,7 @@ struct MLXModelCatalog {
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
         "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
+        "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
     ]
 
     nonisolated private static let legacyModelRepoMap: [String: String] = [
@@ -34,135 +94,194 @@ struct MLXModelCatalog {
         "mlx-community/FireRedASR2": "mlx-community/FireRedASR2-AED-mlx",
     ]
 
-    nonisolated static let availableModels: [Option] = [
+    nonisolated private static let allModels: [Option] = [
+        Option(
+            id: "mlx-community/whisper-large-v3-turbo",
+            title: "Whisper Large v3 Turbo",
+            description: "Fast Whisper large-v3 family model with the best quality-to-latency balance."
+        ),
+        Option(
+            id: "mlx-community/whisper-large-v3-mlx",
+            title: "Whisper Large v3",
+            description: "Accuracy-first Whisper model with a heavier local footprint."
+        ),
+        Option(
+            id: "mlx-community/whisper-small-mlx",
+            title: "Whisper Small",
+            description: "Lower-resource Whisper model for lighter local setups."
+        ),
+        Option(
+            id: "mlx-community/whisper-tiny-mlx",
+            title: "Whisper Tiny",
+            description: "Legacy lightweight Whisper option kept for existing installations.",
+            visibility: .hiddenSupport
+        ),
+        Option(
+            id: "mlx-community/whisper-base-mlx",
+            title: "Whisper Base",
+            description: "Legacy compact Whisper option kept for existing installations.",
+            visibility: .hiddenSupport
+        ),
         Option(
             id: "mlx-community/Qwen3-ASR-0.6B-4bit",
-            title: "Qwen3-ASR 0.6B (4bit)",
+            title: "Qwen3 0.6B (4bit)",
             description: "Balanced quality and speed with low memory use."
         ),
         Option(
             id: "mlx-community/Qwen3-ASR-0.6B-6bit",
-            title: "Qwen3-ASR 0.6B (6bit)",
-            description: "Better accuracy than 4bit with moderate memory usage."
+            title: "Qwen3 0.6B (6bit)",
+            description: "Better accuracy than 4bit with moderate memory usage.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/Qwen3-ASR-0.6B-8bit",
-            title: "Qwen3-ASR 0.6B (8bit)",
-            description: "Highest-precision 0.6B option with higher memory usage."
+            title: "Qwen3 0.6B (8bit)",
+            description: "Highest-precision 0.6B option with higher memory usage.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/Qwen3-ASR-0.6B-bf16",
-            title: "Qwen3-ASR 0.6B (bf16)",
-            description: "Full-precision 0.6B model for maximum local quality."
+            title: "Qwen3 0.6B (bf16)",
+            description: "Full-precision 0.6B model for maximum local quality.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/Qwen3-ASR-1.7B-4bit",
-            title: "Qwen3-ASR 1.7B (4bit)",
-            description: "Larger multilingual model tuned for accuracy at lower memory cost."
+            title: "Qwen3 1.7B (4bit)",
+            description: "Larger multilingual model tuned for accuracy at lower memory cost.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/Qwen3-ASR-1.7B-6bit",
-            title: "Qwen3-ASR 1.7B (6bit)",
+            title: "Qwen3 1.7B (6bit)",
             description: "High-accuracy flagship model with a balanced memory footprint."
         ),
         Option(
             id: "mlx-community/Qwen3-ASR-1.7B-8bit",
-            title: "Qwen3-ASR 1.7B (8bit)",
+            title: "Qwen3 1.7B (8bit)",
             description: "High-precision 1.7B model for stronger recognition quality."
         ),
         Option(
             id: "mlx-community/Qwen3-ASR-1.7B-bf16",
-            title: "Qwen3-ASR 1.7B (bf16)",
-            description: "High accuracy flagship model with higher memory usage."
+            title: "Qwen3 1.7B (bf16)",
+            description: "High accuracy flagship model with higher memory usage.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
-            title: "Voxtral Realtime Mini 4B (4bit)",
-            description: "Realtime-oriented multilingual model with reduced memory use."
+            title: "Voxtral 4B (4bit)",
+            description: "Realtime-oriented multilingual model with reduced memory use.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
-            title: "Voxtral Realtime Mini 4B (6bit)",
+            title: "Voxtral 4B (6bit)",
             description: "Realtime multilingual model with a balanced quality-to-memory tradeoff."
         ),
         Option(
             id: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
-            title: "Voxtral Realtime Mini 4B (fp16)",
-            description: "Realtime-oriented model with larger memory footprint."
+            title: "Voxtral 4B (fp16)",
+            description: "Realtime-oriented model with larger memory footprint.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16",
-            title: "Cohere Transcribe 03-2026 (fp16)",
-            description: "High-accuracy multilingual encoder-decoder model with punctuation enabled."
+            title: "Cohere 03-2026",
+            description: "High-accuracy multilingual encoder-decoder model with punctuation enabled.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-tdt_ctc-110m",
             title: "Parakeet TDT CTC 110M",
-            description: "Smallest Parakeet option for fast English transcription."
+            description: "Smallest Parakeet option for fast English transcription.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-tdt-0.6b-v2",
             title: "Parakeet TDT 0.6B v2",
-            description: "Lightweight English TDT model for lower-memory local transcription."
+            description: "Lightweight English TDT model for lower-memory local transcription.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-tdt-0.6b-v3",
-            title: "Parakeet TDT 0.6B v3",
+            title: "Parakeet v3",
             description: "Fast, lightweight English STT."
         ),
         Option(
             id: "mlx-community/parakeet-ctc-0.6b",
             title: "Parakeet CTC 0.6B",
-            description: "Compact English CTC model with low memory use."
+            description: "Compact English CTC model with low memory use.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-rnnt-0.6b",
             title: "Parakeet RNNT 0.6B",
-            description: "Compact English RNNT model for streaming-friendly decoding."
+            description: "Compact English RNNT model for streaming-friendly decoding.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-tdt-1.1b",
             title: "Parakeet TDT 1.1B",
-            description: "Larger English model with improved recognition quality."
+            description: "Larger English model with improved recognition quality.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-tdt_ctc-1.1b",
             title: "Parakeet TDT CTC 1.1B",
-            description: "Higher-capacity Parakeet hybrid model for English transcription."
+            description: "Higher-capacity Parakeet hybrid model for English transcription.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-ctc-1.1b",
             title: "Parakeet CTC 1.1B",
-            description: "Higher-accuracy English CTC model with increased memory usage."
+            description: "Higher-accuracy English CTC model with increased memory usage.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-rnnt-1.1b",
             title: "Parakeet RNNT 1.1B",
-            description: "Higher-accuracy English RNNT model for heavier local setups."
+            description: "Higher-accuracy English RNNT model for heavier local setups.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/GLM-ASR-Nano-2512-4bit",
-            title: "GLM-ASR Nano (4bit)",
-            description: "Smallest footprint for quick drafts."
+            title: "GLM Nano (4bit)",
+            description: "Smallest footprint for quick drafts.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/granite-4.0-1b-speech-5bit",
-            title: "Granite Speech 4.0 1B (5bit)",
-            description: "Multilingual speech model with stronger accuracy than the nano tier."
+            title: "Granite 4",
+            description: "Speech model for English, French, German, Spanish, Portuguese, and Japanese.",
+            visibility: .hiddenSupport
+        ),
+        Option(
+            id: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
+            title: "Nemotron",
+            description: "Streaming ASR model with cache-aware NeMo-family decoding."
         ),
         Option(
             id: "mlx-community/FireRedASR2-AED-mlx",
-            title: "FireRed ASR 2",
-            description: "Beam-search ASR model tuned for higher offline accuracy."
+            title: "FireRed 2",
+            description: "Beam-search ASR model tuned for higher offline accuracy.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/SenseVoiceSmall",
-            title: "SenseVoice Small",
+            title: "SenseVoice",
             description: "Fast multilingual model with built-in language and event detection."
         )
     ]
 
+    nonisolated static let availableModels: [Option] = allModels.filter { $0.visibility == .visible }
+    nonisolated static let supportedModels: [Option] = allModels
+
     nonisolated private static let presentationByRepo: [String: PresentationMetadata] = [
+        "mlx-community/whisper-large-v3-turbo": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Fast", "Balanced"]),
+        "mlx-community/whisper-large-v3-mlx": PresentationMetadata(ratingText: "4.9", tagKeys: ["Multilingual", "Accurate"]),
+        "mlx-community/whisper-small-mlx": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Fast"]),
+        "mlx-community/whisper-tiny-mlx": PresentationMetadata(ratingText: "4.0", tagKeys: ["Multilingual", "Fast"]),
+        "mlx-community/whisper-base-mlx": PresentationMetadata(ratingText: "4.3", tagKeys: ["Multilingual", "Fast"]),
         "mlx-community/Qwen3-ASR-0.6B-4bit": PresentationMetadata(ratingText: "4.4", tagKeys: ["Multilingual", "Realtime", "Fast"]),
         "mlx-community/Qwen3-ASR-0.6B-6bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
         "mlx-community/Qwen3-ASR-0.6B-8bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
@@ -186,11 +305,17 @@ struct MLXModelCatalog {
         "mlx-community/parakeet-rnnt-1.1b": PresentationMetadata(ratingText: "4.5", tagKeys: ["Accurate"]),
         "mlx-community/GLM-ASR-Nano-2512-4bit": PresentationMetadata(ratingText: "4.1", tagKeys: ["Multilingual", "Fast"]),
         "mlx-community/granite-4.0-1b-speech-5bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Balanced"]),
+        "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Realtime", "Fast"]),
         "mlx-community/FireRedASR2-AED-mlx": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
         "mlx-community/SenseVoiceSmall": PresentationMetadata(ratingText: "4.5", tagKeys: ["Multilingual", "Fast"]),
     ]
 
     nonisolated private static let knownRemoteSizeBytesByRepo: [String: Int64] = [
+        "mlx-community/whisper-large-v3-turbo": 1_617_000_000,
+        "mlx-community/whisper-large-v3-mlx": 3_090_319_899,
+        "mlx-community/whisper-small-mlx": 486_487_465,
+        "mlx-community/whisper-tiny-mlx": 76_635_397,
+        "mlx-community/whisper-base-mlx": 146_719_453,
         "mlx-community/Qwen3-ASR-0.6B-4bit": 712_781_279,
         "mlx-community/Qwen3-ASR-0.6B-6bit": 861_777_567,
         "mlx-community/Qwen3-ASR-0.6B-8bit": 1_010_773_761,
@@ -214,6 +339,7 @@ struct MLXModelCatalog {
         "mlx-community/parakeet-rnnt-1.1b": 4_282_562_211,
         "mlx-community/GLM-ASR-Nano-2512-4bit": 1_288_437_789,
         "mlx-community/granite-4.0-1b-speech-5bit": 2_226_816_753,
+        "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit": 760_000_000,
         "mlx-community/FireRedASR2-AED-mlx": 4_566_119_694,
         "mlx-community/SenseVoiceSmall": 936_491_235,
     ]
@@ -224,7 +350,24 @@ struct MLXModelCatalog {
 
     nonisolated static func displayTitle(for repo: String) -> String {
         let canonicalRepo = canonicalModelRepo(repo)
-        return availableModels.first(where: { $0.id == canonicalRepo })?.title ?? canonicalRepo
+        return supportedModels.first(where: { $0.id == canonicalRepo })?.title ?? canonicalRepo
+    }
+
+    nonisolated static func description(for repo: String) -> String? {
+        let canonicalRepo = canonicalModelRepo(repo)
+        return supportedModels.first(where: { $0.id == canonicalRepo })?.description
+    }
+
+    nonisolated static func isAvailableModelRepo(_ repo: String) -> Bool {
+        let canonicalRepo = canonicalModelRepo(repo)
+        return supportedModels.first(where: { $0.id == canonicalRepo })?.visibility == .visible
+    }
+
+    nonisolated static func displayModels(includingInstalled repos: Set<String>) -> [Option] {
+        let canonicalRepos = Set(repos.map(canonicalModelRepo))
+        return supportedModels.filter { option in
+            option.visibility == .visible || canonicalRepos.contains(canonicalModelRepo(option.id))
+        }
     }
 
     nonisolated static func isRealtimeCapableModelRepo(_ repo: String) -> Bool {
@@ -235,6 +378,9 @@ struct MLXModelCatalog {
         let canonicalRepo = canonicalModelRepo(repo)
         if canonicalRepo.localizedCaseInsensitiveContains("qwen3-asr") {
             return .nativeQwenLive
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("nemotron") {
+            return .nativeNemotronLive
         }
         return .batchPreview
     }

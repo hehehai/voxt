@@ -1,3 +1,6 @@
+// HotkeySupportTests.swift
+// Provides Hotkey Support Tests for Voxt test coverage.
+
 import XCTest
 import AppKit
 import Carbon
@@ -8,18 +11,22 @@ import IOKit.hidsystem
 final class HotkeySupportTests: XCTestCase {
     func testLoadCanonicalizesStoredFunctionModifierHotkey() {
         let defaults = UserDefaults.standard
+        let presetKey = AppPreferenceKey.hotkeyPreset
         let keyCodeKey = AppPreferenceKey.hotkeyKeyCode
         let modifiersKey = AppPreferenceKey.hotkeyModifiers
         let sidedModifiersKey = AppPreferenceKey.hotkeySidedModifiers
+        let savedPreset = defaults.object(forKey: presetKey)
         let savedKeyCode = defaults.object(forKey: keyCodeKey)
         let savedModifiers = defaults.object(forKey: modifiersKey)
         let savedSidedModifiers = defaults.object(forKey: sidedModifiersKey)
         defer {
+            restoreDefaultsValue(savedPreset, forKey: presetKey)
             restoreDefaultsValue(savedKeyCode, forKey: keyCodeKey)
             restoreDefaultsValue(savedModifiers, forKey: modifiersKey)
             restoreDefaultsValue(savedSidedModifiers, forKey: sidedModifiersKey)
         }
 
+        defaults.set(HotkeyPreference.Preset.custom.rawValue, forKey: presetKey)
         defaults.set(Int(UInt16(kVK_Function)), forKey: keyCodeKey)
         defaults.set(Int(NSEvent.ModifierFlags.function.rawValue), forKey: modifiersKey)
         defaults.set(0, forKey: sidedModifiersKey)
@@ -472,7 +479,11 @@ final class HotkeySupportTests: XCTestCase {
             AppPreferenceKey.customPasteHotkeyModifiers,
             AppPreferenceKey.customPasteHotkeySidedModifiers,
             AppPreferenceKey.hotkeyTriggerMode,
-            AppPreferenceKey.rewriteHotkeyActivationMode
+            AppPreferenceKey.rewriteHotkeyActivationMode,
+            AppPreferenceKey.transcriptionHotkeyBindings,
+            AppPreferenceKey.translationHotkeyBindings,
+            AppPreferenceKey.meetingHotkeyBindings,
+            AppPreferenceKey.rewriteHotkeyBindings
         ]) {
             let values = HotkeyPreference.applyPreset(.mouseMiddleFnShift)
 
@@ -484,6 +495,65 @@ final class HotkeySupportTests: XCTestCase {
             XCTAssertEqual(HotkeyPreference.load(), HotkeyPreference.Hotkey(mouseButtonNumber: 2))
             XCTAssertEqual(HotkeyPreference.loadRewriteActivationMode(), .doubleTapTranscriptionHotkey)
             XCTAssertEqual(HotkeyPreference.loadTriggerMode(), .tap)
+            XCTAssertEqual(HotkeyPreference.loadTranscriptionBindings().first?.behavior, .tap)
+            XCTAssertEqual(HotkeyPreference.loadRewriteBindings().first?.behavior, .doubleTap)
+            XCTAssertEqual(HotkeyPreference.loadRewriteBindings().first?.hotkey, HotkeyPreference.Hotkey(mouseButtonNumber: 2))
+        }
+    }
+
+    func testLegacyScalarHotkeyMigratesToBindingListWithTriggerBehavior() {
+        withRestoredDefaults(hotkeyMigrationKeys) {
+            let defaults = UserDefaults.standard
+            defaults.set(Int(HotkeyPreference.modifierOnlyKeyCode), forKey: AppPreferenceKey.hotkeyKeyCode)
+            defaults.set(Int(NSEvent.ModifierFlags.command.rawValue), forKey: AppPreferenceKey.hotkeyModifiers)
+            defaults.set(0, forKey: AppPreferenceKey.hotkeySidedModifiers)
+            defaults.set(HotkeyPreference.TriggerMode.longPress.rawValue, forKey: AppPreferenceKey.hotkeyTriggerMode)
+            defaults.removeObject(forKey: AppPreferenceKey.transcriptionHotkeyBindings)
+
+            HotkeyPreference.migrateHotkeyBindingsIfNeeded(defaults: defaults)
+
+            let bindings = HotkeyPreference.loadTranscriptionBindings(defaults: defaults)
+            XCTAssertEqual(bindings.count, 1)
+            XCTAssertEqual(bindings.first?.behavior, .longPress)
+            XCTAssertEqual(bindings.first?.hotkey.sidedModifiers, [.leftCommand])
+        }
+    }
+
+    func testLegacyRewriteDoubleTapWakeMigratesToTranscriptionDoubleTapBinding() {
+        withRestoredDefaults(hotkeyMigrationKeys) {
+            let defaults = UserDefaults.standard
+            defaults.set(Int(HotkeyPreference.modifierOnlyKeyCode), forKey: AppPreferenceKey.hotkeyKeyCode)
+            defaults.set(Int(NSEvent.ModifierFlags([.function, .shift]).rawValue), forKey: AppPreferenceKey.hotkeyModifiers)
+            defaults.set(0, forKey: AppPreferenceKey.hotkeySidedModifiers)
+            defaults.set(
+                HotkeyPreference.RewriteActivationMode.doubleTapTranscriptionHotkey.rawValue,
+                forKey: AppPreferenceKey.rewriteHotkeyActivationMode
+            )
+            defaults.removeObject(forKey: AppPreferenceKey.rewriteHotkeyBindings)
+
+            HotkeyPreference.migrateHotkeyBindingsIfNeeded(defaults: defaults)
+
+            let binding = HotkeyPreference.loadRewriteBindings(defaults: defaults).first
+            XCTAssertEqual(binding?.behavior, .doubleTap)
+            XCTAssertEqual(binding?.hotkey.modifiers, [.function, .shift])
+            XCTAssertEqual(binding?.hotkey.sidedModifiers, [.leftShift])
+        }
+    }
+
+    func testLegacyModifierWithoutSideMigratesToLeftSide() {
+        withRestoredDefaults(hotkeyMigrationKeys) {
+            let defaults = UserDefaults.standard
+            defaults.set(Int(HotkeyPreference.modifierOnlyKeyCode), forKey: AppPreferenceKey.translationHotkeyKeyCode)
+            defaults.set(Int(NSEvent.ModifierFlags([.command, .shift]).rawValue), forKey: AppPreferenceKey.translationHotkeyModifiers)
+            defaults.set(0, forKey: AppPreferenceKey.translationHotkeySidedModifiers)
+            defaults.removeObject(forKey: AppPreferenceKey.translationHotkeyBindings)
+
+            HotkeyPreference.migrateHotkeyBindingsIfNeeded(defaults: defaults)
+
+            XCTAssertEqual(
+                HotkeyPreference.loadTranslationBindings(defaults: defaults).first?.hotkey.sidedModifiers,
+                [.leftShift, .leftCommand]
+            )
         }
     }
 
@@ -555,5 +625,36 @@ final class HotkeySupportTests: XCTestCase {
             }
         }
         body()
+    }
+
+    private var hotkeyMigrationKeys: [String] {
+        [
+            AppPreferenceKey.hotkeyInputType,
+            AppPreferenceKey.hotkeyKeyCode,
+            AppPreferenceKey.hotkeyMouseButtonNumber,
+            AppPreferenceKey.hotkeyModifiers,
+            AppPreferenceKey.hotkeySidedModifiers,
+            AppPreferenceKey.translationHotkeyInputType,
+            AppPreferenceKey.translationHotkeyKeyCode,
+            AppPreferenceKey.translationHotkeyMouseButtonNumber,
+            AppPreferenceKey.translationHotkeyModifiers,
+            AppPreferenceKey.translationHotkeySidedModifiers,
+            AppPreferenceKey.rewriteHotkeyInputType,
+            AppPreferenceKey.rewriteHotkeyKeyCode,
+            AppPreferenceKey.rewriteHotkeyMouseButtonNumber,
+            AppPreferenceKey.rewriteHotkeyModifiers,
+            AppPreferenceKey.rewriteHotkeySidedModifiers,
+            AppPreferenceKey.meetingHotkeyInputType,
+            AppPreferenceKey.meetingHotkeyKeyCode,
+            AppPreferenceKey.meetingHotkeyMouseButtonNumber,
+            AppPreferenceKey.meetingHotkeyModifiers,
+            AppPreferenceKey.meetingHotkeySidedModifiers,
+            AppPreferenceKey.hotkeyTriggerMode,
+            AppPreferenceKey.rewriteHotkeyActivationMode,
+            AppPreferenceKey.transcriptionHotkeyBindings,
+            AppPreferenceKey.translationHotkeyBindings,
+            AppPreferenceKey.meetingHotkeyBindings,
+            AppPreferenceKey.rewriteHotkeyBindings
+        ]
     }
 }

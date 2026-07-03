@@ -1,3 +1,6 @@
+// ReportSettingsView.swift
+// Provides Report Settings View for settings screens.
+
 import SwiftUI
 import AppKit
 
@@ -351,6 +354,8 @@ private struct BranchRankingRow: View {
 private struct BranchMetricIcon: View {
     let item: HistoryBranchMetricItem
     @State private var image: NSImage?
+    private var imageSize: CGFloat { item.kind == .url ? 14 : 18 }
+    private var cornerRadius: CGFloat { item.kind == .url ? 3 : 4 }
 
     var body: some View {
         Group {
@@ -358,13 +363,15 @@ private struct BranchMetricIcon: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .frame(width: imageSize, height: imageSize)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             } else {
                 Image(systemName: item.kind == .url ? "globe" : "app.dashed")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: item.kind == .url ? 10 : 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(width: 18, height: 18)
         .task(id: item.id) {
             await loadImage()
         }

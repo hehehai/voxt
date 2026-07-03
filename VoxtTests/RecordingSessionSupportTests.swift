@@ -1,3 +1,6 @@
+// RecordingSessionSupportTests.swift
+// Provides Recording Session Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -15,44 +18,6 @@ final class RecordingSessionSupportTests: XCTestCase {
                 ownBundleID: "com.voxt.Voxt.dev"
             ),
             "com.apple.TextEdit"
-        )
-    }
-
-    func testStopRecordingFallbackTimeoutUsesProviderSpecificRemoteBudget() {
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .whisperKit,
-                remoteProvider: .openAIWhisper
-            ),
-            20
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .remote,
-                remoteProvider: .openAIWhisper
-            ),
-            60
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .remote,
-                remoteProvider: .doubaoASR
-            ),
-            8
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .dictation,
-                remoteProvider: .openAIWhisper
-            ),
-            8
-        )
-        XCTAssertEqual(
-            RecordingSessionSupport.stopRecordingFallbackTimeoutSeconds(
-                transcriptionEngine: .mlxAudio,
-                remoteProvider: .openAIWhisper
-            ),
-            20
         )
     }
 

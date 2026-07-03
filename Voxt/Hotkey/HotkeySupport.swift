@@ -1,9 +1,12 @@
+// HotkeySupport.swift
+// Provides Hotkey Support for hotkey handling.
+
 import AppKit
 import Carbon
 import SwiftUI
 import IOKit.hidsystem
 
-struct SidedModifierFlags: OptionSet, Equatable {
+nonisolated struct SidedModifierFlags: OptionSet, Equatable {
     let rawValue: Int
 
     static let leftShift = SidedModifierFlags(rawValue: 1 << 0)
@@ -149,7 +152,112 @@ struct SidedModifierFlags: OptionSet, Equatable {
     }
 }
 
-struct HotkeyPreference {
+nonisolated struct HotkeyPreference {
+    enum TriggerBehavior: String, CaseIterable, Identifiable, Codable {
+        case tap
+        case longPress
+        case doubleTap
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .tap:
+                return AppLocalization.localizedString("Tap")
+            case .longPress:
+                return AppLocalization.localizedString("Long Press")
+            case .doubleTap:
+                return AppLocalization.localizedString("Double Tap")
+            }
+        }
+
+        var legacyTriggerMode: TriggerMode {
+            switch self {
+            case .longPress:
+                return .longPress
+            case .tap, .doubleTap:
+                return .tap
+            }
+        }
+
+        init(_ triggerMode: TriggerMode) {
+            switch triggerMode {
+            case .longPress:
+                self = .longPress
+            case .tap:
+                self = .tap
+            }
+        }
+    }
+
+    struct HotkeyBinding: Identifiable, Equatable, Codable {
+        let id: UUID
+        var hotkey: Hotkey
+        var behavior: TriggerBehavior
+
+        init(
+            id: UUID = UUID(),
+            hotkey: Hotkey,
+            behavior: TriggerBehavior
+        ) {
+            self.id = id
+            self.hotkey = hotkey
+            self.behavior = behavior
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case inputType
+            case keyCode
+            case mouseButtonNumber
+            case modifiers
+            case sidedModifiers
+            case behavior
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+            behavior = try container.decodeIfPresent(TriggerBehavior.self, forKey: .behavior) ?? .tap
+
+            let inputType = try container.decodeIfPresent(String.self, forKey: .inputType)
+            let keyCode = try container.decodeIfPresent(UInt16.self, forKey: .keyCode) ?? HotkeyPreference.modifierOnlyKeyCode
+            let mouseButtonNumber = try container.decodeIfPresent(Int.self, forKey: .mouseButtonNumber)
+            let input: Hotkey.Input
+            if Hotkey.Input.Kind(rawValue: inputType ?? "") == .mouseButton,
+               let mouseButtonNumber,
+               mouseButtonNumber >= HotkeyPreference.middleMouseButtonNumber {
+                input = .mouseButton(mouseButtonNumber)
+            } else {
+                input = .keyboard(keyCode)
+            }
+
+            let modifiersRaw = try container.decodeIfPresent(UInt.self, forKey: .modifiers) ?? 0
+            let modifiers = NSEvent.ModifierFlags(rawValue: modifiersRaw).intersection(.hotkeyRelevant)
+            let sidedRaw = try container.decodeIfPresent(Int.self, forKey: .sidedModifiers) ?? 0
+            hotkey = HotkeyPreference.canonicalHotkey(
+                input: input,
+                modifiers: modifiers,
+                sidedModifiers: SidedModifierFlags(rawValue: sidedRaw).filtered(by: modifiers)
+            )
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(hotkey.input.kind.rawValue, forKey: .inputType)
+            switch hotkey.input {
+            case .keyboard(let keyCode):
+                try container.encode(keyCode, forKey: .keyCode)
+            case .mouseButton(let buttonNumber):
+                try container.encode(buttonNumber, forKey: .mouseButtonNumber)
+            }
+            try container.encode(hotkey.modifiers.rawValue, forKey: .modifiers)
+            try container.encode(hotkey.sidedModifiers.filtered(by: hotkey.modifiers).rawValue, forKey: .sidedModifiers)
+            try container.encode(behavior, forKey: .behavior)
+        }
+    }
+
     enum TriggerMode: String, CaseIterable, Identifiable {
         case longPress
         case tap
@@ -200,7 +308,7 @@ struct HotkeyPreference {
         }
     }
 
-    struct Hotkey: Equatable {
+    struct Hotkey: Equatable, Codable {
         enum Input: Equatable {
             case keyboard(UInt16)
             case mouseButton(Int)
@@ -223,6 +331,14 @@ struct HotkeyPreference {
         let input: Input
         let modifiers: NSEvent.ModifierFlags
         let sidedModifiers: SidedModifierFlags
+
+        private enum CodingKeys: String, CodingKey {
+            case inputType
+            case keyCode
+            case mouseButtonNumber
+            case modifiers
+            case sidedModifiers
+        }
 
         init(
             input: Input,
@@ -271,6 +387,37 @@ struct HotkeyPreference {
         var isMouseButton: Bool {
             mouseButtonNumber != nil
         }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let inputType = try container.decodeIfPresent(String.self, forKey: .inputType)
+            let keyCode = try container.decodeIfPresent(UInt16.self, forKey: .keyCode) ?? HotkeyPreference.modifierOnlyKeyCode
+            let mouseButtonNumber = try container.decodeIfPresent(Int.self, forKey: .mouseButtonNumber)
+            if Input.Kind(rawValue: inputType ?? "") == .mouseButton,
+               let mouseButtonNumber,
+               mouseButtonNumber >= HotkeyPreference.middleMouseButtonNumber {
+                input = .mouseButton(mouseButtonNumber)
+            } else {
+                input = .keyboard(keyCode)
+            }
+            let modifiersRaw = try container.decodeIfPresent(UInt.self, forKey: .modifiers) ?? 0
+            modifiers = NSEvent.ModifierFlags(rawValue: modifiersRaw).intersection(.hotkeyRelevant)
+            let sidedRaw = try container.decodeIfPresent(Int.self, forKey: .sidedModifiers) ?? 0
+            sidedModifiers = SidedModifierFlags(rawValue: sidedRaw).filtered(by: modifiers)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(input.kind.rawValue, forKey: .inputType)
+            switch input {
+            case .keyboard(let keyCode):
+                try container.encode(keyCode, forKey: .keyCode)
+            case .mouseButton(let buttonNumber):
+                try container.encode(buttonNumber, forKey: .mouseButtonNumber)
+            }
+            try container.encode(modifiers.rawValue, forKey: .modifiers)
+            try container.encode(sidedModifiers.filtered(by: modifiers).rawValue, forKey: .sidedModifiers)
+        }
     }
 
     struct PresetHotkeys: Equatable {
@@ -278,15 +425,41 @@ struct HotkeyPreference {
         let transcription: Hotkey
         let translation: Hotkey
         let rewrite: Hotkey
+        let meeting: Hotkey
         let customPaste: Hotkey
         let triggerMode: TriggerMode
         let rewriteActivationMode: RewriteActivationMode
+
+        var transcriptionBindings: [HotkeyBinding] {
+            [.init(id: Self.transcriptionBindingID, hotkey: transcription, behavior: TriggerBehavior(triggerMode))]
+        }
+
+        var translationBindings: [HotkeyBinding] {
+            [.init(id: Self.translationBindingID, hotkey: translation, behavior: TriggerBehavior(triggerMode))]
+        }
+
+        var rewriteBindings: [HotkeyBinding] {
+            let behavior: TriggerBehavior = rewriteActivationMode == .doubleTapTranscriptionHotkey
+                ? .doubleTap
+                : TriggerBehavior(triggerMode)
+            return [.init(id: Self.rewriteBindingID, hotkey: rewrite, behavior: behavior)]
+        }
+
+        var meetingBindings: [HotkeyBinding] {
+            [.init(id: Self.meetingBindingID, hotkey: meeting, behavior: TriggerBehavior(triggerMode))]
+        }
+
+        private static let transcriptionBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
+        private static let translationBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
+        private static let rewriteBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000103")!
+        private static let meetingBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000104")!
 
         init(
             distinguishSides: Bool,
             transcription: Hotkey,
             translation: Hotkey,
             rewrite: Hotkey,
+            meeting: Hotkey,
             customPaste: Hotkey,
             triggerMode: TriggerMode = .tap,
             rewriteActivationMode: RewriteActivationMode = .dedicatedHotkey
@@ -295,6 +468,7 @@ struct HotkeyPreference {
             self.transcription = transcription
             self.translation = translation
             self.rewrite = rewrite
+            self.meeting = meeting
             self.customPaste = customPaste
             self.triggerMode = triggerMode
             self.rewriteActivationMode = rewriteActivationMode
@@ -308,13 +482,27 @@ struct HotkeyPreference {
     static let defaultTranslationModifiers: NSEvent.ModifierFlags = [.function, .shift]
     static let defaultRewriteKeyCode: UInt16 = modifierOnlyKeyCode
     static let defaultRewriteModifiers: NSEvent.ModifierFlags = [.function, .control]
+    static let defaultMeetingKeyCode: UInt16 = modifierOnlyKeyCode
+    static let defaultMeetingModifiers: NSEvent.ModifierFlags = [.function, .option]
     static let defaultCustomPasteKeyCode: UInt16 = UInt16(kVK_ANSI_V)
     static let defaultCustomPasteModifiers: NSEvent.ModifierFlags = [.control, .command]
     static let defaultTriggerMode: TriggerMode = .tap
     static let defaultRewriteActivationMode: RewriteActivationMode = .dedicatedHotkey
-    static let defaultDistinguishModifierSides = false
+    static let defaultDistinguishModifierSides = true
     static let defaultPreset: Preset = .fnCombo
     static let middleMouseButtonNumber = 2
+
+    static func isAllowedGlobalShortcut(_ hotkey: Hotkey) -> Bool {
+        switch hotkey.input {
+        case .keyboard(let keyCode):
+            if keyCode == modifierOnlyKeyCode {
+                return !hotkey.modifiers.isEmpty
+            }
+            return !hotkey.modifiers.isEmpty
+        case .mouseButton(let buttonNumber):
+            return buttonNumber >= middleMouseButtonNumber
+        }
+    }
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
@@ -333,6 +521,11 @@ struct HotkeyPreference {
             AppPreferenceKey.rewriteHotkeyMouseButtonNumber: middleMouseButtonNumber,
             AppPreferenceKey.rewriteHotkeyModifiers: Int(defaultRewriteModifiers.rawValue),
             AppPreferenceKey.rewriteHotkeySidedModifiers: 0,
+            AppPreferenceKey.meetingHotkeyInputType: Hotkey.Input.Kind.keyboard.rawValue,
+            AppPreferenceKey.meetingHotkeyKeyCode: Int(defaultMeetingKeyCode),
+            AppPreferenceKey.meetingHotkeyMouseButtonNumber: middleMouseButtonNumber,
+            AppPreferenceKey.meetingHotkeyModifiers: Int(defaultMeetingModifiers.rawValue),
+            AppPreferenceKey.meetingHotkeySidedModifiers: 0,
             AppPreferenceKey.customPasteHotkeyInputType: Hotkey.Input.Kind.keyboard.rawValue,
             AppPreferenceKey.customPasteHotkeyKeyCode: Int(defaultCustomPasteKeyCode),
             AppPreferenceKey.customPasteHotkeyMouseButtonNumber: middleMouseButtonNumber,
@@ -342,7 +535,9 @@ struct HotkeyPreference {
             AppPreferenceKey.rewriteHotkeyActivationMode: defaultRewriteActivationMode.rawValue,
             AppPreferenceKey.hotkeyDistinguishModifierSides: defaultDistinguishModifierSides,
             AppPreferenceKey.hotkeyPreset: defaultPreset.rawValue,
+            AppPreferenceKey.hotkeyCaptureInProgress: false,
         ])
+        migrateHotkeyBindingsIfNeeded()
     }
 
     static func migrateDefaultsIfNeeded() {
@@ -362,6 +557,147 @@ struct HotkeyPreference {
         }
 
         syncStoredPresetValuesIfNeeded()
+        migrateHotkeyBindingsIfNeeded()
+    }
+
+    static func migrateHotkeyBindingsIfNeeded(defaults: UserDefaults = .standard) {
+        migrateBindingsIfNeeded(
+            bindingsKey: AppPreferenceKey.transcriptionHotkeyBindings,
+            legacyHotkey: legacyHotkey(
+                inputTypeKey: AppPreferenceKey.hotkeyInputType,
+                keyCodeKey: AppPreferenceKey.hotkeyKeyCode,
+                mouseButtonKey: AppPreferenceKey.hotkeyMouseButtonNumber,
+                modifiersKey: AppPreferenceKey.hotkeyModifiers,
+                sidedModifiersKey: AppPreferenceKey.hotkeySidedModifiers,
+                defaultKeyCode: defaultKeyCode,
+                defaultModifiers: defaultModifiers,
+                defaults: defaults
+            ),
+            defaultBehavior: legacyDefaultBehavior(defaults: defaults),
+            defaults: defaults
+        )
+        migrateBindingsIfNeeded(
+            bindingsKey: AppPreferenceKey.translationHotkeyBindings,
+            legacyHotkey: legacyHotkey(
+                inputTypeKey: AppPreferenceKey.translationHotkeyInputType,
+                keyCodeKey: AppPreferenceKey.translationHotkeyKeyCode,
+                mouseButtonKey: AppPreferenceKey.translationHotkeyMouseButtonNumber,
+                modifiersKey: AppPreferenceKey.translationHotkeyModifiers,
+                sidedModifiersKey: AppPreferenceKey.translationHotkeySidedModifiers,
+                defaultKeyCode: defaultTranslationKeyCode,
+                defaultModifiers: defaultTranslationModifiers,
+                defaults: defaults
+            ),
+            defaultBehavior: legacyDefaultBehavior(defaults: defaults),
+            defaults: defaults
+        )
+        migrateBindingsIfNeeded(
+            bindingsKey: AppPreferenceKey.meetingHotkeyBindings,
+            legacyHotkey: legacyHotkey(
+                inputTypeKey: AppPreferenceKey.meetingHotkeyInputType,
+                keyCodeKey: AppPreferenceKey.meetingHotkeyKeyCode,
+                mouseButtonKey: AppPreferenceKey.meetingHotkeyMouseButtonNumber,
+                modifiersKey: AppPreferenceKey.meetingHotkeyModifiers,
+                sidedModifiersKey: AppPreferenceKey.meetingHotkeySidedModifiers,
+                defaultKeyCode: defaultMeetingKeyCode,
+                defaultModifiers: defaultMeetingModifiers,
+                defaults: defaults
+            ),
+            defaultBehavior: legacyDefaultBehavior(defaults: defaults),
+            defaults: defaults
+        )
+
+        guard defaults.object(forKey: AppPreferenceKey.rewriteHotkeyBindings) == nil else { return }
+        let rewriteActivationMode = loadRewriteActivationMode(defaults: defaults)
+        let rewriteHotkey = rewriteActivationMode == .doubleTapTranscriptionHotkey
+            ? legacyHotkey(
+                inputTypeKey: AppPreferenceKey.hotkeyInputType,
+                keyCodeKey: AppPreferenceKey.hotkeyKeyCode,
+                mouseButtonKey: AppPreferenceKey.hotkeyMouseButtonNumber,
+                modifiersKey: AppPreferenceKey.hotkeyModifiers,
+                sidedModifiersKey: AppPreferenceKey.hotkeySidedModifiers,
+                defaultKeyCode: defaultKeyCode,
+                defaultModifiers: defaultModifiers,
+                defaults: defaults
+            )
+            : legacyHotkey(
+                inputTypeKey: AppPreferenceKey.rewriteHotkeyInputType,
+                keyCodeKey: AppPreferenceKey.rewriteHotkeyKeyCode,
+                mouseButtonKey: AppPreferenceKey.rewriteHotkeyMouseButtonNumber,
+                modifiersKey: AppPreferenceKey.rewriteHotkeyModifiers,
+                sidedModifiersKey: AppPreferenceKey.rewriteHotkeySidedModifiers,
+                defaultKeyCode: defaultRewriteKeyCode,
+                defaultModifiers: defaultRewriteModifiers,
+                defaults: defaults
+            )
+        let rewriteBehavior: TriggerBehavior = rewriteActivationMode == .doubleTapTranscriptionHotkey
+            ? .doubleTap
+            : legacyDefaultBehavior(defaults: defaults)
+        saveBindings(
+            [.init(hotkey: rewriteHotkey, behavior: rewriteBehavior)],
+            forKey: AppPreferenceKey.rewriteHotkeyBindings,
+            defaults: defaults
+        )
+    }
+
+    static func loadTranscriptionBindings(defaults: UserDefaults = .standard) -> [HotkeyBinding] {
+        loadBindings(
+            forKey: AppPreferenceKey.transcriptionHotkeyBindings,
+            fallbackHotkey: load(),
+            defaults: defaults
+        )
+    }
+
+    static func loadTranslationBindings(defaults: UserDefaults = .standard) -> [HotkeyBinding] {
+        loadBindings(
+            forKey: AppPreferenceKey.translationHotkeyBindings,
+            fallbackHotkey: loadTranslation(),
+            defaults: defaults
+        )
+    }
+
+    static func loadMeetingBindings(defaults: UserDefaults = .standard) -> [HotkeyBinding] {
+        loadBindings(
+            forKey: AppPreferenceKey.meetingHotkeyBindings,
+            fallbackHotkey: loadMeeting(),
+            defaults: defaults
+        )
+    }
+
+    static func loadRewriteBindings(defaults: UserDefaults = .standard) -> [HotkeyBinding] {
+        loadBindings(
+            forKey: AppPreferenceKey.rewriteHotkeyBindings,
+            fallbackHotkey: loadRewrite(),
+            defaults: defaults
+        )
+    }
+
+    static func saveTranscriptionBindings(_ bindings: [HotkeyBinding], defaults: UserDefaults = .standard) {
+        saveBindings(bindings, forKey: AppPreferenceKey.transcriptionHotkeyBindings, defaults: defaults)
+        if let first = sanitizedBindings(bindings).first {
+            save(first.hotkey, defaults: defaults, syncBindings: false)
+        }
+    }
+
+    static func saveTranslationBindings(_ bindings: [HotkeyBinding], defaults: UserDefaults = .standard) {
+        saveBindings(bindings, forKey: AppPreferenceKey.translationHotkeyBindings, defaults: defaults)
+        if let first = sanitizedBindings(bindings).first {
+            saveTranslation(first.hotkey, defaults: defaults, syncBindings: false)
+        }
+    }
+
+    static func saveMeetingBindings(_ bindings: [HotkeyBinding], defaults: UserDefaults = .standard) {
+        saveBindings(bindings, forKey: AppPreferenceKey.meetingHotkeyBindings, defaults: defaults)
+        if let first = sanitizedBindings(bindings).first {
+            saveMeeting(first.hotkey, defaults: defaults, syncBindings: false)
+        }
+    }
+
+    static func saveRewriteBindings(_ bindings: [HotkeyBinding], defaults: UserDefaults = .standard) {
+        saveBindings(bindings, forKey: AppPreferenceKey.rewriteHotkeyBindings, defaults: defaults)
+        if let first = sanitizedBindings(bindings).first {
+            saveRewrite(first.hotkey, defaults: defaults, syncBindings: false)
+        }
     }
 
     static func load() -> Hotkey {
@@ -383,7 +719,7 @@ struct HotkeyPreference {
         save(.init(keyCode: keyCode, modifiers: modifiers, sidedModifiers: sidedModifiers))
     }
 
-    static func save(_ hotkey: Hotkey, defaults: UserDefaults = .standard) {
+    static func save(_ hotkey: Hotkey, defaults: UserDefaults = .standard, syncBindings: Bool = true) {
         save(
             hotkey,
             inputTypeKey: AppPreferenceKey.hotkeyInputType,
@@ -393,6 +729,13 @@ struct HotkeyPreference {
             sidedModifiersKey: AppPreferenceKey.hotkeySidedModifiers,
             defaults: defaults
         )
+        if syncBindings {
+            saveBindings(
+                [.init(hotkey: hotkey, behavior: legacyDefaultBehavior(defaults: defaults))],
+                forKey: AppPreferenceKey.transcriptionHotkeyBindings,
+                defaults: defaults
+            )
+        }
     }
 
     static func loadTranslation() -> Hotkey {
@@ -414,7 +757,7 @@ struct HotkeyPreference {
         saveTranslation(.init(keyCode: keyCode, modifiers: modifiers, sidedModifiers: sidedModifiers))
     }
 
-    static func saveTranslation(_ hotkey: Hotkey, defaults: UserDefaults = .standard) {
+    static func saveTranslation(_ hotkey: Hotkey, defaults: UserDefaults = .standard, syncBindings: Bool = true) {
         save(
             hotkey,
             inputTypeKey: AppPreferenceKey.translationHotkeyInputType,
@@ -424,6 +767,13 @@ struct HotkeyPreference {
             sidedModifiersKey: AppPreferenceKey.translationHotkeySidedModifiers,
             defaults: defaults
         )
+        if syncBindings {
+            saveBindings(
+                [.init(hotkey: hotkey, behavior: legacyDefaultBehavior(defaults: defaults))],
+                forKey: AppPreferenceKey.translationHotkeyBindings,
+                defaults: defaults
+            )
+        }
     }
 
     static func loadRewrite() -> Hotkey {
@@ -445,7 +795,7 @@ struct HotkeyPreference {
         saveRewrite(.init(keyCode: keyCode, modifiers: modifiers, sidedModifiers: sidedModifiers))
     }
 
-    static func saveRewrite(_ hotkey: Hotkey, defaults: UserDefaults = .standard) {
+    static func saveRewrite(_ hotkey: Hotkey, defaults: UserDefaults = .standard, syncBindings: Bool = true) {
         save(
             hotkey,
             inputTypeKey: AppPreferenceKey.rewriteHotkeyInputType,
@@ -455,6 +805,54 @@ struct HotkeyPreference {
             sidedModifiersKey: AppPreferenceKey.rewriteHotkeySidedModifiers,
             defaults: defaults
         )
+        if syncBindings {
+            let behavior: TriggerBehavior = loadRewriteActivationMode(defaults: defaults) == .doubleTapTranscriptionHotkey
+                ? .doubleTap
+                : legacyDefaultBehavior(defaults: defaults)
+            saveBindings(
+                [.init(hotkey: hotkey, behavior: behavior)],
+                forKey: AppPreferenceKey.rewriteHotkeyBindings,
+                defaults: defaults
+            )
+        }
+    }
+
+    static func loadMeeting() -> Hotkey {
+        if let presetHotkey = resolvedPresetHotkeys()?.meeting {
+            return presetHotkey
+        }
+        return load(
+            inputTypeKey: AppPreferenceKey.meetingHotkeyInputType,
+            keyCodeKey: AppPreferenceKey.meetingHotkeyKeyCode,
+            mouseButtonKey: AppPreferenceKey.meetingHotkeyMouseButtonNumber,
+            modifiersKey: AppPreferenceKey.meetingHotkeyModifiers,
+            sidedModifiersKey: AppPreferenceKey.meetingHotkeySidedModifiers,
+            defaultKeyCode: defaultMeetingKeyCode,
+            defaultModifiers: defaultMeetingModifiers
+        )
+    }
+
+    static func saveMeeting(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, sidedModifiers: SidedModifierFlags) {
+        saveMeeting(.init(keyCode: keyCode, modifiers: modifiers, sidedModifiers: sidedModifiers))
+    }
+
+    static func saveMeeting(_ hotkey: Hotkey, defaults: UserDefaults = .standard, syncBindings: Bool = true) {
+        save(
+            hotkey,
+            inputTypeKey: AppPreferenceKey.meetingHotkeyInputType,
+            keyCodeKey: AppPreferenceKey.meetingHotkeyKeyCode,
+            mouseButtonKey: AppPreferenceKey.meetingHotkeyMouseButtonNumber,
+            modifiersKey: AppPreferenceKey.meetingHotkeyModifiers,
+            sidedModifiersKey: AppPreferenceKey.meetingHotkeySidedModifiers,
+            defaults: defaults
+        )
+        if syncBindings {
+            saveBindings(
+                [.init(hotkey: hotkey, behavior: legacyDefaultBehavior(defaults: defaults))],
+                forKey: AppPreferenceKey.meetingHotkeyBindings,
+                defaults: defaults
+            )
+        }
     }
 
     static func loadCustomPaste() -> Hotkey {
@@ -520,10 +918,7 @@ struct HotkeyPreference {
     }
 
     static func loadDistinguishModifierSides() -> Bool {
-        if let presetValues = resolvedPresetHotkeys() {
-            return presetValues.distinguishSides
-        }
-        return UserDefaults.standard.object(forKey: AppPreferenceKey.hotkeyDistinguishModifierSides) as? Bool ?? defaultDistinguishModifierSides
+        true
     }
 
     static func loadPreset() -> Preset {
@@ -552,12 +947,17 @@ struct HotkeyPreference {
 
     private static func applyPresetHotkeys(_ presetValues: PresetHotkeys) {
         UserDefaults.standard.set(presetValues.distinguishSides, forKey: AppPreferenceKey.hotkeyDistinguishModifierSides)
-        save(presetValues.transcription)
-        saveTranslation(presetValues.translation)
-        saveRewrite(presetValues.rewrite)
+        save(presetValues.transcription, syncBindings: false)
+        saveTranslation(presetValues.translation, syncBindings: false)
+        saveRewrite(presetValues.rewrite, syncBindings: false)
+        saveMeeting(presetValues.meeting, syncBindings: false)
         saveCustomPaste(presetValues.customPaste)
         saveRewriteActivationMode(presetValues.rewriteActivationMode)
         saveTriggerMode(presetValues.triggerMode)
+        saveTranscriptionBindings(presetValues.transcriptionBindings)
+        saveTranslationBindings(presetValues.translationBindings)
+        saveMeetingBindings(presetValues.meetingBindings)
+        saveRewriteBindings(presetValues.rewriteBindings)
     }
 
     private static func normalizeCustomPasteHotkey(_ hotkey: Hotkey) -> Hotkey {
@@ -615,6 +1015,7 @@ struct HotkeyPreference {
                 transcription: Hotkey(keyCode: defaultKeyCode, modifiers: defaultModifiers, sidedModifiers: []),
                 translation: Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
                 rewrite: Hotkey(keyCode: defaultRewriteKeyCode, modifiers: defaultRewriteModifiers, sidedModifiers: []),
+                meeting: Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: []),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: [])
             )
         case .commandCombo:
@@ -623,6 +1024,7 @@ struct HotkeyPreference {
                 transcription: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command], sidedModifiers: [.rightCommand]),
                 translation: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .shift], sidedModifiers: [.rightCommand, .rightShift]),
                 rewrite: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption]),
+                meeting: Hotkey(keyCode: UInt16(kVK_ANSI_L), modifiers: [.command], sidedModifiers: [.rightCommand]),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: [])
             )
         case .mouseMiddleFnShift:
@@ -631,6 +1033,7 @@ struct HotkeyPreference {
                 transcription: Hotkey(mouseButtonNumber: middleMouseButtonNumber),
                 translation: Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
                 rewrite: Hotkey(mouseButtonNumber: middleMouseButtonNumber),
+                meeting: Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: []),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: []),
                 triggerMode: .tap,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey
@@ -677,6 +1080,10 @@ struct HotkeyPreference {
             break
         }
 
+        guard Thread.isMainThread else {
+            return "Key \(keyCode)"
+        }
+
         if let translated = translateKeyCode(keyCode), !translated.isEmpty {
             return translated.uppercased()
         }
@@ -699,6 +1106,122 @@ struct HotkeyPreference {
         default:
             return AppLocalization.format("Mouse Button %d", buttonNumber)
         }
+    }
+
+    private static func legacyDefaultBehavior(defaults: UserDefaults) -> TriggerBehavior {
+        TriggerBehavior(loadTriggerMode(defaults: defaults))
+    }
+
+    private static func migrateBindingsIfNeeded(
+        bindingsKey: String,
+        legacyHotkey: Hotkey,
+        defaultBehavior: TriggerBehavior,
+        defaults: UserDefaults
+    ) {
+        guard defaults.object(forKey: bindingsKey) == nil else { return }
+        saveBindings(
+            [.init(hotkey: legacyHotkey, behavior: defaultBehavior)],
+            forKey: bindingsKey,
+            defaults: defaults
+        )
+    }
+
+    private static func loadBindings(
+        forKey key: String,
+        fallbackHotkey: Hotkey,
+        defaults: UserDefaults
+    ) -> [HotkeyBinding] {
+        if let data = defaults.data(forKey: key),
+           let decoded = try? JSONDecoder().decode([HotkeyBinding].self, from: data) {
+            let sanitized = sanitizedBindings(decoded)
+            if !sanitized.isEmpty {
+                return sanitized
+            }
+        }
+        let fallback = [HotkeyBinding(hotkey: fallbackHotkey, behavior: legacyDefaultBehavior(defaults: defaults))]
+        saveBindings(fallback, forKey: key, defaults: defaults)
+        return fallback
+    }
+
+    private static func saveBindings(
+        _ bindings: [HotkeyBinding],
+        forKey key: String,
+        defaults: UserDefaults = .standard
+    ) {
+        let sanitized = sanitizedBindings(bindings)
+        guard let data = try? JSONEncoder().encode(sanitized) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    private static func sanitizedBindings(_ bindings: [HotkeyBinding]) -> [HotkeyBinding] {
+        let sanitized = bindings.map {
+            HotkeyBinding(
+                id: $0.id,
+                hotkey: canonicalHotkey(
+                    input: $0.hotkey.input,
+                    modifiers: $0.hotkey.modifiers,
+                    sidedModifiers: $0.hotkey.sidedModifiers
+                ),
+                behavior: $0.behavior
+            )
+        }
+        return sanitized.isEmpty
+            ? [.init(hotkey: Hotkey(keyCode: defaultKeyCode, modifiers: defaultModifiers, sidedModifiers: []), behavior: .tap)]
+            : sanitized
+    }
+
+    private static func legacyHotkey(
+        inputTypeKey: String,
+        keyCodeKey: String,
+        mouseButtonKey: String,
+        modifiersKey: String,
+        sidedModifiersKey: String,
+        defaultKeyCode: UInt16,
+        defaultModifiers: NSEvent.ModifierFlags,
+        defaults: UserDefaults
+    ) -> Hotkey {
+        let inputTypeRaw = defaults.string(forKey: inputTypeKey)
+        let keyCodeValue = defaults.object(forKey: keyCodeKey) as? Int
+        let mouseButtonValue = defaults.object(forKey: mouseButtonKey) as? Int
+        let modifiersValue = defaults.object(forKey: modifiersKey) as? Int
+        let sidedValue = defaults.object(forKey: sidedModifiersKey) as? Int
+
+        let keyCode = UInt16(keyCodeValue ?? Int(defaultKeyCode))
+        let input: Hotkey.Input
+        if Hotkey.Input.Kind(rawValue: inputTypeRaw ?? "") == .mouseButton,
+           let mouseButtonValue,
+           mouseButtonValue >= middleMouseButtonNumber {
+            input = .mouseButton(mouseButtonValue)
+        } else {
+            input = .keyboard(keyCode)
+        }
+        let modifiersRaw = modifiersValue ?? Int(defaultModifiers.rawValue)
+        let modifiers = NSEvent.ModifierFlags(rawValue: UInt(modifiersRaw)).intersection(.hotkeyRelevant)
+        let sidedModifiers = migratedLegacySidedModifiers(
+            storedRawValue: sidedValue,
+            modifiers: modifiers
+        )
+        return canonicalHotkey(
+            input: input,
+            modifiers: modifiers,
+            sidedModifiers: sidedModifiers
+        )
+    }
+
+    private static func migratedLegacySidedModifiers(
+        storedRawValue: Int?,
+        modifiers: NSEvent.ModifierFlags
+    ) -> SidedModifierFlags {
+        if let storedRawValue, storedRawValue != 0 {
+            return SidedModifierFlags(rawValue: storedRawValue).filtered(by: modifiers)
+        }
+
+        var sided: SidedModifierFlags = []
+        if modifiers.contains(.shift) { sided.insert(.leftShift) }
+        if modifiers.contains(.control) { sided.insert(.leftControl) }
+        if modifiers.contains(.option) { sided.insert(.leftOption) }
+        if modifiers.contains(.command) { sided.insert(.leftCommand) }
+        return sided.filtered(by: modifiers)
     }
 
     private static func load(
@@ -843,6 +1366,6 @@ struct HotkeyPreference {
     }
 }
 
-extension NSEvent.ModifierFlags {
+nonisolated extension NSEvent.ModifierFlags {
     static let hotkeyRelevant: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
 }

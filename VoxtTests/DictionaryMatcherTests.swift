@@ -1,3 +1,6 @@
+// DictionaryMatcherTests.swift
+// Provides Dictionary Matcher Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

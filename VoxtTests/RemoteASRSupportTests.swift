@@ -1,3 +1,6 @@
+// RemoteASRSupportTests.swift
+// Provides Remote ASRSupport Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -32,6 +35,118 @@ final class RemoteASRSupportTests: XCTestCase {
         XCTAssertEqual(fields["language"], "en")
         XCTAssertNil(fields["prompt"])
         XCTAssertNil(fields["stream"])
+    }
+
+    func testRemoteUploadVADPolicyUsesClientVADForFileUploadProviders() {
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .openAIWhisper,
+                model: "gpt-4o-mini-transcribe",
+                localVADMode: .energy
+            ),
+            .fileUploadClientVAD
+        )
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .glmASR,
+                model: "glm-asr-1",
+                localVADMode: .energy
+            ),
+            .fileUploadClientVAD
+        )
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .xiaomiMiMoASR,
+                model: "mimo-v2.5-asr",
+                localVADMode: .energy
+            ),
+            .fileUploadClientVAD
+        )
+    }
+
+    func testRemoteUploadVADPolicyDoesNotClientTrimRealtimeServerVADProviders() {
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .aliyunBailianASR,
+                model: "qwen3-asr-flash-realtime",
+                localVADMode: .energy
+            ),
+            .realtimeServerVAD
+        )
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .stepFunASR,
+                model: "step-asr-1.1-stream",
+                localVADMode: .energy
+            ),
+            .realtimeServerVAD
+        )
+    }
+
+    func testRemoteUploadVADPolicyLeavesRealtimeStreamingProvidersUnchanged() {
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .doubaoASR,
+                model: DoubaoASRConfiguration.modelV2,
+                localVADMode: .energy
+            ),
+            .realtimeUnchanged(reason: "doubao-streaming")
+        )
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .aliyunBailianASR,
+                model: "fun-asr-realtime",
+                localVADMode: .energy
+            ),
+            .realtimeUnchanged(reason: "aliyun-fun-realtime")
+        )
+    }
+
+    func testRemoteUploadVADPolicyDisablesWhenLocalVADIsOff() {
+        XCTAssertEqual(
+            RemoteASRAudioUploadVADPolicyResolver.policy(
+                provider: .openAIWhisper,
+                model: "gpt-4o-mini-transcribe",
+                localVADMode: .off
+            ),
+            .disabled(reason: "local-vad-off")
+        )
+    }
+
+    func testRemoteUploadPreprocessorExportsShorterClientVADUploadAudio() async throws {
+        let sourceURL = HistoryAudioArchiveSupport.temporaryArchiveURL(prefix: "remote-upload-vad-test-source")
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+        let sampleRate = HistoryAudioArchiveSupport.targetSampleRate
+        let leadingSilence = Array(repeating: Float(0), count: Int(sampleRate * 2))
+        let speech = Array(repeating: Float(0.35), count: Int(sampleRate))
+        let trailingSilence = Array(repeating: Float(0), count: Int(sampleRate * 2))
+        let samples = leadingSilence + speech + trailingSilence
+        XCTAssertTrue(try HistoryAudioArchiveSupport.exportWAV(samples: samples, sampleRate: sampleRate, to: sourceURL))
+
+        let preparation = try await RemoteASRAudioUploadPreprocessor.prepareUploadAudio(
+            originalFileURL: sourceURL,
+            provider: .openAIWhisper,
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteASRProvider.openAIWhisper.rawValue,
+                model: "gpt-4o-mini-transcribe",
+                endpoint: "",
+                apiKey: "test"
+            ),
+            localVADMode: .energy,
+            useCase: .transcription
+        )
+        defer { preparation.cleanupTemporaryUploadFileIfNeeded() }
+
+        XCTAssertTrue(preparation.shouldRequestRemoteASR)
+        XCTAssertEqual(preparation.policy, .fileUploadClientVAD)
+        XCTAssertNotNil(preparation.temporaryUploadFileURL)
+        XCTAssertLessThan(preparation.uploadDurationSeconds ?? 0, preparation.originalDurationSeconds ?? 0)
+        XCTAssertGreaterThan(preparation.speechSegmentCount, 0)
+
+        let uploadSamples = try HistoryAudioArchiveSupport.readWAVSamples(from: preparation.uploadFileURL)
+        XCTAssertLessThan(uploadSamples.count, samples.count)
+        XCTAssertGreaterThan(uploadSamples.count, 0)
     }
 
     func testExtractStreamErrorMessageReadsNestedErrorPayload() {
@@ -158,6 +273,58 @@ final class RemoteASRSupportTests: XCTestCase {
         XCTAssertEqual(
             RemoteASREndpointSupport.resolvedStepFunRealtimeEndpoint("https://api.stepfun.com/v1/audio/asr/sse"),
             "wss://api.stepfun.com/v1/realtime/asr/stream"
+        )
+    }
+
+    func testXiaomiMiMoASRPayloadUsesChatAudioShapeAndLanguage() throws {
+        let payload = RemoteASRTextSupport.xiaomiMiMoASRPayload(
+            model: "",
+            audioData: Data([0x01, 0x02, 0x03]),
+            mimeType: "audio/wav",
+            hintPayload: ResolvedASRHintPayload(language: "zh")
+        )
+
+        XCTAssertEqual(payload["model"] as? String, "mimo-v2.5-asr")
+        XCTAssertNil(payload["stream"])
+
+        let options = try XCTUnwrap(payload["asr_options"] as? [String: Any])
+        XCTAssertEqual(options["language"] as? String, "zh")
+
+        let messages = try XCTUnwrap(payload["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.first?["role"] as? String, "user")
+
+        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "input_audio")
+
+        let inputAudio = try XCTUnwrap(content.first?["input_audio"] as? [String: Any])
+        XCTAssertEqual(inputAudio["data"] as? String, "data:audio/wav;base64,AQID")
+    }
+
+    func testXiaomiMiMoASRPayloadFallsBackToAutoForUnsupportedLanguage() throws {
+        let payload = RemoteASRTextSupport.xiaomiMiMoASRPayload(
+            model: "mimo-v2.5-asr",
+            audioData: Data([0x00]),
+            mimeType: "audio/wav",
+            hintPayload: ResolvedASRHintPayload(language: "ja")
+        )
+
+        let options = try XCTUnwrap(payload["asr_options"] as? [String: Any])
+        XCTAssertEqual(options["language"] as? String, "auto")
+        XCTAssertNil(payload["stream"])
+    }
+
+    func testXiaomiMiMoASREndpointNormalizesChatCompletions() {
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint(""),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint("https://api.xiaomimimo.com"),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedXiaomiMiMoASREndpoint("https://api.xiaomimimo.com/v1/models"),
+            "https://api.xiaomimimo.com/v1/chat/completions"
         )
     }
 }

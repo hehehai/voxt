@@ -1,8 +1,33 @@
+// SessionTextIOTests.swift
+// Provides Session Text IOTests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
 @MainActor
 final class SessionTextIOTests: XCTestCase {
+    func testSelectedTextDictionaryHotkeyAcceptsThirtyCharacters() {
+        let candidate = String(repeating: "词", count: 30)
+        XCTAssertEqual(SelectedTextDictionaryHotkeySupport.candidateTerm(from: candidate), candidate)
+    }
+
+    func testSelectedTextDictionaryHotkeyRejectsMoreThanThirtyCharacters() {
+        let candidate = String(repeating: "词", count: 31)
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: candidate))
+    }
+
+    func testSelectedTextDictionaryHotkeyTrimsWhitespace() {
+        XCTAssertEqual(
+            SelectedTextDictionaryHotkeySupport.candidateTerm(from: "  OpenAI\n"),
+            "OpenAI"
+        )
+    }
+
+    func testSelectedTextDictionaryHotkeyRejectsEmptySelection() {
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: " \n "))
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: nil))
+    }
+
     func testRewriteAlwaysPresentsAnswerOverlay() {
         XCTAssertTrue(
             AppDelegate.shouldPresentRewriteAnswerOverlay(

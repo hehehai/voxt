@@ -1,7 +1,230 @@
+// MLXTranscriptionPlanningTests.swift
+// Provides MLXTranscription Planning Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
 final class MLXTranscriptionPlanningTests: XCTestCase {
+    func testVoiceActivityFilteredSamplesPreservePrerollBeforeDetectedSpeech() {
+        var buffer = MLXVoiceActivitySampleContextBuffer()
+
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [1], startSeconds: 0.0),
+                isSpeech: false
+            ),
+            []
+        )
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [2], startSeconds: 0.1),
+                isSpeech: false
+            ),
+            []
+        )
+        let filtered = buffer.append(
+            voiceActivityFrame(samples: [3], startSeconds: 0.2),
+            isSpeech: true
+        )
+
+        XCTAssertEqual(filtered, [1, 2, 3])
+        XCTAssertTrue(buffer.observedFrames)
+        XCTAssertTrue(buffer.observedSpeech)
+    }
+
+    func testVoiceActivityFilteredSamplesBoundLongPrerollBeforeDetectedSpeech() {
+        var buffer = MLXVoiceActivitySampleContextBuffer()
+
+        for index in 0..<6 {
+            XCTAssertEqual(
+                buffer.append(
+                    voiceActivityFrame(samples: [Float(index)], startSeconds: Double(index) * 0.1),
+                    isSpeech: false
+                ),
+                []
+            )
+        }
+        let filtered = buffer.append(
+            voiceActivityFrame(samples: [6], startSeconds: 0.6),
+            isSpeech: true
+        )
+
+        XCTAssertEqual(filtered, [3, 4, 5, 6])
+    }
+
+    func testVoiceActivityFilteredSamplesFlushPrerollBeforeEachSpeechBurst() {
+        var buffer = MLXVoiceActivitySampleContextBuffer()
+
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [1], startSeconds: 0.0),
+                isSpeech: false
+            ),
+            []
+        )
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [2], startSeconds: 0.1),
+                isSpeech: true
+            ),
+            [1, 2]
+        )
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [3], startSeconds: 0.2),
+                isSpeech: false
+            ),
+            []
+        )
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [4], startSeconds: 0.3),
+                isSpeech: false
+            ),
+            []
+        )
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [5], startSeconds: 0.4),
+                isSpeech: true
+            ),
+            [3, 4, 5]
+        )
+    }
+
+    func testVoiceActivityFilteredSamplesFinishFlushesTrailingContextAfterSpeech() {
+        var buffer = MLXVoiceActivitySampleContextBuffer()
+
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [1], startSeconds: 0.0),
+                isSpeech: true
+            ),
+            [1]
+        )
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [2], startSeconds: 0.1),
+                isSpeech: false
+            ),
+            []
+        )
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [3], startSeconds: 0.2),
+                isSpeech: false
+            ),
+            []
+        )
+
+        XCTAssertEqual(buffer.finish(), [2, 3])
+    }
+
+    func testVoiceActivityFilteredSamplesFinishDropsContextWhenNoSpeechWasObserved() {
+        var buffer = MLXVoiceActivitySampleContextBuffer()
+
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [1], startSeconds: 0.0),
+                isSpeech: false
+            ),
+            []
+        )
+
+        XCTAssertEqual(buffer.finish(), [])
+        XCTAssertTrue(buffer.observedFrames)
+        XCTAssertFalse(buffer.observedSpeech)
+    }
+
+    func testVoiceActivityFilteredSamplesResetClearsPrerollAndObservedState() {
+        var buffer = MLXVoiceActivitySampleContextBuffer()
+
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [1], startSeconds: 0.0),
+                isSpeech: false
+            ),
+            []
+        )
+        buffer.reset()
+
+        XCTAssertFalse(buffer.observedFrames)
+        XCTAssertFalse(buffer.observedSpeech)
+        XCTAssertEqual(
+            buffer.append(
+                voiceActivityFrame(samples: [2], startSeconds: 0.1),
+                isSpeech: true
+            ),
+            [2]
+        )
+    }
+
+    func testFinalizationSamplesUseFullAudioWhenLocalVADIsInactive() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [2, 3],
+            localVADGateActive: false,
+            observedVoiceActivityFrames: true,
+            observedSpeech: true
+        )
+
+        XCTAssertEqual(selection.samples, [1, 2, 3, 4])
+        XCTAssertEqual(selection.source, .full)
+    }
+
+    func testFinalizationSamplesUseFullAudioUntilVADFramesAreAvailable() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: false,
+            observedSpeech: false
+        )
+
+        XCTAssertEqual(selection.samples, [1, 2, 3, 4])
+        XCTAssertEqual(selection.source, .full)
+    }
+
+    func testFinalizationSamplesUseVoiceActivityFilteredAudioWhenSpeechWasObserved() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [2, 3],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: true
+        )
+
+        XCTAssertEqual(selection.samples, [2, 3])
+        XCTAssertEqual(selection.source, .voiceActivityFiltered)
+    }
+
+    func testFinalizationSamplesSkipASRWhenVADObservedNoSpeech() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: false
+        )
+
+        XCTAssertEqual(selection.samples, [])
+        XCTAssertEqual(selection.source, .noSpeech)
+    }
+
+    private func voiceActivityFrame(
+        samples: [Float],
+        startSeconds: TimeInterval,
+        durationSeconds: TimeInterval = 0.1
+    ) -> ASRVoiceActivityAudioFrame {
+        ASRVoiceActivityAudioFrame(
+            samples: samples,
+            sampleRate: 10,
+            startSeconds: startSeconds,
+            endSeconds: startSeconds + durationSeconds,
+            level: nil
+        )
+    }
+
     func testSenseVoiceUsesDirectPassForShortAudio() {
         let shouldUseVAD = MLXTranscriptionPlanning.shouldUseSenseVoiceVAD(
             sampleCount: 16000 * 12,
@@ -46,6 +269,54 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         XCTAssertEqual(ranges.first?.lowerBound, 0)
         XCTAssertEqual(ranges.last?.upperBound, sampleCount)
         XCTAssertEqual(ranges[0].upperBound - ranges[1].lowerBound, Int(0.35 * 16000))
+    }
+
+    func testSenseVoiceSegmentRangesUseSharedVADPolicy() {
+        let probabilities: [Float] = [
+            0.01,
+            0.8,
+            0.82,
+            0.2,
+            0.1,
+            0.05
+        ]
+
+        let ranges = MLXTranscriptionPlanning.senseVoiceSegmentRanges(
+            probabilities: probabilities,
+            sampleCount: 6 * 1600,
+            sampleRate: 16_000,
+            probabilityFrameSampleCount: 1600,
+            vadThreshold: 0.5,
+            vadMinSpeechDurationMs: 150,
+            vadMinSilenceDurationMs: 200,
+            vadSpeechPadMs: 100,
+            maxChunkSamples: 16_000,
+            overlapSamples: 0
+        )
+
+        XCTAssertEqual(ranges, [0..<6400])
+    }
+
+    func testSenseVoiceSegmentRangesSplitLongSpeechSegments() {
+        let probabilities = [Float](repeating: 0.9, count: 12)
+
+        let ranges = MLXTranscriptionPlanning.senseVoiceSegmentRanges(
+            probabilities: probabilities,
+            sampleCount: 12 * 1600,
+            sampleRate: 16_000,
+            probabilityFrameSampleCount: 1600,
+            vadThreshold: 0.5,
+            vadMinSpeechDurationMs: 150,
+            vadMinSilenceDurationMs: 200,
+            vadSpeechPadMs: 0,
+            maxChunkSamples: 4800,
+            overlapSamples: 1600
+        )
+
+        XCTAssertGreaterThan(ranges.count, 1)
+        XCTAssertEqual(ranges.first, 0..<4800)
+        XCTAssertEqual(ranges.last?.upperBound, 19200)
+        XCTAssertEqual(ranges[0].upperBound - ranges[1].lowerBound, 1600)
     }
 
     func testSenseVoiceVisibleRealtimeCorrectionCadenceIsMoreAggressive() {
@@ -129,7 +400,7 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         XCTAssertEqual(decision, .waitForInFlightPass)
     }
 
-    func testQuickStopPassDisabledForNativeQwenLiveMode() {
+    func testQuickStopPassDisabledForNativeLiveModes() {
         let plan = MLXFinalizationPlan(durationSeconds: 30, quickPassSampleCount: 16000 * 30)
 
         XCTAssertFalse(
@@ -137,6 +408,13 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
                 plan: plan,
                 sessionAllowsRealtimeTextDisplay: true,
                 liveMode: .nativeQwenLive
+            )
+        )
+        XCTAssertFalse(
+            MLXTranscriptionPlanning.shouldRunQuickStopPass(
+                plan: plan,
+                sessionAllowsRealtimeTextDisplay: true,
+                liveMode: .nativeNemotronLive
             )
         )
         XCTAssertTrue(

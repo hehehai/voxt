@@ -1,3 +1,6 @@
+// HotkeySettingsView.swift
+// Provides Hotkey Settings View for settings screens.
+
 import SwiftUI
 import AppKit
 import Carbon
@@ -6,10 +9,11 @@ private func localized(_ key: String) -> String {
     AppLocalization.localizedString(key)
 }
 
-enum HotkeyShortcutKind: String, CaseIterable {
+enum HotkeyShortcutKind: String, CaseIterable, Hashable {
     case transcription
     case translation
     case rewrite
+    case meeting
 
     var titleKey: LocalizedStringKey {
         switch self {
@@ -17,23 +21,65 @@ enum HotkeyShortcutKind: String, CaseIterable {
             return "Transcription"
         case .translation:
             return "Translation"
+        case .meeting:
+            return "Meeting"
         case .rewrite:
-            return "Content Rewrite"
+            return "Rewrite"
+        }
+    }
+
+    var localizedTitle: String {
+        switch self {
+        case .transcription:
+            return localized("Transcription")
+        case .translation:
+            return localized("Translation")
+        case .meeting:
+            return localized("Meeting")
+        case .rewrite:
+            return localized("Rewrite")
+        }
+    }
+
+    var defaultHotkey: HotkeyPreference.Hotkey {
+        switch self {
+        case .transcription:
+            return HotkeyPreference.Hotkey(
+                keyCode: HotkeyPreference.defaultKeyCode,
+                modifiers: HotkeyPreference.defaultModifiers,
+                sidedModifiers: []
+            )
+        case .translation:
+            return HotkeyPreference.Hotkey(
+                keyCode: HotkeyPreference.defaultTranslationKeyCode,
+                modifiers: HotkeyPreference.defaultTranslationModifiers,
+                sidedModifiers: []
+            )
+        case .meeting:
+            return HotkeyPreference.Hotkey(
+                keyCode: HotkeyPreference.defaultMeetingKeyCode,
+                modifiers: HotkeyPreference.defaultMeetingModifiers,
+                sidedModifiers: []
+            )
+        case .rewrite:
+            return HotkeyPreference.Hotkey(
+                keyCode: HotkeyPreference.defaultRewriteKeyCode,
+                modifiers: HotkeyPreference.defaultRewriteModifiers,
+                sidedModifiers: []
+            )
         }
     }
 }
 
 enum HotkeyShortcutVisibility {
     static func visibleKinds() -> [HotkeyShortcutKind] {
-        [.transcription, .translation, .rewrite]
+        [.transcription, .translation, .rewrite, .meeting]
     }
 }
 
 struct HotkeySettingsView: View {
-    private enum RecordingField {
-        case transcription
-        case translation
-        case rewrite
+    private enum RecordingField: Equatable {
+        case binding(HotkeyShortcutKind, UUID)
         case customPaste
     }
 
@@ -47,6 +93,11 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.translationHotkeyMouseButtonNumber) private var translationHotkeyMouseButtonNumber = HotkeyPreference.middleMouseButtonNumber
     @AppStorage(AppPreferenceKey.translationHotkeyModifiers) private var translationHotkeyModifiers = Int(HotkeyPreference.defaultTranslationModifiers.rawValue)
     @AppStorage(AppPreferenceKey.translationHotkeySidedModifiers) private var translationHotkeySidedModifiers = 0
+    @AppStorage(AppPreferenceKey.meetingHotkeyInputType) private var meetingHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
+    @AppStorage(AppPreferenceKey.meetingHotkeyKeyCode) private var meetingHotkeyKeyCode = Int(HotkeyPreference.defaultMeetingKeyCode)
+    @AppStorage(AppPreferenceKey.meetingHotkeyMouseButtonNumber) private var meetingHotkeyMouseButtonNumber = HotkeyPreference.middleMouseButtonNumber
+    @AppStorage(AppPreferenceKey.meetingHotkeyModifiers) private var meetingHotkeyModifiers = Int(HotkeyPreference.defaultMeetingModifiers.rawValue)
+    @AppStorage(AppPreferenceKey.meetingHotkeySidedModifiers) private var meetingHotkeySidedModifiers = 0
     @AppStorage(AppPreferenceKey.rewriteHotkeyInputType) private var rewriteHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
     @AppStorage(AppPreferenceKey.rewriteHotkeyKeyCode) private var rewriteHotkeyKeyCode = Int(HotkeyPreference.defaultRewriteKeyCode)
     @AppStorage(AppPreferenceKey.rewriteHotkeyMouseButtonNumber) private var rewriteHotkeyMouseButtonNumber = HotkeyPreference.middleMouseButtonNumber
@@ -68,9 +119,12 @@ struct HotkeySettingsView: View {
     @State private var pendingCapturedField: RecordingField?
     @State private var pendingCapturedHotkey: HotkeyPreference.Hotkey?
     @State private var recorderMessageKey: String?
-    @State private var isAdvancedExpanded = false
     @State private var hotkeyToastMessage = ""
     @State private var hotkeyToastDismissTask: Task<Void, Never>?
+    @State private var transcriptionBindings = HotkeyPreference.loadTranscriptionBindings()
+    @State private var translationBindings = HotkeyPreference.loadTranslationBindings()
+    @State private var meetingBindings = HotkeyPreference.loadMeetingBindings()
+    @State private var rewriteBindings = HotkeyPreference.loadRewriteBindings()
 
     private var hotkeyBinding: Binding<UInt16> {
         Binding(
@@ -155,6 +209,49 @@ struct HotkeySettingsView: View {
         Binding(
             get: { SidedModifierFlags(rawValue: translationHotkeySidedModifiers).filtered(by: translationModifierBinding.wrappedValue) },
             set: { translationHotkeySidedModifiers = $0.filtered(by: translationModifierBinding.wrappedValue).rawValue }
+        )
+    }
+
+    private var meetingHotkeyBinding: Binding<UInt16> {
+        Binding(
+            get: { UInt16(meetingHotkeyKeyCode) },
+            set: {
+                meetingHotkeyKeyCode = Int($0)
+                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+            }
+        )
+    }
+
+    private var meetingModifierBinding: Binding<NSEvent.ModifierFlags> {
+        Binding(
+            get: { NSEvent.ModifierFlags(rawValue: UInt(meetingHotkeyModifiers)).intersection(.hotkeyRelevant) },
+            set: {
+                meetingHotkeyModifiers = Int($0.rawValue)
+                hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+            }
+        )
+    }
+
+    private var currentMeetingHotkey: HotkeyPreference.Hotkey {
+        HotkeyPreference.Hotkey(
+            input: meetingHotkeyInput,
+            modifiers: meetingModifierBinding.wrappedValue,
+            sidedModifiers: meetingSidedModifierBinding.wrappedValue
+        )
+    }
+
+    private var meetingHotkeyInput: HotkeyPreference.Hotkey.Input {
+        resolvedInput(
+            inputType: meetingHotkeyInputType,
+            keyCode: meetingHotkeyKeyCode,
+            mouseButtonNumber: meetingHotkeyMouseButtonNumber
+        )
+    }
+
+    private var meetingSidedModifierBinding: Binding<SidedModifierFlags> {
+        Binding(
+            get: { SidedModifierFlags(rawValue: meetingHotkeySidedModifiers).filtered(by: meetingModifierBinding.wrappedValue) },
+            set: { meetingHotkeySidedModifiers = $0.filtered(by: meetingModifierBinding.wrappedValue).rawValue }
         )
     }
 
@@ -280,10 +377,10 @@ struct HotkeySettingsView: View {
     private var validationMessages: [HotkeySettingsValidation.Message] {
         HotkeySettingsValidation.messages(
             for: .init(
-                transcriptionHotkey: currentHotkey,
-                translationHotkey: currentTranslationHotkey,
-                rewriteHotkey: currentRewriteHotkey,
-                shouldValidateRewriteHotkey: !isRewriteDoubleTapWakeEnabled,
+                transcriptionBindings: transcriptionBindings,
+                translationBindings: translationBindings,
+                meetingBindings: meetingBindings,
+                rewriteBindings: rewriteBindings,
                 customPasteHotkey: customPasteHotkeyEnabled ? currentCustomPasteHotkey : nil
             )
         )
@@ -326,89 +423,10 @@ struct HotkeySettingsView: View {
                         )
                     }
 
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(localized("Distinguish Left/Right Modifiers"))
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.primary.opacity(0.92))
-                            Text(localized("Left Shift and Right Shift are treated as different shortcuts."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { distinguishModifierSides },
-                                set: { newValue in
-                                    distinguishModifierSides = newValue
-                                    hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                                }
-                            )
-                        )
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    SettingsShortcutCaptureField(
-                        title: "Transcription",
-                        hotkey: displayedHotkey(for: .transcription, current: currentHotkey),
-                        isRecording: recordingField == .transcription,
-                        isPendingConfirmation: isPendingConfirmation(for: .transcription),
-                        distinguishModifierSides: distinguishModifierSides,
-                        onFocus: { beginRecording(.transcription) },
-                        onReset: {
-                            hotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
-                            hotkeyBinding.wrappedValue = HotkeyPreference.defaultKeyCode
-                            modifierBinding.wrappedValue = HotkeyPreference.defaultModifiers
-                            sidedModifierBinding.wrappedValue = []
-                            hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                        },
-                        onCancelPending: discardPendingCapture,
-                        onConfirmPending: confirmPendingCapture
-                    )
-
-                    SettingsShortcutCaptureField(
-                        title: "Translation",
-                        hotkey: displayedHotkey(for: .translation, current: currentTranslationHotkey),
-                        isRecording: recordingField == .translation,
-                        isPendingConfirmation: isPendingConfirmation(for: .translation),
-                        distinguishModifierSides: distinguishModifierSides,
-                        onFocus: { beginRecording(.translation) },
-                        onReset: {
-                            translationHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
-                            translationHotkeyBinding.wrappedValue = HotkeyPreference.defaultTranslationKeyCode
-                            translationModifierBinding.wrappedValue = HotkeyPreference.defaultTranslationModifiers
-                            translationSidedModifierBinding.wrappedValue = []
-                            hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                        },
-                        onCancelPending: discardPendingCapture,
-                        onConfirmPending: confirmPendingCapture
-                    )
-
-                    SettingsShortcutCaptureField(
-                        title: "Content Rewrite",
-                        hotkey: displayedHotkey(for: .rewrite, current: currentRewriteHotkey),
-                        isRecording: recordingField == .rewrite,
-                        isPendingConfirmation: isPendingConfirmation(for: .rewrite),
-                        distinguishModifierSides: distinguishModifierSides,
-                        displayTextOverride: isRewriteDoubleTapWakeEnabled ? rewriteDoubleTapDisplayText : nil,
-                        isReadOnly: isRewriteDoubleTapWakeEnabled,
-                        modeButtonTitle: "Double-tap Wake",
-                        isModeButtonSelected: isRewriteDoubleTapWakeEnabled,
-                        onModeButtonToggle: toggleRewriteDoubleTapWake,
-                        onFocus: { beginRecording(.rewrite) },
-                        onReset: {
-                            rewriteHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
-                            rewriteHotkeyBinding.wrappedValue = HotkeyPreference.defaultRewriteKeyCode
-                            rewriteModifierBinding.wrappedValue = HotkeyPreference.defaultRewriteModifiers
-                            rewriteSidedModifierBinding.wrappedValue = []
-                            hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
-                        },
-                        onCancelPending: discardPendingCapture,
-                        onConfirmPending: confirmPendingCapture
-                    )
+                    hotkeyBindingGroup(.transcription, bindings: transcriptionBindings)
+                    hotkeyBindingGroup(.translation, bindings: translationBindings)
+                    hotkeyBindingGroup(.rewrite, bindings: rewriteBindings)
+                    hotkeyBindingGroup(.meeting, bindings: meetingBindings)
 
                     ForEach(validationMessages) { message in
                         Text(message.text)
@@ -420,6 +438,13 @@ struct HotkeySettingsView: View {
                         isRecording: isRecordingBinding,
                         onCapture: { capturedHotkey in
                             guard let field = recordingField else { return }
+                            guard HotkeyPreference.isAllowedGlobalShortcut(capturedHotkey) else {
+                                pendingCapturedField = nil
+                                pendingCapturedHotkey = nil
+                                recordingField = nil
+                                showHotkeyToast(localized("Keyboard shortcuts must include at least one modifier key."))
+                                return
+                            }
                             pendingCapturedField = field
                             pendingCapturedHotkey = capturedHotkey
                             showHotkeyToast(localized("Shortcut captured. Press another shortcut to replace it, or choose Confirm / Cancel."))
@@ -440,32 +465,13 @@ struct HotkeySettingsView: View {
                     )
                     .frame(width: 0, height: 0)
 
-                    GeneralSectionDivider()
-                        .padding(.top, 2)
-
-                    HStack(alignment: .center, spacing: 12) {
-                        Text(localized("Trigger"))
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.primary.opacity(0.92))
-                        Spacer()
-                        SettingsMenuPicker(
-                            selection: triggerModeBinding,
-                            options: HotkeyPreference.TriggerMode.allCases.map { mode in
-                                SettingsMenuOption(value: mode, title: mode.title)
-                            },
-                            selectedTitle: triggerModeBinding.wrappedValue.title,
-                            width: 336
-                        )
-                        .disabled(isRewriteDoubleTapWakeEnabled)
-                    }
-
                     if customPasteHotkeyEnabled {
                         SettingsShortcutCaptureField(
                             title: "Custom Paste",
                             hotkey: displayedHotkey(for: .customPaste, current: currentCustomPasteHotkey),
                             isRecording: recordingField == .customPaste,
                             isPendingConfirmation: isPendingConfirmation(for: .customPaste),
-                            distinguishModifierSides: distinguishModifierSides,
+                            distinguishModifierSides: true,
                             onFocus: { beginRecording(.customPaste) },
                             onReset: {
                                 customPasteHotkeyInputType = HotkeyPreference.Hotkey.Input.Kind.keyboard.rawValue
@@ -478,6 +484,9 @@ struct HotkeySettingsView: View {
                         )
                     }
 
+                    GeneralSectionDivider()
+                        .padding(.top, 2)
+
                     HStack(alignment: .center, spacing: 18) {
                         Text(localized("Use Esc to Cancel"))
                             .font(.body.weight(.semibold))
@@ -488,12 +497,10 @@ struct HotkeySettingsView: View {
                             .toggleStyle(.switch)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VoiceEndCommandSettingsSection()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            GeneralAdvancedCard(isExpanded: $isAdvancedExpanded) {
-                VoiceEndCommandSettingsSection()
             }
         }
         .id(interfaceLanguageRaw)
@@ -513,21 +520,74 @@ struct HotkeySettingsView: View {
                 discardPendingCapture()
             }
         }
-        .onChange(of: rewriteHotkeyActivationMode) { _, _ in
-            if isRewriteDoubleTapWakeEnabled {
-                hotkeyTriggerMode = HotkeyPreference.TriggerMode.tap.rawValue
-                if recordingField == .rewrite || pendingCapturedField == .rewrite {
-                    discardPendingCapture()
-                }
-            }
-        }
     }
 
     private func applyPreset(_ preset: HotkeyPreference.Preset) {
         discardPendingCapture()
         hotkeyPreset = preset.rawValue
-        guard let values = HotkeyPreference.applyPreset(preset) else { return }
-        distinguishModifierSides = values.distinguishSides
+        guard HotkeyPreference.applyPreset(preset) != nil else { return }
+        distinguishModifierSides = true
+        transcriptionBindings = HotkeyPreference.loadTranscriptionBindings()
+        translationBindings = HotkeyPreference.loadTranslationBindings()
+        meetingBindings = HotkeyPreference.loadMeetingBindings()
+        rewriteBindings = HotkeyPreference.loadRewriteBindings()
+    }
+
+    @ViewBuilder
+    private func hotkeyBindingGroup(
+        _ kind: HotkeyShortcutKind,
+        bindings: [HotkeyPreference.HotkeyBinding]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(bindings.enumerated()), id: \.element.id) { index, binding in
+                let field = RecordingField.binding(kind, binding.id)
+                HStack(alignment: .center, spacing: 8) {
+                    SettingsShortcutCaptureField(
+                        title: index == 0 ? kind.titleKey : LocalizedStringKey(""),
+                        hotkey: displayedHotkey(for: field, current: binding.hotkey),
+                        isRecording: recordingField == field,
+                        isPendingConfirmation: isPendingConfirmation(for: field),
+                        distinguishModifierSides: true,
+                        controlWidth: 200,
+                        onFocus: { beginRecording(field) },
+                        onReset: { resetBinding(kind: kind, id: binding.id) },
+                        onCancelPending: discardPendingCapture,
+                        onConfirmPending: confirmPendingCapture
+                    )
+
+                    SettingsMenuPicker(
+                        selection: behaviorBinding(kind: kind, id: binding.id),
+                        options: HotkeyPreference.TriggerBehavior.allCases.map { behavior in
+                            SettingsMenuOption(value: behavior, title: behavior.title)
+                        },
+                        selectedTitle: binding.behavior.title,
+                        width: 70,
+                        allowsCompactWidth: true,
+                        usesCompactInsets: true
+                    )
+
+                    if index == 0 {
+                        Button {
+                            addBinding(kind)
+                        } label: {
+                            Image(systemName: "plus")
+                                .frame(width: 14, height: 14)
+                        }
+                        .buttonStyle(SettingsCompactIconButtonStyle(size: 34))
+                        .help(localized("Add"))
+                    } else {
+                        Button {
+                            removeBinding(kind: kind, id: binding.id)
+                        } label: {
+                            Image(systemName: "trash")
+                                .frame(width: 14, height: 14)
+                        }
+                        .buttonStyle(SettingsCompactIconButtonStyle(tone: .destructive, size: 34))
+                        .help(localized("Delete"))
+                    }
+                }
+            }
+        }
     }
 
     private func beginRecording(_ field: RecordingField) {
@@ -535,18 +595,6 @@ struct HotkeySettingsView: View {
         pendingCapturedHotkey = nil
         recordingField = field
         showHotkeyToast(localized("Type your shortcut now. Press Esc to cancel recording."))
-    }
-
-    private func toggleRewriteDoubleTapWake() {
-        discardPendingCapture()
-        let nextState = HotkeyRewriteActivationState(
-            rawValue: rewriteActivationState.toggledMode.rawValue
-        )
-        rewriteHotkeyActivationMode = nextState.mode.rawValue
-        hotkeyTriggerMode = nextState.enforcedTriggerMode(
-            from: HotkeyPreference.TriggerMode(rawValue: hotkeyTriggerMode)
-                ?? HotkeyPreference.defaultTriggerMode
-        ).rawValue
     }
 
     private func isPendingConfirmation(for field: RecordingField) -> Bool {
@@ -570,20 +618,17 @@ struct HotkeySettingsView: View {
 
     private func confirmPendingCapture() {
         guard let field = pendingCapturedField, let hotkey = pendingCapturedHotkey else { return }
+        guard HotkeyPreference.isAllowedGlobalShortcut(hotkey) else {
+            discardPendingCapture()
+            showHotkeyToast(localized("Keyboard shortcuts must include at least one modifier key."))
+            return
+        }
 
         switch field {
-        case .transcription:
-            assign(hotkey.input, inputType: &hotkeyInputType, keyCode: &hotkeyKeyCode, mouseButtonNumber: &hotkeyMouseButtonNumber)
-            modifierBinding.wrappedValue = hotkey.modifiers
-            sidedModifierBinding.wrappedValue = hotkey.sidedModifiers
-        case .translation:
-            assign(hotkey.input, inputType: &translationHotkeyInputType, keyCode: &translationHotkeyKeyCode, mouseButtonNumber: &translationHotkeyMouseButtonNumber)
-            translationModifierBinding.wrappedValue = hotkey.modifiers
-            translationSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
-        case .rewrite:
-            assign(hotkey.input, inputType: &rewriteHotkeyInputType, keyCode: &rewriteHotkeyKeyCode, mouseButtonNumber: &rewriteHotkeyMouseButtonNumber)
-            rewriteModifierBinding.wrappedValue = hotkey.modifiers
-            rewriteSidedModifierBinding.wrappedValue = hotkey.sidedModifiers
+        case .binding(let kind, let id):
+            updateBinding(kind: kind, id: id) { binding in
+                binding.hotkey = hotkey
+            }
         case .customPaste:
             assign(hotkey.input, inputType: &customPasteHotkeyInputType, keyCode: &customPasteHotkeyKeyCode, mouseButtonNumber: &customPasteHotkeyMouseButtonNumber)
             customPasteModifierBinding.wrappedValue = hotkey.modifiers
@@ -625,6 +670,92 @@ struct HotkeySettingsView: View {
             keyCode = Int(value)
         case .mouseButton(let value):
             mouseButtonNumber = value
+        }
+    }
+
+    private func behaviorBinding(
+        kind: HotkeyShortcutKind,
+        id: UUID
+    ) -> Binding<HotkeyPreference.TriggerBehavior> {
+        Binding(
+            get: {
+                bindings(for: kind).first { $0.id == id }?.behavior ?? .tap
+            },
+            set: { behavior in
+                updateBinding(kind: kind, id: id) { binding in
+                    binding.behavior = behavior
+                }
+            }
+        )
+    }
+
+    private func addBinding(_ kind: HotkeyShortcutKind) {
+        var next = bindings(for: kind)
+        next.append(.init(hotkey: kind.defaultHotkey, behavior: .tap))
+        setBindings(next, for: kind)
+        hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+    }
+
+    private func removeBinding(kind: HotkeyShortcutKind, id: UUID) {
+        let current = bindings(for: kind)
+        guard current.count > 1 else { return }
+        setBindings(current.filter { $0.id != id }, for: kind)
+        if recordingField == .binding(kind, id) || pendingCapturedField == .binding(kind, id) {
+            discardPendingCapture()
+        }
+        hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+    }
+
+    private func resetBinding(kind: HotkeyShortcutKind, id: UUID) {
+        updateBinding(kind: kind, id: id) { binding in
+            binding.hotkey = kind.defaultHotkey
+            binding.behavior = .tap
+        }
+        hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+    }
+
+    private func updateBinding(
+        kind: HotkeyShortcutKind,
+        id: UUID,
+        mutate: (inout HotkeyPreference.HotkeyBinding) -> Void
+    ) {
+        var next = bindings(for: kind)
+        guard let index = next.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&next[index])
+        setBindings(next, for: kind)
+        hotkeyPreset = HotkeyPreference.Preset.custom.rawValue
+    }
+
+    private func bindings(for kind: HotkeyShortcutKind) -> [HotkeyPreference.HotkeyBinding] {
+        switch kind {
+        case .transcription:
+            return transcriptionBindings
+        case .translation:
+            return translationBindings
+        case .meeting:
+            return meetingBindings
+        case .rewrite:
+            return rewriteBindings
+        }
+    }
+
+    private func setBindings(
+        _ bindings: [HotkeyPreference.HotkeyBinding],
+        for kind: HotkeyShortcutKind
+    ) {
+        switch kind {
+        case .transcription:
+            transcriptionBindings = bindings
+            HotkeyPreference.saveTranscriptionBindings(bindings)
+        case .translation:
+            translationBindings = bindings
+            HotkeyPreference.saveTranslationBindings(bindings)
+        case .meeting:
+            meetingBindings = bindings
+            HotkeyPreference.saveMeetingBindings(bindings)
+        case .rewrite:
+            rewriteBindings = bindings
+            HotkeyPreference.saveRewriteBindings(bindings)
         }
     }
 }

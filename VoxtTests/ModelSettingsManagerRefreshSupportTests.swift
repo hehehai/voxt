@@ -1,3 +1,6 @@
+// ModelSettingsManagerRefreshSupportTests.swift
+// Provides Model Settings Manager Refresh Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -28,31 +31,6 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
         XCTAssertEqual(phaseA, phaseB)
     }
 
-    func testWhisperDownloadDescriptorTracksIdentityAndPauseState() {
-        let activeDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: true,
-            progress: 0.5,
-            completed: 50,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 25,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-
-        let descriptor = ModelSettingsManagerRefreshSupport.whisperDownloadDescriptor(for: activeDownload)
-
-        XCTAssertEqual(
-            descriptor,
-            WhisperDownloadActivityDescriptor(
-                modelID: "openai_whisper-large-v3-v20240930",
-                isPaused: true
-            )
-        )
-    }
-
     func testCustomLLMPhaseMapsPausedState() {
         let phase = ModelSettingsManagerRefreshSupport.phase(
             for: CustomLLMModelManager.ModelState.paused(
@@ -79,9 +57,13 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: ["repo-b", "repo-a"],
-            whisperState: .downloaded,
-            whisperActiveDownload: nil,
-            customLLMState: .downloaded
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .downloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
         let tokenB = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
             mlxState: .paused(
@@ -93,44 +75,21 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxActiveDownloadRepos: ["repo-a", "repo-b"],
-            whisperState: .ready,
-            whisperActiveDownload: nil,
-            customLLMState: .downloaded
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .downloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(tokenA, tokenB)
     }
 
-    func testDownloadLifecycleTokenTracksWhisperPauseDescriptor() {
-        let pausedDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: true,
-            progress: 0.2,
-            completed: 20,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 10,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-        let activeDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: false,
-            progress: 0.2,
-            completed: 20,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 10,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-
+    func testDownloadLifecycleTokenTracksMLXPausePhase() {
         let pausedToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
-            mlxState: .notDownloaded,
-            mlxActiveDownloadRepos: [],
-            whisperState: .paused(
+            mlxState: .paused(
                 progress: 0.2,
                 completed: 20,
                 total: 100,
@@ -138,13 +97,17 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            whisperActiveDownload: pausedDownload,
-            customLLMState: .notDownloaded
+            mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
         let activeToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
-            mlxState: .notDownloaded,
-            mlxActiveDownloadRepos: [],
-            whisperState: .downloading(
+            mlxState: .downloading(
                 progress: 0.2,
                 completed: 20,
                 total: 100,
@@ -152,10 +115,87 @@ final class ModelSettingsManagerRefreshSupportTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            whisperActiveDownload: activeDownload,
-            customLLMState: .notDownloaded
+            mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertNotEqual(pausedToken, activeToken)
+    }
+
+    func testDownloadLifecycleTokenTracksSherpaActiveModelIDs() {
+        let idleToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
+            mlxState: .notDownloaded,
+            mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
+        )
+        let sherpaToken = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
+            mlxState: .notDownloaded,
+            mlxActiveDownloadRepos: [],
+            sherpaState: .downloading(
+                progress: 0,
+                completed: 0,
+                total: 100,
+                currentFile: "model.tar.bz2",
+                completedFiles: 0,
+                totalFiles: 1
+            ),
+            sherpaActiveDownloadModelIDs: [
+                SherpaOnnxModelCatalog.funASRNanoModelID,
+                SherpaOnnxModelCatalog.fireRedModelID,
+            ],
+            customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
+        )
+
+        XCTAssertNotEqual(idleToken, sherpaToken)
+        XCTAssertEqual(sherpaToken.sherpaPhase, .downloading)
+        XCTAssertEqual(
+            sherpaToken.sherpaActiveDownloadModelIDs,
+            [
+                SherpaOnnxModelCatalog.fireRedModelID.rawValue,
+                SherpaOnnxModelCatalog.funASRNanoModelID.rawValue,
+            ]
+        )
+    }
+
+    func testDownloadLifecycleTokenTracksCustomLLMActiveRepos() {
+        let token = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
+            mlxState: .notDownloaded,
+            mlxActiveDownloadRepos: [],
+            sherpaState: .notDownloaded,
+            sherpaActiveDownloadModelIDs: [],
+            customLLMState: .notDownloaded,
+            customLLMStateByRepo: [:],
+            customLLMActiveDownloadRepos: [
+                "mlx-community/LFM2-1.2B-4bit",
+                "mlx-community/Qwen3.5-4B-4bit",
+            ],
+            ggufStateByID: [:],
+            ggufActiveDownloadModelID: nil
+        )
+
+        XCTAssertEqual(token.customLLMPhase, .downloading)
+        XCTAssertEqual(
+            token.customLLMActiveDownloadRepos,
+            [
+                "mlx-community/LFM2-1.2B-4bit",
+                "mlx-community/Qwen3.5-4B-4bit",
+            ]
+        )
     }
 }

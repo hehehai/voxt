@@ -6,6 +6,73 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.0-beta.2] - 2026-07-02
+
+### English
+
+#### Fixed
+- Fixed beta release packaging so Sherpa ONNX local ASR is enabled in the signed app build.
+
+### 简体中文
+
+#### 修复
+- 修复 beta 发布包打包流程，现在签名后的 App 会启用 Sherpa ONNX 本地 ASR。
+
+### 日本語
+
+#### 修正
+- beta リリースのパッケージングを修正し、署名済みアプリで Sherpa ONNX ローカル ASR が有効になるようにしました。
+
+## [1.13.0-beta.1] - 2026-07-02
+
+### English
+
+#### Added
+- Added meeting mode with live capture, speaker-aware transcripts, summaries, translation support, and meeting detail windows.
+- Added Sherpa ONNX local ASR support and Xiaomi MiMo remote ASR providers.
+- Added dictionary categories, selected-text dictionary shortcuts, and richer app-context prompts for rewrite and enhancement workflows.
+- Added setup guide onboarding and structured app logging for easier troubleshooting.
+
+#### Changed
+- Refined model settings, local model catalogs, and download status presentation across ASR and local translation models.
+- Improved remote ASR audio upload preprocessing and voice activity handling for more reliable long-form transcription.
+
+#### Fixed
+- Fixed hotkey routing, long-press release handling, and overlay shortcut responsiveness.
+- Improved logger write reliability and prompt fallback behavior.
+
+### 简体中文
+
+#### 新增
+- 新增会议模式，支持实时采集、按说话人整理的转写、摘要、翻译以及会议详情窗口。
+- 新增 Sherpa ONNX 本地 ASR 支持和 Xiaomi MiMo 远程 ASR provider。
+- 新增词典分类、选中文本词典快捷键，以及改写和增强流程中的更完整应用上下文提示词。
+- 新增设置引导和结构化应用日志，方便首次配置与问题排查。
+
+#### 改进
+- 优化 ASR 与本地翻译模型的模型设置、目录展示和下载状态呈现。
+- 改进远程 ASR 音频上传预处理和语音活动处理，让长音频转写更可靠。
+
+#### 修复
+- 修复快捷键路由、长按释放处理和悬浮窗快捷键响应问题。
+- 提升日志写入可靠性，并改进提示词回退行为。
+
+### 日本語
+
+#### 追加
+- 会議モードを追加し、ライブキャプチャ、話者別の文字起こし、要約、翻訳、会議詳細ウィンドウに対応しました。
+- Sherpa ONNX ローカル ASR と Xiaomi MiMo リモート ASR provider を追加しました。
+- 辞書カテゴリ、選択テキスト用の辞書ショートカット、書き換えと強化フロー向けのより詳しいアプリコンテキストプロンプトを追加しました。
+- 初期設定ガイドと構造化アプリログを追加し、設定とトラブルシューティングを進めやすくしました。
+
+#### 変更
+- ASR とローカル翻訳モデルのモデル設定、カタログ表示、ダウンロード状態の表示を見直しました。
+- リモート ASR の音声アップロード前処理と音声活動処理を改善し、長時間の文字起こしをより安定させました。
+
+#### 修正
+- ホットキーのルーティング、長押し解除処理、オーバーレイのショートカット応答性を修正しました。
+- ログ書き込みの信頼性とプロンプトのフォールバック動作を改善しました。
+
 ## [1.12.1] - 2026-07-02
 
 ### English

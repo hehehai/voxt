@@ -1,3 +1,6 @@
+// EnhancementStrategyResolverTests.swift
+// Provides Enhancement Strategy Resolver Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

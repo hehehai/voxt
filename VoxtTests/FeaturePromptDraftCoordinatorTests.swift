@@ -1,3 +1,6 @@
+// FeaturePromptDraftCoordinatorTests.swift
+// Provides Feature Prompt Draft Coordinator Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

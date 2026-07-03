@@ -1,3 +1,6 @@
+// TranscriptionDetailViewModelTests.swift
+// Provides Transcription Detail View Model Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -127,8 +130,8 @@ private extension TranscriptionDetailViewModelTests {
             id: id,
             text: text,
             createdAt: Date(timeIntervalSinceReferenceDate: 10),
-            transcriptionEngine: "WhisperKit",
-            transcriptionModel: "large-v3",
+            transcriptionEngine: "MLX Whisper",
+            transcriptionModel: "whisper-large-v3-turbo",
             enhancementMode: "Off",
             enhancementModel: "None",
             kind: kind,

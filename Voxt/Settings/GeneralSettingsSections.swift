@@ -1,3 +1,6 @@
+// GeneralSettingsSections.swift
+// Provides General Settings Sections for settings screens.
+
 import SwiftUI
 
 private func localized(_ key: String) -> String {
@@ -112,7 +115,7 @@ private struct GeneralInteractionSoundsRow: View {
                         )
 
                         Button(action: playPreview) {
-                            SoundPreviewIcon()
+                            SettingsSoundPreviewIcon()
                                 .foregroundStyle(isPreviewPlaying ? Color.accentColor : Color.primary.opacity(0.86))
                                 .frame(width: 16, height: 16)
                         }
@@ -144,15 +147,7 @@ private struct GeneralInteractionSoundsRow: View {
     }
 }
 
-private struct SoundPreviewIcon: View {
-    var body: some View {
-        ZStack {
-            SVGPathShape(pathData: "M7.96997 22.75C5.34997 22.75 3.21997 20.62 3.21997 18C3.21997 15.38 5.34997 13.25 7.96997 13.25C10.59 13.25 12.72 15.38 12.72 18C12.72 20.62 10.59 22.75 7.96997 22.75ZM7.96997 14.75C6.17997 14.75 4.71997 16.21 4.71997 18C4.71997 19.79 6.17997 21.25 7.96997 21.25C9.75997 21.25 11.22 19.79 11.22 18C11.22 16.21 9.76997 14.75 7.96997 14.75Z")
-            SVGPathShape(pathData: "M11.97 18.75C11.56 18.75 11.22 18.41 11.22 18V4C11.22 3.59 11.56 3.25 11.97 3.25C12.38 3.25 12.72 3.59 12.72 4V18C12.72 18.41 12.39 18.75 11.97 18.75Z")
-            SVGPathShape(pathData: "M19.13 10.2304C18.8 10.2304 18.45 10.1704 18.11 10.0604L13.69 8.59043C12.31 8.13043 11.23 6.63043 11.23 5.18043V4.00043C11.23 3.03043 11.63 2.19043 12.31 1.69043C13 1.19043 13.92 1.09043 14.84 1.39043L19.26 2.86043C20.64 3.32043 21.72 4.82043 21.72 6.27043V7.44043C21.72 8.41043 21.32 9.25043 20.64 9.75043C20.21 10.0804 19.68 10.2304 19.13 10.2304ZM13.82 2.72043C13.58 2.72043 13.36 2.78043 13.19 2.91043C12.89 3.12043 12.73 3.51043 12.73 4.00043V5.17043C12.73 5.97043 13.4 6.90043 14.16 7.16043L18.58 8.63043C19.04 8.79043 19.47 8.75043 19.76 8.54043C20.06 8.33043 20.22 7.94043 20.22 7.45043V6.28043C20.22 5.48043 19.55 4.55043 18.79 4.29043L14.37 2.82043C14.18 2.75043 13.99 2.72043 13.82 2.72043Z")
-        }
-    }
-}
+
 
 struct GeneralTranscriptionUICard: View {
     @Binding var overlayPosition: OverlayPosition
@@ -563,6 +558,28 @@ struct GeneralLoggingCard: View {
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct GeneralVADCard: View {
+    @Binding var localVADMode: LocalVADMode
+
+    var body: some View {
+        GeneralSettingsCard(title: localizedKey("VAD")) {
+            GeneralFieldRow(
+                title: localizedKey("VAD Mode"),
+                description: LocalizedStringKey(localVADMode.detail)
+            ) {
+                SettingsMenuPicker(
+                    selection: $localVADMode,
+                    options: LocalVADMode.allCases.map { mode in
+                        SettingsMenuOption(value: mode, title: mode.title)
+                    },
+                    selectedTitle: localVADMode.title,
+                    width: 180
+                )
+            }
+        }
     }
 }
 

@@ -1,3 +1,6 @@
+// TranscriptionHistoryConversationSupportTests.swift
+// Provides Transcription History Conversation Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -143,8 +146,8 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
             id: UUID(),
             text: text,
             createdAt: createdAt,
-            transcriptionEngine: "WhisperKit",
-            transcriptionModel: "large-v3",
+            transcriptionEngine: "MLX Whisper",
+            transcriptionModel: "whisper-large-v3-turbo",
             enhancementMode: "Off",
             enhancementModel: "None",
             kind: .normal,

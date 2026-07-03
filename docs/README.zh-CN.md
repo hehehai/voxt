@@ -77,10 +77,10 @@ brew install --cask voxt
 依赖 macOS 15.0 及以上版本与本地模型能力，Voxt 当前提供：
 
 - `MLX Audio` 本地 ASR 模型
-- 通过 WhisperKit 接入的 `Whisper` 独立本地 ASR 引擎
+- 通过 `MLX Audio` 接入的 `Whisper` 本地 ASR 模型
 - 一组可下载的本地 LLM 模型（用于文本增强、翻译、改写）
 
-Whisper 不是 `MLX Audio` 的子模式，而是在模型页里独立显示的一个引擎，有自己的模型列表、下载流程和运行时配置。
+Whisper 已迁移为 `MLX Audio` 本地模型家族；旧 Whisper 选择会自动迁移到对应的 MLX Whisper repo。
 
 > [!NOTE]
 > 下表中的“当前状态 / 报错”来自当前项目代码；“语言支持 / 速度 / 推荐度”优先参考模型卡与项目内描述整理。速度与推荐度用于帮助选型，不是统一 benchmark。
@@ -113,25 +113,20 @@ Whisper 不是 `MLX Audio` 的子模式，而是在模型页里独立显示的�
 - Voxt 会把 MLX Audio 下载内容存放在自己的 `mlx-audio` 模型目录下，并先做 canonical repo 归一化，再判断模型是否已经下载。
 - 老的模型 ID 会自动映射到当前 canonical ID，包括 `Parakeet`、`GLM-ASR Nano`、`Voxtral Realtime`、`FireRed ASR 2`，升级后一般不需要手工重选。
 - 对齐专用仓库会被明确拒绝，例如 `Qwen3-ForcedAligner` 不会被当成可转录模型。
-- 当前工程里的依赖源是 Voxt 维护的镜像 fork `hehehai/mlx-audio-swift`，目前固定在 commit `a1c7b11b68b16f1591bb0ff586372dde9b265135`。这次同步包含了上游 FireRed ASR 2 加载修复以及相关 STT / TTS / VAD 更新。依赖策略见 [docs/MLXAudioDependency.md](./MLXAudioDependency.md)。
+- 当前工程里的依赖源是 Voxt 维护的镜像 fork `hehehai/mlx-audio-swift`，目前固定在 commit `3e693624ecb6b3fabf0e844b333c23334952d38d`。这次同步包含了上游 Nemotron ASR、Whisper STT、Voxtral streaming、Irodori TTS 以及相关 STT / TTS / VAD 更新。依赖策略见 [docs/MLXAudioDependency.md](./MLXAudioDependency.md)。
 
-#### Whisper（WhisperKit）
+#### Whisper（MLX Audio）
 
-Voxt 还支持通过 WhisperKit 使用 `Whisper` 作为独立的本地 ASR 引擎。
+Voxt 现在通过 MLX Audio Swift 使用 Whisper 本地 ASR。
 
-- 当前运行时包：Xcode 依赖已迁移到 `argmaxinc/argmax-oss-swift` 提供的 `WhisperKit` product
-- 内置模型列表：`tiny`、`base`、`small`、`medium`、`large-v3`
-- 当前下载源：模型文件仍然走基于 Hugging Face 风格路径的 `argmaxinc/whisperkit-coreml`
+- 当前运行时包：`mlx-audio-swift`
+- 默认可见模型：`whisper-large-v3-turbo`、`whisper-large-v3-mlx`、`whisper-small-mlx`
+- 隐藏兼容模型：`whisper-tiny-mlx`、`whisper-base-mlx`
+- 旧模型迁移：`tiny`、`base`、`small`、`medium`、`large-v3` 等旧 Whisper 选择会映射到 MLX Whisper repo
 - 支持中国镜像：跟随应用里的镜像开关
-- 当前可配置项：
-  - `Realtime`，默认开启
-  - `VAD`
-  - `Timestamps`
-  - `Temperature`
 - 当前行为：
-  - 普通转录默认使用 Whisper 的 `transcribe`
-  - 翻译快捷键可选用 Whisper 内建的 `translate-to-English`
-  - 如果当前场景不支持 Whisper 直翻，Voxt 会自动回退到已选的 LLM 翻译 provider
+  - 普通转录使用 MLX Whisper 的 `transcribe`
+  - 翻译不再走独立 Whisper 直翻 provider，统一使用已选的 LLM 翻译链路
 
 Voxt 当前内置的 Whisper 模型：
 
@@ -146,7 +141,7 @@ Voxt 当前内置的 Whisper 模型：
 Whisper 相关说明：
 
 - 如果主语言设置为简体中文 / 繁体中文，Whisper 输出会按主语言做简繁归一化。
-- Whisper 直翻目前只适用于“语音翻到英文”的场景；选中文本翻译仍然走原有文本翻译链路。
+- Whisper 只作为 ASR 模型参与语音转文字；翻译统一走文本翻译链路。
 - 如果 Whisper 模型下载中断或文件不完整，Voxt 会把它视为未完成模型，并要求重新下载，而不是继续尝试加载损坏模型。
 
 本地 ASR 常见报错 / 状态：
@@ -157,25 +152,24 @@ Whisper 相关说明：
 - `Model load failed (...)`
 - `Size unavailable`
 - 如果误配到对齐专用仓库，会提示 `alignment-only and not supported by Voxt transcription`
-- 如果 Whisper 缺少关键 Core ML 权重文件，也可能出现“下载不完整 / 模型损坏”相关错误
+- 如果 Whisper 缺少关键 MLX 权重文件，也可能出现“下载不完整 / 模型损坏”相关错误
 
 #### 本地 LLM 模型
 
 | 模型 | 仓库 ID | 大小 | 语言倾向 | 速度 | 推荐度 | 适合场景 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Qwen2 1.5B Instruct | `Qwen/Qwen2-1.5B-Instruct` | 1.5B | 中文 / 英文均衡 | 快 | 高 | 轻量文本清洗、简单翻译 |
-| Qwen2.5 3B Instruct | `Qwen/Qwen2.5-3B-Instruct` | 3B | 中文 / 英文均衡 | 中快 | 高 | 更稳的增强与格式整理 |
-| Qwen3 4B (4bit) | `mlx-community/Qwen3-4B-4bit` | 4B / 4bit | 中文 / 英文 / 多语言 | 中快 | 很高 | 本地增强、翻译的均衡选项 |
-| Qwen3 8B (4bit) | `mlx-community/Qwen3-8B-4bit` | 8B / 4bit | 中文 / 英文 / 多语言 | 中慢 | 很高 | 更强的改写、翻译和结构化输出 |
-| GLM-4 9B (4bit) | `mlx-community/GLM-4-9B-0414-4bit` | 9B / 4bit | 中文 / 英文 / 多语言 | 慢 | 很高 | 中文改写、复杂提示词场景 |
-| Llama 3.2 3B Instruct (4bit) | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 3B / 4bit | 英文优先，多语言可用 | 中快 | 中高 | 轻量本地改写 |
-| Llama 3.2 1B Instruct (4bit) | `mlx-community/Llama-3.2-1B-Instruct-4bit` | 1B / 4bit | 英文优先，多语言可用 | 很快 | 中 | 最省资源的本地增强 |
-| Meta Llama 3 8B Instruct (4bit) | `mlx-community/Meta-Llama-3-8B-Instruct-4bit` | 8B / 4bit | 英文优先，多语言可用 | 中慢 | 中高 | 通用增强、摘要、改写 |
-| Meta Llama 3.1 8B Instruct (4bit) | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | 8B / 4bit | 英文优先，多语言可用 | 中慢 | 高 | 比较稳妥的通用本地 LLM |
-| Mistral 7B Instruct v0.3 (4bit) | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 7B / 4bit | 英文 / 欧洲语系更强 | 中 | 高 | 简洁改写、格式修正 |
-| Mistral Nemo Instruct 2407 (4bit) | `mlx-community/Mistral-Nemo-Instruct-2407-4bit` | Nemo 系列 / 4bit | 英文优先，多语言可用 | 中慢 | 高 | 更复杂的本地增强任务 |
-| Gemma 2 2B IT (4bit) | `mlx-community/gemma-2-2b-it-4bit` | 2B / 4bit | 英文优先，多语言可用 | 快 | 中高 | 轻量文本整理 |
-| Gemma 2 9B IT (4bit) | `mlx-community/gemma-2-9b-it-4bit` | 9B / 4bit | 英文优先，多语言可用 | 慢 | 高 | 更高质量的本地润色与翻译 |
+| Qwen3.5 2B (4bit) | `mlx-community/Qwen3.5-2B-4bit` | 2B / 4bit | 中文 / 英文 / 多语言 | 快 | 高 | 轻量本地增强，输出更稳 |
+| Qwen3.5 4B OptiQ (4bit) | `mlx-community/Qwen3.5-4B-OptiQ-4bit` | 4B / 4bit | 中文 / 英文 / 多语言 | 中快 | 很高 | 默认本地增强、翻译均衡选项 |
+| Qwen3.5 9B OptiQ (4bit) | `mlx-community/Qwen3.5-9B-OptiQ-4bit` | 9B / 4bit | 中文 / 英文 / 多语言 | 中慢 | 很高 | 更强的改写、翻译和结构化输出 |
+| Qwen3 VL 4B Instruct (4bit) | `lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit` | 4B / 4bit | 中文 / 英文 / 视觉 | 中 | 高 | 本地图文上下文任务 |
+| GLM 4 9B | `mlx-community/GLM-4-9B-0414-4bit` | 9B / 4bit | 中文 / 英文 / 多语言 | 慢 | 很高 | 中文改写、复杂提示词场景 |
+| Mistral 3 3B | `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 3B / 4bit | 英文 / 欧洲语系 / 多语言 | 中快 | 高 | 轻量非 Qwen 本地清理 |
+| LFM2 1.2B (4bit) | `mlx-community/LFM2-1.2B-4bit` | 1.2B / 4bit | 英文优先 / 多语言 | 很快 | 中 | 极轻量本地生成 |
+| LFM2 8B A1B (3bit) | `mlx-community/LFM2-8B-A1B-3bit-MLX` | 8B-A1B / 3bit | 英文优先 / 多语言 | 中快 | 中高 | 紧凑 MoE 本地生成 |
+| Qwen3.6 27B (4bit) | `mlx-community/Qwen3.6-27B-4bit` | 27B / 4bit | 中文 / 英文 / 多语言 | 很慢 | 很高 | 大内存 Mac 高端本地生成 |
+| Gemma 4 E2B IT (4bit) | `mlx-community/gemma-4-e2b-it-4bit` | E2B / 4bit | 英文优先，多语言和视觉可用 | 快 | 中高 | 轻量非 Qwen 本地清理 |
+| Gemma 4 E4B IT (4bit) | `mlx-community/gemma-4-e4b-it-4bit` | E4B / 4bit | 英文优先，多语言和视觉可用 | 中 | 高 | 均衡的非 Qwen 本地润色与翻译 |
+| Gemma 4 12B IT OptiQ (4bit) | `mlx-community/gemma-4-12B-it-OptiQ-4bit` | 12B / 4bit | 英文优先，多语言和视觉可用 | 慢 | 高 | 更高质量的非 Qwen 本地生成 |
 
 本地 LLM 常见报错 / 状态：
 

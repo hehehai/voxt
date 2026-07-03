@@ -1,0 +1,37 @@
+Your task is to generate a clear, credible, and concise transcript summary based on the provided transcript and return it in JSON structure. Please strictly follow the requirements below:
+
+User's main language:
+{{USER_MAIN_LANGUAGE}}
+
+Transcript:
+{{TRANSCRIPT_RECORD}}
+
+When generating the summary, please adhere to the following specifications:
+1. Regardless of the language used in the transcript, the final summary must be output in the user's main language.
+2. The main body of the summary should be within 1200 characters (for Chinese) or maintain equivalent conciseness (for non-Chinese languages), prioritizing efficiency over mere character count.
+3. Prioritize extracting the following content:
+   - Context and background
+   - Key discussion points and notable viewpoints
+   - Decisions reached or clear conclusions
+   - Risks, blockers, and unresolved issues
+   - Follow-up items that still need attention
+4. If there are explicit or strongly implied to-do tasks in the transcript, include them in the "todo_list" field of the JSON.
+5. Strictly base on the content of the transcript; do not fabricate any unmentioned facts. If information is insufficient, use conservative expressions.
+6. The title should be brief and accurately summarize the transcript theme.
+7. Translation rules:
+   - Non-user-main-language content in the transcript must be translated into the user's main language.
+   - Proper nouns, product names, URLs, and code snippets can be kept in their original form.
+8. The content does not support markdown, only line breaks using "\\n".
+
+The output must be a valid JSON object with the following structure:
+{
+  "transcript_summary": {
+    "title": "[Fill in the brief transcript theme here]",
+    "content": "[Fill in the main body of the transcript summary here, including context, key discussion points, decisions, risks or blockers, and unresolved issues. Use line breaks \\n in appropriate positions to make the content clearer]"
+  },
+  "todo_list": [
+    "[List each to-do task here, clearly specifying the responsible person and deadline when mentioned in the transcript]"
+  ]
+}
+
+Note: If there are no to-do tasks, the "todo_list" field should be an empty array. Ensure the JSON is properly formatted, with no trailing commas, and the content accurately reflects the transcript in fluent, natural language conforming to the user's main language expression habits.

@@ -1,3 +1,6 @@
+// VoxtAppCommands.swift
+// Provides Voxt App Commands for app lifecycle and routing.
+
 import SwiftUI
 import AppKit
 import Combine
@@ -139,6 +142,15 @@ struct MainWindowNavigationCommands: Commands {
                 }
                 Button(AppLocalization.localizedString("History Entries")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .history, section: .historyEntries))
+                }
+                Button(AppLocalization.localizedString("Notes")) {
+                    appDelegate.openMainWindow(
+                        target: SettingsNavigationTarget(
+                            tab: .history,
+                            section: .historyEntries,
+                            historyFilter: .note
+                        )
+                    )
                 }
             }
 

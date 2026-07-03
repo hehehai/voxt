@@ -1,8 +1,11 @@
+// HotkeyModifierInterpreter.swift
+// Provides Hotkey Modifier Interpreter for hotkey handling.
+
 import Foundation
 import Carbon
 import ApplicationServices
 
-struct HotkeyModifierInterpreter {
+nonisolated struct HotkeyModifierInterpreter {
     static func isModifierOnly(_ hotkey: HotkeyPreference.Hotkey) -> Bool {
         guard case .keyboard(let keyCode) = hotkey.input else { return false }
         return keyCode == HotkeyPreference.modifierOnlyKeyCode

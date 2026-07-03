@@ -1,3 +1,6 @@
+// HotkeySettingsValidation.swift
+// Provides Hotkey Settings Validation for settings screens.
+
 import AppKit
 import Carbon
 import Foundation
@@ -23,11 +26,40 @@ private let hotkeySettingsConflictRules: [HotkeyConflictRule] = [
 
 struct HotkeySettingsValidation {
     struct State {
-        let transcriptionHotkey: HotkeyPreference.Hotkey
-        let translationHotkey: HotkeyPreference.Hotkey
-        let rewriteHotkey: HotkeyPreference.Hotkey
-        let shouldValidateRewriteHotkey: Bool
+        let transcriptionBindings: [HotkeyPreference.HotkeyBinding]
+        let translationBindings: [HotkeyPreference.HotkeyBinding]
+        let meetingBindings: [HotkeyPreference.HotkeyBinding]
+        let rewriteBindings: [HotkeyPreference.HotkeyBinding]
         let customPasteHotkey: HotkeyPreference.Hotkey?
+
+        init(
+            transcriptionHotkey: HotkeyPreference.Hotkey,
+            translationHotkey: HotkeyPreference.Hotkey,
+            meetingHotkey: HotkeyPreference.Hotkey? = nil,
+            rewriteHotkey: HotkeyPreference.Hotkey,
+            shouldValidateRewriteHotkey: Bool,
+            customPasteHotkey: HotkeyPreference.Hotkey?
+        ) {
+            self.transcriptionBindings = [.init(hotkey: transcriptionHotkey, behavior: .tap)]
+            self.translationBindings = [.init(hotkey: translationHotkey, behavior: .tap)]
+            self.meetingBindings = meetingHotkey.map { [.init(hotkey: $0, behavior: .tap)] } ?? []
+            self.rewriteBindings = shouldValidateRewriteHotkey ? [.init(hotkey: rewriteHotkey, behavior: .tap)] : []
+            self.customPasteHotkey = customPasteHotkey
+        }
+
+        init(
+            transcriptionBindings: [HotkeyPreference.HotkeyBinding],
+            translationBindings: [HotkeyPreference.HotkeyBinding],
+            meetingBindings: [HotkeyPreference.HotkeyBinding],
+            rewriteBindings: [HotkeyPreference.HotkeyBinding],
+            customPasteHotkey: HotkeyPreference.Hotkey?
+        ) {
+            self.transcriptionBindings = transcriptionBindings
+            self.translationBindings = translationBindings
+            self.meetingBindings = meetingBindings
+            self.rewriteBindings = rewriteBindings
+            self.customPasteHotkey = customPasteHotkey
+        }
     }
 
     struct Message: Identifiable, Equatable {
@@ -38,27 +70,36 @@ struct HotkeySettingsValidation {
     static func messages(for state: State) -> [Message] {
         var messages: [Message] = []
 
-        appendConflictMessage(
-            for: state.transcriptionHotkey,
-            formatKey: "Transcription shortcut: %@",
-            id: "conflict.transcription",
-            to: &messages
-        )
-        appendConflictMessage(
-            for: state.translationHotkey,
-            formatKey: "Translation shortcut: %@",
-            id: "conflict.translation",
-            to: &messages
-        )
-        if state.shouldValidateRewriteHotkey {
-            appendConflictMessage(
-                for: state.rewriteHotkey,
-                formatKey: "Content rewrite shortcut: %@",
-                id: "conflict.rewrite",
-                to: &messages
-            )
+        let groups: [(key: String, title: String, bindings: [HotkeyPreference.HotkeyBinding])] = [
+            ("transcription", "Transcription shortcut: %@", state.transcriptionBindings),
+            ("translation", "Translation shortcut: %@", state.translationBindings),
+            ("meeting", "Meeting shortcut: %@", state.meetingBindings),
+            ("rewrite", "Content rewrite shortcut: %@", state.rewriteBindings)
+        ]
+
+        for group in groups {
+            for (index, binding) in group.bindings.enumerated() {
+                appendInvalidShortcutMessage(
+                    for: binding.hotkey,
+                    formatKey: group.title,
+                    id: "invalid.\(group.key).\(index)",
+                    to: &messages
+                )
+                appendConflictMessage(
+                    for: binding.hotkey,
+                    formatKey: group.title,
+                    id: "conflict.\(group.key).\(index)",
+                    to: &messages
+                )
+            }
         }
         if let customPasteHotkey = state.customPasteHotkey {
+            appendInvalidShortcutMessage(
+                for: customPasteHotkey,
+                formatKey: "Custom paste shortcut: %@",
+                id: "invalid.customPaste",
+                to: &messages
+            )
             appendConflictMessage(
                 for: customPasteHotkey,
                 formatKey: "Custom paste shortcut: %@",
@@ -67,47 +108,94 @@ struct HotkeySettingsValidation {
             )
         }
 
-        appendEqualityMessage(
-            state.transcriptionHotkey == state.translationHotkey,
-            id: "duplicate.transcription.translation",
-            textKey: "Transcription and translation shortcuts should be different.",
-            to: &messages
-        )
-        appendEqualityMessage(
-            state.shouldValidateRewriteHotkey && state.transcriptionHotkey == state.rewriteHotkey,
-            id: "duplicate.transcription.rewrite",
-            textKey: "Transcription and content rewrite shortcuts should be different.",
-            to: &messages
-        )
-        appendEqualityMessage(
-            state.shouldValidateRewriteHotkey && state.translationHotkey == state.rewriteHotkey,
-            id: "duplicate.translation.rewrite",
-            textKey: "Translation and content rewrite shortcuts should be different.",
-            to: &messages
-        )
+        appendDuplicateBindingMessages(groups: groups, to: &messages)
+        appendDuplicateBindingMessagesWithinGroups(groups: groups, to: &messages)
 
         if let customPasteHotkey = state.customPasteHotkey {
-            appendEqualityMessage(
-                state.transcriptionHotkey == customPasteHotkey,
-                id: "duplicate.transcription.customPaste",
-                textKey: "Transcription and custom paste shortcuts should be different.",
-                to: &messages
-            )
-            appendEqualityMessage(
-                state.translationHotkey == customPasteHotkey,
-                id: "duplicate.translation.customPaste",
-                textKey: "Translation and custom paste shortcuts should be different.",
-                to: &messages
-            )
-            appendEqualityMessage(
-                state.shouldValidateRewriteHotkey && state.rewriteHotkey == customPasteHotkey,
-                id: "duplicate.rewrite.customPaste",
-                textKey: "Content rewrite and custom paste shortcuts should be different.",
-                to: &messages
-            )
+            appendCustomPasteDuplicateMessages(customPasteHotkey, groups: groups, to: &messages)
         }
 
         return messages
+    }
+
+    private static func appendDuplicateBindingMessages(
+        groups: [(key: String, title: String, bindings: [HotkeyPreference.HotkeyBinding])],
+        to messages: inout [Message]
+    ) {
+        var seen: [(key: String, binding: HotkeyPreference.HotkeyBinding)] = []
+        for group in groups {
+            for binding in group.bindings {
+                if let duplicate = seen.first(where: {
+                    $0.key != group.key &&
+                    $0.binding.hotkey == binding.hotkey &&
+                    $0.binding.behavior == binding.behavior
+                }) {
+                    messages.append(.init(
+                        id: "duplicate.\(duplicate.key).\(group.key)",
+                        text: duplicateText(first: duplicate.key, second: group.key)
+                    ))
+                } else {
+                    seen.append((group.key, binding))
+                }
+            }
+        }
+    }
+
+    private static func appendDuplicateBindingMessagesWithinGroups(
+        groups: [(key: String, title: String, bindings: [HotkeyPreference.HotkeyBinding])],
+        to messages: inout [Message]
+    ) {
+        for group in groups {
+            var seen: [HotkeyPreference.Hotkey] = []
+            for binding in group.bindings {
+                if seen.contains(binding.hotkey) {
+                    messages.append(.init(
+                        id: "duplicate.\(group.key).\(group.key)",
+                        text: AppLocalization.localizedString("A workflow cannot use the same shortcut more than once.")
+                    ))
+                    break
+                }
+                seen.append(binding.hotkey)
+            }
+        }
+    }
+
+    private static func duplicateText(first: String, second: String) -> String {
+        let pair = Set([first, second])
+        if pair == Set(["transcription", "translation"]) {
+            return AppLocalization.localizedString("Transcription and translation shortcuts should be different.")
+        }
+        if pair == Set(["transcription", "meeting"]) {
+            return AppLocalization.localizedString("Transcription and meeting shortcuts should be different.")
+        }
+        if pair == Set(["translation", "meeting"]) {
+            return AppLocalization.localizedString("Translation and meeting shortcuts should be different.")
+        }
+        if pair == Set(["rewrite", "meeting"]) {
+            return AppLocalization.localizedString("Content rewrite and meeting shortcuts should be different.")
+        }
+        if pair == Set(["transcription", "rewrite"]) {
+            return AppLocalization.localizedString("Transcription and content rewrite shortcuts should be different.")
+        }
+        if pair == Set(["translation", "rewrite"]) {
+            return AppLocalization.localizedString("Translation and content rewrite shortcuts should be different.")
+        }
+        return AppLocalization.localizedString("Shortcuts with the same trigger behavior should be different.")
+    }
+
+    private static func appendCustomPasteDuplicateMessages(
+        _ customPasteHotkey: HotkeyPreference.Hotkey,
+        groups: [(key: String, title: String, bindings: [HotkeyPreference.HotkeyBinding])],
+        to messages: inout [Message]
+    ) {
+        for group in groups {
+            for binding in group.bindings where binding.behavior == .tap && binding.hotkey == customPasteHotkey {
+                messages.append(.init(
+                    id: "duplicate.\(group.key).customPaste",
+                    text: AppLocalization.localizedString("Custom paste shortcut should be different from tap shortcuts.")
+                ))
+            }
+        }
     }
 
     private static func appendConflictMessage(
@@ -118,6 +206,22 @@ struct HotkeySettingsValidation {
     ) {
         guard let conflictMessage = conflictMessage(for: hotkey) else { return }
         messages.append(.init(id: id, text: AppLocalization.format(formatKey, conflictMessage)))
+    }
+
+    private static func appendInvalidShortcutMessage(
+        for hotkey: HotkeyPreference.Hotkey,
+        formatKey: String,
+        id: String,
+        to messages: inout [Message]
+    ) {
+        guard !HotkeyPreference.isAllowedGlobalShortcut(hotkey) else { return }
+        messages.append(.init(
+            id: id,
+            text: AppLocalization.format(
+                formatKey,
+                AppLocalization.localizedString("Keyboard shortcuts must include at least one modifier key.")
+            )
+        ))
     }
 
     private static func appendEqualityMessage(

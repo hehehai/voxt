@@ -1,3 +1,6 @@
+// VoiceEndCommandSettingsSection.swift
+// Provides Voice End Command Settings Section for settings screens.
+
 import SwiftUI
 
 struct VoiceEndCommandSettingsSection: View {

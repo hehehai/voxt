@@ -1,3 +1,6 @@
+// RemoteProviderConnectivityTesterTests.swift
+// Provides Remote Provider Connectivity Tester Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

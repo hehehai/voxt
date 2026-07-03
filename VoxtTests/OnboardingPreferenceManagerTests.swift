@@ -1,3 +1,6 @@
+// OnboardingPreferenceManagerTests.swift
+// Provides Onboarding Preference Manager Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -61,6 +64,18 @@ final class OnboardingPreferenceManagerTests: XCTestCase {
 
         XCTAssertEqual(defaults.object(forKey: AppPreferenceKey.onboardingCompleted) as? Bool, true)
         XCTAssertNil(defaults.string(forKey: AppPreferenceKey.onboardingLastStepID))
+    }
+
+    func testGuideStepPersistsAndIsClearedWhenCompleted() {
+        let defaults = TestDoubles.makeUserDefaults()
+        OnboardingPreferenceManager.saveLastGuideStep(.models, defaults: defaults)
+
+        XCTAssertEqual(OnboardingPreferenceManager.savedLastGuideStep(defaults: defaults), .models)
+
+        OnboardingPreferenceManager.markCompleted(defaults: defaults)
+
+        XCTAssertEqual(defaults.object(forKey: AppPreferenceKey.onboardingCompleted) as? Bool, true)
+        XCTAssertNil(OnboardingPreferenceManager.savedLastGuideStep(defaults: defaults))
     }
 
     private func makeIsolatedDefaults() -> (defaults: UserDefaults, suiteName: String) {

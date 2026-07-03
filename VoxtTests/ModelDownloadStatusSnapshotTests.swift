@@ -1,7 +1,23 @@
+// ModelDownloadStatusSnapshotTests.swift
+// Provides Model Download Status Snapshot Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
 final class ModelDownloadStatusSnapshotTests: XCTestCase {
+    func testInlineDownloadStatusTextKeepsProgressWithoutDownloadedLabel() {
+        let text = ModelDownloadPresentationSupport.statusText(
+            downloadState: .downloading(completed: 42_000_000, total: 100_000_000)
+        )
+
+        XCTAssertTrue(text.contains(AppLocalization.localizedString("Downloading")))
+        XCTAssertTrue(text.contains("42"))
+        XCTAssertTrue(text.contains("100"))
+        XCTAssertTrue(text.contains("/"))
+        XCTAssertFalse(text.contains("Downloaded"))
+        XCTAssertFalse(text.contains("已下载"))
+    }
+
     func testMLXDownloadingSnapshotDoesNotShowHundredPercentBeforeDownloadFinishes() {
         let snapshot = ModelDownloadStatusSnapshot.fromMLXState(
             .downloading(

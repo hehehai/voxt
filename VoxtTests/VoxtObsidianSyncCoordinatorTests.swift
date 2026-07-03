@@ -1,3 +1,6 @@
+// VoxtObsidianSyncCoordinatorTests.swift
+// Provides Voxt Obsidian Sync Coordinator Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

@@ -1,3 +1,6 @@
+// RecentAudioWaveformStateTests.swift
+// Provides Recent Audio Waveform State Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

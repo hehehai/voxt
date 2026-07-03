@@ -1,11 +1,19 @@
+// HotkeyRuntimeConfiguration.swift
+// Provides Hotkey Runtime Configuration for hotkey handling.
+
 import AppKit
 import ApplicationServices
 import Foundation
 
-struct HotkeyRuntimeConfiguration {
+nonisolated struct HotkeyRuntimeConfiguration {
+    let transcriptionBindings: [HotkeyPreference.HotkeyBinding]
+    let translationBindings: [HotkeyPreference.HotkeyBinding]
+    let rewriteBindings: [HotkeyPreference.HotkeyBinding]
+    let meetingBindings: [HotkeyPreference.HotkeyBinding]
     let transcriptionHotkey: HotkeyPreference.Hotkey
     let translationHotkey: HotkeyPreference.Hotkey
     let rewriteHotkey: HotkeyPreference.Hotkey
+    let meetingHotkey: HotkeyPreference.Hotkey?
     let customPasteHotkey: HotkeyPreference.Hotkey?
     let distinguishModifierSides: Bool
     let triggerMode: HotkeyPreference.TriggerMode
@@ -13,15 +21,26 @@ struct HotkeyRuntimeConfiguration {
 
     static func load(defaults: UserDefaults = .standard) -> HotkeyRuntimeConfiguration {
         let customPasteEnabled = defaults.bool(forKey: AppPreferenceKey.customPasteHotkeyEnabled)
+        HotkeyPreference.migrateHotkeyBindingsIfNeeded(defaults: defaults)
+        let transcriptionBindings = HotkeyPreference.loadTranscriptionBindings(defaults: defaults)
+        let translationBindings = HotkeyPreference.loadTranslationBindings(defaults: defaults)
+        let rewriteBindings = HotkeyPreference.loadRewriteBindings(defaults: defaults)
+        let meetingBindings = HotkeyPreference.loadMeetingBindings(defaults: defaults)
+        let rewriteActivationMode = HotkeyPreference.loadRewriteActivationMode(defaults: defaults)
 
         return HotkeyRuntimeConfiguration(
-            transcriptionHotkey: HotkeyPreference.load(),
-            translationHotkey: HotkeyPreference.loadTranslation(),
-            rewriteHotkey: HotkeyPreference.loadRewrite(),
+            transcriptionBindings: transcriptionBindings,
+            translationBindings: translationBindings,
+            rewriteBindings: rewriteBindings,
+            meetingBindings: meetingBindings,
+            transcriptionHotkey: transcriptionBindings.first?.hotkey ?? HotkeyPreference.load(),
+            translationHotkey: translationBindings.first?.hotkey ?? HotkeyPreference.loadTranslation(),
+            rewriteHotkey: rewriteBindings.first?.hotkey ?? HotkeyPreference.loadRewrite(),
+            meetingHotkey: meetingBindings.first?.hotkey ?? HotkeyPreference.loadMeeting(),
             customPasteHotkey: customPasteEnabled ? HotkeyPreference.loadCustomPaste() : nil,
             distinguishModifierSides: HotkeyPreference.loadDistinguishModifierSides(),
-            triggerMode: HotkeyPreference.loadTriggerMode(defaults: defaults),
-            rewriteActivationMode: HotkeyPreference.loadRewriteActivationMode(defaults: defaults)
+            triggerMode: transcriptionBindings.first?.behavior.legacyTriggerMode ?? HotkeyPreference.loadTriggerMode(defaults: defaults),
+            rewriteActivationMode: rewriteActivationMode
         )
     }
 
@@ -37,15 +56,22 @@ struct HotkeyRuntimeConfiguration {
         HotkeyPreference.cgFlags(from: rewriteHotkey.modifiers)
     }
 
+    var meetingFlags: CGEventFlags {
+        meetingHotkey.map { HotkeyPreference.cgFlags(from: $0.modifiers) } ?? []
+    }
+
     var customPasteFlags: CGEventFlags {
         customPasteHotkey.map { HotkeyPreference.cgFlags(from: $0.modifiers) } ?? []
     }
 
     var debugBindingsDescription: String {
+        let meetingDescription = meetingHotkey.map {
+            HotkeyPreference.displayString(for: $0, distinguishModifierSides: distinguishModifierSides)
+        } ?? "disabled"
         let customPasteDescription = customPasteHotkey.map {
             HotkeyPreference.displayString(for: $0, distinguishModifierSides: distinguishModifierSides)
         } ?? "disabled"
 
-        return "Hotkey bindings. transcription=\(HotkeyPreference.displayString(for: transcriptionHotkey, distinguishModifierSides: distinguishModifierSides)), translation=\(HotkeyPreference.displayString(for: translationHotkey, distinguishModifierSides: distinguishModifierSides)), rewrite=\(HotkeyPreference.displayString(for: rewriteHotkey, distinguishModifierSides: distinguishModifierSides)), rewriteActivation=\(rewriteActivationMode.rawValue), customPaste=\(customPasteDescription), trigger=\(triggerMode.rawValue)"
+        return "Hotkey bindings. transcription=\(HotkeyPreference.displayString(for: transcriptionHotkey, distinguishModifierSides: distinguishModifierSides)), translation=\(HotkeyPreference.displayString(for: translationHotkey, distinguishModifierSides: distinguishModifierSides)), rewrite=\(HotkeyPreference.displayString(for: rewriteHotkey, distinguishModifierSides: distinguishModifierSides)), rewriteActivation=\(rewriteActivationMode.rawValue), meeting=\(meetingDescription), customPaste=\(customPasteDescription), trigger=\(triggerMode.rawValue)"
     }
 }

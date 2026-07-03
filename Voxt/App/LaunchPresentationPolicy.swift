@@ -1,3 +1,6 @@
+// LaunchPresentationPolicy.swift
+// Provides Launch Presentation Policy for app lifecycle and routing.
+
 import AppKit
 import Carbon
 

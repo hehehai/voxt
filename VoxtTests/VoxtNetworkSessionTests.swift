@@ -1,3 +1,6 @@
+// VoxtNetworkSessionTests.swift
+// Provides Voxt Network Session Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

@@ -1,3 +1,6 @@
+// RemoteModelConfigurationTests.swift
+// Provides Remote Model Configuration Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -83,6 +86,39 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertEqual(DoubaoASRConfiguration.finalStreamingSequence(nextAudioSequence: 16), -16)
     }
 
+    func testDoubaoParserRejectsOversizedCompressedPayload() {
+        let oversizedPayload = Data(
+            repeating: 0,
+            count: MeetingRemoteAudioSupport.maxDoubaoCompressedPayloadBytes + 1
+        )
+        let packet = MeetingRemoteAudioSupport.buildDoubaoPacket(
+            messageType: MeetingRemoteAudioSupport.DoubaoProtocol.messageTypeFullServerResponse,
+            messageFlags: MeetingRemoteAudioSupport.DoubaoProtocol.flagPositiveSequence,
+            serialization: MeetingRemoteAudioSupport.DoubaoProtocol.serializationJSON,
+            compression: MeetingRemoteAudioSupport.DoubaoProtocol.compressionGzip,
+            sequence: 1,
+            payload: oversizedPayload
+        )
+
+        XCTAssertThrowsError(try MeetingRemoteAudioSupport.parseDoubaoServerPacket(packet))
+    }
+
+    func testDoubaoParserRejectsHighExpansionGzipPayload() throws {
+        let largePlaintext = Data(repeating: 65, count: 1_048_577)
+        let encoded = try MeetingRemoteAudioSupport.encodeDoubaoPayload(largePlaintext)
+        XCTAssertEqual(encoded.compression, MeetingRemoteAudioSupport.DoubaoProtocol.compressionGzip)
+        let packet = MeetingRemoteAudioSupport.buildDoubaoPacket(
+            messageType: MeetingRemoteAudioSupport.DoubaoProtocol.messageTypeFullServerResponse,
+            messageFlags: MeetingRemoteAudioSupport.DoubaoProtocol.flagPositiveSequence,
+            serialization: MeetingRemoteAudioSupport.DoubaoProtocol.serializationJSON,
+            compression: encoded.compression,
+            sequence: 1,
+            payload: encoded.payload
+        )
+
+        XCTAssertThrowsError(try MeetingRemoteAudioSupport.parseDoubaoServerPacket(packet))
+    }
+
     func testAliyunASRModelOptionsIncludeOmniRealtimeModels() {
         let ids = Set(RemoteASRProvider.aliyunBailianASR.modelOptions.map(\.id))
         XCTAssertTrue(ids.contains("qwen3.5-omni-flash-realtime"))
@@ -127,8 +163,8 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertEqual(transcription["model"] as? String, "qwen3-asr-flash-realtime")
         XCTAssertEqual(transcription["language"] as? String, "zh")
         XCTAssertEqual(turnDetection["type"] as? String, "server_vad")
-        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.0)
-        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, 400)
+        XCTAssertEqual(turnDetection["threshold"] as? Double, 0.35)
+        XCTAssertEqual(turnDetection["silence_duration_ms"] as? Int, 800)
     }
 
     func testAliyunOmniRealtimeDoesNotRequireManualCommitWhenUsingServerVAD() {
@@ -146,6 +182,18 @@ final class RemoteModelConfigurationTests: XCTestCase {
 
         XCTAssertNil(transcription["model"])
         XCTAssertNil(transcription["language"])
+    }
+
+    func testAliyunQwenSessionUpdatePayloadCanDisableTurnDetectionForMeeting() throws {
+        let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
+            kind: .qwenASR,
+            hintPayload: ResolvedASRHintPayload(language: nil, languageHints: []),
+            includesTurnDetection: false
+        )
+
+        let session = try XCTUnwrap(payload["session"] as? [String: Any])
+
+        XCTAssertNil(session["turn_detection"])
     }
 
     func testLoadSaveRoundTripPreservesConfigurations() {
@@ -574,6 +622,27 @@ final class RemoteModelConfigurationTests: XCTestCase {
         let capabilities = LLMProviderCapabilityRegistry.capabilities(for: .stepFun)
         XCTAssertTrue(capabilities.supportsThinkingEffort)
         XCTAssertFalse(capabilities.supportsThinkingBudget)
+        XCTAssertTrue(capabilities.supportsResponseFormat)
+    }
+
+    func testXiaomiMiMoUsesChatCompletionModelCatalogAndCapabilities() {
+        XCTAssertEqual(RemoteASRProvider.xiaomiMiMoASR.suggestedModel, "mimo-v2.5-asr")
+        XCTAssertEqual(RemoteASRProvider.xiaomiMiMoASR.modelOptions.map(\.id), ["mimo-v2.5-asr"])
+
+        XCTAssertEqual(RemoteLLMProvider.xiaomiMiMo.suggestedModel, "mimo-v2.5-pro")
+        XCTAssertFalse(RemoteLLMProvider.xiaomiMiMo.usesResponsesAPI)
+        XCTAssertFalse(RemoteLLMProvider.xiaomiMiMo.supportsHostedSearch)
+
+        let ids = RemoteLLMProvider.xiaomiMiMo.modelOptions.map(\.id)
+        XCTAssertTrue(ids.contains("mimo-v2.5-pro"))
+        XCTAssertTrue(ids.contains("mimo-v2.5"))
+
+        let capabilities = LLMProviderCapabilityRegistry.capabilities(for: .xiaomiMiMo)
+        XCTAssertTrue(capabilities.supportsThinkingToggle)
+        XCTAssertFalse(capabilities.supportsThinkingEffort)
+        XCTAssertFalse(capabilities.supportsThinkingBudget)
+        XCTAssertTrue(capabilities.supportsPenalties)
+        XCTAssertFalse(capabilities.supportsLogprobs)
         XCTAssertTrue(capabilities.supportsResponseFormat)
     }
 

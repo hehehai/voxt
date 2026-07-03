@@ -1,3 +1,6 @@
+// ChineseScriptNormalizerTests.swift
+// Provides Chinese Script Normalizer Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

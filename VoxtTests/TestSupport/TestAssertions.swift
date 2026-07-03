@@ -1,3 +1,6 @@
+// TestAssertions.swift
+// Provides Test Assertions for test support.
+
 import XCTest
 
 func XCTAssertJSONRoundTrip<T: Codable & Equatable>(

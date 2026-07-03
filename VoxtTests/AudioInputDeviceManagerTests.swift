@@ -1,3 +1,6 @@
+// AudioInputDeviceManagerTests.swift
+// Provides Audio Input Device Manager Tests for Voxt test coverage.
+
 import XCTest
 import AVFoundation
 @testable import Voxt

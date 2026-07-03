@@ -1,3 +1,6 @@
+// TranslationSessionLanguageSwitchTests.swift
+// Provides Translation Session Language Switch Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -23,26 +26,17 @@ final class TranslationSessionLanguageSwitchTests: XCTestCase {
         XCTAssertEqual(resolved, .english)
     }
 
-    func testAllowsSessionLanguageSwitchingDisablesWhisperDirectSessions() {
+    func testAllowsSessionLanguageSwitchingForMicrophoneTranslationOnly() {
         XCTAssertTrue(
             AppDelegate.shouldAllowSessionTranslationLanguageSwitching(
                 sessionOutputMode: .translation,
-                isSelectedTextTranslationFlow: false,
-                sessionUsesWhisperDirectTranslation: false
+                isSelectedTextTranslationFlow: false
             )
         )
         XCTAssertFalse(
             AppDelegate.shouldAllowSessionTranslationLanguageSwitching(
                 sessionOutputMode: .translation,
-                isSelectedTextTranslationFlow: false,
-                sessionUsesWhisperDirectTranslation: true
-            )
-        )
-        XCTAssertFalse(
-            AppDelegate.shouldAllowSessionTranslationLanguageSwitching(
-                sessionOutputMode: .translation,
-                isSelectedTextTranslationFlow: true,
-                sessionUsesWhisperDirectTranslation: false
+                isSelectedTextTranslationFlow: true
             )
         )
     }
@@ -50,19 +44,16 @@ final class TranslationSessionLanguageSwitchTests: XCTestCase {
     func testLockedSessionProviderResolutionWinsOverChangedTargetLanguage() {
         let locked = TranslationProviderResolution(
             provider: .remoteLLM,
-            fallbackProvider: .customLLM,
-            usesWhisperDirectTranslation: false,
-            fallbackReason: .targetLanguageNotEnglish
+            fallbackProvider: .customLLM
         )
 
         let resolved = AppDelegate.resolvedSessionTranslationProviderResolution(
             lockedResolution: locked,
-            selectedProvider: .whisperKit,
+            selectedProvider: .remoteLLM,
             fallbackProvider: .customLLM,
-            transcriptionEngine: .whisperKit,
+            transcriptionEngine: .mlxAudio,
             targetLanguage: .english,
-            isSelectedTextTranslation: false,
-            whisperModelState: .downloaded
+            isSelectedTextTranslation: false
         )
 
         XCTAssertEqual(resolved, locked)
@@ -71,26 +62,32 @@ final class TranslationSessionLanguageSwitchTests: XCTestCase {
     func testSelectedTextTranslationIgnoresLockedSessionProviderResolution() {
         let locked = TranslationProviderResolution(
             provider: .remoteLLM,
-            fallbackProvider: .customLLM,
-            usesWhisperDirectTranslation: false,
-            fallbackReason: .targetLanguageNotEnglish
+            fallbackProvider: .customLLM
         )
 
         let resolved = AppDelegate.resolvedSessionTranslationProviderResolution(
             lockedResolution: locked,
             selectedProvider: .customLLM,
             fallbackProvider: .remoteLLM,
-            transcriptionEngine: .whisperKit,
+            transcriptionEngine: .mlxAudio,
             targetLanguage: .english,
-            isSelectedTextTranslation: true,
-            whisperModelState: .downloaded
+            isSelectedTextTranslation: true
         )
 
         XCTAssertEqual(resolved.provider, .customLLM)
-        XCTAssertNil(resolved.fallbackReason)
     }
 
     func testWaveformViewPillVisibilityRequiresEligibleTranslationRecordingState() {
+        XCTAssertFalse(
+            WaveformView.shouldShowSessionTranslationLanguagePill(
+                displayMode: .recording,
+                allowsSwitching: true,
+                sessionTranslationTargetLanguage: .japanese,
+                isHovering: false,
+                isPickerPresented: false
+            )
+        )
+
         XCTAssertTrue(
             WaveformView.shouldShowSessionTranslationLanguagePill(
                 displayMode: .recording,
@@ -121,7 +118,7 @@ final class TranslationSessionLanguageSwitchTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(
+        XCTAssertFalse(
             WaveformView.shouldShowSessionTranslationLanguagePill(
                 displayMode: .answer,
                 allowsSwitching: true,

@@ -1,3 +1,6 @@
+// SettingsModelDownloadBadgeSupportTests.swift
+// Provides Settings Model Download Badge Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -8,8 +11,8 @@ final class SettingsModelDownloadBadgeSupportTests: XCTestCase {
                 MLXModelManager.canonicalModelRepo("openai/whisper-tiny"),
                 MLXModelManager.canonicalModelRepo("mlx-community/FireRedASR")
             ],
-            whisperActiveDownload: nil,
-            customLLMState: .notDownloaded
+            customLLMActiveDownloadRepos: [],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(count, 2)
@@ -20,33 +23,23 @@ final class SettingsModelDownloadBadgeSupportTests: XCTestCase {
             mlxActiveDownloadRepos: [
                 MLXModelManager.canonicalModelRepo("mlx-community/FireRedASR")
             ],
-            whisperActiveDownload: nil,
-            customLLMState: .notDownloaded
+            customLLMActiveDownloadRepos: [],
+            ggufActiveDownloadModelID: nil
         )
 
         XCTAssertEqual(count, 1)
     }
 
-    func testActiveDownloadCountIgnoresPausedWhisperDownload() {
-        let whisperDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: true,
-            progress: 0.5,
-            completed: 50,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 25,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-
+    func testActiveDownloadCountTracksConcurrentCustomLLMDownloads() {
         let count = SettingsModelDownloadBadgeSupport.activeDownloadCount(
             mlxActiveDownloadRepos: [],
-            whisperActiveDownload: whisperDownload,
-            customLLMState: .notDownloaded
+            customLLMActiveDownloadRepos: [
+                CustomLLMModelManager.canonicalModelRepo("mlx-community/Qwen3.5-4B-4bit"),
+                CustomLLMModelManager.canonicalModelRepo("mlx-community/LFM2-1.2B-4bit")
+            ],
+            ggufActiveDownloadModelID: nil
         )
 
-        XCTAssertEqual(count, 0)
+        XCTAssertEqual(count, 2)
     }
 }

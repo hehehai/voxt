@@ -1,3 +1,6 @@
+// LLMExecutionPlanCompilerTests.swift
+// Provides LLMExecution Plan Compiler Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -25,6 +28,7 @@ final class LLMExecutionPlanCompilerTests: XCTestCase {
                     isStablePrefixCandidate: true
                 )
             ],
+            attachments: [],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil
@@ -66,6 +70,7 @@ final class LLMExecutionPlanCompilerTests: XCTestCase {
                     isStablePrefixCandidate: false
                 )
             ],
+            attachments: [],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil
@@ -111,6 +116,7 @@ final class LLMExecutionPlanCompilerTests: XCTestCase {
                     isStablePrefixCandidate: true
                 )
             ],
+            attachments: [],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil
@@ -120,6 +126,79 @@ final class LLMExecutionPlanCompilerTests: XCTestCase {
 
         XCTAssertContains(compiled.instructions, "### Latency profile")
         XCTAssertContains(compiled.instructions, "quality")
+    }
+
+    func testCompilationCarriesInputAttachmentsForward() {
+        let plan = LLMExecutionPlan(
+            task: .enhancement(rawText: "raw transcript"),
+            provider: .remote(
+                provider: .openAI,
+                configuration: TestFactories.makeRemoteConfiguration(
+                    providerID: RemoteLLMProvider.openAI.rawValue,
+                    model: "gpt-5"
+                )
+            ),
+            delivery: .systemPrompt,
+            promptContent: "Clean up the transcript.",
+            fallbackText: "raw transcript",
+            executionStrategy: TaskLLMStrategyResolver.resolve(
+                taskKind: .transcriptionEnhancement,
+                rawText: "raw transcript",
+                promptCharacterCount: 24,
+                baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.enhancement.selectionPolicy,
+                capabilities: .unknown
+            ),
+            outputTokenBudgetHint: nil,
+            contextBlocks: [],
+            attachments: [
+                .image(
+                    LLMImageAttachment(
+                        data: Data([0x01, 0x02]),
+                        mimeType: "image/jpeg",
+                        detail: .high,
+                        filename: "capture.jpg"
+                    )
+                )
+            ],
+            conversationHistory: [],
+            previousResponseID: nil,
+            responseFormat: nil
+        )
+
+        let compiled = LLMExecutionPlanCompiler.compile(plan)
+
+        XCTAssertEqual(compiled.attachments, plan.attachments)
+    }
+
+    func testAttachmentPromptCharacterCostUsesDetailTier() {
+        let attachments: [LLMInputAttachment] = [
+            .image(
+                LLMImageAttachment(
+                    data: Data([0x01]),
+                    mimeType: "image/jpeg",
+                    detail: .low,
+                    filename: "low.jpg"
+                )
+            ),
+            .image(
+                LLMImageAttachment(
+                    data: Data([0x02]),
+                    mimeType: "image/jpeg",
+                    detail: .auto,
+                    filename: "auto.jpg"
+                )
+            ),
+            .image(
+                LLMImageAttachment(
+                    data: Data([0x03]),
+                    mimeType: "image/jpeg",
+                    detail: .high,
+                    filename: "high.jpg"
+                )
+            )
+        ]
+
+        XCTAssertEqual(attachments.estimatedPromptCharacterCost, 5_400)
     }
 
     func testReducedLongInputGlossaryPolicyTightensBudget() {

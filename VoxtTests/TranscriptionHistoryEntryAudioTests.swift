@@ -1,3 +1,6 @@
+// TranscriptionHistoryEntryAudioTests.swift
+// Provides Transcription History Entry Audio Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -9,8 +12,8 @@ final class TranscriptionHistoryEntryAudioTests: XCTestCase {
             "id": UUID().uuidString,
             "text": "Transcript",
             "createdAt": createdAt.timeIntervalSince1970,
-            "transcriptionEngine": "WhisperKit",
-            "transcriptionModel": "base",
+            "transcriptionEngine": "MLX Whisper",
+            "transcriptionModel": "whisper-base-mlx",
             "enhancementMode": "Off",
             "enhancementModel": "None",
             "kind": "transcript",
@@ -38,8 +41,8 @@ final class TranscriptionHistoryEntryAudioTests: XCTestCase {
             id: UUID(),
             text: "Transcript",
             createdAt: Date(timeIntervalSinceReferenceDate: 456),
-            transcriptionEngine: "WhisperKit",
-            transcriptionModel: "large-v3",
+            transcriptionEngine: "MLX Whisper",
+            transcriptionModel: "whisper-large-v3-turbo",
             enhancementMode: "Off",
             enhancementModel: "None",
             kind: .normal,

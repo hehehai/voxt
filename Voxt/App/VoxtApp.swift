@@ -1,3 +1,6 @@
+// VoxtApp.swift
+// Provides Voxt App for app lifecycle and routing.
+
 import AppKit
 import ApplicationServices
 import CoreAudio
@@ -54,7 +57,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     struct EnhancementContextSnapshot {
+        let appName: String?
         let bundleID: String?
+        let pid: pid_t?
         let capturedAt: Date
     }
 
@@ -79,6 +84,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let overlayIconMatch: OverlayEnhancementIconMatch?
     }
 
+    enum MeetingSessionCompletionDisposition {
+        case discard
+        case save
+        case saveAndOpenDetail
+    }
+
     struct PendingOutputReplacementTransaction: Equatable {
         let sessionID: UUID
         let bundleIdentifier: String?
@@ -99,11 +110,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let speechTranscriber = SpeechTranscriber()
     var mlxTranscriber: MLXTranscriber?
-    var whisperTranscriber: WhisperKitTranscriber?
+    var sherpaOnnxTranscriber: SherpaOnnxTranscriber?
     let remoteASRTranscriber = RemoteASRTranscriber()
     let mlxModelManager: MLXModelManager
-    let whisperModelManager: WhisperKitModelManager
+    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
+    let ggufTranslationModelManager: GGUFTranslationModelManager
     let historyStore = TranscriptionHistoryStore()
     let noteStore = VoxtNoteStore()
     let noteObsidianExportStore = VoxtNoteObsidianExportStore()
@@ -116,6 +128,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let hotkeyManager = HotkeyManager()
     let overlayWindow = RecordingOverlayWindow()
+    let toastWindow = FloatingToastWindow()
+    let meetingOverlayWindow = MeetingOverlayWindow()
+    let meetingDetailWindowManager = MeetingDetailWindowManager.shared
     let overlayState = OverlayState()
     lazy var noteWindowManager = VoxtNoteWindowManager(store: noteStore)
     lazy var noteObsidianSyncCoordinator = VoxtObsidianSyncCoordinator(
@@ -132,10 +147,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         },
         exportStore: noteRemindersExportStore
     )
+    lazy var meetingSessionCoordinator = MeetingSessionCoordinator(
+        mlxModelManager: mlxModelManager,
+        sherpaOnnxModelManager: sherpaOnnxModelManager,
+        preferredInputDeviceIDProvider: { [weak self] in
+            self?.selectedInputDeviceID
+        },
+        realtimeTranslationTargetLanguageProvider: { [weak self] in
+            self?.meetingRealtimeTranslationTargetLanguage
+        },
+        realtimeTranslationHandler: { [weak self] text, targetLanguage in
+            guard let self else { return text }
+            return try await self.translateMeetingRealtimeText(text, targetLanguage: targetLanguage)
+        }
+    )
     var statusItem: NSStatusItem?
 
     var enhancer: (any TextEnhancing)?
     var mainWindowController: NSWindowController?
+    var onboardingWindowController: NSWindowController?
     let mainWindowVisibilityState = MainWindowVisibilityState()
     var pendingStatusMenuActions: [() -> Void] = []
     var isStatusMenuOpen = false
@@ -150,28 +180,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var audioInputDevicesObserver: AudioInputDeviceObserver?
     var globalEscapeKeyMonitor: Any?
     var localEscapeKeyMonitor: Any?
+    let overlayShortcutEventGate = OverlayShortcutEventGate()
     var inputDevicesRefreshTask: Task<Void, Never>?
     var inputDevicesSnapshot: [AudioInputDevice] = []
     var microphoneResolvedState = MicrophoneResolvedState.empty
 
     var isSessionActive = false
     var pendingSessionFinishTask: Task<Void, Never>?
-    var stopRecordingFallbackTask: Task<Void, Never>?
     var silenceMonitorTask: Task<Void, Never>?
     var pauseLLMTask: Task<Void, Never>?
-    var pendingWhisperStartupTask: Task<Void, Never>?
     var pendingDictionaryHistoryScanTask: Task<Void, Never>?
     var pendingAutomaticDictionaryLearningTask: Task<Void, Never>?
-    var whisperWarmupTask: Task<Void, Never>?
     var llmWarmupTasksByRepo: [String: Task<Void, Never>] = [:]
     var remoteLLMWarmupTasksByKey: [String: Task<Void, Never>] = [:]
     var overlayReminderTask: Task<Void, Never>?
     var overlayStatusClearTask: Task<Void, Never>?
+    var toastDismissTask: Task<Void, Never>?
     var pendingSystemAudioMuteTask: Task<Void, Never>?
     var pendingSelectedTextTranslationRefreshTask: Task<Void, Never>?
+    var pendingMeetingStartupTask: Task<Void, Never>?
+    var pendingApplicationTerminationTask: Task<Void, Never>?
     var lastSignificantAudioAt = Date()
     var didTriggerPauseTranscription = false
     var didTriggerPauseLLM = false
+    var localVADObservedFramesInCurrentSession = false
+    var localVADObservedSpeechInCurrentSession = false
+    var recordingVoiceActivityFrameDecider: RecordingVoiceActivityFrameDecider?
+    var recordingVoiceActivitySegmenter: ASRVoiceActivitySegmenter?
+    var recordingVoiceActivityMode: LocalVADMode?
+    var recordingVoiceActivityUseCase: ASRVoiceActivityUseCase?
+    var recordingVoiceActivityDebugStats = RecordingVoiceActivityDebugStats()
     var voiceEndCommandState = VoiceEndCommandState()
     let silenceAudioLevelThreshold: Float = 0.06
     let sessionFinishDelay: TimeInterval = 1.2
@@ -185,6 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionLLMExecutionTimings: [SessionLLMExecutionTiming] = []
     var sessionOutputMode: SessionOutputMode = .transcription
     var isSelectedTextTranslationFlow = false
+    var answerOverlayInjectionMode: AnswerOverlayInjectionMode = .standard
     var didCommitSessionOutput = false
     var activeRecordingSessionID = UUID()
     var activeLLMRequestID = UUID()
@@ -198,6 +237,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionTargetApplicationPID: pid_t?
     var sessionTargetApplicationBundleID: String?
     var pendingTranscriptionStartTask: Task<Void, Never>?
+    var pendingTranscriptionHotkeyStartBehavior: HotkeyPreference.TriggerBehavior?
+    var isTranscriptionLongPressHotkeyDown = false
     var enhancementContextSnapshot: EnhancementContextSnapshot?
     var lastEnhancementPromptContext: EnhancementPromptContext?
     var selectedTextTranslationHadWritableFocusedInput = false
@@ -207,10 +248,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var transcriptionCaptureSessionMode: TranscriptionCaptureSessionMode = .standard
     var transcriptionCapturePipeline: TranscriptionCapturePipeline = .liveDisplay
     var liveTranscriptSegmentationState = LiveTranscriptSegmentationState()
-    var sessionUsesWhisperDirectTranslation = false
     var sessionTranslationTargetLanguageOverride: TranslationTargetLanguage?
     var selectedTextTranslationRefreshID = UUID()
     var activeSessionTranslationProviderResolution: TranslationProviderResolution?
+    var pendingMeetingSessionCompletionDisposition: MeetingSessionCompletionDisposition = .save
     let tapStopGuardInterval: TimeInterval = 0.35
     let transcriptionStartDebounceInterval: TimeInterval = 0.08
     var mainWindowPresentationState = MainWindowPresentationState()
@@ -222,15 +263,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if repo != storedRepo {
             UserDefaults.standard.set(repo, forKey: AppPreferenceKey.mlxModelRepo)
         }
-        let useMirror = UserDefaults.standard.bool(forKey: AppPreferenceKey.useHfMirror)
-        let hubURL = useMirror ? MLXModelManager.mirrorHubBaseURL : MLXModelManager.defaultHubBaseURL
-        mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: hubURL)
-        let whisperModelID = UserDefaults.standard.string(forKey: AppPreferenceKey.whisperModelID)
-            ?? WhisperKitModelManager.defaultModelID
-        whisperModelManager = WhisperKitModelManager(modelID: whisperModelID, hubBaseURL: hubURL)
+        mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: MLXModelManager.defaultHubBaseURL)
+        let storedSherpaModelID = UserDefaults.standard.string(forKey: AppPreferenceKey.sherpaOnnxASRModelID)
+            ?? SherpaOnnxModelCatalog.defaultModelID.rawValue
+        let sherpaModelID = SherpaOnnxModelID(rawValue: storedSherpaModelID)
+        if sherpaModelID.rawValue != storedSherpaModelID {
+            UserDefaults.standard.set(sherpaModelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
+        }
+        sherpaOnnxModelManager = SherpaOnnxModelManager(modelID: sherpaModelID)
         let llmRepo = UserDefaults.standard.string(forKey: AppPreferenceKey.customLLMModelRepo)
             ?? CustomLLMModelManager.defaultModelRepo
-        customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: hubURL)
+        customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: CustomLLMModelManager.defaultHubBaseURL)
+        let ggufModelID = GGUFTranslationModelCatalog.resolvedModelID(
+            UserDefaults.standard.string(forKey: AppPreferenceKey.translationGGUFModelID)
+        )
+        ggufTranslationModelManager = GGUFTranslationModelManager(modelID: ggufModelID)
         UserDefaults.standard.register(defaults: [
             AppPreferenceKey.interactionSoundsEnabled: true,
             AppPreferenceKey.interactionSoundPreset: InteractionSoundPreset.soft.rawValue,
@@ -242,12 +289,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.interfaceLanguage: AppInterfaceLanguage.system.rawValue,
             AppPreferenceKey.translationTargetLanguage: TranslationTargetLanguage.english.rawValue,
             AppPreferenceKey.userMainLanguageCodes: UserMainLanguageOption.defaultStoredSelectionValue,
+            AppPreferenceKey.sherpaOnnxASRModelID: SherpaOnnxModelCatalog.defaultModelID.rawValue,
             AppPreferenceKey.translationModelProvider: TranslationModelProvider.customLLM.rawValue,
+            AppPreferenceKey.translationGGUFModelID: GGUFTranslationModelCatalog.defaultModelID.rawValue,
             AppPreferenceKey.rewriteModelProvider: RewriteModelProvider.customLLM.rawValue,
             AppPreferenceKey.escapeKeyCancelsOverlaySession: true,
             AppPreferenceKey.translateSelectedTextOnTranslationHotkey: true,
             AppPreferenceKey.showSelectedTextTranslationResultWindow: true,
             AppPreferenceKey.customPasteHotkeyEnabled: false,
+            AppPreferenceKey.hideMeetingOverlayFromScreenSharing: false,
+            AppPreferenceKey.meetingOverlayCollapsed: false,
+            AppPreferenceKey.meetingRealtimeTranslateEnabled: false,
+            AppPreferenceKey.meetingRealtimeTranslationTargetLanguage: "",
             AppPreferenceKey.voiceEndCommandEnabled: false,
             AppPreferenceKey.voiceEndCommandPreset: VoiceEndCommandPreset.over.rawValue,
             AppPreferenceKey.voiceEndCommandText: "",
@@ -258,11 +311,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.translationSystemPrompt: "",
             AppPreferenceKey.rewriteSystemPrompt: "",
             AppPreferenceKey.asrHintSettings: ASRHintSettingsStore.defaultStoredValue(),
-            AppPreferenceKey.whisperModelID: WhisperKitModelManager.defaultModelID,
-            AppPreferenceKey.whisperTemperature: 0.0,
-            AppPreferenceKey.whisperVADEnabled: true,
-            AppPreferenceKey.whisperTimestampsEnabled: false,
-            AppPreferenceKey.whisperRealtimeEnabled: false,
             AppPreferenceKey.translationFallbackModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.rewriteCustomLLMModelRepo: CustomLLMModelManager.defaultModelRepo,
             AppPreferenceKey.remoteASRSelectedProvider: RemoteASRProvider.openAIWhisper.rawValue,
@@ -285,6 +333,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.betaUpdatesEnabled: false,
             AppPreferenceKey.hotkeyDebugLoggingEnabled: false,
             AppPreferenceKey.llmDebugLoggingEnabled: false,
+            AppPreferenceKey.meetingChunkingMode: MeetingChunkingMode.quality.rawValue,
+            AppPreferenceKey.meetingSpeakerDiarizationModel: MeetingDiarizationMode.offlineVBx.rawValue,
+            AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled: true,
             AppPreferenceKey.networkProxyMode: VoxtNetworkSession.ProxyMode.system.rawValue,
             AppPreferenceKey.customProxyScheme: VoxtNetworkSession.ProxyScheme.http.rawValue,
             AppPreferenceKey.customProxyHost: "",
@@ -293,6 +344,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.customProxyPassword: "",
         ])
         FeatureSettingsStore.migrateIfNeeded(defaults: .standard)
+        Self.migrateLegacyWhisperSelectionIfNeeded()
         HotkeyPreference.registerDefaults()
         HotkeyPreference.migrateDefaultsIfNeeded()
         Self.migrateLegacyLocalModelMemoryPreferenceIfNeeded()
@@ -315,10 +367,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(resolvedDelay, forKey: AppPreferenceKey.localModelIdleUnloadDelaySeconds)
     }
 
+    private static func migrateLegacyWhisperSelectionIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: AppPreferenceKey.transcriptionEngine) == "whisperKit" else { return }
+        let legacyModelID = defaults.string(forKey: AppPreferenceKey.legacyWhisperModelID)
+            ?? MLXWhisperMigrationSupport.defaultLegacyModelID
+        defaults.set(TranscriptionEngine.mlxAudio.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
+        defaults.set(
+            MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: legacyModelID),
+            forKey: AppPreferenceKey.mlxModelRepo
+        )
+    }
+
     var transcriptionEngine: TranscriptionEngine {
         get {
             let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.transcriptionEngine)
-            return TranscriptionEngine(rawValue: raw ?? "") ?? .mlxAudio
+            if raw == "whisperKit" {
+                Self.migrateLegacyWhisperSelectionIfNeeded()
+            }
+            let resolved = TranscriptionEngine.resolved(rawValue: raw)
+            return resolved
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
@@ -368,9 +436,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private var isRunningUnitTests: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-    }
+    private var isRunningUnitTests: Bool { VoxtRuntimeEnvironment.isRunningUnitTests }
 
     private var currentSystemVersionLogDescription: String {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -381,6 +447,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LoggingBootstrap.bootstrap()
         _ = noteObsidianSyncCoordinator
         _ = noteRemindersSyncCoordinator
         VoxtLog.info("Voxt launching.")
@@ -479,6 +546,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.refreshOverlayShortcutEventGate()
                 self?.buildMenu()
                 self?.scheduleLLMIdleWarmupIfNeeded()
             }
@@ -487,50 +555,67 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupHotkey()
         setupLifecycleRecoveryObservers()
         setupEscapeKeyMonitoring()
-        overlayWindow.onRequestClose = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.dismissAnswerOverlay()
-            }
+        overlayWindow.onRequestClose = mainActorCallback { $0.dismissAnswerOverlay() }
+        overlayWindow.onRequestInject = mainActorCallback { $0.injectAnswerOverlayContent() }
+        overlayWindow.onRequestContinue = mainActorCallback { $0.continueRewriteConversation() }
+        overlayWindow.onRequestConversationRecordToggle = mainActorCallback { $0.toggleRewriteConversationRecording() }
+        overlayWindow.onRequestDetail = mainActorCallback { $0.showCurrentTranscriptionDetailWindow() }
+        overlayWindow.onRequestSessionTranslationTargetPickerToggle = mainActorCallback { $0.toggleSessionTranslationTargetPicker() }
+        overlayWindow.onRequestSessionTranslationTargetLanguageSelect = mainActorCallback { appDelegate, language in
+            appDelegate.selectSessionTranslationTargetLanguage(language)
         }
-        overlayWindow.onRequestInject = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.injectAnswerOverlayContent()
-            }
+        overlayWindow.onRequestSessionTranslationTargetPickerDismiss = mainActorCallback {
+            $0.dismissSessionTranslationTargetPicker()
         }
-        overlayWindow.onRequestContinue = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.continueRewriteConversation()
-            }
+        meetingOverlayWindow.onRequestClose = mainActorCallback { $0.requestMeetingSessionCloseConfirmation() }
+        meetingOverlayWindow.onRequestCollapseToggle = mainActorCallback { $0.toggleMeetingOverlayCollapse() }
+        meetingOverlayWindow.onRequestPauseToggle = mainActorCallback { $0.toggleMeetingPause() }
+        meetingOverlayWindow.onRequestDetail = mainActorCallback { $0.showLiveMeetingDetailWindow() }
+        meetingOverlayWindow.onRequestRealtimeTranslateToggle = mainActorCallback { appDelegate, isEnabled in
+            appDelegate.handleMeetingRealtimeTranslationToggle(isEnabled)
         }
-        overlayWindow.onRequestConversationRecordToggle = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.toggleRewriteConversationRecording()
-            }
+        meetingOverlayWindow.onRequestCaptureModeChange = mainActorCallback { appDelegate, mode in
+            appDelegate.handleMeetingCaptureModeSelection(mode)
         }
-        overlayWindow.onRequestDetail = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.showCurrentTranscriptionDetailWindow()
-            }
+        meetingOverlayWindow.onRequestCaptureModePickerToggle = mainActorCallback { $0.toggleMeetingCaptureModePicker() }
+        meetingOverlayWindow.onRequestCaptureModePickerDismiss = mainActorCallback { $0.dismissMeetingCaptureModePicker() }
+        meetingOverlayWindow.onRequestRealtimeTranslationLanguageConfirm = mainActorCallback {
+            $0.confirmMeetingRealtimeTranslationLanguageSelection()
         }
-        overlayWindow.onRequestSessionTranslationTargetPickerToggle = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.toggleSessionTranslationTargetPicker()
-            }
+        meetingOverlayWindow.onRequestRealtimeTranslationLanguageCancel = mainActorCallback {
+            $0.cancelMeetingRealtimeTranslationLanguageSelection()
         }
-        overlayWindow.onRequestSessionTranslationTargetLanguageSelect = { [weak self] language in
-            Task { @MainActor [weak self] in
-                self?.selectSessionTranslationTargetLanguage(language)
-            }
+        meetingOverlayWindow.onRequestCancelMeeting = mainActorCallback { $0.cancelMeetingSessionWithoutSaving() }
+        meetingOverlayWindow.onRequestFinishMeeting = mainActorCallback { $0.finishMeetingSessionAndOpenDetail() }
+        meetingOverlayWindow.onRequestDismissCloseConfirmation = mainActorCallback {
+            $0.dismissMeetingSessionCloseConfirmation()
         }
-        overlayWindow.onRequestSessionTranslationTargetPickerDismiss = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.dismissSessionTranslationTargetPicker()
-            }
+        meetingOverlayWindow.onRequestCopySegment = mainActorCallback { appDelegate, segment in
+            appDelegate.copyMeetingSegment(segment)
         }
         presentMainWindowOnLaunchIfNeeded()
-        scheduleWhisperIdleWarmupIfNeeded()
         scheduleLLMIdleWarmupIfNeeded()
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
+    }
+
+    private func mainActorCallback(_ action: @escaping @MainActor (AppDelegate) -> Void) -> () -> Void {
+        { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                action(self)
+            }
+        }
+    }
+
+    private func mainActorCallback<Value>(
+        _ action: @escaping @MainActor (AppDelegate, Value) -> Void
+    ) -> (Value) -> Void {
+        { [weak self] value in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                action(self, value)
+            }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -539,7 +624,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard pendingApplicationTerminationTask == nil else {
+            return .terminateLater
+        }
+
+        guard meetingSessionCoordinator.isActive else {
+            performApplicationTerminationCleanup()
+            return .terminateNow
+        }
+
+        pendingMeetingStartupTask?.cancel()
+        pendingMeetingStartupTask = nil
+        meetingSessionCoordinator.overlayState.isCloseConfirmationPresented = false
+        meetingSessionCoordinator.overlayState.isCaptureModePickerPresented = false
+        meetingSessionCoordinator.overlayState.isRealtimeTranslationLanguagePickerPresented = false
+        meetingDetailWindowManager.closeLiveWindow()
+        meetingOverlayWindow.hide()
+
+        guard let stopTask = meetingSessionCoordinator.stop() else {
+            performApplicationTerminationCleanup()
+            return .terminateNow
+        }
+
+        pendingApplicationTerminationTask = Task { @MainActor [weak self] in
+            await stopTask.value
+            self?.performApplicationTerminationCleanup()
+            self?.pendingApplicationTerminationTask = nil
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        performApplicationTerminationCleanup()
+    }
+
+    private func performApplicationTerminationCleanup() {
+        pendingMeetingStartupTask?.cancel()
+        pendingMeetingStartupTask = nil
+        meetingDetailWindowManager.closeLiveWindow()
         noteWindowManager.hide()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
     }
@@ -577,7 +701,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSEvent.removeMonitor(localEscapeKeyMonitor)
         }
         inputDevicesRefreshTask?.cancel()
-        whisperWarmupTask?.cancel()
+        pendingMeetingStartupTask?.cancel()
         for task in llmWarmupTasksByRepo.values {
             task.cancel()
         }
@@ -586,11 +710,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             task.cancel()
         }
         remoteLLMWarmupTasksByKey.removeAll()
-    }
-
-    func scheduleWhisperIdleWarmupIfNeeded() {
-        whisperWarmupTask?.cancel()
-        whisperWarmupTask = nil
     }
 
     private func migrateLegacyPreferences() {

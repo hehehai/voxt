@@ -1,3 +1,6 @@
+// ASRHintSettingsTests.swift
+// Provides ASRHint Settings Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -12,7 +15,7 @@ final class ASRHintSettingsTests: XCTestCase {
 
         XCTAssertEqual(
             loaded[.mlxAudio]?.promptTemplate,
-            AppPromptDefaults.text(for: .whisperASRHint)
+            ""
         )
         XCTAssertEqual(loaded[.openAIWhisper]?.promptTemplate, "Bias {{USER_MAIN_LANGUAGE}}")
     }
@@ -39,9 +42,9 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(payload.prompt, "Primary Traditional Chinese")
     }
 
-    func testResolveWhisperKitAvoidsPromptBiasAndForcedLanguage() {
+    func testResolveMLXAvoidsPromptBiasAndForcedLanguage() {
         let payload = ASRHintResolver.resolve(
-            target: .whisperKit,
+            target: .mlxAudio,
             settings: ASRHintSettings(
                 followsUserMainLanguage: true,
                 promptTemplate: "Bias {{USER_MAIN_LANGUAGE}} punctuation"
@@ -53,23 +56,10 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertNil(payload.prompt)
     }
 
-    func testResolvedWhisperSettingsDefaultToEmptyPrompt() {
-        let settings = ASRHintSettingsStore.resolvedSettings(for: .whisperKit, rawValue: nil)
+    func testResolvedMLXSettingsDefaultToEmptyPrompt() {
+        let settings = ASRHintSettingsStore.resolvedSettings(for: .mlxAudio, rawValue: nil)
 
         XCTAssertTrue(settings.followsUserMainLanguage)
-        XCTAssertEqual(settings.promptTemplate, AppPromptDefaults.text(for: .whisperASRHint))
-        XCTAssertEqual(settings.promptTemplate, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
-    }
-
-    func testSanitizedWhisperLegacyDefaultPromptMigratesToEmpty() {
-        let settings = ASRHintSettingsStore.sanitized(
-            ASRHintSettings(
-                followsUserMainLanguage: true,
-                promptTemplate: AppPreferenceKey.legacyDefaultWhisperASRHintPrompt
-            ),
-            for: .whisperKit
-        )
-
         XCTAssertEqual(settings.promptTemplate, "")
     }
 
@@ -197,6 +187,86 @@ final class ASRHintSettingsTests: XCTestCase {
         )
 
         XCTAssertEqual(settings.qwenContextBias, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
+    }
+
+    func testSherpaFunASRTuningDefaultsToDictionaryTermsOnlyContext() {
+        let settings = SherpaOnnxLocalTuningSettingsStore.resolvedSettings(
+            for: SherpaOnnxModelCatalog.funASRNanoModelID,
+            kind: .funASRNano,
+            rawValue: nil
+        )
+
+        XCTAssertEqual(settings.contextBias, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
+        XCTAssertEqual(settings.numThreads, 2)
+        XCTAssertEqual(settings.funASRMaxNewTokens, 512)
+        XCTAssertTrue(settings.funASRUseITN)
+    }
+
+    func testSherpaTuningSanitizesModelParameters() {
+        let stored = SherpaOnnxLocalTuningSettingsStore.save(
+            SherpaOnnxLocalTuningSettings(
+                numThreads: 99,
+                contextBias: "  Voxt\nCodex  ",
+                funASRMaxNewTokens: 8,
+                funASRTopP: 2,
+                funASRUseITN: false
+            ),
+            for: SherpaOnnxModelCatalog.funASRNanoModelID,
+            rawValue: nil
+        )
+
+        let settings = SherpaOnnxLocalTuningSettingsStore.resolvedSettings(
+            for: SherpaOnnxModelCatalog.funASRNanoModelID,
+            kind: .funASRNano,
+            rawValue: stored
+        )
+
+        XCTAssertEqual(settings.numThreads, 8)
+        XCTAssertEqual(settings.contextBias, "Voxt\nCodex")
+        XCTAssertEqual(settings.funASRMaxNewTokens, 64)
+        XCTAssertEqual(settings.funASRTopP, 1.0)
+        XCTAssertFalse(settings.funASRUseITN)
+    }
+
+    func testResolveSherpaOnnxUsesLanguageAndMergedTerms() {
+        let payload = ASRHintResolver.resolve(
+            target: .sherpaOnnx,
+            settings: ASRHintSettings(contextualPhrasesText: "Voxt\nFireRed\nVoxt"),
+            userLanguageCodes: ["zh-Hans"],
+            dictionaryTerms: "Codex\nFireRed"
+        )
+
+        XCTAssertEqual(payload.language, "zh")
+        XCTAssertEqual(payload.contextualPhrases, ["Voxt", "FireRed", "Codex"])
+    }
+
+    func testMLXLocalTuningLoadsStoredSettingsWithoutWhisperTemperature() throws {
+        let raw = """
+        {"whisper":{"preset":"accuracyFirst","qwenContextBias":"","granitePromptBias":"","senseVoiceUseITN":false}}
+        """
+
+        let settings = MLXLocalTuningSettingsStore.resolvedSettings(
+            for: "mlx-community/whisper-large-v3-mlx",
+            rawValue: raw
+        )
+
+        XCTAssertEqual(settings.preset, .accuracyFirst)
+        XCTAssertEqual(settings.whisperTemperature, 0.0)
+    }
+
+    func testMLXWhisperTemperatureIsSanitized() throws {
+        let stored = MLXLocalTuningSettingsStore.save(
+            MLXLocalTuningSettings(whisperTemperature: 1.8),
+            for: "mlx-community/whisper-large-v3-mlx",
+            rawValue: nil
+        )
+
+        let settings = MLXLocalTuningSettingsStore.resolvedSettings(
+            for: "mlx-community/whisper-large-v3-mlx",
+            rawValue: stored
+        )
+
+        XCTAssertEqual(settings.whisperTemperature, 1.0)
     }
 
     func testQwenLocalTuningMigratesLegacyDefaultContextBiasToDictionaryTermsOnly() throws {

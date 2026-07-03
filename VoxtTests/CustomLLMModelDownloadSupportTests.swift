@@ -1,3 +1,6 @@
+// CustomLLMModelDownloadSupportTests.swift
+// Provides Custom LLMModel Download Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -219,6 +222,87 @@ final class CustomLLMModelDownloadSupportTests: XCTestCase {
         let request = try XCTUnwrap(MockResumableDownloadURLProtocol.requests().first)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Range"), "bytes=5-")
         XCTAssertEqual(request.value(forHTTPHeaderField: "If-Range"), "\"etag-1\"")
+    }
+
+    func testResumableDownloadFailsWhenStrictExpectedSizeDiffersFromResponse() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let destination = directory.appendingPathComponent("archive.tar.bz2")
+        MockResumableDownloadURLProtocol.install(
+            stubs: [
+                .init(
+                    statusCode: 200,
+                    headers: [
+                        "Content-Length": "5",
+                        "ETag": "\"etag-1\"",
+                        "Accept-Ranges": "bytes"
+                    ],
+                    body: Data("hello".utf8)
+                )
+            ]
+        )
+
+        do {
+            _ = try await ResumableModelDownloadSupport.download(
+                ResumableDownloadDescriptor(
+                    sourceURL: URL(string: "https://example.com/archive.tar.bz2")!,
+                    destinationURL: destination,
+                    relativePath: "archive.tar.bz2",
+                    expectedSize: 10,
+                    userAgent: "VoxtTests",
+                    disableProxy: false,
+                    policy: resumableTestPolicy,
+                    protocolClasses: [MockResumableDownloadURLProtocol.self]
+                ),
+                progress: Progress(totalUnitCount: 10)
+            )
+            XCTFail("Expected strict size validation to fail.")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("Download size mismatch"))
+        }
+    }
+
+    func testResumableDownloadAllowsResponseSizeMismatchWhenStrictMatchIsDisabled() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let destination = directory.appendingPathComponent("archive.tar.bz2")
+        MockResumableDownloadURLProtocol.install(
+            stubs: [
+                .init(
+                    statusCode: 200,
+                    headers: [
+                        "Content-Length": "5",
+                        "ETag": "\"etag-1\"",
+                        "Accept-Ranges": "bytes"
+                    ],
+                    body: Data("hello".utf8)
+                )
+            ]
+        )
+
+        let result = try await ResumableModelDownloadSupport.download(
+            ResumableDownloadDescriptor(
+                sourceURL: URL(string: "https://example.com/archive.tar.bz2")!,
+                destinationURL: destination,
+                relativePath: "archive.tar.bz2",
+                expectedSize: 10,
+                requiresExpectedSizeMatch: false,
+                userAgent: "VoxtTests",
+                disableProxy: false,
+                policy: resumableTestPolicy,
+                protocolClasses: [MockResumableDownloadURLProtocol.self]
+            ),
+            progress: Progress(totalUnitCount: 10)
+        )
+
+        XCTAssertEqual(result.bytesDownloaded, 5)
+        XCTAssertEqual(try Data(contentsOf: destination), Data("hello".utf8))
     }
 
     func testResumableDownloadRestartsFromZeroWhenServerIgnoresRange() async throws {

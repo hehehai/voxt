@@ -1,5 +1,9 @@
+// SettingsPermissionSupport.swift
+// Provides Settings Permission Support for settings screens.
+
 import SwiftUI
 import AVFoundation
+import CoreGraphics
 import Speech
 
 enum SettingsPermissionKind: String, CaseIterable, Identifiable {
@@ -7,6 +11,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
     case speechRecognition
     case accessibility
     case inputMonitoring
+    case screenCapture
     case systemAudioCapture
     case reminders
 
@@ -18,6 +23,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
         case .speechRecognition: return "speech"
         case .accessibility: return "accessibility"
         case .inputMonitoring: return "inputMonitoring"
+        case .screenCapture: return "screenCapture"
         case .systemAudioCapture: return "systemAudioCapture"
         case .reminders: return "reminders"
         }
@@ -29,6 +35,7 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
         case .speechRecognition: return "Speech Recognition Permission"
         case .accessibility: return "Accessibility Permission"
         case .inputMonitoring: return "Input Monitoring Permission"
+        case .screenCapture: return "Screen Recording Permission"
         case .systemAudioCapture: return "System Audio Recording Permission"
         case .reminders: return "Reminders Permission"
         }
@@ -44,8 +51,10 @@ enum SettingsPermissionKind: String, CaseIterable, Identifiable {
             return "Required to paste transcription text into other apps."
         case .inputMonitoring:
             return "Required for reliable global modifier hotkeys (such as fn)."
+        case .screenCapture:
+            return "Required only when Screenshot Context is enabled for rewrite app context."
         case .systemAudioCapture:
-            return "Required to mute other apps' media audio during recording."
+            return "Required to capture system audio for Meeting and to mute other apps' media audio during recording."
         case .reminders:
             return "Required to sync Voxt notes into Apple Reminders."
         }
@@ -56,6 +65,16 @@ struct SettingsPermissionRequirementContext {
     let selectedEngine: TranscriptionEngine
     let muteSystemAudioWhileRecording: Bool
     let featureSettings: FeatureSettings?
+
+    init(
+        selectedEngine: TranscriptionEngine,
+        muteSystemAudioWhileRecording: Bool,
+        featureSettings: FeatureSettings?
+    ) {
+        self.selectedEngine = selectedEngine
+        self.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
+        self.featureSettings = featureSettings
+    }
 }
 
 enum SettingsPermissionRequirementResolver {
@@ -88,6 +107,7 @@ enum SettingsPermissionRequirementResolver {
     ) -> [SettingsPermissionKind] {
         var permissions: [SettingsPermissionKind] = [
             .microphone,
+            .systemAudioCapture,
             .accessibility,
             .inputMonitoring
         ]
@@ -95,7 +115,8 @@ enum SettingsPermissionRequirementResolver {
         let featureSelections = [
             context.featureSettings?.transcription.asrSelectionID.asrSelection,
             context.featureSettings?.translation.asrSelectionID.asrSelection,
-            context.featureSettings?.rewrite.asrSelectionID.asrSelection
+            context.featureSettings?.rewrite.asrSelectionID.asrSelection,
+            context.featureSettings?.meeting.asrSelectionID.asrSelection
         ]
 
         let needsSpeechRecognition = context.selectedEngine == .dictation || featureSelections.contains { selection in
@@ -109,8 +130,8 @@ enum SettingsPermissionRequirementResolver {
             permissions.append(.speechRecognition)
         }
 
-        if context.muteSystemAudioWhileRecording {
-            permissions.append(.systemAudioCapture)
+        if context.featureSettings?.rewrite.appContext.screenshotEnabled == true {
+            permissions.append(.screenCapture)
         }
 
         if context.featureSettings?.transcription.notes.remindersSync.enabled == true {
@@ -139,10 +160,23 @@ enum SettingsPermissionGrantResolver {
             return AccessibilityPermissionManager.isTrusted()
         case .inputMonitoring:
             return EventListeningPermissionManager.isInputMonitoringGranted()
+        case .screenCapture:
+            return ScreenCapturePermission.isGranted()
         case .systemAudioCapture:
             return SystemAudioCapturePermission.authorizationStatus() == .authorized
         case .reminders:
             return RemindersPermissionManager.isAuthorized()
         }
+    }
+}
+
+enum ScreenCapturePermission {
+    static func isGranted() -> Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    @discardableResult
+    static func requestAccess() -> Bool {
+        CGRequestScreenCaptureAccess()
     }
 }

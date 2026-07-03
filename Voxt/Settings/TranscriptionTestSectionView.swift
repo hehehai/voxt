@@ -1,3 +1,6 @@
+// TranscriptionTestSectionView.swift
+// Provides Transcription Test Section View for settings screens.
+
 import SwiftUI
 
 private func localized(_ key: String) -> String {

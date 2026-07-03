@@ -1,3 +1,6 @@
+// MLXModelManagerTests.swift
+// Provides MLXModel Manager Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 import HuggingFace
@@ -86,13 +89,18 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"))
+        XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"))
         XCTAssertFalse(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Qwen3-ASR-0.6B-4bit"))
     }
 
-    func testLiveModeRoutesQwen3ToNativeSessionOnly() {
+    func testLiveModeRoutesQwen3AndNemotronToNativeSessions() {
         XCTAssertEqual(
             MLXModelManager.liveMode(for: "mlx-community/Qwen3-ASR-0.6B-4bit"),
             .nativeQwenLive
+        )
+        XCTAssertEqual(
+            MLXModelManager.liveMode(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"),
+            .nativeNemotronLive
         )
         XCTAssertEqual(
             MLXModelManager.liveMode(for: "mlx-community/Voxtral-Mini-4B-Realtime-6bit"),
@@ -183,12 +191,38 @@ final class MLXModelManagerTests: XCTestCase {
     func testAvailableModelsIncludeLatestSupportedSTTRepos() {
         let modelIDs = Set(MLXModelManager.availableModels.map(\.id))
 
-        XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
-        XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
-        XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
-        XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-4bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-1.7B-6bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-1.7B-8bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/SenseVoiceSmall"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v3"))
+        XCTAssertFalse(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
+        XCTAssertFalse(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
+        XCTAssertFalse(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
+    }
+
+    func testSupportedModelsKeepHiddenASRCompatibilityRepos() {
+        let modelIDs = Set(MLXModelManager.supportedModels.map(\.id))
+
+        XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/GLM-ASR-Nano-2512-4bit"))
+        XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-bf16"))
+    }
+
+    func testHiddenASRModelsDisplayWhenIncludedByLocalState() {
+        let hiddenRepo = "mlx-community/GLM-ASR-Nano-2512-4bit"
+
+        XCTAssertFalse(
+            MLXModelCatalog.displayModels(includingInstalled: []).contains { $0.id == hiddenRepo }
+        )
+        XCTAssertTrue(
+            MLXModelCatalog.displayModels(includingInstalled: [hiddenRepo]).contains { $0.id == hiddenRepo }
+        )
     }
 
     func testKnownRemoteSizeFallbacksCoverCuratedLocalModels() {
@@ -198,12 +232,12 @@ final class MLXModelManagerTests: XCTestCase {
         )
         XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
         XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-ASR-0.6B-4bit"))
+        XCTAssertNotNil(MLXModelManager.fallbackRemoteSizeText(repo: "mlx-community/whisper-base-mlx"))
         XCTAssertNotNil(CustomLLMModelManager.fallbackRemoteSizeText(repo: "mlx-community/Qwen3-4B-4bit"))
-        XCTAssertNotNil(WhisperKitModelManager.fallbackRemoteSizeText(id: "base"))
     }
 
     func testAllCuratedMLXModelsHaveRemoteSizeFallbacks() {
-        let missingRepos = MLXModelManager.availableModels
+        let missingRepos = MLXModelManager.supportedModels
             .map(\.id)
             .filter { MLXModelManager.fallbackRemoteSizeText(repo: $0) == nil }
 
@@ -232,12 +266,56 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertFalse(MLXModelDownloadSupport.isModelDirectoryValid(finalDirectory, fileManager: .default))
     }
 
-    func testAllCuratedWhisperModelsHaveRemoteSizeFallbacks() {
-        let missingModelIDs = WhisperKitModelManager.availableModels
-            .map(\.id)
-            .filter { WhisperKitModelManager.fallbackRemoteSizeText(id: $0) == nil }
+    func testWhisperDirectoryWithoutTokenizerAssetsIsNotTreatedAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let repo = "mlx-community/whisper-large-v3-turbo"
+        let modelDir = root
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent("mlx-community_whisper-large-v3-turbo")
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        try Data(#"{"model_type":"whisper"}"#.utf8).write(to: modelDir.appendingPathComponent("config.json"))
+        try Data("weights".utf8).write(to: modelDir.appendingPathComponent("weights.safetensors"))
+        defer { try? FileManager.default.removeItem(at: root) }
 
-        XCTAssertEqual(missingModelIDs, [])
+        XCTAssertFalse(
+            MLXModelDownloadSupport.isModelDirectoryValid(
+                modelDir,
+                repo: repo,
+                fileManager: .default
+            )
+        )
+    }
+
+    func testWhisperDirectoryWithTokenizerAssetsIsTreatedAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let repo = "mlx-community/whisper-large-v3-turbo"
+        let modelDir = root
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent("mlx-community_whisper-large-v3-turbo")
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        try Data(#"{"model_type":"whisper"}"#.utf8).write(to: modelDir.appendingPathComponent("config.json"))
+        try Data("weights".utf8).write(to: modelDir.appendingPathComponent("weights.safetensors"))
+        for assetPath in MLXModelDownloadSupport.whisperTokenizerAssetPaths {
+            try Data("asset".utf8).write(to: modelDir.appendingPathComponent(assetPath))
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertTrue(
+            MLXModelDownloadSupport.isModelDirectoryValid(
+                modelDir,
+                repo: repo,
+                fileManager: .default
+            )
+        )
+    }
+
+    func testAllCuratedMLXWhisperModelsHaveRemoteSizeFallbacks() {
+        let missingRepos = MLXModelManager.supportedModels
+            .map(\.id)
+            .filter(MLXWhisperMigrationSupport.isWhisperRepo(_:))
+            .filter { MLXModelManager.fallbackRemoteSizeText(repo: $0) == nil }
+
+        XCTAssertEqual(missingRepos, [])
     }
 
     func testCustomLLMBehaviorDisablesThinkingForThinkingModels() {
@@ -245,6 +323,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-8B-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-2B-4bit").disablesThinking)
+        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-0.8B-4bit-OptiQ").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-4bit").disablesThinking)
         XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-OptiQ-4bit").disablesThinking)
@@ -260,7 +339,8 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit").family, .glm4)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Llama-3.2-3B-Instruct-4bit").family, .llama)
         XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Mistral-Nemo-Instruct-2407-4bit").family, .mistral)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/gemma-2-2b-it-4bit").family, .gemma)
+        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Ministral-3-3B-Instruct-2512-4bit").family, .mistral)
+        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/gemma-4-e2b-it-4bit").family, .gemma)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct").disablesThinking)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2.5-3B-Instruct").disablesThinking)
         XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-4-9B-0414-4bit").disablesThinking)
@@ -274,8 +354,50 @@ final class MLXModelManagerTests: XCTestCase {
         let qwen2Behavior = CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct")
 
         XCTAssertEqual(qwen3Behavior.additionalContext?["enable_thinking"] as? Bool, false)
+        XCTAssertEqual(qwen3Behavior.additionalContext?["reasoning_effort"] as? String, "low")
         XCTAssertEqual(glmZ1Behavior.additionalContext?["enable_thinking"] as? Bool, false)
         XCTAssertNil(qwen2Behavior.additionalContext)
+    }
+
+    func testCustomLLMGenerationSettingsDefaultToThinkingOff() {
+        XCTAssertEqual(CustomLLMGenerationSettingsStore.defaultSettings.thinking.mode, .off)
+        XCTAssertEqual(CustomLLMGenerationSettingsStore.resolvedSettings(from: nil).thinking.mode, .off)
+        XCTAssertEqual(
+            CustomLLMGenerationSettingsStore.sanitized(
+                LLMGenerationSettings(thinking: .providerDefault)
+            ).thinking.mode,
+            .off
+        )
+        for repo in [
+            "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit",
+            "mlx-community/LFM2-1.2B-4bit",
+            "mlx-community/LFM2-8B-A1B-3bit-MLX",
+            "mlx-community/Qwen3.6-27B-4bit",
+        ] {
+            XCTAssertEqual(
+                CustomLLMGenerationSettingsStore.resolvedSettings(
+                    for: repo,
+                    rawByRepo: nil,
+                    legacyRaw: nil
+                ).thinking.mode,
+                .off,
+                repo
+            )
+        }
+        XCTAssertEqual(
+            CustomLLMGenerationSettingsStore.resolvedSettings(
+                for: "mlx-community/Qwen3.5-4B-OptiQ-4bit",
+                rawByRepo: nil,
+                legacyRaw: nil
+            ).thinking.mode,
+            .off
+        )
+        XCTAssertEqual(
+            CustomLLMGenerationSettingsStore.resolvedSettings(
+                from: CustomLLMGenerationSettingsStore.defaultStoredValue()
+            ).thinking.mode,
+            .off
+        )
     }
 
     func testCustomLLMGenerationSettingsStoreKeepsOnlyLocalSupportedFields() {
@@ -519,6 +641,14 @@ final class MLXModelManagerTests: XCTestCase {
     }
 
     func testCustomLLMCompiledPlanPreservesOutputTokenBudgetHint() {
+        let attachment = LLMInputAttachment.image(
+            LLMImageAttachment(
+                data: Data([0xFF, 0xD8, 0xFF]),
+                mimeType: "image/jpeg",
+                detail: .high,
+                filename: "capture.jpg"
+            )
+        )
         let compiled = LLMCompiledRequest(
             taskLabel: "enhancement",
             instructions: "system",
@@ -527,6 +657,7 @@ final class MLXModelManagerTests: XCTestCase {
             fallbackText: "fallback",
             inputCharacterCount: 5,
             outputTokenBudgetHint: 321,
+            attachments: [attachment],
             conversationHistory: [],
             previousResponseID: nil,
             responseFormat: nil
@@ -538,6 +669,7 @@ final class MLXModelManagerTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.maxTokensOverride, 321)
+        XCTAssertEqual(plan.attachments, [attachment])
     }
 
     func testCustomLLMNormalizeResultTextStripsThinkBlocksAndMarkers() {
@@ -761,6 +893,7 @@ final class MLXModelManagerTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defaults.set(root.path, forKey: AppPreferenceKey.modelStorageRootPath)
         defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+        ModelStorageDirectoryManager.resetForTesting()
         defer {
             if let previousPath {
                 defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)
@@ -772,6 +905,7 @@ final class MLXModelManagerTests: XCTestCase {
             } else {
                 defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
             }
+            ModelStorageDirectoryManager.resetForTesting()
             try? FileManager.default.removeItem(at: root)
         }
         return try body(root)

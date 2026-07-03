@@ -1,3 +1,6 @@
+// LogsViewerSheet.swift
+// Provides Logs Viewer Sheet for settings screens.
+
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -119,7 +122,7 @@ struct LogsViewerSheet: View {
                 Button(action: dismiss.callAsFunction) {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(SettingsCompactIconButtonStyle())
+                .buttonStyle(SettingsDialogCloseButtonStyle())
             }
             .padding(.horizontal, 20)
             .padding(.top, 18)

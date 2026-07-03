@@ -1,3 +1,6 @@
+// AboutSettingsView.swift
+// Provides About Settings View for settings screens.
+
 import SwiftUI
 
 private func localized(_ key: String) -> String {

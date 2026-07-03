@@ -1,3 +1,6 @@
+// HotkeyActionResolver.swift
+// Provides Hotkey Action Resolver for hotkey handling.
+
 import Foundation
 
 struct HotkeyActionResolver {

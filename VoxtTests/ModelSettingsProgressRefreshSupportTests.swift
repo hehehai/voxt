@@ -1,3 +1,6 @@
+// ModelSettingsProgressRefreshSupportTests.swift
+// Provides Model Settings Progress Refresh Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -55,36 +58,20 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
     }
 
     func testShouldPollModelStateWhenNonCurrentMLXDownloadIsActive() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .notDownloaded,
             mlxHasActiveDownloadingRepos: true,
-            whisperState: .notDownloaded,
-            whisperActiveDownload: nil,
             customLLMState: .notDownloaded
         )
 
         XCTAssertTrue(shouldPoll)
     }
 
-    func testShouldPollModelStateForActiveWhisperDownload() {
-        let whisperDownload = WhisperKitModelManager.ActiveDownload(
-            modelID: "openai_whisper-large-v3-v20240930",
-            isPaused: false,
-            progress: 0.5,
-            completed: 50,
-            total: 100,
-            currentFile: "weights.bin",
-            currentFileCompleted: 25,
-            currentFileTotal: 50,
-            completedFiles: 1,
-            totalFiles: 2
-        )
-
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+    func testShouldPollModelStateWhenSherpaDownloadIsActive() {
+        let shouldPoll = shouldPollModelState(
             mlxState: .notDownloaded,
             mlxHasActiveDownloadingRepos: false,
-            whisperState: .notDownloaded,
-            whisperActiveDownload: whisperDownload,
+            sherpaOnnxHasActiveDownloads: true,
             customLLMState: .notDownloaded
         )
 
@@ -92,11 +79,9 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
     }
 
     func testShouldNotPollModelStateWithoutActiveDownloads() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .downloaded,
             mlxHasActiveDownloadingRepos: false,
-            whisperState: .downloaded,
-            whisperActiveDownload: nil,
             customLLMState: .downloaded
         )
 
@@ -104,11 +89,9 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
     }
 
     func testShouldNotPollModelStateForLoadingWithoutActiveDownloads() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .loading,
             mlxHasActiveDownloadingRepos: false,
-            whisperState: .loading,
-            whisperActiveDownload: nil,
             customLLMState: .notDownloaded
         )
 
@@ -116,7 +99,7 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
     }
 
     func testShouldNotPollModelStateForPausedMLXWhileCancellationStillCleansUp() {
-        let shouldPoll = ModelSettingsProgressRefreshSupport.shouldPollModelState(
+        let shouldPoll = shouldPollModelState(
             mlxState: .paused(
                 progress: 0.5,
                 completed: 50,
@@ -126,11 +109,46 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
                 totalFiles: 2
             ),
             mlxHasActiveDownloadingRepos: false,
-            whisperState: .notDownloaded,
-            whisperActiveDownload: nil,
             customLLMState: .notDownloaded
         )
 
         XCTAssertFalse(shouldPoll)
+    }
+
+    func testShouldPollModelStateWhenCustomLLMDownloadIsActive() {
+        let shouldPoll = shouldPollModelState(
+            mlxState: .notDownloaded,
+            mlxHasActiveDownloadingRepos: false,
+            customLLMState: .notDownloaded,
+            customLLMHasActiveDownloadingRepos: true
+        )
+
+        XCTAssertTrue(shouldPoll)
+    }
+
+    private func shouldPollModelState(
+        mlxState: MLXModelManager.ModelState,
+        mlxHasActiveDownloadingRepos: Bool,
+        sherpaOnnxState: MLXModelManager.ModelState = .notDownloaded,
+        sherpaOnnxStateByID: [SherpaOnnxModelID: MLXModelManager.ModelState] = [:],
+        sherpaOnnxHasActiveDownloads: Bool = false,
+        customLLMState: CustomLLMModelManager.ModelState,
+        customLLMStateByRepo: [String: CustomLLMModelManager.ModelState] = [:],
+        customLLMHasActiveDownloadingRepos: Bool = false,
+        ggufStateByID: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState] = [:],
+        ggufActiveDownloadModelID: GGUFTranslationModelID? = nil
+    ) -> Bool {
+        ModelSettingsProgressRefreshSupport.shouldPollModelState(
+            mlxState: mlxState,
+            mlxHasActiveDownloadingRepos: mlxHasActiveDownloadingRepos,
+            sherpaOnnxState: sherpaOnnxState,
+            sherpaOnnxStateByID: sherpaOnnxStateByID,
+            sherpaOnnxHasActiveDownloads: sherpaOnnxHasActiveDownloads,
+            customLLMState: customLLMState,
+            customLLMStateByRepo: customLLMStateByRepo,
+            customLLMHasActiveDownloadingRepos: customLLMHasActiveDownloadingRepos,
+            ggufStateByID: ggufStateByID,
+            ggufActiveDownloadModelID: ggufActiveDownloadModelID
+        )
     }
 }

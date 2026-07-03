@@ -12,13 +12,17 @@
 		A1B2C3D4E5F6078901234567 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F6078901234568 /* MLXAudioCore */; };
 		A1B2C3D4E5F6078901234569 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F607890123456A /* MLXAudioSTT */; };
 		A1B2C3D4E5F6078901234570 /* MLXAudioVAD in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F6078901234571 /* MLXAudioVAD */; };
+		AABBCCDDEEFF001122334457 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCCDDEEFF001122334456 /* Logging */; };
 		B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B1C2D3E4F5060708090A0B0D /* Sparkle */; };
+		BB11CC22DD33EE44FF556671 /* LlamaSwift in Frameworks */ = {isa = PBXBuildFile; productRef = BB11CC22DD33EE44FF556672 /* LlamaSwift */; };
 		C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B02 /* MLXLMCommon */; };
+		C1D2E3F4A5060708090A0B04 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B05 /* MLXVLM */; };
 		C1D2E3F4A5060708090A0B06 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B07 /* MLXLLM */; };
-		D1E2F3A4B5C60718293A4B5C /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1E2F3A4B5C60718293A4B5D /* WhisperKit */; };
+		D5A1B2C52F81000100ABCDEF /* Voxt/Frameworks/libomnivad.dylib in Embed OmniVAD Runtime */ = {isa = PBXBuildFile; fileRef = D5A1B2C42F81000100ABCDEF /* Voxt/Frameworks/libomnivad.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		E2A1C3B4D5F60718293A4B6C /* PermissionFlow in Frameworks */ = {isa = PBXBuildFile; productRef = E2A1C3B4D5F60718293A4B6D /* PermissionFlow */; };
 		E2A1C3B4D5F60718293A4B6E /* SystemSettingsKit in Frameworks */ = {isa = PBXBuildFile; productRef = E2A1C3B4D5F60718293A4B6F /* SystemSettingsKit */; };
 		F1A2B3C4D5E6F708090A0B0C /* FaviconFinder in Frameworks */ = {isa = PBXBuildFile; productRef = F1A2B3C4D5E6F708090A0B0D /* FaviconFinder */; };
+		F7A1B2C3D4E5F60718293A01 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = F7A1B2C3D4E5F60718293A02 /* FluidAudio */; };
 		FA11DBA0FA11DBA0FA11DBA0 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = FA11DBA1FA11DBA1FA11DBA1 /* GRDB */; };
 /* End PBXBuildFile section */
 
@@ -32,6 +36,20 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		D5A1B2C32F81000100ABCDEF /* Embed OmniVAD Runtime */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				D5A1B2C52F81000100ABCDEF /* Voxt/Frameworks/libomnivad.dylib in Embed OmniVAD Runtime */,
+			);
+			name = "Embed OmniVAD Runtime";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		31F19CCD2F4D76D200E96913 /* Voxt Dev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Voxt Dev.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A1A2B3C4D5E6F708090A0B0A /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -40,17 +58,64 @@
 		694309B92F5280180056FECC /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Localizable.strings; sourceTree = "<group>"; };
 		694309BB2F5280180056FECC /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = Localizable.strings; sourceTree = "<group>"; };
 		694309BD2F5280180056FECC /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = Localizable.strings; sourceTree = "<group>"; };
+		7C0D0E0F1011121314151617 /* SherpaOnnx.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SherpaOnnx.local.xcconfig.example; sourceTree = "<group>"; };
 		AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.shared.xcconfig; sourceTree = "<group>"; };
 		AAC0F002AAC0F002AAC0F002 /* Signing.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.local.xcconfig.example; sourceTree = "<group>"; };
+		D5A1B2C42F81000100ABCDEF /* Voxt/Frameworks/libomnivad.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = Voxt/Frameworks/libomnivad.dylib; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		D4A1B2C32F7A100100ABCDEF /* Exceptions for "Voxt" folder in "Voxt" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				App/README.md,
+				App/Recording/README.md,
+				Core/Dictionary/README.md,
+				Core/History/README.md,
+				Core/LLM/README.md,
+				Core/Logging/README.md,
+				Core/Models/README.md,
+				Core/README.md,
+				Core/RemoteProviders/README.md,
+				Core/Security/README.md,
+				Core/Transcription/README.md,
+				Core/Utilities/README.md,
+				Frameworks/libomnivad.dylib,
+				Hotkey/README.md,
+				Meeting/Capture/README.md,
+				Meeting/Processing/README.md,
+				Meeting/README.md,
+				Meeting/SpeakerAnalysis/README.md,
+				README.md,
+				Resources/Prompts/en/README.md,
+				Resources/Prompts/ja/README.md,
+				Resources/Prompts/README.md,
+				"Resources/Prompts/zh-Hans/README.md",
+				Resources/README.md,
+				Settings/AppEnhancement/README.md,
+				Settings/Dictionary/README.md,
+				Settings/Features/README.md,
+				Settings/History/README.md,
+				Settings/Models/README.md,
+				Settings/Onboarding/README.md,
+				Settings/README.md,
+				Settings/Shell/README.md,
+				Transcription/README.md,
+				Transcription/RemoteASR/README.md,
 				Voxt/Info.plist,
+				Windows/MeetingDetail/README.md,
+				Windows/README.md,
 			);
 			target = 31F19CCC2F4D76D200E96913 /* Voxt */;
+		};
+		D4A1B2C42F7A100100ABCDEF /* Exceptions for "VoxtTests" folder in "VoxtTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Fixtures/Audio/qwen-official/README.md",
+				README.md,
+				TestSupport/README.md,
+			);
+			target = 3A1A2B3C4D5E6F708090A0B0E /* VoxtTests */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -65,6 +130,9 @@
 		};
 		3A1A2B3C4D5E6F708090A0B0D /* VoxtTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D4A1B2C42F7A100100ABCDEF /* Exceptions for "VoxtTests" folder in "VoxtTests" target */,
+			);
 			path = VoxtTests;
 			sourceTree = "<group>";
 		};
@@ -80,13 +148,16 @@
 				A1B2C3D4E5F6078901234569 /* MLXAudioSTT in Frameworks */,
 				A1B2C3D4E5F6078901234570 /* MLXAudioVAD in Frameworks */,
 				B1C2D3E4F5060708090A0B0C /* Sparkle in Frameworks */,
+				BB11CC22DD33EE44FF556671 /* LlamaSwift in Frameworks */,
 				C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */,
+				C1D2E3F4A5060708090A0B04 /* MLXVLM in Frameworks */,
 				C1D2E3F4A5060708090A0B06 /* MLXLLM in Frameworks */,
-				D1E2F3A4B5C60718293A4B5C /* WhisperKit in Frameworks */,
 				E2A1C3B4D5F60718293A4B6C /* PermissionFlow in Frameworks */,
 				E2A1C3B4D5F60718293A4B6E /* SystemSettingsKit in Frameworks */,
 				F1A2B3C4D5E6F708090A0B0C /* FaviconFinder in Frameworks */,
+				F7A1B2C3D4E5F60718293A01 /* FluidAudio in Frameworks */,
 				FA11DBA0FA11DBA0FA11DBA0 /* GRDB in Frameworks */,
+				AABBCCDDEEFF001122334457 /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -153,6 +224,7 @@
 			children = (
 				3C1A2B3C4D5E6F708090A0B0A /* AppIntents.framework */,
 				3A1A2B3C4D5E6F708090A0B0A /* XCTest.framework */,
+				D5A1B2C42F81000100ABCDEF /* Voxt/Frameworks/libomnivad.dylib */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -162,6 +234,7 @@
 			children = (
 				AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */,
 				AAC0F002AAC0F002AAC0F002 /* Signing.local.xcconfig.example */,
+				7C0D0E0F1011121314151617 /* SherpaOnnx.local.xcconfig.example */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -175,6 +248,8 @@
 			buildPhases = (
 				31F19CC92F4D76D200E96913 /* Sources */,
 				31F19CCA2F4D76D200E96913 /* Frameworks */,
+				7C0D0E0F1011121314151618 /* Copy Sherpa ONNX Runtime */,
+				D5A1B2C32F81000100ABCDEF /* Embed OmniVAD Runtime */,
 				31F19CCB2F4D76D200E96913 /* Resources */,
 			);
 			buildRules = (
@@ -189,14 +264,17 @@
 				A1B2C3D4E5F6078901234568 /* MLXAudioCore */,
 				A1B2C3D4E5F607890123456A /* MLXAudioSTT */,
 				A1B2C3D4E5F6078901234571 /* MLXAudioVAD */,
+				BB11CC22DD33EE44FF556672 /* LlamaSwift */,
 				B1C2D3E4F5060708090A0B0D /* Sparkle */,
 				C1D2E3F4A5060708090A0B02 /* MLXLMCommon */,
+				C1D2E3F4A5060708090A0B05 /* MLXVLM */,
 				C1D2E3F4A5060708090A0B07 /* MLXLLM */,
-				D1E2F3A4B5C60718293A4B5D /* WhisperKit */,
 				E2A1C3B4D5F60718293A4B6D /* PermissionFlow */,
 				E2A1C3B4D5F60718293A4B6F /* SystemSettingsKit */,
 				F1A2B3C4D5E6F708090A0B0D /* FaviconFinder */,
+				F7A1B2C3D4E5F60718293A02 /* FluidAudio */,
 				FA11DBA1FA11DBA1FA11DBA1 /* GRDB */,
+				AABBCCDDEEFF001122334456 /* Logging */,
 			);
 			productName = Voxt;
 			productReference = 31F19CCD2F4D76D200E96913 /* Voxt Dev.app */;
@@ -256,10 +334,12 @@
 				A1B2C3D4E5F607890123456B /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
 				B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */,
 				C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
-				D1E2F3A4B5C60718293A4B5E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 				E2A1C3B4D5F60718293A4B70 /* XCRemoteSwiftPackageReference "PermissionFlow" */,
 				F1A2B3C4D5E6F708090A0B0E /* XCRemoteSwiftPackageReference "FaviconFinder" */,
+				F7A1B2C3D4E5F60718293A03 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				FA11DBA2FA11DBA2FA11DBA2 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				AABBCCDDEEFF001122334455 /* XCRemoteSwiftPackageReference "swift-log" */,
+				BB11CC22DD33EE44FF556670 /* XCRemoteSwiftPackageReference "llama.swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 31F19CCE2F4D76D200E96913 /* Products */;
@@ -288,6 +368,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		7C0D0E0F1011121314151618 /* Copy Sherpa ONNX Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Sherpa ONNX Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"${SHERPA_ONNX_COPY_RUNTIME:-NO}\" != \"YES\" ]; then\n  exit 0\nfi\n\nruntime_dir=\"${SHERPA_ONNX_ROOT:-${PROJECT_DIR}/ThirdParty/sherpa-onnx}/install/lib\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\n\nmkdir -p \"$destination\"\nfound=0\nfor dylib in \"$runtime_dir\"/libonnxruntime*.dylib; do\n  if [ ! -e \"$dylib\" ]; then\n    continue\n  fi\n  cp -f \"$dylib\" \"$destination/\"\n  found=1\ndone\n\nif [ \"$found\" = \"0\" ]; then\n  echo \"error: SHERPA_ONNX_COPY_RUNTIME=YES but no libonnxruntime*.dylib was found in $runtime_dir\"\n  exit 1\nfi\n\nif [ \"${CODE_SIGNING_ALLOWED:-YES}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n  for copied in \"$destination\"/libonnxruntime*.dylib; do\n    if [ -e \"$copied\" ]; then\n      /usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$copied\"\n    fi\n  done\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		31F19CC92F4D76D200E96913 /* Sources */ = {
@@ -471,7 +573,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Voxt/Voxt.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 101200199;
+				CURRENT_PROJECT_VERSION = 101300002;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = NO;
@@ -490,8 +592,12 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Voxt/Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.12.1;
+				MARKETING_VERSION = 1.13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt.dev;
 				PRODUCT_MODULE_NAME = Voxt;
 				PRODUCT_NAME = "$(TARGET_NAME) Dev";
@@ -514,7 +620,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Voxt/Voxt.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 101200199;
+				CURRENT_PROJECT_VERSION = 101300002;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = NO;
@@ -533,9 +639,13 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Voxt/Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.12.1;
-				"MARKETING_VERSION[sdk=macosx*]" = 1.12.1;
+				MARKETING_VERSION = 1.13.0;
+				"MARKETING_VERSION[sdk=macosx*]" = 1.13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt;
 				PRODUCT_MODULE_NAME = Voxt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -558,7 +668,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Voxt/Voxt.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 101200199;
+				CURRENT_PROJECT_VERSION = 101300002;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = NO;
@@ -576,8 +686,12 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Voxt/Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.12.1;
+				MARKETING_VERSION = 1.13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxt.Voxt.testhost;
 				PRODUCT_MODULE_NAME = Voxt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -895,7 +1009,15 @@
 			repositoryURL = "https://github.com/hehehai/mlx-audio-swift.git";
 			requirement = {
 				kind = revision;
-				revision = a1c7b11b68b16f1591bb0ff586372dde9b265135;
+				revision = 3e693624ecb6b3fabf0e844b333c23334952d38d;
+			};
+		};
+		AABBCCDDEEFF001122334455 /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.0;
 			};
 		};
 		B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */ = {
@@ -906,20 +1028,20 @@
 				minimumVersion = 2.6.4;
 			};
 		};
+		BB11CC22DD33EE44FF556670 /* XCRemoteSwiftPackageReference "llama.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mattt/llama.swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9669.0;
+			};
+		};
 		C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
 			requirement = {
-				kind = exactVersion;
-				version = 3.31.3;
-			};
-		};
-		D1E2F3A4B5C60718293A4B5E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift.git";
-			requirement = {
-				kind = exactVersion;
-				version = 1.0.0;
+				kind = revision;
+				revision = 124880582175726b709015a632c5ba9f3069a319;
 			};
 		};
 		E2A1C3B4D5F60718293A4B70 /* XCRemoteSwiftPackageReference "PermissionFlow" */ = {
@@ -927,7 +1049,7 @@
 			repositoryURL = "https://github.com/jaywcjlove/PermissionFlow.git";
 			requirement = {
 				kind = exactVersion;
-				version = 2.4.0;
+				version = 2.6.0;
 			};
 		};
 		F1A2B3C4D5E6F708090A0B0E /* XCRemoteSwiftPackageReference "FaviconFinder" */ = {
@@ -936,6 +1058,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 5.1.5;
+			};
+		};
+		F7A1B2C3D4E5F60718293A03 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = revision;
+				revision = ab29cead3c17304536c52c97eb1d93470e4d9afe;
 			};
 		};
 		FA11DBA2FA11DBA2FA11DBA2 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
@@ -964,25 +1094,35 @@
 			package = A1B2C3D4E5F607890123456B /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
 			productName = MLXAudioVAD;
 		};
+		AABBCCDDEEFF001122334456 /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AABBCCDDEEFF001122334455 /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
 		B1C2D3E4F5060708090A0B0D /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B1C2D3E4F5060708090A0B0E /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		BB11CC22DD33EE44FF556672 /* LlamaSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB11CC22DD33EE44FF556670 /* XCRemoteSwiftPackageReference "llama.swift" */;
+			productName = LlamaSwift;
 		};
 		C1D2E3F4A5060708090A0B02 /* MLXLMCommon */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLMCommon;
 		};
+		C1D2E3F4A5060708090A0B05 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
+		};
 		C1D2E3F4A5060708090A0B07 /* MLXLLM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C1D2E3F4A5060708090A0B03 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
-		};
-		D1E2F3A4B5C60718293A4B5D /* WhisperKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D1E2F3A4B5C60718293A4B5E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
-			productName = WhisperKit;
 		};
 		E2A1C3B4D5F60718293A4B6D /* PermissionFlow */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -998,6 +1138,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F1A2B3C4D5E6F708090A0B0E /* XCRemoteSwiftPackageReference "FaviconFinder" */;
 			productName = FaviconFinder;
+		};
+		F7A1B2C3D4E5F60718293A02 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7A1B2C3D4E5F60718293A03 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 		FA11DBA1FA11DBA1FA11DBA1 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;

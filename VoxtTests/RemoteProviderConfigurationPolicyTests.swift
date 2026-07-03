@@ -1,3 +1,6 @@
+// RemoteProviderConfigurationPolicyTests.swift
+// Provides Remote Provider Configuration Policy Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -334,6 +337,26 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
             [
                 "https://ark.cn-beijing.volces.com/api/v3/responses"
             ]
+        )
+    }
+
+    func testXiaomiMiMoEndpointPresetsUseOfficialChatCompletionsAPI() {
+        let llmPresets = RemoteProviderConfigurationPolicy.endpointPresets(
+            target: .llm(.xiaomiMiMo),
+            resolvedModel: "mimo-v2.5-pro"
+        )
+
+        XCTAssertEqual(
+            llmPresets.map(\.url),
+            ["https://api.xiaomimimo.com/v1/chat/completions"]
+        )
+
+        XCTAssertEqual(
+            RemoteProviderConfigurationPolicy.endpointPlaceholder(
+                target: .asr(.xiaomiMiMoASR),
+                resolvedModel: "mimo-v2.5-asr"
+            ),
+            "https://api.xiaomimimo.com/v1/chat/completions"
         )
     }
 

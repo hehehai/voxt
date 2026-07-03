@@ -1,20 +1,24 @@
+// MLXModelPerRepoStateSupportTests.swift
+// Provides MLXModel Per Repo State Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
 final class MLXModelPerRepoStateSupportTests: XCTestCase {
     func testResolvedStatePrefersStoredState() {
+        let storedStates: [String: MLXModelManager.ModelState] = [
+            MLXModelManager.canonicalModelRepo("mlx-community/Qwen3-ASR-0.6B-4bit"): .downloaded
+        ]
         let state = MLXModelPerRepoStateSupport.resolvedState(
             for: "mlx-community/Qwen3-ASR-0.6B-4bit",
             currentRepo: MLXModelManager.defaultModelRepo,
-            currentState: .notDownloaded,
-            storedStates: [
-                MLXModelManager.canonicalModelRepo("mlx-community/Qwen3-ASR-0.6B-4bit"): .downloaded
-            ],
+            currentState: MLXModelManager.ModelState.notDownloaded,
+            storedStates: storedStates,
             isDownloaded: { _ in false },
             hasResumableDownload: { _ in false }
         )
 
-        XCTAssertEqual(state, .downloaded)
+        XCTAssertEqual(state, MLXModelManager.ModelState.downloaded)
     }
 
     func testResolvedStateDerivesPausedForResumableNonCurrentRepo() {
@@ -22,8 +26,8 @@ final class MLXModelPerRepoStateSupportTests: XCTestCase {
         let state = MLXModelPerRepoStateSupport.resolvedState(
             for: repo,
             currentRepo: MLXModelManager.defaultModelRepo,
-            currentState: .notDownloaded,
-            storedStates: [:],
+            currentState: MLXModelManager.ModelState.notDownloaded,
+            storedStates: [String: MLXModelManager.ModelState](),
             isDownloaded: { _ in false },
             hasResumableDownload: { candidate in
                 MLXModelManager.canonicalModelRepo(candidate) == MLXModelManager.canonicalModelRepo(repo)

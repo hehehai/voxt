@@ -1,3 +1,6 @@
+// SQLiteStorageRepositoryTests.swift
+// Provides SQLite Storage Repository Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -19,6 +22,7 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
 
         let tables = try database.debugSQLiteObjectNames(type: "table")
         XCTAssertTrue(tables.contains("dictionary_entries"))
+        XCTAssertTrue(tables.contains("dictionary_categories"))
         XCTAssertTrue(tables.contains("dictionary_replacement_terms"))
         XCTAssertTrue(tables.contains("dictionary_observed_variants"))
         XCTAssertTrue(tables.contains("history_entries"))
@@ -26,6 +30,8 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
         XCTAssertTrue(tables.contains("history_search"))
 
         let indexes = try database.debugSQLiteObjectNames(type: "index")
+        XCTAssertTrue(indexes.contains("idx_dictionary_category_order"))
+        XCTAssertTrue(indexes.contains("idx_dictionary_entries_category"))
         XCTAssertTrue(indexes.contains("idx_dictionary_normalized_scope"))
         XCTAssertTrue(indexes.contains("idx_dictionary_active_scope_rank"))
         XCTAssertTrue(indexes.contains("idx_history_kind_created"))
@@ -66,6 +72,8 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
 
         XCTAssertEqual(migratedEntries.count, 1)
         XCTAssertEqual(migratedEntries[0].term, "Voxt Term")
+        XCTAssertEqual(migratedEntries[0].categoryID, groupID)
+        XCTAssertEqual(migratedEntries[0].categoryNameSnapshot, "Focused Group")
         XCTAssertEqual(migratedEntries[0].groupID, groupID)
         XCTAssertEqual(migratedEntries[0].groupNameSnapshot, "Focused Group")
         XCTAssertEqual(migratedEntries[0].source, .auto)
@@ -73,8 +81,67 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
         XCTAssertEqual(migratedEntries[0].matchCount, 7)
         XCTAssertEqual(migratedEntries[0].replacementTerms.map(\.text), ["Alias Term"])
         XCTAssertEqual(migratedEntries[0].observedVariants.map(\.text), ["voxt variant"])
+        let migratedCategories = try repository.allCategories()
+        XCTAssertTrue(migratedCategories.contains {
+            $0.id == DictionaryCategory.defaultID && $0.isDefault
+        })
+        XCTAssertTrue(migratedCategories.contains {
+            $0.id == groupID && $0.name == "Focused Group" && !$0.isDefault
+        })
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path + ".migrated-backup"))
+    }
+
+    func testDictionaryCategoryPersistenceAndDeletionPolicies() throws {
+        let database = try makeDatabase()
+        let repository = retain(DictionaryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let namesCategory = DictionaryCategory(
+            name: "ArchivedBucket",
+            normalizedName: "archivedbucket",
+            sortOrder: 1
+        )
+        let projectsCategory = DictionaryCategory(
+            name: "ProjectsBucket",
+            normalizedName: "projectsbucket",
+            sortOrder: 2
+        )
+        let nameEntry = DictionaryEntry(
+            term: "Custom Term",
+            normalizedTerm: "custom term",
+            categoryID: namesCategory.id,
+            categoryNameSnapshot: namesCategory.name,
+            source: .manual
+        )
+        let projectEntry = DictionaryEntry(
+            term: "Project Term",
+            normalizedTerm: "project term",
+            categoryID: projectsCategory.id,
+            categoryNameSnapshot: projectsCategory.name,
+            source: .manual
+        )
+
+        try repository.upsertCategory(namesCategory)
+        try repository.upsertCategory(projectsCategory)
+        try repository.replaceAll([nameEntry, projectEntry])
+
+        XCTAssertEqual(try repository.allCategories().map(\.name), ["Default", "ArchivedBucket", "ProjectsBucket"])
+        XCTAssertEqual(
+            try repository.allEntries().first { $0.id == nameEntry.id }?.categoryNameSnapshot,
+            "ArchivedBucket"
+        )
+        XCTAssertEqual(try repository.entryCount(query: "ArchivedBucket"), 1)
+
+        try repository.deleteCategory(id: namesCategory.id, moveEntriesTo: DictionaryCategory.defaultCategory)
+        let movedEntry = try XCTUnwrap(repository.allEntries().first { $0.id == nameEntry.id })
+        XCTAssertEqual(movedEntry.categoryID, DictionaryCategory.defaultID)
+        XCTAssertEqual(movedEntry.categoryNameSnapshot, DictionaryCategory.defaultName)
+        XCTAssertFalse(try repository.allCategories().contains { $0.id == namesCategory.id })
+        XCTAssertEqual(try repository.entryCount(query: "ArchivedBucket"), 0)
+        XCTAssertEqual(try repository.entries(filter: .all, query: "Default", limit: 10, offset: 0).map(\.id), [nameEntry.id])
+
+        try repository.deleteCategory(id: projectsCategory.id, moveEntriesTo: nil)
+        XCTAssertFalse(try repository.allEntries().contains { $0.id == projectEntry.id })
+        XCTAssertFalse(try repository.allCategories().contains { $0.id == projectsCategory.id })
     }
 
     func testDictionaryDuplicateChecksUseDatabaseIndexes() throws {

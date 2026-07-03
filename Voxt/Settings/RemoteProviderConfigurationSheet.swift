@@ -1,3 +1,6 @@
+// RemoteProviderConfigurationSheet.swift
+// Provides Remote Provider Configuration Sheet for settings screens.
+
 import SwiftUI
 import Foundation
 

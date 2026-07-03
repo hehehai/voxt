@@ -1,3 +1,6 @@
+// SettingsPermissionSupportTests.swift
+// Provides Settings Permission Support Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
@@ -6,6 +9,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
         transcriptionASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         translationASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         rewriteASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
+        screenshotContextEnabled: Bool = false,
         remindersEnabled: Bool = false
     ) -> FeatureSettings {
         FeatureSettings(
@@ -30,6 +34,10 @@ final class SettingsPermissionSupportTests: XCTestCase {
                 asrSelectionID: rewriteASR,
                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultRewritePrompt,
+                appContext: .init(
+                    textEnabled: false,
+                    screenshotEnabled: screenshotContextEnabled
+                ),
                 appEnhancementEnabled: false
             )
         )
@@ -49,7 +57,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
         XCTAssertTrue(context.featureSettings?.transcription.notes.remindersSync.enabled == true)
     }
 
-    func testSidebarPermissionsExcludeSystemAudioWhenMuteIsDisabled() {
+    func testSidebarPermissionsIncludeSystemAudioForMeetingModeByDefault() {
         let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
             selectedEngine: .remote,
             muteSystemAudioWhileRecording: false,
@@ -58,7 +66,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
 
-        XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring])
+        XCTAssertEqual(permissions, [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring])
     }
 
     func testSidebarPermissionsIncludeSystemAudioWhenMuteDuringRecordingIsEnabled() {
@@ -70,7 +78,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
 
-        XCTAssertEqual(permissions, [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture])
+        XCTAssertEqual(permissions, [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring])
     }
 
     func testSidebarPermissionsIncludeSpeechRecognitionWhenFeatureUsesDictation() {
@@ -86,7 +94,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .speechRecognition]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .speechRecognition]
         )
     }
 
@@ -101,11 +109,26 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .reminders]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .reminders]
         )
     }
 
-    func testRequiredPermissionsDoNotIncludeConditionalItemsWhenFeaturesAreDisabled() {
+    func testSidebarPermissionsIncludeScreenCaptureWhenRewriteScreenshotContextIsEnabled() {
+        let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
+            selectedEngine: .remote,
+            muteSystemAudioWhileRecording: false,
+            featureSettings: makeFeatureSettings(screenshotContextEnabled: true)
+        )
+
+        let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
+
+        XCTAssertEqual(
+            permissions,
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .screenCapture]
+        )
+    }
+
+    func testRequiredPermissionsIncludeBaselineCapturePermissionsWhenFeaturesAreDisabled() {
         let permissions = SettingsPermissionRequirementResolver.requiredPermissions(
             context: SettingsPermissionRequirementContext(
                 selectedEngine: .mlxAudio,
@@ -116,7 +139,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring]
         )
     }
 
@@ -131,7 +154,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .speechRecognition]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .speechRecognition]
         )
     }
 
@@ -146,7 +169,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .systemAudioCapture]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring]
         )
     }
 
@@ -161,7 +184,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
 
         XCTAssertEqual(
             permissions,
-            [.microphone, .accessibility, .inputMonitoring, .reminders]
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .reminders]
         )
     }
 }

@@ -1,3 +1,6 @@
+// TestDoubles.swift
+// Provides Test Doubles for test support.
+
 import Foundation
 import XCTest
 @testable import Voxt

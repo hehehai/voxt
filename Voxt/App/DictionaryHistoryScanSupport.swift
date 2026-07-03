@@ -1,3 +1,6 @@
+// DictionaryHistoryScanSupport.swift
+// Provides Dictionary History Scan Support for app lifecycle and routing.
+
 import Foundation
 
 struct DictionaryHistoryScanModelOption: Identifiable, Hashable {
@@ -60,7 +63,7 @@ enum DictionaryHistoryScanResponseParser {
             return normalizeAcceptedTerms(from: legacyTerms)
         }
 
-        VoxtLog.warning(
+        VoxtLog.dictionaryWarning(
             "Dictionary history scan returned invalid JSON payload. preview=\(responsePreview(normalizedResponse))"
         )
         throw DictionaryHistoryScanParseError.invalidText(code: -13)

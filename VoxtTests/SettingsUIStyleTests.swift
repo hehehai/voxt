@@ -1,3 +1,6 @@
+// SettingsUIStyleTests.swift
+// Provides Settings UIStyle Tests for Voxt test coverage.
+
 import AppKit
 import XCTest
 @testable import Voxt

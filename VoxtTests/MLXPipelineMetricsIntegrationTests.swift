@@ -1,3 +1,6 @@
+// MLXPipelineMetricsIntegrationTests.swift
+// Provides MLXPipeline Metrics Integration Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 

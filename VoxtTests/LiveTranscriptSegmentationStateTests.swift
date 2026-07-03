@@ -1,3 +1,6 @@
+// LiveTranscriptSegmentationStateTests.swift
+// Provides Live Transcript Segmentation State Tests for Voxt test coverage.
+
 import XCTest
 @testable import Voxt
 
