@@ -89,6 +89,11 @@ enum VoxtLog {
         modelLogger.info(message(), privacy: .preview(limit: 4_000))
     }
 
+    nonisolated static func vad(_ message: @autoclosure () -> String) {
+        guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
+        modelLogger.info(message(), privacy: .preview(limit: 4_000))
+    }
+
     nonisolated static func modelInfo(_ message: @autoclosure () -> String, verbose: Bool = false) {
         modelLogger.info(message(), verbose: verbose)
     }

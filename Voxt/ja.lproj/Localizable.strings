@@ -1800,10 +1800,13 @@
 "VAD Mode" = "VAD モード";
 "Energy" = "エネルギー検出";
 "Silero" = "Silero";
+"OmniVAD" = "OmniVAD";
 "Let Voxt choose the local VAD path for the current workflow." = "現在のワークフローに合わせて Voxt がローカル VAD 経路を選択します。";
 "Use fast local level detection with no extra model." = "追加モデルなしで高速なローカル音量検出を使います。";
 "Use the current local MLX Silero VAD model." = "現在のローカル MLX Silero VAD モデルを使います。";
 "Use the local Silero VAD model for ASR gating." = "ASR ゲートにローカル Silero VAD モデルを使います。";
+"Use OmniVAD-Kit streaming VAD for local ASR gating." = "ローカル ASR ゲートに OmniVAD-Kit のストリーミング VAD を使います。";
+"Use the local OmniVAD-Kit streaming VAD model." = "ローカルの OmniVAD-Kit ストリーミング VAD モデルを使います。";
 "Disable local VAD gating." = "ローカル VAD ゲートを無効にします。";
 "Use the provider's realtime server VAD when the selected ASR supports it." = "選択した ASR が対応する場合、プロバイダのリアルタイムサーバー VAD を使います。";
 "Subtitles Mode" = "字幕モード";

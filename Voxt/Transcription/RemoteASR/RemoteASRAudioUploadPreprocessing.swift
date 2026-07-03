@@ -256,7 +256,9 @@ private actor RemoteASRAudioUploadVADFrameDecider {
     private let energyBackend: ASREnergyVoiceActivityBackend
     private let sileroThreshold: Float
     private let sileroDetector = ASRSileroStreamingVoiceActivityDetector()
+    private let omniDetector: OmniStreamVoiceActivityBackend
     private var sileroFallbackWarningLogged = false
+    private var omniDegradedWarningLogged = false
 
     init(
         mode: LocalVADMode,
@@ -267,6 +269,7 @@ private actor RemoteASRAudioUploadVADFrameDecider {
         self.useCase = useCase
         self.energyBackend = ASREnergyVoiceActivityBackend(threshold: energyThreshold)
         self.sileroThreshold = ASRVoiceActivityConfiguration.profile(for: useCase).onsetProbabilityThreshold
+        self.omniDetector = OmniStreamVoiceActivityBackend(useCase: useCase)
     }
 
     func decision(for frame: ASRVoiceActivityAudioFrame) async -> ASRVoiceActivityFrameDecision? {
@@ -277,6 +280,8 @@ private actor RemoteASRAudioUploadVADFrameDecider {
             return energyDecision(for: frame)
         case .mlxSilero:
             return await sileroDecision(for: frame) ?? energyDecision(for: frame)
+        case .omniStream:
+            return await omniDecision(for: frame) ?? energyDecision(for: frame)
         }
     }
 
@@ -300,6 +305,22 @@ private actor RemoteASRAudioUploadVADFrameDecider {
                 sileroFallbackWarningLogged = true
             }
             await sileroDetector.reset()
+        }
+        return nil
+    }
+
+    private func omniDecision(for frame: ASRVoiceActivityAudioFrame) async -> ASRVoiceActivityFrameDecision? {
+        do {
+            return try await omniDetector.decision(
+                for: frame,
+                streamID: "remote-upload-\(useCase.rawValue)"
+            )
+        } catch {
+            if !omniDegradedWarningLogged {
+                VoxtLog.asrWarning("Remote upload OmniVAD unavailable; degrading current session to energy VAD. error=\(error.localizedDescription)")
+                omniDegradedWarningLogged = true
+            }
+            await omniDetector.reset()
         }
         return nil
     }

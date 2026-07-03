@@ -16,6 +16,7 @@ struct MeetingVoiceActivityDecision: Equatable, Sendable {
         case server
         case energy
         case silero
+        case omni
         case fallbackEnergy
     }
 }
@@ -31,6 +32,8 @@ private extension MeetingVoiceActivityDecision.Source {
             return "energy"
         case .silero:
             return "silero"
+        case .omni:
+            return "omnivad"
         case .fallbackEnergy:
             return "fallback-energy"
         }
@@ -41,21 +44,27 @@ actor MeetingVoiceActivityDetector {
     private static let sileroBalancedThreshold: Float = 0.5
 
     private var sileroDetector = ASRSileroStreamingVoiceActivityDetector()
+    private var omniDetector = OmniStreamVoiceActivityBackend(useCase: .meeting)
     private var mode = currentModeFromSettings()
     private var sileroFallbackWarningLogged = false
+    private var omniDegradedWarningLogged = false
 
     func refreshFromPreferences() async {
         let nextMode = Self.currentModeFromSettings()
         if nextMode != mode {
             await sileroDetector.reset()
+            await omniDetector.reset()
         }
         mode = nextMode
         sileroFallbackWarningLogged = false
+        omniDegradedWarningLogged = false
     }
 
     func reset() async {
         await sileroDetector.reset()
+        await omniDetector.reset()
         sileroFallbackWarningLogged = false
+        omniDegradedWarningLogged = false
     }
 
     private nonisolated static func currentModeFromSettings() -> LocalVADMode {
@@ -119,6 +128,31 @@ actor MeetingVoiceActivityDetector {
             )
         case .mlxSilero:
             break
+        case .omniStream:
+            if let decision = await omniActivity(
+                samples: samples,
+                sampleRate: sampleRate,
+                speaker: speaker
+            ) {
+                return finishActivity(
+                    decision,
+                    startedAt: startedAt,
+                    speaker: speaker,
+                    sampleCount: samples.count,
+                    frameBackend: frameBackend
+                )
+            }
+            return finishActivity(
+                MeetingVoiceActivityDecision(
+                    isSpeech: fallback.isSpeech,
+                    probability: nil,
+                    source: .fallbackEnergy
+                ),
+                startedAt: startedAt,
+                speaker: speaker,
+                sampleCount: samples.count,
+                frameBackend: frameBackend
+            )
         }
 
         if let decision = await mlxSileroActivity(
@@ -187,6 +221,38 @@ actor MeetingVoiceActivityDetector {
                 sileroFallbackWarningLogged = true
             }
             await sileroDetector.reset()
+        }
+        return nil
+    }
+
+    private func omniActivity(
+        samples: [Float],
+        sampleRate: Double,
+        speaker: MeetingSpeaker
+    ) async -> MeetingVoiceActivityDecision? {
+        do {
+            let frame = ASRVoiceActivityAudioFrame(
+                samples: samples,
+                sampleRate: sampleRate,
+                startSeconds: 0,
+                endSeconds: Double(samples.count) / max(sampleRate, 1)
+            )
+            if let decision = try await omniDetector.decision(
+                for: frame,
+                streamID: "meeting-\(speaker.rawValue)"
+            ) {
+                return MeetingVoiceActivityDecision(
+                    isSpeech: decision.isSpeech,
+                    probability: decision.probability,
+                    source: .omni
+                )
+            }
+        } catch {
+            if !omniDegradedWarningLogged {
+                VoxtLog.meetingWarning("Meeting OmniVAD unavailable; degrading current session to energy VAD. error=\(error.localizedDescription)")
+                omniDegradedWarningLogged = true
+            }
+            await omniDetector.reset()
         }
         return nil
     }

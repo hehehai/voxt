@@ -6,6 +6,11 @@ import AppKit
 import ApplicationServices
 
 extension AppDelegate {
+    enum AnswerOverlayInjectionMode: Sendable {
+        case standard
+        case selectedTextTranslation
+    }
+
     private enum SessionOutputDelivery {
         case typeText
         case answerOverlay
@@ -845,6 +850,7 @@ extension AppDelegate {
             writeTextToPasteboard(trimmedContent)
         }
 
+        answerOverlayInjectionMode = .standard
         configureAnswerOverlayInjectionHandler()
         let canInjectIntoFocusedInput = resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: true)
         overlayState.presentAnswer(
@@ -865,6 +871,7 @@ extension AppDelegate {
             writeTextToPasteboard(trimmedContent)
         }
 
+        answerOverlayInjectionMode = .selectedTextTranslation
         configureAnswerOverlayInjectionHandler()
 
         overlayState.configureSessionTranslationTargetLanguage(
@@ -887,6 +894,7 @@ extension AppDelegate {
             writeTextToPasteboard(trimmedContent)
         }
 
+        answerOverlayInjectionMode = .standard
         configureAnswerOverlayInjectionHandler()
         let canInjectIntoFocusedInput = resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: true)
         overlayState.presentConversationAnswer(
@@ -946,6 +954,7 @@ extension AppDelegate {
             guard let self else { return }
             self.overlayWindow.onRequestInject = nil
             self.overlayState.reset()
+            self.answerOverlayInjectionMode = .standard
             self.sessionTargetApplicationPID = nil
             self.sessionTargetApplicationBundleID = nil
             self.selectedTextTranslationHadWritableFocusedInput = false
@@ -957,10 +966,105 @@ extension AppDelegate {
         guard !trimmed.isEmpty else { return }
         guard overlayState.canInjectAnswer else { return }
         VoxtLog.input("Answer overlay inject requested. chars=\(trimmed.count), canInject=\(overlayState.canInjectAnswer)")
-        typeText(trimmed) { [weak self] didInject in
-            guard let self, didInject else { return }
-            self.dismissAnswerOverlay()
+
+        if answerOverlayInjectionMode == .selectedTextTranslation {
+            injectSelectedTextTranslationAnswerOverlayContent(trimmed)
+            return
         }
+
+        injectStandardAnswerOverlayContent(trimmed)
+    }
+
+    private func injectStandardAnswerOverlayContent(_ text: String) {
+        VoxtLog.input("Answer overlay inject will hide overlay before paste. chars=\(text.count)")
+        overlayWindow.onRequestInject = nil
+        overlayWindow.hide(animated: false) { [weak self] in
+            guard let self else { return }
+            self.overlayState.canInjectAnswer = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+                guard let self else { return }
+                self.typeText(text, restoreSessionTarget: true) { [weak self] didInject in
+                    guard let self else { return }
+                    VoxtLog.input("Answer overlay inject completed. didInject=\(didInject)")
+                    if didInject {
+                        self.overlayState.reset()
+                        self.answerOverlayInjectionMode = .standard
+                        self.sessionTargetApplicationPID = nil
+                        self.sessionTargetApplicationBundleID = nil
+                        self.selectedTextTranslationHadWritableFocusedInput = false
+                    } else {
+                        self.configureAnswerOverlayInjectionHandler()
+                        self.overlayState.canInjectAnswer = true
+                        self.overlayWindow.show(state: self.overlayState, position: self.overlayPosition)
+                    }
+                }
+            }
+        }
+    }
+
+    private func injectSelectedTextTranslationAnswerOverlayContent(_ text: String) {
+        VoxtLog.input("Selected text translation overlay inject will hide overlay before paste. chars=\(text.count)")
+        overlayWindow.onRequestInject = nil
+        overlayWindow.hide(animated: false) { [weak self] in
+            guard let self else { return }
+            self.overlayState.canInjectAnswer = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+                guard let self else { return }
+                let activationRestored = self.activateSelectedTextTranslationInjectionTargetIfNeeded()
+                VoxtLog.input(
+                    "Selected text translation overlay inject target prepared. activationRestored=\(activationRestored)"
+                )
+                self.typeText(text, restoreSessionTarget: false) { [weak self] didInject in
+                    guard let self else { return }
+                    VoxtLog.input("Selected text translation overlay inject completed. didInject=\(didInject)")
+                    if didInject {
+                        self.overlayState.reset()
+                        self.answerOverlayInjectionMode = .standard
+                        self.sessionTargetApplicationPID = nil
+                        self.sessionTargetApplicationBundleID = nil
+                        self.selectedTextTranslationHadWritableFocusedInput = false
+                    } else {
+                        self.configureAnswerOverlayInjectionHandler()
+                        self.overlayState.canInjectAnswer = true
+                        self.overlayWindow.show(state: self.overlayState, position: self.overlayPosition)
+                    }
+                }
+            }
+        }
+    }
+
+    @discardableResult
+    private func activateSelectedTextTranslationInjectionTargetIfNeeded() -> Bool {
+        let ownBundleID = Bundle.main.bundleIdentifier
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        let frontmostBundleID = frontmostApplication?.bundleIdentifier
+        if frontmostBundleID != ownBundleID,
+           frontmostBundleID == sessionTargetApplicationBundleID {
+            return false
+        }
+
+        if let targetPID = sessionTargetApplicationPID,
+           let targetApplication = NSRunningApplication(processIdentifier: targetPID),
+           !targetApplication.isTerminated {
+            VoxtLog.input(
+                "Selected text translation overlay restoring target app before paste. bundleID=\(targetApplication.bundleIdentifier ?? "unknown"), pid=\(targetPID)"
+            )
+            return targetApplication.activate(options: [])
+        }
+
+        if let targetBundleID = sessionTargetApplicationBundleID,
+           let targetApplication = NSRunningApplication.runningApplications(withBundleIdentifier: targetBundleID)
+            .first(where: { !$0.isTerminated }) {
+            VoxtLog.input(
+                "Selected text translation overlay restoring target app by bundle ID before paste. bundleID=\(targetBundleID), pid=\(targetApplication.processIdentifier)"
+            )
+            return targetApplication.activate(options: [])
+        }
+
+        VoxtLog.input(
+            "Selected text translation overlay target restore skipped. frontmostBundleID=\(frontmostBundleID ?? "nil"), targetBundleID=\(sessionTargetApplicationBundleID ?? "nil"), targetPID=\(sessionTargetApplicationPID.map(String.init) ?? "nil")"
+        )
+        return false
     }
 
     func showCurrentTranscriptionDetailWindow() {

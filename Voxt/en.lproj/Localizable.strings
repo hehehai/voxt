@@ -1835,11 +1835,14 @@
 "VAD Mode" = "VAD Mode";
 "Energy" = "Energy";
 "Silero" = "Silero";
+"OmniVAD" = "OmniVAD";
 "Let Voxt choose the local VAD path for the current workflow." = "Let Voxt choose the local VAD path for the current workflow.";
 "Use fast local level detection with no extra model." = "Use fast local level detection with no extra model.";
 "Use the current local MLX Silero VAD model." = "Use the current local MLX Silero VAD model.";
 "Use the local Silero VAD model for ASR gating." = "Use the local Silero VAD model for ASR gating.";
 "Use the local Silero VAD model for stronger speech detection." = "Use the local Silero VAD model for stronger speech detection.";
+"Use OmniVAD-Kit streaming VAD for local ASR gating." = "Use OmniVAD-Kit streaming VAD for local ASR gating.";
+"Use the local OmniVAD-Kit streaming VAD model." = "Use the local OmniVAD-Kit streaming VAD model.";
 "Disable local VAD gating." = "Disable local VAD gating.";
 "Use the provider's realtime server VAD when the selected ASR supports it." = "Use the provider's realtime server VAD when the selected ASR supports it.";
 "Download %@" = "Download %@";

@@ -18,6 +18,7 @@
 		C1D2E3F4A5060708090A0B01 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B02 /* MLXLMCommon */; };
 		C1D2E3F4A5060708090A0B04 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B05 /* MLXVLM */; };
 		C1D2E3F4A5060708090A0B06 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = C1D2E3F4A5060708090A0B07 /* MLXLLM */; };
+		D5A1B2C52F81000100ABCDEF /* libomnivad.dylib in Embed OmniVAD Runtime */ = {isa = PBXBuildFile; fileRef = D5A1B2C42F81000100ABCDEF /* libomnivad.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		E2A1C3B4D5F60718293A4B6C /* PermissionFlow in Frameworks */ = {isa = PBXBuildFile; productRef = E2A1C3B4D5F60718293A4B6D /* PermissionFlow */; };
 		E2A1C3B4D5F60718293A4B6E /* SystemSettingsKit in Frameworks */ = {isa = PBXBuildFile; productRef = E2A1C3B4D5F60718293A4B6F /* SystemSettingsKit */; };
 		F1A2B3C4D5E6F708090A0B0C /* FaviconFinder in Frameworks */ = {isa = PBXBuildFile; productRef = F1A2B3C4D5E6F708090A0B0D /* FaviconFinder */; };
@@ -35,6 +36,20 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		D5A1B2C32F81000100ABCDEF /* Embed OmniVAD Runtime */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				D5A1B2C52F81000100ABCDEF /* libomnivad.dylib in Embed OmniVAD Runtime */,
+			);
+			name = "Embed OmniVAD Runtime";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		31F19CCD2F4D76D200E96913 /* Voxt Dev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Voxt Dev.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A1A2B3C4D5E6F708090A0B0A /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -46,6 +61,7 @@
 		7C0D0E0F1011121314151617 /* SherpaOnnx.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SherpaOnnx.local.xcconfig.example; sourceTree = "<group>"; };
 		AAC0F001AAC0F001AAC0F001 /* Signing.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.shared.xcconfig; sourceTree = "<group>"; };
 		AAC0F002AAC0F002AAC0F002 /* Signing.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.local.xcconfig.example; sourceTree = "<group>"; };
+		D5A1B2C42F81000100ABCDEF /* libomnivad.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = Voxt/Frameworks/libomnivad.dylib; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -64,6 +80,7 @@
 				Core/Security/README.md,
 				Core/Transcription/README.md,
 				Core/Utilities/README.md,
+				Frameworks/libomnivad.dylib,
 				Hotkey/README.md,
 				Meeting/Capture/README.md,
 				Meeting/Processing/README.md,
@@ -207,6 +224,7 @@
 			children = (
 				3C1A2B3C4D5E6F708090A0B0A /* AppIntents.framework */,
 				3A1A2B3C4D5E6F708090A0B0A /* XCTest.framework */,
+				D5A1B2C42F81000100ABCDEF /* libomnivad.dylib */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -231,6 +249,7 @@
 				31F19CC92F4D76D200E96913 /* Sources */,
 				31F19CCA2F4D76D200E96913 /* Frameworks */,
 				7C0D0E0F1011121314151618 /* Copy Sherpa ONNX Runtime */,
+				D5A1B2C32F81000100ABCDEF /* Embed OmniVAD Runtime */,
 				31F19CCB2F4D76D200E96913 /* Resources */,
 			);
 			buildRules = (

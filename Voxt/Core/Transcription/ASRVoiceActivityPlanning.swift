@@ -6,6 +6,7 @@ import Foundation
 enum LocalVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case automatic
     case silero
+    case omni
     case energy
     case off
 
@@ -17,6 +18,8 @@ enum LocalVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendab
             return AppLocalization.localizedString("Automatic")
         case .silero:
             return AppLocalization.localizedString("Silero")
+        case .omni:
+            return AppLocalization.localizedString("OmniVAD")
         case .energy:
             return AppLocalization.localizedString("Energy")
         case .off:
@@ -30,6 +33,8 @@ enum LocalVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendab
             return AppLocalization.localizedString("Let Voxt choose the local VAD path for the current workflow.")
         case .silero:
             return AppLocalization.localizedString("Use the local Silero VAD model for ASR gating.")
+        case .omni:
+            return AppLocalization.localizedString("Use OmniVAD-Kit streaming VAD for local ASR gating.")
         case .energy:
             return AppLocalization.localizedString("Use fast local level detection with no extra model.")
         case .off:
@@ -45,6 +50,8 @@ enum LocalVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendab
             return .automatic
         case "silero", "mlxSilero":
             return .silero
+        case "omni", "omnivad", "omniVAD":
+            return .omni
         case "energy":
             return .energy
         case "off", "disabled":
@@ -68,6 +75,7 @@ enum ASRVoiceActivityBackendKind: String, CaseIterable, Identifiable, Codable, H
     case off
     case energy
     case mlxSilero
+    case omniStream
 
     var id: String { rawValue }
 
@@ -79,6 +87,8 @@ enum ASRVoiceActivityBackendKind: String, CaseIterable, Identifiable, Codable, H
             return AppLocalization.localizedString("Energy")
         case .mlxSilero:
             return AppLocalization.localizedString("Silero")
+        case .omniStream:
+            return AppLocalization.localizedString("OmniVAD")
         }
     }
 
@@ -90,6 +100,8 @@ enum ASRVoiceActivityBackendKind: String, CaseIterable, Identifiable, Codable, H
             return AppLocalization.localizedString("Use fast local level detection with no extra model.")
         case .mlxSilero:
             return AppLocalization.localizedString("Use the current local MLX Silero VAD model.")
+        case .omniStream:
+            return AppLocalization.localizedString("Use the local OmniVAD-Kit streaming VAD model.")
         }
     }
 
@@ -103,6 +115,8 @@ enum ASRVoiceActivityBackendKind: String, CaseIterable, Identifiable, Codable, H
             return .energy
         case "silero", "mlxSilero":
             return .mlxSilero
+        case "omni", "omnivad", "omniVAD", "omniStream":
+            return .omniStream
         default:
             return defaultMeetingBackend
         }
@@ -205,6 +219,8 @@ nonisolated enum ASRVoiceActivityRuntimePolicy {
         switch mode {
         case .automatic, .silero:
             return .mlxSilero
+        case .omni:
+            return .omniStream
         case .energy:
             return .energy
         case .off:
