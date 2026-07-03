@@ -4,6 +4,8 @@
 
 当前分支不接入 `speech-swift` 依赖，也不把 `SpeechVAD` / `VoicePipeline` 作为运行时代码路径。`speech-swift` 仅作为链路设计参考：统一 VAD 决策层、按业务场景选择策略、让 ASR 只消费稳定的音频段或 gate 结果。
 
+OmniVAD-Kit 的接入规划见 [OmniVAD-Kit 接入规划](./OmniVADIntegrationPlan.zh-CN.md)。OmniVAD 应作为新的本地 VAD 后端接入现有 VAD 设置和策略层，而不是在业务代码里新增旁路兜底方案。
+
 App 当前使用的本地 VAD 运行路径是：
 
 - `Automatic`：由 Voxt 按业务场景选择本地 VAD 策略，当前优先使用本地 MLX Silero。

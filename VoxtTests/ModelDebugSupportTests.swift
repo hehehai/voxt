@@ -57,6 +57,24 @@ final class ModelDebugSupportTests: XCTestCase {
         }
     }
 
+    func testVADSnapshotShowsOmniBackend() throws {
+        try withEphemeralDefaults { defaults in
+            LocalVADMode.save(.omni, defaults: defaults)
+
+            let snapshot = ModelDebugCatalog.vadSnapshot(
+                defaults: defaults,
+                transcriptionEngine: .mlxAudio,
+                providerUsesServerVAD: false
+            )
+
+            XCTAssertEqual(snapshot.mode, .omni)
+            XCTAssertEqual(snapshot.backend, .omniStream)
+            XCTAssertEqual(snapshot.backendRawValue, ASRVoiceActivityBackendKind.omniStream.rawValue)
+            XCTAssertEqual(snapshot.frameBackend, .omniStream)
+            XCTAssertEqual(snapshot.localGatePolicy, .enabled)
+        }
+    }
+
     func testVADSnapshotDisablesLocalGateForRemoteASR() throws {
         try withEphemeralDefaults { defaults in
             LocalVADMode.save(.silero, defaults: defaults)

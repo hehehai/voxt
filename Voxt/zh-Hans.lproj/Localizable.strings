@@ -1835,11 +1835,14 @@
 "VAD Mode" = "VAD 模式";
 "Energy" = "能量检测";
 "Silero" = "Silero";
+"OmniVAD" = "OmniVAD";
 "Let Voxt choose the local VAD path for the current workflow." = "让 Voxt 按当前工作流选择本地 VAD 链路。";
 "Use fast local level detection with no extra model." = "使用快速本地音量能量检测，不需要额外模型。";
 "Use the current local MLX Silero VAD model." = "使用当前本地 MLX Silero VAD 模型。";
 "Use the local Silero VAD model for ASR gating." = "使用本地 Silero VAD 模型优化 ASR gate。";
 "Use the local Silero VAD model for stronger speech detection." = "使用本地 Silero VAD 模型，提升语音检测稳定性。";
+"Use OmniVAD-Kit streaming VAD for local ASR gating." = "使用 OmniVAD-Kit 流式 VAD 优化本地 ASR gate。";
+"Use the local OmniVAD-Kit streaming VAD model." = "使用本地 OmniVAD-Kit 流式 VAD 模型。";
 "Disable local VAD gating." = "关闭本地 VAD gate。";
 "Use the provider's realtime server VAD when the selected ASR supports it." = "当前 ASR 支持时，使用服务商的实时服务端 VAD。";
 "Download %@" = "下载 %@";

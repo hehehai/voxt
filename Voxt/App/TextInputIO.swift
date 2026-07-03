@@ -933,7 +933,11 @@ extension AppDelegate {
         return false
     }
 
-    func typeText(_ text: String, completion: ((Bool) -> Void)? = nil) {
+    func typeText(
+        _ text: String,
+        restoreSessionTarget: Bool = true,
+        completion: ((Bool) -> Void)? = nil
+    ) {
         guard !text.isEmpty else {
             completion?(false)
             return
@@ -953,10 +957,10 @@ extension AppDelegate {
             return
         }
 
-        let activationRestored = restoreSessionTargetApplicationIfNeeded()
+        let activationRestored = restoreSessionTarget ? restoreSessionTargetApplicationIfNeeded() : false
         let activationDelay: TimeInterval = activationRestored ? 0.04 : 0
         VoxtLog.input(
-            "Text injection prepared. characters=\(text.count), activationRestored=\(activationRestored), activationDelayMs=\(Int(activationDelay * 1000))"
+            "Text injection prepared. characters=\(text.count), activationRestored=\(activationRestored), restoreSessionTarget=\(restoreSessionTarget), activationDelayMs=\(Int(activationDelay * 1000))"
         )
         DispatchQueue.main.asyncAfter(deadline: .now() + activationDelay) { [weak self] in
             guard let self else {

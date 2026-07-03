@@ -25,6 +25,9 @@ final class ASRVoiceActivityPlanningTests: XCTestCase {
         XCTAssertEqual(LocalVADMode.resolved(rawValue: "auto"), .automatic)
         XCTAssertEqual(LocalVADMode.resolved(rawValue: "silero"), .silero)
         XCTAssertEqual(LocalVADMode.resolved(rawValue: "mlxSilero"), .silero)
+        XCTAssertEqual(LocalVADMode.resolved(rawValue: "omni"), .omni)
+        XCTAssertEqual(LocalVADMode.resolved(rawValue: "omnivad"), .omni)
+        XCTAssertEqual(LocalVADMode.resolved(rawValue: "omniVAD"), .omni)
         XCTAssertEqual(LocalVADMode.resolved(rawValue: "energy"), .energy)
         XCTAssertEqual(LocalVADMode.resolved(rawValue: "off"), .off)
         XCTAssertEqual(LocalVADMode.resolved(rawValue: "unknown"), .automatic)
@@ -65,6 +68,9 @@ final class ASRVoiceActivityPlanningTests: XCTestCase {
         XCTAssertEqual(ASRVoiceActivityBackendKind.resolved(rawValue: "off"), .off)
         XCTAssertEqual(ASRVoiceActivityBackendKind.resolved(rawValue: "energy"), .energy)
         XCTAssertEqual(ASRVoiceActivityBackendKind.resolved(rawValue: "mlxSilero"), .mlxSilero)
+        XCTAssertEqual(ASRVoiceActivityBackendKind.resolved(rawValue: "omni"), .omniStream)
+        XCTAssertEqual(ASRVoiceActivityBackendKind.resolved(rawValue: "omnivad"), .omniStream)
+        XCTAssertEqual(ASRVoiceActivityBackendKind.resolved(rawValue: "omniStream"), .omniStream)
         XCTAssertEqual(ASRVoiceActivityBackendKind.resolved(rawValue: "unknown"), .mlxSilero)
     }
 
@@ -76,6 +82,10 @@ final class ASRVoiceActivityPlanningTests: XCTestCase {
         XCTAssertEqual(
             ASRVoiceActivityRuntimePolicy.effectiveBackend(mode: .silero, useCase: .translation),
             .mlxSilero
+        )
+        XCTAssertEqual(
+            ASRVoiceActivityRuntimePolicy.effectiveBackend(mode: .omni, useCase: .transcription),
+            .omniStream
         )
         XCTAssertEqual(
             ASRVoiceActivityRuntimePolicy.effectiveBackend(mode: .energy, useCase: .rewrite),

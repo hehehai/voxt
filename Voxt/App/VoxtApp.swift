@@ -209,6 +209,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var recordingVoiceActivitySegmenter: ASRVoiceActivitySegmenter?
     var recordingVoiceActivityMode: LocalVADMode?
     var recordingVoiceActivityUseCase: ASRVoiceActivityUseCase?
+    var recordingVoiceActivityDebugStats = RecordingVoiceActivityDebugStats()
     var voiceEndCommandState = VoiceEndCommandState()
     let silenceAudioLevelThreshold: Float = 0.06
     let sessionFinishDelay: TimeInterval = 1.2
@@ -222,6 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionLLMExecutionTimings: [SessionLLMExecutionTiming] = []
     var sessionOutputMode: SessionOutputMode = .transcription
     var isSelectedTextTranslationFlow = false
+    var answerOverlayInjectionMode: AnswerOverlayInjectionMode = .standard
     var didCommitSessionOutput = false
     var activeRecordingSessionID = UUID()
     var activeLLMRequestID = UUID()
