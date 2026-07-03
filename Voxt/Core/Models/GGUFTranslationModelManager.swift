@@ -627,6 +627,7 @@ actor GGUFTranslationRuntime {
         defer { llama_sampler_free(sampler) }
 
         var generated = ""
+        var outputAccumulator = GGUFUTF8OutputAccumulator()
         var tokenPosition = Int32(promptTokens.count)
         let eosToken = llama_vocab_eos(vocab)
         let eotToken = llama_vocab_eot(vocab)
@@ -656,9 +657,10 @@ actor GGUFTranslationRuntime {
                 firstTokenLatencyMs = millisecondsSince(startedAt)
             }
 
-            let piece = tokenPiece(for: nextToken, vocab: vocab)
-            if !piece.isEmpty {
-                generated += piece
+            let pieceBytes = tokenPieceBytes(for: nextToken, vocab: vocab)
+            if !pieceBytes.isEmpty,
+               let decoded = outputAccumulator.append(pieceBytes) {
+                generated = decoded
                 onPartialText?(generated)
             }
 
@@ -680,6 +682,19 @@ actor GGUFTranslationRuntime {
                     userInfo: [NSLocalizedDescriptionKey: "Token generation failed."]
                 )
             }
+        }
+
+        let finalizedOutput = outputAccumulator.finalizedText()
+        if generated != finalizedOutput {
+            generated = finalizedOutput
+            if !generated.isEmpty {
+                onPartialText?(generated)
+            }
+        }
+        if outputAccumulator.finalizedWithReplacementCharacters {
+            VoxtLog.llm(
+                "GGUF runtime output contained invalid UTF-8 bytes after token accumulation. model=\(modelURL.lastPathComponent), outputTokens=\(generatedTokenCount)"
+            )
         }
 
         let totalElapsedMs = millisecondsSince(startedAt)
@@ -840,7 +855,7 @@ actor GGUFTranslationRuntime {
         return sampler
     }
 
-    private func tokenPiece(for token: llama_token, vocab: OpaquePointer?) -> String {
+    private func tokenPieceBytes(for token: llama_token, vocab: OpaquePointer?) -> [UInt8] {
         var buffer = [CChar](repeating: 0, count: 64)
         while true {
             let length = llama_token_to_piece(
@@ -852,15 +867,37 @@ actor GGUFTranslationRuntime {
                 false
             )
 
-            guard length > 0 else { return "" }
+            guard length != 0 else { return [] }
 
-            if length < Int32(buffer.count) {
+            if length > 0, length <= Int32(buffer.count) {
                 let bytes = buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }
-                return String(decoding: bytes, as: UTF8.self)
+                return bytes
             }
 
-            let nextCapacity = max(buffer.count * 2, Int(length) + 1)
+            let requiredLength = Int(abs(length))
+            let nextCapacity = max(buffer.count * 2, requiredLength + 1)
             buffer = [CChar](repeating: 0, count: nextCapacity)
         }
+    }
+}
+
+nonisolated struct GGUFUTF8OutputAccumulator {
+    private var bytes: [UInt8] = []
+    private(set) var finalizedWithReplacementCharacters = false
+
+    mutating func append(_ newBytes: [UInt8]) -> String? {
+        guard !newBytes.isEmpty else {
+            return String(data: Data(bytes), encoding: .utf8)
+        }
+        bytes.append(contentsOf: newBytes)
+        return String(data: Data(bytes), encoding: .utf8)
+    }
+
+    mutating func finalizedText() -> String {
+        if let decoded = String(data: Data(bytes), encoding: .utf8) {
+            return decoded
+        }
+        finalizedWithReplacementCharacters = true
+        return String(decoding: bytes, as: UTF8.self)
     }
 }

@@ -172,6 +172,12 @@ extension AppDelegate {
             )
         )
         cacheLatestInjectableOutputText(context.outputText)
+        logUnicodeReplacementCharactersIfNeeded(
+            stage: "commit",
+            inputText: text,
+            outputText: context.outputText,
+            outputMode: sessionOutputMode
+        )
 
         VoxtLog.input(
             "Commit transcription prepared payload. inputChars=\(text.count), outputChars=\(context.outputText.count), hasRewritePayload=\(context.rewriteAnswerPayload != nil), dictionaryMatches=\(context.dictionaryMatches.count), dictionaryCorrections=\(context.dictionaryCorrectedTerms.count)"
@@ -235,6 +241,12 @@ extension AppDelegate {
             llmDurationSeconds: llmDurationSeconds
         )
         cacheLatestInjectableOutputText(context.outputText)
+        logUnicodeReplacementCharactersIfNeeded(
+            stage: "finalizePreviouslyDelivered",
+            inputText: text,
+            outputText: context.outputText,
+            outputMode: sessionOutputMode
+        )
         finalizeCommittedOutputPostDeliveryAsync(
             deliveredContext: context,
             outputMode: sessionOutputMode,
@@ -284,6 +296,30 @@ extension AppDelegate {
             "Preview output injected. chars=\(context.outputText.count), sessionID=\(sessionID.uuidString)"
         )
         return context.outputText
+    }
+
+    private func logUnicodeReplacementCharactersIfNeeded(
+        stage: String,
+        inputText: String,
+        outputText: String,
+        outputMode: SessionOutputMode
+    ) {
+        let marker = Character("\u{FFFD}")
+        let inputCount = inputText.reduce(into: 0) { count, character in
+            if character == marker { count += 1 }
+        }
+        let outputCount = outputText.reduce(into: 0) { count, character in
+            if character == marker { count += 1 }
+        }
+        guard inputCount > 0 || outputCount > 0 else { return }
+
+        VoxtLog.llm(
+            """
+            Unicode replacement characters detected before delivery. stage=\(stage), outputMode=\(RecordingSessionSupport.outputLabel(for: outputMode)), inputReplacementChars=\(inputCount), outputReplacementChars=\(outputCount), inputChars=\(inputText.count), outputChars=\(outputText.count)
+            [output]
+            \(VoxtLog.llmPreview(outputText))
+            """
+        )
     }
 
     func performPendingOutputReplacementIfPossible(
