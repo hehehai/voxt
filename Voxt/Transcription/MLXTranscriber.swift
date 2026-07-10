@@ -334,6 +334,11 @@ enum MLXTranscriptionPlanning {
         return ranges
     }
 
+    nonisolated static func nativeLiveLanguage(from hint: String?) -> String? {
+        let normalized = hint?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return normalized.isEmpty ? nil : normalized
+    }
+
     nonisolated static func finalizationSamples(
         fullSamples: [Float],
         voiceActivityFilteredSamples: [Float],
@@ -2054,19 +2059,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func resolvedNativeQwenLiveLanguage() -> String {
-        let hintPayload = resolvedHintPayload()
-        if let language = hintPayload.language?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !language.isEmpty {
-            return language
-        }
-
-        let selectedCodes = UserMainLanguageOption.storedSelection(
-            from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
-        )
-        let mainLanguage = ASRHintResolver.selectedLanguageOptions(selectedCodes).first
-            ?? UserMainLanguageOption.fallbackOption()
-        return mainLanguage.promptName
+    private func resolvedNativeQwenLiveLanguage() -> String? {
+        MLXTranscriptionPlanning.nativeLiveLanguage(from: resolvedHintPayload().language)
     }
 
     private func resolvedNativeNemotronLiveLanguage() -> String {
@@ -2161,6 +2155,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 latestNativeLivePreviewText = normalized
                 publishPartial(normalized)
             }
+        case .failed(let failure):
+            pendingRuntimeFailureMessage = failure.localizedDescription
+            VoxtLog.asrError(
+                "MLX native streaming session failed. repo=\(modelManager.currentModelRepo), error=\(failure.localizedDescription)"
+            )
+            releaseNativeLiveSession(cancelSession: false)
         case .confirmed, .provisional, .stats:
             break
         }
@@ -2686,7 +2686,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         try Task.checkCancellation()
         let audioArray = MLXArray(audioSamples)
         var streamedText = ""
-        var finalText: String?
+        var finalOutput: STTOutput?
 
         let stream: AsyncThrowingStream<STTGeneration, Error>
         let generationParameters = inferenceConfiguration.generationParameters
@@ -2731,27 +2731,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 structuredSegments: []
             )
         } else if let mossModel = model as? MossTranscribeDiarizeModel {
-            let output = mossModel.generate(
+            stream = mossModel.generateStream(
                 audio: audioArray,
-                maxTokens: generationParameters.maxTokens,
-                temperature: generationParameters.temperature,
-                chunkDuration: generationParameters.chunkDuration,
-                minChunkDuration: generationParameters.minChunkDuration,
-                repetitionPenalty: generationParameters.repetitionPenalty,
-                repetitionContextSize: generationParameters.repetitionContextSize,
+                generationParameters: generationParameters,
                 prompt: inferenceConfiguration.mossPrompt
-            )
-            return MLXDetachedInferenceResult(
-                rawText: MossASRTranscriptRendering.renderedText(
-                    output.text,
-                    outputMode: inferenceConfiguration.mossOutputMode
-                ),
-                senseVoiceMetadata: nil,
-                structuredSegments: mossStructuredSegments(from: output.segments)
             )
         } else if let cohereModel = model as? CohereTranscribeModel,
                   let longFormVADModel {
-            let output = cohereModel.generate(
+            let output = try cohereModel.generateWithVAD(
                 audio: audioArray,
                 generationParameters: generationParameters,
                 vad: (
@@ -2768,7 +2755,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             return MLXDetachedInferenceResult(rawText: output.text, senseVoiceMetadata: nil, structuredSegments: [])
         } else if let voxtralModel = model as? VoxtralRealtimeModel,
                   let longFormVADModel {
-            let output = voxtralModel.generate(
+            let output = try voxtralModel.generateWithVAD(
                 audio: audioArray,
                 generationParameters: generationParameters,
                 vad: (
@@ -2796,12 +2783,24 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             case .info:
                 break
             case .result(let output):
-                finalText = output.text
+                finalOutput = output
             }
         }
 
+        if model is MossTranscribeDiarizeModel {
+            let rawText = finalOutput?.text ?? streamedText
+            return MLXDetachedInferenceResult(
+                rawText: MossASRTranscriptRendering.renderedText(
+                    rawText,
+                    outputMode: inferenceConfiguration.mossOutputMode
+                ),
+                senseVoiceMetadata: nil,
+                structuredSegments: mossStructuredSegments(from: finalOutput?.segments)
+            )
+        }
+
         return MLXDetachedInferenceResult(
-            rawText: finalText ?? streamedText,
+            rawText: finalOutput?.text ?? streamedText,
             senseVoiceMetadata: nil,
             structuredSegments: []
         )
@@ -2863,7 +2862,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             minSilenceMs: vadMinSilenceDurationMs,
             speechPadMs: vadSpeechPadMs,
             mergeGapS: 1.0,
-            maxChunkS: Float(chunkMaximumDurationSeconds)
+            maxChunkS: Float(chunkMaximumDurationSeconds),
+            noSpeechPolicy: .returnEmpty
         )
     }
 
@@ -3008,27 +3008,24 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         guard let vad else {
             throw MLXStructuredTranscriptionError.senseVoiceLongFormVADUnavailable("VAD model is not loaded.")
         }
-        let probabilities = try vad.predictProba(
+        let timestamps = try vad.getSpeechTimestamps(
             MLXArray(audioSamples),
-            sampleRate: targetSampleRate
+            sampleRate: targetSampleRate,
+            threshold: vadThreshold,
+            minSpeechDurationMs: vadMinSpeechDurationMs,
+            minSilenceDurationMs: vadMinSilenceDurationMs,
+            speechPadMs: vadSpeechPadMs
         )
-        eval(probabilities)
-        let probabilityValues = probabilities.asArray(Float.self)
         let maxChunkSamples = Int(chunkMaximumDurationSeconds * Double(targetSampleRate))
         let overlapSamples = Int(chunkOverlapSeconds * Double(targetSampleRate))
-        let probabilityFrameSampleCount = targetSampleRate == 8_000 ? 256 : 512
-        return MLXTranscriptionPlanning.senseVoiceSegmentRanges(
-            probabilities: probabilityValues,
-            sampleCount: audioSamples.count,
-            sampleRate: targetSampleRate,
-            probabilityFrameSampleCount: probabilityFrameSampleCount,
-            vadThreshold: vadThreshold,
-            vadMinSpeechDurationMs: vadMinSpeechDurationMs,
-            vadMinSilenceDurationMs: vadMinSilenceDurationMs,
-            vadSpeechPadMs: vadSpeechPadMs,
-            maxChunkSamples: maxChunkSamples,
-            overlapSamples: overlapSamples
-        )
+        return timestamps.flatMap { timestamp in
+            MLXTranscriptionPlanning.splitSenseVoiceRange(
+                start: max(0, min(timestamp.start, audioSamples.count)),
+                end: max(0, min(timestamp.end, audioSamples.count)),
+                maxChunkSamples: maxChunkSamples,
+                overlapSamples: overlapSamples
+            )
+        }
     }
 
     private nonisolated static func normalizedSenseVoiceLanguageHint(_ languageHint: String?) -> String {

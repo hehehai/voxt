@@ -26,12 +26,13 @@
 | 项目 | 当前值 |
 |---|---|
 | Voxt package URL | `https://github.com/hehehai/mlx-audio-swift.git` |
-| Voxt pin | `3639c34cd94f374539a42c816258e460250362ca` |
+| Voxt pin | exact `0.1.3-voxt.1` (`4ad7bc3ee7f6f40923e3f1f09557d5146e4344cc`) |
 | Voxt `mlx-swift-lm` pin | `124880582175726b709015a632c5ba9f3069a319` |
 | fork 分支 | `codex/moss-asr-configuration` |
+| fork 发布标签 | `v0.1.3-voxt.1` |
 | upstream 最新 release/main | `v0.1.3`, `d302a5c6080d2bb97bae38c7418f82abb76013b6` |
-| fork 额外提交 | MOSS streaming prompt、Canary/Cohere task controls、MMS adapter 切换与脚本语言解析 |
-| 审查区间 | `v0.1.2..3639c34` |
+| fork 额外提交 | MOSS streaming prompt/失败传播、严格 VAD 策略、Canary/Cohere task controls、MMS adapter 切换与脚本语言解析 |
+| 审查区间 | `v0.1.2..4ad7bc3` |
 
 截至本文日期，Voxt 已经锁定当前可用的最新 fork revision，不存在新的 revision 需要继续更新。本轮工作的重点是消费已经存在但尚未完整接入的能力，以及修复包接口与产品语义之间的差距。
 
@@ -821,6 +822,19 @@ Voxt 当前可利用 Qwen、Whisper、Nemotron等模型自己的 auto language�
 - Parakeet batch backlog。
 
 影响：全部先隐藏或 feature flag，不进入默认稳定路径。
+
+### 当前实施状态
+
+截至 2026-07-10，推荐的首批实施范围已经完成：
+
+- MOSS 最终推理改为 prompt-aware throwing stream，并保留最终结构化 segments。
+- streaming failure 通过事件传播，App 会记录失败并释放 live session。
+- Cohere/Voxtral 使用严格 VAD 路径；无语音返回空结果，不再回退整段识别。
+- Qwen live Automatic 保持自动语言检测，不再强制映射为用户主语言。
+- SenseVoice 长音频检测复用 `SileroVAD.getSpeechTimestamps`，保留 Voxt overlap 分段。
+- fork 已发布 `v0.1.3-voxt.1`，Voxt 使用 exact version 固定。
+
+验证结果：fork 7 项定向测试、Voxt 77 项 ASR/VAD 定向测试和 Voxt 完整构建均通过。真实模型取消、静音语料及 30 分钟 session 仍需按上线门禁进行人工回归和性能采样。
 
 ## 15. 影响和复杂度矩阵
 

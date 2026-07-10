@@ -271,6 +271,12 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         XCTAssertEqual(ranges[0].upperBound - ranges[1].lowerBound, Int(0.35 * 16000))
     }
 
+    func testNativeLiveLanguagePreservesAutomaticSelection() {
+        XCTAssertNil(MLXTranscriptionPlanning.nativeLiveLanguage(from: nil))
+        XCTAssertNil(MLXTranscriptionPlanning.nativeLiveLanguage(from: "  "))
+        XCTAssertEqual(MLXTranscriptionPlanning.nativeLiveLanguage(from: " Chinese "), "Chinese")
+    }
+
     func testSenseVoiceSegmentRangesUseSharedVADPolicy() {
         let probabilities: [Float] = [
             0.01,
