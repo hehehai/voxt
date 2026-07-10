@@ -475,7 +475,7 @@ enum ASRHintResolver {
 
     private static func mlxRequiresExplicitPrimaryLanguage(modelRepo: String) -> Bool {
         let lower = modelRepo.lowercased()
-        return lower.contains("cohere-transcribe") || lower.contains("cohere")
+        return lower.contains("cohere-transcribe") || lower.contains("cohere") || lower.contains("canary")
     }
 
     private static func resolvedDictationLocaleIdentifier(_ mainLanguage: UserMainLanguageOption) -> String {

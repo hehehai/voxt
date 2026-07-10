@@ -26,8 +26,29 @@ enum MLXConfigurationSummarySupport {
             return AppLocalization.format("%@ · %@", tuning.preset.title, hasPrompt)
         case .senseVoice:
             return AppLocalization.localizedString(tuning.senseVoiceUseITN ? "ITN On" : "ITN Off")
+        case .mossTranscribeDiarize:
+            let hotwords = tuning.mossHotwords.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? AppLocalization.localizedString("Hotwords Off")
+                : AppLocalization.localizedString("Hotwords On")
+            return AppLocalization.format("%@ · %@", tuning.mossOutputMode.title, hotwords)
         case .cohereTranscribe:
-            return tuning.preset.title
+            return AppLocalization.format(
+                "%@ · Temp %.2f",
+                tuning.cohereLongFormStrategy.title,
+                tuning.cohereTemperature
+            )
+        case .canary:
+            return AppLocalization.format(
+                "%@ · Temp %.2f",
+                tuning.canaryTaskMode.title,
+                tuning.canaryTemperature
+            )
+        case .moonshine:
+            return AppLocalization.format("Max Output: %@ · Temp %.2f", String(tuning.moonshineMaxTokens), tuning.moonshineTemperature)
+        case .mmsCTC:
+            return AppLocalization.format("Adapter: %@", tuning.mmsLanguageCode)
+        case .wav2vec2CTC, .lasrCTC:
+            return AppLocalization.localizedString("Checkpoint Defaults")
         case .generic:
             return tuning.preset.title
         }

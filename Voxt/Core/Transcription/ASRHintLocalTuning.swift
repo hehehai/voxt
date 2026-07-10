@@ -28,12 +28,203 @@ enum LocalASRRecognitionPreset: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum MossASROutputMode: String, CaseIterable, Codable, Identifiable, Sendable {
+    case timestampedDiarization
+    case speakerOnly
+    case plainText
+    case customPrompt
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .timestampedDiarization:
+            return AppLocalization.localizedString("Timestamped Diarization")
+        case .speakerOnly:
+            return AppLocalization.localizedString("Speaker Labels Only")
+        case .plainText:
+            return AppLocalization.localizedString("Plain Text")
+        case .customPrompt:
+            return AppLocalization.localizedString("Custom Prompt")
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .timestampedDiarization:
+            return AppLocalization.localizedString("Include start and end timestamps with anonymous speaker labels.")
+        case .speakerOnly:
+            return AppLocalization.localizedString("Include anonymous speaker labels without timestamps.")
+        case .plainText:
+            return AppLocalization.localizedString("Return transcription text without timestamps or speaker labels.")
+        case .customPrompt:
+            return AppLocalization.localizedString("Use a custom MOSS transcription instruction.")
+        }
+    }
+}
+
+enum CohereLongFormStrategy: String, CaseIterable, Codable, Identifiable, Sendable {
+    case fixedChunks
+    case voiceActivity
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fixedChunks:
+            return AppLocalization.localizedString("Fixed Chunks")
+        case .voiceActivity:
+            return AppLocalization.localizedString("Voice Activity")
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .fixedChunks:
+            return AppLocalization.localizedString("Best for clean, dense narration without long silences.")
+        case .voiceActivity:
+            return AppLocalization.localizedString("Better for meetings and podcasts with silence or non-speech sections.")
+        }
+    }
+}
+
+enum CanaryTaskMode: String, CaseIterable, Codable, Identifiable, Sendable {
+    case transcription
+    case translateToEnglish
+    case translateFromEnglish
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .transcription:
+            return AppLocalization.localizedString("Transcription")
+        case .translateToEnglish:
+            return AppLocalization.localizedString("Translate to English")
+        case .translateFromEnglish:
+            return AppLocalization.localizedString("Translate from English")
+        }
+    }
+}
+
+enum CanaryLanguageSupport {
+    static let supportedCodes = [
+        "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
+        "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
+    ]
+
+    static let translationTargetCodes = supportedCodes.filter { $0 != "en" }
+
+    static func title(for code: String) -> String {
+        UserMainLanguageOption.option(for: code)?.title()
+            ?? AppLocalization.locale.localizedString(forLanguageCode: code)
+            ?? code
+    }
+
+    static func sanitizedTranslationTarget(_ code: String) -> String {
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return translationTargetCodes.contains(normalized) ? normalized : "fr"
+    }
+
+    static func resolvedTaskLanguages(
+        mode: CanaryTaskMode,
+        sourceLanguage: String?,
+        translationLanguage: String
+    ) -> (source: String, target: String) {
+        let normalizedSource = sourceLanguage?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let source = supportedCodes.contains(normalizedSource) ? normalizedSource : "en"
+        switch mode {
+        case .transcription:
+            return (source, source)
+        case .translateToEnglish:
+            return (source, "en")
+        case .translateFromEnglish:
+            return ("en", sanitizedTranslationTarget(translationLanguage))
+        }
+    }
+}
+
+enum MossASRPromptSupport {
+    static func resolvedPrompt(
+        outputMode: MossASROutputMode,
+        customPrompt: String,
+        hotwords: String
+    ) -> String {
+        let basePrompt: String
+        switch outputMode {
+        case .timestampedDiarization:
+            basePrompt = "Transcribe the audio. For each segment, start with the timestamp and speaker ID ([S01], [S02], [S03], ...), then the spoken text, and end with the segment timestamp."
+        case .speakerOnly:
+            basePrompt = "Transcribe the audio as text using speaker labels such as [S01], [S02], and [S03]."
+        case .plainText:
+            basePrompt = "Transcribe the audio as plain text without timestamps or speaker labels."
+        case .customPrompt:
+            let trimmed = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            basePrompt = trimmed.isEmpty
+                ? "Transcribe the audio. For each segment, start with the timestamp and speaker ID ([S01], [S02], [S03], ...), then the spoken text, and end with the segment timestamp."
+                : trimmed
+        }
+
+        let normalizedHotwords = hotwords
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        guard !normalizedHotwords.isEmpty else { return basePrompt }
+        return "\(basePrompt) Hotwords: \(normalizedHotwords)"
+    }
+}
+
+enum MossASRTranscriptRendering {
+    nonisolated static func renderedText(_ rawText: String, outputMode: MossASROutputMode) -> String {
+        switch outputMode {
+        case .timestampedDiarization, .customPrompt:
+            return rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .speakerOnly:
+            return removingStructuredTags(from: rawText, removesSpeakerLabels: false)
+        case .plainText:
+            return removingStructuredTags(from: rawText, removesSpeakerLabels: true)
+        }
+    }
+
+    nonisolated private static func removingStructuredTags(from text: String, removesSpeakerLabels: Bool) -> String {
+        var result = replacingMatches(
+            in: text,
+            pattern: #"\[\d+(?:[\.,]\d+)?\]"#,
+            with: "\n"
+        )
+        if removesSpeakerLabels {
+            result = replacingMatches(in: result, pattern: #"\[S\d+\]\s*"#, with: "")
+        } else {
+            result = replacingMatches(in: result, pattern: #"\[(S\d+)\]\s*"#, with: "[$1] ")
+        }
+        result = replacingMatches(in: result, pattern: #"\[(?:\d|[\.,])*$"#, with: "")
+        return result
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    nonisolated private static func replacingMatches(in text: String, pattern: String, with replacement: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
+    }
+}
+
 enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
     case whisper
     case qwen3ASR
     case graniteSpeech
     case senseVoice
     case cohereTranscribe
+    case mossTranscribeDiarize
+    case canary
+    case moonshine
+    case wav2vec2CTC
+    case mmsCTC
+    case lasrCTC
     case generic
 
     var id: String { rawValue }
@@ -57,6 +248,29 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
         {
             return .cohereTranscribe
         }
+        if canonicalRepo.localizedCaseInsensitiveContains("moss-transcribe-diarize")
+            || canonicalRepo.localizedCaseInsensitiveContains("moss_transcribe_diarize")
+        {
+            return .mossTranscribeDiarize
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("canary") {
+            return .canary
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("moonshine") {
+            return .moonshine
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("/mms-")
+            || canonicalRepo.localizedCaseInsensitiveContains("mms_")
+            || canonicalRepo.localizedCaseInsensitiveContains("mms-")
+        {
+            return .mmsCTC
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("wav2vec") {
+            return .wav2vec2CTC
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("lasr") {
+            return .lasrCTC
+        }
         return .generic
     }
 
@@ -72,6 +286,18 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("SenseVoice")
         case .cohereTranscribe:
             return AppLocalization.localizedString("Cohere")
+        case .mossTranscribeDiarize:
+            return AppLocalization.localizedString("MOSS")
+        case .canary:
+            return AppLocalization.localizedString("Canary")
+        case .moonshine:
+            return AppLocalization.localizedString("Moonshine")
+        case .wav2vec2CTC:
+            return AppLocalization.localizedString("Wav2Vec2")
+        case .mmsCTC:
+            return AppLocalization.localizedString("MMS")
+        case .lasrCTC:
+            return AppLocalization.localizedString("LASR")
         case .generic:
             return AppLocalization.localizedString("General MLX ASR")
         }
@@ -81,7 +307,23 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
     var supportsPromptBias: Bool { self == .graniteSpeech }
     var supportsITN: Bool { self == .senseVoice }
     var supportsWhisperTemperature: Bool { self == .whisper }
-    var supportsRecognitionPreset: Bool { self != .senseVoice }
+    var supportsRecognitionPreset: Bool {
+        switch self {
+        case .senseVoice, .canary, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
+            return false
+        default:
+            return true
+        }
+    }
+
+    var supportsSharedLanguageRouting: Bool {
+        switch self {
+        case .graniteSpeech, .mossTranscribeDiarize, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
+            return false
+        default:
+            return true
+        }
+    }
 }
 
 struct MLXLocalTuningSettings: Codable, Equatable {
@@ -90,19 +332,64 @@ struct MLXLocalTuningSettings: Codable, Equatable {
     var qwenContextBias: String = ""
     var granitePromptBias: String = ""
     var senseVoiceUseITN: Bool = false
+    var mossOutputMode: MossASROutputMode = .timestampedDiarization
+    var mossHotwords: String = AppPreferenceKey.asrDictionaryTermsTemplateVariable
+    var mossCustomPrompt: String = ""
+    var cohereLongFormStrategy: CohereLongFormStrategy = .voiceActivity
+    var cohereUsePunctuation: Bool = true
+    var cohereMaxTokens: Int = 1024
+    var cohereTemperature: Double = 0.0
+    var canaryTaskMode: CanaryTaskMode = .transcription
+    var canaryTranslationLanguage: String = "fr"
+    var canaryUsePunctuation: Bool = true
+    var canaryMaxTokens: Int = 200
+    var canaryTemperature: Double = 0.0
+    var moonshineMaxTokens: Int = 200
+    var moonshineTemperature: Double = 0.0
+    var mmsLanguageCode: String = "eng"
 
     init(
         preset: LocalASRRecognitionPreset = .balanced,
         whisperTemperature: Double = 0.0,
         qwenContextBias: String = "",
         granitePromptBias: String = "",
-        senseVoiceUseITN: Bool = false
+        senseVoiceUseITN: Bool = false,
+        mossOutputMode: MossASROutputMode = .timestampedDiarization,
+        mossHotwords: String = AppPreferenceKey.asrDictionaryTermsTemplateVariable,
+        mossCustomPrompt: String = "",
+        cohereLongFormStrategy: CohereLongFormStrategy = .voiceActivity,
+        cohereUsePunctuation: Bool = true,
+        cohereMaxTokens: Int = 1024,
+        cohereTemperature: Double = 0.0,
+        canaryTaskMode: CanaryTaskMode = .transcription,
+        canaryTranslationLanguage: String = "fr",
+        canaryUsePunctuation: Bool = true,
+        canaryMaxTokens: Int = 200,
+        canaryTemperature: Double = 0.0,
+        moonshineMaxTokens: Int = 200,
+        moonshineTemperature: Double = 0.0,
+        mmsLanguageCode: String = "eng"
     ) {
         self.preset = preset
         self.whisperTemperature = whisperTemperature
         self.qwenContextBias = qwenContextBias
         self.granitePromptBias = granitePromptBias
         self.senseVoiceUseITN = senseVoiceUseITN
+        self.mossOutputMode = mossOutputMode
+        self.mossHotwords = mossHotwords
+        self.mossCustomPrompt = mossCustomPrompt
+        self.cohereLongFormStrategy = cohereLongFormStrategy
+        self.cohereUsePunctuation = cohereUsePunctuation
+        self.cohereMaxTokens = cohereMaxTokens
+        self.cohereTemperature = cohereTemperature
+        self.canaryTaskMode = canaryTaskMode
+        self.canaryTranslationLanguage = canaryTranslationLanguage
+        self.canaryUsePunctuation = canaryUsePunctuation
+        self.canaryMaxTokens = canaryMaxTokens
+        self.canaryTemperature = canaryTemperature
+        self.moonshineMaxTokens = moonshineMaxTokens
+        self.moonshineTemperature = moonshineTemperature
+        self.mmsLanguageCode = mmsLanguageCode
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -111,6 +398,21 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         case qwenContextBias
         case granitePromptBias
         case senseVoiceUseITN
+        case mossOutputMode
+        case mossHotwords
+        case mossCustomPrompt
+        case cohereLongFormStrategy
+        case cohereUsePunctuation
+        case cohereMaxTokens
+        case cohereTemperature
+        case canaryTaskMode
+        case canaryTranslationLanguage
+        case canaryUsePunctuation
+        case canaryMaxTokens
+        case canaryTemperature
+        case moonshineMaxTokens
+        case moonshineTemperature
+        case mmsLanguageCode
     }
 
     init(from decoder: Decoder) throws {
@@ -120,6 +422,24 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         qwenContextBias = try container.decodeIfPresent(String.self, forKey: .qwenContextBias) ?? ""
         granitePromptBias = try container.decodeIfPresent(String.self, forKey: .granitePromptBias) ?? ""
         senseVoiceUseITN = try container.decodeIfPresent(Bool.self, forKey: .senseVoiceUseITN) ?? false
+        mossOutputMode = try container.decodeIfPresent(MossASROutputMode.self, forKey: .mossOutputMode)
+            ?? .timestampedDiarization
+        mossHotwords = try container.decodeIfPresent(String.self, forKey: .mossHotwords)
+            ?? AppPreferenceKey.asrDictionaryTermsTemplateVariable
+        mossCustomPrompt = try container.decodeIfPresent(String.self, forKey: .mossCustomPrompt) ?? ""
+        cohereLongFormStrategy = try container.decodeIfPresent(CohereLongFormStrategy.self, forKey: .cohereLongFormStrategy)
+            ?? .voiceActivity
+        cohereUsePunctuation = try container.decodeIfPresent(Bool.self, forKey: .cohereUsePunctuation) ?? true
+        cohereMaxTokens = try container.decodeIfPresent(Int.self, forKey: .cohereMaxTokens) ?? 1024
+        cohereTemperature = try container.decodeIfPresent(Double.self, forKey: .cohereTemperature) ?? 0.0
+        canaryTaskMode = try container.decodeIfPresent(CanaryTaskMode.self, forKey: .canaryTaskMode) ?? .transcription
+        canaryTranslationLanguage = try container.decodeIfPresent(String.self, forKey: .canaryTranslationLanguage) ?? "fr"
+        canaryUsePunctuation = try container.decodeIfPresent(Bool.self, forKey: .canaryUsePunctuation) ?? true
+        canaryMaxTokens = try container.decodeIfPresent(Int.self, forKey: .canaryMaxTokens) ?? 200
+        canaryTemperature = try container.decodeIfPresent(Double.self, forKey: .canaryTemperature) ?? 0.0
+        moonshineMaxTokens = try container.decodeIfPresent(Int.self, forKey: .moonshineMaxTokens) ?? 200
+        moonshineTemperature = try container.decodeIfPresent(Double.self, forKey: .moonshineTemperature) ?? 0.0
+        mmsLanguageCode = try container.decodeIfPresent(String.self, forKey: .mmsLanguageCode) ?? "eng"
     }
 
     static func defaults(for preset: LocalASRRecognitionPreset) -> MLXLocalTuningSettings {
@@ -129,7 +449,10 @@ struct MLXLocalTuningSettings: Codable, Equatable {
     static func defaults(for preset: LocalASRRecognitionPreset, family: MLXModelFamily?) -> MLXLocalTuningSettings {
         MLXLocalTuningSettings(
             preset: preset,
-            qwenContextBias: family == .qwen3ASR ? AppPromptDefaults.text(for: .qwenASRContextBias) : ""
+            qwenContextBias: family == .qwen3ASR ? AppPromptDefaults.text(for: .qwenASRContextBias) : "",
+            mossHotwords: family == .mossTranscribeDiarize
+                ? AppPreferenceKey.asrDictionaryTermsTemplateVariable
+                : ""
         )
     }
 }
@@ -191,8 +514,28 @@ enum MLXLocalTuningSettingsStore {
                 ? ""
                 : qwenContextBias,
             granitePromptBias: settings.granitePromptBias.trimmingCharacters(in: .whitespacesAndNewlines),
-            senseVoiceUseITN: settings.senseVoiceUseITN
+            senseVoiceUseITN: settings.senseVoiceUseITN,
+            mossOutputMode: settings.mossOutputMode,
+            mossHotwords: settings.mossHotwords.trimmingCharacters(in: .whitespacesAndNewlines),
+            mossCustomPrompt: settings.mossCustomPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
+            cohereLongFormStrategy: settings.cohereLongFormStrategy,
+            cohereUsePunctuation: settings.cohereUsePunctuation,
+            cohereMaxTokens: max(32, min(settings.cohereMaxTokens, 2048)),
+            cohereTemperature: max(0.0, min(settings.cohereTemperature, 1.0)),
+            canaryTaskMode: settings.canaryTaskMode,
+            canaryTranslationLanguage: CanaryLanguageSupport.sanitizedTranslationTarget(settings.canaryTranslationLanguage),
+            canaryUsePunctuation: settings.canaryUsePunctuation,
+            canaryMaxTokens: max(32, min(settings.canaryMaxTokens, 2048)),
+            canaryTemperature: max(0.0, min(settings.canaryTemperature, 1.0)),
+            moonshineMaxTokens: max(32, min(settings.moonshineMaxTokens, 2048)),
+            moonshineTemperature: max(0.0, min(settings.moonshineTemperature, 1.0)),
+            mmsLanguageCode: sanitizedMMSLanguageCode(settings.mmsLanguageCode)
         )
+    }
+
+    private static func sanitizedMMSLanguageCode(_ value: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? "eng" : normalized
     }
 }
 

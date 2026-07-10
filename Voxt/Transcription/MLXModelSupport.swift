@@ -7,7 +7,9 @@ import HuggingFace
 enum MLXLiveMode: Equatable {
     case batchPreview
     case nativeQwenLive
+    case nativeStreamingLive
     case nativeNemotronLive
+    case nativeVoxtralLive
 }
 
 enum MLXWhisperMigrationSupport {
@@ -83,6 +85,8 @@ struct MLXModelCatalog {
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
         "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
+        "beshkenadze/cohere-transcribe-03-2026-mlx-fp16",
+        "OpenMOSS-Team/MOSS-Transcribe-Diarize",
         "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
     ]
 
@@ -187,8 +191,32 @@ struct MLXModelCatalog {
         Option(
             id: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16",
             title: "Cohere 03-2026",
-            description: "High-accuracy multilingual encoder-decoder model with punctuation enabled.",
-            visibility: .hiddenSupport
+            description: "High-accuracy multilingual encoder-decoder model with punctuation enabled."
+        ),
+        Option(
+            id: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
+            title: "MOSS Transcribe Diarize",
+            description: "One-pass timestamped transcription and speaker-label model for meeting-style audio."
+        ),
+        Option(
+            id: "Mediform/canary-1b-v2-mlx-q8",
+            title: "Canary 1B v2 (Q8)",
+            description: "Canary-compatible NeMo encoder-decoder checkpoint for multilingual transcription."
+        ),
+        Option(
+            id: "UsefulSensors/moonshine-tiny",
+            title: "Moonshine Tiny",
+            description: "Lightweight Moonshine ASR checkpoint for fast English transcription."
+        ),
+        Option(
+            id: "facebook/wav2vec2-base-960h",
+            title: "Wav2Vec2 Base 960h",
+            description: "CTC English speech recognizer with a compact encoder-only decoding path."
+        ),
+        Option(
+            id: "facebook/mms-1b-fl102",
+            title: "MMS 1B FL102",
+            description: "Massively multilingual Wav2Vec2 adapter model for broad language coverage."
         ),
         Option(
             id: "mlx-community/parakeet-tdt_ctc-110m",
@@ -293,7 +321,12 @@ struct MLXModelCatalog {
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Realtime", "Fast"]),
         "mlx-community/Voxtral-Mini-4B-Realtime-6bit": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Balanced"]),
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
-        "beshkenadze/cohere-transcribe-03-2026-mlx-fp16": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Accurate"]),
+        "beshkenadze/cohere-transcribe-03-2026-mlx-fp16": PresentationMetadata(ratingText: "4.8", tagKeys: ["Multilingual", "Realtime", "Accurate"]),
+        "OpenMOSS-Team/MOSS-Transcribe-Diarize": PresentationMetadata(ratingText: "4.7", tagKeys: ["Multilingual", "Realtime", "Diarization"]),
+        "Mediform/canary-1b-v2-mlx-q8": PresentationMetadata(ratingText: "4.6", tagKeys: ["Multilingual", "Accurate"]),
+        "UsefulSensors/moonshine-tiny": PresentationMetadata(ratingText: "4.1", tagKeys: ["Fast"]),
+        "facebook/wav2vec2-base-960h": PresentationMetadata(ratingText: "4.2", tagKeys: ["Fast"]),
+        "facebook/mms-1b-fl102": PresentationMetadata(ratingText: "4.4", tagKeys: ["Multilingual"]),
         "mlx-community/parakeet-tdt_ctc-110m": PresentationMetadata(ratingText: "4.0", tagKeys: ["Fast"]),
         "mlx-community/parakeet-tdt-0.6b-v2": PresentationMetadata(ratingText: "4.2", tagKeys: ["Fast"]),
         "mlx-community/parakeet-tdt-0.6b-v3": PresentationMetadata(ratingText: "4.3", tagKeys: ["Fast"]),
@@ -328,6 +361,11 @@ struct MLXModelCatalog {
         "mlx-community/Voxtral-Mini-4B-Realtime-6bit": 3_624_337_564,
         "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16": 8_885_525_001,
         "beshkenadze/cohere-transcribe-03-2026-mlx-fp16": 4_132_564_062,
+        "OpenMOSS-Team/MOSS-Transcribe-Diarize": 1_833_165_136,
+        "Mediform/canary-1b-v2-mlx-q8": 1_137_111_210,
+        "UsefulSensors/moonshine-tiny": 110_385_501,
+        "facebook/wav2vec2-base-960h": 1_133_123_712,
+        "facebook/mms-1b-fl102": 9_657_613_841,
         "mlx-community/parakeet-tdt_ctc-110m": 458_961_098,
         "mlx-community/parakeet-tdt-0.6b-v2": 2_471_865_399,
         "mlx-community/parakeet-tdt-0.6b-v3": 2_509_044_141,
@@ -379,8 +417,17 @@ struct MLXModelCatalog {
         if canonicalRepo.localizedCaseInsensitiveContains("qwen3-asr") {
             return .nativeQwenLive
         }
+        if canonicalRepo.localizedCaseInsensitiveContains("cohere")
+            || canonicalRepo.localizedCaseInsensitiveContains("moss-transcribe-diarize")
+            || canonicalRepo.localizedCaseInsensitiveContains("moss_transcribe_diarize")
+        {
+            return .nativeStreamingLive
+        }
         if canonicalRepo.localizedCaseInsensitiveContains("nemotron") {
             return .nativeNemotronLive
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("voxtral") {
+            return .nativeVoxtralLive
         }
         return .batchPreview
     }

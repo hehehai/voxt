@@ -6,7 +6,7 @@ The current Xcode package reference is:
 
 - URL: `https://github.com/hehehai/mlx-audio-swift.git`
 - Requirement: `revision`
-- Revision: `3e693624ecb6b3fabf0e844b333c23334952d38d`
+- Revision: `3639c34cd94f374539a42c816258e460250362ca`
 
 ## Version rules
 
@@ -42,5 +42,5 @@ If Voxt needs to consume a synced fork commit before a new tag exists, pin the p
 
 - Fork: `hehehai/mlx-audio-swift`
 - Requirement: `revision`
-- Commit: `3e693624ecb6b3fabf0e844b333c23334952d38d`
-- Notes: merged upstream `main` through Nemotron ASR, Whisper STT, Voxtral streaming, Irodori TTS, and related STT/TTS/VAD updates; replace with a new Voxt tag once one is cut
+- Commit: `3639c34cd94f374539a42c816258e460250362ca`
+- Notes: merged upstream `main` through OmniVoice, IndexTTS, MOSS-Transcribe-Diarize, and additional STT models; adds MOSS streaming prompts, Cohere/Canary task controls, and explicit MMS language adapter switching; replace with a new Voxt tag once one is cut

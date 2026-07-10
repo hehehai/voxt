@@ -32,7 +32,7 @@ final class MLXModelSupportTests: XCTestCase {
         )
     }
 
-    func testLiveModeUsesNativeSessionForQwen3AndNemotronASR() {
+    func testLiveModeUsesNativeSessionForSupportedRealtimeFamilies() {
         XCTAssertEqual(
             MLXModelCatalog.liveMode(for: "mlx-community/Qwen3-ASR-0.6B-4bit"),
             .nativeQwenLive
@@ -46,8 +46,16 @@ final class MLXModelSupportTests: XCTestCase {
             .nativeNemotronLive
         )
         XCTAssertEqual(
+            MLXModelCatalog.liveMode(for: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"),
+            .nativeStreamingLive
+        )
+        XCTAssertEqual(
+            MLXModelCatalog.liveMode(for: "OpenMOSS-Team/MOSS-Transcribe-Diarize"),
+            .nativeStreamingLive
+        )
+        XCTAssertEqual(
             MLXModelCatalog.liveMode(for: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"),
-            .batchPreview
+            .nativeVoxtralLive
         )
     }
 

@@ -251,8 +251,32 @@ private struct MLXASRConfigurationSheetView: View {
         ).language ?? AppLocalization.localizedString("Automatic")
     }
 
+    private var resolvedLanguageCode: String? {
+        guard hintSettings.followsUserMainLanguage else { return nil }
+        return ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: hintSettings,
+            userLanguageCodes: userLanguageCodes,
+            mlxModelRepo: modelRepo
+        ).language
+    }
+
+    private var canaryTaskLanguages: (source: String, target: String) {
+        CanaryLanguageSupport.resolvedTaskLanguages(
+            mode: tuningSettings.canaryTaskMode,
+            sourceLanguage: resolvedLanguageCode,
+            translationLanguage: tuningSettings.canaryTranslationLanguage
+        )
+    }
+
     private var senseVoiceSupportedLanguageSummary: String {
         AppLocalization.localizedString("Automatic, zh, en, yue, ja, ko")
+    }
+
+    private var canaryTranslationLanguageOptions: [SettingsMenuOption<String>] {
+        CanaryLanguageSupport.translationTargetCodes.map {
+            SettingsMenuOption(value: $0, title: CanaryLanguageSupport.title(for: $0))
+        }
     }
 
     var body: some View {
@@ -307,15 +331,17 @@ private struct MLXASRConfigurationSheetView: View {
                         }
                     }
 
-                    Toggle(localized("Follow User Main Language"), isOn: $hintSettings.followsUserMainLanguage)
-                        .toggleStyle(.switch)
+                    if family.supportsSharedLanguageRouting {
+                        Toggle(localized("Follow User Main Language"), isOn: $hintSettings.followsUserMainLanguage)
+                            .toggleStyle(.switch)
 
-                    HStack(alignment: .top, spacing: 16) {
-                        localInfoRow(label: localized("Primary language"), value: mainLanguageSummary)
-                        localInfoRow(label: localized("Resolved language"), value: resolvedLanguage)
+                        HStack(alignment: .top, spacing: 16) {
+                            localInfoRow(label: localized("Primary language"), value: mainLanguageSummary)
+                            localInfoRow(label: localized("Resolved language"), value: resolvedLanguage)
+                        }
+
+                        localInfoRow(label: localized("Other languages"), value: secondaryLanguageSummary)
                     }
-
-                    localInfoRow(label: localized("Other languages"), value: secondaryLanguageSummary)
 
                     if family == .senseVoice {
                         localInfoRow(
@@ -323,6 +349,189 @@ private struct MLXASRConfigurationSheetView: View {
                             value: senseVoiceSupportedLanguageSummary
                         )
                         Text(localized("SenseVoice only accepts explicit language routing for zh, en, yue, ja, and ko here. Any other primary language falls back to Automatic."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if family == .mossTranscribeDiarize {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("Output Format"))
+                                .font(.subheadline.weight(.medium))
+                            SettingsMenuPicker(
+                                selection: Binding(
+                                    get: { tuningSettings.mossOutputMode.rawValue },
+                                    set: { rawValue in
+                                        guard let mode = MossASROutputMode(rawValue: rawValue) else { return }
+                                        tuningSettings.mossOutputMode = mode
+                                    }
+                                ),
+                                options: MossASROutputMode.allCases.map {
+                                    SettingsMenuOption(value: $0.rawValue, title: $0.title)
+                                },
+                                selectedTitle: tuningSettings.mossOutputMode.title,
+                                width: 240
+                            )
+                            Text(tuningSettings.mossOutputMode.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(localized("Hotwords"))
+                            .font(.subheadline.weight(.medium))
+                        PromptEditorView(
+                            text: $tuningSettings.mossHotwords,
+                            height: 90,
+                            variables: Self.dictionaryTermsVariable
+                        )
+                        Text(localized("Names and terms are appended to the MOSS prompt using its official Hotwords format."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        if tuningSettings.mossOutputMode == .customPrompt {
+                            Text(localized("Recognition Prompt"))
+                                .font(.subheadline.weight(.medium))
+                            PromptEditorView(text: $tuningSettings.mossCustomPrompt, height: 120)
+                            Text(localized("This instruction replaces the standard MOSS transcription format prompt."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if family == .cohereTranscribe {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("Long Audio Segmentation"))
+                                .font(.subheadline.weight(.medium))
+                            SettingsMenuPicker(
+                                selection: Binding(
+                                    get: { tuningSettings.cohereLongFormStrategy.rawValue },
+                                    set: { rawValue in
+                                        guard let strategy = CohereLongFormStrategy(rawValue: rawValue) else { return }
+                                        tuningSettings.cohereLongFormStrategy = strategy
+                                    }
+                                ),
+                                options: CohereLongFormStrategy.allCases.map {
+                                    SettingsMenuOption(value: $0.rawValue, title: $0.title)
+                                },
+                                selectedTitle: tuningSettings.cohereLongFormStrategy.title,
+                                width: 220
+                            )
+                            Text(tuningSettings.cohereLongFormStrategy.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Toggle(localized("Punctuation and Capitalization"), isOn: $tuningSettings.cohereUsePunctuation)
+                            .toggleStyle(.switch)
+                        SettingsIntegerStepperField(
+                            title: localized("Max Output Tokens"),
+                            value: $tuningSettings.cohereMaxTokens,
+                            range: 32...2048,
+                            step: 32,
+                            help: localized("Increase this only when long recordings are being truncated.")
+                        )
+                        decodingTemperatureControl(value: $tuningSettings.cohereTemperature)
+                    }
+
+                    if family == .canary {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("Task"))
+                                .font(.subheadline.weight(.medium))
+                            SettingsMenuPicker(
+                                selection: Binding(
+                                    get: { tuningSettings.canaryTaskMode.rawValue },
+                                    set: { rawValue in
+                                        guard let mode = CanaryTaskMode(rawValue: rawValue) else { return }
+                                        tuningSettings.canaryTaskMode = mode
+                                    }
+                                ),
+                                options: CanaryTaskMode.allCases.map {
+                                    SettingsMenuOption(value: $0.rawValue, title: $0.title)
+                                },
+                                selectedTitle: tuningSettings.canaryTaskMode.title,
+                                width: 240
+                            )
+                            Text(localized("Canary supports transcription in 25 European languages and translation only when the source or target is English."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if tuningSettings.canaryTaskMode == .translateFromEnglish {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(localized("Translation Language"))
+                                    .font(.subheadline.weight(.medium))
+                                SettingsMenuPicker(
+                                    selection: $tuningSettings.canaryTranslationLanguage,
+                                    options: canaryTranslationLanguageOptions,
+                                    selectedTitle: CanaryLanguageSupport.title(for: tuningSettings.canaryTranslationLanguage),
+                                    width: 240
+                                )
+                            }
+                        }
+
+                        HStack(alignment: .top, spacing: 16) {
+                            localInfoRow(
+                                label: localized("Task source"),
+                                value: CanaryLanguageSupport.title(for: canaryTaskLanguages.source)
+                            )
+                            localInfoRow(
+                                label: localized("Task output"),
+                                value: CanaryLanguageSupport.title(for: canaryTaskLanguages.target)
+                            )
+                        }
+
+                        Toggle(localized("Punctuation and Capitalization"), isOn: $tuningSettings.canaryUsePunctuation)
+                            .toggleStyle(.switch)
+                        SettingsIntegerStepperField(
+                            title: localized("Max Output Tokens"),
+                            value: $tuningSettings.canaryMaxTokens,
+                            range: 32...2048,
+                            step: 32,
+                            help: localized("Increase this only when transcription or translation is being truncated.")
+                        )
+                        decodingTemperatureControl(value: $tuningSettings.canaryTemperature)
+                    }
+
+                    if family == .moonshine {
+                        localInfoRow(label: localized("Model language"), value: localized("English"))
+                        SettingsIntegerStepperField(
+                            title: localized("Max Output Tokens"),
+                            value: $tuningSettings.moonshineMaxTokens,
+                            range: 32...2048,
+                            step: 32,
+                            help: localized("Increase this only when long utterances are being truncated.")
+                        )
+                        decodingTemperatureControl(value: $tuningSettings.moonshineTemperature)
+                    }
+
+                    if family == .mmsCTC {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("MMS Adapter Language"))
+                                .font(.subheadline.weight(.medium))
+                            TextField("eng", text: $tuningSettings.mmsLanguageCode)
+                                .textFieldStyle(.plain)
+                                .modifier(
+                                    SettingsFieldSurfaceModifier(
+                                        width: 140,
+                                        minHeight: 30,
+                                        horizontalPadding: 8,
+                                        alignment: .leading
+                                    )
+                                )
+                            Text(localized("Use the checkpoint's ISO 639-3 adapter code, for example eng, cmn, jpn, deu, or fra."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if family == .wav2vec2CTC {
+                        localInfoRow(label: localized("Model language"), value: localized("English"))
+                        Text(localized("This checkpoint uses greedy CTC decoding and does not expose sampling or prompt controls."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if family == .lasrCTC {
+                        Text(localized("LASR uses greedy CTC decoding. Language and vocabulary are defined by the checkpoint."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -353,11 +562,7 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if !family.supportsContextBias
-                        && !family.supportsPromptBias
-                        && !family.supportsITN
-                        && !family.supportsWhisperTemperature
-                    {
+                    if family == .generic {
                         Text(localized("This model family only exposes preset and language controls."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -400,6 +605,23 @@ private struct MLXASRConfigurationSheetView: View {
             Spacer()
             Text(value)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func decodingTemperatureControl(value: Binding<Double>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(localized("Temperature"))
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text(String(format: "%.2f", value.wrappedValue))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Slider(value: value, in: 0...1, step: 0.05)
+            Text(localized("Keep this at 0 for deterministic decoding; higher values sample alternative tokens."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
