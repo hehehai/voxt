@@ -28,6 +28,44 @@ enum LocalASRRecognitionPreset: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum NemotronStreamLatency: Int, CaseIterable, Codable, Identifiable, Sendable {
+    case minimum = 80
+    case fast = 160
+    case responsive = 320
+    case balanced = 560
+    case accurate = 1120
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .minimum: return AppLocalization.localizedString("Minimum (80 ms)")
+        case .fast: return AppLocalization.localizedString("Fast (160 ms)")
+        case .responsive: return AppLocalization.localizedString("Responsive (320 ms)")
+        case .balanced: return AppLocalization.localizedString("Balanced (560 ms)")
+        case .accurate: return AppLocalization.localizedString("Accurate (1120 ms)")
+        }
+    }
+}
+
+enum VoxtralTranscriptionDelay: Int, CaseIterable, Codable, Identifiable, Sendable {
+    case fastest = 240
+    case balanced = 480
+    case accurate = 960
+    case subtitle = 2400
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .fastest: return AppLocalization.localizedString("Fastest (240 ms)")
+        case .balanced: return AppLocalization.localizedString("Balanced (480 ms)")
+        case .accurate: return AppLocalization.localizedString("Accurate (960 ms)")
+        case .subtitle: return AppLocalization.localizedString("Subtitle (2400 ms)")
+        }
+    }
+}
+
 enum MossASROutputMode: String, CaseIterable, Codable, Identifiable, Sendable {
     case timestampedDiarization
     case speakerOnly
@@ -302,6 +340,8 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
     case graniteSpeech
     case senseVoice
     case cohereTranscribe
+    case nemotronASR
+    case voxtralRealtime
     case mossTranscribeDiarize
     case canary
     case moonshine
@@ -330,6 +370,12 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
             || canonicalRepo.localizedCaseInsensitiveContains("cohere")
         {
             return .cohereTranscribe
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("nemotron") {
+            return .nemotronASR
+        }
+        if canonicalRepo.localizedCaseInsensitiveContains("voxtral") {
+            return .voxtralRealtime
         }
         if canonicalRepo.localizedCaseInsensitiveContains("moss-transcribe-diarize")
             || canonicalRepo.localizedCaseInsensitiveContains("moss_transcribe_diarize")
@@ -369,6 +415,10 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("SenseVoice")
         case .cohereTranscribe:
             return AppLocalization.localizedString("Cohere")
+        case .nemotronASR:
+            return AppLocalization.localizedString("Nemotron")
+        case .voxtralRealtime:
+            return AppLocalization.localizedString("Voxtral")
         case .mossTranscribeDiarize:
             return AppLocalization.localizedString("MOSS")
         case .canary:
@@ -392,7 +442,7 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
     var supportsWhisperTemperature: Bool { self == .whisper }
     var supportsRecognitionPreset: Bool {
         switch self {
-        case .senseVoice, .canary, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
+        case .senseVoice, .nemotronASR, .voxtralRealtime, .canary, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
             return false
         default:
             return true
@@ -401,7 +451,7 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
 
     var supportsSharedLanguageRouting: Bool {
         switch self {
-        case .graniteSpeech, .mossTranscribeDiarize, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
+        case .graniteSpeech, .voxtralRealtime, .mossTranscribeDiarize, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
             return false
         default:
             return true
@@ -425,6 +475,8 @@ struct MLXLocalTuningSettings: Codable, Equatable {
     var cohereUsePunctuation: Bool = true
     var cohereMaxTokens: Int = 1024
     var cohereTemperature: Double = 0.0
+    var nemotronStreamLatency: NemotronStreamLatency = .balanced
+    var voxtralTranscriptionDelay: VoxtralTranscriptionDelay = .balanced
     var canaryTaskMode: CanaryTaskMode = .transcription
     var canaryTranslationLanguage: String = "fr"
     var canaryUsePunctuation: Bool = true
@@ -457,7 +509,9 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         canaryTemperature: Double = 0.0,
         moonshineMaxTokens: Int = 200,
         moonshineTemperature: Double = 0.0,
-        mmsLanguageCode: String = "eng"
+        mmsLanguageCode: String = "eng",
+        nemotronStreamLatency: NemotronStreamLatency = .balanced,
+        voxtralTranscriptionDelay: VoxtralTranscriptionDelay = .balanced
     ) {
         self.preset = preset
         self.whisperTemperature = whisperTemperature
@@ -482,6 +536,8 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         self.moonshineMaxTokens = moonshineMaxTokens
         self.moonshineTemperature = moonshineTemperature
         self.mmsLanguageCode = mmsLanguageCode
+        self.nemotronStreamLatency = nemotronStreamLatency
+        self.voxtralTranscriptionDelay = voxtralTranscriptionDelay
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -508,6 +564,8 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         case moonshineMaxTokens
         case moonshineTemperature
         case mmsLanguageCode
+        case nemotronStreamLatency
+        case voxtralTranscriptionDelay
     }
 
     init(from decoder: Decoder) throws {
@@ -556,6 +614,12 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         moonshineMaxTokens = try container.decodeIfPresent(Int.self, forKey: .moonshineMaxTokens) ?? 200
         moonshineTemperature = try container.decodeIfPresent(Double.self, forKey: .moonshineTemperature) ?? 0.0
         mmsLanguageCode = try container.decodeIfPresent(String.self, forKey: .mmsLanguageCode) ?? "eng"
+        nemotronStreamLatency = try container.decodeIfPresent(NemotronStreamLatency.self, forKey: .nemotronStreamLatency)
+            ?? .balanced
+        voxtralTranscriptionDelay = try container.decodeIfPresent(
+            VoxtralTranscriptionDelay.self,
+            forKey: .voxtralTranscriptionDelay
+        ) ?? .balanced
     }
 
     static func defaults(for preset: LocalASRRecognitionPreset) -> MLXLocalTuningSettings {
@@ -665,7 +729,9 @@ enum MLXLocalTuningSettingsStore {
             canaryTemperature: max(0.0, min(settings.canaryTemperature, 1.0)),
             moonshineMaxTokens: max(32, min(settings.moonshineMaxTokens, 2048)),
             moonshineTemperature: max(0.0, min(settings.moonshineTemperature, 1.0)),
-            mmsLanguageCode: sanitizedMMSLanguageCode(settings.mmsLanguageCode)
+            mmsLanguageCode: sanitizedMMSLanguageCode(settings.mmsLanguageCode),
+            nemotronStreamLatency: settings.nemotronStreamLatency,
+            voxtralTranscriptionDelay: settings.voxtralTranscriptionDelay
         )
     }
 

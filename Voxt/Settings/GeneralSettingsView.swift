@@ -31,6 +31,7 @@ struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.hotkeyDebugLoggingEnabled) private var hotkeyDebugLoggingEnabled = false
     @AppStorage(AppPreferenceKey.llmDebugLoggingEnabled) private var llmDebugLoggingEnabled = false
     @AppStorage(AppPreferenceKey.localVADMode) private var localVADModeRaw = LocalVADMode.defaultMode.rawValue
+    @AppStorage(AppPreferenceKey.sileroVADModelVersion) private var sileroVADModelVersionRaw = SileroVADModelVersion.defaultVersion.rawValue
     @AppStorage(AppPreferenceKey.networkProxyMode) private var networkProxyModeRaw = VoxtNetworkSession.ProxyMode.system.rawValue
     @AppStorage(AppPreferenceKey.customProxyScheme) private var customProxySchemeRaw = VoxtNetworkSession.ProxyScheme.http.rawValue
     @AppStorage(AppPreferenceKey.customProxyHost) private var customProxyHost = ""
@@ -87,6 +88,13 @@ struct GeneralSettingsView: View {
         Binding(
             get: { LocalVADMode.resolved(rawValue: localVADModeRaw) },
             set: { LocalVADMode.save($0) }
+        )
+    }
+
+    private var sileroVADModelVersion: Binding<SileroVADModelVersion> {
+        Binding(
+            get: { SileroVADModelVersion.resolved(rawValue: sileroVADModelVersionRaw) },
+            set: { SileroVADModelVersion.save($0) }
         )
     }
 
@@ -177,7 +185,10 @@ struct GeneralSettingsView: View {
 
                 Divider()
 
-                GeneralVADCard(localVADMode: localVADMode)
+                GeneralVADCard(
+                    localVADMode: localVADMode,
+                    sileroModelVersion: sileroVADModelVersion
+                )
 
                 Divider()
 

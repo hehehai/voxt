@@ -563,6 +563,21 @@ struct GeneralLoggingCard: View {
 
 struct GeneralVADCard: View {
     @Binding var localVADMode: LocalVADMode
+    @Binding var sileroModelVersion: SileroVADModelVersion
+    @StateObject private var modelManager = MeetingVADModelManager()
+
+    private var modelStatusText: String {
+        switch modelManager.state {
+        case .notDownloaded:
+            return localized("Not Downloaded")
+        case .downloaded:
+            return localized("Downloaded")
+        case .downloading(let progress, _, _, _, _, _):
+            return AppLocalization.format("Downloading %.0f%%", progress * 100)
+        case .error:
+            return localized("Download Failed")
+        }
+    }
 
     var body: some View {
         GeneralSettingsCard(title: localizedKey("VAD")) {
@@ -579,6 +594,52 @@ struct GeneralVADCard: View {
                     width: 180
                 )
             }
+
+            GeneralFieldRow(
+                title: localizedKey("Silero Model"),
+                description: localizedKey("Select the Silero checkpoint used by local VAD workflows.")
+            ) {
+                SettingsMenuPicker(
+                    selection: $sileroModelVersion,
+                    options: SileroVADModelVersion.allCases.map { version in
+                        SettingsMenuOption(value: version, title: version.title)
+                    },
+                    selectedTitle: sileroModelVersion.title,
+                    width: 180
+                )
+                .disabled(modelManager.state.isDownloading)
+            }
+
+            GeneralFieldRow(
+                title: localizedKey("Silero Status"),
+                description: LocalizedStringKey(modelManager.remoteSizeText)
+            ) {
+                HStack(spacing: 8) {
+                    Text(modelStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    switch modelManager.state {
+                    case .downloaded:
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .downloading:
+                        ProgressView()
+                            .controlSize(.small)
+                    case .notDownloaded, .error:
+                        Button {
+                            modelManager.downloadSelectedModel()
+                        } label: {
+                            Image(systemName: "arrow.down.circle")
+                        }
+                        .buttonStyle(SettingsCompactIconButtonStyle(size: 28))
+                        .help(localized("Download"))
+                    }
+                }
+            }
+        }
+        .onChange(of: sileroModelVersion) { _, _ in
+            modelManager.refresh()
         }
     }
 }

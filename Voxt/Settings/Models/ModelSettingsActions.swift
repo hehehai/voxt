@@ -40,6 +40,10 @@ enum MLXConfigurationSummarySupport {
                 tuning.cohereLongFormStrategy.title,
                 tuning.cohereTemperature
             )
+        case .nemotronASR:
+            return tuning.nemotronStreamLatency.title
+        case .voxtralRealtime:
+            return tuning.voxtralTranscriptionDelay.title
         case .canary:
             return AppLocalization.format(
                 "%@ · Temp %.2f",

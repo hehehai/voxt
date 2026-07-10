@@ -32,6 +32,7 @@ enum AppPreferenceKey {
     static let rewriteRemoteLLMProvider = "rewriteRemoteLLMProvider"
     static let asrHintSettings = "asrHintSettings"
     nonisolated static let localVADMode = "localVADMode"
+    nonisolated static let sileroVADModelVersion = "sileroVADModelVersion"
     static let mlxLocalASRTuningSettings = "mlxLocalASRTuningSettings"
     static let sherpaOnnxLocalASRTuningSettings = "sherpaOnnxLocalASRTuningSettings"
     nonisolated static let modelStorageRootPath = "modelStorageRootPath"

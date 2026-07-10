@@ -223,10 +223,15 @@ private final class MLXVoxtralNativeStreamingSession: MLXNativeStreamingSession,
     private let continuation: AsyncStream<TranscriptionEvent>.Continuation
     private var isFinished = false
 
-    init(model: VoxtralRealtimeModel, generationParameters: STTGenerateParameters = STTGenerateParameters()) {
+    init(
+        model: VoxtralRealtimeModel,
+        generationParameters: STTGenerateParameters = STTGenerateParameters(),
+        transcriptionDelayMilliseconds: Int
+    ) {
         self.session = model.makeStreamSession(
             temperature: generationParameters.temperature,
-            maxTokens: generationParameters.maxTokens
+            maxTokens: generationParameters.maxTokens,
+            transcriptionDelayMs: transcriptionDelayMilliseconds
         )
         var continuation: AsyncStream<TranscriptionEvent>.Continuation!
         self.events = AsyncStream { continuation = $0 }
@@ -337,6 +342,42 @@ enum MLXTranscriptionPlanning {
     nonisolated static func nativeLiveLanguage(from hint: String?) -> String? {
         let normalized = hint?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return normalized.isEmpty ? nil : normalized
+    }
+
+    nonisolated static func nativeNemotronLanguage(
+        requested: String?,
+        availableLanguages: [String],
+        defaultLanguage: String
+    ) -> String {
+        let availableByNormalized = availableLanguages.reduce(into: [String: String]()) { result, language in
+            result[language.lowercased()] = language
+        }
+        let normalizedRequest = requested?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+
+        if let normalizedRequest, !normalizedRequest.isEmpty {
+            if let exact = availableByNormalized[normalizedRequest] {
+                return exact
+            }
+            let baseLanguage = normalizedRequest.split(separator: "-").first.map(String.init) ?? normalizedRequest
+            let preferredLocale = ["zh": "zh-cn", "en": "en-us"][baseLanguage]
+            if let preferredLocale, let preferred = availableByNormalized[preferredLocale] {
+                return preferred
+            }
+            if let baseMatch = availableByNormalized
+                .filter({ $0.key == baseLanguage || $0.key.hasPrefix("\(baseLanguage)-") })
+                .sorted(by: { $0.key < $1.key })
+                .first?.value
+            {
+                return baseMatch
+            }
+        }
+
+        return availableByNormalized[defaultLanguage.lowercased()]
+            ?? availableByNormalized["auto"]
+            ?? defaultLanguage
     }
 
     nonisolated static func finalizationSamples(
@@ -643,7 +684,8 @@ enum MLXTranscriptionPlanning {
             // Local streaming MLX models may echo prompt/context guidance back into the
             // partial transcript UI, so multilingual guidance stays in the language hint only.
             return (nil, nil)
-        case .whisper, .senseVoice, .cohereTranscribe, .mossTranscribeDiarize, .canary, .moonshine,
+        case .whisper, .senseVoice, .cohereTranscribe, .nemotronASR, .voxtralRealtime,
+             .mossTranscribeDiarize, .canary, .moonshine,
              .wav2vec2CTC, .mmsCTC, .lasrCTC, .generic:
             return (nil, nil)
         }
@@ -1022,7 +1064,6 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private let quickPassMinimumDurationSeconds: Double = 14.0
     private let qwenLiveFeedPollInterval: Duration = .milliseconds(100)
     private let qwenLiveEndedTimeoutSeconds: Double = 0.35
-    private let senseVoiceVADRepo = "mlx-community/silero-vad"
     private let senseVoiceDirectPassMaximumDurationSeconds: Double = 30.0
     private let senseVoiceChunkMaximumDurationSeconds: Double = 24.0
     private let senseVoiceChunkOverlapSeconds: Double = 0.35
@@ -1066,6 +1107,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private(set) var lastCaptureMetrics: TranscriptionCaptureMetrics?
     @Published private(set) var latestSenseVoiceMetadata: SenseVoiceTranscriptMetadata?
     private var senseVoiceVADModel: SileroVAD?
+    private var senseVoiceVADModelRepo: String?
     private var pendingRuntimeFailureMessage: String?
 
     init(modelManager: MLXModelManager, transcriptionPurpose: MLXTranscriptionPurpose = .dictation) {
@@ -1929,13 +1971,21 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     private func installNativeNemotronLiveSession(_ model: NemotronASRModel, revision: Int) {
         releaseNativeLiveSession(cancelSession: true)
+        let tuningSettings = resolvedLocalTuningSettings()
+        let chunkMilliseconds = tuningSettings.nemotronStreamLatency.rawValue
+        let language = MLXTranscriptionPlanning.nativeNemotronLanguage(
+            requested: resolvedNativeNemotronLiveLanguage(),
+            availableLanguages: Array(model.promptDictionary.keys),
+            defaultLanguage: model.defaultLanguage
+        )
         let session = NemotronASRStreamingSession(
             model: model,
             config: StreamingConfig(
-                decodeIntervalSeconds: 0.45,
+                decodeIntervalSeconds: Double(chunkMilliseconds) / 1000,
                 boundaryDecodeIntervalSeconds: 0.2,
                 boundaryBoostSeconds: 1.0,
-                language: resolvedNativeNemotronLiveLanguage(),
+                delayPreset: .custom(ms: chunkMilliseconds),
+                language: language,
                 temperature: 0.0,
                 maxTokensPerPass: 1024
             )
@@ -1992,13 +2042,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     private func installNativeVoxtralLiveSession(_ model: VoxtralRealtimeModel, revision: Int) {
         releaseNativeLiveSession(cancelSession: true)
+        let tuningSettings = resolvedLocalTuningSettings()
         let session = MLXVoxtralNativeStreamingSession(
             model: model,
             generationParameters: STTGenerateParameters(
                 maxTokens: 1024,
-                temperature: 0.0,
-                language: resolvedNativeNemotronLiveLanguage()
-            )
+                temperature: 0.0
+            ),
+            transcriptionDelayMilliseconds: tuningSettings.voxtralTranscriptionDelay.rawValue
         )
         installNativeLiveSession(session, revision: revision, modelPinned: true)
     }
@@ -2658,14 +2709,16 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         } else if !(model is SenseVoiceModel) && !(model is VoxtralRealtimeModel) {
             return nil
         }
-        if let senseVoiceVADModel {
+        let vadRepo = SileroVADModelVersion.stored().repo
+        if let senseVoiceVADModel, senseVoiceVADModelRepo == vadRepo {
             return senseVoiceVADModel
         }
 
-        let modelDirectory = try await modelManager.ensureModelDirectory(repo: senseVoiceVADRepo)
+        let modelDirectory = try await modelManager.ensureModelDirectory(repo: vadRepo)
         try Task.checkCancellation()
         let loadedModel = try SileroVAD.fromModelDirectory(modelDirectory)
         senseVoiceVADModel = loadedModel
+        senseVoiceVADModelRepo = vadRepo
         return loadedModel
     }
 

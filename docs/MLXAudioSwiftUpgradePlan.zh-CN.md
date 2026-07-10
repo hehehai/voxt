@@ -26,13 +26,13 @@
 | 项目 | 当前值 |
 |---|---|
 | Voxt package URL | `https://github.com/hehehai/mlx-audio-swift.git` |
-| Voxt pin | exact `0.1.3-voxt.1` (`4ad7bc3ee7f6f40923e3f1f09557d5146e4344cc`) |
+| Voxt pin | exact `0.1.3-voxt.2` (`6baf0a1d8a42de76ced1cc7cb0a4f525d4211029`) |
 | Voxt `mlx-swift-lm` pin | `124880582175726b709015a632c5ba9f3069a319` |
 | fork 分支 | `codex/moss-asr-configuration` |
-| fork 发布标签 | `v0.1.3-voxt.1` |
+| fork 发布标签 | `v0.1.3-voxt.2` |
 | upstream 最新 release/main | `v0.1.3`, `d302a5c6080d2bb97bae38c7418f82abb76013b6` |
-| fork 额外提交 | MOSS streaming prompt/失败传播、严格 VAD 策略、Canary/Cohere task controls、MMS adapter 切换与脚本语言解析 |
-| 审查区间 | `v0.1.2..4ad7bc3` |
+| fork 额外提交 | MOSS streaming prompt/失败传播、严格 VAD 策略、Nemotron 增量 event session、Canary/Cohere task controls、MMS adapter 切换与脚本语言解析 |
+| 审查区间 | `v0.1.2..6baf0a1` |
 
 截至本文日期，Voxt 已经锁定当前可用的最新 fork revision，不存在新的 revision 需要继续更新。本轮工作的重点是消费已经存在但尚未完整接入的能力，以及修复包接口与产品语义之间的差距。
 
@@ -834,7 +834,15 @@ Voxt 当前可利用 Qwen、Whisper、Nemotron等模型自己的 auto language�
 - SenseVoice 长音频检测复用 `SileroVAD.getSpeechTimestamps`，保留 Voxt overlap 分段。
 - fork 已发布 `v0.1.3-voxt.1`，Voxt 使用 exact version 固定。
 
-验证结果：fork 7 项定向测试、Voxt 77 项 ASR/VAD 定向测试和 Voxt 完整构建均通过。真实模型取消、静音语料及 30 分钟 session 仍需按上线门禁进行人工回归和性能采样。
+第二批直接能力升级也已完成：
+
+- Nemotron event session 改为封装缓存式 `NemotronASRStreamSession`，不再使用旧的重复 mel/encoder 状态实现。
+- Nemotron 增加 80/160/320/560/1120ms streaming latency 表单，并按 checkpoint prompt dictionary 解析 locale。
+- Voxtral 增加 240/480/960/2400ms transcription delay 表单并传入 native session。
+- Silero v5/v6 增加统一版本选择、独立模型目录和下载入口；实时 gate 与长音频分段共享选择。
+- fork 已发布 `v0.1.3-voxt.2`，Voxt exact pin 已同步更新。
+
+验证结果：fork 首批 7 项测试及第二批 Nemotron 定向测试、Voxt 125 项 ASR/VAD/设置定向测试和 Voxt 完整构建均通过。真实模型取消、静音语料及 30 分钟 session 仍需按上线门禁进行人工回归和性能采样。
 
 ## 15. 影响和复杂度矩阵
 

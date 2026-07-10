@@ -405,6 +405,42 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    if family == .nemotronASR {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("Streaming Latency"))
+                                .font(.subheadline.weight(.medium))
+                            SettingsMenuPicker(
+                                selection: $tuningSettings.nemotronStreamLatency,
+                                options: NemotronStreamLatency.allCases.map {
+                                    SettingsMenuOption(value: $0, title: $0.title)
+                                },
+                                selectedTitle: tuningSettings.nemotronStreamLatency.title,
+                                width: 240
+                            )
+                            Text(localized("Smaller chunks update sooner; larger chunks favor recognition accuracy."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if family == .voxtralRealtime {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("Transcription Delay"))
+                                .font(.subheadline.weight(.medium))
+                            SettingsMenuPicker(
+                                selection: $tuningSettings.voxtralTranscriptionDelay,
+                                options: VoxtralTranscriptionDelay.allCases.map {
+                                    SettingsMenuOption(value: $0, title: $0.title)
+                                },
+                                selectedTitle: tuningSettings.voxtralTranscriptionDelay.title,
+                                width: 240
+                            )
+                            Text(localized("Longer delay produces more stable realtime text."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     if family == .mossTranscribeDiarize {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Usage"))

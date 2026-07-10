@@ -344,6 +344,14 @@ final class ASRHintSettingsTests: XCTestCase {
 
     func testMLXModelFamilyRecognizesLatestMLXAudioFamilies() {
         XCTAssertEqual(
+            MLXModelFamily.family(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"),
+            .nemotronASR
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"),
+            .voxtralRealtime
+        )
+        XCTAssertEqual(
             MLXModelFamily.family(for: "OpenMOSS-Team/MOSS-Transcribe-Diarize"),
             .mossTranscribeDiarize
         )
@@ -383,7 +391,9 @@ final class ASRHintSettingsTests: XCTestCase {
                 canaryTemperature: -1,
                 moonshineMaxTokens: 480,
                 moonshineTemperature: 0.35,
-                mmsLanguageCode: " JPN "
+                mmsLanguageCode: " JPN ",
+                nemotronStreamLatency: .fast,
+                voxtralTranscriptionDelay: .accurate
             ),
             for: "Mediform/canary-1b-v2-mlx-q8",
             rawValue: nil
@@ -406,6 +416,29 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(settings.moonshineMaxTokens, 480)
         XCTAssertEqual(settings.moonshineTemperature, 0.35)
         XCTAssertEqual(settings.mmsLanguageCode, "jpn")
+        XCTAssertEqual(settings.nemotronStreamLatency, .fast)
+        XCTAssertEqual(settings.voxtralTranscriptionDelay, .accurate)
+    }
+
+    func testStreamingLatencySettingsUseBackwardCompatibleDefaults() {
+        let legacy = """
+        {"nemotronASR":{"preset":"balanced"},"voxtralRealtime":{"preset":"balanced"}}
+        """
+
+        XCTAssertEqual(
+            MLXLocalTuningSettingsStore.resolvedSettings(
+                for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
+                rawValue: legacy
+            ).nemotronStreamLatency,
+            .balanced
+        )
+        XCTAssertEqual(
+            MLXLocalTuningSettingsStore.resolvedSettings(
+                for: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+                rawValue: legacy
+            ).voxtralTranscriptionDelay,
+            .balanced
+        )
     }
 
     func testCanaryTaskLanguageRoutesRespectOfficialEnglishTranslationConstraint() {
