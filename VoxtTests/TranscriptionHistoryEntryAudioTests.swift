@@ -6,6 +6,8 @@ import XCTest
 
 @MainActor
 final class TranscriptionHistoryEntryAudioTests: XCTestCase {
+    private static var retainedObjects: [AnyObject] = []
+
     func testDecodingTranscriptAudioPathPopulatesGenericAudioPath() throws {
         let createdAt = Date(timeIntervalSinceReferenceDate: 321)
         let payload: [String: Any] = [
@@ -75,5 +77,59 @@ final class TranscriptionHistoryEntryAudioTests: XCTestCase {
         XCTAssertEqual(object["audioRelativePath"] as? String, "transcription/sample.wav")
         XCTAssertNil(object["transcriptAudioRelativePath"])
         XCTAssertTrue((object["dictionaryCorrectionSnapshots"] as? [Any])?.isEmpty == true)
+    }
+
+    func testHistoryStoreAllowsAudioOnlyMeetingEntryWhenExplicitlyEnabled() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("voxt-audio-history-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let database = retain(VoxtDatabase(databaseURL: directoryURL.appendingPathComponent("history.sqlite")))
+        let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let store = retain(TranscriptionHistoryStore(repository: repository))
+
+        let entryID = store.append(
+            text: "",
+            transcriptionEngine: "MLX Audio",
+            transcriptionModel: "MOSS",
+            enhancementMode: "Off",
+            enhancementModel: "None",
+            kind: .transcript,
+            isTranslation: false,
+            audioDurationSeconds: 12,
+            transcriptionProcessingDurationSeconds: nil,
+            llmDurationSeconds: nil,
+            focusedAppName: nil,
+            focusedAppBundleID: nil,
+            matchedGroupID: nil,
+            matchedGroupName: nil,
+            matchedAppGroupName: nil,
+            matchedURLGroupName: nil,
+            remoteASRProvider: nil,
+            remoteASRModel: nil,
+            remoteASREndpoint: nil,
+            remoteLLMProvider: nil,
+            remoteLLMModel: nil,
+            remoteLLMEndpoint: nil,
+            audioRelativePath: "transcript/audio-only.wav",
+            whisperWordTimings: nil,
+            transcriptSegments: [],
+            transcriptAudioRelativePath: "transcript/audio-only.wav",
+            meetingCaptureMode: .recording,
+            displayTitle: "Recording",
+            dictionaryHitTerms: [],
+            dictionaryCorrectedTerms: [],
+            dictionarySuggestedTerms: [],
+            allowEmptyTextWithAudio: true
+        )
+
+        let entry = try XCTUnwrap(entryID.flatMap { store.entry(id: $0) })
+        XCTAssertEqual(entry.text, "")
+        XCTAssertEqual(entry.meetingCaptureMode, .recording)
+        XCTAssertEqual(entry.audioRelativePath, "transcript/audio-only.wav")
+    }
+
+    private func retain<Value: AnyObject>(_ value: Value) -> Value {
+        Self.retainedObjects.append(value)
+        return value
     }
 }

@@ -164,10 +164,14 @@ struct HistoryRow: View {
     }
 
     private var displayText: String {
-        HistoryCorrectionPresentation.correctedText(
+        let corrected = HistoryCorrectionPresentation.correctedText(
             for: entry.text,
             snapshots: entry.dictionaryCorrectionSnapshots
         )
+        if !corrected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return corrected
+        }
+        return entry.displayTitle ?? entry.meetingCaptureMode?.title ?? localized("Recording")
     }
 
     private var timeText: String {

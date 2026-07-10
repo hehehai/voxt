@@ -286,11 +286,9 @@ enum TranscriptSummarySupport {
         generatedAt: Date
     ) -> TranscriptSummarySnapshot? {
         let summaryBlock = payload.transcriptSummary
-        let title = normalizeEscapedText(summaryBlock?.title ?? payload.title)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = normalizeEscapedText(summaryBlock?.content ?? summaryBlock?.body ?? payload.body ?? payload.content)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let todoItems = normalizedTodoItems(payload.todoList ?? payload.todoItems ?? [])
+        let title = decodedText(summaryBlock?.title ?? payload.title)
+        let body = decodedText(summaryBlock?.content ?? summaryBlock?.body ?? payload.body ?? payload.content)
+        let todoItems = decodedTodoItems(payload.todoList ?? payload.todoItems ?? [])
         guard !body.isEmpty || !todoItems.isEmpty else { return nil }
         return TranscriptSummarySnapshot(
             title: title.isEmpty ? fallbackSummaryTitle(for: settings) : title,
@@ -343,7 +341,7 @@ enum TranscriptSummarySupport {
                 #"(?is)(?:^|\n)\s*["']?(?:todoItems|todos|actionItems)["']?\s*[:：]\s*([\s\S]+?)\s*$"#
             ]
         ) ?? "") : xmlTodoBlock
-        let todoItems = normalizedTodoItems(
+        let todoItems = normalizedLooseTodoItems(
             todoBlock
                 .components(separatedBy: .newlines)
                 .map { $0.replacingOccurrences(of: #"^[\-\*\d\.\)\s]+"#, with: "", options: .regularExpression) }
@@ -358,7 +356,17 @@ enum TranscriptSummarySupport {
         )
     }
 
-    private static func normalizedTodoItems(_ values: [String]) -> [String] {
+    private static func decodedText(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private static func decodedTodoItems(_ values: [String]) -> [String] {
+        values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private static func normalizedLooseTodoItems(_ values: [String]) -> [String] {
         values
             .map { normalizeEscapedText($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }

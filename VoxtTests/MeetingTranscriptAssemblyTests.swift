@@ -520,7 +520,7 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
     }
 
     @MainActor
-    func testFinalTranscriptionPassPrefersWholeAssetTranscriptionWhenAvailable() async {
+    func testFinalTranscriptionPassPrefersWholeAssetTranscriptionWhenAvailable() async throws {
         let asset = MeetingAudioAsset(
             source: .systemAudio,
             samples: [Float](repeating: 0.1, count: 20),
@@ -529,7 +529,7 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         )
         let transcriber = WholeAssetMeetingTranscriber()
 
-        let segments = await MeetingFinalTranscriptionPass.transcribe(
+        let segments = try await MeetingFinalTranscriptionPass.transcribe(
             assets: [asset],
             transcriber: transcriber
         )
@@ -538,6 +538,61 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertEqual(segments.count, 1)
         XCTAssertEqual(segments[0].speakerID, "moss:S01")
         XCTAssertEqual(segments[0].text, "whole asset")
+    }
+
+    @MainActor
+    func testFinalTranscriptionPassDoesNotReturnPartialWholeAssetResults() async {
+        let assets = [
+            MeetingAudioAsset(
+                source: .microphone,
+                samples: [Float](repeating: 0.1, count: 20),
+                sampleRate: 10,
+                sessionStartOffset: 0
+            ),
+            MeetingAudioAsset(
+                source: .systemAudio,
+                samples: [Float](repeating: 0.1, count: 20),
+                sampleRate: 10,
+                sessionStartOffset: 0
+            ),
+        ]
+        let transcriber = FailingWholeAssetMeetingTranscriber(failingSource: .systemAudio)
+
+        do {
+            _ = try await MeetingFinalTranscriptionPass.transcribe(
+                assets: assets,
+                transcriber: transcriber
+            )
+            XCTFail("Expected the whole final transcription pass to fail atomically")
+        } catch {
+            XCTAssertEqual(error as? WholeAssetTranscriptionStubError, .inferenceFailed)
+        }
+
+        XCTAssertEqual(transcriber.successfulSources, [.microphone])
+    }
+
+    @MainActor
+    func testFinalTranscriptionPassThrowsWhenDescriptorAssetCannotBeLoaded() async {
+        let descriptor = MeetingAudioAssetDescriptor(
+            source: .systemAudio,
+            sampleRate: 10,
+            startSample: 0,
+            sampleCount: 20
+        )
+
+        do {
+            _ = try await MeetingFinalTranscriptionPass.transcribe(
+                descriptors: [descriptor],
+                loadAsset: { _ in nil },
+                transcriber: WholeAssetMeetingTranscriber()
+            )
+            XCTFail("Expected an unavailable asset error")
+        } catch {
+            XCTAssertEqual(
+                error as? MeetingFinalTranscriptionPass.Failure,
+                .assetUnavailable(.systemAudio)
+            )
+        }
     }
 
     func testBalancedSpeakerAssemblyKeepsContinuousSegmentTogetherAcrossShortSpeakerTurns() {
@@ -601,8 +656,44 @@ private final class WholeAssetMeetingTranscriber: MeetingSegmentTranscribing {
         return nil
     }
 
-    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async -> [MeetingTranscriptSegment]? {
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
         [
+            MeetingTranscriptSegment(
+                speaker: asset.source.defaultSpeaker,
+                speakerID: "moss:S01",
+                speakerDisplayName: "Speaker 1",
+                audioSource: asset.source,
+                startSeconds: asset.sessionStartOffset,
+                endSeconds: asset.sessionStartOffset + asset.durationSeconds,
+                text: "whole asset"
+            )
+        ]
+    }
+}
+
+private enum WholeAssetTranscriptionStubError: Error, Equatable {
+    case inferenceFailed
+}
+
+@MainActor
+private final class FailingWholeAssetMeetingTranscriber: MeetingSegmentTranscribing {
+    private let failingSource: TranscriptAudioSource
+    private(set) var successfulSources: [TranscriptAudioSource] = []
+
+    init(failingSource: TranscriptAudioSource) {
+        self.failingSource = failingSource
+    }
+
+    func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment? {
+        nil
+    }
+
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
+        guard asset.source != failingSource else {
+            throw WholeAssetTranscriptionStubError.inferenceFailed
+        }
+        successfulSources.append(asset.source)
+        return [
             MeetingTranscriptSegment(
                 speaker: asset.source.defaultSpeaker,
                 speakerID: "moss:S01",

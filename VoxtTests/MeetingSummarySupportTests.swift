@@ -47,7 +47,7 @@ final class MeetingSummarySupportTests: XCTestCase {
         XCTAssertEqual(decoded?.settingsSnapshot.modelSelectionID, "remote-llm:openAI")
     }
 
-    func testDecodeSummaryNormalizesDoubleEscapedLineBreaks() {
+    func testDecodeSummaryPreservesLiteralEscapesInStructuredJSON() {
         let settings = MeetingSummarySettingsSnapshot(
             autoGenerate: true,
             promptTemplate: "Summarize decisions and TODOs.",
@@ -58,18 +58,35 @@ final class MeetingSummarySupportTests: XCTestCase {
         {
           "transcript_summary": {
             "title": "城市游览",
-            "content": "背景：讨论围绕城市游览和品尝当地特色食物展开。\\\\n\\\\n关键讨论点：饮料价格、特色菜品试吃和口味反馈。"
+            "content": "Windows path C:\\\\new and literal tab \\\\t stay unchanged."
           },
-          "todo_list": ["继续寻找更多当地餐馆\\\\n记录价格"]
+          "todo_list": ["Keep C:\\\\new unchanged"]
         }
         """
 
         let decoded = MeetingSummarySupport.decodeSummary(from: payload, settings: settings)
 
-        XCTAssertEqual(
-            decoded?.body,
-            "背景：讨论围绕城市游览和品尝当地特色食物展开。\n\n关键讨论点：饮料价格、特色菜品试吃和口味反馈。"
+        XCTAssertEqual(decoded?.body, "Windows path C:\\new and literal tab \\t stay unchanged.")
+        XCTAssertEqual(decoded?.todoItems, ["Keep C:\\new unchanged"])
+    }
+
+    func testDecodeLooseSummaryNormalizesDoubleEscapedLineBreaks() {
+        let settings = MeetingSummarySettingsSnapshot(
+            autoGenerate: true,
+            promptTemplate: "Summarize decisions and TODOs.",
+            modelSelectionID: "remote-llm:openAI"
         )
+        let payload = """
+        <transcript_summary>
+        <title>城市游览</title>
+        <content>背景：讨论围绕城市游览展开。\\n\\n关键讨论点：饮料价格和口味反馈。</content>
+        </transcript_summary>
+        <todo_list>继续寻找更多当地餐馆\\n记录价格</todo_list>
+        """
+
+        let decoded = MeetingSummarySupport.decodeSummary(from: payload, settings: settings)
+
+        XCTAssertEqual(decoded?.body, "背景：讨论围绕城市游览展开。\n\n关键讨论点：饮料价格和口味反馈。")
         XCTAssertEqual(decoded?.todoItems, ["继续寻找更多当地餐馆\n记录价格"])
     }
 

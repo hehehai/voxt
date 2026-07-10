@@ -245,7 +245,7 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     var canRegenerateSummary: Bool {
-        mode == .history && historyEntryID != nil
+        mode == .history && historyEntryID != nil && !segments.isEmpty
     }
 
     var canSendSummaryChat: Bool {
@@ -326,6 +326,10 @@ final class MeetingDetailViewModel: ObservableObject {
 
         switch mode {
         case .history:
+            guard !segments.isEmpty else {
+                summaryState = .idle
+                return
+            }
             if summary != nil {
                 summaryState = .idle
                 return

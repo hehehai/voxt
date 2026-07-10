@@ -2003,3 +2003,5 @@
 "%@ · Temp %.2f" = "%@ · 温度 %.2f";
 "Task source" = "タスク入力言語";
 "Task output" = "タスク出力言語";
+"No transcript was produced for this recording." = "この録音の文字起こしは生成されませんでした。";
+"The audio recording is saved and available for playback." = "録音は保存され、再生できます。";

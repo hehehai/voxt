@@ -381,6 +381,54 @@ final class MeetingSpeakerTranscriptAssemblerTests: XCTestCase {
         XCTAssertEqual(Set(result.compactMap(\.speakerID)), Set(["S1", "S2"]))
     }
 
+    func testSpeakerAnalysisPipelinePreservesMOSSDataAndAnalyzesRemainingSegments() async {
+        let mossSegment = MeetingTranscriptSegment(
+            speaker: .them,
+            speakerID: "moss:S01",
+            speakerDisplayName: "MOSS Speaker 1",
+            audioSource: .systemAudio,
+            startSeconds: 0,
+            endSeconds: 2,
+            text: "structured segment",
+            preventsAdjacentMerge: true
+        )
+        let unstructuredSegment = MeetingTranscriptSegment(
+            speaker: .them,
+            audioSource: .systemAudio,
+            startSeconds: 2,
+            endSeconds: 4,
+            text: "segment needing analysis"
+        )
+        let asset = MeetingAudioAsset(
+            source: .systemAudio,
+            samples: [Float](repeating: 0.1, count: 400),
+            sampleRate: 100,
+            sessionStartOffset: 0
+        )
+        let engine = StubMeetingSpeakerDiarizationEngine(turns: [
+            MeetingSpeakerTurn(
+                source: .systemAudio,
+                speakerID: "raw-speaker",
+                displayName: "Raw Speaker",
+                startSeconds: 0,
+                endSeconds: 4
+            )
+        ])
+
+        let result = await MeetingSpeakerAnalysisPipeline.analyzedSegmentsPreservingStructuredSpeakerData(
+            from: [mossSegment, unstructuredSegment],
+            assets: [asset],
+            engine: engine
+        )
+
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result[0].speakerID, "moss:S01")
+        XCTAssertEqual(result[0].speakerDisplayName, "MOSS Speaker 1")
+        XCTAssertEqual(result[0].text, "structured segment")
+        XCTAssertEqual(result[1].speakerID, "raw-speaker")
+        XCTAssertEqual(result[1].text, "segment needing analysis")
+    }
+
     func testSegmentsWithoutMatchingTurnsKeepOriginalSpeakerAndSource() {
         let segment = MeetingTranscriptSegment(
             speaker: .me,

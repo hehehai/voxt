@@ -2045,3 +2045,5 @@
 "%@ · Temp %.2f" = "%@ · 温度 %.2f";
 "Task source" = "任务源语言";
 "Task output" = "任务输出语言";
+"No transcript was produced for this recording." = "这段录音未生成转写文本。";
+"The audio recording is saved and available for playback." = "录音已保存，可以直接播放。";

@@ -97,7 +97,11 @@ extension AppDelegate {
 
     func requestMeetingSessionCloseConfirmation() {
         guard meetingSessionCoordinator.isActive else { return }
-        if meetingSessionCoordinator.overlayState.segments.isEmpty {
+        let closeDecision = MeetingSessionClosePlanner.resolve(
+            hasTranscriptSegments: !meetingSessionCoordinator.overlayState.segments.isEmpty,
+            hasCapturedAudio: meetingSessionCoordinator.hasCapturedAudio
+        )
+        if closeDecision == .discard {
             cancelMeetingSessionWithoutSaving()
             return
         }

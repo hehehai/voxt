@@ -4,6 +4,35 @@
 import Foundation
 
 enum MeetingSpeakerAnalysisPipeline {
+    static func analyzedSegmentsPreservingStructuredSpeakerData(
+        from segments: [MeetingTranscriptSegment],
+        assets: [MeetingAudioAsset],
+        options: MeetingSpeakerDiarizationOptions = MeetingSpeakerDiarizationOptions(),
+        engine: (any MeetingSpeakerDiarizationEngine)? = MeetingSpeakerDiarizationEngineFactory.makeDefault()
+    ) async -> [MeetingTranscriptSegment] {
+        await analyzedSegmentsPreservingStructuredSpeakerData(from: segments) { candidates in
+            await analyzedSegments(from: candidates, assets: assets, options: options, engine: engine)
+        }
+    }
+
+    static func analyzedSegmentsPreservingStructuredSpeakerData(
+        from segments: [MeetingTranscriptSegment],
+        descriptors: [MeetingAudioAssetDescriptor],
+        loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
+        options: MeetingSpeakerDiarizationOptions = MeetingSpeakerDiarizationOptions(),
+        engine: (any MeetingSpeakerDiarizationEngine)? = MeetingSpeakerDiarizationEngineFactory.makeDefault()
+    ) async -> [MeetingTranscriptSegment] {
+        await analyzedSegmentsPreservingStructuredSpeakerData(from: segments) { candidates in
+            await analyzedSegments(
+                from: candidates,
+                descriptors: descriptors,
+                loadAsset: loadAsset,
+                options: options,
+                engine: engine
+            )
+        }
+    }
+
     static func analyzedSegments(
         from segments: [MeetingTranscriptSegment],
         assets: [MeetingAudioAsset],
@@ -95,6 +124,24 @@ enum MeetingSpeakerAnalysisPipeline {
             options: options
         )
         return readableSegments
+    }
+
+    private static func analyzedSegmentsPreservingStructuredSpeakerData(
+        from segments: [MeetingTranscriptSegment],
+        analyze: ([MeetingTranscriptSegment]) async -> [MeetingTranscriptSegment]
+    ) async -> [MeetingTranscriptSegment] {
+        let protectedSegments = segments.filter(hasStructuredSpeakerData)
+        let candidates = segments.filter { !hasStructuredSpeakerData($0) }
+        guard !candidates.isEmpty else {
+            return MeetingTranscriptPostProcessor.process(protectedSegments)
+        }
+
+        let analyzedSegments = await analyze(candidates)
+        return MeetingTranscriptPostProcessor.process(protectedSegments + analyzedSegments)
+    }
+
+    private static func hasStructuredSpeakerData(_ segment: MeetingTranscriptSegment) -> Bool {
+        segment.speakerID?.hasPrefix("moss:") == true
     }
 
     private static func logDebug(_ message: @autoclosure () -> String, options: MeetingSpeakerDiarizationOptions) {

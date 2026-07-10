@@ -641,7 +641,7 @@ private struct MeetingDetailWindowView: View {
                 Text(
                     viewModel.isFinalizing
                         ? String(localized: "Preparing final transcript…")
-                        : String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts.")
+                        : transcriptEmptyTitle
                 )
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -649,7 +649,7 @@ private struct MeetingDetailWindowView: View {
                 Text(
                     viewModel.isFinalizing
                         ? String(localized: "Voxt is finishing audio flushing, final transcription, and speaker analysis.")
-                        : String(localized: "This panel stays focused on the detailed transcript and synced playback.")
+                        : transcriptEmptyMessage
                 )
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary.opacity(0.85))
@@ -667,6 +667,20 @@ private struct MeetingDetailWindowView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
         }
+    }
+
+    private var transcriptEmptyTitle: String {
+        if viewModel.mode == .history, viewModel.audioURL != nil {
+            return String(localized: "No transcript was produced for this recording.")
+        }
+        return String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts.")
+    }
+
+    private var transcriptEmptyMessage: String {
+        if viewModel.mode == .history, viewModel.audioURL != nil {
+            return String(localized: "The audio recording is saved and available for playback.")
+        }
+        return String(localized: "This panel stays focused on the detailed transcript and synced playback.")
     }
 
     private var meetingFinalizationBanner: some View {

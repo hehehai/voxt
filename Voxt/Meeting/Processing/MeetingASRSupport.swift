@@ -32,6 +32,7 @@ struct MeetingASREngineContext: Equatable {
     let resolvedMode: MeetingASRResolvedMode
     let needsModelInitialization: Bool
     var sherpaModelID: SherpaOnnxModelID? = nil
+    var mlxModelRepo: String? = nil
 
     var chunkingProfile: MeetingChunkingProfile {
         resolvedMode.chunkingProfile
@@ -46,7 +47,8 @@ struct MeetingASREngineContext: Equatable {
             historyModelDescription: historyModelDescription,
             resolvedMode: .chunk(profile: mode.resolvedProfile(automaticProfile: automaticProfile)),
             needsModelInitialization: needsModelInitialization,
-            sherpaModelID: sherpaModelID
+            sherpaModelID: sherpaModelID,
+            mlxModelRepo: mlxModelRepo
         )
     }
 }
@@ -71,7 +73,8 @@ enum MeetingASRSupport {
                 resolvedMode: .chunk(
                     profile: MLXModelManager.isRealtimeCapableModelRepo(mlxCurrentModelRepo) ? .realtime : .quality
                 ),
-                needsModelInitialization: !mlxIsCurrentModelLoaded && modelStateNeedsInitialization(mlxModelState)
+                needsModelInitialization: !mlxIsCurrentModelLoaded && modelStateNeedsInitialization(mlxModelState),
+                mlxModelRepo: mlxCurrentModelRepo
             )
         case .remote:
             let resolvedMode = resolveRemoteMode(

@@ -400,6 +400,30 @@ nonisolated struct ASRVoiceActivityFrameDecision: Equatable, Sendable {
     }
 }
 
+nonisolated struct ASROfflineSpeechRange: Equatable, Sendable {
+    let startSeconds: TimeInterval
+    let endSeconds: TimeInterval
+
+    nonisolated init(startSeconds: TimeInterval, endSeconds: TimeInterval) {
+        self.startSeconds = max(0, startSeconds)
+        self.endSeconds = max(self.startSeconds, endSeconds)
+    }
+
+    nonisolated func intersects(
+        startSeconds otherStart: TimeInterval,
+        endSeconds otherEnd: TimeInterval,
+        tolerance: TimeInterval = 0
+    ) -> Bool {
+        let resolvedTolerance = max(0, tolerance)
+        return endSeconds + resolvedTolerance > otherStart
+            && startSeconds - resolvedTolerance < otherEnd
+    }
+}
+
+protocol ASROfflineVoiceActivityBackend: Sendable {
+    func speechRanges(samples: [Float], sampleRate: Double) async throws -> [ASROfflineSpeechRange]
+}
+
 nonisolated enum ASRVoiceActivitySampleRateConverter {
     private static let maximumExpansionRatio: Double = 32
 

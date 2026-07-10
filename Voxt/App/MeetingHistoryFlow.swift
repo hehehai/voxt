@@ -101,20 +101,31 @@ extension AppDelegate {
         }
 
         let persistedSegments = result.persistedSegments
-        guard !persistedSegments.isEmpty else {
-            VoxtLog.meetingWarning("Meeting history persistence skipped: no meaningful meeting segments were available.")
-            return nil
-        }
-
         let persistedText = MeetingTranscriptFormatter.joinedText(for: persistedSegments)
-        guard !persistedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            VoxtLog.meetingWarning("Meeting history persistence skipped: merged meeting text was empty after formatting.")
+        let hasMeaningfulText = !persistedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let archivedAudioExists = result.archivedAudioURL.map {
+            FileManager.default.fileExists(atPath: $0.path)
+        } ?? false
+        let storesAudioForMode = historyAudioStorageEnabled || result.captureMode == .recording
+        let allowsAudioOnlyHistory = storesAudioForMode && archivedAudioExists
+        guard hasMeaningfulText || allowsAudioOnlyHistory else {
+            VoxtLog.meetingWarning(
+                "Meeting history persistence skipped: neither meaningful transcript text nor a persistable audio asset was available."
+            )
             return nil
         }
 
         let audioRelativePath: String?
-        if historyAudioStorageEnabled, let archivedAudioURL = result.archivedAudioURL {
-            audioRelativePath = try? historyStore.importAudioArchive(from: archivedAudioURL, kind: .transcript)
+        if storesAudioForMode, let archivedAudioURL = result.archivedAudioURL, archivedAudioExists {
+            do {
+                audioRelativePath = try historyStore.importAudioArchive(from: archivedAudioURL, kind: .transcript)
+            } catch {
+                VoxtLog.meetingWarning("Meeting audio persistence failed. error=\(error.localizedDescription)")
+                if result.captureMode == .recording || !hasMeaningfulText {
+                    return nil
+                }
+                audioRelativePath = nil
+            }
         } else {
             if let archivedAudioURL = result.archivedAudioURL,
                FileManager.default.fileExists(atPath: archivedAudioURL.path) {
@@ -151,10 +162,15 @@ extension AppDelegate {
             transcriptSegments: persistedSegments,
             transcriptAudioRelativePath: audioRelativePath,
             meetingCaptureMode: result.captureMode,
+            displayTitle: hasMeaningfulText ? nil : result.captureMode.title,
             dictionaryHitTerms: [],
             dictionaryCorrectedTerms: [],
-            dictionarySuggestedTerms: []
+            dictionarySuggestedTerms: [],
+            allowEmptyTextWithAudio: !hasMeaningfulText
         ) else {
+            if let audioRelativePath {
+                historyStore.removeImportedAudioArchive(relativePath: audioRelativePath)
+            }
             VoxtLog.meetingWarning("Meeting history persistence failed: history store rejected the meeting entry.")
             return nil
         }
@@ -162,7 +178,9 @@ extension AppDelegate {
         VoxtLog.meeting(
             "Meeting history persistence succeeded. entryID=\(entryID.uuidString), segments=\(persistedSegments.count), forceSave=\(forceSave)"
         )
-        cacheLatestInjectableOutputText(persistedText)
+        if hasMeaningfulText {
+            cacheLatestInjectableOutputText(persistedText)
+        }
         return historyStore.entry(id: entryID)
     }
 

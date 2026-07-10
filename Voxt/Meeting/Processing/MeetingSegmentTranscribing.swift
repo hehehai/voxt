@@ -9,7 +9,7 @@ import MLXAudioSTT
 protocol MeetingSegmentTranscribing {
     func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment?
     func transcribeSegments(chunk: BufferedMeetingChunk) async -> [MeetingTranscriptSegment]
-    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async -> [MeetingTranscriptSegment]?
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]?
     func cancelPendingWork() async
 }
 
@@ -19,7 +19,7 @@ extension MeetingSegmentTranscribing {
         return [segment]
     }
 
-    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async -> [MeetingTranscriptSegment]? {
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
         nil
     }
 
@@ -189,11 +189,11 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
         )
     }
 
-    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async -> [MeetingTranscriptSegment]? {
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
         guard MLXModelFamily.family(for: modelManager.currentModelRepo) == .mossTranscribeDiarize else {
             return nil
         }
-        guard let result = await mlxTranscriber.transcribeMeetingChunkResult(
+        guard let result = try await mlxTranscriber.transcribeBufferedResult(
             samples: asset.samples,
             sampleRate: asset.sampleRate
         ) else {

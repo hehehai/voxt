@@ -4,6 +4,17 @@
 import Foundation
 
 enum MeetingFinalTranscriptionPass {
+    enum Failure: LocalizedError, Equatable {
+        case assetUnavailable(TranscriptAudioSource)
+
+        var errorDescription: String? {
+            switch self {
+            case let .assetUnavailable(source):
+                return "Meeting audio asset is unavailable for \(source.rawValue)."
+            }
+        }
+    }
+
     struct Options: Equatable, Sendable {
         var maxChunkSeconds: TimeInterval = 22
         var overlapSeconds: TimeInterval = 1.0
@@ -36,10 +47,10 @@ enum MeetingFinalTranscriptionPass {
         assets: [MeetingAudioAsset],
         transcriber: any MeetingSegmentTranscribing,
         options: Options = Options()
-    ) async -> [MeetingTranscriptSegment] {
+    ) async throws -> [MeetingTranscriptSegment] {
         var segments: [MeetingTranscriptSegment] = []
         for asset in assets {
-            if let wholeAssetSegments = await transcriber.transcribeWholeAsset(asset) {
+            if let wholeAssetSegments = try await transcriber.transcribeWholeAsset(asset) {
                 appendCleaned(wholeAssetSegments, to: &segments)
                 continue
             }
@@ -57,11 +68,13 @@ enum MeetingFinalTranscriptionPass {
         loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
         transcriber: any MeetingSegmentTranscribing,
         options: Options = Options()
-    ) async -> [MeetingTranscriptSegment] {
+    ) async throws -> [MeetingTranscriptSegment] {
         var segments: [MeetingTranscriptSegment] = []
         for descriptor in descriptors {
-            guard let asset = await loadAsset(descriptor) else { continue }
-            if let wholeAssetSegments = await transcriber.transcribeWholeAsset(asset) {
+            guard let asset = await loadAsset(descriptor) else {
+                throw Failure.assetUnavailable(descriptor.source)
+            }
+            if let wholeAssetSegments = try await transcriber.transcribeWholeAsset(asset) {
                 appendCleaned(wholeAssetSegments, to: &segments)
                 continue
             }

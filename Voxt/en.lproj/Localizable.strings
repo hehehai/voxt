@@ -2045,3 +2045,5 @@
 "%@ · Temp %.2f" = "%@ · Temp %.2f";
 "Task source" = "Task source";
 "Task output" = "Task output";
+"No transcript was produced for this recording." = "No transcript was produced for this recording.";
+"The audio recording is saved and available for playback." = "The audio recording is saved and available for playback.";
