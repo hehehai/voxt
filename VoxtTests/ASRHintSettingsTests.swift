@@ -180,6 +180,48 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertNil(unsupportedPayload.language)
     }
 
+    func testResolveMLXUsesCapabilityLanguageRouting() {
+        let unsupportedQwen = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["sw"],
+            mlxModelRepo: "mlx-community/Qwen3-ASR-0.6B-4bit"
+        )
+        XCTAssertNil(unsupportedQwen.language)
+
+        let automaticParakeet = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["de"],
+            mlxModelRepo: "mlx-community/parakeet-tdt-0.6b-v3"
+        )
+        XCTAssertNil(automaticParakeet.language)
+
+        let nemotron = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hans", "en"],
+            mlxModelRepo: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"
+        )
+        XCTAssertEqual(nemotron.language, "zh-CN")
+
+        let traditionalChineseNemotron = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hant"],
+            mlxModelRepo: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"
+        )
+        XCTAssertEqual(traditionalChineseNemotron.language, "zh-TW")
+
+        let automaticVoxtral = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hans"],
+            mlxModelRepo: "mlx-community/Voxtral-Mini-4B-Realtime-6bit"
+        )
+        XCTAssertNil(automaticVoxtral.language)
+    }
+
     func testQwenLocalTuningDefaultsToDictionaryTermsOnly() {
         let settings = MLXLocalTuningSettingsStore.resolvedSettings(
             for: "mlx-community/Qwen3-ASR-1.7B-4bit",
@@ -372,6 +414,10 @@ final class ASRHintSettingsTests: XCTestCase {
             .mmsCTC
         )
         XCTAssertEqual(
+            MLXModelFamily.family(for: "mlx-community/parakeet-tdt-0.6b-v3"),
+            .parakeet
+        )
+        XCTAssertEqual(
             MLXModelFamily.family(for: "example/lasr-ctc-checkpoint"),
             .lasrCTC
         )
@@ -418,6 +464,14 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(settings.mmsLanguageCode, "jpn")
         XCTAssertEqual(settings.nemotronStreamLatency, .fast)
         XCTAssertEqual(settings.voxtralTranscriptionDelay, .accurate)
+    }
+
+    func testMMSAdapterSanitizationRejectsUnknownCheckpointAdapter() {
+        let sanitized = MLXLocalTuningSettingsStore.sanitized(
+            MLXLocalTuningSettings(mmsLanguageCode: "not-a-real-adapter")
+        )
+
+        XCTAssertEqual(sanitized.mmsLanguageCode, "eng")
     }
 
     func testStreamingLatencySettingsUseBackwardCompatibleDefaults() {

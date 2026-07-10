@@ -74,6 +74,66 @@ final class MLXModelSupportTests: XCTestCase {
         XCTAssertTrue(tagKeys.contains("Realtime"))
     }
 
+    func testCapabilityRegistryUsesExactLanguageMatrices() {
+        let qwen = MLXModelCatalog.capability(for: "mlx-community/Qwen3-ASR-0.6B-4bit")
+        XCTAssertTrue(qwen.supportsLanguage(code: "zh"))
+        XCTAssertTrue(qwen.supportsLanguage(code: "yue"))
+        XCTAssertFalse(qwen.supportsLanguage(code: "sw"))
+
+        let parakeetV3 = MLXModelCatalog.capability(for: "mlx-community/parakeet-tdt-0.6b-v3")
+        XCTAssertEqual(parakeetV3.family, .parakeet)
+        XCTAssertEqual(parakeetV3.supportedLanguageCodes.count, 25)
+        XCTAssertTrue(parakeetV3.supportsLanguage(code: "de"))
+        XCTAssertFalse(parakeetV3.supportsLanguage(code: "zh"))
+
+        let legacyParakeet = MLXModelCatalog.capability(for: "mlx-community/parakeet-tdt-0.6b-v2")
+        XCTAssertEqual(legacyParakeet.supportedLanguageCodes, ["en"])
+
+        let nemotron = MLXModelCatalog.capability(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit")
+        XCTAssertTrue(nemotron.supportsLanguage(code: "zh"))
+        XCTAssertTrue(nemotron.supportsLanguage(code: "ja"))
+        XCTAssertFalse(nemotron.supportsLanguage(code: "el"))
+
+        let voxtral = MLXModelCatalog.capability(for: "mlx-community/Voxtral-Mini-4B-Realtime-6bit")
+        XCTAssertEqual(voxtral.supportedLanguageCodes.count, 13)
+        XCTAssertTrue(voxtral.supportsLanguage(code: "zh"))
+        XCTAssertFalse(voxtral.supportsLanguage(code: "yue"))
+    }
+
+    func testEveryCatalogModelHasAnExplicitCapability() {
+        let missingRepos = MLXModelCatalog.supportedModels
+            .map(\.id)
+            .filter { !MLXModelCatalog.hasRegisteredCapability(for: $0) }
+
+        XCTAssertEqual(missingRepos, [])
+    }
+
+    func testCapabilityRegistryDrivesFormsAndStructuredOutput() {
+        let parakeet = MLXModelCatalog.capability(for: "mlx-community/parakeet-tdt-0.6b-v3")
+        XCTAssertTrue(parakeet.configurationCapabilities.isEmpty)
+        XCTAssertEqual(parakeet.languageRouting, .automatic)
+
+        let moss = MLXModelCatalog.capability(for: "OpenMOSS-Team/MOSS-Transcribe-Diarize")
+        XCTAssertTrue(moss.configurationCapabilities.contains(.mossPromptAndOutput))
+        XCTAssertTrue(moss.outputCapabilities.contains(.timestamps))
+        XCTAssertTrue(moss.outputCapabilities.contains(.speakerLabels))
+        XCTAssertEqual(moss.vadPolicy, .preserveTimeline)
+
+        let senseVoice = MLXModelCatalog.capability(for: "mlx-community/SenseVoiceSmall")
+        XCTAssertTrue(senseVoice.configurationCapabilities.contains(.senseVoiceITN))
+        XCTAssertTrue(senseVoice.outputCapabilities.contains(.emotion))
+        XCTAssertTrue(senseVoice.outputCapabilities.contains(.audioEvents))
+    }
+
+    func testMMSAdapterCatalogMatchesFL102Checkpoint() {
+        XCTAssertEqual(MMSLanguageAdapterOption.all.count, 102)
+        XCTAssertTrue(MMSLanguageAdapterOption.all.contains(where: { $0.id == "eng" && $0.appLanguageCode == "en" }))
+        XCTAssertTrue(MMSLanguageAdapterOption.all.contains(where: { $0.id == "cmn-script_simplified" && $0.appLanguageCode == "zh" }))
+        XCTAssertTrue(MMSLanguageAdapterOption.all.contains(where: { $0.id == "yue-script_traditional" && $0.appLanguageCode == "yue" }))
+        XCTAssertTrue(MLXModelCatalog.supportsLanguage("ja", for: "facebook/mms-1b-fl102"))
+        XCTAssertFalse(MLXModelCatalog.supportsLanguage("bo", for: "facebook/mms-1b-fl102"))
+    }
+
     func testFallbackRemoteSizeSupportsLegacyAndCuratedRepos() {
         XCTAssertEqual(
             MLXModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/FireRedASR2"),

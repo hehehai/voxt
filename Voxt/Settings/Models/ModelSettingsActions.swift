@@ -54,7 +54,7 @@ enum MLXConfigurationSummarySupport {
             return AppLocalization.format("Max Output: %@ · Temp %.2f", String(tuning.moonshineMaxTokens), tuning.moonshineTemperature)
         case .mmsCTC:
             return AppLocalization.format("Adapter: %@", tuning.mmsLanguageCode)
-        case .wav2vec2CTC, .lasrCTC:
+        case .wav2vec2CTC, .parakeet, .lasrCTC:
             return AppLocalization.localizedString("Checkpoint Defaults")
         case .generic:
             return tuning.preset.title

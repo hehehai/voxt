@@ -686,7 +686,7 @@ enum MLXTranscriptionPlanning {
             return (nil, nil)
         case .whisper, .senseVoice, .cohereTranscribe, .nemotronASR, .voxtralRealtime,
              .mossTranscribeDiarize, .canary, .moonshine,
-             .wav2vec2CTC, .mmsCTC, .lasrCTC, .generic:
+             .wav2vec2CTC, .mmsCTC, .parakeet, .lasrCTC, .generic:
             return (nil, nil)
         }
     }
@@ -2461,7 +2461,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         var languageHint = hintPayload.language
         var targetLanguage: String?
         switch family {
-        case .graniteSpeech, .mossTranscribeDiarize, .moonshine, .wav2vec2CTC, .lasrCTC:
+        case .graniteSpeech, .mossTranscribeDiarize, .moonshine, .wav2vec2CTC, .parakeet, .lasrCTC:
             languageHint = nil
         case .mmsCTC:
             languageHint = tuningSettings.mmsLanguageCode

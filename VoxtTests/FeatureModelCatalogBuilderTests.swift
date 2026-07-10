@@ -176,7 +176,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
-    func testASRSelectorEntryDisplaysDoesNotSupportPrimaryLanguageTag() throws {
+    func testParakeetV3SelectorDoesNotClaimUnsupportedChinesePrimaryLanguage() throws {
         let repo = "mlx-community/parakeet-tdt-0.6b-v3"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),

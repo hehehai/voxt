@@ -525,10 +525,6 @@ struct FeatureModelCatalogBuilder {
         }
     }
 
-    private func mlxSupportsMultilingual(_ repo: String) -> Bool {
-        MLXModelManager.isMultilingualModelRepo(repo)
-    }
-
     private func primaryLanguageSupportTag(for selectionID: FeatureModelSelectionID) -> String? {
         guard let support = supportsPrimaryLanguage(for: selectionID) else { return nil }
         return localized(support ? "Supports Primary Language" : "Does Not Support Primary Language")
@@ -560,22 +556,7 @@ struct FeatureModelCatalogBuilder {
         _ repo: String,
         primaryLanguage: UserMainLanguageOption
     ) -> Bool {
-        let key = repo.lowercased()
-        let baseCode = primaryLanguage.baseLanguageCode
-
-        if key.contains("parakeet") {
-            return baseCode == "en"
-        }
-
-        if key.contains("glm-asr") || key.contains("firered") {
-            return ["zh", "en"].contains(baseCode)
-        }
-
-        if key.contains("canary") {
-            return CanaryLanguageSupport.supportedCodes.contains(baseCode)
-        }
-
-        return mlxSupportsMultilingual(repo)
+        MLXModelCatalog.supportsLanguage(primaryLanguage.baseLanguageCode, for: repo)
     }
 
     private func deduplicatedFeatureTags(_ tags: [String]) -> [String] {

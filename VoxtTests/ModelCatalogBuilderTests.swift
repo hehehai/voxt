@@ -165,7 +165,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
-    func testEnglishOnlyMLXModelDisplaysDoesNotSupportPrimaryLanguageTag() throws {
+    func testParakeetV3DoesNotClaimUnsupportedChinesePrimaryLanguage() throws {
         let repo = "mlx-community/parakeet-tdt-0.6b-v3"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),

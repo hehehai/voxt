@@ -168,10 +168,10 @@ enum CanaryTaskMode: String, CaseIterable, Codable, Identifiable, Sendable {
 }
 
 enum CanaryLanguageSupport {
-    static let supportedCodes = [
-        "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
-        "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
-    ]
+    static let supportedCodes = MLXModelCatalog
+        .capability(for: "Mediform/canary-1b-v2-mlx-q8")
+        .supportedLanguageCodes
+        .sorted()
 
     static let translationTargetCodes = supportedCodes.filter { $0 != "en" }
 
@@ -334,7 +334,7 @@ enum MossASRTranscriptRendering {
     }
 }
 
-enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
+nonisolated enum MLXModelFamily: String, CaseIterable, Codable, Identifiable, Sendable {
     case whisper
     case qwen3ASR
     case graniteSpeech
@@ -347,60 +347,14 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
     case moonshine
     case wav2vec2CTC
     case mmsCTC
+    case parakeet
     case lasrCTC
     case generic
 
     var id: String { rawValue }
 
     static func family(for repo: String) -> MLXModelFamily {
-        let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
-        if MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) {
-            return .whisper
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("Qwen3-ASR") {
-            return .qwen3ASR
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("granite-4.0-1b-speech") {
-            return .graniteSpeech
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("sensevoice") {
-            return .senseVoice
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("cohere-transcribe")
-            || canonicalRepo.localizedCaseInsensitiveContains("cohere")
-        {
-            return .cohereTranscribe
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("nemotron") {
-            return .nemotronASR
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("voxtral") {
-            return .voxtralRealtime
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("moss-transcribe-diarize")
-            || canonicalRepo.localizedCaseInsensitiveContains("moss_transcribe_diarize")
-        {
-            return .mossTranscribeDiarize
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("canary") {
-            return .canary
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("moonshine") {
-            return .moonshine
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("/mms-")
-            || canonicalRepo.localizedCaseInsensitiveContains("mms_")
-            || canonicalRepo.localizedCaseInsensitiveContains("mms-")
-        {
-            return .mmsCTC
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("wav2vec") {
-            return .wav2vec2CTC
-        }
-        if canonicalRepo.localizedCaseInsensitiveContains("lasr") {
-            return .lasrCTC
-        }
-        return .generic
+        MLXModelCatalog.capability(for: repo).family
     }
 
     var title: String {
@@ -429,6 +383,8 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("Wav2Vec2")
         case .mmsCTC:
             return AppLocalization.localizedString("MMS")
+        case .parakeet:
+            return AppLocalization.localizedString("Parakeet")
         case .lasrCTC:
             return AppLocalization.localizedString("LASR")
         case .generic:
@@ -436,27 +392,6 @@ enum MLXModelFamily: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    var supportsContextBias: Bool { self == .qwen3ASR }
-    var supportsPromptBias: Bool { self == .graniteSpeech }
-    var supportsITN: Bool { self == .senseVoice }
-    var supportsWhisperTemperature: Bool { self == .whisper }
-    var supportsRecognitionPreset: Bool {
-        switch self {
-        case .senseVoice, .nemotronASR, .voxtralRealtime, .canary, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
-            return false
-        default:
-            return true
-        }
-    }
-
-    var supportsSharedLanguageRouting: Bool {
-        switch self {
-        case .graniteSpeech, .voxtralRealtime, .mossTranscribeDiarize, .moonshine, .wav2vec2CTC, .mmsCTC, .lasrCTC:
-            return false
-        default:
-            return true
-        }
-    }
 }
 
 struct MLXLocalTuningSettings: Codable, Equatable {
@@ -737,7 +672,7 @@ enum MLXLocalTuningSettingsStore {
 
     private static func sanitizedMMSLanguageCode(_ value: String) -> String {
         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized.isEmpty ? "eng" : normalized
+        return MMSLanguageAdapterOption.all.contains(where: { $0.id == normalized }) ? normalized : "eng"
     }
 }
 

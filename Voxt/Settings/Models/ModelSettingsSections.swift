@@ -101,7 +101,7 @@ extension ModelSettingsView {
             MLXASRConfigurationSheetView(
                 modelRepo: repo,
                 modelTitle: mlxModelManager.displayTitle(for: repo),
-                family: MLXModelFamily.family(for: repo),
+                capability: MLXModelCatalog.capability(for: repo),
                 hintSettings: asrHintSettingsBinding(for: .mlxAudio),
                 tuningSettings: mlxLocalTuningSettingsBinding(for: repo),
                 userLanguageCodes: selectedUserLanguageCodes
@@ -225,12 +225,17 @@ private struct MLXASRConfigurationSheetView: View {
 
     let modelRepo: String
     let modelTitle: String
-    let family: MLXModelFamily
+    let capability: MLXASRModelCapability
     @Binding var hintSettings: ASRHintSettings
     @Binding var tuningSettings: MLXLocalTuningSettings
     @State private var mossUsageScope: MossASRUsageScope = .dictation
     let userLanguageCodes: [String]
     let onDone: () -> Void
+
+    private var family: MLXModelFamily { capability.family }
+    private var configurationCapabilities: MLXASRConfigurationCapability {
+        capability.configurationCapabilities
+    }
 
     private var mainLanguageSummary: String {
         ASRHintResolver.selectedLanguageSummary(userLanguageCodes)
@@ -278,6 +283,17 @@ private struct MLXASRConfigurationSheetView: View {
         CanaryLanguageSupport.translationTargetCodes.map {
             SettingsMenuOption(value: $0, title: CanaryLanguageSupport.title(for: $0))
         }
+    }
+
+    private var mmsLanguageAdapterOptions: [SettingsMenuOption<String>] {
+        MMSLanguageAdapterOption.all.map {
+            SettingsMenuOption(value: $0.id, title: $0.title)
+        }
+    }
+
+    private var selectedMMSLanguageAdapterTitle: String {
+        MMSLanguageAdapterOption.all.first(where: { $0.id == tuningSettings.mmsLanguageCode })?.title
+            ?? tuningSettings.mmsLanguageCode
     }
 
     private var mossOutputModeBinding: Binding<MossASROutputMode> {
@@ -342,7 +358,7 @@ private struct MLXASRConfigurationSheetView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    if family.supportsRecognitionPreset {
+                    if configurationCapabilities.contains(.recognitionPreset) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Preset"))
                                 .font(.subheadline.weight(.medium))
@@ -366,7 +382,7 @@ private struct MLXASRConfigurationSheetView: View {
                         }
                     }
 
-                    if family.supportsWhisperTemperature {
+                    if configurationCapabilities.contains(.whisperTemperature) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(localized("Temperature"))
@@ -383,7 +399,7 @@ private struct MLXASRConfigurationSheetView: View {
                         }
                     }
 
-                    if family.supportsSharedLanguageRouting {
+                    if configurationCapabilities.contains(.languageRouting) {
                         Toggle(localized("Follow User Main Language"), isOn: $hintSettings.followsUserMainLanguage)
                             .toggleStyle(.switch)
 
@@ -405,7 +421,7 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if family == .nemotronASR {
+                    if configurationCapabilities.contains(.nemotronLatency) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Streaming Latency"))
                                 .font(.subheadline.weight(.medium))
@@ -423,7 +439,7 @@ private struct MLXASRConfigurationSheetView: View {
                         }
                     }
 
-                    if family == .voxtralRealtime {
+                    if configurationCapabilities.contains(.voxtralDelay) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Transcription Delay"))
                                 .font(.subheadline.weight(.medium))
@@ -441,7 +457,7 @@ private struct MLXASRConfigurationSheetView: View {
                         }
                     }
 
-                    if family == .mossTranscribeDiarize {
+                    if configurationCapabilities.contains(.mossPromptAndOutput) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Usage"))
                                 .font(.subheadline.weight(.medium))
@@ -497,7 +513,7 @@ private struct MLXASRConfigurationSheetView: View {
                         }
                     }
 
-                    if family == .cohereTranscribe {
+                    if configurationCapabilities.contains(.cohereLongForm) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Long Audio Segmentation"))
                                 .font(.subheadline.weight(.medium))
@@ -532,7 +548,7 @@ private struct MLXASRConfigurationSheetView: View {
                         decodingTemperatureControl(value: $tuningSettings.cohereTemperature)
                     }
 
-                    if family == .canary {
+                    if configurationCapabilities.contains(.canaryTask) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Task"))
                                 .font(.subheadline.weight(.medium))
@@ -591,7 +607,7 @@ private struct MLXASRConfigurationSheetView: View {
                         decodingTemperatureControl(value: $tuningSettings.canaryTemperature)
                     }
 
-                    if family == .moonshine {
+                    if configurationCapabilities.contains(.moonshineDecoding) {
                         localInfoRow(label: localized("Model language"), value: localized("English"))
                         SettingsIntegerStepperField(
                             title: localized("Max Output Tokens"),
@@ -603,21 +619,17 @@ private struct MLXASRConfigurationSheetView: View {
                         decodingTemperatureControl(value: $tuningSettings.moonshineTemperature)
                     }
 
-                    if family == .mmsCTC {
+                    if configurationCapabilities.contains(.mmsAdapter) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("MMS Adapter Language"))
                                 .font(.subheadline.weight(.medium))
-                            TextField("eng", text: $tuningSettings.mmsLanguageCode)
-                                .textFieldStyle(.plain)
-                                .modifier(
-                                    SettingsFieldSurfaceModifier(
-                                        width: 140,
-                                        minHeight: 30,
-                                        horizontalPadding: 8,
-                                        alignment: .leading
-                                    )
-                                )
-                            Text(localized("Use the checkpoint's ISO 639-3 adapter code, for example eng, cmn, jpn, deu, or fra."))
+                            SettingsMenuPicker(
+                                selection: $tuningSettings.mmsLanguageCode,
+                                options: mmsLanguageAdapterOptions,
+                                selectedTitle: selectedMMSLanguageAdapterTitle,
+                                width: 280
+                            )
+                            Text(localized("Select one of the language adapters included in the FL102 checkpoint."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -636,7 +648,7 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if family.supportsContextBias {
+                    if configurationCapabilities.contains(.qwenContext) {
                         Text(localized("Recognition Context"))
                             .font(.subheadline.weight(.medium))
                         PromptEditorView(text: $tuningSettings.qwenContextBias, height: 110, variables: Self.dictionaryTermsVariable)
@@ -645,7 +657,7 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if family.supportsPromptBias {
+                    if configurationCapabilities.contains(.granitePrompt) {
                         Text(localized("Recognition Prompt"))
                             .font(.subheadline.weight(.medium))
                         PromptEditorView(text: $tuningSettings.granitePromptBias, height: 110, variables: Self.dictionaryTermsVariable)
@@ -654,7 +666,7 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if family.supportsITN {
+                    if configurationCapabilities.contains(.senseVoiceITN) {
                         Toggle(localized("Enable ITN"), isOn: $tuningSettings.senseVoiceUseITN)
                             .toggleStyle(.switch)
                         Text(localized("ITN lets SenseVoice normalize spoken numbers, dates, and similar expressions into written form."))
@@ -662,7 +674,19 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if family == .generic {
+                    if configurationCapabilities.isEmpty && (family == .parakeet || family == .generic) {
+                        localInfoRow(
+                            label: localized("Language detection"),
+                            value: capability.supportedLanguageCodes.count > 1
+                                ? localized("Automatic")
+                                : capability.supportedLanguageCodes.first.map {
+                                    UserMainLanguageOption.option(for: $0)?.title() ?? $0
+                                } ?? localized("Checkpoint default")
+                        )
+                        Text(localized("This model uses checkpoint-defined decoding and does not expose additional controls."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if family == .generic {
                         Text(localized("This model family only exposes preset and language controls."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
