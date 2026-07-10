@@ -34,6 +34,15 @@ enum AutomaticDictionaryLearningObservationDecision: Equatable {
     case settleForAnalysis(finalText: String)
 }
 
+enum AutomaticDictionaryLearningObservationScheduleDecision: Equatable {
+    case schedule
+    case skipTextNotInjected
+    case skipNonTranscriptionOutput
+    case skipFeatureDisabled
+    case skipEmptyText
+    case skipAutoKeyPress
+}
+
 enum AutomaticDictionaryLearningMonitor {
     private struct WhitespaceCollapsedProjection {
         let text: String
@@ -153,6 +162,23 @@ enum AutomaticDictionaryLearningMonitor {
             }
         )
     ]
+
+    static func observationScheduleDecision(
+        didInject: Bool,
+        isTranscriptionOutput: Bool,
+        isFeatureEnabled: Bool,
+        insertedText: String,
+        didTriggerAutoKeyPress: Bool
+    ) -> AutomaticDictionaryLearningObservationScheduleDecision {
+        guard didInject else { return .skipTextNotInjected }
+        guard isTranscriptionOutput else { return .skipNonTranscriptionOutput }
+        guard isFeatureEnabled else { return .skipFeatureDisabled }
+        guard !insertedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .skipEmptyText
+        }
+        guard !didTriggerAutoKeyPress else { return .skipAutoKeyPress }
+        return .schedule
+    }
 
     static func makeLearningRequest(
         insertedText rawInsertedText: String,
