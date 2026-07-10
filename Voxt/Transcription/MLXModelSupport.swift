@@ -200,23 +200,26 @@ struct MLXModelCatalog {
         ),
         Option(
             id: "Mediform/canary-1b-v2-mlx-q8",
-            title: "Canary 1B v2 (Q8)",
+            title: "Canary",
             description: "Canary-compatible NeMo encoder-decoder checkpoint for multilingual transcription."
         ),
         Option(
             id: "UsefulSensors/moonshine-tiny",
             title: "Moonshine Tiny",
-            description: "Lightweight Moonshine ASR checkpoint for fast English transcription."
+            description: "Lightweight Moonshine ASR checkpoint for fast English transcription.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "facebook/wav2vec2-base-960h",
             title: "Wav2Vec2 Base 960h",
-            description: "CTC English speech recognizer with a compact encoder-only decoding path."
+            description: "CTC English speech recognizer with a compact encoder-only decoding path.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "facebook/mms-1b-fl102",
             title: "MMS 1B FL102",
-            description: "Massively multilingual Wav2Vec2 adapter model for broad language coverage."
+            description: "Massively multilingual Wav2Vec2 adapter model for broad language coverage.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/parakeet-tdt_ctc-110m",

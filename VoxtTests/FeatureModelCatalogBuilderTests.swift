@@ -193,6 +193,22 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
+    func testCanarySelectorDoesNotClaimChinesePrimaryLanguageSupport() throws {
+        let repo = "Mediform/canary-1b-v2-mlx-q8"
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
+            primaryUserLanguageCode: "zh-Hans"
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .transcriptionASR)
+                .first(where: { $0.selectionID == .mlx(repo) })
+        )
+
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Does Not Support Primary Language")))
+        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
+    }
+
     func testASRSelectorShowsSherpaModelsEvenWhenRuntimeUnavailable() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .dictation)

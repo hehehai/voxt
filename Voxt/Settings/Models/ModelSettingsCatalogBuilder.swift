@@ -417,6 +417,10 @@ struct ModelCatalogBuilder {
             return ["zh", "en"].contains(baseCode)
         }
 
+        if key.contains("canary") {
+            return CanaryLanguageSupport.supportedCodes.contains(baseCode)
+        }
+
         return mlxSupportsMultilingual(repo)
     }
 

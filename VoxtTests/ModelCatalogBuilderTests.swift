@@ -181,6 +181,29 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
+    func testCanaryLanguageTagUsesItsOfficialLanguageList() throws {
+        let repo = "Mediform/canary-1b-v2-mlx-q8"
+        let chineseBuilder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
+            primaryUserLanguageCode: "zh-Hans"
+        )
+        let germanBuilder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
+            primaryUserLanguageCode: "de"
+        )
+
+        let chineseEntry = try XCTUnwrap(
+            chineseBuilder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
+        )
+        let germanEntry = try XCTUnwrap(
+            germanBuilder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
+        )
+
+        XCTAssertTrue(chineseEntry.displayTags.contains(AppLocalization.localizedString("Does Not Support Primary Language")))
+        XCTAssertFalse(chineseEntry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
+        XCTAssertTrue(germanEntry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
+    }
+
     func testMLXCatalogShowsPauseForDownloadingNonSelectedModel() throws {
         let selectedRepo = "mlx-community/parakeet-tdt-0.6b-v3"
         let downloadingRepo = "mlx-community/Qwen3-ASR-0.6B-4bit"

@@ -205,8 +205,69 @@ enum MossASRTranscriptRendering {
         case .speakerOnly:
             return removingStructuredTags(from: rawText, removesSpeakerLabels: false)
         case .plainText:
-            return removingStructuredTags(from: rawText, removesSpeakerLabels: true)
+            return flattenedPlainText(
+                removingStructuredTags(from: rawText, removesSpeakerLabels: true)
+            )
         }
+    }
+
+    nonisolated private static func flattenedPlainText(_ text: String) -> String {
+        let segments = text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var result = ""
+        for segment in segments {
+            guard let previous = result.last, let next = segment.first else {
+                result = segment
+                continue
+            }
+            if shouldSeparatePlainTextSegments(previous: previous, next: next) {
+                result += " "
+            }
+            result += segment
+        }
+        return result
+    }
+
+    nonisolated private static func shouldSeparatePlainTextSegments(
+        previous: Character,
+        next: Character
+    ) -> Bool {
+        guard !isCJKTextBoundary(previous), !isCJKTextBoundary(next) else { return false }
+        guard !isClosingPunctuation(next), !isOpeningPunctuation(previous) else { return false }
+        return true
+    }
+
+    nonisolated private static func isCJKTextBoundary(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x1100...0x11FF,
+                 0x2E80...0x303F,
+                 0x3040...0x30FF,
+                 0x3130...0x318F,
+                 0x31F0...0x31FF,
+                 0x3400...0x4DBF,
+                 0x4E00...0x9FFF,
+                 0xA960...0xA97F,
+                 0xAC00...0xD7FF,
+                 0xF900...0xFAFF,
+                 0xFF00...0xFFEF,
+                 0x20000...0x2CEAF:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    nonisolated private static func isClosingPunctuation(_ character: Character) -> Bool {
+        ",.!?;:%)]}".contains(character)
+    }
+
+    nonisolated private static func isOpeningPunctuation(_ character: Character) -> Bool {
+        "([{".contains(character)
     }
 
     nonisolated private static func removingStructuredTags(from text: String, removesSpeakerLabels: Bool) -> String {

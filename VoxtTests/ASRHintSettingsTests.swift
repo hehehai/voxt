@@ -547,7 +547,37 @@ final class ASRHintSettingsTests: XCTestCase {
         )
         XCTAssertEqual(
             MossASRTranscriptRendering.renderedText(raw, outputMode: .plainText),
-            "Welcome everyone\nReady to begin"
+            "Welcome everyone Ready to begin"
+        )
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(raw, outputMode: .timestampedDiarization),
+            raw
+        )
+    }
+
+    func testMOSSPlainTextFlattensStreamingWindowsWithoutBreakingWordBoundaries() {
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(
+                "零九是一名在互联网公司做\n后端开发的软件工程师\n他每天上班后的第一件事",
+                outputMode: .plainText
+            ),
+            "零九是一名在互联网公司做后端开发的软件工程师他每天上班后的第一件事"
+        )
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(
+                "The server is healthy.\nReady to deploy\n(version 2).",
+                outputMode: .plainText
+            ),
+            "The server is healthy. Ready to deploy (version 2)."
+        )
+    }
+
+    func testMOSSMeetingRenderingPreservesStructuredLineBreaks() {
+        let raw = "[0.00][S01]第一段[1.20]\n[1.30][S02]第二段[2.40]"
+
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(raw, outputMode: .speakerOnly),
+            "[S01] 第一段\n[S02] 第二段"
         )
         XCTAssertEqual(
             MossASRTranscriptRendering.renderedText(raw, outputMode: .timestampedDiarization),

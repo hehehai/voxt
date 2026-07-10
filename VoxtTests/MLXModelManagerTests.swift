@@ -211,9 +211,9 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
         XCTAssertTrue(modelIDs.contains("OpenMOSS-Team/MOSS-Transcribe-Diarize"))
         XCTAssertTrue(modelIDs.contains("Mediform/canary-1b-v2-mlx-q8"))
-        XCTAssertTrue(modelIDs.contains("UsefulSensors/moonshine-tiny"))
-        XCTAssertTrue(modelIDs.contains("facebook/wav2vec2-base-960h"))
-        XCTAssertTrue(modelIDs.contains("facebook/mms-1b-fl102"))
+        XCTAssertFalse(modelIDs.contains("UsefulSensors/moonshine-tiny"))
+        XCTAssertFalse(modelIDs.contains("facebook/wav2vec2-base-960h"))
+        XCTAssertFalse(modelIDs.contains("facebook/mms-1b-fl102"))
         XCTAssertFalse(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertFalse(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
         XCTAssertFalse(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
@@ -227,6 +227,13 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/GLM-ASR-Nano-2512-4bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-bf16"))
+        XCTAssertTrue(modelIDs.contains("UsefulSensors/moonshine-tiny"))
+        XCTAssertTrue(modelIDs.contains("facebook/wav2vec2-base-960h"))
+        XCTAssertTrue(modelIDs.contains("facebook/mms-1b-fl102"))
+        XCTAssertEqual(
+            MLXModelCatalog.displayTitle(for: "Mediform/canary-1b-v2-mlx-q8"),
+            "Canary"
+        )
     }
 
     func testHiddenASRModelsDisplayWhenIncludedByLocalState() {

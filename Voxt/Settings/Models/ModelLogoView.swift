@@ -264,7 +264,7 @@ enum ModelLogoKey: String {
         if value.contains("llama") || value.contains("meta") {
             return .meta
         }
-        if value.contains("parakeet") || value.contains("nemotron") || value.contains("nvidia") {
+        if value.contains("canary") || value.contains("parakeet") || value.contains("nemotron") || value.contains("nvidia") {
             return .nvidia
         }
         if value.contains("mistral") || value.contains("voxtral") {

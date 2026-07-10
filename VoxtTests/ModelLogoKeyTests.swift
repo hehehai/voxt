@@ -9,6 +9,13 @@ final class ModelLogoKeyTests: XCTestCase {
         )
     }
 
+    func testCanaryASRUsesNvidiaLogo() {
+        XCTAssertEqual(
+            ModelLogoKey.resolve(title: "Canary", engine: "MLX Audio"),
+            .nvidia
+        )
+    }
+
     func testLFMUsesLiquidLogo() {
         XCTAssertEqual(
             ModelLogoKey.resolve(title: "LFM2 1.2B (4bit)", engine: "Local LLM"),
