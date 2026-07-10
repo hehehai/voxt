@@ -46,6 +46,10 @@ struct OnboardingGuideView: View {
     @State private var permissionMonitoringKinds: Set<OnboardingContextualPermission> = []
     @State private var permissionMonitorTasks: [OnboardingContextualPermission: Task<Void, Never>] = [:]
     @State private var modelFocus: OnboardingGuideModelFocus = .local
+    @State private var showsMoreLocalASRModels = false
+    @State private var showsMoreLocalLLMModels = false
+    @State private var showsMoreRemoteASRProviders = false
+    @State private var showsMoreRemoteLLMProviders = false
     @State private var modelStorageDisplayPath = ""
     @State private var modelStorageSelectionError: String?
     @State private var featureSettings = FeatureSettingsStore.load(defaults: .standard)
@@ -58,6 +62,10 @@ struct OnboardingGuideView: View {
     @State private var isAppPromptDialogPresented = false
     @State private var temporaryEnhancementPrompt = Self.defaultTranscriptionEnhancementPrompt
     @State private var temporaryAppEnhancementPrompt = Self.defaultAppEnhancementPrompt
+    @State private var microphoneSignalFrameCount = 0
+    @State private var microphoneReceivedInitialBuffer = false
+    @State private var microphoneStartupRetryCount = 0
+    @State private var microphoneStartupWatchdogTask: Task<Void, Never>?
     @State private var transcriptionInput = ""
     @State private var transcriptionEnhancementInput = ""
     @State private var translationInput = Self.defaultTranslationSample
@@ -104,11 +112,25 @@ struct OnboardingGuideView: View {
     private static let windowSize = CGSize(width: 880, height: 600)
     private static let outerPadding: CGFloat = 12
     private static let outerBottomPadding: CGFloat = 12
-    private static let headerHeight: CGFloat = 30
-    private static let headerContentSpacing: CGFloat = 8
-    private static let contentBottomCompensation: CGFloat = 30
-    private static let modelCompactWidth: CGFloat = 268
-    private static let compactModelContentWidth: CGFloat = 500
+    private static let shellHeaderHeight: CGFloat = 58
+    private static let shellSideCutoutWidth: CGFloat = 58
+    private static let contentBottomCompensation: CGFloat = 0
+    private static let microphoneRawSignalThreshold: Float = 0.006
+    private static let microphoneDisplaySignalThreshold: Float = 0.022
+    private static let microphoneRequiredSignalFrames = 2
+    private static let microphoneStartupWatchdogDelay: Duration = .milliseconds(1200)
+    private static let defaultRemoteASRProviders: [RemoteASRProvider] = [
+        .doubaoASR,
+        .aliyunBailianASR,
+        .stepFunASR,
+        .xiaomiMiMoASR
+    ]
+    private static let defaultRemoteLLMProviders: [RemoteLLMProvider] = [
+        .volcengine,
+        .aliyunBailian,
+        .stepFun,
+        .xiaomiMiMo
+    ]
 
     private var interfaceLanguage: AppInterfaceLanguage {
         AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
@@ -183,6 +205,44 @@ struct OnboardingGuideView: View {
         return repos
     }
 
+    private var defaultLocalASRRepos: [String] {
+        let qwen06Repo = localASRRepos.first { repo in
+            let text = "\(repo) \(mlxModelManager.displayTitle(for: repo))".lowercased()
+            return text.contains("qwen") && text.contains("0.6")
+        }
+        return qwen06Repo.map { [$0] } ?? Array(localASRRepos.prefix(1))
+    }
+
+    private var defaultLocalLLMRepos: [String] {
+        let gemma4E2BRepo = localLLMRepos.first { repo in
+            let text = "\(repo) \(customLLMManager.displayTitle(for: repo))".lowercased()
+            return text.contains("gemma") && text.contains("4") && text.contains("e2b")
+        }
+        return gemma4E2BRepo.map { [$0] } ?? Array(localLLMRepos.prefix(1))
+    }
+
+    private var displayedLocalASRRepos: [String] {
+        showsMoreLocalASRModels ? localASRRepos : defaultLocalASRRepos
+    }
+
+    private var displayedLocalLLMRepos: [String] {
+        showsMoreLocalLLMModels ? localLLMRepos : defaultLocalLLMRepos
+    }
+
+    private var displayedRemoteASRProviders: [RemoteASRProvider] {
+        if showsMoreRemoteASRProviders {
+            return RemoteASRProvider.allCases
+        }
+        return Self.defaultRemoteASRProviders.filter { RemoteASRProvider.allCases.contains($0) }
+    }
+
+    private var displayedRemoteLLMProviders: [RemoteLLMProvider] {
+        if showsMoreRemoteLLMProviders {
+            return RemoteLLMProvider.allCases
+        }
+        return Self.defaultRemoteLLMProviders.filter { RemoteLLMProvider.allCases.contains($0) }
+    }
+
     private var modelStepReady: Bool {
         switch modelFocus {
         case .local:
@@ -216,24 +276,55 @@ struct OnboardingGuideView: View {
     var body: some View {
         ZStack {
             GeometryReader { proxy in
-                let contentHeight = max(
+                let shellHeight = max(
                     0,
                     proxy.size.height
                         - Self.outerPadding
-                        - Self.headerHeight
-                        - Self.headerContentSpacing
                         - Self.outerBottomPadding
                         + Self.contentBottomCompensation
                 )
+                let contentHeight = max(0, shellHeight - Self.shellHeaderHeight)
 
-                VStack(spacing: 0) {
-                    header
-                        .frame(height: Self.headerHeight)
-                        .padding(.bottom, Self.headerContentSpacing)
+                ZStack(alignment: .top) {
+                    VStack(spacing: 0) {
+                        headerNavigation
+                            .frame(height: Self.shellHeaderHeight)
 
-                    content
-                        .frame(maxWidth: .infinity)
-                        .frame(height: contentHeight)
+                        content
+                            .frame(maxWidth: .infinity)
+                            .frame(height: contentHeight)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: shellHeight)
+                    .background(
+                        OnboardingGuideShellShape(
+                            headerHeight: Self.shellHeaderHeight,
+                            sideCutoutWidth: Self.shellSideCutoutWidth,
+                            cornerRadius: OnboardingGuideStyle.panelCornerRadius,
+                            transitionRadius: OnboardingGuideStyle.headerTransitionRadius
+                        )
+                        .fill(OnboardingGuideStyle.panelFill)
+                    )
+                    .overlay(
+                        OnboardingGuideShellShape(
+                            headerHeight: Self.shellHeaderHeight,
+                            sideCutoutWidth: Self.shellSideCutoutWidth,
+                            cornerRadius: OnboardingGuideStyle.panelCornerRadius,
+                            transitionRadius: OnboardingGuideStyle.headerTransitionRadius
+                        )
+                        .stroke(OnboardingGuideStyle.panelBorder, lineWidth: 1)
+                    )
+                    .clipShape(
+                        OnboardingGuideShellShape(
+                            headerHeight: Self.shellHeaderHeight,
+                            sideCutoutWidth: Self.shellSideCutoutWidth,
+                            cornerRadius: OnboardingGuideStyle.panelCornerRadius,
+                            transitionRadius: OnboardingGuideStyle.headerTransitionRadius
+                        )
+                    )
+
+                    topChrome
+                        .frame(height: Self.shellHeaderHeight)
                 }
                 .padding(.top, Self.outerPadding)
                 .padding(.horizontal, Self.outerPadding)
@@ -241,68 +332,18 @@ struct OnboardingGuideView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
             .frame(width: Self.windowSize.width, height: Self.windowSize.height)
-            .ignoresSafeArea(.container, edges: .top)
+
+            onboardingModalOverlay
         }
-        .background(SettingsUIStyle.windowBackgroundColor)
+        .background(OnboardingGuideStyle.windowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: OnboardingGuideStyle.windowCornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: OnboardingGuideStyle.windowCornerRadius, style: .continuous)
+                .strokeBorder(OnboardingGuideStyle.windowBorder, lineWidth: 1)
+        )
         .frame(width: Self.windowSize.width, height: Self.windowSize.height)
-        .ignoresSafeArea(.container, edges: .top)
         .environment(\.locale, interfaceLanguage.locale)
         .groupBoxStyle(SettingsPanelGroupBoxStyle())
-        .sheet(isPresented: $isMicrophonePriorityDialogPresented) {
-            MicrophonePriorityDialog(
-                state: microphoneState,
-                onUseNow: { uid in
-                    focusMicrophone(uid: uid)
-                    restartMicrophoneMeterIfNeeded()
-                },
-                onAutoSwitchChanged: setMicrophoneAutoSwitchEnabled(_:),
-                onReorderPriority: applyMicrophonePriorityOrder(_:)
-            )
-        }
-        .sheet(isPresented: $isModelStorageDialogPresented) {
-            modelStorageDialog
-        }
-        .sheet(item: $editingASRProvider) { provider in
-            RemoteProviderConfigurationSheet(
-                providerTitle: provider.title,
-                credentialHint: asrCredentialHint(for: provider),
-                showsDoubaoFields: provider == .doubaoASR,
-                testTarget: .asr(provider),
-                configuration: RemoteModelConfigurationStore.resolvedASRConfiguration(
-                    provider: provider,
-                    stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteASRProviderConfigurationsRaw)
-                ),
-                onSave: saveRemoteASRConfiguration(_:)
-            )
-        }
-        .sheet(item: $editingLLMProvider) { provider in
-            RemoteProviderConfigurationSheet(
-                providerTitle: provider.title,
-                credentialHint: nil,
-                showsDoubaoFields: false,
-                testTarget: .llm(provider),
-                configuration: RemoteModelConfigurationStore.resolvedLLMConfiguration(
-                    provider: provider,
-                    stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteLLMProviderConfigurationsRaw)
-                ),
-                onSave: saveRemoteLLMConfiguration(_:)
-            )
-        }
-        .sheet(item: $editingShortcut) { shortcut in
-            shortcutSheet(for: shortcut)
-        }
-        .sheet(isPresented: $isPromptDialogPresented) {
-            promptSheet(
-                title: guideLocalized("Enhancement Prompt"),
-                text: $temporaryEnhancementPrompt
-            )
-        }
-        .sheet(isPresented: $isAppPromptDialogPresented) {
-            promptSheet(
-                title: guideLocalized("Temporary App Enhancement Prompt"),
-                text: $temporaryAppEnhancementPrompt
-            )
-        }
         .onAppear {
             refreshInputDevices()
             refreshModelStorageDisplayPath()
@@ -361,6 +402,12 @@ struct OnboardingGuideView: View {
         .onReceive(NotificationCenter.default.publisher(for: .voxtRemoteProviderConfigurationsDidChange)) { _ in
             syncFeatureSelections()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .voxtHotkeyDidTrigger)) { notification in
+            guard let rawKind = notification.userInfo?["kind"] as? String,
+                  let kind = OnboardingGuideShortcutKind(rawValue: rawKind)
+            else { return }
+            handleShortcutObserved(kind)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissionRefreshRevision += 1
         }
@@ -372,58 +419,243 @@ struct OnboardingGuideView: View {
         )
     }
 
-    private var header: some View {
-        ZStack {
-            HStack(spacing: 0) {
-                Color.clear
-                    .frame(width: 62, height: 1)
-
-                Spacer(minLength: 0)
-
-                Text(AppLocalization.format("%d/%d", currentStep.stepNumber, OnboardingGuideStep.allCases.count))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .frame(height: 18)
-                    .background(Capsule(style: .continuous).fill(Color.primary.opacity(0.06)))
+    private var topChrome: some View {
+        HStack {
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .frame(width: 32, height: 32)
             }
+            .buttonStyle(OnboardingGuideIconButtonStyle())
+            .help(guideLocalized("Exit Guide"))
 
-            phaseStrip
+            Spacer(minLength: 0)
+
+            OnboardingGuideProgressRing(
+                current: currentStep.stepNumber,
+                total: OnboardingGuideStep.allCases.count
+            )
         }
+        .padding(.horizontal, 12)
     }
 
-    private var phaseStrip: some View {
-        HStack(spacing: 10) {
-            ForEach(Array(OnboardingGuidePhase.allCases.enumerated()), id: \.element.id) { index, phase in
-                if index > 0 {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
+    private var headerNavigation: some View {
+        HStack(spacing: 8) {
+            if let previous = currentStep.previous {
+                OnboardingGuideHeaderStepButton(
+                    title: previous.title,
+                    alignment: .trailing,
+                    isEnabled: true,
+                    action: {
+                        currentStep = previous
+                    }
+                )
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity)
+            }
 
-                Text(phase.title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(phase == currentStep.phase ? Color.accentColor : .secondary)
-                    .frame(width: 126, height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(phase == currentStep.phase ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.045))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(phase == currentStep.phase ? Color.accentColor.opacity(0.28) : SettingsUIStyle.subtleBorderColor, lineWidth: 1)
-                    )
+            Text(currentStep.title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(OnboardingGuideStyle.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(width: 200)
+
+            if let next = currentStep.next {
+                OnboardingGuideHeaderStepButton(
+                    title: next.title,
+                    alignment: .leading,
+                    isEnabled: canContinue,
+                    action: {
+                        guard canContinue else { return }
+                        currentStep = next
+                    }
+                )
+                .help(canContinue ? "" : continueDisabledHelp)
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity)
             }
         }
+        .padding(.horizontal, Self.shellSideCutoutWidth + 18)
     }
 
     @ViewBuilder
     private var content: some View {
-        if currentStep == .models {
+        if currentStep == .permissions {
+            permissionsGuidePanel
+        } else if currentStep == .microphone {
+            microphoneGuidePanel
+        } else if currentStep == .models {
             modelGuidePanel
         } else {
             regularGuidePanel
         }
+    }
+
+    @ViewBuilder
+    private var onboardingModalOverlay: some View {
+        if isMicrophonePriorityDialogPresented {
+            onboardingModalScrim {
+                MicrophonePriorityDialog(
+                    state: microphoneState,
+                    onUseNow: { uid in
+                        focusMicrophone(uid: uid)
+                        restartMicrophoneMeterIfNeeded()
+                    },
+                    onAutoSwitchChanged: setMicrophoneAutoSwitchEnabled(_:),
+                    onReorderPriority: applyMicrophonePriorityOrder(_:),
+                    cornerRadius: OnboardingGuideStyle.modalCornerRadius,
+                    onClose: {
+                        isMicrophonePriorityDialogPresented = false
+                    }
+                )
+            }
+        } else if isModelStorageDialogPresented {
+            onboardingModalScrim {
+                modelStorageDialog
+            }
+        } else if let provider = editingASRProvider {
+            onboardingModalScrim {
+                RemoteProviderConfigurationSheet(
+                    providerTitle: provider.title,
+                    credentialHint: asrCredentialHint(for: provider),
+                    showsDoubaoFields: provider == .doubaoASR,
+                    testTarget: .asr(provider),
+                    configuration: RemoteModelConfigurationStore.resolvedASRConfiguration(
+                        provider: provider,
+                        stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteASRProviderConfigurationsRaw)
+                    ),
+                    onSave: saveRemoteASRConfiguration(_:),
+                    cornerRadius: OnboardingGuideStyle.modalCornerRadius,
+                    onClose: {
+                        editingASRProvider = nil
+                    }
+                )
+            }
+        } else if let provider = editingLLMProvider {
+            onboardingModalScrim {
+                RemoteProviderConfigurationSheet(
+                    providerTitle: provider.title,
+                    credentialHint: nil,
+                    showsDoubaoFields: false,
+                    testTarget: .llm(provider),
+                    configuration: RemoteModelConfigurationStore.resolvedLLMConfiguration(
+                        provider: provider,
+                        stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteLLMProviderConfigurationsRaw)
+                    ),
+                    onSave: saveRemoteLLMConfiguration(_:),
+                    cornerRadius: OnboardingGuideStyle.modalCornerRadius,
+                    onClose: {
+                        editingLLMProvider = nil
+                    }
+                )
+            }
+        } else if let shortcut = editingShortcut {
+            onboardingModalScrim {
+                shortcutSheet(for: shortcut)
+            }
+        } else if isPromptDialogPresented {
+            onboardingModalScrim {
+                promptSheet(
+                    title: guideLocalized("Enhancement Prompt"),
+                    text: $temporaryEnhancementPrompt
+                )
+            }
+        } else if isAppPromptDialogPresented {
+            onboardingModalScrim {
+                promptSheet(
+                    title: guideLocalized("Temporary App Enhancement Prompt"),
+                    text: $temporaryAppEnhancementPrompt
+                )
+            }
+        }
+    }
+
+    private func onboardingModalScrim<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ZStack {
+            OnboardingGuideStyle.modalScrim
+                .contentShape(Rectangle())
+
+            content()
+        }
+        .frame(width: Self.windowSize.width, height: Self.windowSize.height)
+        .clipShape(RoundedRectangle(cornerRadius: OnboardingGuideStyle.windowCornerRadius, style: .continuous))
+        .zIndex(10)
+    }
+
+    private var permissionsGuidePanel: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: 16) {
+                Text(currentStep.subtitle)
+                    .font(.callout)
+                    .foregroundStyle(OnboardingGuideStyle.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 560)
+
+                permissionsActions
+                    .frame(maxWidth: 520)
+            }
+            .frame(maxWidth: 560)
+
+            Spacer(minLength: 0)
+
+            permissionsFooter
+                .frame(maxWidth: 520)
+                .padding(.bottom, 12)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var microphoneGuidePanel: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: 18) {
+                OnboardingMicrophoneWaveformView(waveformState: waveformState)
+                    .frame(maxWidth: 360)
+
+                VStack(spacing: 11) {
+                    Text(currentStep.subtitle)
+                        .font(.callout)
+                        .foregroundStyle(OnboardingGuideStyle.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 560)
+
+                    GuideInfoRow(
+                        title: guideLocalized("Current Microphone"),
+                        value: microphoneState.activeDevice?.name ?? guideLocalized("No available microphone devices")
+                    )
+                    .frame(maxWidth: 520)
+
+                    Text(completedInteractionSteps.contains(.microphone)
+                        ? guideLocalized("Signal detected")
+                        : guideLocalized("Speak normally for one or two seconds."))
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(completedInteractionSteps.contains(.microphone) ? Color.green : OnboardingGuideStyle.secondaryText)
+                }
+                .frame(maxWidth: 560)
+            }
+            .frame(maxWidth: 560)
+
+            Spacer(minLength: 0)
+
+            footer
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var regularGuidePanel: some View {
@@ -432,22 +664,13 @@ struct OnboardingGuideView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Rectangle()
-                .fill(SettingsUIStyle.panelBorderColor)
+                .fill(OnboardingGuideStyle.panelBorder)
                 .frame(width: 1)
 
             tourPane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
-                .fill(SettingsUIStyle.panelFillColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
-                .strokeBorder(SettingsUIStyle.panelBorderColor, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous))
     }
 
     private var modelGuidePanel: some View {
@@ -456,37 +679,43 @@ struct OnboardingGuideView: View {
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            footer
+            modelFooter
                 .padding(.horizontal, 12)
                 .padding(.bottom, 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
-                .fill(SettingsUIStyle.panelFillColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
-                .strokeBorder(SettingsUIStyle.panelBorderColor, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous))
     }
 
     private var tourPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(guideLocalized("View Tour"))
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.secondary)
-
+        VStack(alignment: .leading, spacing: 0) {
             guideVisual
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(SettingsUIStyle.subtleFillColor)
+                    LinearGradient(
+                        colors: [
+                            OnboardingGuideStyle.visualTopFill,
+                            OnboardingGuideStyle.visualBottomFill
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.0),
+                            .init(color: OnboardingGuideStyle.panelFill.opacity(0.20), location: 0.58),
+                            .init(color: OnboardingGuideStyle.panelFill.opacity(0.84), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .allowsHitTesting(false)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: OnboardingGuideStyle.innerCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: OnboardingGuideStyle.innerCornerRadius, style: .continuous)
+                        .strokeBorder(OnboardingGuideStyle.subtleBorder, lineWidth: 1)
                 )
         }
         .padding(12)
@@ -495,19 +724,10 @@ struct OnboardingGuideView: View {
 
     private var actionPane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
-                    Text(currentStep.phase.title)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(currentStep.title)
-                        .font(.title3.weight(.semibold))
-                }
-                Text(currentStep.subtitle)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(currentStep.subtitle)
+                .font(.callout)
+                .foregroundStyle(OnboardingGuideStyle.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
 
             stepActions
 
@@ -523,9 +743,9 @@ struct OnboardingGuideView: View {
     private var guideVisual: some View {
         switch currentStep {
         case .permissions:
-            placeholderVisual(systemImage: "lock.shield", title: guideLocalized("Permission preview"))
+            EmptyView()
         case .microphone:
-            microphoneVisual
+            EmptyView()
         case .transcriptionShortcut:
             guideTextEditor(text: $transcriptionInput, prompt: guideLocalized("Focus here, then press the transcription shortcut."))
                 .focused($focusedField, equals: .transcription)
@@ -551,23 +771,6 @@ struct OnboardingGuideView: View {
             finishVisual
         case .models:
             EmptyView()
-        }
-    }
-
-    private var microphoneVisual: some View {
-        VStack(spacing: 14) {
-            MeetingMiniWaveform(
-                waveformState: waveformState,
-                isSubdued: false
-            )
-            .frame(height: 56)
-            .padding(.horizontal, 24)
-
-            Text(completedInteractionSteps.contains(.microphone)
-                ? guideLocalized("Signal detected")
-                : guideLocalized("Speak into the selected microphone"))
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(completedInteractionSteps.contains(.microphone) ? Color.green : .secondary)
         }
     }
 
@@ -613,20 +816,6 @@ struct OnboardingGuideView: View {
             )
         }
         .padding(16)
-    }
-
-    private func placeholderVisual(systemImage: String, title: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(Color.accentColor.opacity(0.72))
-            Text(title)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text(guideLocalized("Image placeholder"))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
     }
 
     private func guideTextEditor(text: Binding<String>, prompt: String) -> some View {
@@ -681,11 +870,6 @@ struct OnboardingGuideView: View {
             ForEach(allRequiredPermissions, id: \.self) { permission in
                 permissionRow(permission)
             }
-
-            Text(guideLocalized("If macOS asks you to quit and reopen Voxt, leave this guide unfinished. After restart, Voxt will reopen this setup window."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -845,111 +1029,139 @@ struct OnboardingGuideView: View {
     }
 
     private var modelSelectionContent: some View {
-        HStack(alignment: .top, spacing: 12) {
-            modelBlock(
-                focus: .local,
-                title: guideLocalized("Local"),
-                subtitle: guideLocalized("Private, offline after download. Install one ASR and one LLM model before continuing.")
-            ) {
-                localModelActions
-            }
-            .frame(maxWidth: modelFocus == .local ? .infinity : Self.modelCompactWidth)
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                modelTabItem(
+                    focus: .local,
+                    title: guideLocalized("Local"),
+                    subtitle: guideLocalized("Private and offline after download. Install one speech-to-text model and one large language model before continuing.")
+                )
 
-            modelBlock(
-                focus: .remote,
-                title: guideLocalized("Remote"),
-                subtitle: guideLocalized("Fast to start. Configure the selected remote ASR and LLM providers before continuing.")
-            ) {
-                remoteModelActions
+                modelTabItem(
+                    focus: .remote,
+                    title: guideLocalized("Remote"),
+                    subtitle: guideLocalized("Fast to start. Configure the selected remote speech-to-text and large language model providers before continuing.")
+                )
             }
-            .frame(maxWidth: modelFocus == .remote ? .infinity : Self.modelCompactWidth)
+
+            ScrollView {
+                Group {
+                    switch modelFocus {
+                    case .local:
+                        localModelActions
+                    case .remote:
+                        remoteModelActions
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
+                    .fill(SettingsUIStyle.panelFillColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
+                    .strokeBorder(SettingsUIStyle.panelBorderColor, lineWidth: 1)
+            )
         }
         .animation(.easeInOut(duration: 0.18), value: modelFocus)
     }
 
-    private func modelBlock<Content: View>(
+    private func modelTabItem(
         focus: OnboardingGuideModelFocus,
         title: String,
-        subtitle: String,
-        @ViewBuilder content: () -> Content
+        subtitle: String
     ) -> some View {
-        let isFocused = modelFocus == focus
+        let isActive = modelFocus == focus
         return Button {
             modelFocus = focus
             applyModelFocus(focus)
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text(title)
                         .font(.headline)
-                    Spacer()
-                    if modelFocus == focus {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.accentColor)
-                    }
+                        .foregroundStyle(OnboardingGuideStyle.primaryText)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(OnboardingGuideStyle.secondaryText)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(subtitle)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(isFocused ? nil : 2)
-                    .fixedSize(horizontal: false, vertical: true)
 
-                if isFocused {
-                    ScrollView {
-                        content()
-                            .padding(.trailing, 2)
-                    }
-                    .frame(maxHeight: .infinity)
-                } else {
-                    ScrollView([.vertical, .horizontal]) {
-                        content()
-                            .frame(width: Self.compactModelContentWidth, alignment: .topLeading)
-                            .padding(.trailing, 2)
-                    }
-                    .frame(maxHeight: .infinity)
+                Spacer(minLength: 8)
+
+                if isActive {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
-                    .fill(isFocused ? Color.accentColor.opacity(0.08) : SettingsUIStyle.panelFillColor)
+                    .fill(isActive ? Color.accentColor.opacity(0.08) : SettingsUIStyle.panelFillColor)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: SettingsUIStyle.panelCornerRadius, style: .continuous)
-                    .strokeBorder(isFocused ? Color.accentColor.opacity(0.35) : SettingsUIStyle.panelBorderColor, lineWidth: 1)
+                    .strokeBorder(isActive ? Color.accentColor.opacity(0.35) : SettingsUIStyle.panelBorderColor, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
     }
 
     private var localModelActions: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(guideLocalized("ASR"))
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.secondary)
-            ForEach(localASRRepos, id: \.self) { repo in
-                localASRModelRow(repo: repo)
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(guideLocalized("Speech-to-text Model"))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(displayedLocalASRRepos, id: \.self) { repo in
+                    localASRModelRow(repo: repo)
+                }
+                if localASRRepos.count > defaultLocalASRRepos.count {
+                    moreListButton(
+                        isExpanded: showsMoreLocalASRModels,
+                        expandedCount: localASRRepos.count,
+                        collapsedCount: defaultLocalASRRepos.count
+                    ) {
+                        showsMoreLocalASRModels.toggle()
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
-            Divider()
-
-            Text(guideLocalized("LLM"))
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.secondary)
-            ForEach(localLLMRepos, id: \.self) { repo in
-                localLLMModelRow(repo: repo)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(guideLocalized("Large Language Model"))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(displayedLocalLLMRepos, id: \.self) { repo in
+                    localLLMModelRow(repo: repo)
+                }
+                if localLLMRepos.count > defaultLocalLLMRepos.count {
+                    moreListButton(
+                        isExpanded: showsMoreLocalLLMModels,
+                        expandedCount: localLLMRepos.count,
+                        collapsedCount: defaultLocalLLMRepos.count
+                    ) {
+                        showsMoreLocalLLMModels.toggle()
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
     private var remoteModelActions: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(guideLocalized("ASR"))
+                Text(guideLocalized("Speech-to-text Model"))
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.secondary)
-                ForEach(RemoteASRProvider.allCases) { provider in
+                ForEach(displayedRemoteASRProviders) { provider in
                     remoteProviderRow(
                         title: provider.title,
                         isSelected: selectedRemoteASRProvider == provider,
@@ -965,15 +1177,25 @@ struct OnboardingGuideView: View {
                         }
                     )
                 }
+                if RemoteASRProvider.allCases.count > Self.defaultRemoteASRProviders.count {
+                    moreListButton(
+                        isExpanded: showsMoreRemoteASRProviders,
+                        expandedCount: RemoteASRProvider.allCases.count,
+                        collapsedCount: Self.defaultRemoteASRProviders.count
+                    ) {
+                        showsMoreRemoteASRProviders.toggle()
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(guideLocalized("LLM"))
+                Text(guideLocalized("Large Language Model"))
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.secondary)
-                ForEach(RemoteLLMProvider.allCases) { provider in
+                ForEach(displayedRemoteLLMProviders) { provider in
                     remoteProviderRow(
-                        title: provider.title,
+                        title: onboardingRemoteLLMProviderTitle(provider),
                         isSelected: selectedRemoteLLMProvider == provider,
                         isConfigured: RemoteModelConfigurationStore.isStoredLLMConfigurationConfigured(
                             provider: provider,
@@ -995,21 +1217,22 @@ struct OnboardingGuideView: View {
                         }
                     )
                 }
+                if RemoteLLMProvider.allCases.count > Self.defaultRemoteLLMProviders.count {
+                    moreListButton(
+                        isExpanded: showsMoreRemoteLLMProviders,
+                        expandedCount: RemoteLLMProvider.allCases.count,
+                        collapsedCount: Self.defaultRemoteLLMProviders.count
+                    ) {
+                        showsMoreRemoteLLMProviders.toggle()
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
     private var footer: some View {
         HStack(spacing: 8) {
-            if let previous = currentStep.previous {
-                Button {
-                    currentStep = previous
-                } label: {
-                    Label(guideLocalized("Back"), systemImage: "chevron.left")
-                }
-                .buttonStyle(SettingsPillButtonStyle())
-            }
-
             Spacer(minLength: 0)
 
             leadingFooterAction
@@ -1021,7 +1244,7 @@ struct OnboardingGuideView: View {
                 } label: {
                     Label(guideLocalized("Start Voxt"), systemImage: "checkmark.circle")
                 }
-                .buttonStyle(SettingsPrimaryButtonStyle())
+                .buttonStyle(OnboardingGuidePrimaryButtonStyle())
             } else if let next = currentStep.next {
                 Button {
                     currentStep = next
@@ -1029,14 +1252,64 @@ struct OnboardingGuideView: View {
                     Label(guideLocalized("Continue"), systemImage: "chevron.right")
                         .labelStyle(OnboardingGuideNextLabelStyle())
                 }
-                .buttonStyle(SettingsPrimaryButtonStyle())
+                .buttonStyle(OnboardingGuidePrimaryButtonStyle())
                 .disabled(!canContinue)
                 .help(canContinue ? "" : continueDisabledHelp)
             }
         }
         .padding(.top, 10)
         .overlay(alignment: .top) {
-            Divider()
+            Rectangle()
+                .fill(OnboardingGuideStyle.panelBorder)
+                .frame(height: 1)
+        }
+    }
+
+    private var modelFooter: some View {
+        HStack(spacing: 10) {
+            Spacer(minLength: 0)
+
+            if modelFocus == .local {
+                Button(guideLocalized("Model Location")) {
+                    isModelStorageDialogPresented = true
+                }
+                .buttonStyle(OnboardingGuideSecondaryButtonStyle())
+            }
+
+            if let next = currentStep.next {
+                Button {
+                    currentStep = next
+                } label: {
+                    Label(guideLocalized("Continue"), systemImage: "chevron.right")
+                        .labelStyle(OnboardingGuideNextLabelStyle())
+                }
+                .buttonStyle(OnboardingGuidePrimaryButtonStyle())
+                .disabled(!canContinue)
+                .help(canContinue ? "" : continueDisabledHelp)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 10)
+    }
+
+    private var permissionsFooter: some View {
+        HStack {
+            Spacer(minLength: 0)
+
+            if let next = currentStep.next {
+                Button {
+                    currentStep = next
+                } label: {
+                    Label(guideLocalized("Continue"), systemImage: "chevron.right")
+                        .labelStyle(OnboardingGuideNextLabelStyle())
+                }
+                .buttonStyle(OnboardingGuidePrimaryButtonStyle())
+                .disabled(!canContinue)
+                .help(canContinue ? "" : continueDisabledHelp)
+            }
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -1047,42 +1320,42 @@ struct OnboardingGuideView: View {
             Button(guideLocalized("Switch Microphone")) {
                 isMicrophonePriorityDialogPresented = true
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .models where modelFocus == .local:
             Button(guideLocalized("Model Location")) {
                 isModelStorageDialogPresented = true
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .transcriptionShortcut:
             Button(guideLocalized("Change Shortcut")) {
                 editingShortcut = .transcription
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .transcriptionEnhancement:
             Button(guideLocalized("Edit Prompt")) {
                 isPromptDialogPresented = true
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .translationShortcut:
             Button(guideLocalized("Change Shortcut")) {
                 editingShortcut = .translation
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .rewriteShortcut:
             Button(guideLocalized("Change Shortcut")) {
                 editingShortcut = .rewrite
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .appEnhancement:
             Button(guideLocalized("Enhancement Prompt")) {
                 isAppPromptDialogPresented = true
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .meeting:
             Button(guideLocalized("Change Shortcut")) {
                 editingShortcut = .meeting
             }
-            .buttonStyle(SettingsPillButtonStyle())
+            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         default:
             EmptyView()
         }
@@ -1165,12 +1438,332 @@ private enum OnboardingGuideShortcutKind: String, CaseIterable, Identifiable {
     }
 }
 
+private enum OnboardingGuideStyle {
+    static let windowCornerRadius: CGFloat = 22
+    static let panelCornerRadius: CGFloat = 20
+    static let modalCornerRadius: CGFloat = 18
+    static let innerCornerRadius: CGFloat = 16
+    static let headerTransitionRadius: CGFloat = 24
+
+    static let windowBackground = dynamicColor(
+        light: NSColor(calibratedRed: 0.965, green: 0.968, blue: 0.972, alpha: 1),
+        dark: NSColor(calibratedRed: 0.080, green: 0.085, blue: 0.090, alpha: 1)
+    )
+    static let windowBorder = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.08),
+        dark: NSColor.white.withAlphaComponent(0.12)
+    )
+    static let modalScrim = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.22),
+        dark: NSColor.black.withAlphaComponent(0.46)
+    )
+    static let panelFill = dynamicColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 1),
+        dark: NSColor(calibratedRed: 0.105, green: 0.110, blue: 0.120, alpha: 1)
+    )
+    static let panelBorder = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.065),
+        dark: NSColor.white.withAlphaComponent(0.10)
+    )
+    static let subtleBorder = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.075),
+        dark: NSColor.white.withAlphaComponent(0.12)
+    )
+    static let visualTopFill = dynamicColor(
+        light: NSColor(calibratedRed: 0.925, green: 0.940, blue: 0.960, alpha: 1),
+        dark: NSColor(calibratedRed: 0.160, green: 0.180, blue: 0.200, alpha: 1)
+    )
+    static let visualBottomFill = dynamicColor(
+        light: NSColor(calibratedRed: 0.982, green: 0.984, blue: 0.988, alpha: 1),
+        dark: NSColor(calibratedRed: 0.085, green: 0.090, blue: 0.100, alpha: 1)
+    )
+    static let primaryText = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.90),
+        dark: NSColor.white.withAlphaComponent(0.96)
+    )
+    static let secondaryText = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.62),
+        dark: NSColor.white.withAlphaComponent(0.68)
+    )
+    static let mutedText = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.42),
+        dark: NSColor.white.withAlphaComponent(0.46)
+    )
+    static let controlFill = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.055),
+        dark: NSColor.white.withAlphaComponent(0.11)
+    )
+    static let controlPressedFill = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.095),
+        dark: NSColor.white.withAlphaComponent(0.17)
+    )
+    static let progressTrack = dynamicColor(
+        light: NSColor.black.withAlphaComponent(0.12),
+        dark: NSColor.white.withAlphaComponent(0.16)
+    )
+    static let primaryButtonBorder = dynamicColor(
+        light: NSColor.white.withAlphaComponent(0.30),
+        dark: NSColor.white.withAlphaComponent(0.20)
+    )
+
+    private static func dynamicColor(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            switch appearance.bestMatch(from: [.darkAqua, .aqua]) {
+            case .darkAqua:
+                return dark
+            default:
+                return light
+            }
+        })
+    }
+}
+
+private struct OnboardingGuideShellShape: Shape {
+    let headerHeight: CGFloat
+    let sideCutoutWidth: CGFloat
+    let cornerRadius: CGFloat
+    let transitionRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let width = rect.width
+        let height = rect.height
+        let topInset = min(max(sideCutoutWidth, 0), width / 3)
+        let headerHeight = min(max(headerHeight, 0), height)
+        let cornerRadius = min(max(cornerRadius, 0), width / 2, height / 2)
+        let transitionRadius = min(max(transitionRadius, 0), topInset, headerHeight)
+
+        var path = Path()
+        path.move(to: CGPoint(x: topInset + cornerRadius, y: 0))
+        path.addLine(to: CGPoint(x: width - topInset - cornerRadius, y: 0))
+        path.addQuadCurve(
+            to: CGPoint(x: width - topInset, y: cornerRadius),
+            control: CGPoint(x: width - topInset, y: 0)
+        )
+        path.addLine(to: CGPoint(x: width - topInset, y: headerHeight - transitionRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: width - topInset + transitionRadius, y: headerHeight),
+            control: CGPoint(x: width - topInset, y: headerHeight)
+        )
+        path.addLine(to: CGPoint(x: width - cornerRadius, y: headerHeight))
+        path.addQuadCurve(
+            to: CGPoint(x: width, y: headerHeight + cornerRadius),
+            control: CGPoint(x: width, y: headerHeight)
+        )
+        path.addLine(to: CGPoint(x: width, y: height - cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: width - cornerRadius, y: height),
+            control: CGPoint(x: width, y: height)
+        )
+        path.addLine(to: CGPoint(x: cornerRadius, y: height))
+        path.addQuadCurve(
+            to: CGPoint(x: 0, y: height - cornerRadius),
+            control: CGPoint(x: 0, y: height)
+        )
+        path.addLine(to: CGPoint(x: 0, y: headerHeight + cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: cornerRadius, y: headerHeight),
+            control: CGPoint(x: 0, y: headerHeight)
+        )
+        path.addLine(to: CGPoint(x: topInset - transitionRadius, y: headerHeight))
+        path.addQuadCurve(
+            to: CGPoint(x: topInset, y: headerHeight - transitionRadius),
+            control: CGPoint(x: topInset, y: headerHeight)
+        )
+        path.addLine(to: CGPoint(x: topInset, y: cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: topInset + cornerRadius, y: 0),
+            control: CGPoint(x: topInset, y: 0)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct OnboardingGuideHeaderStepButton: View {
+    let title: String
+    let alignment: Alignment
+    let isEnabled: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    private var opacity: Double {
+        guard isEnabled else { return 0.24 }
+        return isHovered ? 0.82 : 0.38
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(OnboardingGuideStyle.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: alignment)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(opacity)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct OnboardingGuideProgressRing: View {
+    let current: Int
+    let total: Int
+
+    private let ringSize: CGFloat = 32
+    private let totalBadgeSize: CGFloat = 14
+
+    private var progress: CGFloat {
+        guard total > 0 else { return 0 }
+        return CGFloat(current) / CGFloat(total)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            ZStack {
+                Circle()
+                    .stroke(OnboardingGuideStyle.progressTrack, lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.30, green: 0.74, blue: 1.0),
+                                Color(red: 0.08, green: 0.48, blue: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+
+                Text("\(current)")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(OnboardingGuideStyle.primaryText)
+                    .monospacedDigit()
+            }
+            .frame(width: ringSize, height: ringSize)
+
+            Text("\(total)")
+                .font(.system(size: 7, weight: .bold, design: .rounded))
+                .foregroundStyle(OnboardingGuideStyle.primaryText)
+                .monospacedDigit()
+                .frame(width: totalBadgeSize, height: totalBadgeSize)
+                .background(
+                    Circle()
+                        .fill(OnboardingGuideStyle.panelFill)
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(OnboardingGuideStyle.subtleBorder, lineWidth: 1)
+                )
+        }
+        .frame(width: 32, height: 32)
+        .accessibilityLabel(Text(AppLocalization.format("%d/%d", current, total)))
+    }
+}
+
+private struct OnboardingGuideIconButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(OnboardingGuideStyle.primaryText)
+            .background(
+                Circle()
+                    .fill(configuration.isPressed ? OnboardingGuideStyle.controlPressedFill : OnboardingGuideStyle.controlFill)
+            )
+            .overlay(
+                Circle()
+                    .strokeBorder(OnboardingGuideStyle.subtleBorder, lineWidth: 1)
+            )
+            .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(Circle())
+    }
+}
+
+private struct OnboardingGuidePrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(minWidth: 86, minHeight: 32)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.accentColor.opacity(configuration.isPressed ? 0.82 : 0.94))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(OnboardingGuideStyle.primaryButtonBorder, lineWidth: 1)
+            )
+            .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(Capsule(style: .continuous))
+    }
+}
+
+private struct OnboardingGuideSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(OnboardingGuideStyle.primaryText)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 32)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(configuration.isPressed ? OnboardingGuideStyle.controlPressedFill : OnboardingGuideStyle.controlFill)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(OnboardingGuideStyle.subtleBorder, lineWidth: 1)
+            )
+            .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(Capsule(style: .continuous))
+    }
+}
+
 private struct OnboardingGuideNextLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 6) {
             configuration.title
             configuration.icon
         }
+    }
+}
+
+private struct OnboardingMicrophoneWaveformView: View {
+    @ObservedObject var waveformState: RecentAudioWaveformState
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(0..<waveformState.barCount, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.88))
+                    .frame(width: 4, height: barHeight(for: index))
+            }
+        }
+        .frame(height: 62)
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    private func barHeight(for index: Int) -> CGFloat {
+        let level = waveformState.barLevels.indices.contains(index) ? waveformState.barLevels[index] : 0
+        return WaveformBarVisuals.barHeight(
+            level: level,
+            minHeight: 7,
+            maxHeight: 52
+        )
     }
 }
 
@@ -1277,6 +1870,103 @@ private struct SelectableGuideTextView: NSViewRepresentable {
     }
 }
 
+private struct OnboardingShortcutCaptureRow: View {
+    let title: String
+    let detail: String
+    @Binding var shortcut: HotkeyPreference.HotkeyBinding
+    let defaultHotkey: HotkeyPreference.Hotkey
+
+    @State private var isRecording = false
+    @State private var pendingCapturedHotkey: HotkeyPreference.Hotkey?
+
+    private var behaviorSelection: Binding<HotkeyPreference.TriggerBehavior> {
+        Binding(
+            get: { shortcut.behavior },
+            set: { behavior in
+                shortcut.behavior = behavior
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            GeometryReader { proxy in
+                let pickerWidth: CGFloat = 112
+                HStack(alignment: .center, spacing: 8) {
+                    SettingsShortcutCaptureField(
+                        title: LocalizedStringKey(""),
+                        hotkey: pendingCapturedHotkey ?? shortcut.hotkey,
+                        isRecording: isRecording,
+                        isPendingConfirmation: pendingCapturedHotkey != nil,
+                        distinguishModifierSides: false,
+                        showsTitle: false,
+                        controlWidth: max(280, proxy.size.width - pickerWidth - 8),
+                        onFocus: {
+                            pendingCapturedHotkey = nil
+                            isRecording = true
+                        },
+                        onReset: {
+                            shortcut.hotkey = defaultHotkey
+                            shortcut.behavior = .tap
+                            pendingCapturedHotkey = nil
+                            isRecording = false
+                        },
+                        onCancelPending: {
+                            pendingCapturedHotkey = nil
+                            isRecording = false
+                        },
+                        onConfirmPending: {
+                            if let pendingCapturedHotkey {
+                                shortcut.hotkey = pendingCapturedHotkey
+                            }
+                            pendingCapturedHotkey = nil
+                            isRecording = false
+                        }
+                    )
+
+                    SettingsMenuPicker(
+                        selection: behaviorSelection,
+                        options: HotkeyPreference.TriggerBehavior.allCases.map { behavior in
+                            SettingsMenuOption(value: behavior, title: behavior.title)
+                        },
+                        selectedTitle: shortcut.behavior.title,
+                        width: pickerWidth,
+                        allowsCompactWidth: true,
+                        usesCompactInsets: true
+                    )
+                }
+            }
+            .frame(height: 34)
+
+            HotkeyRecorderView(
+                isRecording: $isRecording,
+                onCapture: { capturedHotkey in
+                    pendingCapturedHotkey = capturedHotkey
+                },
+                onCancelCapture: {
+                    pendingCapturedHotkey = nil
+                    isRecording = false
+                },
+                onRecorderMessageChange: { _ in }
+            )
+            .frame(width: 0, height: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 private struct OnboardingGuideHotkeyObserver: NSViewRepresentable {
     let onMatch: (OnboardingGuideShortcutKind) -> Void
 
@@ -1338,18 +2028,26 @@ private struct OnboardingGuideHotkeyObserver: NSViewRepresentable {
         }
 
         private func matches(kind: OnboardingGuideShortcutKind, event: NSEvent) -> Bool {
-            let hotkey: HotkeyPreference.Hotkey
+            bindings(for: kind).contains { binding in
+                guard binding.behavior != .doubleTap else { return false }
+                return matches(hotkey: binding.hotkey, event: event)
+            }
+        }
+
+        private func bindings(for kind: OnboardingGuideShortcutKind) -> [HotkeyPreference.HotkeyBinding] {
             switch kind {
             case .transcription:
-                hotkey = HotkeyPreference.load()
+                return HotkeyPreference.loadTranscriptionBindings()
             case .translation:
-                hotkey = HotkeyPreference.loadTranslation()
+                return HotkeyPreference.loadTranslationBindings()
             case .rewrite:
-                hotkey = HotkeyPreference.loadRewrite()
+                return HotkeyPreference.loadRewriteBindings()
             case .meeting:
-                hotkey = HotkeyPreference.loadMeeting()
+                return HotkeyPreference.loadMeetingBindings()
             }
+        }
 
+        private func matches(hotkey: HotkeyPreference.Hotkey, event: NSEvent) -> Bool {
             switch (hotkey.input, event.type) {
             case (.mouseButton(let buttonNumber), .otherMouseDown):
                 guard event.buttonNumber == buttonNumber else { return false }
@@ -1430,7 +2128,7 @@ private extension OnboardingGuideView {
                 .buttonStyle(SettingsPrimaryButtonStyle())
             }
         }
-        .settingsDialogChrome(width: 420, onClose: {
+        .settingsDialogChrome(width: 420, cornerRadius: OnboardingGuideStyle.modalCornerRadius, onClose: {
             isModelStorageDialogPresented = false
         })
     }
@@ -1450,7 +2148,7 @@ private extension OnboardingGuideView {
                 .buttonStyle(SettingsPrimaryButtonStyle())
             }
         }
-        .settingsDialogChrome(width: 480, onClose: {
+        .settingsDialogChrome(width: 480, cornerRadius: OnboardingGuideStyle.modalCornerRadius, onClose: {
             isPromptDialogPresented = false
             isAppPromptDialogPresented = false
         })
@@ -1458,11 +2156,10 @@ private extension OnboardingGuideView {
 
     func shortcutSheet(for kind: OnboardingGuideShortcutKind) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            FeatureShortcutCaptureRow(
+            OnboardingShortcutCaptureRow(
                 title: AppLocalization.format("%@ %@", kind.title, guideLocalized("Shortcut")),
                 detail: guideLocalized("Capture a new shortcut for this workflow. The change is saved immediately after confirmation."),
-                inputWidth: 360,
-                hotkey: hotkeyBinding(for: kind),
+                shortcut: shortcutBinding(for: kind),
                 defaultHotkey: kind.defaultHotkey
             )
 
@@ -1474,9 +2171,30 @@ private extension OnboardingGuideView {
                 .buttonStyle(SettingsPrimaryButtonStyle())
             }
         }
-        .settingsDialogChrome(width: 460, onClose: {
+        .settingsDialogChrome(width: 460, cornerRadius: OnboardingGuideStyle.modalCornerRadius, onClose: {
             editingShortcut = nil
         })
+    }
+
+    func shortcutBinding(for kind: OnboardingGuideShortcutKind) -> Binding<HotkeyPreference.HotkeyBinding> {
+        Binding(
+            get: {
+                shortcutBindings(for: kind).first ?? HotkeyPreference.HotkeyBinding(
+                    hotkey: kind.defaultHotkey,
+                    behavior: .tap
+                )
+            },
+            set: { binding in
+                hotkeyPresetRaw = HotkeyPreference.Preset.custom.rawValue
+                var bindings = shortcutBindings(for: kind)
+                if bindings.isEmpty {
+                    bindings = [binding]
+                } else {
+                    bindings[0] = binding
+                }
+                saveShortcutBindings(bindings, for: kind)
+            }
+        )
     }
 
     func hotkeyBinding(for kind: OnboardingGuideShortcutKind) -> Binding<HotkeyPreference.Hotkey> {
@@ -1513,6 +2231,8 @@ private extension OnboardingGuideView {
         localModelRow(
             title: mlxModelManager.displayTitle(for: repo),
             repo: repo,
+            sizeText: mlxModelManager.remoteSizeText(repo: repo),
+            ratingText: MLXModelManager.ratingText(for: repo),
             isSelected: MLXModelManager.canonicalModelRepo(mlxModelRepo) == MLXModelManager.canonicalModelRepo(repo),
             isInstalled: mlxModelManager.isModelDownloaded(repo: repo),
             status: mlxDownloadStatus(for: repo),
@@ -1542,6 +2262,8 @@ private extension OnboardingGuideView {
         localModelRow(
             title: customLLMManager.displayTitle(for: repo),
             repo: repo,
+            sizeText: customLLMManager.remoteSizeText(repo: repo),
+            ratingText: CustomLLMModelManager.ratingText(for: repo),
             isSelected: CustomLLMModelManager.canonicalModelRepo(customLLMRepo) == CustomLLMModelManager.canonicalModelRepo(repo),
             isInstalled: customLLMManager.isModelDownloaded(repo: repo),
             status: customLLMDownloadStatus(for: repo),
@@ -1580,6 +2302,8 @@ private extension OnboardingGuideView {
     func localModelRow(
         title: String,
         repo: String,
+        sizeText: String,
+        ratingText: String,
         isSelected: Bool,
         isInstalled: Bool,
         status: ModelDownloadStatusSnapshot?,
@@ -1590,15 +2314,27 @@ private extension OnboardingGuideView {
         onCancel: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 10) {
+                ModelLogoView(
+                    key: ModelLogoKey.resolve(title: title, engine: repo),
+                    fallbackTitle: title,
+                    size: 24
+                )
+
+                VStack(alignment: .leading, spacing: 5) {
                     Text(title)
                         .font(.callout.weight(.semibold))
-                    Text(repo)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .truncationMode(.middle)
+
+                    HStack(spacing: 6) {
+                        modelMetaPill(text: sizeText, systemImage: "externaldrive")
+                        modelInstallStatusPill(
+                            text: localInstallStatusText(isInstalled: isInstalled, status: status),
+                            isInstalled: isInstalled,
+                            isActive: status != nil
+                        )
+                        modelMetaPill(text: ratingText, systemImage: "star.fill")
+                    }
                 }
 
                 Spacer(minLength: 6)
@@ -1640,6 +2376,76 @@ private extension OnboardingGuideView {
         )
     }
 
+    func moreListButton(
+        isExpanded: Bool,
+        expandedCount: Int,
+        collapsedCount: Int,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(isExpanded ? guideLocalized("Less") : guideLocalized("More"))
+                    .font(.caption.weight(.semibold))
+                Text("\(isExpanded ? collapsedCount : expandedCount)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(SettingsCompactActionButtonStyle(height: 26, horizontalPadding: 8))
+    }
+
+    func localInstallStatusText(isInstalled: Bool, status: ModelDownloadStatusSnapshot?) -> String {
+        if let status {
+            return status.titleText
+        }
+        return isInstalled ? guideLocalized("Installed") : guideLocalized("Not installed")
+    }
+
+    func onboardingRemoteLLMProviderTitle(_ provider: RemoteLLMProvider) -> String {
+        switch provider {
+        case .volcengine:
+            return guideLocalized("Doubao")
+        default:
+            return provider.title
+        }
+    }
+
+    func modelMetaPill(text: String, systemImage: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 8, weight: .semibold))
+            Text(text)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(
+            Capsule(style: .continuous)
+                .fill(SettingsUIStyle.panelFillColor)
+        )
+    }
+
+    func modelInstallStatusPill(text: String, isInstalled: Bool, isActive: Bool) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .foregroundStyle(isInstalled ? Color.green : (isActive ? Color.accentColor : .secondary))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill((isInstalled ? Color.green : (isActive ? Color.accentColor : Color.secondary)).opacity(0.12))
+            )
+    }
+
     func remoteProviderRow(
         title: String,
         isSelected: Bool,
@@ -1648,25 +2454,35 @@ private extension OnboardingGuideView {
         onConfigure: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(title)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(1)
+            HStack(alignment: .top, spacing: 8) {
+                ModelLogoView(
+                    key: ModelLogoKey.resolve(title: title, engine: "remote"),
+                    fallbackTitle: title,
+                    size: 22
+                )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(1)
+                    Text(isConfigured ? guideLocalized("Configured") : guideLocalized("Not configured"))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(isConfigured ? Color.green : .secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
-                Image(systemName: isConfigured ? "checkmark.circle.fill" : "exclamationmark.circle")
-                    .foregroundStyle(isConfigured ? Color.green : .secondary)
-            }
-            HStack(spacing: 6) {
-                Button(isSelected ? guideLocalized("Selected") : guideLocalized("Use")) {
-                    onSelect()
-                }
-                .buttonStyle(SettingsCompactActionButtonStyle())
-                .disabled(isSelected)
 
-                Button(guideLocalized("Configure")) {
-                    onConfigure()
+                HStack(spacing: 6) {
+                    Button(isSelected ? guideLocalized("Selected") : guideLocalized("Use")) {
+                        onSelect()
+                    }
+                    .buttonStyle(SettingsCompactActionButtonStyle(height: 24, horizontalPadding: 8))
+                    .disabled(isSelected)
+
+                    Button(guideLocalized("Configure")) {
+                        onConfigure()
+                    }
+                    .buttonStyle(SettingsCompactActionButtonStyle(height: 24, horizontalPadding: 8))
                 }
-                .buttonStyle(SettingsCompactActionButtonStyle())
             }
         }
         .padding(9)
@@ -1674,21 +2490,54 @@ private extension OnboardingGuideView {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(isSelected ? Color.accentColor.opacity(0.08) : SettingsUIStyle.controlFillColor)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor.opacity(0.26) : SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+        )
     }
 
     func shortcutDisplay(for kind: OnboardingGuideShortcutKind) -> String {
         let hotkey: HotkeyPreference.Hotkey
         switch kind {
         case .transcription:
-            hotkey = HotkeyPreference.load()
+            hotkey = shortcutBindings(for: kind).first?.hotkey ?? HotkeyPreference.load()
         case .translation:
-            hotkey = HotkeyPreference.loadTranslation()
+            hotkey = shortcutBindings(for: kind).first?.hotkey ?? HotkeyPreference.loadTranslation()
         case .rewrite:
-            hotkey = HotkeyPreference.loadRewrite()
+            hotkey = shortcutBindings(for: kind).first?.hotkey ?? HotkeyPreference.loadRewrite()
         case .meeting:
-            hotkey = HotkeyPreference.loadMeeting()
+            hotkey = shortcutBindings(for: kind).first?.hotkey ?? HotkeyPreference.loadMeeting()
         }
         return HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: distinguishModifierSides)
+    }
+
+    func shortcutBindings(for kind: OnboardingGuideShortcutKind) -> [HotkeyPreference.HotkeyBinding] {
+        switch kind {
+        case .transcription:
+            return HotkeyPreference.loadTranscriptionBindings()
+        case .translation:
+            return HotkeyPreference.loadTranslationBindings()
+        case .rewrite:
+            return HotkeyPreference.loadRewriteBindings()
+        case .meeting:
+            return HotkeyPreference.loadMeetingBindings()
+        }
+    }
+
+    func saveShortcutBindings(
+        _ bindings: [HotkeyPreference.HotkeyBinding],
+        for kind: OnboardingGuideShortcutKind
+    ) {
+        switch kind {
+        case .transcription:
+            HotkeyPreference.saveTranscriptionBindings(bindings)
+        case .translation:
+            HotkeyPreference.saveTranslationBindings(bindings)
+        case .rewrite:
+            HotkeyPreference.saveRewriteBindings(bindings)
+        case .meeting:
+            HotkeyPreference.saveMeetingBindings(bindings)
+        }
     }
 
     func handleShortcutObserved(_ kind: OnboardingGuideShortcutKind) {
@@ -1868,36 +2717,86 @@ private extension OnboardingGuideView {
     }
 
     func startMicrophoneMeter() {
+        refreshInputDevices()
+        startMicrophoneMeter(preferredDeviceID: microphoneState.activeDevice?.id, resetStartupRetry: true)
+    }
+
+    func startMicrophoneMeter(preferredDeviceID: AudioDeviceID?, resetStartupRetry: Bool) {
         guard OnboardingPermissionGrantResolver.isGranted(.microphone) else { return }
 
-        stopMicrophoneMeter()
+        stopMicrophoneMeter(resetStartupRetry: resetStartupRetry)
+        if resetStartupRetry {
+            microphoneStartupRetryCount = 0
+        }
         waveformState.reset()
         waveformState.setActive(true)
+        microphoneSignalFrameCount = 0
+        microphoneReceivedInitialBuffer = false
 
         let capture = MeetingMicrophoneCapture()
-        capture.setPreferredInputDevice(microphoneState.activeDevice?.id)
+        capture.setPreferredInputDevice(preferredDeviceID)
         microphoneCapture = capture
 
         do {
             try capture.start { _, level in
                 Task { @MainActor in
+                    guard currentStep == .microphone, microphoneCapture === capture else { return }
+                    microphoneReceivedInitialBuffer = true
+                    microphoneStartupWatchdogTask?.cancel()
+                    microphoneStartupWatchdogTask = nil
                     let displayLevel = guideMicrophoneDisplayLevel(level)
                     waveformState.ingest(level: displayLevel)
-                    if displayLevel > 0.035 {
+                    if level >= Self.microphoneRawSignalThreshold || displayLevel >= Self.microphoneDisplaySignalThreshold {
+                        microphoneSignalFrameCount += 1
+                    } else {
+                        microphoneSignalFrameCount = 0
+                    }
+                    if microphoneSignalFrameCount >= Self.microphoneRequiredSignalFrames {
                         completedInteractionSteps.insert(.microphone)
                     }
                 }
             }
+            scheduleMicrophoneStartupWatchdog(preferredDeviceID: preferredDeviceID)
         } catch {
             VoxtLog.settingsWarning("Guide microphone meter failed: \(error.localizedDescription)")
             stopMicrophoneMeter()
         }
     }
 
-    func stopMicrophoneMeter() {
+    func stopMicrophoneMeter(resetStartupRetry: Bool = true) {
+        microphoneStartupWatchdogTask?.cancel()
+        microphoneStartupWatchdogTask = nil
         microphoneCapture?.stop()
         microphoneCapture = nil
+        microphoneSignalFrameCount = 0
+        microphoneReceivedInitialBuffer = false
+        if resetStartupRetry {
+            microphoneStartupRetryCount = 0
+        }
         waveformState.setActive(false)
+    }
+
+    func scheduleMicrophoneStartupWatchdog(preferredDeviceID: AudioDeviceID?) {
+        microphoneStartupWatchdogTask?.cancel()
+        microphoneStartupWatchdogTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: Self.microphoneStartupWatchdogDelay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled,
+                  currentStep == .microphone,
+                  !microphoneReceivedInitialBuffer,
+                  microphoneStartupRetryCount < 1
+            else {
+                return
+            }
+
+            microphoneStartupRetryCount += 1
+            VoxtLog.settingsWarning("Guide microphone meter restarting after missing initial callback.")
+            startMicrophoneMeter(preferredDeviceID: nil, resetStartupRetry: false)
+        }
     }
 
     func restartMicrophoneMeterIfNeeded() {

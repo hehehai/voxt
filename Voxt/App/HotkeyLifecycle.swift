@@ -94,6 +94,7 @@ extension AppDelegate {
         // - AppDelegate owns business decisions (start/stop session, selected-text fast path, mode rules).
         hotkeyManager.onKeyDownWithBehavior = { [weak self] behavior in
             guard let self else { return }
+            self.postHotkeyDidTrigger(kind: "transcription", behavior: behavior)
             self.handleTranscriptionHotkeyDown(behavior: behavior)
         }
         hotkeyManager.onKeyUpWithBehavior = { [weak self] behavior in
@@ -102,6 +103,7 @@ extension AppDelegate {
         }
         hotkeyManager.onTranslationKeyDownWithBehavior = { [weak self] behavior in
             guard let self else { return }
+            self.postHotkeyDidTrigger(kind: "translation", behavior: behavior)
             self.handleTranslationHotkeyDown(behavior: behavior)
         }
         hotkeyManager.onTranslationKeyUpWithBehavior = { [weak self] behavior in
@@ -110,14 +112,16 @@ extension AppDelegate {
         }
         hotkeyManager.onRewriteKeyDownWithBehavior = { [weak self] behavior in
             guard let self else { return }
+            self.postHotkeyDidTrigger(kind: "rewrite", behavior: behavior)
             self.handleRewriteHotkeyDown(behavior: behavior)
         }
         hotkeyManager.onRewriteKeyUpWithBehavior = { [weak self] behavior in
             guard let self else { return }
             self.handleRewriteHotkeyUp(behavior: behavior)
         }
-        hotkeyManager.onMeetingKeyDownWithBehavior = { [weak self] _ in
+        hotkeyManager.onMeetingKeyDownWithBehavior = { [weak self] behavior in
             guard let self else { return }
+            self.postHotkeyDidTrigger(kind: "meeting", behavior: behavior)
             self.handleMeetingHotkeyDown()
         }
         hotkeyManager.onCustomPasteKeyDown = { [weak self] in
@@ -573,6 +577,17 @@ extension AppDelegate {
         )
         guard isSessionActive, sessionOutputMode == .rewrite else { return }
         endRecording()
+    }
+
+    private func postHotkeyDidTrigger(kind: String, behavior: HotkeyPreference.TriggerBehavior) {
+        NotificationCenter.default.post(
+            name: .voxtHotkeyDidTrigger,
+            object: nil,
+            userInfo: [
+                "kind": kind,
+                "behavior": behavior.rawValue
+            ]
+        )
     }
 
     func handleCustomPasteHotkeyDown() {

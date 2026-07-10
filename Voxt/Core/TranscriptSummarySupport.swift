@@ -95,7 +95,7 @@ enum TranscriptSummarySupport {
 
     static func defaultPromptTemplate() -> String {
         """
-        Your task is to generate a clear, credible, and concise transcript summary based on the provided transcript and return it in JSON structure. Please strictly follow the requirements below:
+        Your task is to generate a clear, credible, and concise transcript summary based on the provided transcript and return one valid JSON object. Please strictly follow the requirements below:
 
         User's main language:
         {{USER_MAIN_LANGUAGE}}
@@ -118,20 +118,44 @@ enum TranscriptSummarySupport {
         7. Translation rules:
            - Non-user-main-language content in the transcript must be translated into the user's main language.
            - Proper nouns, product names, URLs, and code snippets can be kept in their original form.
-        8. The content does not support markdown, only line breaks using "\\n".
+        8. The content field is plain text only. Do not use markdown, bullets, tables, code fences, or HTML. If paragraph breaks are needed inside the JSON string, use normal JSON newline escapes. Do not double-escape line breaks.
 
-        The output must be a valid JSON object with the following structure:
+        The output must be JSON only, with no surrounding markdown or explanation, and must conform exactly to this JSON Schema:
         {
-          "transcript_summary": {
-            "title": "[Fill in the brief transcript theme here]",
-            "content": "[Fill in the main body of the transcript summary here, including context, key discussion points, decisions, risks or blockers, and unresolved issues. Use line breaks \\n in appropriate positions to make the content clearer]"
-          },
-          "todo_list": [
-            "[List each to-do task here, clearly specifying the responsible person and deadline when mentioned in the transcript]"
-          ]
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transcript_summary", "todo_list"],
+          "properties": {
+            "transcript_summary": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["title", "content"],
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "description": "Brief transcript theme"
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Plain-text summary covering context, key points, decisions, risks or blockers, and unresolved issues. Use JSON newline escapes only when paragraph breaks improve readability."
+                }
+              }
+            },
+            "todo_list": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "description": "One task with owner and deadline when mentioned"
+              }
+            }
+          }
         }
 
-        Note: If there are no to-do tasks, the "todo_list" field should be an empty array. Ensure the JSON is properly formatted, with no trailing commas, and the content accurately reflects the transcript in fluent, natural language conforming to the user's main language expression habits.
+        Note: If there are no to-do tasks, the "todo_list" field must be an empty array. Ensure the JSON is properly formatted, with no trailing commas, and the content accurately reflects the transcript in fluent, natural language conforming to the user's main language expression habits.
         """
     }
 
@@ -262,10 +286,10 @@ enum TranscriptSummarySupport {
         generatedAt: Date
     ) -> TranscriptSummarySnapshot? {
         let summaryBlock = payload.transcriptSummary
-        let title = (summaryBlock?.title ?? payload.title)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let body = (summaryBlock?.content ?? summaryBlock?.body ?? payload.body ?? payload.content)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = normalizeEscapedText(summaryBlock?.title ?? payload.title)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = normalizeEscapedText(summaryBlock?.content ?? summaryBlock?.body ?? payload.body ?? payload.content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let todoItems = normalizedTodoItems(payload.todoList ?? payload.todoItems ?? [])
         guard !body.isEmpty || !todoItems.isEmpty else { return nil }
         return TranscriptSummarySnapshot(
@@ -282,18 +306,18 @@ enum TranscriptSummarySupport {
         settings: TranscriptSummarySettingsSnapshot,
         generatedAt: Date
     ) -> TranscriptSummarySnapshot? {
-        let xmlTitle = firstMatch(
+        let xmlTitle = normalizeEscapedText(firstMatch(
             in: text,
             patterns: [
                 #"(?is)<title>\s*([\s\S]*?)\s*</title>"#
             ]
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let xmlBody = firstMatch(
+        )).trimmingCharacters(in: .whitespacesAndNewlines)
+        let xmlBody = normalizeEscapedText(firstMatch(
             in: text,
             patterns: [
                 #"(?is)<content>\s*([\s\S]*?)\s*</content>"#
             ]
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )).trimmingCharacters(in: .whitespacesAndNewlines)
         let xmlTodoBlock = firstMatch(
             in: text,
             patterns: [
@@ -301,18 +325,18 @@ enum TranscriptSummarySupport {
             ]
         )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        let title = xmlTitle ?? firstMatch(
+        let title = !xmlTitle.isEmpty ? xmlTitle : normalizeEscapedText(firstMatch(
             in: text,
             patterns: [
                 #"(?is)(?:^|\n)\s*["']?title["']?\s*[:：]\s*["']?(.+?)["']?(?=\n\s*["']?(?:body|summary|content)["']?\s*[:：]|\n{2,}|$)"#
             ]
-        ) ?? fallbackSummaryTitle(for: settings)
-        let body = xmlBody ?? firstMatch(
+        ) ?? fallbackSummaryTitle(for: settings))
+        let body = !xmlBody.isEmpty ? xmlBody : normalizeEscapedText(firstMatch(
             in: text,
             patterns: [
                 #"(?is)(?:^|\n)\s*["']?(?:body|summary|content)["']?\s*[:：]\s*([\s\S]+?)(?=\n\s*["']?(?:todoItems|todos|actionItems)["']?\s*[:：]|\s*$)"#
             ]
-        )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        )).trimmingCharacters(in: .whitespacesAndNewlines)
         let todoBlock = xmlTodoBlock.isEmpty ? (firstMatch(
             in: text,
             patterns: [
@@ -336,8 +360,16 @@ enum TranscriptSummarySupport {
 
     private static func normalizedTodoItems(_ values: [String]) -> [String] {
         values
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { normalizeEscapedText($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    private static func normalizeEscapedText(_ value: String?) -> String {
+        guard let value else { return "" }
+        return value
+            .replacingOccurrences(of: "\\r\\n", with: "\n")
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\t", with: "\t")
     }
 
     private static func normalizePayload(_ text: String) -> String {

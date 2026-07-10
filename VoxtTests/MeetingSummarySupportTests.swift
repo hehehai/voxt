@@ -47,6 +47,32 @@ final class MeetingSummarySupportTests: XCTestCase {
         XCTAssertEqual(decoded?.settingsSnapshot.modelSelectionID, "remote-llm:openAI")
     }
 
+    func testDecodeSummaryNormalizesDoubleEscapedLineBreaks() {
+        let settings = MeetingSummarySettingsSnapshot(
+            autoGenerate: true,
+            promptTemplate: "Summarize decisions and TODOs.",
+            modelSelectionID: "remote-llm:openAI"
+        )
+
+        let payload = """
+        {
+          "transcript_summary": {
+            "title": "城市游览",
+            "content": "背景：讨论围绕城市游览和品尝当地特色食物展开。\\\\n\\\\n关键讨论点：饮料价格、特色菜品试吃和口味反馈。"
+          },
+          "todo_list": ["继续寻找更多当地餐馆\\\\n记录价格"]
+        }
+        """
+
+        let decoded = MeetingSummarySupport.decodeSummary(from: payload, settings: settings)
+
+        XCTAssertEqual(
+            decoded?.body,
+            "背景：讨论围绕城市游览和品尝当地特色食物展开。\n\n关键讨论点：饮料价格、特色菜品试吃和口味反馈。"
+        )
+        XCTAssertEqual(decoded?.todoItems, ["继续寻找更多当地餐馆\n记录价格"])
+    }
+
     func testDecodeSummaryExtractsJSONObjectFromWrappedText() {
         let settings = MeetingSummarySettingsSnapshot(
             autoGenerate: true,
@@ -121,7 +147,8 @@ final class MeetingSummarySupportTests: XCTestCase {
 
         XCTAssertTrue(prompt.contains("\"transcript_summary\""))
         XCTAssertTrue(prompt.contains("\"todo_list\""))
-        XCTAssertTrue(prompt.contains("line breaks using \"\\n\""))
+        XCTAssertTrue(prompt.contains("\"additionalProperties\": false"))
+        XCTAssertTrue(prompt.contains("Do not double-escape line breaks"))
     }
 
     func testDecodeSummaryParsesXMLPayload() {
