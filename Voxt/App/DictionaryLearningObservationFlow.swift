@@ -9,26 +9,39 @@ extension AppDelegate {
         insertedText rawInsertedText: String,
         outputMode: SessionOutputMode,
         didInject: Bool,
+        didTriggerAutoKeyPress: Bool,
         historyEntryID: UUID?
     ) {
-        guard didInject else {
+        let insertedText = rawInsertedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scheduleDecision = AutomaticDictionaryLearningMonitor.observationScheduleDecision(
+            didInject: didInject,
+            isTranscriptionOutput: outputMode == .transcription,
+            isFeatureEnabled: dictionaryAutoLearningEnabled,
+            insertedText: insertedText,
+            didTriggerAutoKeyPress: didTriggerAutoKeyPress
+        )
+
+        switch scheduleDecision {
+        case .schedule:
+            break
+        case .skipTextNotInjected:
             VoxtLog.dictionary("Automatic dictionary learning skipped: text was not injected.")
             return
-        }
-        guard outputMode == .transcription else {
+        case .skipNonTranscriptionOutput:
             VoxtLog.dictionary(
                 "Automatic dictionary learning skipped: output mode is \(RecordingSessionSupport.outputLabel(for: outputMode))."
             )
             return
-        }
-        guard dictionaryAutoLearningEnabled else {
+        case .skipFeatureDisabled:
             VoxtLog.dictionary("Automatic dictionary learning skipped: feature disabled.")
             return
-        }
-
-        let insertedText = rawInsertedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !insertedText.isEmpty else {
+        case .skipEmptyText:
             VoxtLog.dictionary("Automatic dictionary learning skipped: inserted text is empty.")
+            return
+        case .skipAutoKeyPress:
+            VoxtLog.dictionary(
+                "Automatic dictionary learning skipped: app enhancement auto key press was triggered."
+            )
             return
         }
 

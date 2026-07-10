@@ -183,12 +183,13 @@ extension AppDelegate {
             "Commit transcription prepared payload. inputChars=\(text.count), outputChars=\(context.outputText.count), hasRewritePayload=\(context.rewriteAnswerPayload != nil), dictionaryMatches=\(context.dictionaryMatches.count), dictionaryCorrections=\(context.dictionaryCorrectedTerms.count)"
         )
 
-        deliverCommittedOutput(context) { [weak self] didInject in
+        deliverCommittedOutput(context) { [weak self] didInject, didTriggerAutoKeyPress in
             guard let self else { return }
             self.finalizeCommittedOutputPostDeliveryAsync(
                 deliveredContext: context,
                 outputMode: sessionOutputMode,
-                didInject: didInject
+                didInject: didInject,
+                didTriggerAutoKeyPress: didTriggerAutoKeyPress
             )
             onDeliveryCompleted?()
         }
@@ -250,7 +251,8 @@ extension AppDelegate {
         finalizeCommittedOutputPostDeliveryAsync(
             deliveredContext: context,
             outputMode: sessionOutputMode,
-            didInject: didInject
+            didInject: didInject,
+            didTriggerAutoKeyPress: false
         )
         onDeliveryCompleted?()
     }
@@ -508,7 +510,7 @@ extension AppDelegate {
 
     private func deliverCommittedOutput(
         _ context: SessionFinalizeContext,
-        completion: ((Bool) -> Void)? = nil
+        completion: ((Bool, Bool) -> Void)? = nil
     ) {
         let delivery = resolvedOutputDelivery(for: context)
         let deliveryLabel: String
@@ -536,7 +538,7 @@ extension AppDelegate {
                 if didInject, let autoKeyPressHotkey {
                     self?.pressAutoKeyAfterTextInjection(autoKeyPressHotkey)
                 }
-                completion?(didInject)
+                completion?(didInject, didInject && autoKeyPressHotkey != nil)
             }
         case .answerOverlay:
             if overlayState.isRewriteConversationActive, context.rewriteAnswerPayload == nil {
@@ -546,18 +548,19 @@ extension AppDelegate {
                 presentRewriteAnswerOverlay(title: payload.title, content: payload.content)
             }
             sessionFinalOutputDeliveredAt = Date()
-            completion?(false)
+            completion?(false, false)
         case .selectedTextTranslationResultWindow:
             presentSelectedTextTranslationAnswerOverlay(content: context.outputText)
             sessionFinalOutputDeliveredAt = Date()
-            completion?(false)
+            completion?(false, false)
         }
     }
 
     private func finalizeCommittedOutputPostDeliveryAsync(
         deliveredContext: SessionFinalizeContext,
         outputMode: SessionOutputMode,
-        didInject: Bool
+        didInject: Bool,
+        didTriggerAutoKeyPress: Bool
     ) {
         let deliveredText = deliveredContext.outputText
         let displayTitle = deliveredContext.rewriteAnswerPayload?.trimmedTitle
@@ -621,6 +624,7 @@ extension AppDelegate {
                     insertedText: deliveredText,
                     outputMode: outputMode,
                     didInject: didInject,
+                    didTriggerAutoKeyPress: didTriggerAutoKeyPress,
                     historyEntryID: historyEntryID
                 )
                 self.persistDictionaryEvidence(

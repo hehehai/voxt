@@ -1,4 +1,4 @@
-你的任务是根据提供的转写记录，生成一份清晰、可信、简洁的转写摘要，并以 JSON 结构返回。请严格遵守以下要求：
+你的任务是根据提供的转写记录，生成一份清晰、可信、简洁的转写摘要，并只返回一个合法 JSON 对象。请严格遵守以下要求：
 
 用户主要语言：
 {{USER_MAIN_LANGUAGE}}
@@ -21,17 +21,41 @@
 7. 翻译规则：
    - 转写记录中非用户主要语言的内容，必须翻译成用户主要语言。
    - 专有名词、产品名、URL 和代码片段可以保留原文。
-8. 内容不支持 markdown，只能使用 "\\n" 表示换行。
+8. content 字段只能是纯文本。不要使用 markdown、项目符号、表格、代码块或 HTML。若 JSON 字符串内部确实需要分段，请使用正常的 JSON 换行转义，不要双重转义换行。
 
-输出必须是一个合法 JSON 对象，结构如下：
+输出必须只包含 JSON，不要包裹 markdown 或额外说明，并且必须严格符合以下 JSON Schema：
 {
-  "transcript_summary": {
-    "title": "[在这里填写简短的转写主题]",
-    "content": "[在这里填写转写摘要正文，包含背景与上下文、关键讨论点、已达成决策、风险/阻塞项和待解决问题，并在合适位置使用 \\n 提高可读性]"
-  },
-  "todo_list": [
-    "[在这里逐条列出待办事项，并尽可能写明负责人和截止时间（若转写中提到）]"
-  ]
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["transcript_summary", "todo_list"],
+  "properties": {
+    "transcript_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "content"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "简短的转写主题"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "description": "纯文本摘要，覆盖背景与上下文、关键讨论点、已达成决策、风险/阻塞项和待解决问题。仅在确实能提升可读性时使用 JSON 换行转义分段。"
+        }
+      }
+    },
+    "todo_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "description": "一条待办事项；转写中提到负责人或截止时间时必须写明"
+      }
+    }
+  }
 }
 
 注意：如果没有待办事项，"todo_list" 必须返回空数组。请确保 JSON 格式正确、没有多余逗号，并使用符合用户主要语言表达习惯的自然流畅语言，准确反映转写内容。

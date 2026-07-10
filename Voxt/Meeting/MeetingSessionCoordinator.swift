@@ -19,6 +19,7 @@ final class MeetingSessionCoordinator {
     private var micAccumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: micSpeechThreshold, profile: .quality)
     private var systemAccumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: systemSpeechThreshold, profile: .quality)
     private let voiceActivityDetector = MeetingVoiceActivityDetector()
+    private let offlineVoiceActivityDetector = MeetingOfflineVoiceActivityDetector()
     private var transcriber: (any MeetingSegmentTranscribing)?
     private var liveSessionFactory: (any MeetingLiveSessionFactory)?
     private var liveSessions: [MeetingSpeaker: any MeetingLiveTranscribingSession] = [:]
@@ -29,6 +30,7 @@ final class MeetingSessionCoordinator {
     private var stopFinalizationTask: Task<Void, Never>?
     private var recordingStartedAt: Date?
     private var accumulatedRecordingDuration: TimeInterval = 0
+    private(set) var hasCapturedAudio = false
     private var preferredInputDeviceIDProvider: () -> AudioDeviceID?
     private var pendingTasks: [UUID: Task<Void, Never>] = [:]
     private var completedPendingTaskIDs = Set<UUID>()
@@ -217,19 +219,30 @@ final class MeetingSessionCoordinator {
             }
             let finalTranscriptionDescriptors = shouldFlushPendingAudio ? await self.audioArchive.finalTranscriptionAssetDescriptors() : []
             let speakerAnalysisDescriptors = shouldFlushPendingAudio ? await self.audioArchive.analysisAssetDescriptors(for: captureMode) : []
+            let finalVADPolicy = MeetingFinalSpeechValidator.vadPolicy(
+                transcriptionEngine: self.activeEngineContext?.engine ?? self.resolvedTranscriptionEngine(),
+                mlxModelRepo: self.activeEngineContext?.mlxModelRepo ?? self.mlxModelManager.currentModelRepo
+            )
             let finalTranscriptSegments = await self.optimizedFinalTranscriptSegments(
                 fallbackSegments: finalSegmentsBeforeSpeakerAnalysis,
                 finalTranscriptionDescriptors: finalTranscriptionDescriptors,
                 shouldFlushPendingAudio: shouldFlushPendingAudio
             )
-            let speechValidatedFinalTranscriptSegments = await self.speechValidatedFinalSegments(
+            let finalSpeechEvidence = await self.finalSpeechEvidence(
+                descriptors: finalTranscriptionDescriptors,
+                captureMode: captureMode,
+                policy: finalVADPolicy,
+                shouldValidate: shouldFlushPendingAudio
+            )
+            let speechValidatedFinalTranscriptSegments = MeetingFinalSpeechValidator.validatedSegments(
                 finalTranscriptSegments,
-                captureMode: captureMode
+                policy: finalVADPolicy,
+                evidence: finalSpeechEvidence
             )
             let speakerAnalysisOptions = MeetingSpeakerDiarizationOptions.fromPreferences()
             let finalSegments: [MeetingTranscriptSegment]
             if captureMode.capabilities.allowsSpeakerFeatures {
-                finalSegments = await MeetingSpeakerAnalysisPipeline.analyzedSegments(
+                finalSegments = await MeetingSpeakerAnalysisPipeline.analyzedSegmentsPreservingStructuredSpeakerData(
                     from: speechValidatedFinalTranscriptSegments,
                     descriptors: speakerAnalysisDescriptors,
                     loadAsset: { descriptor in
@@ -246,9 +259,11 @@ final class MeetingSessionCoordinator {
                 }
                 return lhs.startSeconds < rhs.startSeconds
             }
-            let speechValidatedVisibleSnapshotSegments = shouldFlushPendingAudio
-                ? await self.speechValidatedFinalSegments(visibleSnapshotSegments, captureMode: captureMode)
-                : visibleSnapshotSegments
+            let speechValidatedVisibleSnapshotSegments = MeetingFinalSpeechValidator.validatedSegments(
+                visibleSnapshotSegments,
+                policy: finalVADPolicy,
+                evidence: shouldFlushPendingAudio ? finalSpeechEvidence : nil
+            )
             await MainActor.run {
                 self.overlayState.segments = sortedFinalSegments
             }
@@ -391,6 +406,8 @@ final class MeetingSessionCoordinator {
             }
             return
         }
+        guard !samples.isEmpty else { return }
+        hasCapturedAudio = true
 
         let bufferDuration = Double(samples.count) / sampleRate
         let bufferStartSeconds = max(bufferEndSeconds - bufferDuration, 0)
@@ -493,10 +510,13 @@ final class MeetingSessionCoordinator {
             pendingChunks.append(chunk)
             return
         }
-        if let segment = await transcriber.transcribe(chunk: chunk) {
+        let segments = await transcriber.transcribeSegments(chunk: chunk)
+        if !segments.isEmpty {
             await MainActor.run { [weak self] in
                 guard let self, self.overlayState.isPresented else { return }
-                self.applyTranscriptEvent(chunk.isFinal ? .final(segment) : .partial(segment))
+                for segment in segments {
+                    self.applyTranscriptEvent(chunk.isFinal ? .final(segment) : .partial(segment))
+                }
             }
         }
     }
@@ -543,6 +563,7 @@ final class MeetingSessionCoordinator {
         loggedSampleExtractionFailureSpeakers.removeAll()
         recordingStartedAt = nil
         accumulatedRecordingDuration = 0
+        hasCapturedAudio = false
         completedPendingTaskIDs.removeAll()
         pendingChunks.removeAll()
         Task {
@@ -1007,13 +1028,21 @@ final class MeetingSessionCoordinator {
             return MeetingTranscriptPostProcessor.process(fallbackSegments)
         }
 
-        let optimizedSegments = await MeetingFinalTranscriptionPass.transcribe(
-            descriptors: finalTranscriptionDescriptors,
-            loadAsset: { descriptor in
-                await self.audioArchive.loadAsset(descriptor)
-            },
-            transcriber: transcriber
-        )
+        let optimizedSegments: [MeetingTranscriptSegment]
+        do {
+            optimizedSegments = try await MeetingFinalTranscriptionPass.transcribe(
+                descriptors: finalTranscriptionDescriptors,
+                loadAsset: { descriptor in
+                    await self.audioArchive.loadAsset(descriptor)
+                },
+                transcriber: transcriber
+            )
+        } catch {
+            VoxtLog.meetingWarning(
+                "Meeting final transcript optimization failed; falling back to realtime transcript. error=\(error.localizedDescription)"
+            )
+            return MeetingTranscriptPostProcessor.process(fallbackSegments)
+        }
         guard !optimizedSegments.isEmpty else {
             VoxtLog.meeting("Meeting final transcript optimization produced no segments; falling back to realtime transcript.", verbose: true)
             return MeetingTranscriptPostProcessor.process(fallbackSegments)
@@ -1025,69 +1054,53 @@ final class MeetingSessionCoordinator {
         return optimizedSegments
     }
 
-    private func speechValidatedFinalSegments(
-        _ segments: [MeetingTranscriptSegment],
-        captureMode: MeetingCaptureMode
-    ) async -> [MeetingTranscriptSegment] {
-        guard !segments.isEmpty else { return [] }
-        await voiceActivityDetector.reset()
-        defer {
-            Task {
-                await voiceActivityDetector.reset()
-            }
+    private func finalSpeechEvidence(
+        descriptors: [MeetingAudioAssetDescriptor],
+        captureMode: MeetingCaptureMode,
+        policy: MLXVADPolicy,
+        shouldValidate: Bool
+    ) async -> MeetingFinalSpeechEvidence? {
+        guard shouldValidate, !descriptors.isEmpty else { return nil }
+        guard policy == .standard else {
+            VoxtLog.meeting(
+                "Meeting final external VAD skipped for model-owned timeline. policy=\(String(describing: policy))",
+                verbose: true
+            )
+            return nil
+        }
+        guard !serverVADActive else {
+            VoxtLog.meeting("Meeting final external VAD skipped because server VAD is active.", verbose: true)
+            return nil
         }
 
-        var output: [MeetingTranscriptSegment] = []
-        for segment in segments.sorted(by: { lhs, rhs in
-            if lhs.startSeconds == rhs.startSeconds {
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            return lhs.startSeconds < rhs.startSeconds
-        }) {
-            if await hasSpeechEvidence(for: segment, captureMode: captureMode) {
-                output.append(segment)
-            } else {
-                VoxtLog.meeting(
-                    "Meeting final segment dropped by VAD validation. speaker=\(segment.speaker.rawValue), start=\(String(format: "%.2f", segment.startSeconds)), end=\(String(format: "%.2f", segment.endSeconds ?? segment.startSeconds)), textChars=\(segment.text.count)",
-                    verbose: true
+        var evidence = MeetingFinalSpeechEvidence()
+        var evaluatedAssetCount = 0
+        for descriptor in descriptors {
+            let speaker = descriptor.source.defaultSpeaker
+            guard captureMode.includes(speaker: speaker) else { continue }
+            guard let asset = await audioArchive.loadVoiceActivityAsset(descriptor) else {
+                VoxtLog.meetingWarning(
+                    "Meeting final VAD asset unavailable; transcript coverage remains unvalidated. source=\(descriptor.source.rawValue), start=\(String(format: "%.2f", descriptor.sessionStartOffset))"
                 )
+                continue
             }
+            guard let speechRanges = await offlineVoiceActivityDetector.speechRanges(
+                samples: asset.samples,
+                sampleRate: asset.sampleRate,
+                fallbackThreshold: Self.speechThreshold(for: speaker)
+            ) else {
+                continue
+            }
+            evidence.record(
+                source: asset.source,
+                assetStartSeconds: asset.sessionStartOffset,
+                assetDurationSeconds: asset.durationSeconds,
+                speechRanges: speechRanges
+            )
+            evaluatedAssetCount += 1
         }
-        return output
-    }
-
-    private func hasSpeechEvidence(
-        for segment: MeetingTranscriptSegment,
-        captureMode: MeetingCaptureMode
-    ) async -> Bool {
-        let source = segment.audioSource ?? inferredAudioSource(for: segment.speaker)
-        guard captureMode.includes(speaker: source.defaultSpeaker) else { return true }
-        let segmentEndSeconds = max(segment.endSeconds ?? segment.startSeconds, segment.startSeconds)
-        guard segmentEndSeconds > segment.startSeconds else { return true }
-        guard let asset = await audioArchive.loadAssetWindow(
-            source: source,
-            startSeconds: segment.startSeconds,
-            endSeconds: segmentEndSeconds,
-            paddingSeconds: 0.12
-        ) else {
-            return false
-        }
-
-        let speaker = source.defaultSpeaker
-        let fallbackLevel = AudioLevelMeter.normalizedLevel(
-            fromSamples: asset.samples,
-            noiseGate: 0.002,
-            gain: 12
-        )
-        let decision = await voiceActivityDetector.activity(
-            samples: asset.samples,
-            sampleRate: asset.sampleRate,
-            speaker: speaker,
-            fallbackLevel: fallbackLevel,
-            fallbackThreshold: Self.speechThreshold(for: speaker),
-            serverVADActive: serverVADActive
-        )
-        return decision.isSpeech
+        guard evaluatedAssetCount > 0 else { return nil }
+        return evidence
     }
 
     private func resolvedTranscriptionEngine() -> TranscriptionEngine {

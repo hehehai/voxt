@@ -89,11 +89,13 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-6bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16"))
+        XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
+        XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("OpenMOSS-Team/MOSS-Transcribe-Diarize"))
         XCTAssertTrue(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"))
         XCTAssertFalse(MLXModelManager.isRealtimeCapableModelRepo("mlx-community/Qwen3-ASR-0.6B-4bit"))
     }
 
-    func testLiveModeRoutesQwen3AndNemotronToNativeSessions() {
+    func testLiveModeRoutesRealtimeFamiliesToNativeSessions() {
         XCTAssertEqual(
             MLXModelManager.liveMode(for: "mlx-community/Qwen3-ASR-0.6B-4bit"),
             .nativeQwenLive
@@ -103,8 +105,16 @@ final class MLXModelManagerTests: XCTestCase {
             .nativeNemotronLive
         )
         XCTAssertEqual(
+            MLXModelManager.liveMode(for: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"),
+            .nativeStreamingLive
+        )
+        XCTAssertEqual(
+            MLXModelManager.liveMode(for: "OpenMOSS-Team/MOSS-Transcribe-Diarize"),
+            .nativeStreamingLive
+        )
+        XCTAssertEqual(
             MLXModelManager.liveMode(for: "mlx-community/Voxtral-Mini-4B-Realtime-6bit"),
-            .batchPreview
+            .nativeVoxtralLive
         )
     }
 
@@ -198,6 +208,12 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("mlx-community/Voxtral-Mini-4B-Realtime-6bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v3"))
+        XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
+        XCTAssertTrue(modelIDs.contains("OpenMOSS-Team/MOSS-Transcribe-Diarize"))
+        XCTAssertTrue(modelIDs.contains("Mediform/canary-1b-v2-mlx-q8"))
+        XCTAssertFalse(modelIDs.contains("UsefulSensors/moonshine-tiny"))
+        XCTAssertFalse(modelIDs.contains("facebook/wav2vec2-base-960h"))
+        XCTAssertFalse(modelIDs.contains("facebook/mms-1b-fl102"))
         XCTAssertFalse(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertFalse(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
         XCTAssertFalse(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
@@ -206,12 +222,18 @@ final class MLXModelManagerTests: XCTestCase {
     func testSupportedModelsKeepHiddenASRCompatibilityRepos() {
         let modelIDs = Set(MLXModelManager.supportedModels.map(\.id))
 
-        XCTAssertTrue(modelIDs.contains("beshkenadze/cohere-transcribe-03-2026-mlx-fp16"))
         XCTAssertTrue(modelIDs.contains("mlx-community/parakeet-tdt-0.6b-v2"))
         XCTAssertTrue(modelIDs.contains("mlx-community/FireRedASR2-AED-mlx"))
         XCTAssertTrue(modelIDs.contains("mlx-community/granite-4.0-1b-speech-5bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/GLM-ASR-Nano-2512-4bit"))
         XCTAssertTrue(modelIDs.contains("mlx-community/Qwen3-ASR-0.6B-bf16"))
+        XCTAssertTrue(modelIDs.contains("UsefulSensors/moonshine-tiny"))
+        XCTAssertTrue(modelIDs.contains("facebook/wav2vec2-base-960h"))
+        XCTAssertTrue(modelIDs.contains("facebook/mms-1b-fl102"))
+        XCTAssertEqual(
+            MLXModelCatalog.displayTitle(for: "Mediform/canary-1b-v2-mlx-q8"),
+            "Canary"
+        )
     }
 
     func testHiddenASRModelsDisplayWhenIncludedByLocalState() {

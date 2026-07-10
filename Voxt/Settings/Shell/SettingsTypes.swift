@@ -13,6 +13,7 @@ nonisolated extension Notification.Name {
     static let voxtAudioInputDevicesDidChange = Notification.Name("voxt.audioInputDevices.didChange")
     static let voxtOverlayAppearanceDidChange = Notification.Name("voxt.overlayAppearance.didChange")
     static let voxtFeatureSettingsDidChange = Notification.Name("voxt.feature-settings.did-change")
+    static let voxtHotkeyDidTrigger = Notification.Name("voxt.hotkey.did-trigger")
 }
 
 nonisolated enum AppInterfaceLanguage: String, CaseIterable, Identifiable {

@@ -578,10 +578,11 @@ final class TranscriptionHistoryStore: ObservableObject {
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
         dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot] = [],
-        dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
+        dictionarySuggestedTerms: [DictionarySuggestionSnapshot],
+        allowEmptyTextWithAudio: Bool = false
     ) -> UUID? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty || (allowEmptyTextWithAudio && audioRelativePath != nil) else { return nil }
 
         let entry = TranscriptionHistoryEntry(
             id: UUID(),
@@ -678,6 +679,10 @@ final class TranscriptionHistoryStore: ObservableObject {
         preferredFileName: String? = nil
     ) throws -> String {
         try audioArchive.importArchive(from: sourceURL, kind: kind, preferredFileName: preferredFileName)
+    }
+
+    func removeImportedAudioArchive(relativePath: String) {
+        audioArchive.removeArchive(relativePath: relativePath)
     }
 
     func replaceAudioArchive(for entryID: UUID, with sourceURL: URL) throws -> TranscriptionHistoryEntry? {

@@ -13,6 +13,8 @@ struct MicrophonePriorityDialog: View {
     let onUseNow: (String) -> Void
     let onAutoSwitchChanged: (Bool) -> Void
     let onReorderPriority: ([String]) -> Void
+    var cornerRadius: CGFloat = SettingsUIStyle.dialogCornerRadius
+    var onClose: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var orderedEntries: [MicrophoneDisplayEntry]
@@ -22,12 +24,16 @@ struct MicrophonePriorityDialog: View {
         state: MicrophoneResolvedState,
         onUseNow: @escaping (String) -> Void,
         onAutoSwitchChanged: @escaping (Bool) -> Void,
-        onReorderPriority: @escaping ([String]) -> Void
+        onReorderPriority: @escaping ([String]) -> Void,
+        cornerRadius: CGFloat = SettingsUIStyle.dialogCornerRadius,
+        onClose: (() -> Void)? = nil
     ) {
         self.state = state
         self.onUseNow = onUseNow
         self.onAutoSwitchChanged = onAutoSwitchChanged
         self.onReorderPriority = onReorderPriority
+        self.cornerRadius = cornerRadius
+        self.onClose = onClose
         _orderedEntries = State(initialValue: state.entries)
     }
 
@@ -68,40 +74,42 @@ struct MicrophonePriorityDialog: View {
             }
 
             SettingsDialogActionRow {
+                Toggle(localized("Auto Switch"), isOn: autoSwitchBinding)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+            } trailing: {
                 Button(localized("Done")) {
-                    dismiss()
+                    close()
                 }
                 .buttonStyle(SettingsPrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .settingsDialogChrome(width: 560, height: 380, onClose: { dismiss() })
+        .settingsDialogChrome(width: 560, height: 380, cornerRadius: cornerRadius, onClose: close)
         .onChange(of: state.entries) { _, newValue in
             orderedEntries = newValue
         }
     }
 
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(localized("Microphone Priority"))
-                        .font(.headline)
-                    Text(state.activeDevice?.name ?? String(localized: "No available microphone devices"))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Toggle(localized("Auto Switch"), isOn: autoSwitchBinding)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-            }
+            Text(localized("Microphone Priority"))
+                .font(.headline)
+            Text(state.activeDevice?.name ?? String(localized: "No available microphone devices"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
             Text(localized("Drag to set the preferred microphone order."))
-            .font(.caption)
-            .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

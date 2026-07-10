@@ -121,7 +121,14 @@ actor MeetingAudioArchive {
     }
 
     func loadAsset(_ descriptor: MeetingAudioAssetDescriptor) -> MeetingAudioAsset? {
+        guard let asset = loadVoiceActivityAsset(descriptor) else { return nil }
+        guard asset.samples.contains(where: { abs($0) > Self.silenceThreshold }) else { return nil }
+        return asset
+    }
+
+    func loadVoiceActivityAsset(_ descriptor: MeetingAudioAssetDescriptor) -> MeetingAudioAsset? {
         let range = descriptor.startSample..<(descriptor.startSample + descriptor.sampleCount)
+        guard range.lowerBound >= 0, range.lowerBound < range.upperBound else { return nil }
         let samples: [Float]
         switch descriptor.source {
         case .mixed:
@@ -131,7 +138,7 @@ actor MeetingAudioArchive {
         case .systemAudio:
             samples = readSamples(speaker: .them, in: range)
         }
-        guard samples.contains(where: { abs($0) > Self.silenceThreshold }) else { return nil }
+        guard !samples.isEmpty else { return nil }
         return MeetingAudioAsset(
             source: descriptor.source,
             samples: samples,

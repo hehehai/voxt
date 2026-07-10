@@ -39,7 +39,7 @@ struct MeetingOverlayContainerView: View {
             onCopySegment: onCopySegment
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.top, 8)
+        .padding(.top, state.isCollapsed ? 0 : 8)
     }
 }
 
@@ -82,7 +82,7 @@ private struct MeetingOverlayCard: View {
                     transcriptContent
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: state.isCollapsed ? nil : .infinity, alignment: .topLeading)
             .padding(.horizontal, 18)
             .padding(.vertical, state.isCollapsed ? 10 : 14)
             .background(cardBackground)
@@ -132,7 +132,11 @@ private struct MeetingOverlayCard: View {
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.84), value: state.isCaptureModePickerPresented)
         .padding(.horizontal, 12)
-        .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+        .shadow(
+            color: .black.opacity(state.isCollapsed ? 0 : 0.18),
+            radius: state.isCollapsed ? 0 : 18,
+            y: state.isCollapsed ? 0 : 10
+        )
     }
 
     private var header: some View {

@@ -436,20 +436,20 @@ struct MeetingDetailSummarySettingsDialog: View {
                     .buttonStyle(SettingsPillButtonStyle())
                 }
 
-                TextEditor(
+                PromptEditorView(
                     text: Binding(
                         get: { viewModel.summaryPromptTemplate },
                         set: { viewModel.setSummaryPromptTemplate($0) }
-                    )
+                    ),
+                    height: 112,
+                    contentPadding: 10,
+                    variables: summaryPromptVariables,
+                    variablesLayout: .twoColumns,
+                    variablesTitle: AppLocalization.localizedString("Available variables")
                 )
-                .settingsPromptEditor(height: 112, contentPadding: 10)
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(String(localized: "Available variables: {{USER_MAIN_LANGUAGE}}, {{MEETING_RECORD}}"))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-
-                    Text(String(localized: "Expected result: return valid JSON with transcript_summary.title, transcript_summary.content, and todo_list. Use \\n for line breaks inside content."))
+                    Text(String(localized: "Expected result: return JSON only with transcript_summary.title, transcript_summary.content, and todo_list. Do not wrap it in markdown or add extra keys."))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -500,6 +500,12 @@ struct MeetingDetailSummarySettingsDialog: View {
             for: viewModel.summaryModelOptions,
             selectedSummaryModelID: viewModel.resolvedSummaryModelSelectionID
         )
+    }
+
+    private var summaryPromptVariables: [PromptTemplateVariableDescriptor] {
+        TranscriptSummarySupport.promptTemplateVariables.map {
+            PromptTemplateVariableDescriptor(token: $0, tipKey: "Template tip \($0)")
+        }
     }
 }
 

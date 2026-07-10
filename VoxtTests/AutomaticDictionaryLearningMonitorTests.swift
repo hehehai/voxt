@@ -6,6 +6,30 @@ import XCTest
 
 @MainActor
 final class AutomaticDictionaryLearningMonitorTests: XCTestCase {
+    func testAutoKeyPressSkipsObservationScheduling() {
+        let decision = AutomaticDictionaryLearningMonitor.observationScheduleDecision(
+            didInject: true,
+            isTranscriptionOutput: true,
+            isFeatureEnabled: true,
+            insertedText: "Send this message",
+            didTriggerAutoKeyPress: true
+        )
+
+        XCTAssertEqual(decision, .skipAutoKeyPress)
+    }
+
+    func testTranscriptionWithoutAutoKeyPressSchedulesObservation() {
+        let decision = AutomaticDictionaryLearningMonitor.observationScheduleDecision(
+            didInject: true,
+            isTranscriptionOutput: true,
+            isFeatureEnabled: true,
+            insertedText: "Keep editing this draft",
+            didTriggerAutoKeyPress: false
+        )
+
+        XCTAssertEqual(decision, .schedule)
+    }
+
     func testBuildsLearningRequestForInPlaceCorrection() {
         let outcome = AutomaticDictionaryLearningMonitor.makeLearningRequest(
             insertedText: "anthropic ai",

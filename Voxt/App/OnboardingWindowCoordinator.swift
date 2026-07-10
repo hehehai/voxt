@@ -43,6 +43,11 @@ extension AppDelegate {
         NSSize(width: 880, height: 600)
     }
 
+    private final class OnboardingHostWindow: NSWindow {
+        override var canBecomeKey: Bool { true }
+        override var canBecomeMain: Bool { true }
+    }
+
     func openOnboardingWindow(step requestedStep: OnboardingGuideStep? = nil) {
         let initialStep = requestedStep
             ?? OnboardingPreferenceManager.savedLastGuideStep()
@@ -54,28 +59,26 @@ extension AppDelegate {
                 window.center()
             }
             AppBehaviorController.bringUserInvokedWindowToFront(window)
-            scheduleOnboardingTrafficLightButtonPositionUpdate(for: window)
             return
         }
 
-        let window = NSWindow(
+        let window = OnboardingHostWindow(
             contentRect: NSRect(origin: .zero, size: onboardingWindowContentSize),
-            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = AppLocalization.localizedString("Setup Guide")
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.toolbar = nil
-        window.isOpaque = true
-        window.backgroundColor = SettingsUIStyle.windowBackgroundNSColor
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.isMovableByWindowBackground = true
         window.contentMinSize = onboardingWindowContentSize
         window.contentMaxSize = onboardingWindowContentSize
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.level = .normal
-        window.collectionBehavior = []
+        window.collectionBehavior = [.managed, .participatesInCycle]
         window.delegate = self
 
         let controller = NSWindowController(window: window)
@@ -101,41 +104,5 @@ extension AppDelegate {
         window.setContentSize(onboardingWindowContentSize)
         window.center()
         AppBehaviorController.bringUserInvokedWindowToFront(window)
-        scheduleOnboardingTrafficLightButtonPositionUpdate(for: window)
-    }
-
-    private func positionOnboardingTrafficLightButtons(_ window: NSWindow) {
-        guard let closeButton = window.standardWindowButton(.closeButton),
-              let miniaturizeButton = window.standardWindowButton(.miniaturizeButton),
-              let zoomButton = window.standardWindowButton(.zoomButton),
-              let container = closeButton.superview
-        else {
-            return
-        }
-
-        let leftInset: CGFloat = 15
-        let topInset: CGFloat = 21
-        let spacing: CGFloat = 6
-
-        let buttonSize = closeButton.frame.size
-        let y = container.bounds.height - topInset - buttonSize.height
-        let closeX = leftInset
-        let miniaturizeX = closeX + buttonSize.width + spacing
-        let zoomX = miniaturizeX + buttonSize.width + spacing
-
-        closeButton.translatesAutoresizingMaskIntoConstraints = true
-        miniaturizeButton.translatesAutoresizingMaskIntoConstraints = true
-        zoomButton.translatesAutoresizingMaskIntoConstraints = true
-
-        closeButton.setFrameOrigin(CGPoint(x: closeX, y: y))
-        miniaturizeButton.setFrameOrigin(CGPoint(x: miniaturizeX, y: y))
-        zoomButton.setFrameOrigin(CGPoint(x: zoomX, y: y))
-    }
-
-    private func scheduleOnboardingTrafficLightButtonPositionUpdate(for window: NSWindow) {
-        DispatchQueue.main.async { [weak self, weak window] in
-            guard let self, let window else { return }
-            self.positionOnboardingTrafficLightButtons(window)
-        }
     }
 }

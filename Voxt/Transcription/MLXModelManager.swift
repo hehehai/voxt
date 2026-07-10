@@ -806,11 +806,28 @@ class MLXModelManager: ObservableObject {
         if lower.contains("qwen3-asr") || lower.contains("qwen3_asr") {
             return try await Qwen3ASRModel.fromModelDirectory(modelDir)
         }
+        if lower.contains("moss-transcribe-diarize") || lower.contains("moss_transcribe_diarize") {
+            return try await MossTranscribeDiarizeModel.fromModelDirectory(modelDir)
+        }
         if lower.contains("voxtral") {
             return try Self.loadVoxtralModel(from: modelDir)
         }
         if lower.contains("cohere") {
             return try Self.loadCohereModel(from: modelDir)
+        }
+        if lower.contains("canary") {
+            return try await CanaryModel.fromModelDirectory(modelDir)
+        }
+        if lower.contains("wav2vec") || lower.contains("wav2vec2")
+            || lower.contains("/mms-") || lower.contains("mms_") || lower.contains("mms-")
+        {
+            return try Wav2Vec2CTCModel.fromModelDirectory(modelDir)
+        }
+        if lower.contains("lasr") {
+            return try LasrCTCModel.fromModelDirectory(modelDir)
+        }
+        if lower.contains("moonshine") {
+            return try await MoonshineModel.fromModelDirectory(modelDir)
         }
         if lower.contains("parakeet") {
             return try ParakeetModel.fromDirectory(modelDir)

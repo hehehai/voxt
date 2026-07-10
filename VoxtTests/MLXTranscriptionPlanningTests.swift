@@ -271,6 +271,41 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         XCTAssertEqual(ranges[0].upperBound - ranges[1].lowerBound, Int(0.35 * 16000))
     }
 
+    func testNativeLiveLanguagePreservesAutomaticSelection() {
+        XCTAssertNil(MLXTranscriptionPlanning.nativeLiveLanguage(from: nil))
+        XCTAssertNil(MLXTranscriptionPlanning.nativeLiveLanguage(from: "  "))
+        XCTAssertEqual(MLXTranscriptionPlanning.nativeLiveLanguage(from: " Chinese "), "Chinese")
+    }
+
+    func testNativeNemotronLanguageUsesCheckpointLocaleKeys() {
+        let available = ["auto", "en-US", "zh-CN", "de-DE"]
+
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.nativeNemotronLanguage(
+                requested: "zh",
+                availableLanguages: available,
+                defaultLanguage: "auto"
+            ),
+            "zh-CN"
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.nativeNemotronLanguage(
+                requested: "de",
+                availableLanguages: available,
+                defaultLanguage: "auto"
+            ),
+            "de-DE"
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.nativeNemotronLanguage(
+                requested: nil,
+                availableLanguages: available,
+                defaultLanguage: "auto"
+            ),
+            "auto"
+        )
+    }
+
     func testSenseVoiceSegmentRangesUseSharedVADPolicy() {
         let probabilities: [Float] = [
             0.01,

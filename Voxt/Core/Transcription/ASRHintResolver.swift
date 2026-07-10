@@ -385,97 +385,18 @@ enum ASRHintResolver {
         }
     }
 
-    private static func resolvedMLXLanguage(mainLanguage: UserMainLanguageOption, modelRepo: String?) -> String? {
-        guard let modelRepo else { return nil }
-        if modelRepo.localizedCaseInsensitiveContains("granite-4.0-1b-speech") {
-            return nil
-        }
-        if modelRepo.localizedCaseInsensitiveContains("sensevoice") {
-            switch mainLanguage.baseLanguageCode {
-            case "zh":
-                return "zh"
-            case "en":
-                return "en"
-            case "yue":
-                return "yue"
-            case "ja":
-                return "ja"
-            case "ko":
-                return "ko"
-            default:
-                return nil
-            }
-        }
-        if modelRepo.localizedCaseInsensitiveContains("cohere-transcribe") || modelRepo.localizedCaseInsensitiveContains("cohere") {
-            switch mainLanguage.baseLanguageCode {
-            case "zh":
-                return "zh"
-            case "en":
-                return "en"
-            case "ja":
-                return "ja"
-            case "ko":
-                return "ko"
-            case "vi":
-                return "vi"
-            case "ar":
-                return "ar"
-            case "el":
-                return "el"
-            case "pl":
-                return "pl"
-            case "nl":
-                return "nl"
-            case "pt":
-                return "pt"
-            case "it":
-                return "it"
-            case "es":
-                return "es"
-            case "de":
-                return "de"
-            case "fr":
-                return "fr"
-            default:
-                return nil
-            }
-        }
-        if modelRepo.localizedCaseInsensitiveContains("Qwen3-ASR") {
-            return mainLanguage.promptName
-        }
-
-        switch mainLanguage.baseLanguageCode {
-        case "zh":
-            return "zh"
-        case "en":
-            return "en"
-        case "ja":
-            return "ja"
-        case "ko":
-            return "ko"
-        default:
-            return mainLanguage.baseLanguageCode
-        }
-    }
-
     private static func resolvedMLXLanguageHint(
         mainLanguage: UserMainLanguageOption,
         otherLanguages: [UserMainLanguageOption],
         modelRepo: String?
     ) -> String? {
         guard let modelRepo else { return nil }
-
-        if mlxRequiresExplicitPrimaryLanguage(modelRepo: modelRepo) {
-            return resolvedMLXLanguage(mainLanguage: mainLanguage, modelRepo: modelRepo)
+        let capability = MLXModelCatalog.capability(for: modelRepo)
+        if capability.requiresExplicitPrimaryLanguage {
+            return capability.resolvedLanguage(for: mainLanguage)
         }
-
         guard otherLanguages.isEmpty else { return nil }
-        return resolvedMLXLanguage(mainLanguage: mainLanguage, modelRepo: modelRepo)
-    }
-
-    private static func mlxRequiresExplicitPrimaryLanguage(modelRepo: String) -> Bool {
-        let lower = modelRepo.lowercased()
-        return lower.contains("cohere-transcribe") || lower.contains("cohere")
+        return capability.resolvedLanguage(for: mainLanguage)
     }
 
     private static func resolvedDictationLocaleIdentifier(_ mainLanguage: UserMainLanguageOption) -> String {

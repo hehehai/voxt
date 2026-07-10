@@ -341,6 +341,179 @@ actor ASRSileroStreamingVoiceActivityDetector {
     }
 }
 
+actor ASRSileroOfflineVoiceActivityDetector: ASROfflineVoiceActivityBackend {
+    private let sampleRate = 16_000
+    private var model: SileroVAD?
+
+    func speechRanges(samples: [Float], sampleRate inputSampleRate: Double) async throws -> [ASROfflineSpeechRange] {
+        guard !samples.isEmpty, inputSampleRate.isFinite, inputSampleRate > 0 else { return [] }
+        let model = try await loadModelIfAvailable()
+        let prepared = ASRVoiceActivitySampleRateConverter.resample(
+            samples: samples,
+            from: inputSampleRate,
+            to: Double(sampleRate)
+        )
+        guard !prepared.isEmpty else { return [] }
+
+        let profile = ASRVoiceActivityConfiguration.profile(for: .meeting)
+        let timestamps = try model.getSpeechTimestamps(
+            MLXArray(prepared),
+            sampleRate: sampleRate,
+            threshold: profile.onsetProbabilityThreshold,
+            minSpeechDurationMs: Int((profile.minSpeechSeconds * 1_000).rounded(.up)),
+            minSilenceDurationMs: Int((profile.minSilenceSeconds * 1_000).rounded(.up)),
+            speechPadMs: Int((profile.speechPadSeconds * 1_000).rounded(.up))
+        )
+        return timestamps.compactMap { timestamp in
+            let start = Double(timestamp.start) / Double(sampleRate)
+            let end = Double(timestamp.end) / Double(sampleRate)
+            guard end > start else { return nil }
+            return ASROfflineSpeechRange(startSeconds: start, endSeconds: end)
+        }
+    }
+
+    private func loadModelIfAvailable() async throws -> SileroVAD {
+        if let model {
+            return model
+        }
+        let directory = await MainActor.run {
+            MeetingVADModelStorage.modelDirectory(requireValid: true)
+        }
+        guard let directory else {
+            throw MeetingVADModelError.modelNotDownloaded
+        }
+        let loaded = try SileroVAD.fromModelDirectory(directory)
+        model = loaded
+        return loaded
+    }
+}
+
+actor MeetingOfflineVoiceActivityDetector {
+    private var sileroDetector: ASRSileroOfflineVoiceActivityDetector?
+    private var omniDetector: OmniOfflineVoiceActivityBackend?
+    private var sileroWarningLogged = false
+    private var omniWarningLogged = false
+
+    func speechRanges(
+        samples: [Float],
+        sampleRate: Double,
+        fallbackThreshold: Float
+    ) async -> [ASROfflineSpeechRange]? {
+        let mode = MainActorSync.run {
+            LocalVADMode.stored()
+        }
+        switch ASRVoiceActivityRuntimePolicy.effectiveBackend(mode: mode, useCase: .meeting) {
+        case .off:
+            return nil
+        case .energy:
+            return Self.energySpeechRanges(
+                samples: samples,
+                sampleRate: sampleRate,
+                threshold: fallbackThreshold
+            )
+        case .mlxSilero:
+            do {
+                let detector = await resolvedSileroDetector()
+                return try await detector.speechRanges(samples: samples, sampleRate: sampleRate)
+            } catch {
+                if !sileroWarningLogged {
+                    VoxtLog.meetingWarning(
+                        "Meeting final Silero VAD unavailable; preserving unvalidated transcript segments. error=\(error.localizedDescription)"
+                    )
+                    sileroWarningLogged = true
+                }
+                return nil
+            }
+        case .omniStream:
+            do {
+                let detector = await resolvedOmniDetector()
+                return try await detector.speechRanges(samples: samples, sampleRate: sampleRate)
+            } catch {
+                if !omniWarningLogged {
+                    VoxtLog.meetingWarning(
+                        "Meeting final OmniVAD unavailable; preserving unvalidated transcript segments. error=\(error.localizedDescription)"
+                    )
+                    omniWarningLogged = true
+                }
+                return nil
+            }
+        }
+    }
+
+    private func resolvedSileroDetector() async -> ASRSileroOfflineVoiceActivityDetector {
+        if let sileroDetector {
+            return sileroDetector
+        }
+        let detector = await MainActor.run {
+            ASRSileroOfflineVoiceActivityDetector()
+        }
+        sileroDetector = detector
+        return detector
+    }
+
+    private func resolvedOmniDetector() async -> OmniOfflineVoiceActivityBackend {
+        if let omniDetector {
+            return omniDetector
+        }
+        let detector = await MainActor.run {
+            OmniOfflineVoiceActivityBackend(useCase: .meeting)
+        }
+        omniDetector = detector
+        return detector
+    }
+
+    private nonisolated static func energySpeechRanges(
+        samples: [Float],
+        sampleRate: Double,
+        threshold: Float
+    ) -> [ASROfflineSpeechRange] {
+        guard !samples.isEmpty, sampleRate.isFinite, sampleRate > 0 else { return [] }
+        let frameSampleCount = max(Int((sampleRate * 0.1).rounded()), 1)
+        var segmenter = ASRVoiceActivitySegmenter(configuration: .meeting)
+        var ranges: [ASROfflineSpeechRange] = []
+        var startIndex = 0
+
+        while startIndex < samples.count {
+            let endIndex = min(startIndex + frameSampleCount, samples.count)
+            let frameSamples = Array(samples[startIndex..<endIndex])
+            let startSeconds = Double(startIndex) / sampleRate
+            let endSeconds = Double(endIndex) / sampleRate
+            let level = AudioLevelMeter.normalizedLevel(
+                fromSamples: frameSamples,
+                noiseGate: 0.002,
+                gain: 12
+            )
+            let decision = ASRVoiceActivityFrameDecision(
+                startSeconds: startSeconds,
+                endSeconds: endSeconds,
+                isSpeech: level >= threshold
+            )
+            ranges.append(contentsOf: speechRanges(from: segmenter.append(decision)))
+            startIndex = endIndex
+        }
+        if let event = segmenter.finish(at: Double(samples.count) / sampleRate) {
+            ranges.append(contentsOf: speechRanges(from: [event]))
+        }
+        return ranges
+    }
+
+    private nonisolated static func speechRanges(
+        from events: [ASRVoiceActivityEvent]
+    ) -> [ASROfflineSpeechRange] {
+        events.compactMap { event in
+            switch event {
+            case .speechEnded(let segment), .speechForced(let segment):
+                return ASROfflineSpeechRange(
+                    startSeconds: segment.startSeconds,
+                    endSeconds: segment.endSeconds
+                )
+            case .speechStarted, .speechRejected:
+                return nil
+            }
+        }
+    }
+}
+
 enum MeetingVADModelError: LocalizedError {
     case modelNotDownloaded
     case runtimeUnavailable(String)
@@ -356,12 +529,11 @@ enum MeetingVADModelError: LocalizedError {
 }
 
 enum MeetingVADModelStorage {
-    static let sileroRepo = "mlx-community/silero-vad"
     static let sortformerV2Repo = "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16"
     static let fallbackRemoteSizeText = "2 MB"
     static let sortformerFallbackRemoteSizeText = "120 MB"
 
-    static let repo = sileroRepo
+    static let repo = SileroVADModelSupport.repo
 
     static func modelDirectory(requireValid: Bool) -> URL? {
         for rootDirectory in ModelStorageDirectoryManager.resolvedReadableRootURLs() {

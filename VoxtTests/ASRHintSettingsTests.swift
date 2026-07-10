@@ -180,6 +180,48 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertNil(unsupportedPayload.language)
     }
 
+    func testResolveMLXUsesCapabilityLanguageRouting() {
+        let unsupportedQwen = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["sw"],
+            mlxModelRepo: "mlx-community/Qwen3-ASR-0.6B-4bit"
+        )
+        XCTAssertNil(unsupportedQwen.language)
+
+        let automaticParakeet = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["de"],
+            mlxModelRepo: "mlx-community/parakeet-tdt-0.6b-v3"
+        )
+        XCTAssertNil(automaticParakeet.language)
+
+        let nemotron = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hans", "en"],
+            mlxModelRepo: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"
+        )
+        XCTAssertEqual(nemotron.language, "zh-CN")
+
+        let traditionalChineseNemotron = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hant"],
+            mlxModelRepo: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"
+        )
+        XCTAssertEqual(traditionalChineseNemotron.language, "zh-TW")
+
+        let automaticVoxtral = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hans"],
+            mlxModelRepo: "mlx-community/Voxtral-Mini-4B-Realtime-6bit"
+        )
+        XCTAssertNil(automaticVoxtral.language)
+    }
+
     func testQwenLocalTuningDefaultsToDictionaryTermsOnly() {
         let settings = MLXLocalTuningSettingsStore.resolvedSettings(
             for: "mlx-community/Qwen3-ASR-1.7B-4bit",
@@ -339,6 +381,294 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(
             MLXModelFamily.family(for: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"),
             .cohereTranscribe
+        )
+    }
+
+    func testMLXModelFamilyRecognizesLatestMLXAudioFamilies() {
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"),
+            .nemotronASR
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"),
+            .voxtralRealtime
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "OpenMOSS-Team/MOSS-Transcribe-Diarize"),
+            .mossTranscribeDiarize
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "Mediform/canary-1b-v2-mlx-q8"),
+            .canary
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "UsefulSensors/moonshine-tiny"),
+            .moonshine
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "facebook/wav2vec2-base-960h"),
+            .wav2vec2CTC
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "facebook/mms-1b-fl102"),
+            .mmsCTC
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "mlx-community/parakeet-tdt-0.6b-v3"),
+            .parakeet
+        )
+        XCTAssertEqual(
+            MLXModelFamily.family(for: "example/lasr-ctc-checkpoint"),
+            .lasrCTC
+        )
+    }
+
+    func testLatestMLXModelTuningRoundTripsAndSanitizes() {
+        let stored = MLXLocalTuningSettingsStore.save(
+            MLXLocalTuningSettings(
+                cohereLongFormStrategy: .fixedChunks,
+                cohereUsePunctuation: false,
+                cohereMaxTokens: 4096,
+                cohereTemperature: 1.4,
+                canaryTaskMode: .translateFromEnglish,
+                canaryTranslationLanguage: "DE",
+                canaryUsePunctuation: false,
+                canaryMaxTokens: 12,
+                canaryTemperature: -1,
+                moonshineMaxTokens: 480,
+                moonshineTemperature: 0.35,
+                mmsLanguageCode: " JPN ",
+                nemotronStreamLatency: .fast,
+                voxtralTranscriptionDelay: .accurate
+            ),
+            for: "Mediform/canary-1b-v2-mlx-q8",
+            rawValue: nil
+        )
+
+        let settings = MLXLocalTuningSettingsStore.resolvedSettings(
+            for: "Mediform/canary-1b-v2-mlx-q8",
+            rawValue: stored
+        )
+
+        XCTAssertEqual(settings.cohereLongFormStrategy, .fixedChunks)
+        XCTAssertFalse(settings.cohereUsePunctuation)
+        XCTAssertEqual(settings.cohereMaxTokens, 2048)
+        XCTAssertEqual(settings.cohereTemperature, 1.0)
+        XCTAssertEqual(settings.canaryTaskMode, .translateFromEnglish)
+        XCTAssertEqual(settings.canaryTranslationLanguage, "de")
+        XCTAssertFalse(settings.canaryUsePunctuation)
+        XCTAssertEqual(settings.canaryMaxTokens, 32)
+        XCTAssertEqual(settings.canaryTemperature, 0.0)
+        XCTAssertEqual(settings.moonshineMaxTokens, 480)
+        XCTAssertEqual(settings.moonshineTemperature, 0.35)
+        XCTAssertEqual(settings.mmsLanguageCode, "jpn")
+        XCTAssertEqual(settings.nemotronStreamLatency, .fast)
+        XCTAssertEqual(settings.voxtralTranscriptionDelay, .accurate)
+    }
+
+    func testMMSAdapterSanitizationRejectsUnknownCheckpointAdapter() {
+        let sanitized = MLXLocalTuningSettingsStore.sanitized(
+            MLXLocalTuningSettings(mmsLanguageCode: "not-a-real-adapter")
+        )
+
+        XCTAssertEqual(sanitized.mmsLanguageCode, "eng")
+    }
+
+    func testStreamingLatencySettingsUseBackwardCompatibleDefaults() {
+        let legacy = """
+        {"nemotronASR":{"preset":"balanced"},"voxtralRealtime":{"preset":"balanced"}}
+        """
+
+        XCTAssertEqual(
+            MLXLocalTuningSettingsStore.resolvedSettings(
+                for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
+                rawValue: legacy
+            ).nemotronStreamLatency,
+            .balanced
+        )
+        XCTAssertEqual(
+            MLXLocalTuningSettingsStore.resolvedSettings(
+                for: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+                rawValue: legacy
+            ).voxtralTranscriptionDelay,
+            .balanced
+        )
+    }
+
+    func testCanaryTaskLanguageRoutesRespectOfficialEnglishTranslationConstraint() {
+        let transcription = CanaryLanguageSupport.resolvedTaskLanguages(
+            mode: .transcription,
+            sourceLanguage: "de",
+            translationLanguage: "fr"
+        )
+        XCTAssertEqual(transcription.source, "de")
+        XCTAssertEqual(transcription.target, "de")
+
+        let toEnglish = CanaryLanguageSupport.resolvedTaskLanguages(
+            mode: .translateToEnglish,
+            sourceLanguage: "uk",
+            translationLanguage: "fr"
+        )
+        XCTAssertEqual(toEnglish.source, "uk")
+        XCTAssertEqual(toEnglish.target, "en")
+
+        let fromEnglish = CanaryLanguageSupport.resolvedTaskLanguages(
+            mode: .translateFromEnglish,
+            sourceLanguage: "de",
+            translationLanguage: "es"
+        )
+        XCTAssertEqual(fromEnglish.source, "en")
+        XCTAssertEqual(fromEnglish.target, "es")
+
+        let unsupported = CanaryLanguageSupport.resolvedTaskLanguages(
+            mode: .transcription,
+            sourceLanguage: "zh",
+            translationLanguage: "fr"
+        )
+        XCTAssertEqual(unsupported.source, "en")
+        XCTAssertEqual(unsupported.target, "en")
+    }
+
+    func testMOSSLocalTuningUsesSeparateDictationAndMeetingDefaults() {
+        let settings = MLXLocalTuningSettingsStore.resolvedSettings(
+            for: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
+            rawValue: nil
+        )
+
+        XCTAssertEqual(settings.mossOutputMode, .plainText)
+        XCTAssertEqual(settings.mossHotwords, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
+        XCTAssertEqual(settings.mossCustomPrompt, "")
+        XCTAssertEqual(settings.mossMeetingOutputMode, .timestampedDiarization)
+        XCTAssertEqual(settings.mossMeetingHotwords, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
+        XCTAssertEqual(settings.mossMeetingCustomPrompt, "")
+    }
+
+    func testMOSSLocalTuningRoundTripsPromptConfiguration() {
+        let stored = MLXLocalTuningSettingsStore.save(
+            MLXLocalTuningSettings(
+                mossOutputMode: .customPrompt,
+                mossHotwords: "  Voxt\nCodex  ",
+                mossCustomPrompt: "  Transcribe with concise paragraphs.  ",
+                mossMeetingOutputMode: .speakerOnly,
+                mossMeetingHotwords: "  Alice\nBob  ",
+                mossMeetingCustomPrompt: "  Keep speaker turns.  "
+            ),
+            for: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
+            rawValue: nil
+        )
+
+        let settings = MLXLocalTuningSettingsStore.resolvedSettings(
+            for: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
+            rawValue: stored
+        )
+        XCTAssertEqual(settings.mossOutputMode, .customPrompt)
+        XCTAssertEqual(settings.mossHotwords, "Voxt\nCodex")
+        XCTAssertEqual(settings.mossCustomPrompt, "Transcribe with concise paragraphs.")
+        XCTAssertEqual(settings.mossMeetingOutputMode, .speakerOnly)
+        XCTAssertEqual(settings.mossMeetingHotwords, "Alice\nBob")
+        XCTAssertEqual(settings.mossMeetingCustomPrompt, "Keep speaker turns.")
+        XCTAssertEqual(settings.mossSettings(for: .dictation).outputMode, .customPrompt)
+        XCTAssertEqual(settings.mossSettings(for: .meeting).outputMode, .speakerOnly)
+    }
+
+    func testMOSSLocalTuningMigratesLegacyConfigurationToMeetingScope() throws {
+        let legacy = """
+        {"mossTranscribeDiarize":{"mossOutputMode":"timestampedDiarization","mossHotwords":"Voxt","mossCustomPrompt":"Legacy prompt"}}
+        """
+
+        let settings = MLXLocalTuningSettingsStore.resolvedSettings(
+            for: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
+            rawValue: legacy
+        )
+
+        XCTAssertEqual(settings.mossOutputMode, .plainText)
+        XCTAssertEqual(settings.mossHotwords, "Voxt")
+        XCTAssertEqual(settings.mossMeetingOutputMode, .timestampedDiarization)
+        XCTAssertEqual(settings.mossMeetingHotwords, "Voxt")
+        XCTAssertEqual(settings.mossMeetingCustomPrompt, "Legacy prompt")
+    }
+
+    func testMOSSStructuredSegmentsPreserveTimingSpeakerAndPlainText() {
+        let segments = MLXTranscriber.mossStructuredSegments(from: [
+            ["start": 1.25, "end": 2.75, "speaker_id": "S02", "text": "[S02] Hello world"]
+        ])
+
+        XCTAssertEqual(
+            segments,
+            [
+                MLXStructuredTranscriptSegment(
+                    startSeconds: 1.25,
+                    endSeconds: 2.75,
+                    speakerID: "S02",
+                    text: "Hello world"
+                )
+            ]
+        )
+    }
+
+    func testMOSSPromptSupportUsesOfficialModesAndHotwords() {
+        XCTAssertEqual(
+            MossASRPromptSupport.resolvedPrompt(
+                outputMode: .speakerOnly,
+                customPrompt: "",
+                hotwords: "Voxt\nCodex"
+            ),
+            "Transcribe the audio as text using speaker labels such as [S01], [S02], and [S03]. Hotwords: Voxt, Codex"
+        )
+        XCTAssertEqual(
+            MossASRPromptSupport.resolvedPrompt(
+                outputMode: .customPrompt,
+                customPrompt: "Keep paragraph breaks.",
+                hotwords: ""
+            ),
+            "Keep paragraph breaks."
+        )
+    }
+
+    func testMOSSRenderingRemovesOnlyConfiguredStructuredTags() {
+        let raw = "[0.48][S01]Welcome everyone[1.66][2.10][S02]Ready to begin[3.25]"
+
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(raw, outputMode: .speakerOnly),
+            "[S01] Welcome everyone\n[S02] Ready to begin"
+        )
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(raw, outputMode: .plainText),
+            "Welcome everyone Ready to begin"
+        )
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(raw, outputMode: .timestampedDiarization),
+            raw
+        )
+    }
+
+    func testMOSSPlainTextFlattensStreamingWindowsWithoutBreakingWordBoundaries() {
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(
+                "零九是一名在互联网公司做\n后端开发的软件工程师\n他每天上班后的第一件事",
+                outputMode: .plainText
+            ),
+            "零九是一名在互联网公司做后端开发的软件工程师他每天上班后的第一件事"
+        )
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(
+                "The server is healthy.\nReady to deploy\n(version 2).",
+                outputMode: .plainText
+            ),
+            "The server is healthy. Ready to deploy (version 2)."
+        )
+    }
+
+    func testMOSSMeetingRenderingPreservesStructuredLineBreaks() {
+        let raw = "[0.00][S01]第一段[1.20]\n[1.30][S02]第二段[2.40]"
+
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(raw, outputMode: .speakerOnly),
+            "[S01] 第一段\n[S02] 第二段"
+        )
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(raw, outputMode: .timestampedDiarization),
+            raw
         )
     }
 

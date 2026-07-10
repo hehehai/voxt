@@ -247,6 +247,7 @@ struct SettingsDialogChromeModifier: ViewModifier {
     var width: CGFloat?
     var height: CGFloat?
     var maxHeight: CGFloat?
+    var cornerRadius: CGFloat = SettingsUIStyle.dialogCornerRadius
     var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
@@ -258,10 +259,10 @@ struct SettingsDialogChromeModifier: ViewModifier {
             .frame(maxHeight: maxHeight, alignment: .top)
             .background(SettingsUIStyle.windowBackgroundColor)
             .clipShape(
-                RoundedRectangle(cornerRadius: SettingsUIStyle.dialogCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: SettingsUIStyle.dialogCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(SettingsUIStyle.dialogBorderColor, lineWidth: 0.7)
             )
             .overlay(alignment: .topTrailing) {
@@ -413,6 +414,7 @@ extension View {
         width: CGFloat? = nil,
         height: CGFloat? = nil,
         maxHeight: CGFloat? = nil,
+        cornerRadius: CGFloat = SettingsUIStyle.dialogCornerRadius,
         onClose: (() -> Void)? = nil
     ) -> some View {
         modifier(
@@ -420,6 +422,7 @@ extension View {
                 width: width,
                 height: height,
                 maxHeight: maxHeight,
+                cornerRadius: cornerRadius,
                 onClose: onClose
             )
         )

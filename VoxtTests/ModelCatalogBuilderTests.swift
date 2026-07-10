@@ -165,7 +165,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
-    func testEnglishOnlyMLXModelDisplaysDoesNotSupportPrimaryLanguageTag() throws {
+    func testParakeetV3DoesNotClaimUnsupportedChinesePrimaryLanguage() throws {
         let repo = "mlx-community/parakeet-tdt-0.6b-v3"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
@@ -179,6 +179,29 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Does Not Support Primary Language")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
+    }
+
+    func testCanaryLanguageTagUsesItsOfficialLanguageList() throws {
+        let repo = "Mediform/canary-1b-v2-mlx-q8"
+        let chineseBuilder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
+            primaryUserLanguageCode: "zh-Hans"
+        )
+        let germanBuilder = makeBuilder(
+            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
+            primaryUserLanguageCode: "de"
+        )
+
+        let chineseEntry = try XCTUnwrap(
+            chineseBuilder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
+        )
+        let germanEntry = try XCTUnwrap(
+            germanBuilder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
+        )
+
+        XCTAssertTrue(chineseEntry.displayTags.contains(AppLocalization.localizedString("Does Not Support Primary Language")))
+        XCTAssertFalse(chineseEntry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
+        XCTAssertTrue(germanEntry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
     }
 
     func testMLXCatalogShowsPauseForDownloadingNonSelectedModel() throws {

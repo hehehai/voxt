@@ -15,6 +15,8 @@ struct RemoteProviderConfigurationSheet: View {
     let testTarget: RemoteProviderTestTarget
     let configuration: RemoteProviderConfiguration
     let onSave: (RemoteProviderConfiguration) -> Void
+    var cornerRadius: CGFloat = SettingsUIStyle.dialogCornerRadius
+    var onClose: (() -> Void)? = nil
 
     @State var selectedProviderModel = ""
     @State var customModelID = ""
@@ -155,7 +157,7 @@ struct RemoteProviderConfigurationSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .settingsDialogChrome(width: dialogWidth, maxHeight: dialogMaxHeight, onClose: { dismiss() })
+        .settingsDialogChrome(width: dialogWidth, maxHeight: dialogMaxHeight, cornerRadius: cornerRadius, onClose: close)
         .onAppear {
             configureModelSelection()
             customModelID = configuration.model
@@ -187,6 +189,14 @@ struct RemoteProviderConfigurationSheet: View {
             codexAuthFileBookmark = configuration.codexAuthFileBookmark
             codexFastModeEnabled = configuration.codexFastModeEnabled
             loadCodexModelOptionsIfNeeded()
+        }
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
         }
     }
 }

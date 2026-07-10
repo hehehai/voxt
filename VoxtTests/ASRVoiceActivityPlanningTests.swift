@@ -33,6 +33,11 @@ final class ASRVoiceActivityPlanningTests: XCTestCase {
         XCTAssertEqual(LocalVADMode.resolved(rawValue: "unknown"), .automatic)
     }
 
+    func testSileroModelSupportUsesV6Checkpoint() {
+        XCTAssertEqual(SileroVADModelSupport.repo, "mlx-community/silero-vad-v6")
+        XCTAssertEqual(SileroVADModelSupport.title, "Silero v6")
+    }
+
     func testLocalVADModePersistsInUserDefaults() throws {
         try withEphemeralDefaults { defaults in
             XCTAssertEqual(LocalVADMode.stored(defaults: defaults), .automatic)

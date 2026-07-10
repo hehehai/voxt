@@ -8,10 +8,21 @@ import MLXAudioSTT
 
 protocol MeetingSegmentTranscribing {
     func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment?
+    func transcribeSegments(chunk: BufferedMeetingChunk) async -> [MeetingTranscriptSegment]
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]?
     func cancelPendingWork() async
 }
 
 extension MeetingSegmentTranscribing {
+    func transcribeSegments(chunk: BufferedMeetingChunk) async -> [MeetingTranscriptSegment] {
+        guard let segment = await transcribe(chunk: chunk) else { return [] }
+        return [segment]
+    }
+
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
+        nil
+    }
+
     func cancelPendingWork() async {}
 }
 
@@ -140,10 +151,12 @@ actor MeetingRemoteTranscriptionGate {
 
 @MainActor
 final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
+    private let modelManager: MLXModelManager
     private let mlxTranscriber: MLXTranscriber
 
     init(modelManager: MLXModelManager) {
-        self.mlxTranscriber = MLXTranscriber(modelManager: modelManager)
+        self.modelManager = modelManager
+        self.mlxTranscriber = MLXTranscriber(modelManager: modelManager, transcriptionPurpose: .meeting)
         self.mlxTranscriber.dictionaryEntryProvider = {
             guard let appDelegate = AppDelegate.shared else { return [] }
             return appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
@@ -153,28 +166,117 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
     }
 
     func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment? {
-        guard let text = await mlxTranscriber.transcribeMeetingChunk(
+        await transcribeSegments(chunk: chunk).first
+    }
+
+    func transcribeSegments(chunk: BufferedMeetingChunk) async -> [MeetingTranscriptSegment] {
+        guard let result = await mlxTranscriber.transcribeMeetingChunkResult(
             samples: chunk.samples,
             sampleRate: chunk.sampleRate
         ) else {
+            return []
+        }
+
+        return meetingSegments(
+            from: result,
+            segmentID: chunk.segmentID,
+            speaker: chunk.speaker,
+            audioSource: chunk.speaker == .me ? .microphone : .systemAudio,
+            startSeconds: chunk.startSeconds,
+            endSeconds: chunk.endSeconds,
+            usesStructuredOutput: chunk.isFinal,
+            preventsAdjacentMerge: chunk.preventsAdjacentMerge
+        )
+    }
+
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
+        guard MLXModelFamily.family(for: modelManager.currentModelRepo) == .mossTranscribeDiarize else {
             return nil
         }
+        guard let result = try await mlxTranscriber.transcribeBufferedResult(
+            samples: asset.samples,
+            sampleRate: asset.sampleRate
+        ) else {
+            return []
+        }
+        return meetingSegments(
+            from: result,
+            segmentID: UUID(),
+            speaker: asset.source.defaultSpeaker,
+            audioSource: asset.source,
+            startSeconds: asset.sessionStartOffset,
+            endSeconds: asset.sessionStartOffset + asset.durationSeconds,
+            usesStructuredOutput: true,
+            preventsAdjacentMerge: true
+        )
+    }
+
+    private func meetingSegments(
+        from result: MLXBufferedTranscriptionResult,
+        segmentID: UUID,
+        speaker: MeetingSpeaker,
+        audioSource: TranscriptAudioSource,
+        startSeconds: TimeInterval,
+        endSeconds: TimeInterval,
+        usesStructuredOutput: Bool,
+        preventsAdjacentMerge: Bool
+    ) -> [MeetingTranscriptSegment] {
+        let dictionaryEntries = activeMeetingDictionaryEntries()
+        if usesStructuredOutput, !result.structuredSegments.isEmpty {
+            return result.structuredSegments.enumerated().compactMap { index, segment in
+                let text = MeetingTranscriptSanitizer.sanitizedText(
+                    segment.text,
+                    dictionaryEntries: dictionaryEntries
+                )
+                guard !text.isEmpty else { return nil }
+                let boundedStart = min(max(startSeconds + segment.startSeconds, startSeconds), endSeconds)
+                let boundedEnd = min(max(startSeconds + segment.endSeconds, boundedStart), endSeconds)
+                return MeetingTranscriptSegment(
+                    id: index == 0 ? segmentID : UUID(),
+                    speaker: speaker,
+                    speakerID: "moss:\(segment.speakerID)",
+                    speakerDisplayName: speakerDisplayName(for: segment.speakerID, source: audioSource),
+                    audioSource: audioSource,
+                    startSeconds: boundedStart,
+                    endSeconds: boundedEnd,
+                    text: text,
+                    preventsAdjacentMerge: true
+                )
+            }
+        }
+
+        let previewText = result.structuredSegments.isEmpty
+            ? result.text
+            : result.structuredSegments.map(\.text).joined(separator: " ")
         let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
-            text,
-            dictionaryEntries: activeMeetingDictionaryEntries()
+            previewText,
+            dictionaryEntries: dictionaryEntries
         )
         guard !sanitizedText.isEmpty else {
             VoxtLog.meetingWarning("Meeting MLX transcription suppressed because it matched ASR prompt or hint guidance.")
-            return nil
+            return []
         }
-        return MeetingTranscriptSegment(
-            id: chunk.segmentID,
-            speaker: chunk.speaker,
-            startSeconds: chunk.startSeconds,
-            endSeconds: chunk.endSeconds,
-            text: sanitizedText,
-            preventsAdjacentMerge: chunk.preventsAdjacentMerge
-        )
+        return [
+            MeetingTranscriptSegment(
+                id: segmentID,
+                speaker: speaker,
+                audioSource: audioSource,
+                startSeconds: startSeconds,
+                endSeconds: endSeconds,
+                text: sanitizedText,
+                preventsAdjacentMerge: preventsAdjacentMerge
+            )
+        ]
+    }
+
+    private func speakerDisplayName(
+        for speakerID: String,
+        source: TranscriptAudioSource
+    ) -> String? {
+        guard source != .microphone else { return nil }
+        let digits = speakerID.drop(while: { !$0.isNumber })
+        guard let ordinal = Int(digits), ordinal > 0 else { return speakerID }
+        return MeetingSpeakerDisplayNameFormatter.displayName(ordinal: ordinal)
     }
 }
 
