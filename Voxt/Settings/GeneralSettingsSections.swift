@@ -563,7 +563,6 @@ struct GeneralLoggingCard: View {
 
 struct GeneralVADCard: View {
     @Binding var localVADMode: LocalVADMode
-    @Binding var sileroModelVersion: SileroVADModelVersion
     @StateObject private var modelManager = MeetingVADModelManager()
 
     private var modelStatusText: String {
@@ -596,22 +595,7 @@ struct GeneralVADCard: View {
             }
 
             GeneralFieldRow(
-                title: localizedKey("Silero Model"),
-                description: localizedKey("Select the Silero checkpoint used by local VAD workflows.")
-            ) {
-                SettingsMenuPicker(
-                    selection: $sileroModelVersion,
-                    options: SileroVADModelVersion.allCases.map { version in
-                        SettingsMenuOption(value: version, title: version.title)
-                    },
-                    selectedTitle: sileroModelVersion.title,
-                    width: 180
-                )
-                .disabled(modelManager.state.isDownloading)
-            }
-
-            GeneralFieldRow(
-                title: localizedKey("Silero Status"),
+                title: LocalizedStringKey(SileroVADModelSupport.title),
                 description: LocalizedStringKey(modelManager.remoteSizeText)
             ) {
                 HStack(spacing: 8) {
@@ -637,9 +621,6 @@ struct GeneralVADCard: View {
                     }
                 }
             }
-        }
-        .onChange(of: sileroModelVersion) { _, _ in
-            modelManager.refresh()
         }
     }
 }

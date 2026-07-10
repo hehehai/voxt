@@ -1107,7 +1107,6 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private(set) var lastCaptureMetrics: TranscriptionCaptureMetrics?
     @Published private(set) var latestSenseVoiceMetadata: SenseVoiceTranscriptMetadata?
     private var senseVoiceVADModel: SileroVAD?
-    private var senseVoiceVADModelRepo: String?
     private var pendingRuntimeFailureMessage: String?
 
     init(modelManager: MLXModelManager, transcriptionPurpose: MLXTranscriptionPurpose = .dictation) {
@@ -2709,16 +2708,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         } else if !(model is SenseVoiceModel) && !(model is VoxtralRealtimeModel) {
             return nil
         }
-        let vadRepo = SileroVADModelVersion.stored().repo
-        if let senseVoiceVADModel, senseVoiceVADModelRepo == vadRepo {
+        if let senseVoiceVADModel {
             return senseVoiceVADModel
         }
 
-        let modelDirectory = try await modelManager.ensureModelDirectory(repo: vadRepo)
+        let modelDirectory = try await modelManager.ensureModelDirectory(repo: SileroVADModelSupport.repo)
         try Task.checkCancellation()
         let loadedModel = try SileroVAD.fromModelDirectory(modelDirectory)
         senseVoiceVADModel = loadedModel
-        senseVoiceVADModelRepo = vadRepo
         return loadedModel
     }
 

@@ -73,7 +73,7 @@ Voxt 还直接链接 `MLX`、`MLXLLM`、`MLXLMCommon` 和 `MLXVLM`，用于自�
 2. 将包中的 `[[String: Any]]` segment 改为强类型、可发送的数据结构。
 3. 为 Voxtral 和 Nemotron 暴露官方支持的延迟档位。
 4. 将 SenseVoice 长音频检测改用 `SileroVAD.getSpeechTimestamps`，保留 Voxt 的 overlap 和无语音行为。
-5. 增加 Silero VAD v6 作为可测试模型，并在真实中文、会议和噪声语料上与 v5 对比。
+5. 固定使用 Silero VAD v6，并在真实中文、会议和噪声语料上校准阈值与端点延迟。
 6. 将 VAD 的 gate、trim、segment 三种用途分离，避免时间戳模型接收被压缩的音频时间轴。
 
 ### 3.3 当前不应直接替换
@@ -98,7 +98,7 @@ Voxt 还直接链接 `MLX`、`MLXLLM`、`MLXLMCommon` 和 `MLXVLM`，用于自�
 | SenseVoice | ASR、LID、情绪、事件、ITN | 已接语言/情绪/事件/ITN；长音频切段为 App 自实现 | 使用包时间戳 API 简化检测；保留 metadata 合并和 overlap |
 | FireRed/GLM/Granite | 加载、兼容和模型修复 | 隐藏支持或已有专用 prompt | 维持兼容；不扩大默认展示；统一 capability metadata |
 | Moonshine/Wav2Vec2/MMS/LASR | 新增模型；MMS adapter runtime switching | 已隐藏支持；MMS 使用自由文本 code | MMS 改 adapter picker；其他保持隐藏测试 |
-| Silero VAD | v5/v6、stream state、批量概率、speech timestamps | 已使用 v5 stream；长音频未直接用 timestamp API | 增加 v6 测试；复用 `getSpeechTimestamps` |
+| Silero VAD | v6、stream state、批量概率、speech timestamps | 已统一使用 v6；长音频已使用 timestamp API | 保持单一 v6 checkpoint；继续校准真实语料阈值 |
 | SpeechSegmenter | 通用 Silero 切段 | Cohere/Voxtral 已使用 | 增加 no-speech/failure policy 和 overlap 能力 |
 | Sortformer | streaming 结果转换性能优化 | 已用于会议实时和最终说话人分析 | 已自动继承；增加性能回归指标即可 |
 | SmartTurn | 最近 8 秒语义端点判断 | 未接 | 作为 VAD 后置端点判断实验，不替代 VAD |
@@ -512,12 +512,11 @@ enum MLXVADAudioPolicy {
 
 ### 9.2 Silero v6
 
-包已支持 `mlx-community/silero-vad-v6`。建议：
+包已支持 `mlx-community/silero-vad-v6`。Voxt 固定使用 v6，不再提供 v5 运行时选项：
 
-- 将 v6 加入 VAD 模型管理并可见测试。
-- v5 保留兼容，不立即自动迁移。
-- 使用同一批真实音频比较 speech recall、false positive、endpoint delay 和耗时。
-- 如果 v6 在中文、远场、电话和噪声语料稳定优于 v5，再切默认。
+- VAD 模型管理、实时 gate、会议和长音频分段共享单一 v6 repo。
+- 已有 v5 模型目录不主动删除，但不再作为失败回退。
+- 使用中文、远场、电话和噪声语料校准 v6 的 threshold、speech recall、false positive 和 endpoint delay。
 
 ### 9.3 SpeechSegmenter 策略缺口
 
@@ -604,7 +603,7 @@ MOSS 已带 speaker labels 时，继续跳过二次 Sortformer 是正确策略�
 VAD 是 workflow 配置，不应复制到每个模型表单。建议提供：
 
 - Backend：Automatic / Silero / OmniVAD / Energy / Off。
-- Silero Model：v6 / v5。
+- Silero Model：固定 v6，只展示下载状态。
 - Sensitivity：Low / Standard / High。
 - Endpoint：Fast / Balanced / Stable。
 - SmartTurn：Off / Assist。
@@ -780,7 +779,7 @@ Voxt 当前可利用 Qwen、Whisper、Nemotron等模型自己的 auto language�
 - Nemotron 新增量 session。
 - Voxtral/Nemotron latency 配置。
 - Qwen live Automatic 修复。
-- Silero v6 可见测试。
+- Silero v6 固定运行时和下载入口。
 - SenseVoice 使用 `getSpeechTimestamps`。
 
 影响：实时行为和延迟可能变化；通过 feature flag 分模型上线。
@@ -839,7 +838,7 @@ Voxt 当前可利用 Qwen、Whisper、Nemotron等模型自己的 auto language�
 - Nemotron event session 改为封装缓存式 `NemotronASRStreamSession`，不再使用旧的重复 mel/encoder 状态实现。
 - Nemotron 增加 80/160/320/560/1120ms streaming latency 表单，并按 checkpoint prompt dictionary 解析 locale。
 - Voxtral 增加 240/480/960/2400ms transcription delay 表单并传入 native session。
-- Silero v5/v6 增加统一版本选择、独立模型目录和下载入口；实时 gate 与长音频分段共享选择。
+- Silero 固定使用 v6 并提供下载入口；实时 gate 与长音频分段共享同一 checkpoint。
 - fork 已发布 `v0.1.3-voxt.2`，Voxt exact pin 已同步更新。
 
 验证结果：fork 首批 7 项测试及第二批 Nemotron 定向测试、Voxt 125 项 ASR/VAD/设置定向测试和 Voxt 完整构建均通过。真实模型取消、静音语料及 30 分钟 session 仍需按上线门禁进行人工回归和性能采样。
@@ -919,7 +918,7 @@ VAD：
 - false activation rate。
 - endpoint delay。
 - 静音 hallucination rate。
-- v5/v6 在相同阈值下的差异。
+- v6 在中文、远场、电话和噪声语料上的阈值基线。
 
 ### 16.3 自动测试
 
@@ -970,7 +969,7 @@ P0/P1 合入前必须满足：
 ### 17.2 模型目录
 
 - 不移动现有 ASR 模型目录。
-- Silero v6 使用独立 repo 目录，不覆盖 v5。
+- Silero v6 使用独立 repo 目录；已有 v5 目录不删除但不再读取。
 - canonical repo migration 保留。
 - package local loader 必须接受现有目录，不重新下载。
 
@@ -989,7 +988,7 @@ P0/P1 合入前必须满足：
 ### 17.4 回滚
 
 - package 每个 phase 独立 tag。
-- App 以 feature flag 控制 Nemotron 新 session、Silero v6 和 SmartTurn。
+- App 以 feature flag 控制 Nemotron 新 session 和 SmartTurn；Silero 固定使用 v6。
 - typed output 迁移期同时保留 text-only 路径。
 - 回滚不得删除新版本写入的用户配置；旧版本应忽略未知字段。
 

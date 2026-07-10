@@ -272,7 +272,6 @@ actor ASRSileroStreamingVoiceActivityDetector {
     private let sampleRate = 16_000
     private let chunkSize = 512
     private var model: SileroVAD?
-    private var loadedRepo: String?
     private var states: [String: SileroVADStreamingState] = [:]
     private var pendingSamples: [String: [Float]] = [:]
     private var lastProbabilities: [String: Float] = [:]
@@ -327,8 +326,7 @@ actor ASRSileroStreamingVoiceActivityDetector {
     }
 
     private func loadModelIfAvailable() async throws -> SileroVAD {
-        let repo = MeetingVADModelStorage.repo
-        if let model, loadedRepo == repo {
+        if let model {
             return model
         }
         let directory = await MainActor.run {
@@ -339,7 +337,6 @@ actor ASRSileroStreamingVoiceActivityDetector {
         }
         let loaded = try SileroVAD.fromModelDirectory(directory)
         model = loaded
-        loadedRepo = repo
         return loaded
     }
 }
@@ -359,13 +356,11 @@ enum MeetingVADModelError: LocalizedError {
 }
 
 enum MeetingVADModelStorage {
-    static let sileroV5Repo = SileroVADModelVersion.v5.repo
-    static let sileroV6Repo = SileroVADModelVersion.v6.repo
     static let sortformerV2Repo = "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16"
     static let fallbackRemoteSizeText = "2 MB"
     static let sortformerFallbackRemoteSizeText = "120 MB"
 
-    static var repo: String { SileroVADModelVersion.stored().repo }
+    static let repo = SileroVADModelSupport.repo
 
     static func modelDirectory(requireValid: Bool) -> URL? {
         for rootDirectory in ModelStorageDirectoryManager.resolvedReadableRootURLs() {

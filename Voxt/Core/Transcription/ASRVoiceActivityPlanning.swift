@@ -3,40 +3,9 @@
 
 import Foundation
 
-enum SileroVADModelVersion: String, CaseIterable, Codable, Identifiable, Sendable {
-    case v5
-    case v6
-
-    nonisolated static let defaultVersion: SileroVADModelVersion = .v5
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .v5: return "Silero v5"
-        case .v6: return "Silero v6"
-        }
-    }
-
-    nonisolated var repo: String {
-        switch self {
-        case .v5: return "mlx-community/silero-vad"
-        case .v6: return "mlx-community/silero-vad-v6"
-        }
-    }
-
-    nonisolated static func resolved(rawValue: String?) -> SileroVADModelVersion {
-        SileroVADModelVersion(rawValue: rawValue ?? "") ?? defaultVersion
-    }
-
-    nonisolated static func stored(defaults: UserDefaults = .standard) -> SileroVADModelVersion {
-        resolved(rawValue: defaults.string(forKey: AppPreferenceKey.sileroVADModelVersion))
-    }
-
-    nonisolated static func save(_ version: SileroVADModelVersion, defaults: UserDefaults = .standard) {
-        defaults.set(version.rawValue, forKey: AppPreferenceKey.sileroVADModelVersion)
-        NotificationCenter.default.post(name: .voxtFeatureSettingsDidChange, object: nil)
-    }
+enum SileroVADModelSupport {
+    nonisolated static let repo = "mlx-community/silero-vad-v6"
+    nonisolated static let title = "Silero v6"
 }
 
 enum LocalVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
