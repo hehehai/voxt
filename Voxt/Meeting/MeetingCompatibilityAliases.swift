@@ -92,6 +92,18 @@ extension MLXTranscriber {
             return nil
         }
     }
+
+    func transcribeMeetingChunkResult(
+        samples: [Float],
+        sampleRate: Double
+    ) async -> MLXBufferedTranscriptionResult? {
+        do {
+            return try await transcribeBufferedResult(samples: samples, sampleRate: sampleRate)
+        } catch {
+            VoxtLog.meetingError("Meeting MLX chunk transcription failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
 }
 
 extension RemoteASRTranscriber {

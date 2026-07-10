@@ -228,7 +228,10 @@ final class MeetingSessionCoordinator {
             )
             let speakerAnalysisOptions = MeetingSpeakerDiarizationOptions.fromPreferences()
             let finalSegments: [MeetingTranscriptSegment]
-            if captureMode.capabilities.allowsSpeakerFeatures {
+            let hasMossStructuredSpeakerData = speechValidatedFinalTranscriptSegments.contains { segment in
+                segment.speakerID?.hasPrefix("moss:") == true
+            }
+            if captureMode.capabilities.allowsSpeakerFeatures, !hasMossStructuredSpeakerData {
                 finalSegments = await MeetingSpeakerAnalysisPipeline.analyzedSegments(
                     from: speechValidatedFinalTranscriptSegments,
                     descriptors: speakerAnalysisDescriptors,
@@ -493,10 +496,13 @@ final class MeetingSessionCoordinator {
             pendingChunks.append(chunk)
             return
         }
-        if let segment = await transcriber.transcribe(chunk: chunk) {
+        let segments = await transcriber.transcribeSegments(chunk: chunk)
+        if !segments.isEmpty {
             await MainActor.run { [weak self] in
                 guard let self, self.overlayState.isPresented else { return }
-                self.applyTranscriptEvent(chunk.isFinal ? .final(segment) : .partial(segment))
+                for segment in segments {
+                    self.applyTranscriptEvent(chunk.isFinal ? .final(segment) : .partial(segment))
+                }
             }
         }
     }

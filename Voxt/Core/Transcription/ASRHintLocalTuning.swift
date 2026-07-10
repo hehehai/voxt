@@ -63,6 +63,28 @@ enum MossASROutputMode: String, CaseIterable, Codable, Identifiable, Sendable {
     }
 }
 
+enum MossASRUsageScope: String, CaseIterable, Identifiable, Sendable {
+    case dictation
+    case meeting
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dictation:
+            return AppLocalization.localizedString("Dictation Settings")
+        case .meeting:
+            return AppLocalization.localizedString("Meeting")
+        }
+    }
+}
+
+struct MossASRUsageSettings: Equatable, Sendable {
+    var outputMode: MossASROutputMode
+    var hotwords: String
+    var customPrompt: String
+}
+
 enum CohereLongFormStrategy: String, CaseIterable, Codable, Identifiable, Sendable {
     case fixedChunks
     case voiceActivity
@@ -332,9 +354,12 @@ struct MLXLocalTuningSettings: Codable, Equatable {
     var qwenContextBias: String = ""
     var granitePromptBias: String = ""
     var senseVoiceUseITN: Bool = false
-    var mossOutputMode: MossASROutputMode = .timestampedDiarization
+    var mossOutputMode: MossASROutputMode = .plainText
     var mossHotwords: String = AppPreferenceKey.asrDictionaryTermsTemplateVariable
     var mossCustomPrompt: String = ""
+    var mossMeetingOutputMode: MossASROutputMode = .timestampedDiarization
+    var mossMeetingHotwords: String = AppPreferenceKey.asrDictionaryTermsTemplateVariable
+    var mossMeetingCustomPrompt: String = ""
     var cohereLongFormStrategy: CohereLongFormStrategy = .voiceActivity
     var cohereUsePunctuation: Bool = true
     var cohereMaxTokens: Int = 1024
@@ -354,9 +379,12 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         qwenContextBias: String = "",
         granitePromptBias: String = "",
         senseVoiceUseITN: Bool = false,
-        mossOutputMode: MossASROutputMode = .timestampedDiarization,
+        mossOutputMode: MossASROutputMode = .plainText,
         mossHotwords: String = AppPreferenceKey.asrDictionaryTermsTemplateVariable,
         mossCustomPrompt: String = "",
+        mossMeetingOutputMode: MossASROutputMode = .timestampedDiarization,
+        mossMeetingHotwords: String = AppPreferenceKey.asrDictionaryTermsTemplateVariable,
+        mossMeetingCustomPrompt: String = "",
         cohereLongFormStrategy: CohereLongFormStrategy = .voiceActivity,
         cohereUsePunctuation: Bool = true,
         cohereMaxTokens: Int = 1024,
@@ -378,6 +406,9 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         self.mossOutputMode = mossOutputMode
         self.mossHotwords = mossHotwords
         self.mossCustomPrompt = mossCustomPrompt
+        self.mossMeetingOutputMode = mossMeetingOutputMode
+        self.mossMeetingHotwords = mossMeetingHotwords
+        self.mossMeetingCustomPrompt = mossMeetingCustomPrompt
         self.cohereLongFormStrategy = cohereLongFormStrategy
         self.cohereUsePunctuation = cohereUsePunctuation
         self.cohereMaxTokens = cohereMaxTokens
@@ -401,6 +432,9 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         case mossOutputMode
         case mossHotwords
         case mossCustomPrompt
+        case mossMeetingOutputMode
+        case mossMeetingHotwords
+        case mossMeetingCustomPrompt
         case cohereLongFormStrategy
         case cohereUsePunctuation
         case cohereMaxTokens
@@ -422,11 +456,32 @@ struct MLXLocalTuningSettings: Codable, Equatable {
         qwenContextBias = try container.decodeIfPresent(String.self, forKey: .qwenContextBias) ?? ""
         granitePromptBias = try container.decodeIfPresent(String.self, forKey: .granitePromptBias) ?? ""
         senseVoiceUseITN = try container.decodeIfPresent(Bool.self, forKey: .senseVoiceUseITN) ?? false
-        mossOutputMode = try container.decodeIfPresent(MossASROutputMode.self, forKey: .mossOutputMode)
-            ?? .timestampedDiarization
-        mossHotwords = try container.decodeIfPresent(String.self, forKey: .mossHotwords)
+        let legacyMossOutputMode = try container.decodeIfPresent(MossASROutputMode.self, forKey: .mossOutputMode)
+        let legacyMossHotwords = try container.decodeIfPresent(String.self, forKey: .mossHotwords)
             ?? AppPreferenceKey.asrDictionaryTermsTemplateVariable
-        mossCustomPrompt = try container.decodeIfPresent(String.self, forKey: .mossCustomPrompt) ?? ""
+        let legacyMossCustomPrompt = try container.decodeIfPresent(String.self, forKey: .mossCustomPrompt) ?? ""
+        let hasScopedMossSettings = container.contains(.mossMeetingOutputMode)
+            || container.contains(.mossMeetingHotwords)
+            || container.contains(.mossMeetingCustomPrompt)
+        if hasScopedMossSettings {
+            mossOutputMode = legacyMossOutputMode ?? .plainText
+            mossHotwords = legacyMossHotwords
+            mossCustomPrompt = legacyMossCustomPrompt
+            mossMeetingOutputMode = try container.decodeIfPresent(
+                MossASROutputMode.self,
+                forKey: .mossMeetingOutputMode
+            ) ?? .timestampedDiarization
+            mossMeetingHotwords = try container.decodeIfPresent(String.self, forKey: .mossMeetingHotwords)
+                ?? AppPreferenceKey.asrDictionaryTermsTemplateVariable
+            mossMeetingCustomPrompt = try container.decodeIfPresent(String.self, forKey: .mossMeetingCustomPrompt) ?? ""
+        } else {
+            mossOutputMode = .plainText
+            mossHotwords = legacyMossHotwords
+            mossCustomPrompt = legacyMossCustomPrompt
+            mossMeetingOutputMode = legacyMossOutputMode ?? .timestampedDiarization
+            mossMeetingHotwords = legacyMossHotwords
+            mossMeetingCustomPrompt = legacyMossCustomPrompt
+        }
         cohereLongFormStrategy = try container.decodeIfPresent(CohereLongFormStrategy.self, forKey: .cohereLongFormStrategy)
             ?? .voiceActivity
         cohereUsePunctuation = try container.decodeIfPresent(Bool.self, forKey: .cohereUsePunctuation) ?? true
@@ -454,6 +509,23 @@ struct MLXLocalTuningSettings: Codable, Equatable {
                 ? AppPreferenceKey.asrDictionaryTermsTemplateVariable
                 : ""
         )
+    }
+
+    func mossSettings(for scope: MossASRUsageScope) -> MossASRUsageSettings {
+        switch scope {
+        case .dictation:
+            return MossASRUsageSettings(
+                outputMode: mossOutputMode,
+                hotwords: mossHotwords,
+                customPrompt: mossCustomPrompt
+            )
+        case .meeting:
+            return MossASRUsageSettings(
+                outputMode: mossMeetingOutputMode,
+                hotwords: mossMeetingHotwords,
+                customPrompt: mossMeetingCustomPrompt
+            )
+        }
     }
 }
 
@@ -518,6 +590,9 @@ enum MLXLocalTuningSettingsStore {
             mossOutputMode: settings.mossOutputMode,
             mossHotwords: settings.mossHotwords.trimmingCharacters(in: .whitespacesAndNewlines),
             mossCustomPrompt: settings.mossCustomPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
+            mossMeetingOutputMode: settings.mossMeetingOutputMode,
+            mossMeetingHotwords: settings.mossMeetingHotwords.trimmingCharacters(in: .whitespacesAndNewlines),
+            mossMeetingCustomPrompt: settings.mossMeetingCustomPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
             cohereLongFormStrategy: settings.cohereLongFormStrategy,
             cohereUsePunctuation: settings.cohereUsePunctuation,
             cohereMaxTokens: max(32, min(settings.cohereMaxTokens, 2048)),

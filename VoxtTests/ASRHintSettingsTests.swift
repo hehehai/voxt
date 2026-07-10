@@ -442,15 +442,18 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(unsupported.target, "en")
     }
 
-    func testMOSSLocalTuningDefaultsToOfficialFormatAndDictionaryHotwords() {
+    func testMOSSLocalTuningUsesSeparateDictationAndMeetingDefaults() {
         let settings = MLXLocalTuningSettingsStore.resolvedSettings(
             for: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
             rawValue: nil
         )
 
-        XCTAssertEqual(settings.mossOutputMode, .timestampedDiarization)
+        XCTAssertEqual(settings.mossOutputMode, .plainText)
         XCTAssertEqual(settings.mossHotwords, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
         XCTAssertEqual(settings.mossCustomPrompt, "")
+        XCTAssertEqual(settings.mossMeetingOutputMode, .timestampedDiarization)
+        XCTAssertEqual(settings.mossMeetingHotwords, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
+        XCTAssertEqual(settings.mossMeetingCustomPrompt, "")
     }
 
     func testMOSSLocalTuningRoundTripsPromptConfiguration() {
@@ -458,7 +461,10 @@ final class ASRHintSettingsTests: XCTestCase {
             MLXLocalTuningSettings(
                 mossOutputMode: .customPrompt,
                 mossHotwords: "  Voxt\nCodex  ",
-                mossCustomPrompt: "  Transcribe with concise paragraphs.  "
+                mossCustomPrompt: "  Transcribe with concise paragraphs.  ",
+                mossMeetingOutputMode: .speakerOnly,
+                mossMeetingHotwords: "  Alice\nBob  ",
+                mossMeetingCustomPrompt: "  Keep speaker turns.  "
             ),
             for: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
             rawValue: nil
@@ -471,6 +477,46 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(settings.mossOutputMode, .customPrompt)
         XCTAssertEqual(settings.mossHotwords, "Voxt\nCodex")
         XCTAssertEqual(settings.mossCustomPrompt, "Transcribe with concise paragraphs.")
+        XCTAssertEqual(settings.mossMeetingOutputMode, .speakerOnly)
+        XCTAssertEqual(settings.mossMeetingHotwords, "Alice\nBob")
+        XCTAssertEqual(settings.mossMeetingCustomPrompt, "Keep speaker turns.")
+        XCTAssertEqual(settings.mossSettings(for: .dictation).outputMode, .customPrompt)
+        XCTAssertEqual(settings.mossSettings(for: .meeting).outputMode, .speakerOnly)
+    }
+
+    func testMOSSLocalTuningMigratesLegacyConfigurationToMeetingScope() throws {
+        let legacy = """
+        {"mossTranscribeDiarize":{"mossOutputMode":"timestampedDiarization","mossHotwords":"Voxt","mossCustomPrompt":"Legacy prompt"}}
+        """
+
+        let settings = MLXLocalTuningSettingsStore.resolvedSettings(
+            for: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
+            rawValue: legacy
+        )
+
+        XCTAssertEqual(settings.mossOutputMode, .plainText)
+        XCTAssertEqual(settings.mossHotwords, "Voxt")
+        XCTAssertEqual(settings.mossMeetingOutputMode, .timestampedDiarization)
+        XCTAssertEqual(settings.mossMeetingHotwords, "Voxt")
+        XCTAssertEqual(settings.mossMeetingCustomPrompt, "Legacy prompt")
+    }
+
+    func testMOSSStructuredSegmentsPreserveTimingSpeakerAndPlainText() {
+        let segments = MLXTranscriber.mossStructuredSegments(from: [
+            ["start": 1.25, "end": 2.75, "speaker_id": "S02", "text": "[S02] Hello world"]
+        ])
+
+        XCTAssertEqual(
+            segments,
+            [
+                MLXStructuredTranscriptSegment(
+                    startSeconds: 1.25,
+                    endSeconds: 2.75,
+                    speakerID: "S02",
+                    text: "Hello world"
+                )
+            ]
+        )
     }
 
     func testMOSSPromptSupportUsesOfficialModesAndHotwords() {

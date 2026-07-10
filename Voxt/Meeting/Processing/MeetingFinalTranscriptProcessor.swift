@@ -39,15 +39,14 @@ enum MeetingFinalTranscriptionPass {
     ) async -> [MeetingTranscriptSegment] {
         var segments: [MeetingTranscriptSegment] = []
         for asset in assets {
+            if let wholeAssetSegments = await transcriber.transcribeWholeAsset(asset) {
+                appendCleaned(wholeAssetSegments, to: &segments)
+                continue
+            }
             let chunks = chunks(for: asset, options: options)
             for chunk in chunks {
-                guard let segment = await transcriber.transcribe(chunk: chunk) else { continue }
-                let cleaned = segment.updatingText(
-                    MeetingTranscriptTextPostProcessor.normalizedFinalText(segment.text)
-                )
-                if !cleaned.text.isEmpty {
-                    segments.append(cleaned)
-                }
+                let chunkSegments = await transcriber.transcribeSegments(chunk: chunk)
+                appendCleaned(chunkSegments, to: &segments)
             }
         }
         return MeetingTranscriptPostProcessor.process(segments)
@@ -62,18 +61,31 @@ enum MeetingFinalTranscriptionPass {
         var segments: [MeetingTranscriptSegment] = []
         for descriptor in descriptors {
             guard let asset = await loadAsset(descriptor) else { continue }
+            if let wholeAssetSegments = await transcriber.transcribeWholeAsset(asset) {
+                appendCleaned(wholeAssetSegments, to: &segments)
+                continue
+            }
             let chunks = chunks(for: asset, options: options)
             for chunk in chunks {
-                guard let segment = await transcriber.transcribe(chunk: chunk) else { continue }
-                let cleaned = segment.updatingText(
-                    MeetingTranscriptTextPostProcessor.normalizedFinalText(segment.text)
-                )
-                if !cleaned.text.isEmpty {
-                    segments.append(cleaned)
-                }
+                let chunkSegments = await transcriber.transcribeSegments(chunk: chunk)
+                appendCleaned(chunkSegments, to: &segments)
             }
         }
         return MeetingTranscriptPostProcessor.process(segments)
+    }
+
+    private static func appendCleaned(
+        _ newSegments: [MeetingTranscriptSegment],
+        to segments: inout [MeetingTranscriptSegment]
+    ) {
+        for segment in newSegments {
+            let cleaned = segment.updatingText(
+                MeetingTranscriptTextPostProcessor.normalizedFinalText(segment.text)
+            )
+            if !cleaned.text.isEmpty {
+                segments.append(cleaned)
+            }
+        }
     }
 
     static func chunks(

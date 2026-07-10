@@ -519,6 +519,27 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertTrue(chunks.allSatisfy(\.preventsAdjacentMerge))
     }
 
+    @MainActor
+    func testFinalTranscriptionPassPrefersWholeAssetTranscriptionWhenAvailable() async {
+        let asset = MeetingAudioAsset(
+            source: .systemAudio,
+            samples: [Float](repeating: 0.1, count: 20),
+            sampleRate: 10,
+            sessionStartOffset: 3
+        )
+        let transcriber = WholeAssetMeetingTranscriber()
+
+        let segments = await MeetingFinalTranscriptionPass.transcribe(
+            assets: [asset],
+            transcriber: transcriber
+        )
+
+        XCTAssertEqual(transcriber.chunkTranscriptionCount, 0)
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments[0].speakerID, "moss:S01")
+        XCTAssertEqual(segments[0].text, "whole asset")
+    }
+
     func testBalancedSpeakerAssemblyKeepsContinuousSegmentTogetherAcrossShortSpeakerTurns() {
         let segment = MeetingTranscriptSegment(
             speaker: .them,
@@ -568,5 +589,29 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertEqual(result[0].text, segment.text)
         XCTAssertEqual(result[0].speakerID, "speaker_a")
         XCTAssertEqual(result[0].speakerDisplayName, "Speaker 1")
+    }
+}
+
+@MainActor
+private final class WholeAssetMeetingTranscriber: MeetingSegmentTranscribing {
+    private(set) var chunkTranscriptionCount = 0
+
+    func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment? {
+        chunkTranscriptionCount += 1
+        return nil
+    }
+
+    func transcribeWholeAsset(_ asset: MeetingAudioAsset) async -> [MeetingTranscriptSegment]? {
+        [
+            MeetingTranscriptSegment(
+                speaker: asset.source.defaultSpeaker,
+                speakerID: "moss:S01",
+                speakerDisplayName: "Speaker 1",
+                audioSource: asset.source,
+                startSeconds: asset.sessionStartOffset,
+                endSeconds: asset.sessionStartOffset + asset.durationSeconds,
+                text: "whole asset"
+            )
+        ]
     }
 }

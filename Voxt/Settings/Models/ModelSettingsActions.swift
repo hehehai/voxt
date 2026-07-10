@@ -27,10 +27,13 @@ enum MLXConfigurationSummarySupport {
         case .senseVoice:
             return AppLocalization.localizedString(tuning.senseVoiceUseITN ? "ITN On" : "ITN Off")
         case .mossTranscribeDiarize:
-            let hotwords = tuning.mossHotwords.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? AppLocalization.localizedString("Hotwords Off")
-                : AppLocalization.localizedString("Hotwords On")
-            return AppLocalization.format("%@ · %@", tuning.mossOutputMode.title, hotwords)
+            return AppLocalization.format(
+                "%@: %@ · %@: %@",
+                AppLocalization.localizedString("Dictation Settings"),
+                tuning.mossOutputMode.title,
+                AppLocalization.localizedString("Meeting"),
+                tuning.mossMeetingOutputMode.title
+            )
         case .cohereTranscribe:
             return AppLocalization.format(
                 "%@ · Temp %.2f",

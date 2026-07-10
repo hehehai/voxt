@@ -228,6 +228,7 @@ private struct MLXASRConfigurationSheetView: View {
     let family: MLXModelFamily
     @Binding var hintSettings: ASRHintSettings
     @Binding var tuningSettings: MLXLocalTuningSettings
+    @State private var mossUsageScope: MossASRUsageScope = .dictation
     let userLanguageCodes: [String]
     let onDone: () -> Void
 
@@ -277,6 +278,57 @@ private struct MLXASRConfigurationSheetView: View {
         CanaryLanguageSupport.translationTargetCodes.map {
             SettingsMenuOption(value: $0, title: CanaryLanguageSupport.title(for: $0))
         }
+    }
+
+    private var mossOutputModeBinding: Binding<MossASROutputMode> {
+        Binding(
+            get: {
+                switch mossUsageScope {
+                case .dictation: tuningSettings.mossOutputMode
+                case .meeting: tuningSettings.mossMeetingOutputMode
+                }
+            },
+            set: { mode in
+                switch mossUsageScope {
+                case .dictation: tuningSettings.mossOutputMode = mode
+                case .meeting: tuningSettings.mossMeetingOutputMode = mode
+                }
+            }
+        )
+    }
+
+    private var mossHotwordsBinding: Binding<String> {
+        Binding(
+            get: {
+                switch mossUsageScope {
+                case .dictation: tuningSettings.mossHotwords
+                case .meeting: tuningSettings.mossMeetingHotwords
+                }
+            },
+            set: { value in
+                switch mossUsageScope {
+                case .dictation: tuningSettings.mossHotwords = value
+                case .meeting: tuningSettings.mossMeetingHotwords = value
+                }
+            }
+        )
+    }
+
+    private var mossCustomPromptBinding: Binding<String> {
+        Binding(
+            get: {
+                switch mossUsageScope {
+                case .dictation: tuningSettings.mossCustomPrompt
+                case .meeting: tuningSettings.mossMeetingCustomPrompt
+                }
+            },
+            set: { value in
+                switch mossUsageScope {
+                case .dictation: tuningSettings.mossCustomPrompt = value
+                case .meeting: tuningSettings.mossMeetingCustomPrompt = value
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -355,23 +407,35 @@ private struct MLXASRConfigurationSheetView: View {
 
                     if family == .mossTranscribeDiarize {
                         VStack(alignment: .leading, spacing: 8) {
+                            Text(localized("Usage"))
+                                .font(.subheadline.weight(.medium))
+                            Picker(localized("Usage"), selection: $mossUsageScope) {
+                                ForEach(MossASRUsageScope.allCases) { scope in
+                                    Text(scope.title).tag(scope)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Output Format"))
                                 .font(.subheadline.weight(.medium))
                             SettingsMenuPicker(
                                 selection: Binding(
-                                    get: { tuningSettings.mossOutputMode.rawValue },
+                                    get: { mossOutputModeBinding.wrappedValue.rawValue },
                                     set: { rawValue in
                                         guard let mode = MossASROutputMode(rawValue: rawValue) else { return }
-                                        tuningSettings.mossOutputMode = mode
+                                        mossOutputModeBinding.wrappedValue = mode
                                     }
                                 ),
                                 options: MossASROutputMode.allCases.map {
                                     SettingsMenuOption(value: $0.rawValue, title: $0.title)
                                 },
-                                selectedTitle: tuningSettings.mossOutputMode.title,
+                                selectedTitle: mossOutputModeBinding.wrappedValue.title,
                                 width: 240
                             )
-                            Text(tuningSettings.mossOutputMode.summary)
+                            Text(mossOutputModeBinding.wrappedValue.summary)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -379,7 +443,7 @@ private struct MLXASRConfigurationSheetView: View {
                         Text(localized("Hotwords"))
                             .font(.subheadline.weight(.medium))
                         PromptEditorView(
-                            text: $tuningSettings.mossHotwords,
+                            text: mossHotwordsBinding,
                             height: 90,
                             variables: Self.dictionaryTermsVariable
                         )
@@ -387,10 +451,10 @@ private struct MLXASRConfigurationSheetView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        if tuningSettings.mossOutputMode == .customPrompt {
+                        if mossOutputModeBinding.wrappedValue == .customPrompt {
                             Text(localized("Recognition Prompt"))
                                 .font(.subheadline.weight(.medium))
-                            PromptEditorView(text: $tuningSettings.mossCustomPrompt, height: 120)
+                            PromptEditorView(text: mossCustomPromptBinding, height: 120)
                             Text(localized("This instruction replaces the standard MOSS transcription format prompt."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

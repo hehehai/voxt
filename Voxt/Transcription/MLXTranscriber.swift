@@ -138,9 +138,34 @@ private struct SenseVoiceInferenceResult {
     let metadata: SenseVoiceTranscriptMetadata?
 }
 
+enum MLXTranscriptionPurpose: Sendable {
+    case dictation
+    case meeting
+
+    var mossUsageScope: MossASRUsageScope {
+        switch self {
+        case .dictation: .dictation
+        case .meeting: .meeting
+        }
+    }
+}
+
+struct MLXStructuredTranscriptSegment: Equatable, Sendable {
+    let startSeconds: TimeInterval
+    let endSeconds: TimeInterval
+    let speakerID: String
+    let text: String
+}
+
+struct MLXBufferedTranscriptionResult: Equatable, Sendable {
+    let text: String
+    let structuredSegments: [MLXStructuredTranscriptSegment]
+}
+
 private struct MLXDetachedInferenceResult {
     let rawText: String
     let senseVoiceMetadata: SenseVoiceTranscriptMetadata?
+    let structuredSegments: [MLXStructuredTranscriptSegment]
 }
 
 private struct MLXUnsafeSendableBox<Value>: @unchecked Sendable {
@@ -980,6 +1005,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var inputSampleRate: Double = 16000
     private var completedAudioArchiveURL: URL?
     private let modelManager: MLXModelManager
+    private let transcriptionPurpose: MLXTranscriptionPurpose
     private var preferredInputDeviceID: AudioDeviceID?
     private let targetSampleRate = 16000
 
@@ -1037,8 +1063,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var senseVoiceVADModel: SileroVAD?
     private var pendingRuntimeFailureMessage: String?
 
-    init(modelManager: MLXModelManager) {
+    init(modelManager: MLXModelManager, transcriptionPurpose: MLXTranscriptionPurpose = .dictation) {
         self.modelManager = modelManager
+        self.transcriptionPurpose = transcriptionPurpose
     }
 
     func setPreferredInputDevice(_ deviceID: AudioDeviceID?) {
@@ -2337,7 +2364,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
         return MossASRTranscriptRendering.renderedText(
             text,
-            outputMode: resolvedLocalTuningSettings().mossOutputMode
+            outputMode: resolvedLocalTuningSettings()
+                .mossSettings(for: transcriptionPurpose.mossUsageScope)
+                .outputMode
         )
     }
 
@@ -2358,6 +2387,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private func resolvedInferenceConfiguration(for stage: MLXCorrectionPassKind) -> ResolvedInferenceConfiguration {
         let hintPayload = resolvedHintPayload()
         let tuningSettings = resolvedLocalTuningSettings()
+        let mossSettings = tuningSettings.mossSettings(for: transcriptionPurpose.mossUsageScope)
         let userLanguageCodes = UserMainLanguageOption.storedSelection(
             from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
         )
@@ -2458,20 +2488,20 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             cohereLongFormStrategy: tuningSettings.cohereLongFormStrategy,
             mossPrompt: family == .mossTranscribeDiarize
                 ? MossASRPromptSupport.resolvedPrompt(
-                    outputMode: tuningSettings.mossOutputMode,
+                    outputMode: mossSettings.outputMode,
                     customPrompt: resolvedBiasTemplate(
-                        tuningSettings.mossCustomPrompt,
+                        mossSettings.customPrompt,
                         userLanguageCodes: userLanguageCodes,
                         dictionaryTerms: dictionaryTerms
                     ),
                     hotwords: resolvedBiasTemplate(
-                        tuningSettings.mossHotwords,
+                        mossSettings.hotwords,
                         userLanguageCodes: userLanguageCodes,
                         dictionaryTerms: dictionaryTerms
                     )
                 )
                 : nil,
-            mossOutputMode: tuningSettings.mossOutputMode
+            mossOutputMode: mossSettings.outputMode
         )
     }
 
@@ -2697,7 +2727,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             )
             return MLXDetachedInferenceResult(
                 rawText: result.output.text,
-                senseVoiceMetadata: result.metadata
+                senseVoiceMetadata: result.metadata,
+                structuredSegments: []
             )
         } else if let mossModel = model as? MossTranscribeDiarizeModel {
             let output = mossModel.generate(
@@ -2715,7 +2746,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     output.text,
                     outputMode: inferenceConfiguration.mossOutputMode
                 ),
-                senseVoiceMetadata: nil
+                senseVoiceMetadata: nil,
+                structuredSegments: mossStructuredSegments(from: output.segments)
             )
         } else if let cohereModel = model as? CohereTranscribeModel,
                   let longFormVADModel {
@@ -2733,7 +2765,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     )
                 )
             )
-            return MLXDetachedInferenceResult(rawText: output.text, senseVoiceMetadata: nil)
+            return MLXDetachedInferenceResult(rawText: output.text, senseVoiceMetadata: nil, structuredSegments: [])
         } else if let voxtralModel = model as? VoxtralRealtimeModel,
                   let longFormVADModel {
             let output = voxtralModel.generate(
@@ -2750,7 +2782,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     )
                 )
             )
-            return MLXDetachedInferenceResult(rawText: output.text, senseVoiceMetadata: nil)
+            return MLXDetachedInferenceResult(rawText: output.text, senseVoiceMetadata: nil, structuredSegments: [])
         } else {
             stream = model.generateStream(audio: audioArray, generationParameters: generationParameters)
         }
@@ -2770,8 +2802,52 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         return MLXDetachedInferenceResult(
             rawText: finalText ?? streamedText,
-            senseVoiceMetadata: nil
+            senseVoiceMetadata: nil,
+            structuredSegments: []
         )
+    }
+
+    nonisolated static func mossStructuredSegments(
+        from rawSegments: [[String: Any]]?
+    ) -> [MLXStructuredTranscriptSegment] {
+        (rawSegments ?? []).compactMap { segment in
+            guard let start = numericValue(segment["start"]),
+                  let end = numericValue(segment["end"]),
+                  end >= start,
+                  let speakerID = segment["speaker_id"] as? String,
+                  !speakerID.isEmpty,
+                  let rawText = segment["text"] as? String
+            else {
+                return nil
+            }
+
+            let speakerPrefix = "[\(speakerID)]"
+            let text = rawText.hasPrefix(speakerPrefix)
+                ? String(rawText.dropFirst(speakerPrefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                : rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return MLXStructuredTranscriptSegment(
+                startSeconds: start,
+                endSeconds: end,
+                speakerID: speakerID,
+                text: text
+            )
+        }
+    }
+
+    private nonisolated static func numericValue(_ value: Any?) -> Double? {
+        switch value {
+        case let number as NSNumber:
+            return number.doubleValue
+        case let number as Double:
+            return number
+        case let number as Float:
+            return Double(number)
+        case let text as String:
+            return Double(text.replacingOccurrences(of: ",", with: "."))
+        default:
+            return nil
+        }
     }
 
     private nonisolated static func longFormSpeechSegmentConfig(
@@ -2976,6 +3052,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func transcribeBufferedChunk(samples: [Float], sampleRate: Double) async throws -> String? {
+        try await transcribeBufferedResult(samples: samples, sampleRate: sampleRate)?.text
+    }
+
+    func transcribeBufferedResult(
+        samples: [Float],
+        sampleRate: Double
+    ) async throws -> MLXBufferedTranscriptionResult? {
         guard !samples.isEmpty else { return nil }
 
         latestSenseVoiceMetadata = nil
@@ -3002,7 +3085,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             latestSenseVoiceMetadata = nil
             return nil
         }
-        return candidate
+        return MLXBufferedTranscriptionResult(
+            text: candidate,
+            structuredSegments: inferenceResult.structuredSegments
+        )
     }
 
     func transcribeAudioFile(_ fileURL: URL) async throws -> String {
