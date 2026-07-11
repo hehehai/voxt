@@ -12,9 +12,9 @@ private func localized(_ key: String) -> String {
 enum HistoryFilterTab: String, CaseIterable, Hashable, Identifiable {
     case transcription
     case translation
-    case transcript
     case rewrite
     case note
+    case transcript
 
     var id: String { rawValue }
 

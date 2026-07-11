@@ -5,6 +5,13 @@ import XCTest
 @testable import Voxt
 
 final class HistorySettingsDataTests: XCTestCase {
+    func testHistoryTabsUseExpectedDisplayOrder() {
+        XCTAssertEqual(
+            HistoryFilterTab.allCases,
+            [.transcription, .translation, .rewrite, .note, .transcript]
+        )
+    }
+
     func testFilteredEntriesUsesSelectedHistoryTab() {
         let entries = [
             makeHistoryEntry(kind: .normal, text: "a"),
