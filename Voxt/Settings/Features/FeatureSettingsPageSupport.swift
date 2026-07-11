@@ -63,10 +63,6 @@ extension FeatureSettingsView {
             FeatureSummaryPill(
                 title: featureSettingsLocalized("Model"),
                 value: shortSummary(llmSelectionSummary(featureSettings.transcription.notes.titleModelSelectionID))
-            ),
-            FeatureSummaryPill(
-                title: featureSettingsLocalized("Corner"),
-                value: featureSettings.transcription.notes.panel.corner.title
             )
         ]
     }

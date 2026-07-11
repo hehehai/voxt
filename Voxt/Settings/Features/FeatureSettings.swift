@@ -234,8 +234,6 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
     var enabled: Bool
     var triggerShortcut: TranscriptionNoteTriggerSettings
     var titleModelSelectionID: FeatureModelSelectionID
-    var soundEnabled: Bool
-    var soundPreset: InteractionSoundPreset
     var panel: VoxtNotePanelSettings
     var obsidianSync: ObsidianNoteSyncSettings
     var remindersSync: RemindersNoteSyncSettings
@@ -244,8 +242,6 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         enabled: Bool = true,
         triggerShortcut: TranscriptionNoteTriggerSettings = .defaultShortcut,
         titleModelSelectionID: FeatureModelSelectionID,
-        soundEnabled: Bool = false,
-        soundPreset: InteractionSoundPreset = .soft,
         panel: VoxtNotePanelSettings = .init(),
         obsidianSync: ObsidianNoteSyncSettings = .init(),
         remindersSync: RemindersNoteSyncSettings = .init()
@@ -253,8 +249,6 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         self.enabled = true
         self.triggerShortcut = triggerShortcut
         self.titleModelSelectionID = titleModelSelectionID
-        self.soundEnabled = soundEnabled
-        self.soundPreset = soundPreset
         self.panel = panel
         self.obsidianSync = obsidianSync
         self.remindersSync = remindersSync
@@ -264,8 +258,6 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         case enabled
         case triggerShortcut
         case titleModelSelectionID
-        case soundEnabled
-        case soundPreset
         case panel
         case obsidianSync
         case remindersSync
@@ -276,8 +268,6 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         enabled = true
         triggerShortcut = try container.decodeIfPresent(TranscriptionNoteTriggerSettings.self, forKey: .triggerShortcut) ?? .defaultShortcut
         titleModelSelectionID = try container.decode(FeatureModelSelectionID.self, forKey: .titleModelSelectionID)
-        soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
-        soundPreset = try container.decodeIfPresent(InteractionSoundPreset.self, forKey: .soundPreset) ?? .soft
         panel = try container.decodeIfPresent(VoxtNotePanelSettings.self, forKey: .panel) ?? .init()
         obsidianSync = try container.decodeIfPresent(ObsidianNoteSyncSettings.self, forKey: .obsidianSync) ?? .init()
         remindersSync = try container.decodeIfPresent(RemindersNoteSyncSettings.self, forKey: .remindersSync) ?? .init()

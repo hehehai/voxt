@@ -1354,11 +1354,7 @@
 "Note Title Model" = "メモタイトルモデル";
 "Title Model" = "タイトルモデル";
 "Choose Note Title Model" = "メモタイトルモデルを選択";
-"Note Audio" = "メモ通知音";
 "Sound" = "通知音";
-"Play a short reminder sound each time the note trigger is pressed during a live transcription session." = "リアルタイム文字起こし中にメモトリガーを押すたび、短い通知音を再生します。";
-"Note Sound Preset" = "メモ通知音プリセット";
-"Choose the reminder sound used when a note is captured, and preview it here." = "メモ記録時に使う通知音を選び、ここで試聴できます。";
 "Enable Reminders Sync" = "Reminders 同期";
 "Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list." = "メモのタイトル、内容、完了状態、優先度を Apple Reminders に同期します。";
 "Reminders Sync" = "Reminders 同期";
@@ -2017,7 +2013,7 @@
 "Reveal Delay" = "表示までの時間";
 "Hide Delay" = "非表示までの時間";
 "Translucent Panel" = "半透明パネル";
-"Hiding Corner" = "表示する隅";
+"Trigger Corner" = "表示する隅";
 "The same corner works on every connected display." = "接続中のすべてのディスプレイで同じ隅を使用します。";
 "macOS Hot Corners may activate at the same time." = "macOS のホットコーナーも同時に作動する場合があります。";
 "sec" = "秒";
@@ -2051,6 +2047,7 @@
 "The existing database will be preserved in a recovery folder. Notes in it will not appear in the new database." = "既存のデータベースは復旧フォルダに保存されます。その中のノートは新しいデータベースには表示されません。";
 "Note shortcut: %@" = "ノートショートカット：%@";
 "The selected text could not be saved as a note." = "選択したテキストをノートとして保存できませんでした。";
+"Note created." = "ノートを作成しました。";
 "All statuses" = "すべてのステータス";
 "%d statuses" = "%d 件のステータス";
 "Status" = "ステータス";

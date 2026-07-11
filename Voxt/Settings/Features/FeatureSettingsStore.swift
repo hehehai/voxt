@@ -446,8 +446,6 @@ enum FeatureSettingsStore {
             enabled: true,
             triggerShortcut: resolvedShortcut,
             titleModelSelectionID: resolvedSelectionID,
-            soundEnabled: settings.soundEnabled,
-            soundPreset: settings.soundPreset,
             panel: VoxtNotePanelSettings(
                 corner: settings.panel.corner,
                 revealDelay: min(max(settings.panel.revealDelay, 0.2), 2.0),

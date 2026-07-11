@@ -1410,11 +1410,7 @@
 "Note Title Model" = "笔记标题模型";
 "Title Model" = "标题模型";
 "Choose Note Title Model" = "选择笔记标题模型";
-"Note Audio" = "笔记提示音";
 "Sound" = "提示音";
-"Play a short reminder sound each time the note trigger is pressed during a live transcription session." = "在实时转录过程中每次按下笔记触发键时，播放一个短提示音。";
-"Note Sound Preset" = "笔记提示音预设";
-"Choose the reminder sound used when a note is captured, and preview it here." = "选择记录笔记时使用的提示音，并可在这里试听。";
 "Enable Reminders Sync" = "提醒事项同步";
 "Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list." = "将笔记标题、内容、完成状态和优先级同步到 Apple 提醒事项。";
 "Reminders Sync" = "提醒事项同步";
@@ -2059,7 +2055,7 @@
 "Reveal Delay" = "显示延迟";
 "Hide Delay" = "隐藏延迟";
 "Translucent Panel" = "半透明面板";
-"Hiding Corner" = "触发角落";
+"Trigger Corner" = "触发角落";
 "The same corner works on every connected display." = "所有已连接的显示器使用同一个角落。";
 "macOS Hot Corners may activate at the same time." = "macOS 触发角可能会同时激活。";
 "sec" = "秒";
@@ -2093,6 +2089,7 @@
 "The existing database will be preserved in a recovery folder. Notes in it will not appear in the new database." = "现有数据库会保留在恢复目录中，其中的笔记不会显示在新数据库里。";
 "Note shortcut: %@" = "笔记快捷键：%@";
 "The selected text could not be saved as a note." = "无法将选中文本保存为笔记。";
+"Note created." = "笔记创建成功。";
 "All statuses" = "全部状态";
 "%d statuses" = "%d 个状态";
 "Status" = "状态";

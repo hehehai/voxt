@@ -1463,11 +1463,7 @@
 "Note Title Model" = "Note Title Model";
 "Title Model" = "Title Model";
 "Choose Note Title Model" = "Choose Note Title Model";
-"Note Audio" = "Note Audio";
 "Sound" = "Sound";
-"Play a short reminder sound each time the note trigger is pressed during a live transcription session." = "Play a short reminder sound each time the note trigger is pressed during a live transcription session.";
-"Note Sound Preset" = "Note Sound Preset";
-"Choose the reminder sound used when a note is captured, and preview it here." = "Choose the reminder sound used when a note is captured, and preview it here.";
 "Enable Reminders Sync" = "Reminders Sync";
 "Sync Voxt notes into Apple Reminders by creating and updating reminders in the selected list." = "Keep note titles, content, completion, and priority synchronized to Apple Reminders.";
 "Reminders Sync" = "Reminders Sync";
@@ -2059,7 +2055,7 @@
 "Reveal Delay" = "Reveal Delay";
 "Hide Delay" = "Hide Delay";
 "Translucent Panel" = "Translucent Panel";
-"Hiding Corner" = "Hiding Corner";
+"Trigger Corner" = "Trigger Corner";
 "The same corner works on every connected display." = "The same corner works on every connected display.";
 "macOS Hot Corners may activate at the same time." = "macOS Hot Corners may activate at the same time.";
 "sec" = "sec";
@@ -2093,6 +2089,7 @@
 "The existing database will be preserved in a recovery folder. Notes in it will not appear in the new database." = "The existing database will be preserved in a recovery folder. Notes in it will not appear in the new database.";
 "Note shortcut: %@" = "Note shortcut: %@";
 "The selected text could not be saved as a note." = "The selected text could not be saved as a note.";
+"Note created." = "Note created.";
 "All statuses" = "All statuses";
 "%d statuses" = "%d statuses";
 "Status" = "Status";

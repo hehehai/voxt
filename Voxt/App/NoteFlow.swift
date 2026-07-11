@@ -72,9 +72,7 @@ extension AppDelegate {
                 )
                 return
             }
-            if noteFeatureSettings.soundEnabled {
-                interactionSoundPlayer.playNote(preset: noteFeatureSettings.soundPreset)
-            }
+            showFloatingToast(AppLocalization.localizedString("Note created."))
             VoxtLog.hotkey("Note hotkey captured selected text. characters=\(selectedText.count)")
         case .stopRecordingAsNote:
             transcriptionCaptureSessionMode = .noteSession
@@ -129,9 +127,6 @@ extension AppDelegate {
 
         transcriptionCaptureSessionMode = .noteSession
         configureTranscriptionCapturePipelineForCurrentSession()
-        if noteFeatureSettings.soundEnabled {
-            interactionSoundPlayer.playNote(preset: noteFeatureSettings.soundPreset)
-        }
         refreshVoxtNoteTranscriptDisplay()
         VoxtLog.info("Voxt note captured. reason=\(reason), characters=\(trimmedText.count)")
         return true
