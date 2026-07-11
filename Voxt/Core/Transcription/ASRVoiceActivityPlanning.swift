@@ -5,7 +5,6 @@ import Foundation
 
 enum SileroVADModelSupport {
     nonisolated static let repo = "mlx-community/silero-vad-v6"
-    nonisolated static let title = "Silero v6"
 }
 
 enum LocalVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
@@ -217,6 +216,15 @@ nonisolated enum ASRVoiceActivityLocalGatePolicy: Equatable, Sendable {
 }
 
 nonisolated enum ASRVoiceActivityRuntimePolicy {
+    nonisolated static func requiresSileroModel(mode: LocalVADMode) -> Bool {
+        switch mode {
+        case .automatic, .silero:
+            return true
+        case .omni, .energy, .off:
+            return false
+        }
+    }
+
     nonisolated static func effectiveBackend(
         mode: LocalVADMode,
         useCase: ASRVoiceActivityUseCase

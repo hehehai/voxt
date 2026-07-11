@@ -97,7 +97,7 @@ enum FeatureSettingsStore {
                 ),
                 appContext: .init(),
                 notes: TranscriptionNoteFeatureSettings(
-                    enabled: false,
+                    enabled: true,
                     triggerShortcut: .defaultShortcut,
                     titleModelSelectionID: transcriptionText,
                     obsidianSync: .init(),
@@ -443,11 +443,15 @@ enum FeatureSettingsStore {
                 sidedModifiers: settings.triggerShortcut.sidedModifiers
             )
         return TranscriptionNoteFeatureSettings(
-            enabled: settings.enabled,
+            enabled: true,
             triggerShortcut: resolvedShortcut,
             titleModelSelectionID: resolvedSelectionID,
-            soundEnabled: settings.soundEnabled,
-            soundPreset: settings.soundPreset,
+            panel: VoxtNotePanelSettings(
+                corner: settings.panel.corner,
+                revealDelay: min(max(settings.panel.revealDelay, 0.2), 2.0),
+                hideDelay: min(max(settings.panel.hideDelay, 0.1), 2.0),
+                isTranslucent: settings.panel.isTranslucent
+            ),
             obsidianSync: sanitizedObsidianSyncSettings(settings.obsidianSync),
             remindersSync: sanitizedRemindersSyncSettings(settings.remindersSync)
         )

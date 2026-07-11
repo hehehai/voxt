@@ -11,7 +11,12 @@ private enum VoxtNoteTitleModel {
 }
 
 extension AppDelegate {
-    func appendVoxtNote(text: String, sessionID: UUID) {
+    @discardableResult
+    func appendVoxtNote(
+        text: String,
+        sessionID: UUID,
+        source: VoxtNoteSource = .transcription
+    ) -> Bool {
         let fallbackTitle = VoxtNoteTitleSupport.fallbackTitle(from: text)
         let resolvedTitleModel = resolvedVoxtNoteTitleModel()
         let initialState: NoteTitleGenerationState = resolvedTitleModel == nil ? .fallback : .pending
@@ -20,14 +25,15 @@ extension AppDelegate {
             sessionID: sessionID,
             text: text,
             title: fallbackTitle,
-            titleGenerationState: initialState
+            titleGenerationState: initialState,
+            source: source
         ) else {
-            return
+            return false
         }
 
         noteWindowManager.show()
 
-        guard let resolvedTitleModel else { return }
+        guard let resolvedTitleModel else { return true }
         Task { @MainActor [weak self] in
             await self?.generateVoxtNoteTitle(
                 for: item.id,
@@ -36,6 +42,7 @@ extension AppDelegate {
                 model: resolvedTitleModel
             )
         }
+        return true
     }
 
     private func generateVoxtNoteTitle(

@@ -91,6 +91,7 @@ enum AppPreferenceKey {
     nonisolated static let translationHotkeyBindings = "translationHotkeyBindings"
     nonisolated static let meetingHotkeyBindings = "meetingHotkeyBindings"
     nonisolated static let rewriteHotkeyBindings = "rewriteHotkeyBindings"
+    nonisolated static let noteHotkeyBindings = "noteHotkeyBindings"
     static let transcriptSummaryPromptTemplate = "transcriptSummaryPromptTemplate"
     static let transcriptSummaryModelSelection = "transcriptSummaryModelSelection"
     static let hideMeetingOverlayFromScreenSharing = "hideMeetingOverlayFromScreenSharing"

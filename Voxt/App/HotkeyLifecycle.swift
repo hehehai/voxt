@@ -21,8 +21,7 @@ final class OverlayShortcutEventGate: @unchecked Sendable {
     ]
 
     func update(
-        answerContinueShortcut: HotkeyPreference.Hotkey,
-        noteShortcut: HotkeyPreference.Hotkey?
+        answerContinueShortcut: HotkeyPreference.Hotkey
     ) {
         var updatedSignatures: Set<KeySignature> = [
             KeySignature(keyCode: UInt16(kVK_Escape), modifiers: [])
@@ -33,15 +32,6 @@ final class OverlayShortcutEventGate: @unchecked Sendable {
                 modifiers: answerContinueShortcut.modifiers
             )
         )
-        if let noteShortcut {
-            updatedSignatures.insert(
-                KeySignature(
-                    keyCode: noteShortcut.keyCode,
-                    modifiers: noteShortcut.modifiers
-                )
-            )
-        }
-
         lock.lock()
         signatures = updatedSignatures
         lock.unlock()
@@ -128,6 +118,11 @@ extension AppDelegate {
             guard let self else { return }
             self.handleCustomPasteHotkeyDown()
         }
+        hotkeyManager.onNoteKeyDown = { [weak self] in
+            guard let self else { return }
+            self.postHotkeyDidTrigger(kind: "note", behavior: .tap)
+            self.handleNoteHotkeyDown()
+        }
         hotkeyManager.onCommonStopKeyDown = { [weak self] in
             guard let self else { return }
             self.handleCommonStopHotkeyDown()
@@ -210,12 +205,8 @@ extension AppDelegate {
     }
 
     func refreshOverlayShortcutEventGate() {
-        let noteShortcut = noteFeatureSettings.enabled
-            ? noteFeatureSettings.triggerShortcut.hotkey
-            : nil
         overlayShortcutEventGate.update(
-            answerContinueShortcut: rewriteContinueShortcutSettings.hotkey,
-            noteShortcut: noteShortcut
+            answerContinueShortcut: rewriteContinueShortcutSettings.hotkey
         )
     }
 
@@ -232,11 +223,6 @@ extension AppDelegate {
 
         if shouldHandleAnswerOverlayContinueShortcut(event),
            overlayWindow.handleAnswerSpaceShortcut() {
-            return shouldConsume ? nil : event
-        }
-
-        if shouldHandleLiveTranscriptNoteShortcut(event),
-           captureLiveTranscriptNoteIfPossible(reason: "note-shortcut") {
             return shouldConsume ? nil : event
         }
 
@@ -365,6 +351,7 @@ extension AppDelegate {
     ) {
         VoxtLog.hotkey(
             "Trigger callback transcriptionDown. source=\(source), mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
+            verbose: true
         )
         guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "\(source)TranscriptionDown") else { return }
         if allowsDoubleTapRewrite {
@@ -440,6 +427,7 @@ extension AppDelegate {
         guard triggerMode == .longPress else { return }
         VoxtLog.hotkey(
             "Trigger callback transcriptionUp. source=\(source), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
+            verbose: true
         )
         let actions = HotkeyActionResolver.resolveTranscriptionUp(
             state: HotkeyActionResolver.State(
@@ -469,6 +457,7 @@ extension AppDelegate {
         )
         VoxtLog.hotkey(
             "Trigger callback translationDown. source=\(source), mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), pendingStart=\(pendingTranscriptionStartTask != nil)",
+            verbose: true
         )
         guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "\(source)TranslationDown") else { return }
         let actions = HotkeyActionResolver.resolveTranslationDown(
@@ -513,6 +502,7 @@ extension AppDelegate {
         guard triggerMode == .longPress else { return }
         VoxtLog.hotkey(
             "Trigger callback translationUp. source=\(source), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputMode == .translation ? "translation" : "transcription"), selectedTextFlow=\(isSelectedTextTranslationFlow)",
+            verbose: true
         )
         let actions = HotkeyActionResolver.resolveTranslationUp(
             state: HotkeyActionResolver.State(
@@ -542,6 +532,7 @@ extension AppDelegate {
         )
         VoxtLog.hotkey(
             "Trigger callback rewriteDown. source=\(source), mode=\(triggerMode.rawValue), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel), pendingStart=\(pendingTranscriptionStartTask != nil)",
+            verbose: true
         )
         guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "\(source)RewriteDown") else { return }
 
@@ -574,6 +565,7 @@ extension AppDelegate {
         guard triggerMode == .longPress else { return }
         VoxtLog.hotkey(
             "Trigger callback rewriteUp. source=\(source), isSessionActive=\(isSessionActive), sessionOutput=\(sessionOutputModeLabel)",
+            verbose: true
         )
         guard isSessionActive, sessionOutputMode == .rewrite else { return }
         endRecording()

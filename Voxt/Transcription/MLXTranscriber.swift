@@ -2712,7 +2712,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             return senseVoiceVADModel
         }
 
-        let modelDirectory = try await modelManager.ensureModelDirectory(repo: SileroVADModelSupport.repo)
+        let modelDirectory = try await SileroVADModelProvisioner.shared.ensureModelDirectory()
         try Task.checkCancellation()
         let loadedModel = try SileroVAD.fromModelDirectory(modelDirectory)
         senseVoiceVADModel = loadedModel

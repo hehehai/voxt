@@ -204,6 +204,26 @@ final class FeatureSettingsStoreTests: XCTestCase {
         }
     }
 
+    func testNotePanelSettingsPersistAndClampDelays() throws {
+        try withEphemeralDefaults { defaults in
+            var settings = FeatureSettingsStore.load(defaults: defaults)
+            settings.transcription.notes.panel = VoxtNotePanelSettings(
+                corner: .bottomLeft,
+                revealDelay: 9,
+                hideDelay: 0,
+                isTranslucent: false
+            )
+
+            FeatureSettingsStore.save(settings, defaults: defaults)
+            let reloaded = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertEqual(reloaded.transcription.notes.panel.corner, .bottomLeft)
+            XCTAssertEqual(reloaded.transcription.notes.panel.revealDelay, 2.0)
+            XCTAssertEqual(reloaded.transcription.notes.panel.hideDelay, 0.1)
+            XCTAssertFalse(reloaded.transcription.notes.panel.isTranslucent)
+        }
+    }
+
     func testAppContextSettingsEnableToggleTurnsOnBothSubsettings() {
         var settings = TranscriptionAppContextSettings()
 

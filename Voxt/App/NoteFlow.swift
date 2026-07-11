@@ -11,8 +11,10 @@ extension AppDelegate {
         case noteSession
     }
 
-    func configureVoxtNoteSessionRuntimeStateForNewRecording() {
-        transcriptionCaptureSessionMode = .standard
+    func configureVoxtNoteSessionRuntimeStateForNewRecording(
+        mode: TranscriptionCaptureSessionMode = .standard
+    ) {
+        transcriptionCaptureSessionMode = mode
         configureTranscriptionCapturePipelineForCurrentSession()
         liveTranscriptSegmentationState.reset()
         overlayState.setTranscribedTextTransformer { [weak self] rawText in
@@ -27,23 +29,80 @@ extension AppDelegate {
         overlayState.setTranscribedTextTransformer(nil)
     }
 
-    func shouldHandleLiveTranscriptNoteShortcut(_ event: NSEvent) -> Bool {
-        guard event.type == .keyDown else { return false }
-        guard !event.isARepeat else { return false }
-        guard noteFeatureSettings.enabled else { return false }
-        let shortcut = noteFeatureSettings.triggerShortcut.hotkey
-        guard event.keyCode == shortcut.keyCode else { return false }
-        let modifiers = event.modifierFlags.intersection(.hotkeyRelevant)
-        guard modifiers == shortcut.modifiers else { return false }
-        guard isSessionActive, sessionOutputMode == .transcription else { return false }
-        guard overlayState.displayMode != .answer else { return false }
-        return isCurrentTranscriptionCaptureLive
+    func handleNoteHotkeyDown() {
+        cancelPendingTranscriptionStart()
+        guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "noteHotkey") else { return }
+        guard noteStore.isAvailable else {
+            showFloatingToast(
+                AppLocalization.localizedString("Notes are unavailable. Open Note settings to repair storage."),
+                kind: .warning,
+                clearAfter: 3.2
+            )
+            return
+        }
+
+        let selectedText: String? = if isSessionActive {
+            nil
+        } else {
+            selectedTextFromSystemSelection()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let action = NoteHotkeyActionResolver.resolve(
+            state: .init(
+                isSessionActive: isSessionActive,
+                sessionOutputMode: sessionOutputMode,
+                isPanelVisible: noteWindowManager.isVisible,
+                canStopSession: !isSessionStopInProgress && !shouldIgnoreTapStop(),
+                hasSelectedText: selectedText?.isEmpty == false
+            )
+        )
+        switch action {
+        case .captureSelectedText:
+            guard let selectedText, !selectedText.isEmpty else { return }
+            guard appendVoxtNote(
+                text: selectedText,
+                sessionID: UUID(),
+                source: .selection
+            ) else {
+                showFloatingToast(
+                    AppLocalization.localizedString("The selected text could not be saved as a note."),
+                    kind: .warning,
+                    clearAfter: 3.2
+                )
+                return
+            }
+            showFloatingToast(AppLocalization.localizedString("Note created."))
+            VoxtLog.hotkey("Note hotkey captured selected text. characters=\(selectedText.count)")
+        case .stopRecordingAsNote:
+            transcriptionCaptureSessionMode = .noteSession
+            configureTranscriptionCapturePipelineForCurrentSession()
+            VoxtLog.hotkey("Note hotkey ending active transcription as a note.")
+            endRecording()
+        case .startNoteRecording:
+            noteWindowManager.hide()
+            VoxtLog.hotkey("Note hotkey starting note transcription from visible panel.")
+            beginRecording(outputMode: .transcription, transcriptionCaptureMode: .noteSession)
+        case .revealPanel:
+            VoxtLog.hotkey("Note hotkey revealing note panel.")
+            noteWindowManager.show()
+        case .ignore:
+            break
+        }
     }
 
     @discardableResult
     func captureLiveTranscriptNoteIfPossible(reason: String) -> Bool {
-        guard noteFeatureSettings.enabled else { return false }
         guard isSessionActive, sessionOutputMode == .transcription else { return false }
+        guard noteStore.isAvailable else {
+            showFloatingToast(
+                AppLocalization.localizedString("Notes are unavailable. Open Note settings to repair storage."),
+                kind: .warning,
+                clearAfter: 3.2
+            )
+            return false
+        }
+        let previousSegmentationState = liveTranscriptSegmentationState
         let rawText = currentSessionRawTranscribedText()
         let capturedText = liveTranscriptSegmentationState.freezeCurrentSegment(
             using: rawText,
@@ -56,12 +115,18 @@ extension AppDelegate {
             return false
         }
 
+        guard appendVoxtNote(text: trimmedText, sessionID: activeRecordingSessionID) else {
+            liveTranscriptSegmentationState = previousSegmentationState
+            showFloatingToast(
+                AppLocalization.localizedString("The note could not be saved. Your transcript was kept unchanged."),
+                kind: .warning,
+                clearAfter: 3.2
+            )
+            return false
+        }
+
         transcriptionCaptureSessionMode = .noteSession
         configureTranscriptionCapturePipelineForCurrentSession()
-        if noteFeatureSettings.soundEnabled {
-            interactionSoundPlayer.playNote(preset: noteFeatureSettings.soundPreset)
-        }
-        appendVoxtNote(text: trimmedText, sessionID: activeRecordingSessionID)
         refreshVoxtNoteTranscriptDisplay()
         VoxtLog.info("Voxt note captured. reason=\(reason), characters=\(trimmedText.count)")
         return true
@@ -70,9 +135,11 @@ extension AppDelegate {
     @discardableResult
     func captureTrailingVoxtNoteIfNeeded(finalRawText: String) -> Bool {
         guard transcriptionCaptureSessionMode == .noteSession else { return false }
+        guard noteStore.isAvailable else { return false }
         let trimmedFinalText = finalRawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedFinalText.isEmpty else { return false }
 
+        let previousSegmentationState = liveTranscriptSegmentationState
         let capturedText = liveTranscriptSegmentationState.freezeCurrentSegment(using: trimmedFinalText)
         let trimmedCapturedText = capturedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmedCapturedText.isEmpty else {
@@ -80,7 +147,10 @@ extension AppDelegate {
             return false
         }
 
-        appendVoxtNote(text: trimmedCapturedText, sessionID: activeRecordingSessionID)
+        guard appendVoxtNote(text: trimmedCapturedText, sessionID: activeRecordingSessionID) else {
+            liveTranscriptSegmentationState = previousSegmentationState
+            return false
+        }
         refreshVoxtNoteTranscriptDisplay()
         VoxtLog.info("Voxt note trailing segment captured at session end. characters=\(trimmedCapturedText.count)")
         return true

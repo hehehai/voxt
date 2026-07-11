@@ -4,6 +4,21 @@
 import Foundation
 import Combine
 
+nonisolated enum VoxtObsidianSyncMapping {
+    static func statusValue(for status: VoxtNoteStatus) -> String {
+        switch status {
+        case .todo: return "todo"
+        case .inProgress: return "in-progress"
+        case .done: return "done"
+        case .backlog: return "backlog"
+        }
+    }
+
+    static func priorityValue(for priority: VoxtNotePriority) -> String {
+        priority.rawValue
+    }
+}
+
 final class VoxtObsidianSyncCoordinator {
     private let noteStore: VoxtNoteStore
     private let settingsProvider: () -> ObsidianNoteSyncSettings
@@ -41,12 +56,14 @@ final class VoxtObsidianSyncCoordinator {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            self.scheduleSync(
-                notes: self.latestNotesSnapshot,
-                settings: self.settingsProvider(),
-                reason: "settings-updated"
-            )
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.scheduleSync(
+                    notes: self.latestNotesSnapshot,
+                    settings: self.settingsProvider(),
+                    reason: "settings-updated"
+                )
+            }
         }
 
         scheduleSync(
@@ -62,11 +79,16 @@ final class VoxtObsidianSyncCoordinator {
         }
     }
 
+    @MainActor
     private func scheduleSync(
         notes: [VoxtNoteItem],
         settings: ObsidianNoteSyncSettings,
         reason: String
     ) {
+        guard noteStore.isAvailable else {
+            VoxtLog.warning("Obsidian sync skipped because note storage is unavailable. reason=\(reason)")
+            return
+        }
         queue.async { [exportStore, fileManagerBox] in
             Self.reconcile(
                 notes: notes,
@@ -189,17 +211,7 @@ final class VoxtObsidianSyncCoordinator {
                 switch record.groupingMode {
                 case .file:
                     guard let note = assignedNotes.first else { continue }
-                    let previousFileURL: URL?
-                    if let previousRecord = previousRecordsByNoteID[note.id],
-                       previousRecord.relativeFilePath != record.relativeFilePath {
-                        previousFileURL = vaultURL.appendingPathComponent(
-                            previousRecord.relativeFilePath,
-                            isDirectory: false
-                        )
-                    } else {
-                        previousFileURL = nil
-                    }
-                    try syncSingleNoteFile(note: note, to: fileURL, previousFileURL: previousFileURL)
+                    try syncSingleNoteFile(note: note, to: fileURL)
                 case .session, .daily:
                     let renderedText = renderGroupedFile(notes: assignedNotes, record: record)
                     try renderedText.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -344,34 +356,7 @@ final class VoxtObsidianSyncCoordinator {
     }
 
     private static func fileStemTitle(for note: VoxtNoteItem) -> String {
-        let cleanedTitle = sanitizedFileNameComponent(strippingStatusPrefix(from: note.title))
-        guard !cleanedTitle.isEmpty else {
-            return note.isCompleted ? "[完成]" : ""
-        }
-        return note.isCompleted ? "\(cleanedTitle) [完成]" : cleanedTitle
-    }
-
-    private static func strippingStatusPrefix(from value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-
-        let prefixes = [
-            "已完成 ",
-            "完成 ",
-            "[完成] ",
-            "[已完成] ",
-            "completed ",
-            "complete ",
-            "[done] ",
-            "done "
-        ]
-
-        for prefix in prefixes {
-            if trimmed.lowercased().hasPrefix(prefix.lowercased()) {
-                return String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-        return trimmed
+        sanitizedFileNameComponent(note.title)
     }
 
     private static func sanitizedFileNameComponent(_ value: String) -> String {
@@ -391,27 +376,9 @@ final class VoxtObsidianSyncCoordinator {
 
     private static func syncSingleNoteFile(
         note: VoxtNoteItem,
-        to fileURL: URL,
-        previousFileURL: URL? = nil
+        to fileURL: URL
     ) throws {
-        let existingText = try? String(contentsOf: fileURL, encoding: .utf8)
-        let bodyText: String
-
-        if let existingText,
-           let parsed = parseManagedSingleNoteFile(existingText),
-           parsed.noteID == note.id {
-            bodyText = parsed.bodyText
-        } else if let previousFileURL,
-                  previousFileURL != fileURL,
-                  let previousText = try? String(contentsOf: previousFileURL, encoding: .utf8),
-                  let parsed = parseManagedSingleNoteFile(previousText),
-                  parsed.noteID == note.id {
-            bodyText = parsed.bodyText
-        } else {
-            bodyText = note.text
-        }
-
-        let renderedText = renderSingleNoteFile(note, bodyText: bodyText)
+        let renderedText = renderSingleNoteFile(note, bodyText: note.text)
         try renderedText.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
@@ -422,9 +389,12 @@ final class VoxtObsidianSyncCoordinator {
         ---
         type: \(yamlValue("voxt-note"))
         source: \(yamlValue("voxt"))
+        capture-source: \(yamlValue(note.source.rawValue))
         created: \(yamlValue(isoFormatter.string(from: note.createdAt)))
-        updated: \(yamlValue(isoFormatter.string(from: Date())))
-        status: \(yamlValue(note.isCompleted ? "completed" : "incomplete"))
+        updated: \(yamlValue(isoFormatter.string(from: note.updatedAt)))
+        completed: \(yamlValue(note.completedAt.map { isoFormatter.string(from: $0) } ?? ""))
+        status: \(yamlValue(VoxtObsidianSyncMapping.statusValue(for: note.status)))
+        priority: \(yamlValue(VoxtObsidianSyncMapping.priorityValue(for: note.priority)))
         title: \(yamlValue(note.title))
         note-id: \(yamlValue(note.id.uuidString))
         session-id: \(yamlValue(note.sessionID.uuidString))
@@ -481,7 +451,11 @@ final class VoxtObsidianSyncCoordinator {
 
         > Created: \(displayDateTimeString(from: note.createdAt))
         >
-        > Status: \(note.isCompleted ? "completed" : "incomplete")
+        > Updated: \(displayDateTimeString(from: note.updatedAt))
+        >
+        > Status: \(VoxtObsidianSyncMapping.statusValue(for: note.status))
+        >
+        > Priority: \(VoxtObsidianSyncMapping.priorityValue(for: note.priority))
 
         \(note.text)
         """
@@ -494,41 +468,6 @@ final class VoxtObsidianSyncCoordinator {
         formatter.timeZone = TimeZone.current
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter.string(from: date)
-    }
-
-    private static func parseManagedSingleNoteFile(_ text: String) -> ManagedSingleNoteFile? {
-        guard text.hasPrefix("---\n") else { return nil }
-        let bodyStartMarker = "\n---\n"
-        guard let frontmatterEndRange = text.range(of: bodyStartMarker) else { return nil }
-
-        let frontmatterText = String(text[text.index(text.startIndex, offsetBy: 4)..<frontmatterEndRange.lowerBound])
-        let metadata = parseFrontmatter(frontmatterText)
-        guard metadata["type"] == "voxt-note",
-              metadata["source"] == "voxt",
-              let noteIDRaw = metadata["note-id"],
-              let noteID = UUID(uuidString: noteIDRaw)
-        else {
-            return nil
-        }
-
-        var bodyRegion = String(text[frontmatterEndRange.upperBound...])
-        bodyRegion = bodyRegion.trimmingCharacters(in: .newlines)
-
-        guard let headingRange = bodyRegion.range(of: "^# .*$", options: .regularExpression) else {
-            return ManagedSingleNoteFile(noteID: noteID, bodyText: bodyRegion)
-        }
-
-        var trailingRegion = String(bodyRegion[headingRange.upperBound...])
-        if trailingRegion.hasPrefix("\n\n") {
-            trailingRegion.removeFirst(2)
-        } else if trailingRegion.hasPrefix("\n") {
-            trailingRegion.removeFirst()
-        }
-
-        return ManagedSingleNoteFile(
-            noteID: noteID,
-            bodyText: trailingRegion.trimmingCharacters(in: .newlines)
-        )
     }
 
     private static func managedIdentifier(in text: String) -> ManagedFileIdentifier? {
@@ -613,11 +552,6 @@ final class VoxtObsidianSyncCoordinator {
             try? fileManager.removeItem(at: currentURL)
             currentURL.deleteLastPathComponent()
         }
-    }
-
-    private struct ManagedSingleNoteFile {
-        let noteID: UUID
-        let bodyText: String
     }
 
     private enum ManagedFileIdentifier: Equatable {
@@ -726,10 +660,10 @@ final class VoxtObsidianSyncCoordinator {
             if looksLikeOldDatePrefixedFileName(lastComponent) {
                 return true
             }
-            if note.isCompleted && !lastComponent.contains("[完成]") {
-                return true
-            }
-            return lastComponent.contains("完成 ") || lastComponent.contains("已完成 ")
+            return lastComponent.range(
+                of: #" \[(完成|已完成)\]\.md$"#,
+                options: .regularExpression
+            ) != nil
         case .daily:
             return false
         }

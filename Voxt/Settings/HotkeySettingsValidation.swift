@@ -31,6 +31,7 @@ struct HotkeySettingsValidation {
         let meetingBindings: [HotkeyPreference.HotkeyBinding]
         let rewriteBindings: [HotkeyPreference.HotkeyBinding]
         let customPasteHotkey: HotkeyPreference.Hotkey?
+        let noteBindings: [HotkeyPreference.HotkeyBinding]
 
         init(
             transcriptionHotkey: HotkeyPreference.Hotkey,
@@ -45,6 +46,7 @@ struct HotkeySettingsValidation {
             self.meetingBindings = meetingHotkey.map { [.init(hotkey: $0, behavior: .tap)] } ?? []
             self.rewriteBindings = shouldValidateRewriteHotkey ? [.init(hotkey: rewriteHotkey, behavior: .tap)] : []
             self.customPasteHotkey = customPasteHotkey
+            self.noteBindings = []
         }
 
         init(
@@ -52,13 +54,17 @@ struct HotkeySettingsValidation {
             translationBindings: [HotkeyPreference.HotkeyBinding],
             meetingBindings: [HotkeyPreference.HotkeyBinding],
             rewriteBindings: [HotkeyPreference.HotkeyBinding],
-            customPasteHotkey: HotkeyPreference.Hotkey?
+            customPasteHotkey: HotkeyPreference.Hotkey?,
+            noteBindings: [HotkeyPreference.HotkeyBinding] = []
         ) {
             self.transcriptionBindings = transcriptionBindings
             self.translationBindings = translationBindings
             self.meetingBindings = meetingBindings
             self.rewriteBindings = rewriteBindings
             self.customPasteHotkey = customPasteHotkey
+            self.noteBindings = noteBindings.map {
+                .init(id: $0.id, hotkey: $0.hotkey, behavior: .tap)
+            }
         }
     }
 
@@ -74,7 +80,8 @@ struct HotkeySettingsValidation {
             ("transcription", "Transcription shortcut: %@", state.transcriptionBindings),
             ("translation", "Translation shortcut: %@", state.translationBindings),
             ("meeting", "Meeting shortcut: %@", state.meetingBindings),
-            ("rewrite", "Content rewrite shortcut: %@", state.rewriteBindings)
+            ("rewrite", "Content rewrite shortcut: %@", state.rewriteBindings),
+            ("note", "Note shortcut: %@", state.noteBindings)
         ]
 
         for group in groups {

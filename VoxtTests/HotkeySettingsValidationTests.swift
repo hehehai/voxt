@@ -7,7 +7,7 @@ import Carbon
 @testable import Voxt
 
 final class HotkeySettingsValidationTests: XCTestCase {
-    func testBareKeyboardShortcutReportsInvalidGlobalShortcut() {
+    func testBareKeyboardShortcutIsAllowed() {
         let messages = HotkeySettingsValidation.messages(
             for: .init(
                 transcriptionBindings: [.init(
@@ -32,7 +32,7 @@ final class HotkeySettingsValidationTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(messages.contains { $0.id == "invalid.transcription.0" })
+        XCTAssertFalse(messages.contains { $0.id == "invalid.transcription.0" })
     }
 
     func testDoubleTapWakeSuppressesRewriteSpecificMessages() {

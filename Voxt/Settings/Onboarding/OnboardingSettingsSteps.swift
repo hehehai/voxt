@@ -407,18 +407,6 @@ extension OnboardingSettingsView {
                 }
             }
 
-            GeneralSettingsCard(title: "Notes") {
-                GeneralToggleRow(
-                    title: "Enable Notes",
-                    description: "Add segmented notes during transcription. Once enabled, Notes appears in the Feature menu and supports a dedicated trigger key.",
-                    isOn: onboardingNotesEnabled
-                )
-
-                Text(localized("Notes configuration moved here after transcription-level enablement."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             OnboardingSummaryCard(
                 title: "Quick Test",
                 lines: [
@@ -653,7 +641,7 @@ extension OnboardingSettingsView {
                         title: "Notes",
                         detail: "Capture key points during recording. Notes stay separate and get short AI titles.",
                         status: notesStatusSummary,
-                        statusTint: featureSettings.transcription.notes.enabled ? .green : .secondary
+                        statusTint: .green
                     )
 
                     Divider()

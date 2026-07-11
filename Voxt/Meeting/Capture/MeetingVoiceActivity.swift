@@ -329,12 +329,7 @@ actor ASRSileroStreamingVoiceActivityDetector {
         if let model {
             return model
         }
-        let directory = await MainActor.run {
-            MeetingVADModelStorage.modelDirectory(requireValid: true)
-        }
-        guard let directory else {
-            throw MeetingVADModelError.modelNotDownloaded
-        }
+        let directory = try await SileroVADModelProvisioner.shared.ensureModelDirectory()
         let loaded = try SileroVAD.fromModelDirectory(directory)
         model = loaded
         return loaded
@@ -376,12 +371,7 @@ actor ASRSileroOfflineVoiceActivityDetector: ASROfflineVoiceActivityBackend {
         if let model {
             return model
         }
-        let directory = await MainActor.run {
-            MeetingVADModelStorage.modelDirectory(requireValid: true)
-        }
-        guard let directory else {
-            throw MeetingVADModelError.modelNotDownloaded
-        }
+        let directory = try await SileroVADModelProvisioner.shared.ensureModelDirectory()
         let loaded = try SileroVAD.fromModelDirectory(directory)
         model = loaded
         return loaded

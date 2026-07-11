@@ -84,6 +84,75 @@ final class HotkeyActionResolverTests: XCTestCase {
         XCTAssertEqual(actions, [.ignore])
     }
 
+    func testNoteHotkeyRevealsPanelWhenIdleAndHidden() {
+        XCTAssertEqual(
+            NoteHotkeyActionResolver.resolve(state: .init(
+                isSessionActive: false,
+                sessionOutputMode: .transcription,
+                isPanelVisible: false,
+                canStopSession: true,
+                hasSelectedText: false
+            )),
+            .revealPanel
+        )
+    }
+
+    func testNoteHotkeyStartsNoteRecordingOnlyFromVisiblePanel() {
+        XCTAssertEqual(
+            NoteHotkeyActionResolver.resolve(state: .init(
+                isSessionActive: false,
+                sessionOutputMode: .transcription,
+                isPanelVisible: true,
+                canStopSession: true,
+                hasSelectedText: false
+            )),
+            .startNoteRecording
+        )
+    }
+
+    func testNoteHotkeyCapturesSelectedTextBeforeRevealingOrRecording() {
+        for isPanelVisible in [false, true] {
+            XCTAssertEqual(
+                NoteHotkeyActionResolver.resolve(state: .init(
+                    isSessionActive: false,
+                    sessionOutputMode: .transcription,
+                    isPanelVisible: isPanelVisible,
+                    canStopSession: true,
+                    hasSelectedText: true
+                )),
+                .captureSelectedText
+            )
+        }
+    }
+
+    func testNoteHotkeyStopsActiveTranscriptionAsNote() {
+        XCTAssertEqual(
+            NoteHotkeyActionResolver.resolve(state: .init(
+                isSessionActive: true,
+                sessionOutputMode: .transcription,
+                isPanelVisible: false,
+                canStopSession: true,
+                hasSelectedText: true
+            )),
+            .stopRecordingAsNote
+        )
+    }
+
+    func testNoteHotkeyDoesNotStopTranslationOrRewrite() {
+        for outputMode in [SessionOutputMode.translation, .rewrite] {
+            XCTAssertEqual(
+                NoteHotkeyActionResolver.resolve(state: .init(
+                    isSessionActive: true,
+                    sessionOutputMode: outputMode,
+                    isPanelVisible: true,
+                    canStopSession: true,
+                    hasSelectedText: true
+                )),
+                .ignore
+            )
+        }
+    }
+
     private func makeState(
         triggerMode: HotkeyPreference.TriggerMode,
         isSessionActive: Bool,

@@ -145,7 +145,8 @@ extension AppDelegate {
         }
 
         VoxtLog.asr(
-            "Session end pipeline started. sessionID=\(sessionID.uuidString), trigger=\(trigger), displayMode=\(overlayState.displayMode), overlayVisible=\(overlayWindow.isVisible)"
+            "Session end pipeline started. sessionID=\(sessionID.uuidString), trigger=\(trigger), displayMode=\(overlayState.displayMode), overlayVisible=\(overlayWindow.isVisible)",
+            verbose: true
         )
         let stages: [any SessionEndStage] = [
             HideOverlayStage(),
@@ -158,7 +159,8 @@ extension AppDelegate {
             stage.run(delegate: self)
         }
         VoxtLog.asr(
-            "Session end pipeline completed. sessionID=\(sessionID.uuidString), overlayVisible=\(overlayWindow.isVisible)"
+            "Session end pipeline completed. sessionID=\(sessionID.uuidString), overlayVisible=\(overlayWindow.isVisible)",
+            verbose: true
         )
     }
 }

@@ -212,10 +212,6 @@ struct SettingsView: View {
         .onChange(of: featureSettingsRaw) { _, _ in
             refreshPermissionBadge()
             refreshModelConfigurationBadge()
-            if !noteEnabled, selectedTab == .feature, selectedFeatureTab == .note {
-                navigationRequest = nil
-                selectedFeatureTab = .transcription
-            }
         }
         .onChange(of: remoteASRProviderConfigurationsRaw) { _, _ in
             refreshModelConfigurationBadge()
@@ -319,7 +315,7 @@ struct SettingsView: View {
                                 Text(currentTitle)
                                     .font(.title3.weight(.semibold))
 
-                                if showsMeetingExperimentalBadge {
+                                if showsFeatureExperimentalBadge {
                                     FeatureStatusBadge(text: settingsLocalized("Experimental"))
                                 }
                             }
@@ -402,7 +398,7 @@ struct SettingsView: View {
     }
 
     private var noteEnabled: Bool {
-        featureSettings.transcription.notes.enabled
+        true
     }
 
     private var onboardingStepBinding: Binding<OnboardingStep> {
@@ -509,7 +505,8 @@ struct SettingsView: View {
                         mlxModelManager: mlxModelManager,
                         sherpaOnnxModelManager: sherpaOnnxModelManager,
                         customLLMManager: customLLMManager,
-                        ggufTranslationModelManager: ggufTranslationModelManager
+                        ggufTranslationModelManager: ggufTranslationModelManager,
+                        noteStore: noteStore
                     )
                 }
             }
@@ -681,8 +678,8 @@ struct SettingsView: View {
         sidebarMode == .feature ? selectedFeatureTab.titleKey : selectedTab.titleKey
     }
 
-    private var showsMeetingExperimentalBadge: Bool {
-        sidebarMode == .feature && selectedFeatureTab == .meeting
+    private var showsFeatureExperimentalBadge: Bool {
+        sidebarMode == .feature && (selectedFeatureTab == .meeting || selectedFeatureTab == .note)
     }
 
     private var showsContentHeader: Bool {
@@ -1406,7 +1403,7 @@ private struct SettingsSidebarMenuPager: View {
                     iconKind: tab.sidebarIconKind,
                     systemImageName: tab.sidebarIconKind == nil ? tab.iconName : nil,
                     title: tab.titleKey,
-                    badgeText: tab == .meeting ? "Experimental" : nil,
+                    badgeText: (tab == .meeting || tab == .note) ? "Experimental" : nil,
                     isActive: tab == selectedFeatureTab,
                     action: { onSelectFeatureTab(tab) }
                 )

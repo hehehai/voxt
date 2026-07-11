@@ -95,7 +95,7 @@ final class KeyCaptureView: NSView {
             onCancel?()
             return
         }
-        VoxtLog.hotkey("Hotkey recorder keyDown. keyCode=\(event.keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: combinedModifiers(with: event.modifierFlags.intersection(.hotkeyRelevant))))")
+        VoxtLog.hotkey("Hotkey recorder keyDown. keyCode=\(event.keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: combinedModifiers(with: event.modifierFlags.intersection(.hotkeyRelevant))))", verbose: true)
         captureKeyDown(
             keyCode: event.keyCode,
             modifiers: event.modifierFlags.intersection(.hotkeyRelevant),
@@ -119,7 +119,7 @@ final class KeyCaptureView: NSView {
             rawModifiers: event.modifierFlags.intersection(.hotkeyRelevant)
         )
         updateSidedModifiers(for: event.keyCode)
-        VoxtLog.hotkey("Hotkey recorder flagsChanged(local). keyCode=\(event.keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: modifiers))")
+        VoxtLog.hotkey("Hotkey recorder flagsChanged(local). keyCode=\(event.keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: modifiers))", verbose: true)
         scheduleModifierOnlyCaptureIfNeeded(keyCode: event.keyCode, modifiers: modifiers)
     }
 
@@ -226,11 +226,11 @@ final class KeyCaptureView: NSView {
         guard isRecording else { return }
         if isDown {
             currentModifierFlags.insert(.function)
-            VoxtLog.hotkey("Hotkey recorder hid fn down.")
+            VoxtLog.hotkey("Hotkey recorder hid fn down.", verbose: true)
             scheduleModifierOnlyCaptureIfNeeded(keyCode: UInt16(kVK_Function), modifiers: currentModifierFlags)
         } else {
             currentModifierFlags.remove(.function)
-            VoxtLog.hotkey("Hotkey recorder hid fn up.")
+            VoxtLog.hotkey("Hotkey recorder hid fn up.", verbose: true)
             if currentModifierFlags.isEmpty {
                 finalizePendingModifierCaptureIfNeeded(reason: "hid modifier release")
             }
@@ -240,7 +240,7 @@ final class KeyCaptureView: NSView {
     private func handleHIDSpaceKeyChange(isDown: Bool) {
         guard isRecording else { return }
         guard currentModifierFlags.contains(.function) else { return }
-        VoxtLog.hotkey("Hotkey recorder hid space \(isDown ? "down" : "up"). modifiers=\(HotkeyPreference.modifierSymbols(for: currentModifierFlags))")
+        VoxtLog.hotkey("Hotkey recorder hid space \(isDown ? "down" : "up"). modifiers=\(HotkeyPreference.modifierSymbols(for: currentModifierFlags))", verbose: true)
         guard isDown else { return }
         captureKeyDown(
             keyCode: UInt16(kVK_Space),
@@ -277,7 +277,7 @@ final class KeyCaptureView: NSView {
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         switch type {
         case .keyDown:
-            VoxtLog.hotkey("Hotkey recorder keyDown(tap). keyCode=\(keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: combinedModifiers(with: modifierFlags(from: event.flags).intersection(.hotkeyRelevant))))")
+            VoxtLog.hotkey("Hotkey recorder keyDown(tap). keyCode=\(keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: combinedModifiers(with: modifierFlags(from: event.flags).intersection(.hotkeyRelevant))))", verbose: true)
             captureKeyDown(
                 keyCode: keyCode,
                 modifiers: combinedModifiers(with: modifierFlags(from: event.flags).intersection(.hotkeyRelevant)),
@@ -296,7 +296,7 @@ final class KeyCaptureView: NSView {
                 rawModifiers: modifierFlags(from: event.flags).intersection(.hotkeyRelevant)
             )
             currentSidedModifiers = SidedModifierFlags.from(eventFlags: event.flags).filtered(by: modifiers)
-            VoxtLog.hotkey("Hotkey recorder flagsChanged(tap). keyCode=\(keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: modifiers))")
+            VoxtLog.hotkey("Hotkey recorder flagsChanged(tap). keyCode=\(keyCode), modifiers=\(HotkeyPreference.modifierSymbols(for: modifiers))", verbose: true)
             scheduleModifierOnlyCaptureIfNeeded(keyCode: keyCode, modifiers: modifiers)
         default:
             break
@@ -325,6 +325,10 @@ final class KeyCaptureView: NSView {
         modifiers: NSEvent.ModifierFlags,
         sidedModifiers: SidedModifierFlags
     ) {
+        guard HotkeyPreference.isRecordableKeyboardKeyCode(keyCode) else {
+            VoxtLog.hotkey("Hotkey recorder ignored unsupported key. keyCode=\(keyCode)")
+            return
+        }
         let capturedModifiers = combinedModifiers(with: modifiers.intersection(.hotkeyRelevant))
         pendingModifierCaptureTask?.cancel()
         pendingModifierCapture = nil
@@ -551,6 +555,18 @@ private final class HotkeyRecorderHIDMonitor {
 
 #if DEBUG
 extension KeyCaptureView {
+    func debugCaptureKeyDownForTests(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags = [],
+        sidedModifiers: SidedModifierFlags = []
+    ) {
+        captureKeyDown(
+            keyCode: keyCode,
+            modifiers: modifiers,
+            sidedModifiers: sidedModifiers
+        )
+    }
+
     func debugCaptureMouseButtonDownForTests(
         buttonNumber: Int,
         modifiers: NSEvent.ModifierFlags,

@@ -50,8 +50,13 @@ extension FeatureSettingsView {
                 title: featureSettingsLocalized("Trigger"),
                 value: shortSummary(
                     HotkeyPreference.displayString(
-                        for: featureSettings.transcription.notes.triggerShortcut.hotkey,
-                        distinguishModifierSides: false
+                        for: HotkeyPreference.loadNoteBindings().first?.hotkey
+                            ?? HotkeyPreference.Hotkey(
+                                keyCode: HotkeyPreference.defaultNoteKeyCode,
+                                modifiers: HotkeyPreference.defaultNoteModifiers,
+                                sidedModifiers: HotkeyPreference.defaultNoteSidedModifiers
+                            ),
+                        distinguishModifierSides: true
                     )
                 )
             ),

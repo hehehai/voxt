@@ -190,7 +190,8 @@ extension AppDelegate {
                 overlayIconMatch: match.overlayIconMatch
             )
             VoxtLog.input(
-                "Auto Key enabled for app branch group. group=\(match.group.name), hotkey=\(HotkeyPreference.displayString(for: match.group.autoKeyPressHotkey, distinguishModifierSides: false))"
+                "Auto Key enabled for app branch group. group=\(match.group.name), hotkey=\(HotkeyPreference.displayString(for: match.group.autoKeyPressHotkey, distinguishModifierSides: false))",
+                verbose: true
             )
         }
 

@@ -1023,7 +1023,7 @@ struct OnboardingGuideView: View {
             GuideInfoRow(title: guideLocalized("Speech Model"), value: asrSelectionSummary(featureSettings.transcription.asrSelectionID))
             GuideInfoRow(title: guideLocalized("Text Enhancement"), value: featureSettings.transcription.llmEnabled ? llmSelectionSummary(featureSettings.transcription.llmSelectionID) : guideLocalized("Disabled"))
             GuideInfoRow(title: guideLocalized("Translation Model"), value: translationSelectionSummary(featureSettings.translation.modelSelectionID))
-            GuideInfoRow(title: guideLocalized("Notes"), value: featureSettings.transcription.notes.enabled ? guideLocalized("Enabled") : guideLocalized("Disabled"))
+            GuideInfoRow(title: guideLocalized("Notes"), value: guideLocalized("Enabled"))
             GuideInfoRow(title: guideLocalized("Meeting Summary"), value: llmSelectionSummary(featureSettings.meeting.summaryModelSelectionID))
         }
     }

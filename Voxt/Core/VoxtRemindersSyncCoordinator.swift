@@ -10,6 +10,7 @@ struct RemindersReminderPayload: Hashable, Sendable {
     let title: String
     let notes: String
     let isCompleted: Bool
+    let priority: Int
 }
 
 struct RemindersReminderRecord: Hashable, Sendable {
@@ -18,6 +19,22 @@ struct RemindersReminderRecord: Hashable, Sendable {
     let title: String
     let notes: String
     let isCompleted: Bool
+    let priority: Int
+}
+
+nonisolated enum VoxtRemindersSyncMapping {
+    static func isCompleted(for status: VoxtNoteStatus) -> Bool {
+        status == .done
+    }
+
+    static func priority(for priority: VoxtNotePriority) -> Int {
+        switch priority {
+        case .none: return 0
+        case .high: return 1
+        case .medium: return 5
+        case .low: return 9
+        }
+    }
 }
 
 protocol VoxtRemindersSyncBackend {
@@ -53,7 +70,8 @@ final class EventKitVoxtRemindersSyncBackend: VoxtRemindersSyncBackend {
             listIdentifier: calendar.calendarIdentifier,
             title: reminder.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             notes: reminder.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-            isCompleted: reminder.isCompleted
+            isCompleted: reminder.isCompleted,
+            priority: reminder.priority
         )
     }
 
@@ -76,6 +94,7 @@ final class EventKitVoxtRemindersSyncBackend: VoxtRemindersSyncBackend {
         reminder.title = payload.title
         reminder.notes = payload.notes
         reminder.isCompleted = payload.isCompleted
+        reminder.priority = payload.priority
 
         try eventStore.save(reminder, commit: true)
         return reminder.calendarItemIdentifier
@@ -128,12 +147,14 @@ final class VoxtRemindersSyncCoordinator {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            self.scheduleSync(
-                notes: self.latestNotesSnapshot,
-                settings: self.settingsProvider(),
-                reason: "settings-updated"
-            )
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.scheduleSync(
+                    notes: self.latestNotesSnapshot,
+                    settings: self.settingsProvider(),
+                    reason: "settings-updated"
+                )
+            }
         }
 
         scheduleSync(
@@ -149,11 +170,16 @@ final class VoxtRemindersSyncCoordinator {
         }
     }
 
+    @MainActor
     private func scheduleSync(
         notes: [VoxtNoteItem],
         settings: RemindersNoteSyncSettings,
         reason: String
     ) {
+        guard noteStore.isAvailable else {
+            VoxtLog.persistenceWarning("Reminders sync skipped because note storage is unavailable. reason=\(reason)")
+            return
+        }
         queue.async { [backendFactory, exportStore] in
             Self.reconcile(
                 notes: notes,
@@ -249,7 +275,8 @@ final class VoxtRemindersSyncCoordinator {
             listIdentifier: listIdentifier,
             title: note.title.trimmingCharacters(in: .whitespacesAndNewlines),
             notes: note.text.trimmingCharacters(in: .whitespacesAndNewlines),
-            isCompleted: note.isCompleted
+            isCompleted: VoxtRemindersSyncMapping.isCompleted(for: note.status),
+            priority: VoxtRemindersSyncMapping.priority(for: note.priority)
         )
     }
 

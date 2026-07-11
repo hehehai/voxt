@@ -36,20 +36,6 @@ private enum HistoryListItem: Identifiable {
     }
 }
 
-private enum HistoryNoteListItem: Identifiable {
-    case dayHeader(Date)
-    case note(VoxtNoteItem)
-
-    var id: String {
-        switch self {
-        case .dayHeader(let date):
-            return "note-day-\(date.timeIntervalSince1970)"
-        case .note(let note):
-            return "note-\(note.id.uuidString)"
-        }
-    }
-}
-
 struct HistorySettingsView: View {
     @Environment(\.locale) private var locale
     @AppStorage(AppPreferenceKey.historyCleanupEnabled) private var historyCleanupEnabled = true
@@ -81,10 +67,18 @@ struct HistorySettingsView: View {
     @State private var historyPageGeneration = 0
     @State private var historyAudioStatsGeneration = 0
     @State private var suppressedStoreHistoryReloadCount = 0
+    @State private var selectedNoteStatuses = Set(VoxtNoteStatus.allCases)
+    @State private var noteVisibleLimit = 80
+    @State private var noteViewMode: HistoryNoteViewMode = .linearCard
+    @State private var linearCompletedVisibleLimit = 20
 
     private let historyPageSize = 80
+    private let notePageSize = 80
+    private let linearCompletedPageSize = 10
     private let historyRowHeight: CGFloat = 74
+    private let noteHistoryRowHeight: CGFloat = 68
     private let historyRowSpacing: CGFloat = 2
+    private let noteListRowSpacing: CGFloat = 6
     private let historyRowVerticalInset: CGFloat = 4
 
     private var historyRetentionPeriod: HistoryRetentionPeriod {
@@ -92,28 +86,23 @@ struct HistorySettingsView: View {
     }
 
     private var allNotes: [VoxtNoteItem] {
-        HistorySettingsData.searchNotes(noteStore.items, query: historySearchText)
+        let matchingIDs = Set(HistorySettingsData.filteredNotes(
+            noteStore.items,
+            statuses: selectedNoteStatuses,
+            query: historySearchText
+        ).map(\.id))
+
+        return HistorySettingsData.noteSectionOrder.flatMap { status in
+            noteStore.orderedItems(for: status).filter { matchingIDs.contains($0.id) }
+        }
     }
 
     private var visibleNotes: [VoxtNoteItem] {
-        allNotes
+        HistorySettingsData.visibleEntries(from: allNotes, visibleLimit: noteVisibleLimit)
     }
 
-    private var noteListItems: [HistoryNoteListItem] {
-        var items: [HistoryNoteListItem] = []
-        var currentDay: Date?
-        let calendar = Calendar.current
-
-        for note in visibleNotes {
-            let day = calendar.startOfDay(for: note.createdAt)
-            if currentDay != day {
-                items.append(.dayHeader(day))
-                currentDay = day
-            }
-            items.append(.note(note))
-        }
-
-        return items
+    private var visibleNoteSections: [VoxtNoteSectionSnapshot] {
+        HistorySettingsData.noteSections(from: visibleNotes)
     }
 
     private var visibleEntries: [TranscriptionHistoryEntry] {
@@ -149,6 +138,10 @@ struct HistorySettingsView: View {
         !historySearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var isNoteStatusFilterActive: Bool {
+        selectedNoteStatuses != Set(VoxtNoteStatus.allCases)
+    }
+
     private var emptyState: HistoryContentEmptyState {
         if selectedFilter == .note {
             return allNotes.isEmpty ? .noNotes : .none
@@ -157,7 +150,7 @@ struct HistorySettingsView: View {
     }
 
     private var emptyStateTitle: String {
-        if isSearchActive {
+        if isSearchActive || (isNoteTabSelected && isNoteStatusFilterActive) {
             return localized("No matching results")
         }
 
@@ -210,9 +203,12 @@ struct HistorySettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 12) {
                         HistoryFilterTabPicker(selectedTab: $selectedFilter)
+                        if isNoteTabSelected {
+                            HistoryNoteStatusFilterSelect(selection: $selectedNoteStatuses)
+                        }
                         Spacer(minLength: 12)
                         Button {
                             showHistorySearchDialog = true
@@ -220,7 +216,7 @@ struct HistorySettingsView: View {
                             SettingsSearchIconView()
                         }
                         .buttonStyle(SettingsCompactIconButtonStyle())
-                        .help(localized("Search History"))
+                        .help(localized(isNoteTabSelected ? "Search Notes" : "Search History"))
                         Button {
                             pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history
                         } label: {
@@ -228,16 +224,21 @@ struct HistorySettingsView: View {
                         }
                         .buttonStyle(HistoryToolbarDeleteButtonStyle())
                         .help(localized("Delete All"))
-                        .disabled(isNoteTabSelected ? allNotes.isEmpty : totalHistoryEntryCount == 0)
-                        Button {
-                            historyAudioStorageSelectionError = nil
-                            historyAudioExportResultMessage = nil
-                            isHistoryAudioSettingsPresented = true
-                        } label: {
-                            HistoryToolbarSettingsIcon(size: 16)
+                        .disabled(isNoteTabSelected ? noteStore.items.isEmpty : totalHistoryEntryCount == 0)
+                        if isNoteTabSelected {
+                            HistoryNoteViewPicker(selection: $noteViewMode)
                         }
-                        .buttonStyle(SettingsCompactIconButtonStyle())
-                        .help(localized("History Audio Settings"))
+                        if !isNoteTabSelected {
+                            Button {
+                                historyAudioStorageSelectionError = nil
+                                historyAudioExportResultMessage = nil
+                                isHistoryAudioSettingsPresented = true
+                            } label: {
+                                HistoryToolbarSettingsIcon(size: 16)
+                            }
+                            .buttonStyle(SettingsCompactIconButtonStyle())
+                            .help(localized("History Audio Settings"))
+                        }
                     }
 
                     if isSearchActive {
@@ -266,7 +267,6 @@ struct HistorySettingsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.vertical, 8)
             }
             .settingsNavigationAnchor(.historySettings)
             .settingsNavigationAnchor(.historyEntries)
@@ -309,8 +309,12 @@ struct HistorySettingsView: View {
         }
         .sheet(isPresented: $showHistorySearchDialog) {
             SettingsSearchDialog(
-                title: localized("Search History"),
-                placeholder: localized("Search text, title, app, or dictionary terms"),
+                title: localized(isNoteTabSelected ? "Search Notes" : "Search History"),
+                placeholder: localized(
+                    isNoteTabSelected
+                        ? "Search note titles or content"
+                        : "Search text, title, app, or dictionary terms"
+                ),
                 query: $historySearchText,
                 isPresented: $showHistorySearchDialog
             )
@@ -338,10 +342,17 @@ struct HistorySettingsView: View {
             applyNavigationTarget(navigationRequest?.target)
         }
         .onChange(of: selectedFilter) { _, _ in
+            noteVisibleLimit = notePageSize
             reloadHistoryEntries(reset: true)
         }
         .onChange(of: historySearchText) { _, _ in
+            noteVisibleLimit = notePageSize
+            linearCompletedVisibleLimit = 20
             reloadHistoryEntries(reset: true)
+        }
+        .onChange(of: selectedNoteStatuses) { _, _ in
+            noteVisibleLimit = notePageSize
+            linearCompletedVisibleLimit = 20
         }
         .onChange(of: historyCleanupEnabled) { _, _ in
             applyRetentionPolicyAndReload()
@@ -365,46 +376,187 @@ struct HistorySettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var notesList: some View {
-        let items = noteListItems
-        return PagedVerticalList(
-            items: items,
-            totalCount: items.count,
-            rowHeight: historyRowHeight,
-            rowSpacing: historyRowSpacing,
-            rowHeightForItem: noteRowHeight(for:),
-            isLoading: false,
-            onLoadMore: {}
-        ) { item in
-            switch item {
-            case .dayHeader(let date):
-                HistoryDayHeader(date: date)
-            case .note(let note):
-                NoteHistoryRow(
-                    item: note,
-                    onCopy: {
-                        copyStringToPasteboard(note.text)
-                        copiedNoteID = note.id
-                        showCopyToast()
-                        Task {
-                            try? await Task.sleep(for: .seconds(1.2))
-                            if copiedNoteID == note.id {
-                                copiedNoteID = nil
+        switch noteViewMode {
+        case .list:
+            groupedNotesList
+        case .linearCard:
+            linearNotesList
+        }
+    }
+
+    private var groupedNotesList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                ForEach(visibleNoteSections) { section in
+                    VStack(alignment: .leading, spacing: 4) {
+                        NoteHistorySectionHeader(
+                            status: section.status,
+                            count: allNotes.lazy.filter { $0.status == section.status }.count
+                        )
+
+                        LazyVStack(spacing: noteListRowSpacing) {
+                            ForEach(section.items) { note in
+                                noteHistoryRow(note, fixedHeight: noteHistoryRowHeight)
                             }
                         }
-                    },
-                    onToggleCompletion: {
-                        _ = noteStore.updateCompletion(!note.isCompleted, for: note.id)
-                    },
-                    onDelete: {
-                        copiedNoteID = nil
-                        noteStore.delete(id: note.id)
                     }
-                )
-                .padding(.vertical, historyRowVerticalInset)
+                }
+
+                if HistorySettingsData.hasMoreItems(in: allNotes, visibleLimit: noteVisibleLimit) {
+                    Button(localized("Load More")) {
+                        noteVisibleLimit = HistorySettingsData.nextVisibleLimit(
+                            currentLimit: noteVisibleLimit,
+                            pageSize: notePageSize,
+                            totalCount: allNotes.count
+                        )
+                    }
+                    .buttonStyle(SettingsPillButtonStyle())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
             }
+            .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var linearNotesList: some View {
+        GeometryReader { geometry in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(linearNoteStatuses) { status in
+                        linearNoteColumn(status)
+                    }
+                }
+                .frame(height: geometry.size.height, alignment: .top)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var linearNoteStatuses: [VoxtNoteStatus] {
+        HistorySettingsData.linearNoteSectionOrder.filter(selectedNoteStatuses.contains)
+    }
+
+    private func linearNoteColumn(_ status: VoxtNoteStatus) -> some View {
+        let allStatusNotes = allNotes.filter { $0.status == status }
+        let visibleStatusNotes = HistorySettingsData.visibleLinearNotes(
+            from: allNotes,
+            status: status,
+            completedVisibleLimit: linearCompletedVisibleLimit
+        )
+
+        return VStack(alignment: .leading, spacing: 4) {
+            NoteHistorySectionHeader(status: status, count: allStatusNotes.count)
+                .padding(.horizontal, 4)
+
+            ScrollView {
+                LazyVStack(spacing: historyRowSpacing) {
+                    if visibleStatusNotes.isEmpty {
+                        Text(localized("No notes yet"))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                    } else {
+                        ForEach(visibleStatusNotes) { note in
+                            noteHistoryRow(note, contentLineLimit: 5)
+                        }
+                    }
+
+                    if status == .done, visibleStatusNotes.count < allStatusNotes.count {
+                        NoteHistoryMoreButton {
+                            linearCompletedVisibleLimit = HistorySettingsData.nextVisibleLimit(
+                                currentLimit: linearCompletedVisibleLimit,
+                                pageSize: linearCompletedPageSize,
+                                totalCount: allStatusNotes.count
+                            )
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
+            }
+        }
+        .padding(6)
+        .frame(width: 260)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(
+            SettingsUIStyle.groupedFillColor,
+            in: RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+                .strokeBorder(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func noteHistoryRow(
+        _ note: VoxtNoteItem,
+        contentLineLimit: Int = 2,
+        fixedHeight: CGFloat? = nil
+    ) -> some View {
+        if let fixedHeight {
+            noteHistoryRowContent(
+                note,
+                contentLineLimit: contentLineLimit,
+                fixedHeight: fixedHeight
+            )
+        } else {
+            noteHistoryRowContent(note, contentLineLimit: contentLineLimit, fixedHeight: nil)
+                .padding(.vertical, historyRowVerticalInset)
+        }
+    }
+
+    private func noteHistoryRowContent(
+        _ note: VoxtNoteItem,
+        contentLineLimit: Int,
+        fixedHeight: CGFloat?
+    ) -> some View {
+        NoteHistoryRow(
+            item: note,
+            layout: noteViewMode == .linearCard ? .linearCard : .list,
+            contentLineLimit: contentLineLimit,
+            fixedHeight: fixedHeight,
+            onCopy: {
+                copyStringToPasteboard(note.text)
+                copiedNoteID = note.id
+                showCopyToast()
+                Task {
+                    try? await Task.sleep(for: .seconds(1.2))
+                    if copiedNoteID == note.id {
+                        copiedNoteID = nil
+                    }
+                }
+            },
+            onDoubleClick: {
+                _ = noteStore.performDoubleClickAction(for: note.id)
+            },
+            onSetStatus: { status in
+                _ = noteStore.setStatus(status, for: note.id)
+            },
+            onSetPriority: { priority in
+                _ = noteStore.setPriority(priority, for: note.id)
+            },
+            onRename: { title in
+                _ = noteStore.rename(note.id, to: title)
+            },
+            onUpdateDetails: { title, text in
+                noteStore.updateDetails(note.id, title: title, text: text)
+            },
+            onReorder: { draggedNoteID in
+                noteStore.reorder(noteID: draggedNoteID, relativeTo: note.id)
+            },
+            onDelete: {
+                copiedNoteID = nil
+                noteStore.delete(id: note.id)
+            }
+        )
     }
 
     @ViewBuilder
@@ -460,15 +612,6 @@ struct HistorySettingsView: View {
         case .dayHeader:
             return 32
         case .entry:
-            return historyRowHeight
-        }
-    }
-
-    private func noteRowHeight(for item: HistoryNoteListItem) -> CGFloat {
-        switch item {
-        case .dayHeader:
-            return 32
-        case .note:
             return historyRowHeight
         }
     }

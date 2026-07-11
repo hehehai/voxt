@@ -21,7 +21,7 @@ final class MainWindowVisibilityState: ObservableObject {
     @Published var isVisible = false
 }
 
-enum SessionOutputMode {
+nonisolated enum SessionOutputMode {
     case transcription
     case translation
     case rewrite
@@ -101,10 +101,8 @@ struct MainWindowNavigationCommands: Commands {
                 Button(AppLocalization.localizedString("Transcription")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
                 }
-                if noteEnabled {
-                    Button(AppLocalization.localizedString("Notes")) {
-                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
-                    }
+                Button(AppLocalization.localizedString("Notes")) {
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
                 }
                 Button(AppLocalization.localizedString("Translation")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .translation))
@@ -175,9 +173,6 @@ struct MainWindowNavigationCommands: Commands {
         }
     }
 
-    private var noteEnabled: Bool {
-        FeatureSettingsStore.load(defaults: .standard).transcription.notes.enabled
-    }
 }
 
 struct HelpNavigationCommands: Commands {
