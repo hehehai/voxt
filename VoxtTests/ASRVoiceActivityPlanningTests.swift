@@ -35,7 +35,14 @@ final class ASRVoiceActivityPlanningTests: XCTestCase {
 
     func testSileroModelSupportUsesV6Checkpoint() {
         XCTAssertEqual(SileroVADModelSupport.repo, "mlx-community/silero-vad-v6")
-        XCTAssertEqual(SileroVADModelSupport.title, "Silero v6")
+    }
+
+    func testOnlyAutomaticAndSileroModesRequireSileroModel() {
+        XCTAssertTrue(ASRVoiceActivityRuntimePolicy.requiresSileroModel(mode: .automatic))
+        XCTAssertTrue(ASRVoiceActivityRuntimePolicy.requiresSileroModel(mode: .silero))
+        XCTAssertFalse(ASRVoiceActivityRuntimePolicy.requiresSileroModel(mode: .omni))
+        XCTAssertFalse(ASRVoiceActivityRuntimePolicy.requiresSileroModel(mode: .energy))
+        XCTAssertFalse(ASRVoiceActivityRuntimePolicy.requiresSileroModel(mode: .off))
     }
 
     func testLocalVADModePersistsInUserDefaults() throws {

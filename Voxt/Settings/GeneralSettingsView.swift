@@ -86,7 +86,10 @@ struct GeneralSettingsView: View {
     private var localVADMode: Binding<LocalVADMode> {
         Binding(
             get: { LocalVADMode.resolved(rawValue: localVADModeRaw) },
-            set: { LocalVADMode.save($0) }
+            set: { mode in
+                LocalVADMode.save(mode)
+                SileroVADModelProvisioner.prefetchIfNeeded(for: mode)
+            }
         )
     }
 

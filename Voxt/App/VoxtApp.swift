@@ -482,6 +482,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        SileroVADModelProvisioner.prefetchIfNeeded(for: LocalVADMode.stored())
         RemoteModelConfigurationStore.migrateLegacyStoredSecrets()
 
         synchronizeAppActivationPolicy()
