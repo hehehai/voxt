@@ -105,6 +105,54 @@ final class HistorySettingsDataTests: XCTestCase {
         )
     }
 
+    func testNoteSectionsUseFloatPanelStatusOrderAndPreserveItemOrder() {
+        let todo = makeNote(title: "Todo", status: .todo, updatedAt: 10)
+        let progress = makeNote(title: "Progress", status: .inProgress, updatedAt: 30)
+        let done = makeNote(title: "Done", status: .done, updatedAt: 20)
+        let backlog = makeNote(title: "Backlog", status: .backlog, updatedAt: 40)
+
+        let sections = HistorySettingsData.noteSections(
+            from: [todo, progress, done, backlog]
+        )
+
+        XCTAssertEqual(sections.map(\.status), [.inProgress, .todo, .done, .backlog])
+        XCTAssertEqual(sections.flatMap(\.items).map(\.id), [progress.id, todo.id, done.id, backlog.id])
+    }
+
+    func testLinearNoteSectionsUseBacklogFirstOrder() {
+        XCTAssertEqual(
+            HistorySettingsData.linearNoteSectionOrder,
+            [.backlog, .inProgress, .todo, .done]
+        )
+    }
+
+    func testLinearNotesOnlyLimitCompletedItems() {
+        let todoNotes = (0..<3).map {
+            makeNote(title: "Todo \($0)", status: .todo, updatedAt: TimeInterval($0))
+        }
+        let doneNotes = (0..<25).map {
+            makeNote(title: "Done \($0)", status: .done, updatedAt: TimeInterval($0))
+        }
+        let notes = todoNotes + doneNotes
+
+        XCTAssertEqual(
+            HistorySettingsData.visibleLinearNotes(
+                from: notes,
+                status: .todo,
+                completedVisibleLimit: 20
+            ).count,
+            3
+        )
+        XCTAssertEqual(
+            HistorySettingsData.visibleLinearNotes(
+                from: notes,
+                status: .done,
+                completedVisibleLimit: 20
+            ).count,
+            20
+        )
+    }
+
     func testNoteStatusToggleNeverLeavesAnEmptySelection() {
         XCTAssertEqual(
             HistorySettingsData.toggledNoteStatuses([.todo], status: .todo),

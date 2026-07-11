@@ -69,12 +69,16 @@ struct HistorySettingsView: View {
     @State private var suppressedStoreHistoryReloadCount = 0
     @State private var selectedNoteStatuses = Set(VoxtNoteStatus.allCases)
     @State private var noteVisibleLimit = 80
+    @State private var noteViewMode: HistoryNoteViewMode = .linearCard
+    @State private var linearCompletedVisibleLimit = 20
 
     private let historyPageSize = 80
     private let notePageSize = 80
+    private let linearCompletedPageSize = 10
     private let historyRowHeight: CGFloat = 74
-    private let noteHistoryRowHeight: CGFloat = 96
+    private let noteHistoryRowHeight: CGFloat = 68
     private let historyRowSpacing: CGFloat = 2
+    private let noteListRowSpacing: CGFloat = 6
     private let historyRowVerticalInset: CGFloat = 4
 
     private var historyRetentionPeriod: HistoryRetentionPeriod {
@@ -82,15 +86,23 @@ struct HistorySettingsView: View {
     }
 
     private var allNotes: [VoxtNoteItem] {
-        HistorySettingsData.filteredNotes(
+        let matchingIDs = Set(HistorySettingsData.filteredNotes(
             noteStore.items,
             statuses: selectedNoteStatuses,
             query: historySearchText
-        )
+        ).map(\.id))
+
+        return HistorySettingsData.noteSectionOrder.flatMap { status in
+            noteStore.orderedItems(for: status).filter { matchingIDs.contains($0.id) }
+        }
     }
 
     private var visibleNotes: [VoxtNoteItem] {
         HistorySettingsData.visibleEntries(from: allNotes, visibleLimit: noteVisibleLimit)
+    }
+
+    private var visibleNoteSections: [VoxtNoteSectionSnapshot] {
+        HistorySettingsData.noteSections(from: visibleNotes)
     }
 
     private var visibleEntries: [TranscriptionHistoryEntry] {
@@ -191,7 +203,7 @@ struct HistorySettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 12) {
                         HistoryFilterTabPicker(selectedTab: $selectedFilter)
                         if isNoteTabSelected {
@@ -213,6 +225,9 @@ struct HistorySettingsView: View {
                         .buttonStyle(HistoryToolbarDeleteButtonStyle())
                         .help(localized("Delete All"))
                         .disabled(isNoteTabSelected ? noteStore.items.isEmpty : totalHistoryEntryCount == 0)
+                        if isNoteTabSelected {
+                            HistoryNoteViewPicker(selection: $noteViewMode)
+                        }
                         if !isNoteTabSelected {
                             Button {
                                 historyAudioStorageSelectionError = nil
@@ -252,7 +267,6 @@ struct HistorySettingsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.vertical, 8)
             }
             .settingsNavigationAnchor(.historySettings)
             .settingsNavigationAnchor(.historyEntries)
@@ -333,10 +347,12 @@ struct HistorySettingsView: View {
         }
         .onChange(of: historySearchText) { _, _ in
             noteVisibleLimit = notePageSize
+            linearCompletedVisibleLimit = 20
             reloadHistoryEntries(reset: true)
         }
         .onChange(of: selectedNoteStatuses) { _, _ in
             noteVisibleLimit = notePageSize
+            linearCompletedVisibleLimit = 20
         }
         .onChange(of: historyCleanupEnabled) { _, _ in
             applyRetentionPolicyAndReload()
@@ -360,58 +376,187 @@ struct HistorySettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var notesList: some View {
-        return PagedVerticalList(
-            items: visibleNotes,
-            totalCount: allNotes.count,
-            rowHeight: historyRowHeight,
-            rowSpacing: historyRowSpacing,
-            rowHeightForItem: noteRowHeight(for:),
-            isLoading: false,
-            onLoadMore: {
-                noteVisibleLimit = HistorySettingsData.nextVisibleLimit(
-                    currentLimit: noteVisibleLimit,
-                    pageSize: notePageSize,
-                    totalCount: allNotes.count
-                )
-            }
-        ) { note in
-            NoteHistoryRow(
-                item: note,
-                onCopy: {
-                    copyStringToPasteboard(note.text)
-                    copiedNoteID = note.id
-                    showCopyToast()
-                    Task {
-                        try? await Task.sleep(for: .seconds(1.2))
-                        if copiedNoteID == note.id {
-                            copiedNoteID = nil
+        switch noteViewMode {
+        case .list:
+            groupedNotesList
+        case .linearCard:
+            linearNotesList
+        }
+    }
+
+    private var groupedNotesList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                ForEach(visibleNoteSections) { section in
+                    VStack(alignment: .leading, spacing: 4) {
+                        NoteHistorySectionHeader(
+                            status: section.status,
+                            count: allNotes.lazy.filter { $0.status == section.status }.count
+                        )
+
+                        LazyVStack(spacing: noteListRowSpacing) {
+                            ForEach(section.items) { note in
+                                noteHistoryRow(note, fixedHeight: noteHistoryRowHeight)
+                            }
                         }
                     }
-                },
-                onToggleCompletion: {
-                    _ = noteStore.performPrimaryAction(for: note.id)
-                },
-                onSetStatus: { status in
-                    _ = noteStore.setStatus(status, for: note.id)
-                },
-                onSetPriority: { priority in
-                    _ = noteStore.setPriority(priority, for: note.id)
-                },
-                    onRename: { title in
-                        _ = noteStore.rename(note.id, to: title)
-                    },
-                    onUpdateDetails: { title, text in
-                        noteStore.updateDetails(note.id, title: title, text: text)
-                    },
-                    onDelete: {
-                    copiedNoteID = nil
-                    noteStore.delete(id: note.id)
                 }
-            )
-            .padding(.vertical, historyRowVerticalInset)
+
+                if HistorySettingsData.hasMoreItems(in: allNotes, visibleLimit: noteVisibleLimit) {
+                    Button(localized("Load More")) {
+                        noteVisibleLimit = HistorySettingsData.nextVisibleLimit(
+                            currentLimit: noteVisibleLimit,
+                            pageSize: notePageSize,
+                            totalCount: allNotes.count
+                        )
+                    }
+                    .buttonStyle(SettingsPillButtonStyle())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+            }
+            .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var linearNotesList: some View {
+        GeometryReader { geometry in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(linearNoteStatuses) { status in
+                        linearNoteColumn(status)
+                    }
+                }
+                .frame(height: geometry.size.height, alignment: .top)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var linearNoteStatuses: [VoxtNoteStatus] {
+        HistorySettingsData.linearNoteSectionOrder.filter(selectedNoteStatuses.contains)
+    }
+
+    private func linearNoteColumn(_ status: VoxtNoteStatus) -> some View {
+        let allStatusNotes = allNotes.filter { $0.status == status }
+        let visibleStatusNotes = HistorySettingsData.visibleLinearNotes(
+            from: allNotes,
+            status: status,
+            completedVisibleLimit: linearCompletedVisibleLimit
+        )
+
+        return VStack(alignment: .leading, spacing: 4) {
+            NoteHistorySectionHeader(status: status, count: allStatusNotes.count)
+                .padding(.horizontal, 4)
+
+            ScrollView {
+                LazyVStack(spacing: historyRowSpacing) {
+                    if visibleStatusNotes.isEmpty {
+                        Text(localized("No notes yet"))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                    } else {
+                        ForEach(visibleStatusNotes) { note in
+                            noteHistoryRow(note, contentLineLimit: 5)
+                        }
+                    }
+
+                    if status == .done, visibleStatusNotes.count < allStatusNotes.count {
+                        NoteHistoryMoreButton {
+                            linearCompletedVisibleLimit = HistorySettingsData.nextVisibleLimit(
+                                currentLimit: linearCompletedVisibleLimit,
+                                pageSize: linearCompletedPageSize,
+                                totalCount: allStatusNotes.count
+                            )
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
+            }
+        }
+        .padding(6)
+        .frame(width: 260)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(
+            SettingsUIStyle.groupedFillColor,
+            in: RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
+                .strokeBorder(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func noteHistoryRow(
+        _ note: VoxtNoteItem,
+        contentLineLimit: Int = 2,
+        fixedHeight: CGFloat? = nil
+    ) -> some View {
+        if let fixedHeight {
+            noteHistoryRowContent(
+                note,
+                contentLineLimit: contentLineLimit,
+                fixedHeight: fixedHeight
+            )
+        } else {
+            noteHistoryRowContent(note, contentLineLimit: contentLineLimit, fixedHeight: nil)
+                .padding(.vertical, historyRowVerticalInset)
+        }
+    }
+
+    private func noteHistoryRowContent(
+        _ note: VoxtNoteItem,
+        contentLineLimit: Int,
+        fixedHeight: CGFloat?
+    ) -> some View {
+        NoteHistoryRow(
+            item: note,
+            layout: noteViewMode == .linearCard ? .linearCard : .list,
+            contentLineLimit: contentLineLimit,
+            fixedHeight: fixedHeight,
+            onCopy: {
+                copyStringToPasteboard(note.text)
+                copiedNoteID = note.id
+                showCopyToast()
+                Task {
+                    try? await Task.sleep(for: .seconds(1.2))
+                    if copiedNoteID == note.id {
+                        copiedNoteID = nil
+                    }
+                }
+            },
+            onDoubleClick: {
+                _ = noteStore.performDoubleClickAction(for: note.id)
+            },
+            onSetStatus: { status in
+                _ = noteStore.setStatus(status, for: note.id)
+            },
+            onSetPriority: { priority in
+                _ = noteStore.setPriority(priority, for: note.id)
+            },
+            onRename: { title in
+                _ = noteStore.rename(note.id, to: title)
+            },
+            onUpdateDetails: { title, text in
+                noteStore.updateDetails(note.id, title: title, text: text)
+            },
+            onReorder: { draggedNoteID in
+                noteStore.reorder(noteID: draggedNoteID, relativeTo: note.id)
+            },
+            onDelete: {
+                copiedNoteID = nil
+                noteStore.delete(id: note.id)
+            }
+        )
     }
 
     @ViewBuilder
@@ -469,10 +614,6 @@ struct HistorySettingsView: View {
         case .entry:
             return historyRowHeight
         }
-    }
-
-    private func noteRowHeight(for item: VoxtNoteItem) -> CGFloat {
-        noteHistoryRowHeight
     }
 
     private var historySearchListHeight: CGFloat {

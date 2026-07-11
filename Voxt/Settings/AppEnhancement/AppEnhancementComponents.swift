@@ -3,6 +3,10 @@
 
 import SwiftUI
 
+enum AppEnhancementToolbarMetrics {
+    static let controlHeight: CGFloat = 26
+}
+
 struct SourceTabPicker: View {
     @Binding var selectedTab: SourceTab
 
@@ -30,7 +34,7 @@ struct SourceTabPicker: View {
             }
         }
         .padding(2)
-        .frame(width: 154)
+        .frame(width: 154, height: AppEnhancementToolbarMetrics.controlHeight)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(SettingsUIStyle.controlFillColor)

@@ -117,12 +117,10 @@ extension FeatureSettingsView {
                             ),
                             range: 0.1...2.0
                         )
-
-                        Text(featureSettingsLocalized("macOS Hot Corners may activate at the same time."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
+
+                Divider()
 
                 FeatureSettingSection(
                     title: "",

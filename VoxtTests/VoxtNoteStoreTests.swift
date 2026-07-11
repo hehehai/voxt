@@ -235,6 +235,30 @@ final class VoxtNoteStoreTests: XCTestCase {
         XCTAssertEqual(store.orderedItems(for: .done).map(\.id), [second.id, first.id])
     }
 
+    func testDoubleClickActionUsesTheSameStatusTransitionsAsTheFloatPanel() throws {
+        let store = VoxtNoteStore(inMemory: true)
+        let item = try XCTUnwrap(store.append(
+            sessionID: UUID(),
+            text: "Shared double-click behavior",
+            title: "Double click",
+            titleGenerationState: .fallback
+        ))
+
+        XCTAssertTrue(store.performDoubleClickAction(for: item.id))
+        XCTAssertEqual(store.items.first(where: { $0.id == item.id })?.status, .inProgress)
+
+        XCTAssertTrue(store.performDoubleClickAction(for: item.id))
+        XCTAssertEqual(store.items.first(where: { $0.id == item.id })?.status, .todo)
+
+        XCTAssertTrue(store.setStatus(.backlog, for: item.id))
+        XCTAssertTrue(store.performDoubleClickAction(for: item.id))
+        XCTAssertEqual(store.items.first(where: { $0.id == item.id })?.status, .todo)
+
+        XCTAssertTrue(store.setStatus(.done, for: item.id))
+        XCTAssertFalse(store.performDoubleClickAction(for: item.id))
+        XCTAssertEqual(store.items.first(where: { $0.id == item.id })?.status, .done)
+    }
+
     func testGeneratedTitleDoesNotOverwriteUserRename() throws {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

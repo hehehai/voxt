@@ -7,10 +7,12 @@ import UniformTypeIdentifiers
 
 struct VoxtNoteDragPayload: Sendable {
     let text: String
+    var noteID: UUID? = nil
 
     func itemProvider() -> NSItemProvider {
         let provider = NSItemProvider()
         let plainText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        provider.suggestedName = noteID?.uuidString
         provider.registerObject(plainText as NSString, visibility: .all)
         provider.registerDataRepresentation(
             forTypeIdentifier: UTType.utf8PlainText.identifier,
@@ -295,7 +297,7 @@ private struct VoxtNoteSectionView: View {
     }
 }
 
-private struct VoxtNoteStatusMark: View {
+struct VoxtNoteStatusMark: View {
     let status: VoxtNoteStatus
     let priority: VoxtNotePriority
     var size: CGFloat = 15
@@ -577,17 +579,9 @@ private struct VoxtNoteListRow: View {
             .buttonStyle(.plain)
             .help(String(localized: "Save title"))
         } else {
-            Menu {
+            AppSVGMenuButton(icon: .more) {
                 noteActions
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
             .opacity(isHovering ? 1 : 0.38)
             .help(String(localized: "Note actions"))
         }
@@ -595,16 +589,22 @@ private struct VoxtNoteListRow: View {
 
     @ViewBuilder
     private var noteActions: some View {
-        Button(String(localized: "View note…"), systemImage: "doc.text.magnifyingglass") {
+        Button {
             showDetail()
+        } label: {
+            AppSVGMenuLabel(title: String(localized: "View note…"), icon: .viewDetails)
         }
 
-        Button(String(localized: "Edit title…"), systemImage: "pencil") {
+        Button {
             uiState.beginEditing(item.id)
+        } label: {
+            AppSVGMenuLabel(title: String(localized: "Edit title…"), icon: .edit)
         }
 
-        Button(String(localized: "Copy"), systemImage: "doc.on.doc") {
+        Button {
             copyBody()
+        } label: {
+            AppSVGMenuLabel(title: String(localized: "Copy"), icon: .copy)
         }
 
         Menu(String(localized: "Priority")) {
@@ -637,8 +637,10 @@ private struct VoxtNoteListRow: View {
 
         Divider()
 
-        Button(String(localized: "Delete"), systemImage: "trash", role: .destructive) {
+        Button(role: .destructive) {
             store.delete(id: item.id)
+        } label: {
+            AppSVGMenuLabel(title: String(localized: "Delete"), icon: .delete, color: .red)
         }
     }
 

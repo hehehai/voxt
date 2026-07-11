@@ -21,6 +21,14 @@ final class VoxtNoteDragPayloadTests: XCTestCase {
         }
         wait(for: [loaded], timeout: 1)
     }
+
+    func testDragPayloadCarriesNoteIdentityForInternalReordering() {
+        let noteID = UUID()
+        let provider = VoxtNoteDragPayload(text: "Reorder me", noteID: noteID).itemProvider()
+
+        XCTAssertEqual(provider.suggestedName, noteID.uuidString)
+        XCTAssertTrue(provider.hasItemConformingToTypeIdentifier(UTType.utf8PlainText.identifier))
+    }
 }
 
 final class VoxtNoteCompletedPaginationTests: XCTestCase {

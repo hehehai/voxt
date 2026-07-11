@@ -87,6 +87,7 @@ struct SettingsFixedSelectionBlock: View {
 
 struct SettingsSelectionButton<Label: View>: View {
     let width: CGFloat
+    var height: CGFloat = 34
     let action: () -> Void
     @ViewBuilder let label: () -> Label
 
@@ -106,7 +107,7 @@ struct SettingsSelectionButton<Label: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(SettingsSelectLikeButtonStyle())
+        .buttonStyle(SettingsSelectLikeButtonStyle(height: height))
         .frame(width: resolvedWidth)
     }
 }
@@ -152,13 +153,16 @@ struct SettingsPathSelectionRow: View {
 }
 
 struct SettingsSelectLikeButtonStyle: ButtonStyle {
+    var height: CGFloat = 34
+
     func makeBody(configuration: Configuration) -> some View {
-        SettingsSelectLikeButtonBody(configuration: configuration)
+        SettingsSelectLikeButtonBody(configuration: configuration, height: height)
     }
 }
 
 private struct SettingsSelectLikeButtonBody: View {
     let configuration: SettingsSelectLikeButtonStyle.Configuration
+    let height: CGFloat
     @State private var isHovered = false
 
     var body: some View {
@@ -166,7 +170,7 @@ private struct SettingsSelectLikeButtonBody: View {
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(.primary)
             .padding(.horizontal, 12)
-            .frame(height: 34)
+            .frame(height: height)
             .background(
                 RoundedRectangle(cornerRadius: SettingsUIStyle.controlCornerRadius, style: .continuous)
                     .fill(SettingsUIStyle.controlFillColor)

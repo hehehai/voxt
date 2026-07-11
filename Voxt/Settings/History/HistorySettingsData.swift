@@ -24,6 +24,9 @@ enum HistoryContentEmptyState: Equatable {
 }
 
 enum HistorySettingsData {
+    static let noteSectionOrder: [VoxtNoteStatus] = [.inProgress, .todo, .done, .backlog]
+    static let linearNoteSectionOrder: [VoxtNoteStatus] = [.backlog, .inProgress, .todo, .done]
+
     static func filteredEntries(
         for filter: HistoryFilterTab,
         allEntries: [TranscriptionHistoryEntry]
@@ -94,6 +97,24 @@ enum HistorySettingsData {
                 }
                 return lhs.id.uuidString < rhs.id.uuidString
             }
+    }
+
+    static func noteSections(from notes: [VoxtNoteItem]) -> [VoxtNoteSectionSnapshot] {
+        noteSectionOrder.compactMap { status in
+            let items = notes.filter { $0.status == status }
+            guard !items.isEmpty else { return nil }
+            return VoxtNoteSectionSnapshot(status: status, items: items)
+        }
+    }
+
+    static func visibleLinearNotes(
+        from notes: [VoxtNoteItem],
+        status: VoxtNoteStatus,
+        completedVisibleLimit: Int
+    ) -> [VoxtNoteItem] {
+        let matchingNotes = notes.filter { $0.status == status }
+        guard status == .done else { return matchingNotes }
+        return Array(matchingNotes.prefix(max(0, completedVisibleLimit)))
     }
 
     static func toggledNoteStatuses(
