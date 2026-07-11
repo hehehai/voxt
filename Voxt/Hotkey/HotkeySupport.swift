@@ -1078,17 +1078,17 @@ nonisolated struct HotkeyPreference {
                 translation: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .shift], sidedModifiers: [.rightCommand, .rightShift]),
                 rewrite: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption]),
                 meeting: Hotkey(keyCode: UInt16(kVK_ANSI_L), modifiers: [.command], sidedModifiers: [.rightCommand]),
-                note: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.function, .command], sidedModifiers: []),
+                note: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.option], sidedModifiers: [.rightOption]),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: [])
             )
         case .mouseMiddleFnShift:
             return PresetHotkeys(
-                distinguishSides: false,
+                distinguishSides: true,
                 transcription: Hotkey(mouseButtonNumber: middleMouseButtonNumber),
                 translation: Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
                 rewrite: Hotkey(mouseButtonNumber: middleMouseButtonNumber),
                 meeting: Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: []),
-                note: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.function, .command], sidedModifiers: []),
+                note: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command], sidedModifiers: [.rightCommand]),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: []),
                 triggerMode: .tap,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey

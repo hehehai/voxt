@@ -48,6 +48,26 @@ final class HotkeySupportTests: XCTestCase {
         XCTAssertEqual(preset?.noteBindings.first?.behavior, .tap)
     }
 
+    func testCommandPresetUsesRightOptionForNotes() {
+        let preset = HotkeyPreference.presetHotkeys(for: .commandCombo)
+
+        XCTAssertTrue(preset?.distinguishSides == true)
+        XCTAssertEqual(preset?.note.keyCode, HotkeyPreference.modifierOnlyKeyCode)
+        XCTAssertEqual(preset?.note.modifiers, [.option])
+        XCTAssertEqual(preset?.note.sidedModifiers, [.rightOption])
+        XCTAssertEqual(preset?.noteBindings.first?.behavior, .tap)
+    }
+
+    func testMouseMiddlePresetUsesRightCommandForNotes() {
+        let preset = HotkeyPreference.presetHotkeys(for: .mouseMiddleFnShift)
+
+        XCTAssertTrue(preset?.distinguishSides == true)
+        XCTAssertEqual(preset?.note.keyCode, HotkeyPreference.modifierOnlyKeyCode)
+        XCTAssertEqual(preset?.note.modifiers, [.command])
+        XCTAssertEqual(preset?.note.sidedModifiers, [.rightCommand])
+        XCTAssertEqual(preset?.noteBindings.first?.behavior, .tap)
+    }
+
     func testGlobalShortcutValidationAllowsBareKeyboardKey() {
         XCTAssertTrue(
             HotkeyPreference.isAllowedGlobalShortcut(
