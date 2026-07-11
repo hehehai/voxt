@@ -25,22 +25,24 @@ extension AppDelegate {
         case .schedule:
             break
         case .skipTextNotInjected:
-            VoxtLog.dictionary("Automatic dictionary learning skipped: text was not injected.")
+            VoxtLog.dictionary("Automatic dictionary learning skipped: text was not injected.", verbose: true)
             return
         case .skipNonTranscriptionOutput:
             VoxtLog.dictionary(
-                "Automatic dictionary learning skipped: output mode is \(RecordingSessionSupport.outputLabel(for: outputMode))."
+                "Automatic dictionary learning skipped: output mode is \(RecordingSessionSupport.outputLabel(for: outputMode)).",
+                verbose: true
             )
             return
         case .skipFeatureDisabled:
-            VoxtLog.dictionary("Automatic dictionary learning skipped: feature disabled.")
+            VoxtLog.dictionary("Automatic dictionary learning skipped: feature disabled.", verbose: true)
             return
         case .skipEmptyText:
-            VoxtLog.dictionary("Automatic dictionary learning skipped: inserted text is empty.")
+            VoxtLog.dictionary("Automatic dictionary learning skipped: inserted text is empty.", verbose: true)
             return
         case .skipAutoKeyPress:
             VoxtLog.dictionary(
-                "Automatic dictionary learning skipped: app enhancement auto key press was triggered."
+                "Automatic dictionary learning skipped: app enhancement auto key press was triggered.",
+                verbose: true
             )
             return
         }

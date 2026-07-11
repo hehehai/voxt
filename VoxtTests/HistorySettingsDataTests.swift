@@ -81,6 +81,44 @@ final class HistorySettingsDataTests: XCTestCase {
         XCTAssertEqual(HistorySettingsData.nextVisibleLimit(currentLimit: 3, pageSize: 2, totalCount: 5), 5)
         XCTAssertEqual(HistorySettingsData.normalizedVisibleLimit(currentLimit: 1, pageSize: 4, totalCount: 2), 4)
     }
+
+    func testNoteFilteringSupportsSingleAndMultipleStatuses() {
+        let todo = makeNote(title: "Todo", status: .todo, updatedAt: 10)
+        let progress = makeNote(title: "Progress", status: .inProgress, updatedAt: 30)
+        let done = makeNote(title: "Done", status: .done, updatedAt: 20)
+
+        XCTAssertEqual(
+            HistorySettingsData.filteredNotes(
+                [todo, progress, done],
+                statuses: [.inProgress],
+                query: ""
+            ).map(\.id),
+            [progress.id]
+        )
+        XCTAssertEqual(
+            HistorySettingsData.filteredNotes(
+                [todo, progress, done],
+                statuses: [.inProgress, .done],
+                query: ""
+            ).map(\.id),
+            [progress.id, done.id]
+        )
+    }
+
+    func testNoteStatusToggleNeverLeavesAnEmptySelection() {
+        XCTAssertEqual(
+            HistorySettingsData.toggledNoteStatuses([.todo], status: .todo),
+            [.todo]
+        )
+        XCTAssertEqual(
+            HistorySettingsData.toggledNoteStatuses([.todo, .done], status: .done),
+            [.todo]
+        )
+        XCTAssertEqual(
+            HistorySettingsData.toggledNoteStatuses([.todo], status: .done),
+            [.todo, .done]
+        )
+    }
 }
 
 private extension HistorySettingsDataTests {
@@ -118,14 +156,20 @@ private extension HistorySettingsDataTests {
         )
     }
 
-    func makeNote(title: String) -> VoxtNoteItem {
+    func makeNote(
+        title: String,
+        status: VoxtNoteStatus = .todo,
+        updatedAt: TimeInterval = 1
+    ) -> VoxtNoteItem {
         VoxtNoteItem(
             id: UUID(),
             sessionID: UUID(),
             createdAt: Date(timeIntervalSince1970: 1),
             text: title,
             title: title,
-            titleGenerationState: .generated
+            titleGenerationState: .generated,
+            updatedAt: Date(timeIntervalSince1970: updatedAt),
+            status: status
         )
     }
 }

@@ -9,6 +9,92 @@ import IOKit.hidsystem
 
 @MainActor
 final class HotkeySupportTests: XCTestCase {
+    func testNoteShortcutsAlwaysLoadAsMultipleTapBindings() {
+        let suiteName = "HotkeySupportTests.note.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let hotkey = HotkeyPreference.Hotkey(
+            keyCode: UInt16(kVK_ANSI_N),
+            modifiers: [.command],
+            sidedModifiers: []
+        )
+
+        HotkeyPreference.saveNoteBindings([
+            .init(hotkey: hotkey, behavior: .doubleTap),
+            .init(
+                hotkey: HotkeyPreference.Hotkey(
+                    keyCode: UInt16(kVK_ANSI_B),
+                    modifiers: [],
+                    sidedModifiers: []
+                ),
+                behavior: .longPress
+            )
+        ], defaults: defaults)
+
+        let loaded = HotkeyPreference.loadNoteBindings(defaults: defaults)
+        XCTAssertEqual(loaded.count, 2)
+        XCTAssertEqual(loaded.first?.hotkey, hotkey)
+        XCTAssertTrue(loaded.allSatisfy { $0.behavior == .tap })
+        XCTAssertEqual(loaded.last?.hotkey.keyCode, UInt16(kVK_ANSI_B))
+    }
+
+    func testFnPresetUsesRightCommandForNotes() {
+        let preset = HotkeyPreference.presetHotkeys(for: .fnCombo)
+
+        XCTAssertTrue(preset?.distinguishSides == true)
+        XCTAssertEqual(preset?.note.keyCode, HotkeyPreference.modifierOnlyKeyCode)
+        XCTAssertEqual(preset?.note.modifiers, [.command])
+        XCTAssertEqual(preset?.note.sidedModifiers, [.rightCommand])
+        XCTAssertEqual(preset?.noteBindings.first?.behavior, .tap)
+    }
+
+    func testGlobalShortcutValidationAllowsBareKeyboardKey() {
+        XCTAssertTrue(
+            HotkeyPreference.isAllowedGlobalShortcut(
+                HotkeyPreference.Hotkey(
+                    keyCode: UInt16(kVK_ANSI_F),
+                    modifiers: [],
+                    sidedModifiers: []
+                )
+            )
+        )
+    }
+
+    func testGlobalShortcutValidationAllowsRightCommandModifierOnly() {
+        XCTAssertTrue(
+            HotkeyPreference.isAllowedGlobalShortcut(
+                HotkeyPreference.Hotkey(
+                    keyCode: HotkeyPreference.modifierOnlyKeyCode,
+                    modifiers: [.command],
+                    sidedModifiers: [.rightCommand]
+                )
+            )
+        )
+    }
+
+    func testGlobalShortcutValidationRejectsUnsupportedKeyboardKeyCode() {
+        XCTAssertFalse(
+            HotkeyPreference.isAllowedGlobalShortcut(
+                HotkeyPreference.Hotkey(
+                    keyCode: 179,
+                    modifiers: [],
+                    sidedModifiers: []
+                )
+            )
+        )
+    }
+
+    func testRecorderIgnoresUnsupportedKeyboardKeyCode() async {
+        let recorder = KeyCaptureView()
+        var capturedHotkey: HotkeyPreference.Hotkey?
+        recorder.onHotkeyCaptured = { capturedHotkey = $0 }
+
+        recorder.debugCaptureKeyDownForTests(keyCode: 179)
+        await Task.yield()
+
+        XCTAssertNil(capturedHotkey)
+    }
+
     func testLoadCanonicalizesStoredFunctionModifierHotkey() {
         let defaults = UserDefaults.standard
         let presetKey = AppPreferenceKey.hotkeyPreset

@@ -117,7 +117,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let historyStore = TranscriptionHistoryStore()
-    let noteStore = VoxtNoteStore()
+    lazy var noteStore = VoxtNoteStore(inMemory: VoxtRuntimeEnvironment.isRunningUnitTests)
     let noteObsidianExportStore = VoxtNoteObsidianExportStore()
     let noteRemindersExportStore = VoxtNoteRemindersExportStore()
     let dictionaryStore = DictionaryStore()
@@ -132,7 +132,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let meetingOverlayWindow = MeetingOverlayWindow()
     let meetingDetailWindowManager = MeetingDetailWindowManager.shared
     let overlayState = OverlayState()
-    lazy var noteWindowManager = VoxtNoteWindowManager(store: noteStore)
+    lazy var noteWindowManager = VoxtNoteWindowManager(
+        store: noteStore,
+        settingsProvider: { [weak self] in
+            self?.noteFeatureSettings.panel ?? .init()
+        },
+        onOpenSettings: { [weak self] in
+            self?.openMainWindow(
+                target: SettingsNavigationTarget(tab: .feature, featureTab: .note)
+            )
+        }
+    )
     lazy var noteObsidianSyncCoordinator = VoxtObsidianSyncCoordinator(
         noteStore: noteStore,
         settingsProvider: { [weak self] in
@@ -547,10 +557,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refreshOverlayShortcutEventGate()
+                self?.noteWindowManager.updateLifecycle(
+                    isEnabled: true
+                )
                 self?.buildMenu()
                 self?.scheduleLLMIdleWarmupIfNeeded()
             }
         }
+
+        noteWindowManager.updateLifecycle(isEnabled: true)
 
         setupHotkey()
         setupLifecycleRecoveryObservers()
@@ -664,7 +679,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         pendingMeetingStartupTask?.cancel()
         pendingMeetingStartupTask = nil
         meetingDetailWindowManager.closeLiveWindow()
-        noteWindowManager.hide()
+        noteWindowManager.stop()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
     }
 

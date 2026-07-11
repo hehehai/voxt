@@ -765,7 +765,7 @@ extension AppDelegate {
             try? FileManager.default.removeItem(at: pendingCompletedHistoryAudioArchiveURL)
         }
         pendingCompletedHistoryAudioArchiveURL = url
-        VoxtLog.history("Pending history audio archive stashed. file=\(url.lastPathComponent)")
+        VoxtLog.history("Pending history audio archive stashed. file=\(url.lastPathComponent)", verbose: true)
     }
 
     private func importConsumedAudioArchiveIfNeeded(
@@ -784,7 +784,8 @@ extension AppDelegate {
         let exists = FileManager.default.fileExists(atPath: sourceURL.path)
         guard historyAudioStorageEnabled else {
             VoxtLog.history(
-                "History audio import skipped because storage is disabled. kind=\(kind.rawValue), file=\(sourceURL.lastPathComponent), exists=\(exists)"
+                "History audio import skipped because storage is disabled. kind=\(kind.rawValue), file=\(sourceURL.lastPathComponent), exists=\(exists)",
+                verbose: true
             )
             return nil
         }

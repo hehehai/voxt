@@ -11,6 +11,7 @@ struct FeatureSettingsView: View {
     @ObservedObject var sherpaOnnxModelManager: SherpaOnnxModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var ggufTranslationModelManager: GGUFTranslationModelManager
+    @ObservedObject var noteStore: VoxtNoteStore
     @StateObject var meetingDiarizationModelManager = MeetingDiarizationModelManager()
 
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""

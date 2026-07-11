@@ -158,7 +158,7 @@ extension AppDelegate {
             return
         }
 
-        VoxtLog.input("Commit transcription entered. characters=\(text.count)")
+        VoxtLog.input("Commit transcription entered. characters=\(text.count)", verbose: true)
 
         let context = Self.preparedDeliveryContext(
             originalText: text,
@@ -180,7 +180,8 @@ extension AppDelegate {
         )
 
         VoxtLog.input(
-            "Commit transcription prepared payload. inputChars=\(text.count), outputChars=\(context.outputText.count), hasRewritePayload=\(context.rewriteAnswerPayload != nil), dictionaryMatches=\(context.dictionaryMatches.count), dictionaryCorrections=\(context.dictionaryCorrectedTerms.count)"
+            "Commit transcription prepared payload. inputChars=\(text.count), outputChars=\(context.outputText.count), hasRewritePayload=\(context.rewriteAnswerPayload != nil), dictionaryMatches=\(context.dictionaryMatches.count), dictionaryCorrections=\(context.dictionaryCorrectedTerms.count)",
+            verbose: true
         )
 
         deliverCommittedOutput(context) { [weak self] didInject, didTriggerAutoKeyPress in
@@ -523,7 +524,8 @@ extension AppDelegate {
             deliveryLabel = "selectedTextTranslationResultWindow"
         }
         VoxtLog.input(
-            "Deliver committed output started. delivery=\(deliveryLabel), characters=\(context.outputText.count)"
+            "Deliver committed output started. delivery=\(deliveryLabel), characters=\(context.outputText.count)",
+            verbose: true
         )
 
         switch delivery {
@@ -616,7 +618,8 @@ extension AppDelegate {
                     )
                     if !reinforcedTerms.isEmpty {
                         VoxtLog.input(
-                            "Dictionary occurrences reinforced from delivered text. terms=\(reinforcedTerms.joined(separator: ", "))"
+                            "Dictionary occurrences reinforced from delivered text. terms=\(reinforcedTerms.joined(separator: ", "))",
+                            verbose: true
                         )
                     }
                 }
@@ -633,7 +636,8 @@ extension AppDelegate {
                     historyEntryID: historyEntryID
                 )
                 VoxtLog.input(
-                    "Deliver committed output finalized. historyEntryID=\(historyEntryID?.uuidString ?? "nil"), characters=\(deliveredText.count)"
+                    "Deliver committed output finalized. historyEntryID=\(historyEntryID?.uuidString ?? "nil"), characters=\(deliveredText.count)",
+                    verbose: true
                 )
                 self.logSessionTimingSummaryIfPossible(
                     snapshot: timingSnapshot,

@@ -58,6 +58,33 @@ struct SettingsMenuPicker<Value: Hashable>: View {
     }
 }
 
+struct SettingsFixedSelectionBlock: View {
+    let title: String
+    let width: CGFloat
+    var usesCompactInsets = false
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .padding(.horizontal, usesCompactInsets ? 8 : 12)
+            .frame(
+                width: max(ceil(width), 1),
+                height: 34,
+                alignment: .leading
+            )
+            .background(
+                RoundedRectangle(cornerRadius: SettingsUIStyle.controlCornerRadius, style: .continuous)
+                    .fill(SettingsUIStyle.controlFillColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SettingsUIStyle.controlCornerRadius, style: .continuous)
+                    .strokeBorder(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+            )
+    }
+}
+
 struct SettingsSelectionButton<Label: View>: View {
     let width: CGFloat
     let action: () -> Void

@@ -81,6 +81,32 @@ enum HistorySettingsData {
         }
     }
 
+    static func filteredNotes(
+        _ notes: [VoxtNoteItem],
+        statuses: Set<VoxtNoteStatus>,
+        query: String
+    ) -> [VoxtNoteItem] {
+        searchNotes(notes, query: query)
+            .filter { statuses.contains($0.status) }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+    }
+
+    static func toggledNoteStatuses(
+        _ current: Set<VoxtNoteStatus>,
+        status: VoxtNoteStatus
+    ) -> Set<VoxtNoteStatus> {
+        if current.contains(status) {
+            guard current.count > 1 else { return current }
+            return current.subtracting([status])
+        }
+        return current.union([status])
+    }
+
     static func visibleEntries<T>(
         from items: [T],
         visibleLimit: Int

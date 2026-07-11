@@ -97,3 +97,34 @@ struct TranscriptionDoubleTapRewriteResolver {
         return state.hasPendingTranscriptionStart ? .startRewrite : .scheduleDelayedTranscriptionStart
     }
 }
+
+nonisolated struct NoteHotkeyActionResolver {
+    enum Action: Equatable {
+        case captureSelectedText
+        case revealPanel
+        case startNoteRecording
+        case stopRecordingAsNote
+        case ignore
+    }
+
+    struct State {
+        let isSessionActive: Bool
+        let sessionOutputMode: SessionOutputMode
+        let isPanelVisible: Bool
+        let canStopSession: Bool
+        let hasSelectedText: Bool
+    }
+
+    static func resolve(state: State) -> Action {
+        if state.isSessionActive {
+            guard state.sessionOutputMode == .transcription, state.canStopSession else {
+                return .ignore
+            }
+            return .stopRecordingAsNote
+        }
+        if state.hasSelectedText {
+            return .captureSelectedText
+        }
+        return state.isPanelVisible ? .startNoteRecording : .revealPanel
+    }
+}

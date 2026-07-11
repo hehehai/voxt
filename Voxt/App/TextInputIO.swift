@@ -960,7 +960,8 @@ extension AppDelegate {
         let activationRestored = restoreSessionTarget ? restoreSessionTargetApplicationIfNeeded() : false
         let activationDelay: TimeInterval = activationRestored ? 0.04 : 0
         VoxtLog.input(
-            "Text injection prepared. characters=\(text.count), activationRestored=\(activationRestored), restoreSessionTarget=\(restoreSessionTarget), activationDelayMs=\(Int(activationDelay * 1000))"
+            "Text injection prepared. characters=\(text.count), activationRestored=\(activationRestored), restoreSessionTarget=\(restoreSessionTarget), activationDelayMs=\(Int(activationDelay * 1000))",
+            verbose: true
         )
         DispatchQueue.main.asyncAfter(deadline: .now() + activationDelay) { [weak self] in
             guard let self else {
@@ -1020,7 +1021,8 @@ extension AppDelegate {
             keyDown.post(tap: .cgAnnotatedSessionEventTap)
             keyUp.post(tap: .cgAnnotatedSessionEventTap)
             VoxtLog.input(
-                "Auto Key event posted after text injection. hotkey=\(HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: false))"
+                "Auto Key event posted after text injection. hotkey=\(HotkeyPreference.displayString(for: hotkey, distinguishModifierSides: false))",
+                verbose: true
             )
         }
     }

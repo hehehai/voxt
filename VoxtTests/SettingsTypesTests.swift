@@ -389,23 +389,23 @@ final class SettingsTypesTests: XCTestCase {
     func testFeatureVisibleTabsOnlyIncludeCurrentFeatureTabs() {
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, noteEnabled: false),
-            [.transcription, .translation, .rewrite, .meeting]
+            [.transcription, .translation, .rewrite, .note, .meeting]
         )
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true),
-            [.transcription, .note, .translation, .rewrite, .appEnhancement, .meeting]
+            [.transcription, .translation, .rewrite, .appEnhancement, .note, .meeting]
         )
     }
 
-    func testFeatureVisibleTabsHideNotesWhenDisabled() {
-        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: false).contains(.note))
+    func testFeatureVisibleTabsAlwaysIncludeNotes() {
+        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: false).contains(.note))
         XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true).contains(.note))
     }
 
     func testHotkeyShortcutVisibilityOnlyIncludesCurrentFeatureKinds() {
         XCTAssertEqual(
             HotkeyShortcutVisibility.visibleKinds(),
-            [.transcription, .translation, .rewrite, .meeting]
+            [.transcription, .note, .translation, .rewrite, .meeting]
         )
     }
 

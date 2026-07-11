@@ -42,8 +42,12 @@ enum VoxtLog {
         historyLogger.warning(message())
     }
 
-    nonisolated static func hotkey(_ message: @autoclosure () -> String) {
-        guard isHotkeyDebugLoggingEnabled else { return }
+    nonisolated static func hotkey(_ message: @autoclosure () -> String, verbose: Bool = false) {
+        guard isHotkeyDebugLoggingEnabled,
+              !verbose || verboseEnabled
+        else {
+            return
+        }
         hotkeyLogger.info(message())
     }
 
@@ -341,6 +345,10 @@ enum VoxtLog {
         lines.append("feature.transcription.llmSelectionID: \(featureSettings.transcription.llmSelectionID.rawValue)")
         lines.append("feature.transcription.notes.enabled: \(featureSettings.transcription.notes.enabled)")
         lines.append("feature.transcription.notes.titleModelSelectionID: \(featureSettings.transcription.notes.titleModelSelectionID.rawValue)")
+        lines.append("feature.transcription.notes.panel.corner: \(featureSettings.transcription.notes.panel.corner.rawValue)")
+        lines.append("feature.transcription.notes.panel.revealDelay: \(featureSettings.transcription.notes.panel.revealDelay)")
+        lines.append("feature.transcription.notes.panel.hideDelay: \(featureSettings.transcription.notes.panel.hideDelay)")
+        lines.append("feature.transcription.notes.panel.isTranslucent: \(featureSettings.transcription.notes.panel.isTranslucent)")
         lines.append("feature.translation.asrSelectionID: \(featureSettings.translation.asrSelectionID.rawValue)")
         lines.append("feature.translation.modelSelectionID: \(featureSettings.translation.modelSelectionID.rawValue)")
         lines.append("feature.translation.targetLanguage: \(featureSettings.translation.targetLanguage.rawValue)")

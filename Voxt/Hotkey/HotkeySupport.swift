@@ -426,6 +426,7 @@ nonisolated struct HotkeyPreference {
         let translation: Hotkey
         let rewrite: Hotkey
         let meeting: Hotkey
+        let note: Hotkey
         let customPaste: Hotkey
         let triggerMode: TriggerMode
         let rewriteActivationMode: RewriteActivationMode
@@ -449,10 +450,15 @@ nonisolated struct HotkeyPreference {
             [.init(id: Self.meetingBindingID, hotkey: meeting, behavior: TriggerBehavior(triggerMode))]
         }
 
+        var noteBindings: [HotkeyBinding] {
+            [.init(id: Self.noteBindingID, hotkey: note, behavior: .tap)]
+        }
+
         private static let transcriptionBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
         private static let translationBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
         private static let rewriteBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000103")!
         private static let meetingBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000104")!
+        private static let noteBindingID = UUID(uuidString: "00000000-0000-0000-0000-000000000105")!
 
         init(
             distinguishSides: Bool,
@@ -460,6 +466,7 @@ nonisolated struct HotkeyPreference {
             translation: Hotkey,
             rewrite: Hotkey,
             meeting: Hotkey,
+            note: Hotkey,
             customPaste: Hotkey,
             triggerMode: TriggerMode = .tap,
             rewriteActivationMode: RewriteActivationMode = .dedicatedHotkey
@@ -469,6 +476,7 @@ nonisolated struct HotkeyPreference {
             self.translation = translation
             self.rewrite = rewrite
             self.meeting = meeting
+            self.note = note
             self.customPaste = customPaste
             self.triggerMode = triggerMode
             self.rewriteActivationMode = rewriteActivationMode
@@ -484,6 +492,9 @@ nonisolated struct HotkeyPreference {
     static let defaultRewriteModifiers: NSEvent.ModifierFlags = [.function, .control]
     static let defaultMeetingKeyCode: UInt16 = modifierOnlyKeyCode
     static let defaultMeetingModifiers: NSEvent.ModifierFlags = [.function, .option]
+    static let defaultNoteKeyCode: UInt16 = modifierOnlyKeyCode
+    static let defaultNoteModifiers: NSEvent.ModifierFlags = [.command]
+    static let defaultNoteSidedModifiers: SidedModifierFlags = [.rightCommand]
     static let defaultCustomPasteKeyCode: UInt16 = UInt16(kVK_ANSI_V)
     static let defaultCustomPasteModifiers: NSEvent.ModifierFlags = [.control, .command]
     static let defaultTriggerMode: TriggerMode = .tap
@@ -491,6 +502,11 @@ nonisolated struct HotkeyPreference {
     static let defaultDistinguishModifierSides = true
     static let defaultPreset: Preset = .fnCombo
     static let middleMouseButtonNumber = 2
+    private static let maximumRecordableKeyboardKeyCode: UInt16 = 0x7F
+
+    static func isRecordableKeyboardKeyCode(_ keyCode: UInt16) -> Bool {
+        keyCode <= maximumRecordableKeyboardKeyCode
+    }
 
     static func isAllowedGlobalShortcut(_ hotkey: Hotkey) -> Bool {
         switch hotkey.input {
@@ -498,7 +514,7 @@ nonisolated struct HotkeyPreference {
             if keyCode == modifierOnlyKeyCode {
                 return !hotkey.modifiers.isEmpty
             }
-            return !hotkey.modifiers.isEmpty
+            return isRecordableKeyboardKeyCode(keyCode)
         case .mouseButton(let buttonNumber):
             return buttonNumber >= middleMouseButtonNumber
         }
@@ -672,6 +688,25 @@ nonisolated struct HotkeyPreference {
         )
     }
 
+    static func loadNoteBindings(defaults: UserDefaults = .standard) -> [HotkeyBinding] {
+        let fallback = Hotkey(
+            keyCode: defaultNoteKeyCode,
+            modifiers: defaultNoteModifiers,
+            sidedModifiers: defaultNoteSidedModifiers
+        )
+        let loaded = loadBindings(
+            forKey: AppPreferenceKey.noteHotkeyBindings,
+            fallbackHotkey: fallback,
+            defaults: defaults
+        )
+        guard !loaded.isEmpty else {
+            return [.init(hotkey: fallback, behavior: .tap)]
+        }
+        return loaded.map {
+            .init(id: $0.id, hotkey: $0.hotkey, behavior: .tap)
+        }
+    }
+
     static func saveTranscriptionBindings(_ bindings: [HotkeyBinding], defaults: UserDefaults = .standard) {
         saveBindings(bindings, forKey: AppPreferenceKey.transcriptionHotkeyBindings, defaults: defaults)
         if let first = sanitizedBindings(bindings).first {
@@ -698,6 +733,22 @@ nonisolated struct HotkeyPreference {
         if let first = sanitizedBindings(bindings).first {
             saveRewrite(first.hotkey, defaults: defaults, syncBindings: false)
         }
+    }
+
+    static func saveNoteBindings(_ bindings: [HotkeyBinding], defaults: UserDefaults = .standard) {
+        let fallback = Hotkey(
+            keyCode: defaultNoteKeyCode,
+            modifiers: defaultNoteModifiers,
+            sidedModifiers: defaultNoteSidedModifiers
+        )
+        let sources = bindings.isEmpty
+            ? [.init(hotkey: fallback, behavior: .tap)]
+            : bindings
+        saveBindings(
+            sources.map { .init(id: $0.id, hotkey: $0.hotkey, behavior: .tap) },
+            forKey: AppPreferenceKey.noteHotkeyBindings,
+            defaults: defaults
+        )
     }
 
     static func load() -> Hotkey {
@@ -958,6 +1009,7 @@ nonisolated struct HotkeyPreference {
         saveTranslationBindings(presetValues.translationBindings)
         saveMeetingBindings(presetValues.meetingBindings)
         saveRewriteBindings(presetValues.rewriteBindings)
+        saveNoteBindings(presetValues.noteBindings)
     }
 
     private static func normalizeCustomPasteHotkey(_ hotkey: Hotkey) -> Hotkey {
@@ -1011,11 +1063,12 @@ nonisolated struct HotkeyPreference {
         switch preset {
         case .fnCombo:
             return PresetHotkeys(
-                distinguishSides: false,
+                distinguishSides: true,
                 transcription: Hotkey(keyCode: defaultKeyCode, modifiers: defaultModifiers, sidedModifiers: []),
                 translation: Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
                 rewrite: Hotkey(keyCode: defaultRewriteKeyCode, modifiers: defaultRewriteModifiers, sidedModifiers: []),
                 meeting: Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: []),
+                note: Hotkey(keyCode: defaultNoteKeyCode, modifiers: defaultNoteModifiers, sidedModifiers: defaultNoteSidedModifiers),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: [])
             )
         case .commandCombo:
@@ -1025,6 +1078,7 @@ nonisolated struct HotkeyPreference {
                 translation: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .shift], sidedModifiers: [.rightCommand, .rightShift]),
                 rewrite: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.command, .option], sidedModifiers: [.rightCommand, .rightOption]),
                 meeting: Hotkey(keyCode: UInt16(kVK_ANSI_L), modifiers: [.command], sidedModifiers: [.rightCommand]),
+                note: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.function, .command], sidedModifiers: []),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: [])
             )
         case .mouseMiddleFnShift:
@@ -1034,6 +1088,7 @@ nonisolated struct HotkeyPreference {
                 translation: Hotkey(keyCode: defaultTranslationKeyCode, modifiers: defaultTranslationModifiers, sidedModifiers: []),
                 rewrite: Hotkey(mouseButtonNumber: middleMouseButtonNumber),
                 meeting: Hotkey(keyCode: defaultMeetingKeyCode, modifiers: defaultMeetingModifiers, sidedModifiers: []),
+                note: Hotkey(keyCode: modifierOnlyKeyCode, modifiers: [.function, .command], sidedModifiers: []),
                 customPaste: Hotkey(keyCode: defaultCustomPasteKeyCode, modifiers: defaultCustomPasteModifiers, sidedModifiers: []),
                 triggerMode: .tap,
                 rewriteActivationMode: .doubleTapTranscriptionHotkey
@@ -1050,7 +1105,19 @@ nonisolated struct HotkeyPreference {
         distinguishModifierSides: Bool
     ) -> Bool {
         let requiredFlags = cgFlags(from: hotkey.modifiers)
-        guard eventFlags.contains(requiredFlags) else { return false }
+        if case .keyboard(let keyCode) = hotkey.input,
+           keyCode != modifierOnlyKeyCode {
+            let relevantFlags = eventFlags.intersection([
+                .maskCommand,
+                .maskAlternate,
+                .maskControl,
+                .maskShift,
+                .maskSecondaryFn
+            ])
+            guard relevantFlags == requiredFlags else { return false }
+        } else {
+            guard eventFlags.contains(requiredFlags) else { return false }
+        }
         guard distinguishModifierSides, !hotkey.sidedModifiers.isEmpty else { return true }
         return sidedModifiers.isSuperset(of: hotkey.sidedModifiers) && hotkey.sidedModifiers.matches(requiredModifiers: hotkey.modifiers)
     }

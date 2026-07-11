@@ -74,10 +74,24 @@ final class VoxtRemindersSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(reminder.title, "Reminders sync")
         XCTAssertEqual(reminder.notes, "Ship reminders integration.")
         XCTAssertFalse(reminder.isCompleted)
+        XCTAssertEqual(reminder.priority, 0)
 
-        _ = noteStore.updateTitle("Updated title", state: .generated, for: item.id)
+        XCTAssertTrue(noteStore.updateDetails(
+            item.id,
+            title: "Updated title",
+            text: "Updated reminder content."
+        ))
+        XCTAssertTrue(noteStore.setStatus(.inProgress, for: item.id))
+        XCTAssertTrue(noteStore.setPriority(.high, for: item.id))
         try await Task.sleep(for: .milliseconds(500))
-        _ = noteStore.updateCompletion(true, for: item.id)
+
+        reminder = try XCTUnwrap(backend.reminder(with: initialRecord.reminderCalendarItemIdentifier))
+        XCTAssertEqual(reminder.title, "Updated title")
+        XCTAssertEqual(reminder.notes, "Updated reminder content.")
+        XCTAssertFalse(reminder.isCompleted)
+        XCTAssertEqual(reminder.priority, 1)
+
+        XCTAssertTrue(noteStore.setStatus(.done, for: item.id))
         try await Task.sleep(for: .milliseconds(500))
 
         reminder = try XCTUnwrap(backend.reminder(with: initialRecord.reminderCalendarItemIdentifier))
@@ -90,6 +104,17 @@ final class VoxtRemindersSyncCoordinatorTests: XCTestCase {
         XCTAssertNil(try backend.reminder(with: initialRecord.reminderCalendarItemIdentifier))
         XCTAssertTrue(backend.deletedIdentifiers.contains(initialRecord.reminderCalendarItemIdentifier))
         XCTAssertTrue(exportStore.recordsByNoteID.isEmpty)
+    }
+
+    func testReminderPriorityMappingMatchesEventKitScale() {
+        XCTAssertEqual(VoxtRemindersSyncMapping.priority(for: .none), 0)
+        XCTAssertEqual(VoxtRemindersSyncMapping.priority(for: .high), 1)
+        XCTAssertEqual(VoxtRemindersSyncMapping.priority(for: .medium), 5)
+        XCTAssertEqual(VoxtRemindersSyncMapping.priority(for: .low), 9)
+        XCTAssertFalse(VoxtRemindersSyncMapping.isCompleted(for: .todo))
+        XCTAssertFalse(VoxtRemindersSyncMapping.isCompleted(for: .inProgress))
+        XCTAssertFalse(VoxtRemindersSyncMapping.isCompleted(for: .backlog))
+        XCTAssertTrue(VoxtRemindersSyncMapping.isCompleted(for: .done))
     }
 
     func testStaleReminderMappingCreatesReplacementReminder() async throws {
@@ -228,7 +253,8 @@ private final class FakeVoxtRemindersSyncBackend: VoxtRemindersSyncBackend {
                 listIdentifier: payload.listIdentifier,
                 title: payload.title,
                 notes: payload.notes,
-                isCompleted: payload.isCompleted
+                isCompleted: payload.isCompleted,
+                priority: payload.priority
             )
             return identifier
         }

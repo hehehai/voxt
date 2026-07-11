@@ -69,6 +69,89 @@ struct HistoryFilterTabPicker: View {
     }
 }
 
+struct HistoryNoteStatusFilterSelect: View {
+    @Binding var selection: Set<VoxtNoteStatus>
+    @State private var isPresented = false
+
+    private let statuses: [VoxtNoteStatus] = [.todo, .inProgress, .done, .backlog]
+
+    var body: some View {
+        SettingsSelectionButton(width: 150) {
+            isPresented = true
+        } label: {
+            Text(selectionSummary)
+                .lineLimit(1)
+        }
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                filterRow(
+                    title: localized("All statuses"),
+                    isSelected: selection == Set(statuses)
+                ) {
+                    selection = Set(statuses)
+                }
+
+                Divider()
+                    .padding(.vertical, 2)
+
+                ForEach(statuses) { status in
+                    filterRow(
+                        title: status.title,
+                        isSelected: selection.contains(status)
+                    ) {
+                        selection = HistorySettingsData.toggledNoteStatuses(selection, status: status)
+                    }
+                }
+            }
+            .padding(8)
+            .frame(width: 190)
+        }
+        .accessibilityLabel(localized("Status"))
+    }
+
+    private var selectionSummary: String {
+        if selection == Set(statuses) {
+            return localized("All statuses")
+        }
+        if selection.count == 1, let status = selection.first {
+            return status.title
+        }
+        return AppLocalization.format("%d statuses", selection.count)
+    }
+
+    private func filterRow(
+        title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Group {
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                    } else {
+                        Color.clear
+                    }
+                }
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 12, height: 12)
+            }
+            .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+            .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(
+                Color.accentColor.opacity(isSelected ? 0.09 : 0),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct HistoryDayHeader: View {
     @Environment(\.locale) private var locale
     let date: Date
@@ -284,42 +367,118 @@ private enum HistoryRowStyle {
 struct NoteHistoryRow: View {
     @Environment(\.locale) private var locale
     @State private var isHovered = false
+    @State private var isRenaming = false
+    @State private var isDetailPresented = false
+    @State private var draftTitle = ""
+    @State private var isEditingDetail = false
+    @State private var detailTitle = ""
+    @State private var detailContent = ""
+    @FocusState private var isRenameFocused: Bool
 
     let item: VoxtNoteItem
     let onCopy: () -> Void
     let onToggleCompletion: () -> Void
+    let onSetStatus: (VoxtNoteStatus) -> Void
+    let onSetPriority: (VoxtNotePriority) -> Void
+    let onRename: (String) -> Void
+    let onUpdateDetails: (String, String) -> Bool
     let onDelete: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Text(timeText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 50, alignment: .leading)
-                    .padding(.top, 1)
+            Button(action: onToggleCompletion) {
+                Image(systemName: statusSystemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .frame(width: 28, height: 28)
+                    .background(statusColor.opacity(0.10), in: Circle())
+                    .overlay(Circle().stroke(statusColor.opacity(0.25), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .help(primaryActionHelp)
 
-                Button(action: onCopy) {
-                    Text(displayText)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                        .lineSpacing(2)
-                        .lineLimit(3)
-                        .truncationMode(.tail)
+            VStack(alignment: .leading, spacing: 5) {
+                if isRenaming {
+                    TextField(localized("Note title"), text: $draftTitle)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .semibold))
+                        .focused($isRenameFocused)
+                        .onSubmit(commitRename)
+                        .onExitCommand(perform: cancelRename)
+
+                    noteContentPreview
+                } else {
+                    Button(action: showDetail) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(item.title)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(item.status == .done ? .secondary : .primary)
+                                .strikethrough(item.status == .done, color: .secondary)
+                                .lineLimit(1)
+
+                            noteContentPreview
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
-                        .help(localized("Copy"))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(localized("Open note details"))
                 }
-                .buttonStyle(.plain)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            HStack(spacing: 6) {
-                Button(action: onToggleCompletion) {
-                    Image(systemName: item.isCompleted ? "arrow.uturn.backward" : "checkmark")
+                HStack(spacing: 6) {
+                    metadataChip(item.status.title, color: statusColor)
+                    if item.priority != .none {
+                        metadataChip(item.priority.title, color: priorityColor)
+                    }
+                    Text(sourceText)
+                    Text("·")
+                    Text(timeText)
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 4) {
+                Menu {
+                    ForEach(VoxtNotePriority.allCases, id: \.self) { priority in
+                        Button {
+                            onSetPriority(priority)
+                        } label: {
+                            menuLabel(priority.title, selected: priority == item.priority)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "flag")
                 }
                 .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
+                .help(localized("Priority"))
+
+                Menu {
+                    ForEach(VoxtNoteStatus.moveMenuOrder) { status in
+                        Button {
+                            onSetStatus(status)
+                        } label: {
+                            menuLabel(status.title, selected: status == item.status)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                }
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
+                .help(localized("Move to"))
+
+                Button(action: beginRenaming) {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
+                .help(localized("Rename"))
+
+                Button(action: onCopy) {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
+                .help(localized("Copy"))
 
                 Button(role: .destructive, action: onDelete) {
                     HistoryActionIcon(kind: .delete)
@@ -329,7 +488,7 @@ struct NoteHistoryRow: View {
             .opacity(isHovered ? 1 : 0)
             .allowsHitTesting(isHovered)
             .animation(.easeInOut(duration: 0.12), value: isHovered)
-            .frame(width: 58)
+            .frame(width: 146)
             .frame(maxHeight: .infinity, alignment: .center)
         }
         .padding(.horizontal, 9.5)
@@ -348,26 +507,223 @@ struct NoteHistoryRow: View {
                 isHovered = hovering
             }
         }
+        .onChange(of: item.id) { _, _ in
+            isRenaming = false
+            isDetailPresented = false
+            isEditingDetail = false
+            draftTitle = ""
+            detailTitle = ""
+            detailContent = ""
+        }
+        .popover(isPresented: $isDetailPresented, arrowEdge: .trailing) {
+            noteDetail
+        }
     }
 
-    private var displayText: String {
-        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if title.isEmpty {
-            return text
+    private var noteContentPreview: some View {
+        Text(item.text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+    }
+
+    private var noteDetail: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    if isEditingDetail {
+                        TextField(localized("Note title"), text: $detailTitle)
+                            .textFieldStyle(.plain)
+                            .font(.headline)
+                            .settingsFieldSurface(minHeight: 32)
+                    } else {
+                        Text(item.title)
+                            .font(.headline)
+                            .textSelection(.enabled)
+                    }
+                    HStack(spacing: 6) {
+                        metadataChip(item.status.title, color: statusColor)
+                        if item.priority != .none {
+                            metadataChip(item.priority.title, color: priorityColor)
+                        }
+                    }
+                }
+                Spacer(minLength: 12)
+                Button {
+                    isDetailPresented = false
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(localized("Close"))
+            }
+
+            Divider()
+
+            if isEditingDetail {
+                TextEditor(text: $detailContent)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .background(
+                        SettingsUIStyle.controlFillColor,
+                        in: RoundedRectangle(cornerRadius: SettingsUIStyle.controlCornerRadius, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SettingsUIStyle.controlCornerRadius, style: .continuous)
+                            .strokeBorder(SettingsUIStyle.subtleBorderColor, lineWidth: 1)
+                    )
+            } else {
+                ScrollView {
+                    Text(item.text)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            HStack {
+                Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if isEditingDetail {
+                    Button(localized("Cancel"), action: cancelDetailEditing)
+                    Button(localized("Save"), action: saveDetailEditing)
+                        .disabled(!canSaveDetail)
+                } else {
+                    Button(localized("Edit"), action: beginDetailEditing)
+                    Button(localized("Copy"), action: onCopy)
+                }
+            }
         }
-        if text.isEmpty || title == text {
-            return title
+        .padding(16)
+        .frame(width: 400, height: 320)
+    }
+
+    private var statusSystemImage: String {
+        switch item.status {
+        case .todo: return "circle"
+        case .inProgress: return "circle.lefthalf.filled"
+        case .done: return "checkmark"
+        case .backlog: return "tray"
         }
-        return "\(title)\n\(text)"
+    }
+
+    private var statusColor: Color {
+        switch item.status {
+        case .todo: return .blue
+        case .inProgress: return .orange
+        case .done: return .green
+        case .backlog: return .secondary
+        }
+    }
+
+    private var priorityColor: Color {
+        switch item.priority {
+        case .none: return .secondary
+        case .low: return .blue
+        case .medium: return .orange
+        case .high: return .red
+        }
+    }
+
+    private var primaryActionHelp: String {
+        item.status == .done ? localized("Move to To do") : localized("Mark done")
+    }
+
+    private var sourceText: String {
+        switch item.source {
+        case .transcription: return localized("Transcription")
+        case .selection: return localized("Selected text")
+        case .migrated: return localized("Migrated")
+        }
     }
 
     private var timeText: String {
-        item.createdAt.formatted(
+        item.updatedAt.formatted(
             .dateTime
                 .locale(locale)
+                .month(.abbreviated)
+                .day()
                 .hour()
                 .minute()
         )
+    }
+
+    private func metadataChip(_ title: String, color: Color) -> some View {
+        Text(title)
+            .font(.system(size: 9.5, weight: .medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .frame(height: 17)
+            .background(color.opacity(0.08), in: Capsule(style: .continuous))
+    }
+
+    private func menuLabel(_ title: String, selected: Bool) -> some View {
+        HStack {
+            Text(title)
+            if selected {
+                Image(systemName: "checkmark")
+            }
+        }
+    }
+
+    private func beginRenaming() {
+        draftTitle = item.title
+        isRenaming = true
+        DispatchQueue.main.async { isRenameFocused = true }
+    }
+
+    private func showDetail() {
+        guard !isRenaming else { return }
+        detailTitle = item.title
+        detailContent = item.text
+        isEditingDetail = false
+        isDetailPresented = true
+    }
+
+    private var canSaveDetail: Bool {
+        !detailTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !detailContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func beginDetailEditing() {
+        detailTitle = item.title
+        detailContent = item.text
+        isEditingDetail = true
+    }
+
+    private func cancelDetailEditing() {
+        detailTitle = item.title
+        detailContent = item.text
+        isEditingDetail = false
+    }
+
+    private func saveDetailEditing() {
+        guard canSaveDetail,
+              onUpdateDetails(detailTitle, detailContent)
+        else {
+            return
+        }
+        isEditingDetail = false
+    }
+
+    private func cancelRename() {
+        isRenaming = false
+        draftTitle = ""
+    }
+
+    private func commitRename() {
+        let title = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+            cancelRename()
+            return
+        }
+        onRename(title)
+        cancelRename()
     }
 }

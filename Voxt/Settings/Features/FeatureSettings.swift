@@ -151,13 +151,54 @@ enum ObsidianNoteGroupingMode: String, Codable, CaseIterable, Hashable, Sendable
     case file
 }
 
+nonisolated enum VoxtNotePanelCorner: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .topLeft:
+            return String(localized: "Top left")
+        case .topRight:
+            return String(localized: "Top right")
+        case .bottomLeft:
+            return String(localized: "Bottom left")
+        case .bottomRight:
+            return String(localized: "Bottom right")
+        }
+    }
+}
+
+nonisolated struct VoxtNotePanelSettings: Codable, Hashable, Sendable {
+    var corner: VoxtNotePanelCorner
+    var revealDelay: Double
+    var hideDelay: Double
+    var isTranslucent: Bool
+
+    init(
+        corner: VoxtNotePanelCorner = .topRight,
+        revealDelay: Double = 0.2,
+        hideDelay: Double = 0.3,
+        isTranslucent: Bool = true
+    ) {
+        self.corner = corner
+        self.revealDelay = revealDelay
+        self.hideDelay = hideDelay
+        self.isTranslucent = isTranslucent
+    }
+}
+
 struct RemindersNoteSyncSettings: Codable, Hashable, Sendable {
     var enabled: Bool
     var selectedListIdentifier: String
     var selectedListTitle: String
 
     init(
-        enabled: Bool = false,
+        enabled: Bool = true,
         selectedListIdentifier: String = "",
         selectedListTitle: String = ""
     ) {
@@ -195,23 +236,26 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
     var titleModelSelectionID: FeatureModelSelectionID
     var soundEnabled: Bool
     var soundPreset: InteractionSoundPreset
+    var panel: VoxtNotePanelSettings
     var obsidianSync: ObsidianNoteSyncSettings
     var remindersSync: RemindersNoteSyncSettings
 
     init(
-        enabled: Bool = false,
+        enabled: Bool = true,
         triggerShortcut: TranscriptionNoteTriggerSettings = .defaultShortcut,
         titleModelSelectionID: FeatureModelSelectionID,
         soundEnabled: Bool = false,
         soundPreset: InteractionSoundPreset = .soft,
+        panel: VoxtNotePanelSettings = .init(),
         obsidianSync: ObsidianNoteSyncSettings = .init(),
         remindersSync: RemindersNoteSyncSettings = .init()
     ) {
-        self.enabled = enabled
+        self.enabled = true
         self.triggerShortcut = triggerShortcut
         self.titleModelSelectionID = titleModelSelectionID
         self.soundEnabled = soundEnabled
         self.soundPreset = soundPreset
+        self.panel = panel
         self.obsidianSync = obsidianSync
         self.remindersSync = remindersSync
     }
@@ -222,17 +266,19 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         case titleModelSelectionID
         case soundEnabled
         case soundPreset
+        case panel
         case obsidianSync
         case remindersSync
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        enabled = true
         triggerShortcut = try container.decodeIfPresent(TranscriptionNoteTriggerSettings.self, forKey: .triggerShortcut) ?? .defaultShortcut
         titleModelSelectionID = try container.decode(FeatureModelSelectionID.self, forKey: .titleModelSelectionID)
         soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
         soundPreset = try container.decodeIfPresent(InteractionSoundPreset.self, forKey: .soundPreset) ?? .soft
+        panel = try container.decodeIfPresent(VoxtNotePanelSettings.self, forKey: .panel) ?? .init()
         obsidianSync = try container.decodeIfPresent(ObsidianNoteSyncSettings.self, forKey: .obsidianSync) ?? .init()
         remindersSync = try container.decodeIfPresent(RemindersNoteSyncSettings.self, forKey: .remindersSync) ?? .init()
     }
@@ -314,7 +360,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
         self.prompt = prompt
         self.appContext = appContext
         self.notes = notes ?? TranscriptionNoteFeatureSettings(
-            enabled: false,
+            enabled: true,
             triggerShortcut: .defaultShortcut,
             titleModelSelectionID: llmSelectionID.textSelection == nil
                 ? .localLLM(CustomLLMModelManager.defaultModelRepo)

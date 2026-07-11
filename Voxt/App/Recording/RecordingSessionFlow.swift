@@ -60,7 +60,10 @@ extension AppDelegate {
         }
     }
 
-    func beginRecording(outputMode: SessionOutputMode) {
+    func beginRecording(
+        outputMode: SessionOutputMode,
+        transcriptionCaptureMode: TranscriptionCaptureSessionMode = .standard
+    ) {
         let transcriptionHotkeyStartBehavior = outputMode == .transcription
             ? pendingTranscriptionHotkeyStartBehavior
             : nil
@@ -70,7 +73,8 @@ extension AppDelegate {
 
         recordingRequestedAt = Date()
         VoxtLog.asr(
-            "Begin recording requested. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), isSessionActive=\(isSessionActive)"
+            "Begin recording requested. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), isSessionActive=\(isSessionActive)",
+            verbose: true
         )
         guard !blockNonMeetingRecordingWhileMeetingIsActive(
             source: "beginRecording:\(RecordingSessionSupport.outputLabel(for: outputMode))"
@@ -136,7 +140,9 @@ extension AppDelegate {
         enhancementContextSnapshot = nil
         rewriteSessionHasSelectedSourceText = false
         resetSessionTranslationState()
-        configureVoxtNoteSessionRuntimeStateForNewRecording()
+        configureVoxtNoteSessionRuntimeStateForNewRecording(
+            mode: outputMode == .transcription ? transcriptionCaptureMode : .standard
+        )
         configureTranscriptionCapturePipelineForCurrentSession()
         prewarmLLMForUpcomingSession(outputMode: outputMode)
         let frontmostApplication = NSWorkspace.shared.frontmostApplication

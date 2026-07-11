@@ -11,6 +11,7 @@ private func localized(_ key: String) -> String {
 
 enum HotkeyShortcutKind: String, CaseIterable, Hashable {
     case transcription
+    case note
     case translation
     case rewrite
     case meeting
@@ -19,6 +20,8 @@ enum HotkeyShortcutKind: String, CaseIterable, Hashable {
         switch self {
         case .transcription:
             return "Transcription"
+        case .note:
+            return "Notes"
         case .translation:
             return "Translation"
         case .meeting:
@@ -32,6 +35,8 @@ enum HotkeyShortcutKind: String, CaseIterable, Hashable {
         switch self {
         case .transcription:
             return localized("Transcription")
+        case .note:
+            return localized("Notes")
         case .translation:
             return localized("Translation")
         case .meeting:
@@ -48,6 +53,12 @@ enum HotkeyShortcutKind: String, CaseIterable, Hashable {
                 keyCode: HotkeyPreference.defaultKeyCode,
                 modifiers: HotkeyPreference.defaultModifiers,
                 sidedModifiers: []
+            )
+        case .note:
+            return HotkeyPreference.Hotkey(
+                keyCode: HotkeyPreference.defaultNoteKeyCode,
+                modifiers: HotkeyPreference.defaultNoteModifiers,
+                sidedModifiers: HotkeyPreference.defaultNoteSidedModifiers
             )
         case .translation:
             return HotkeyPreference.Hotkey(
@@ -73,7 +84,7 @@ enum HotkeyShortcutKind: String, CaseIterable, Hashable {
 
 enum HotkeyShortcutVisibility {
     static func visibleKinds() -> [HotkeyShortcutKind] {
-        [.transcription, .translation, .rewrite, .meeting]
+        [.transcription, .note, .translation, .rewrite, .meeting]
     }
 }
 
@@ -122,6 +133,7 @@ struct HotkeySettingsView: View {
     @State private var hotkeyToastMessage = ""
     @State private var hotkeyToastDismissTask: Task<Void, Never>?
     @State private var transcriptionBindings = HotkeyPreference.loadTranscriptionBindings()
+    @State private var noteBindings = HotkeyPreference.loadNoteBindings()
     @State private var translationBindings = HotkeyPreference.loadTranslationBindings()
     @State private var meetingBindings = HotkeyPreference.loadMeetingBindings()
     @State private var rewriteBindings = HotkeyPreference.loadRewriteBindings()
@@ -381,7 +393,8 @@ struct HotkeySettingsView: View {
                 translationBindings: translationBindings,
                 meetingBindings: meetingBindings,
                 rewriteBindings: rewriteBindings,
-                customPasteHotkey: customPasteHotkeyEnabled ? currentCustomPasteHotkey : nil
+                customPasteHotkey: customPasteHotkeyEnabled ? currentCustomPasteHotkey : nil,
+                noteBindings: noteBindings
             )
         )
     }
@@ -424,6 +437,7 @@ struct HotkeySettingsView: View {
                     }
 
                     hotkeyBindingGroup(.transcription, bindings: transcriptionBindings)
+                    hotkeyBindingGroup(.note, bindings: noteBindings)
                     hotkeyBindingGroup(.translation, bindings: translationBindings)
                     hotkeyBindingGroup(.rewrite, bindings: rewriteBindings)
                     hotkeyBindingGroup(.meeting, bindings: meetingBindings)
@@ -439,9 +453,6 @@ struct HotkeySettingsView: View {
                         onCapture: { capturedHotkey in
                             guard let field = recordingField else { return }
                             guard HotkeyPreference.isAllowedGlobalShortcut(capturedHotkey) else {
-                                pendingCapturedField = nil
-                                pendingCapturedHotkey = nil
-                                recordingField = nil
                                 showHotkeyToast(localized("Keyboard shortcuts must include at least one modifier key."))
                                 return
                             }
@@ -528,6 +539,7 @@ struct HotkeySettingsView: View {
         guard HotkeyPreference.applyPreset(preset) != nil else { return }
         distinguishModifierSides = true
         transcriptionBindings = HotkeyPreference.loadTranscriptionBindings()
+        noteBindings = HotkeyPreference.loadNoteBindings()
         translationBindings = HotkeyPreference.loadTranslationBindings()
         meetingBindings = HotkeyPreference.loadMeetingBindings()
         rewriteBindings = HotkeyPreference.loadRewriteBindings()
@@ -555,16 +567,24 @@ struct HotkeySettingsView: View {
                         onConfirmPending: confirmPendingCapture
                     )
 
-                    SettingsMenuPicker(
-                        selection: behaviorBinding(kind: kind, id: binding.id),
-                        options: HotkeyPreference.TriggerBehavior.allCases.map { behavior in
-                            SettingsMenuOption(value: behavior, title: behavior.title)
-                        },
-                        selectedTitle: binding.behavior.title,
-                        width: 70,
-                        allowsCompactWidth: true,
-                        usesCompactInsets: true
-                    )
+                    if kind == .note {
+                        SettingsFixedSelectionBlock(
+                            title: localized("Tap"),
+                            width: 70,
+                            usesCompactInsets: true
+                        )
+                    } else {
+                        SettingsMenuPicker(
+                            selection: behaviorBinding(kind: kind, id: binding.id),
+                            options: HotkeyPreference.TriggerBehavior.allCases.map { behavior in
+                                SettingsMenuOption(value: behavior, title: behavior.title)
+                            },
+                            selectedTitle: binding.behavior.title,
+                            width: 70,
+                            allowsCompactWidth: true,
+                            usesCompactInsets: true
+                        )
+                    }
 
                     if index == 0 {
                         Button {
@@ -730,6 +750,8 @@ struct HotkeySettingsView: View {
         switch kind {
         case .transcription:
             return transcriptionBindings
+        case .note:
+            return noteBindings
         case .translation:
             return translationBindings
         case .meeting:
@@ -747,6 +769,14 @@ struct HotkeySettingsView: View {
         case .transcription:
             transcriptionBindings = bindings
             HotkeyPreference.saveTranscriptionBindings(bindings)
+        case .note:
+            let normalized = bindings.map {
+                HotkeyPreference.HotkeyBinding(id: $0.id, hotkey: $0.hotkey, behavior: .tap)
+            }
+            noteBindings = normalized.isEmpty
+                ? [.init(hotkey: kind.defaultHotkey, behavior: .tap)]
+                : normalized
+            HotkeyPreference.saveNoteBindings(noteBindings)
         case .translation:
             translationBindings = bindings
             HotkeyPreference.saveTranslationBindings(bindings)

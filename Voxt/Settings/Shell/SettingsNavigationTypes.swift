@@ -292,10 +292,10 @@ enum SettingsSidebarMode: Equatable {
 
 enum FeatureSettingsTab: String, CaseIterable, Identifiable {
     case transcription
-    case note
     case translation
     case rewrite
     case appEnhancement
+    case note
     case meeting
 
     var id: String { rawValue }
@@ -341,7 +341,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
         allCases.filter { tab in
             switch tab {
             case .note:
-                return noteEnabled
+                return true
             case .appEnhancement:
                 return appEnhancementEnabled
             default:

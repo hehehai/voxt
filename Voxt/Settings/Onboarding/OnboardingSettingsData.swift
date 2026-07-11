@@ -224,9 +224,7 @@ extension OnboardingSettingsView {
     }
 
     var notesStatusSummary: String {
-        featureSettings.transcription.notes.enabled
-            ? AppLocalization.localizedString("Enabled")
-            : AppLocalization.localizedString("Disabled")
+        AppLocalization.localizedString("Enabled")
     }
 
     var onboardingASRSummary: String {
@@ -250,18 +248,6 @@ extension OnboardingSettingsView {
             choice: llmPathChoice.wrappedValue,
             localLLMRepo: customLLMRepo,
             remoteLLMProvider: selectedRemoteLLMProvider
-        )
-    }
-
-    var onboardingNotesEnabled: Binding<Bool> {
-        Binding(
-            get: { featureSettings.transcription.notes.enabled },
-            set: { isEnabled in
-                FeatureSettingsStore.update(defaults: .standard) { settings in
-                    settings.transcription.notes.enabled = isEnabled
-                }
-                featureSettings = FeatureSettingsStore.load(defaults: .standard)
-            }
         )
     }
 
