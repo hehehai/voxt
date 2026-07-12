@@ -206,6 +206,45 @@ private struct MLXAudioEngineBox: @unchecked Sendable {
     nonisolated(unsafe) let engine: AVAudioEngine
 }
 
+/// Coalesces realtime meter samples while the main actor is busy. At most one delivery task is
+/// queued, so a cold model load cannot build up seconds of stale waveform updates.
+nonisolated final class MLXAudioLevelDelivery: @unchecked Sendable {
+    private let lock = NSLock()
+    private var latestLevel: Float?
+    private var isDeliveryScheduled = false
+
+    func submit(_ level: Float, deliver: @escaping @MainActor @Sendable (Float) -> Void) {
+        lock.lock()
+        latestLevel = level
+        let shouldSchedule = !isDeliveryScheduled
+        if shouldSchedule {
+            isDeliveryScheduled = true
+        }
+        lock.unlock()
+
+        guard shouldSchedule else { return }
+        Task { @MainActor [weak self] in
+            guard let level = self?.takeLatestLevel() else { return }
+            deliver(level)
+        }
+    }
+
+    func clear() {
+        lock.lock()
+        latestLevel = nil
+        lock.unlock()
+    }
+
+    private func takeLatestLevel() -> Float? {
+        lock.lock()
+        defer { lock.unlock() }
+        let level = latestLevel
+        latestLevel = nil
+        isDeliveryScheduled = false
+        return level
+    }
+}
+
 private protocol MLXNativeStreamingSession: AnyObject, Sendable {
     var events: AsyncStream<TranscriptionEvent> { get }
     func feedAudio(samples: [Float])
@@ -1046,6 +1085,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     var dictionaryEntryProvider: (() -> [DictionaryEntry])?
 
     private let audioEngine = AVAudioEngine()
+    private let audioLevelDelivery = MLXAudioLevelDelivery()
     private let sampleStore = AudioSampleStore()
     private let voiceActivityFrameStore = VoiceActivityFrameStore()
     private let voiceActivityFilteredSampleStore = AudioSampleStore()
@@ -1582,6 +1622,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         qwenVoiceActivityFeedCursor = 0
         transcribedText = ""
         internalTranscribedText = ""
+        audioLevelDelivery.clear()
         audioLevel = 0
         isModelInitializing = false
         isFinalizingTranscription = false
@@ -1686,8 +1727,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 sampleRate: buffer.format.sampleRate,
                 level: normalized
             )
-            Task { @MainActor [weak self] in
-                self?.audioLevel = normalized
+            self.audioLevelDelivery.submit(normalized) { [weak self] latestLevel in
+                self?.audioLevel = latestLevel
             }
         }
 

@@ -9,6 +9,61 @@ import MLXAudioCore
 import MLXAudioSTT
 import HuggingFace
 
+private struct MLXLoadedModelBox: @unchecked Sendable {
+    nonisolated(unsafe) let model: any STTGenerationModel
+}
+
+private nonisolated enum MLXSTTModelLoader {
+    static func load(repo: String, directory: URL) async throws -> MLXLoadedModelBox {
+        let lower = repo.lowercased()
+        let model: any STTGenerationModel
+
+        if lower.contains("forcedaligner") {
+            throw NSError(
+                domain: "MLXModelManager",
+                code: 1001,
+                userInfo: [NSLocalizedDescriptionKey: "Qwen3-ForcedAligner is alignment-only and not supported by Voxt transcription."]
+            )
+        } else if lower.contains("glmasr") || lower.contains("glm-asr") {
+            model = try await GLMASRModel.fromModelDirectory(directory)
+        } else if lower.contains("whisper") {
+            model = try await WhisperModel.fromDirectory(directory)
+        } else if lower.contains("firered") {
+            model = try FireRedASR2Model.fromDirectory(directory)
+        } else if lower.contains("sensevoice") {
+            model = try SenseVoiceModel.fromDirectory(directory)
+        } else if lower.contains("qwen3-asr") || lower.contains("qwen3_asr") {
+            model = try await Qwen3ASRModel.fromModelDirectory(directory)
+        } else if lower.contains("moss-transcribe-diarize") || lower.contains("moss_transcribe_diarize") {
+            model = try await MossTranscribeDiarizeModel.fromModelDirectory(directory)
+        } else if lower.contains("voxtral") {
+            model = try VoxtralRealtimeModel.fromDirectory(directory)
+        } else if lower.contains("cohere") {
+            model = try CohereTranscribeModel.fromDirectory(directory)
+        } else if lower.contains("canary") {
+            model = try await CanaryModel.fromModelDirectory(directory)
+        } else if lower.contains("wav2vec") || lower.contains("wav2vec2")
+            || lower.contains("/mms-") || lower.contains("mms_") || lower.contains("mms-")
+        {
+            model = try Wav2Vec2CTCModel.fromModelDirectory(directory)
+        } else if lower.contains("lasr") {
+            model = try LasrCTCModel.fromModelDirectory(directory)
+        } else if lower.contains("moonshine") {
+            model = try await MoonshineModel.fromModelDirectory(directory)
+        } else if lower.contains("parakeet") {
+            model = try ParakeetModel.fromDirectory(directory)
+        } else if lower.contains("granite") {
+            model = try await GraniteSpeechModel.fromModelDirectory(directory)
+        } else if lower.contains("nemotron") {
+            model = try NemotronASRModel.fromDirectory(directory)
+        } else {
+            model = try await Qwen3ASRModel.fromModelDirectory(directory)
+        }
+
+        return MLXLoadedModelBox(model: model)
+    }
+}
+
 @MainActor
 class MLXModelManager: ObservableObject {
     static let defaultHubBaseURL = URL(string: "https://huggingface.co")!
@@ -784,70 +839,15 @@ class MLXModelManager: ObservableObject {
             sourceDirectory: sourceModelDir,
             lowercasedRepo: lower
         )
-        if lower.contains("forcedaligner") {
-            throw NSError(
-                domain: "MLXModelManager",
-                code: 1001,
-                userInfo: [NSLocalizedDescriptionKey: "Qwen3-ForcedAligner is alignment-only and not supported by Voxt transcription."]
-            )
+        let modelLoadTask = Task.detached(priority: .userInitiated) {
+            try await MLXSTTModelLoader.load(repo: repo, directory: modelDir)
         }
-        if lower.contains("glmasr") || lower.contains("glm-asr") {
-            return try await GLMASRModel.fromModelDirectory(modelDir)
+        let loaded = try await withTaskCancellationHandler {
+            try await modelLoadTask.value
+        } onCancel: {
+            modelLoadTask.cancel()
         }
-        if lower.contains("whisper") {
-            return try await WhisperModel.fromDirectory(modelDir)
-        }
-        if lower.contains("firered") {
-            return try FireRedASR2Model.fromDirectory(modelDir)
-        }
-        if lower.contains("sensevoice") {
-            return try SenseVoiceModel.fromDirectory(modelDir)
-        }
-        if lower.contains("qwen3-asr") || lower.contains("qwen3_asr") {
-            return try await Qwen3ASRModel.fromModelDirectory(modelDir)
-        }
-        if lower.contains("moss-transcribe-diarize") || lower.contains("moss_transcribe_diarize") {
-            return try await MossTranscribeDiarizeModel.fromModelDirectory(modelDir)
-        }
-        if lower.contains("voxtral") {
-            return try Self.loadVoxtralModel(from: modelDir)
-        }
-        if lower.contains("cohere") {
-            return try Self.loadCohereModel(from: modelDir)
-        }
-        if lower.contains("canary") {
-            return try await CanaryModel.fromModelDirectory(modelDir)
-        }
-        if lower.contains("wav2vec") || lower.contains("wav2vec2")
-            || lower.contains("/mms-") || lower.contains("mms_") || lower.contains("mms-")
-        {
-            return try Wav2Vec2CTCModel.fromModelDirectory(modelDir)
-        }
-        if lower.contains("lasr") {
-            return try LasrCTCModel.fromModelDirectory(modelDir)
-        }
-        if lower.contains("moonshine") {
-            return try await MoonshineModel.fromModelDirectory(modelDir)
-        }
-        if lower.contains("parakeet") {
-            return try ParakeetModel.fromDirectory(modelDir)
-        }
-        if lower.contains("granite") {
-            return try await GraniteSpeechModel.fromModelDirectory(modelDir)
-        }
-        if lower.contains("nemotron") {
-            return try NemotronASRModel.fromDirectory(modelDir)
-        }
-
-        return try await Qwen3ASRModel.fromModelDirectory(modelDir)
-    }
-
-    private static func loadVoxtralModel(from modelDir: URL) throws -> VoxtralRealtimeModel {
-        return try VoxtralRealtimeModel.fromDirectory(modelDir)
-    }
-
-    private static func loadCohereModel(from modelDir: URL) throws -> CohereTranscribeModel {
-        return try CohereTranscribeModel.fromDirectory(modelDir)
+        return loaded.model
     }
 
     private func writeCacheDirectory(for repo: String) -> URL? {

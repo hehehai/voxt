@@ -147,6 +147,7 @@ extension AppDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.interactionSoundPlayer.reset()
                 self?.scheduleHotkeyTransientStateReset(reason: "workspaceWillSleep")
             }
         }
@@ -157,6 +158,7 @@ extension AppDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.interactionSoundPlayer.reset()
                 self?.scheduleHotkeyTransientStateReset(reason: "workspaceDidWake")
             }
         }

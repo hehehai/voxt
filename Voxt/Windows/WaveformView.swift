@@ -635,7 +635,7 @@ struct WaveformView: View {
         stopAnimating(resetPhases: false)
         currentAnimationInterval = interval
         animTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 let speed = animationSpeed
                 guard speed > 0 else { return }
                 if displayMode == .recording && isRecording {

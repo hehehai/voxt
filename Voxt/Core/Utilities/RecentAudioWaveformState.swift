@@ -175,7 +175,7 @@ final class RecentAudioWaveformState: ObservableObject {
         guard timer == nil else { return }
         let interval = 1.0 / framesPerSecond
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.advanceFrame()
             }
         }

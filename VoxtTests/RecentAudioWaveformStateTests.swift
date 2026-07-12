@@ -5,6 +5,51 @@ import XCTest
 @testable import Voxt
 
 final class RecentAudioWaveformStateTests: XCTestCase {
+    @MainActor
+    func testAudioLevelDeliveryCoalescesPendingLevels() async {
+        let delivery = MLXAudioLevelDelivery()
+        var deliveredLevels: [Float] = []
+        let delivered = expectation(description: "latest audio level delivered")
+
+        delivery.submit(0.1) {
+            deliveredLevels.append($0)
+            delivered.fulfill()
+        }
+        delivery.submit(0.4) {
+            deliveredLevels.append($0)
+            delivered.fulfill()
+        }
+        delivery.submit(0.9) {
+            deliveredLevels.append($0)
+            delivered.fulfill()
+        }
+
+        await fulfillment(of: [delivered], timeout: 1)
+
+        XCTAssertEqual(deliveredLevels, [0.9])
+    }
+
+    @MainActor
+    func testAudioLevelDeliveryCanScheduleAgainAfterDelivery() async {
+        let delivery = MLXAudioLevelDelivery()
+        var deliveredLevels: [Float] = []
+        let firstDelivery = expectation(description: "first audio level delivered")
+        let secondDelivery = expectation(description: "second audio level delivered")
+
+        delivery.submit(0.2) {
+            deliveredLevels.append($0)
+            firstDelivery.fulfill()
+        }
+        await fulfillment(of: [firstDelivery], timeout: 1)
+        delivery.submit(0.7) {
+            deliveredLevels.append($0)
+            secondDelivery.fulfill()
+        }
+        await fulfillment(of: [secondDelivery], timeout: 1)
+
+        XCTAssertEqual(deliveredLevels, [0.2, 0.7])
+    }
+
     func testWaveformMaintainsConfiguredBarCount() {
         var waveform = RecentAudioWaveformModel(barCount: 16, historyDuration: 2.0, framesPerSecond: 18)
 
