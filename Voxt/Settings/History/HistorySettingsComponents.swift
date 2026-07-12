@@ -218,7 +218,6 @@ struct HistoryDayHeader: View {
 }
 
 struct HistoryRow: View {
-    @Environment(\.locale) private var locale
     @State private var isHovered = false
 
     let entry: TranscriptionHistoryEntry
@@ -234,7 +233,7 @@ struct HistoryRow: View {
                 Text(timeText)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 50, alignment: .leading)
+                    .frame(width: 92, alignment: .leading)
                     .padding(.top, 1)
 
                 Button(action: onCopy) {
@@ -300,12 +299,7 @@ struct HistoryRow: View {
     }
 
     private var timeText: String {
-        entry.createdAt.formatted(
-            .dateTime
-                .locale(locale)
-                .hour()
-                .minute()
-        )
+        RelativeNoteTimestampFormatter.historyCardTimestamp(for: entry.createdAt)
     }
 }
 
@@ -536,7 +530,6 @@ enum NoteHistoryRowLayout: Equatable {
 }
 
 struct NoteHistoryRow: View {
-    @Environment(\.locale) private var locale
     @State private var isHovered = false
     @State private var isRenaming = false
     @State private var isDetailPresented = false
@@ -963,14 +956,7 @@ struct NoteHistoryRow: View {
     }
 
     private var timeText: String {
-        item.updatedAt.formatted(
-            .dateTime
-                .locale(locale)
-                .month(.abbreviated)
-                .day()
-                .hour()
-                .minute()
-        )
+        RelativeNoteTimestampFormatter.historyCardTimestamp(for: item.updatedAt)
     }
 
     private func metadataChip(_ title: String, color: Color) -> some View {

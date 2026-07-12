@@ -424,6 +424,8 @@
 "Open Notification List" = "Open";
 "No Notifications" = "No notifications";
 "Select Notification" = "Select a notification";
+"Notification service is temporarily unavailable. Please try again later." = "Notification service is temporarily unavailable. Please try again later.";
+"Notification service is temporarily unavailable. Showing previously loaded notifications." = "Notification service is temporarily unavailable. Showing previously loaded notifications.";
 "Refresh" = "Refresh";
 "Version %@" = "Version %@";
 "Total Dictation Time" = "Total Dictation Time";
@@ -538,6 +540,7 @@
 "3 Months" = "3 Months";
 "6 Months" = "6 Months";
 "Today" = "Today";
+"Yesterday" = "Yesterday";
 "1 Day" = "1 Day";
 "7 Days" = "7 Days";
 "15 Days" = "15 Days";

@@ -875,13 +875,14 @@ struct SettingsView: View {
                             isListExpanded.toggle()
                         }
                     } label: {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 4) {
                             HomeNotificationListToggleIcon(isExpanded: isListExpanded)
-                                .frame(width: 14, height: 14)
+                                .frame(width: 13, height: 13)
                             Text(settingsLocalized("Notification History"))
+                                .font(.system(size: 11, weight: .semibold))
                         }
                     }
-                    .buttonStyle(SettingsPillButtonStyle())
+                    .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 9, height: 26))
 
                     if store.isLoading {
                         ProgressView()
@@ -889,6 +890,28 @@ struct SettingsView: View {
                     }
 
                     Spacer(minLength: 0)
+                }
+
+                if let errorMessage = store.lastErrorMessage {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(errorMessage)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        Button(settingsLocalized("Refresh")) {
+                            Task {
+                                await store.refresh(force: true)
+                            }
+                        }
+                        .buttonStyle(SettingsPillButtonStyle())
+                        .disabled(store.isLoading)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(SettingsUIStyle.groupedFillColor)
+                    .clipShape(RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous))
                 }
 
                 HStack(spacing: 0) {
@@ -914,11 +937,14 @@ struct SettingsView: View {
                 .animation(.easeInOut(duration: 0.18), value: isListExpanded)
 
             }
-            .settingsDialogChrome(width: isListExpanded ? 760 : 540, height: 540, onClose: onClose)
+            .settingsDialogChrome(width: isListExpanded ? 760 : 540, height: 500, onClose: onClose)
             .animation(.easeInOut(duration: 0.18), value: isListExpanded)
             .onAppear {
                 selectedNotificationID = selectedNotification?.id
                 markSelectedNotificationAsViewed()
+                Task {
+                    await store.refresh(force: true)
+                }
             }
             .onChange(of: store.notifications) { _, notifications in
                 guard !notifications.isEmpty else {
@@ -1074,7 +1100,7 @@ struct SettingsView: View {
                         .fill(.primary)
                 }
             }
-            .frame(width: 18, height: 18)
+            .frame(width: 13, height: 13)
         }
 
         private var paths: [String] {

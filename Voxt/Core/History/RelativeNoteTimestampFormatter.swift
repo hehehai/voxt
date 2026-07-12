@@ -4,70 +4,42 @@
 import Foundation
 
 enum RelativeNoteTimestampFormatter {
-    private static let minute: TimeInterval = 60
-    private static let hour: TimeInterval = 60 * minute
-    private static let day: TimeInterval = 24 * hour
-    private static let relativeCutoff: TimeInterval = 15 * day
-
     static func noteCardTimestamp(for date: Date, now: Date = Date()) -> String? {
-        let elapsed = max(0, now.timeIntervalSince(date))
-        guard elapsed < relativeCutoff else { return nil }
-        return relativeTimestamp(forElapsed: elapsed)
+        historyCardTimestamp(for: date, now: now)
     }
 
     static func noteHistoryTimestamp(for date: Date, now: Date = Date()) -> String {
-        let elapsed = max(0, now.timeIntervalSince(date))
-        if elapsed < relativeCutoff {
-            return relativeTimestamp(forElapsed: elapsed)
-        }
-        return absoluteTimestamp(for: date)
+        historyCardTimestamp(for: date, now: now)
     }
 
-    private static func relativeTimestamp(forElapsed elapsed: TimeInterval) -> String {
-        if elapsed < minute {
-            return AppLocalization.localizedString("Just now")
-        }
+    static func historyCardTimestamp(
+        for date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfDate = calendar.startOfDay(for: date)
+        let dayDifference = calendar.dateComponents([.day], from: startOfDate, to: startOfToday).day ?? 0
 
-        if elapsed < hour {
-            let minutes = max(1, Int(elapsed / minute))
-            return localizedCount(
-                value: minutes,
-                singularKey: "%d min ago",
-                pluralKey: "%d mins ago"
-            )
+        switch dayDifference {
+        case ...0:
+            return AppLocalization.localizedString("Today")
+        case 1:
+            return AppLocalization.localizedString("Yesterday")
+        case 2..<7:
+            return AppLocalization.format("%d days ago", dayDifference)
+        default:
+            return absoluteDate(for: date)
         }
-
-        if elapsed < day {
-            let hours = max(1, Int(elapsed / hour))
-            return localizedCount(
-                value: hours,
-                singularKey: "%d hr ago",
-                pluralKey: "%d hrs ago"
-            )
-        }
-
-        let days = max(1, Int(elapsed / day))
-        return localizedCount(
-            value: days,
-            singularKey: "%d day ago",
-            pluralKey: "%d days ago"
-        )
     }
 
-    private static func localizedCount(value: Int, singularKey: String, pluralKey: String) -> String {
-        let key = value == 1 ? singularKey : pluralKey
-        return AppLocalization.format(key, value)
-    }
-
-    private static func absoluteTimestamp(for date: Date) -> String {
+    private static func absoluteDate(for date: Date) -> String {
         date.formatted(
             .dateTime
                 .locale(AppLocalization.locale)
                 .year()
                 .month(.abbreviated)
                 .day()
-                .hour()
-                .minute()
         )
     }
 }

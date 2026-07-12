@@ -424,6 +424,8 @@
 "Open Notification List" = "打开";
 "No Notifications" = "暂无通知";
 "Select Notification" = "选择通知";
+"Notification service is temporarily unavailable. Please try again later." = "通知服务暂时不可用，请稍后再试。";
+"Notification service is temporarily unavailable. Showing previously loaded notifications." = "通知服务暂时不可用，当前显示的是之前加载的通知。";
 "Refresh" = "刷新";
 "Version %@" = "版本 %@";
 "Total Dictation Time" = "总口述时间";
@@ -538,6 +540,7 @@
 "3 Months" = "三个月";
 "6 Months" = "六个月";
 "Today" = "今天";
+"Yesterday" = "昨天";
 "1 Day" = "1 天";
 "7 Days" = "7 天";
 "15 Days" = "15 天";

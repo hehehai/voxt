@@ -24,22 +24,58 @@ final class RelativeNoteTimestampFormatterTests: XCTestCase {
         super.tearDown()
     }
 
-    func testNoteCardTimestampHidesDatesOlderThanFifteenDays() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        let recent = now.addingTimeInterval(-(3 * 24 * 60 * 60))
-        let stale = now.addingTimeInterval(-(16 * 24 * 60 * 60))
+    func testHistoryCardTimestampUsesCalendarDayLabelsThroughSixDays() throws {
+        let calendar = utcCalendar()
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 12, hour: 10)))
 
-        XCTAssertEqual(RelativeNoteTimestampFormatter.noteCardTimestamp(for: recent, now: now), "3 days ago")
-        XCTAssertNil(RelativeNoteTimestampFormatter.noteCardTimestamp(for: stale, now: now))
+        XCTAssertEqual(timestamp(daysBefore: 0, now: now, calendar: calendar), "Today")
+        XCTAssertEqual(timestamp(daysBefore: 1, now: now, calendar: calendar), "Yesterday")
+        XCTAssertEqual(timestamp(daysBefore: 2, now: now, calendar: calendar), "2 days ago")
+        XCTAssertEqual(timestamp(daysBefore: 6, now: now, calendar: calendar), "6 days ago")
     }
 
-    func testNoteHistoryTimestampFallsBackToAbsoluteDateAfterFifteenDays() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        let stale = now.addingTimeInterval(-(16 * 24 * 60 * 60))
+    func testHistoryCardTimestampUsesAbsoluteDateAtSevenDays() throws {
+        let calendar = utcCalendar()
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 12, hour: 10)))
+        let sevenDaysAgo = try XCTUnwrap(calendar.date(byAdding: .day, value: -7, to: now))
 
-        let text = RelativeNoteTimestampFormatter.noteHistoryTimestamp(for: stale, now: now)
+        let text = RelativeNoteTimestampFormatter.historyCardTimestamp(
+            for: sevenDaysAgo,
+            now: now,
+            calendar: calendar
+        )
 
         XCTAssertFalse(text.isEmpty)
-        XCTAssertNotEqual(text, "16 days ago")
+        XCTAssertNotEqual(text, "7 days ago")
+    }
+
+    func testHistoryCardTimestampUsesCalendarBoundaryForYesterday() throws {
+        let calendar = utcCalendar()
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 12, hour: 0, minute: 30)))
+        let previousNight = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 11, hour: 23, minute: 30)))
+
+        XCTAssertEqual(
+            RelativeNoteTimestampFormatter.historyCardTimestamp(
+                for: previousNight,
+                now: now,
+                calendar: calendar
+            ),
+            "Yesterday"
+        )
+    }
+
+    private func timestamp(daysBefore: Int, now: Date, calendar: Calendar) -> String {
+        let date = calendar.date(byAdding: .day, value: -daysBefore, to: now)!
+        return RelativeNoteTimestampFormatter.historyCardTimestamp(
+            for: date,
+            now: now,
+            calendar: calendar
+        )
+    }
+
+    private func utcCalendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
     }
 }

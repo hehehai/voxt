@@ -415,6 +415,8 @@
 "Open Notification List" = "開く";
 "No Notifications" = "通知はありません";
 "Select Notification" = "通知を選択";
+"Notification service is temporarily unavailable. Please try again later." = "通知サービスは一時的に利用できません。しばらくしてから再試行してください。";
+"Notification service is temporarily unavailable. Showing previously loaded notifications." = "通知サービスは一時的に利用できません。以前に読み込んだ通知を表示しています。";
 "Refresh" = "更新";
 "Version %@" = "バージョン %@";
 "Total Dictation Time" = "総口述時間";
@@ -529,6 +531,7 @@
 "3 Months" = "3か月";
 "6 Months" = "6か月";
 "Today" = "今日";
+"Yesterday" = "昨日";
 "1 Day" = "1日";
 "7 Days" = "7日";
 "15 Days" = "15日";
