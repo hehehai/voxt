@@ -318,7 +318,7 @@ struct HistorySettingsView: View {
                 placeholder: localized(
                     isNoteTabSelected
                         ? "Search note titles or content"
-                        : "Search text, title, app, or dictionary terms"
+                        : "Search history text, titles, or apps"
                 ),
                 query: $historySearchText,
                 isPresented: $showHistorySearchDialog

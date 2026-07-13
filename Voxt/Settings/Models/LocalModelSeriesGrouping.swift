@@ -10,7 +10,8 @@ private func localized(_ key: String) -> String {
 enum ModelCatalogBadgeSupport {
     private static let recommendedMLXRepos: Set<String> = [
         "mlx-community/whisper-large-v3-turbo",
-        "mlx-community/SenseVoiceSmall"
+        "mlx-community/SenseVoiceSmall",
+        "OpenMOSS-Team/MOSS-Transcribe-Diarize"
     ]
 
     private static let recommendedRemoteASRProviders: Set<RemoteASRProvider> = [

@@ -1566,12 +1566,12 @@
 "Start Ingest" = "开始录入";
 "Delete All Dictionary Terms?" = "确认清空全部词典词条？";
 "Search Dictionary" = "搜索词典";
-"Search terms, aliases, or groups" = "搜索词汇、替换词或分组";
+"Search dictionary terms, aliases, or groups" = "搜索词典中的词汇、替换词或分组";
 "Filtered by \"%@\"" = "按“%@”筛选";
 "Clear" = "清除";
 "Done" = "完成";
 "Search History" = "搜索历史记录";
-"Search text, title, app, or dictionary terms" = "搜索文本、标题、应用或词典词汇";
+"Search history text, titles, or apps" = "搜索历史记录中的文本、标题或应用";
 "This will permanently delete all dictionary terms." = "这会永久删除所有词典词条。";
 "Plain Text" = "纯文本";
 "JSON Schema" = "JSON Schema";

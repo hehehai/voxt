@@ -1508,12 +1508,12 @@
 "Start Ingest" = "取り込み開始";
 "Delete All Dictionary Terms?" = "辞書の全項目を削除しますか？";
 "Search Dictionary" = "辞書を検索";
-"Search terms, aliases, or groups" = "用語、別名、グループを検索";
+"Search dictionary terms, aliases, or groups" = "辞書内の用語、別名、グループを検索";
 "Filtered by \"%@\"" = "「%@」で絞り込み";
 "Clear" = "クリア";
 "Done" = "完了";
 "Search History" = "履歴を検索";
-"Search text, title, app, or dictionary terms" = "テキスト、タイトル、アプリ、辞書用語を検索";
+"Search history text, titles, or apps" = "履歴内のテキスト、タイトル、アプリを検索";
 "This will permanently delete all dictionary terms." = "すべての辞書項目が完全に削除されます。";
 "Plain Text" = "プレーンテキスト";
 "JSON Schema" = "JSON Schema";

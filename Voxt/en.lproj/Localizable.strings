@@ -1619,12 +1619,12 @@
 "Start Ingest" = "Start Ingest";
 "Delete All Dictionary Terms?" = "Delete All Dictionary Terms?";
 "Search Dictionary" = "Search Dictionary";
-"Search terms, aliases, or groups" = "Search terms, aliases, or groups";
+"Search dictionary terms, aliases, or groups" = "Search dictionary terms, aliases, or groups";
 "Filtered by \"%@\"" = "Filtered by \"%@\"";
 "Clear" = "Clear";
 "Done" = "Done";
 "Search History" = "Search History";
-"Search text, title, app, or dictionary terms" = "Search text, title, app, or dictionary terms";
+"Search history text, titles, or apps" = "Search history text, titles, or apps";
 "This will permanently delete all dictionary terms." = "This will permanently delete all dictionary terms.";
 "Plain Text" = "Plain Text";
 "JSON Schema" = "JSON Schema";

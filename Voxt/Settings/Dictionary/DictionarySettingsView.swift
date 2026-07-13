@@ -129,7 +129,7 @@ struct DictionarySettingsView: View {
         .sheet(isPresented: $showDictionarySearchDialog) {
             SettingsSearchDialog(
                 title: localized("Search Dictionary"),
-                placeholder: localized("Search terms, aliases, or groups"),
+                placeholder: localized("Search dictionary terms, aliases, or groups"),
                 query: $dictionarySearchText,
                 isPresented: $showDictionarySearchDialog
             )

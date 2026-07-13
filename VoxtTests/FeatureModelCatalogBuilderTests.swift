@@ -365,6 +365,9 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         let senseVoice = try XCTUnwrap(
             asrEntries.first(where: { $0.selectionID == .mlx("mlx-community/SenseVoiceSmall") })
         )
+        let moss = try XCTUnwrap(
+            asrEntries.first(where: { $0.selectionID == .mlx("OpenMOSS-Team/MOSS-Transcribe-Diarize") })
+        )
         let doubaoASR = try XCTUnwrap(
             asrEntries.first(where: { $0.selectionID == .remoteASR(.doubaoASR) })
         )
@@ -385,6 +388,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(senseVoice.badgeText, recommended)
+        XCTAssertEqual(moss.badgeText, recommended)
         XCTAssertEqual(doubaoASR.badgeText, recommended)
         XCTAssertEqual(stepFunASR.badgeText, recommended)
         XCTAssertEqual(deepSeek.badgeText, recommended)

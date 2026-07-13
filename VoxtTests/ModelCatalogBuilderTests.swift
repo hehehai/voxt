@@ -423,6 +423,9 @@ final class ModelCatalogBuilderTests: XCTestCase {
         let senseVoice = try XCTUnwrap(
             builder.asrEntries().first(where: { $0.id == "mlx:mlx-community/SenseVoiceSmall" })
         )
+        let moss = try XCTUnwrap(
+            builder.asrEntries().first(where: { $0.id == "mlx:OpenMOSS-Team/MOSS-Transcribe-Diarize" })
+        )
         let doubaoASR = try XCTUnwrap(
             builder.asrEntries().first(where: { $0.id == "remote-asr:\(RemoteASRProvider.doubaoASR.rawValue)" })
         )
@@ -444,6 +447,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
 
         let recommended = AppLocalization.localizedString("Recommended")
         XCTAssertEqual(senseVoice.badgeText, recommended)
+        XCTAssertEqual(moss.badgeText, recommended)
         XCTAssertEqual(doubaoASR.badgeText, recommended)
         XCTAssertEqual(stepFunASR.badgeText, recommended)
         XCTAssertEqual(deepSeek.badgeText, recommended)
