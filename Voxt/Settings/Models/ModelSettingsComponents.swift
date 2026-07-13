@@ -13,19 +13,15 @@ struct PromptEditorView: View {
     var variablesTitle: String? = nil
     var onTextChange: ((String) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextEditor(text: $text)
+            PromptTextEditor(
+                text: $text,
+                onTextChange: onTextChange,
+                onFocusChange: onFocusChange
+            )
                 .settingsPromptEditor(height: height, contentPadding: contentPadding)
-                .focused($isFocused)
-                .onChange(of: text) { _, newValue in
-                    onTextChange?(newValue)
-                }
-                .onChange(of: isFocused) { _, newValue in
-                    onFocusChange?(newValue)
-                }
 
             if !variables.isEmpty {
                 PromptTemplateVariablesView(
@@ -34,6 +30,140 @@ struct PromptEditorView: View {
                     layout: variablesLayout
                 )
             }
+        }
+    }
+}
+
+enum PromptTextEditorUpdatePolicy {
+    static func shouldPublishChange(hasMarkedText: Bool) -> Bool {
+        // Marked text is an in-progress input method candidate, not a committed edit.
+        !hasMarkedText
+    }
+
+    static func shouldApplyExternalText(
+        currentText: String,
+        externalText: String,
+        hasMarkedText: Bool
+    ) -> Bool {
+        // Reassigning even identical text resets NSTextView's selection. Never
+        // replace its storage while an input method owns a marked range either.
+        !hasMarkedText && currentText != externalText
+    }
+}
+
+private struct PromptTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    let onTextChange: ((String) -> Void)?
+    let onFocusChange: ((Bool) -> Void)?
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.string = text
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.allowsUndo = true
+        textView.drawsBackground = false
+        textView.font = .monospacedSystemFont(ofSize: 13, weight: .medium)
+        textView.textColor = .labelColor
+        applyParagraphStyle(to: textView)
+        textView.textContainerInset = NSSize(width: 2, height: 4)
+        textView.minSize = .zero
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        guard PromptTextEditorUpdatePolicy.shouldApplyExternalText(
+            currentText: textView.string,
+            externalText: text,
+            hasMarkedText: textView.hasMarkedText()
+        ) else {
+            return
+        }
+
+        let selectedRange = textView.selectedRange()
+        textView.string = text
+        applyParagraphStyle(to: textView)
+        textView.setSelectedRange(clamped(selectedRange, for: text))
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    private func applyParagraphStyle(to textView: NSTextView) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 4
+        textView.defaultParagraphStyle = paragraphStyle
+        textView.typingAttributes[.paragraphStyle] = paragraphStyle
+        textView.textStorage?.addAttribute(
+            .paragraphStyle,
+            value: paragraphStyle,
+            range: NSRange(location: 0, length: textView.textStorage?.length ?? 0)
+        )
+    }
+
+    private func clamped(_ range: NSRange, for text: String) -> NSRange {
+        let textLength = (text as NSString).length
+        let location = min(range.location, textLength)
+        return NSRange(
+            location: location,
+            length: min(range.length, textLength - location)
+        )
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: PromptTextEditor
+
+        init(parent: PromptTextEditor) {
+            self.parent = parent
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            parent.onFocusChange?(true)
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            publishCommittedText(from: textView)
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            if let textView = notification.object as? NSTextView {
+                publishCommittedText(from: textView)
+            }
+            parent.onFocusChange?(false)
+        }
+
+        private func publishCommittedText(from textView: NSTextView) {
+            guard PromptTextEditorUpdatePolicy.shouldPublishChange(
+                hasMarkedText: textView.hasMarkedText()
+            ) else {
+                return
+            }
+
+            let newValue = textView.string
+            guard parent.text != newValue else { return }
+            parent.text = newValue
+            parent.onTextChange?(newValue)
         }
     }
 }

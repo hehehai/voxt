@@ -57,4 +57,71 @@ final class FeaturePromptDraftCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastSyncedText, "External prompt")
         XCTAssertNil(coordinator.takePendingPersist())
     }
+
+    func testPendingPersistPreservesUnicodeSpacesAndNewlinesExactly() {
+        var coordinator = FeaturePromptDraftCoordinator(text: "Base prompt")
+        let editedPrompt = "请保留 空格\n并保留换行。日本語も保持する"
+
+        coordinator.updateDraft(editedPrompt)
+
+        XCTAssertEqual(coordinator.takePendingPersist(), editedPrompt)
+        XCTAssertEqual(coordinator.draft, editedPrompt)
+        XCTAssertEqual(coordinator.lastSyncedText, editedPrompt)
+    }
+
+    func testRoundTripEchoDoesNotMoveDraftAfterMultilineEdit() {
+        var coordinator = FeaturePromptDraftCoordinator(text: "第一行")
+        let editedPrompt = "第一行\n第二行 最后一个字"
+        coordinator.updateDraft(editedPrompt)
+        XCTAssertEqual(coordinator.takePendingPersist(), editedPrompt)
+
+        coordinator.syncExternalText(editedPrompt)
+
+        XCTAssertEqual(coordinator.draft, editedPrompt)
+        XCTAssertNil(coordinator.takePendingPersist())
+    }
+}
+
+final class PromptTextEditorUpdatePolicyTests: XCTestCase {
+    func testMarkedTextIsNotPublishedToAutosave() {
+        XCTAssertFalse(
+            PromptTextEditorUpdatePolicy.shouldPublishChange(hasMarkedText: true)
+        )
+    }
+
+    func testCommittedTextIsPublishedToAutosave() {
+        XCTAssertTrue(
+            PromptTextEditorUpdatePolicy.shouldPublishChange(hasMarkedText: false)
+        )
+    }
+
+    func testAutosaveRoundTripDoesNotReassignIdenticalText() {
+        XCTAssertFalse(
+            PromptTextEditorUpdatePolicy.shouldApplyExternalText(
+                currentText: "用户正在输入",
+                externalText: "用户正在输入",
+                hasMarkedText: false
+            )
+        )
+    }
+
+    func testExternalStateCannotReplaceActiveInputMethodComposition() {
+        XCTAssertFalse(
+            PromptTextEditorUpdatePolicy.shouldApplyExternalText(
+                currentText: "用户正在shuru",
+                externalText: "用户正在",
+                hasMarkedText: true
+            )
+        )
+    }
+
+    func testRealExternalChangeIsAppliedAfterCompositionCommits() {
+        XCTAssertTrue(
+            PromptTextEditorUpdatePolicy.shouldApplyExternalText(
+                currentText: "旧提示词",
+                externalText: "新提示词\n第二行",
+                hasMarkedText: false
+            )
+        )
+    }
 }

@@ -85,20 +85,27 @@ struct OnboardingGuideView: View {
 
     @FocusState private var focusedField: OnboardingGuideFocusField?
 
-    private static let defaultTranscriptionEnhancementPromptKey = """
-    Clean up the dictated text while preserving meaning. Fix punctuation, casing, repeated words, spoken filler, and obvious number or unit formatting.
-    """
-
-    private static let defaultAppEnhancementPromptKey = """
-    Turn the user's spoken note into a concise, professional email. Keep the tone clear, polite, and action-oriented.
-    """
-
     private static var defaultTranscriptionEnhancementPrompt: String {
-        guideLocalized(Self.defaultTranscriptionEnhancementPromptKey)
+        AppPromptResourceStore.requiredText(
+            for: .onboardingTranscriptionEnhancement,
+            language: AppLocalization.language
+        )
     }
 
     private static var defaultAppEnhancementPrompt: String {
-        guideLocalized(Self.defaultAppEnhancementPromptKey)
+        AppPromptResourceStore.requiredText(
+            for: .onboardingAppEnhancement,
+            language: AppLocalization.language
+        )
+    }
+
+    private static func isBundledGuidePrompt(
+        _ text: String,
+        resource: LocalizedPromptResource
+    ) -> Bool {
+        [.english, .chineseSimplified, .japanese].contains { language in
+            AppPromptResourceStore.text(for: resource, language: language) == text
+        }
     }
 
     private static let defaultTranslationSampleKey = "Please translate this sentence into the selected target language."
@@ -2912,11 +2919,17 @@ private extension OnboardingGuideView {
 
     func refreshLocalizedGuideSamples() {
         if temporaryEnhancementPrompt.isEmpty
-            || temporaryEnhancementPrompt == Self.defaultTranscriptionEnhancementPromptKey {
+            || Self.isBundledGuidePrompt(
+                temporaryEnhancementPrompt,
+                resource: .onboardingTranscriptionEnhancement
+            ) {
             temporaryEnhancementPrompt = Self.defaultTranscriptionEnhancementPrompt
         }
         if temporaryAppEnhancementPrompt.isEmpty
-            || temporaryAppEnhancementPrompt == Self.defaultAppEnhancementPromptKey {
+            || Self.isBundledGuidePrompt(
+                temporaryAppEnhancementPrompt,
+                resource: .onboardingAppEnhancement
+            ) {
             temporaryAppEnhancementPrompt = Self.defaultAppEnhancementPrompt
         }
         if translationInput.isEmpty

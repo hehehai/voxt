@@ -393,20 +393,22 @@ nonisolated private func recognizeWithSherpa(
         case .funASRNano:
             let hotwordsText = recognitionConfiguration.hotwords.joined(separator: "\n")
             let language = recognitionConfiguration.language ?? ""
+            let systemPrompt = AppPromptResourceStore.requiredText(for: .funASRNanoSystem)
+            let userPrompt = AppPromptResourceStore.requiredText(for: .funASRNanoUser)
             return withCStringPointer(modelDirectory.appendingPathComponent("encoder_adaptor.int8.onnx").path) { adaptorPath in
                 withCStringPointer(modelDirectory.appendingPathComponent("llm.int8.onnx").path) { llmPath in
                     withCStringPointer(modelDirectory.appendingPathComponent("embedding.int8.onnx").path) { embeddingPath in
                         withCStringPointer(modelDirectory.appendingPathComponent("Qwen3-0.6B").path) { tokenizerPath in
-                            withCStringPointer("You are a helpful assistant.") { systemPrompt in
-                                withCStringPointer("Transcribe speech:") { userPrompt in
+                            withCStringPointer(systemPrompt) { systemPromptPointer in
+                                withCStringPointer(userPrompt) { userPromptPointer in
                                     withCStringPointer(language) { languagePointer in
                                         withCStringPointer(hotwordsText) { hotwordsPointer in
                                             config.model_config.funasr_nano.encoder_adaptor = adaptorPath
                                             config.model_config.funasr_nano.llm = llmPath
                                             config.model_config.funasr_nano.embedding = embeddingPath
                                             config.model_config.funasr_nano.tokenizer = tokenizerPath
-                                            config.model_config.funasr_nano.system_prompt = systemPrompt
-                                            config.model_config.funasr_nano.user_prompt = userPrompt
+                                            config.model_config.funasr_nano.system_prompt = systemPromptPointer
+                                            config.model_config.funasr_nano.user_prompt = userPromptPointer
                                             if !language.isEmpty {
                                                 config.model_config.funasr_nano.language = languagePointer
                                             }

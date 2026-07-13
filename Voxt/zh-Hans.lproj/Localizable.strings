@@ -1905,7 +1905,6 @@
 "Choose Folder" = "选择文件夹";
 "Choose Models" = "选择模型";
 "Choose a target language and test the translation shortcut." = "选择默认目标语言，并测试翻译快捷键。";
-"Clean up the dictated text while preserving meaning. Fix punctuation, casing, repeated words, spoken filler, and obvious number or unit formatting." = "在保留原意的前提下整理听写文本。修正标点、大小写、重复词、口头语，以及明显的数字或单位格式。";
 "Complete this test to continue." = "完成当前测试后才能继续。";
 "Configure at least one remote ASR or LLM provider to continue." = "至少配置一个远程 ASR 或 LLM 服务后才能继续。";
 "Current Location" = "当前位置";
@@ -1967,7 +1966,6 @@
 "Try enhanced transcription output in a focused input." = "在聚焦输入框中测试增强后的转录结果。";
 "Try entering text in the box, then continue." = "在输入框中输入一些文本，然后继续。";
 "Try: please draft an update email for the launch delay." = "试试说：请为发布延期起草一封更新邮件。";
-"Turn the user's spoken note into a concise, professional email. Keep the tone clear, polite, and action-oriented." = "把用户的语音笔记整理成简洁、专业的邮件。语气保持清晰、礼貌，并突出行动项。";
 "Use this input to test translation." = "用这个输入框测试翻译。";
 "Use voice rewrite mode to answer or transform text." = "使用语音转写模式来回答问题或改写文本。";
 "View Tour" = "引导预览";

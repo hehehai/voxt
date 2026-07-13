@@ -1863,7 +1863,6 @@
 "Choose Folder" = "フォルダを選択";
 "Choose Models" = "モデルを選択";
 "Choose a target language and test the translation shortcut." = "対象言語を選び、翻訳ショートカットをテストします。";
-"Clean up the dictated text while preserving meaning. Fix punctuation, casing, repeated words, spoken filler, and obvious number or unit formatting." = "意味を保ったまま音声入力テキストを整えます。句読点、大文字小文字、重複語、口癖、明らかな数値や単位の表記を修正します。";
 "Complete this test to continue." = "続けるにはこのテストを完了してください。";
 "Configure at least one remote ASR or LLM provider to continue." = "続けるには少なくとも 1 つのリモート ASR または LLM プロバイダーを設定してください。";
 "Current Location" = "現在の場所";
@@ -1925,7 +1924,6 @@
 "Try enhanced transcription output in a focused input." = "フォーカス中の入力欄で補正後の文字起こし結果を試します。";
 "Try entering text in the box, then continue." = "ボックスにテキストを入力してから続けてください。";
 "Try: please draft an update email for the launch delay." = "例：リリース遅延についての更新メールを作成してください。";
-"Turn the user's spoken note into a concise, professional email. Keep the tone clear, polite, and action-oriented." = "ユーザーの音声メモを簡潔でプロフェッショナルなメールにします。明確で丁寧、行動につながるトーンにしてください。";
 "Use this input to test translation." = "この入力欄で翻訳をテストします。";
 "Use voice rewrite mode to answer or transform text." = "音声書き換えモードで回答したり、テキストを変換したりします。";
 "View Tour" = "ガイドプレビュー";

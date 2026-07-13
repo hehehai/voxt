@@ -213,15 +213,15 @@ enum MossASRPromptSupport {
         let basePrompt: String
         switch outputMode {
         case .timestampedDiarization:
-            basePrompt = "Transcribe the audio. For each segment, start with the timestamp and speaker ID ([S01], [S02], [S03], ...), then the spoken text, and end with the segment timestamp."
+            basePrompt = AppPromptResourceStore.requiredText(for: .mossTimestampedDiarization)
         case .speakerOnly:
-            basePrompt = "Transcribe the audio as text using speaker labels such as [S01], [S02], and [S03]."
+            basePrompt = AppPromptResourceStore.requiredText(for: .mossSpeakerOnly)
         case .plainText:
-            basePrompt = "Transcribe the audio as plain text without timestamps or speaker labels."
+            basePrompt = AppPromptResourceStore.requiredText(for: .mossPlainText)
         case .customPrompt:
             let trimmed = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             basePrompt = trimmed.isEmpty
-                ? "Transcribe the audio. For each segment, start with the timestamp and speaker ID ([S01], [S02], [S03], ...), then the spoken text, and end with the segment timestamp."
+                ? AppPromptResourceStore.requiredText(for: .mossTimestampedDiarization)
                 : trimmed
         }
 

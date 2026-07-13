@@ -1905,7 +1905,6 @@
 "Choose Folder" = "Choose Folder";
 "Choose Models" = "Choose Models";
 "Choose a target language and test the translation shortcut." = "Choose a target language and test the translation shortcut.";
-"Clean up the dictated text while preserving meaning. Fix punctuation, casing, repeated words, spoken filler, and obvious number or unit formatting." = "Clean up the dictated text while preserving meaning. Fix punctuation, casing, repeated words, spoken filler, and obvious number or unit formatting.";
 "Complete this test to continue." = "Complete this test to continue.";
 "Configure at least one remote ASR or LLM provider to continue." = "Configure at least one remote ASR or LLM provider to continue.";
 "Current Location" = "Current Location";
@@ -1967,7 +1966,6 @@
 "Try enhanced transcription output in a focused input." = "Try enhanced transcription output in a focused input.";
 "Try entering text in the box, then continue." = "Try entering text in the box, then continue.";
 "Try: please draft an update email for the launch delay." = "Try: please draft an update email for the launch delay.";
-"Turn the user's spoken note into a concise, professional email. Keep the tone clear, polite, and action-oriented." = "Turn the user's spoken note into a concise, professional email. Keep the tone clear, polite, and action-oriented.";
 "Use this input to test translation." = "Use this input to test translation.";
 "Use voice rewrite mode to answer or transform text." = "Use voice rewrite mode to answer or transform text.";
 "View Tour" = "View Tour";

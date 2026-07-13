@@ -3,24 +3,80 @@
 
 import Foundation
 
-enum AppPromptResourceStore {
-    static func text(for kind: AppPromptKind, language: AppInterfaceLanguage) -> String? {
-        let languageDirectory = resourceLanguageDirectory(for: language)
-        let resourceName = "\(languageDirectory)-\(kind.promptResourceName)"
-        let subdirectory = "Resources/Prompts/\(languageDirectory)"
-        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "txt")
-            ?? Bundle.main.url(
-                forResource: kind.promptResourceName,
-                withExtension: "txt",
-                subdirectory: subdirectory
-            ) else {
-            return nil
-        }
+enum LocalizedPromptResource: String, CaseIterable {
+    case enhancement
+    case translation
+    case translationCompact = "translation-compact"
+    case rewrite
+    case transcriptSummary = "transcript-summary"
+    case dictionaryIngest = "dictionary-ingest"
+    case dictionaryAutoLearning = "dictionary-auto-learning"
+    case dictionaryAutoLearningRuntimeConstraints = "dictionary-auto-learning-runtime-constraints"
+    case qwenASRContextBias = "qwen-asr-context-bias"
+    case openAIASRHint = "openai-asr-hint"
+    case glmASRHint = "glm-asr-hint"
+    case onboardingTranscriptionEnhancement = "onboarding-transcription-enhancement"
+    case onboardingAppEnhancement = "onboarding-app-enhancement"
+}
 
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return nil
+nonisolated enum SharedPromptResource: String, CaseIterable {
+    case mossTimestampedDiarization = "moss-timestamped-diarization"
+    case mossSpeakerOnly = "moss-speaker-only"
+    case mossPlainText = "moss-plain-text"
+    case funASRNanoSystem = "funasr-nano-system"
+    case funASRNanoUser = "funasr-nano-user"
+    case transcriptFollowUp = "transcript-follow-up"
+    case savedTranscriptionFollowUp = "saved-transcription-follow-up"
+}
+
+enum AppPromptResourceStore {
+    static var registeredLocalizedResourceNames: Set<String> {
+        Set(LocalizedPromptResource.allCases.map(\.rawValue))
+            .union(FeaturePromptPresetCatalog.localizedResourceNames)
+    }
+
+    nonisolated static var registeredSharedResourceNames: Set<String> {
+        Set(SharedPromptResource.allCases.map(\.rawValue))
+    }
+
+    static func text(for kind: AppPromptKind, language: AppInterfaceLanguage) -> String? {
+        text(for: kind.promptResource, language: language)
+    }
+
+    static func text(
+        for resource: LocalizedPromptResource,
+        language: AppInterfaceLanguage
+    ) -> String? {
+        let languageDirectory = resourceLanguageDirectory(for: language)
+        let resourceName = "\(languageDirectory)-\(resource.rawValue)"
+        let subdirectory = "Resources/Prompts/\(languageDirectory)"
+        return loadText(resourceName: resourceName, subdirectory: subdirectory)
+    }
+
+    nonisolated static func text(for resource: SharedPromptResource) -> String? {
+        loadText(
+            resourceName: resource.rawValue,
+            subdirectory: "Resources/Prompts/shared"
+        )
+    }
+
+    static func requiredText(
+        for resource: LocalizedPromptResource,
+        language: AppInterfaceLanguage
+    ) -> String {
+        guard let text = text(for: resource, language: language),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            preconditionFailure("Missing bundled prompt resource \(resource.rawValue) for \(language.rawValue)")
         }
-        return text.removingSingleTrailingNewline()
+        return text
+    }
+
+    nonisolated static func requiredText(for resource: SharedPromptResource) -> String {
+        guard let text = text(for: resource),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            preconditionFailure("Missing bundled shared prompt resource \(resource.rawValue)")
+        }
+        return text
     }
 
     static func presetText(
@@ -29,20 +85,9 @@ enum AppPromptResourceStore {
         language: AppInterfaceLanguage
     ) -> String? {
         let languageDirectory = resourceLanguageDirectory(for: language)
-        let resourceName = "\(languageDirectory)-\(kind.promptResourceName)-\(presetID)"
+        let resourceName = "\(languageDirectory)-\(kind.promptResource.rawValue)-\(presetID)"
         let subdirectory = "Resources/Prompts/\(languageDirectory)"
-        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "txt")
-            ?? Bundle.main.url(
-                forResource: resourceName,
-                withExtension: "txt",
-                subdirectory: subdirectory
-            ) else {
-            return nil
-        }
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return nil
-        }
-        return text.removingSingleTrailingNewline()
+        return loadText(resourceName: resourceName, subdirectory: subdirectory)
     }
 
     private static func resourceLanguageDirectory(for language: AppInterfaceLanguage) -> String {
@@ -57,34 +102,50 @@ enum AppPromptResourceStore {
             return resourceLanguageDirectory(for: .resolvedSystemLanguage)
         }
     }
+
+    nonisolated private static func loadText(
+        resourceName: String,
+        subdirectory: String
+    ) -> String? {
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "txt")
+            ?? Bundle.main.url(
+                forResource: resourceName,
+                withExtension: "txt",
+                subdirectory: subdirectory
+            ),
+            let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return text.removingSingleTrailingNewline()
+    }
 }
 
-private extension AppPromptKind {
-    var promptResourceName: String {
+extension AppPromptKind {
+    var promptResource: LocalizedPromptResource {
         switch self {
         case .enhancement:
-            return "enhancement"
+            return .enhancement
         case .translation:
-            return "translation"
+            return .translation
         case .rewrite:
-            return "rewrite"
+            return .rewrite
         case .transcriptSummary:
-            return "transcript-summary"
+            return .transcriptSummary
         case .dictionaryIngest:
-            return "dictionary-ingest"
+            return .dictionaryIngest
         case .dictionaryAutoLearning:
-            return "dictionary-auto-learning"
+            return .dictionaryAutoLearning
         case .qwenASRContextBias:
-            return "qwen-asr-context-bias"
+            return .qwenASRContextBias
         case .openAIASRHint:
-            return "openai-asr-hint"
+            return .openAIASRHint
         case .glmASRHint:
-            return "glm-asr-hint"
+            return .glmASRHint
         }
     }
 }
 
-private extension String {
+nonisolated private extension String {
     func removingSingleTrailingNewline() -> String {
         if hasSuffix("\r\n") {
             return String(dropLast(2))

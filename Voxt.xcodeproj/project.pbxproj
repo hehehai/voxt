@@ -90,6 +90,7 @@
 				Resources/Prompts/en/README.md,
 				Resources/Prompts/ja/README.md,
 				Resources/Prompts/README.md,
+				Resources/Prompts/shared/README.md,
 				"Resources/Prompts/zh-Hans/README.md",
 				Resources/README.md,
 				Settings/AppEnhancement/README.md,

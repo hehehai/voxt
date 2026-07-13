@@ -17,6 +17,17 @@ enum FeaturePromptPresetCatalog {
         .japanese
     ]
 
+    static var localizedResourceNames: Set<String> {
+        Set(
+            AppPromptKind.allCases.flatMap { kind in
+                definitions(for: kind).compactMap { definition in
+                    guard definition.id != defaultPresetID(for: kind) else { return nil }
+                    return "\(kind.promptResource.rawValue)-\(definition.id)"
+                }
+            }
+        )
+    }
+
     static func defaultPresetID(for kind: AppPromptKind) -> String? {
         switch kind {
         case .enhancement:
