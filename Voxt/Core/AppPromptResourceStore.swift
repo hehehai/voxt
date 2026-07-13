@@ -6,7 +6,6 @@ import Foundation
 enum LocalizedPromptResource: String, CaseIterable {
     case enhancement
     case translation
-    case translationCompact = "translation-compact"
     case rewrite
     case transcriptSummary = "transcript-summary"
     case dictionaryIngest = "dictionary-ingest"

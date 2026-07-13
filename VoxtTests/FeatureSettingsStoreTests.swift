@@ -137,7 +137,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
                 language: .english
             )!
             let rewritePreset = FeaturePromptPresetCatalog.preset(
-                id: "concise",
+                id: "strict",
                 for: .rewrite,
                 language: .english
             )!
@@ -161,7 +161,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
             let reloaded = FeatureSettingsStore.load(defaults: defaults)
             XCTAssertEqual(reloaded.transcription.promptPresetID, "structured")
             XCTAssertEqual(reloaded.translation.promptPresetID, "natural")
-            XCTAssertEqual(reloaded.rewrite.promptPresetID, "concise")
+            XCTAssertEqual(reloaded.rewrite.promptPresetID, "strict")
         }
     }
 

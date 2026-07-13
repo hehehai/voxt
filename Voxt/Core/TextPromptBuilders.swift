@@ -4,31 +4,13 @@
 import Foundation
 
 struct TranslationPromptBuilder {
-    enum Style: Equatable {
-        case standard
-        case compactDefault(language: AppInterfaceLanguage)
-    }
-
     static func build(
         systemPrompt: String,
         targetLanguage: TranslationTargetLanguage,
         sourceText: String,
         userMainLanguagePromptValue: String,
-        strict: Bool,
-        style: Style = .standard
+        strict: Bool
     ) -> String {
-        switch style {
-        case .standard:
-            break
-        case .compactDefault(let language):
-            return compactDefaultPrompt(
-                language: language,
-                targetLanguage: targetLanguage,
-                userMainLanguagePromptValue: userMainLanguagePromptValue,
-                strict: strict
-            )
-        }
-
         let basePrompt = systemPrompt
             .replacingOccurrences(of: "{target_language}", with: targetLanguage.instructionName)
             .replacingOccurrences(of: "{{TARGET_LANGUAGE}}", with: targetLanguage.instructionName)
@@ -59,46 +41,6 @@ struct TranslationPromptBuilder {
 
         return "\(basePrompt)\n\(normalizedEnforcement)"
     }
-
-    private static func compactDefaultPrompt(
-        language: AppInterfaceLanguage,
-        targetLanguage: TranslationTargetLanguage,
-        userMainLanguagePromptValue: String,
-        strict: Bool
-    ) -> String {
-        let resolvedLanguage = resolvedLanguage(language)
-        let template = AppPromptResourceStore.requiredText(
-            for: .translationCompact,
-            language: resolvedLanguage
-        )
-        let scriptRule = targetLanguage.translationScriptConstraint.map { "- \($0)" } ?? ""
-        let strictRule: String
-        switch resolvedLanguage {
-        case .english, .system:
-            strictRule = strict
-                ? "- Translate every meaningful linguistic token. Do not leave source-language wording except for names, code, URLs, emails, and pure numbers."
-                : "- Translate short text too."
-        case .chineseSimplified:
-            strictRule = strict
-                ? "- 所有有意义的语言内容都要翻译；除人名、代码、URL、邮箱和纯数字外，不要保留源语言措辞。"
-                : "- 很短的语言内容也要翻译。"
-        case .japanese:
-            strictRule = strict
-                ? "- 意味のある言語内容はすべて翻訳し、人名・コード・URL・メールアドレス・純粋な数字以外は原文の言い回しを残さないでください。"
-                : "- 短いテキストも翻訳してください。"
-        }
-
-        return template
-            .replacingOccurrences(of: "{{USER_MAIN_LANGUAGE}}", with: userMainLanguagePromptValue)
-            .replacingOccurrences(of: "{{TARGET_LANGUAGE}}", with: targetLanguage.instructionName)
-            .replacingOccurrences(of: "{{SCRIPT_RULE}}", with: scriptRule)
-            .replacingOccurrences(of: "{{STRICT_RULE}}", with: strictRule)
-    }
-
-    private static func resolvedLanguage(_ language: AppInterfaceLanguage) -> AppInterfaceLanguage {
-        language == .system ? .resolvedSystemLanguage : language
-    }
-
 }
 
 struct RewritePromptBuilder {

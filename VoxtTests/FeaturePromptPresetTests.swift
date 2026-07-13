@@ -5,7 +5,7 @@ import XCTest
 @testable import Voxt
 
 final class FeaturePromptPresetTests: XCTestCase {
-    func testCatalogProvidesFourLocalizedPresetsForEachEditableFeature() {
+    func testCatalogProvidesLocalizedPresetsForEachEditableFeature() {
         for language in [
             AppInterfaceLanguage.english,
             .chineseSimplified,
@@ -17,11 +17,11 @@ final class FeaturePromptPresetTests: XCTestCase {
             )
             XCTAssertEqual(
                 FeaturePromptPresetCatalog.presets(for: .translation, language: language).count,
-                4
+                2
             )
             XCTAssertEqual(
                 FeaturePromptPresetCatalog.presets(for: .rewrite, language: language).count,
-                4
+                1
             )
         }
     }
@@ -95,26 +95,24 @@ final class FeaturePromptPresetTests: XCTestCase {
         XCTAssertTrue(prompt.contains("使用序号列表方式整理"))
         XCTAssertTrue(prompt.contains("Markdown 嵌套列表格式"))
         XCTAssertTrue(prompt.contains("任务分三步"))
-        XCTAssertTrue(prompt.contains("当前 App 上下文或截图"))
     }
 
-    func testTranslationPreciseCleanupAndClearStructureRemainDistinct() {
-        let precise = FeaturePromptPresetCatalog.preset(
-            id: "precise",
+    func testTranslationCatalogOnlyKeepsPreciseAndNaturalPresets() {
+        let presetIDs = FeaturePromptPresetCatalog.presets(
             for: .translation,
             language: .chineseSimplified
-        )?.prompt ?? ""
-        let structured = FeaturePromptPresetCatalog.preset(
-            id: "structured",
-            for: .translation,
-            language: .chineseSimplified
-        )?.prompt ?? ""
+        ).map(\.id)
 
-        XCTAssertTrue(precise.contains("不要把连续叙述改成标题、列表或新的写作结构"))
-        XCTAssertFalse(precise.contains("使用序号列表方式整理"))
-        XCTAssertTrue(structured.contains("使用序号列表方式整理"))
-        XCTAssertTrue(structured.contains("Markdown 嵌套列表格式"))
-        XCTAssertTrue(structured.contains("任务分三步"))
+        XCTAssertEqual(presetIDs, ["precise", "natural"])
+    }
+
+    func testRewriteCatalogOnlyKeepsDefaultPreset() {
+        let presetIDs = FeaturePromptPresetCatalog.presets(
+            for: .rewrite,
+            language: .chineseSimplified
+        ).map(\.id)
+
+        XCTAssertEqual(presetIDs, ["strict"])
     }
 
     func testBuiltInPromptFollowsInterfaceLanguageWhileCustomPromptIsPreserved() {

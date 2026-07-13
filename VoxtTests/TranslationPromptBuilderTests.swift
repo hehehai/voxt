@@ -1,12 +1,12 @@
 // TranslationPromptBuilderTests.swift
-// Provides focused coverage for compact local GGUF translation prompts.
+// Provides focused coverage for translation prompt construction.
 
 import XCTest
 @testable import Voxt
 
 final class TranslationPromptBuilderTests: XCTestCase {
-    func testCompactDefaultPromptIsShorterThanStandardDefaultPrompt() {
-        let standard = TranslationPromptBuilder.build(
+    func testPromptIncludesDefaultTemplateAndRuntimeRules() {
+        let prompt = TranslationPromptBuilder.build(
             systemPrompt: AppPromptDefaults.text(for: .translation, language: .english),
             targetLanguage: .english,
             sourceText: "hello world",
@@ -14,31 +14,21 @@ final class TranslationPromptBuilderTests: XCTestCase {
             strict: false
         )
 
-        let compact = TranslationPromptBuilder.build(
-            systemPrompt: AppPromptDefaults.text(for: .translation, language: .english),
-            targetLanguage: .english,
-            sourceText: "hello world",
-            userMainLanguagePromptValue: "English",
-            strict: false,
-            style: .compactDefault(language: .english)
-        )
-
-        XCTAssertLessThan(compact.count, standard.count)
-        XCTAssertContains(compact, "Voxt's translation assistant")
-        XCTAssertContains(compact, "Return translated text only.")
+        XCTAssertContains(prompt, "Voxt's content cleanup and translation assistant")
+        XCTAssertContains(prompt, "Translate to English")
+        XCTAssertContains(prompt, "Return translated text only.")
     }
 
-    func testCompactStrictPromptKeepsScriptConstraint() {
-        let compact = TranslationPromptBuilder.build(
+    func testStrictPromptKeepsScriptConstraint() {
+        let prompt = TranslationPromptBuilder.build(
             systemPrompt: AppPromptDefaults.text(for: .translation, language: .english),
             targetLanguage: .chineseSimplified,
             sourceText: "test",
             userMainLanguagePromptValue: "English",
-            strict: true,
-            style: .compactDefault(language: .english)
+            strict: true
         )
 
-        XCTAssertContains(compact, "Use Simplified Chinese characters only.")
-        XCTAssertContains(compact, "Do not leave source-language wording")
+        XCTAssertContains(prompt, "Use Simplified Chinese characters only.")
+        XCTAssertContains(prompt, "Translate every linguistic token")
     }
 }

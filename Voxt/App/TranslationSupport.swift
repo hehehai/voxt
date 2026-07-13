@@ -128,8 +128,7 @@ extension AppDelegate {
             targetLanguage: targetLanguage,
             sourceText: text,
             strict: false,
-            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy,
-            modelProvider: modelProvider
+            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
         )
         let translationModel = translationModelLogDescriptor(for: modelProvider)
         VoxtLog.llm(
@@ -371,8 +370,7 @@ extension AppDelegate {
             targetLanguage: targetLanguage,
             sourceText: text,
             strict: true,
-            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy,
-            modelProvider: modelProvider
+            glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
         )
         let translationModel = translationModelLogDescriptor(for: modelProvider)
         VoxtLog.llm(
@@ -653,44 +651,28 @@ extension AppDelegate {
         targetLanguage: TranslationTargetLanguage,
         sourceText: String,
         strict: Bool,
-        glossarySelectionPolicy: DictionaryGlossarySelectionPolicy?,
-        modelProvider: TranslationModelProvider
+        glossarySelectionPolicy: DictionaryGlossarySelectionPolicy?
     ) -> VariablePromptResolution {
-        let usesCompactDefaultPrompt =
-            modelProvider == .localGGUF &&
-            AppPromptDefaults.matchesKnownDefault(translationSystemPrompt, kind: .translation)
-        let promptStyle: TranslationPromptBuilder.Style =
-            usesCompactDefaultPrompt
-            ? .compactDefault(language: AppLocalization.language)
-            : .standard
         let basePrompt = TranslationPromptBuilder.build(
             systemPrompt: translationSystemPrompt,
             targetLanguage: targetLanguage,
             sourceText: sourceText,
             userMainLanguagePromptValue: userMainLanguagePromptValue,
-            strict: strict,
-            style: promptStyle
+            strict: strict
         )
         let glossary = dictionaryGlossaryText(
             for: sourceText,
             purpose: .translation,
             selectionPolicy: glossarySelectionPolicy
         )
-        let delivery: VariablePromptDelivery
-        if usesCompactDefaultPrompt {
-            delivery = .systemPrompt
-        } else {
-            delivery = deliveryForTemplate(
-                translationSystemPrompt,
-                variableTokens: ["{{SOURCE_TEXT}}"]
-            )
-        }
-        let promptProfile = usesCompactDefaultPrompt ? "localGGUF-compact-default" : "standard"
         return VariablePromptResolution(
             content: basePrompt,
             dictionaryGlossary: glossary,
-            delivery: delivery,
-            promptProfile: promptProfile
+            delivery: deliveryForTemplate(
+                translationSystemPrompt,
+                variableTokens: ["{{SOURCE_TEXT}}"]
+            ),
+            promptProfile: "standard"
         )
     }
 

@@ -133,16 +133,11 @@ enum FeaturePromptPresetCatalog {
         case .translation:
             return [
                 Definition(id: "precise", titleKey: "Precise Cleanup"),
-                Definition(id: "structured", titleKey: "Clear Structure"),
-                Definition(id: "literal", titleKey: "Literal Translation"),
                 Definition(id: "natural", titleKey: "Natural Translation")
             ]
         case .rewrite:
             return [
-                Definition(id: "strict", titleKey: "Strict Instructions"),
-                Definition(id: "concise", titleKey: "Concise Writing"),
-                Definition(id: "professional", titleKey: "Professional Writing"),
-                Definition(id: "creative", titleKey: "Creative Writing")
+                Definition(id: "strict", titleKey: "Strict Instructions")
             ]
         default:
             return []
