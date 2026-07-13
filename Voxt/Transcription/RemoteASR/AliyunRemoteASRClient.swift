@@ -120,12 +120,16 @@ enum AliyunRemoteASRClient {
         )
         let key = buildOSSKey(uploadDirectory: policy.uploadDirectory, fileURL: fileURL)
         let boundary = "Boundary-\(UUID().uuidString)"
-        let body = try makeOSSUploadBody(
+        let fields = [(name: "key", value: key)]
+            + policy.formFields.sorted(by: { $0.key < $1.key }).map { (name: $0.key, value: $0.value) }
+            + [(name: "success_action_status", value: "200")]
+        let body = try MultipartFileBody.create(
+            sourceFileURL: fileURL,
             boundary: boundary,
-            policy: policy,
-            key: key,
-            fileURL: fileURL
+            fields: fields,
+            mimeType: audioMIMEType(for: fileURL)
         )
+        defer { body.remove() }
 
         guard let uploadURL = URL(string: policy.uploadHost) else {
             throw NSError(domain: "Voxt.RemoteASR", code: -38, userInfo: [NSLocalizedDescriptionKey: "Invalid Aliyun upload host URL."])
@@ -134,8 +138,9 @@ enum AliyunRemoteASRClient {
         request.httpMethod = "POST"
         request.timeoutInterval = 60
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue(String(body.byteCount), forHTTPHeaderField: "Content-Length")
 
-        let (data, response) = try await VoxtNetworkSession.active.upload(for: request, from: body)
+        let (data, response) = try await VoxtNetworkSession.active.upload(for: request, fromFile: body.url)
         guard let http = response as? HTTPURLResponse else {
             throw NSError(domain: "Voxt.RemoteASR", code: -39, userInfo: [NSLocalizedDescriptionKey: "Invalid Aliyun upload response."])
         }
@@ -315,37 +320,6 @@ enum AliyunRemoteASRClient {
             )
         }
         return try JSONSerialization.jsonObject(with: data)
-    }
-
-    private static func makeOSSUploadBody(
-        boundary: String,
-        policy: AliyunUploadPolicy,
-        key: String,
-        fileURL: URL
-    ) throws -> Data {
-        var body = Data()
-
-        func appendField(name: String, value: String) {
-            guard !value.isEmpty else { return }
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(value)\r\n".data(using: .utf8)!)
-        }
-
-        appendField(name: "key", value: key)
-        for (name, value) in policy.formFields.sorted(by: { $0.key < $1.key }) {
-            appendField(name: name, value: value)
-        }
-        appendField(name: "success_action_status", value: "200")
-
-        let fileData = try Data(contentsOf: fileURL)
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(audioMIMEType(for: fileURL))\r\n\r\n".data(using: .utf8)!)
-        body.append(fileData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        return body
     }
 
     private static func buildOSSKey(uploadDirectory: String, fileURL: URL) -> String {

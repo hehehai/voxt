@@ -356,12 +356,15 @@ struct HistoryBranchMetricItem: Identifiable, Hashable {
 @MainActor
 final class TranscriptionHistoryStore: ObservableObject {
     @Published private(set) var entries: [TranscriptionHistoryEntry] = []
+    @Published private(set) var isLoading = false
 
     private var allEntries: [TranscriptionHistoryEntry] = []
     private var entriesByKind: [TranscriptionHistoryKind: [TranscriptionHistoryEntry]] = [:]
     private var loadedCount = 0
     private var totalEntryCount = 0
     private var reloadGeneration = 0
+    private var nextPageRequestGeneration = 0
+    private var isLoadingNextPage = false
     private let pageSize = 40
 
     private let fileManager = FileManager.default
@@ -375,7 +378,12 @@ final class TranscriptionHistoryStore: ObservableObject {
     ) {
         self.repository = repository ?? HistoryRepository()
         self.audioArchive = audioArchive ?? HistoryAudioArchiveService()
-        reload()
+        if repository == nil {
+            reloadAsync()
+        } else {
+            // Injected repositories are primarily deterministic test/support stores.
+            reload()
+        }
     }
 
     var hasMore: Bool {
@@ -395,10 +403,11 @@ final class TranscriptionHistoryStore: ObservableObject {
 
     func updateRetentionPolicy() {
         cleanupRetainedEntriesIfNeeded()
-        reload()
+        reloadAsync()
     }
 
     func reload() {
+        invalidatePendingLoads()
         do {
             let repositoryCount = try repository.entryCount(kind: nil, query: "")
             if repositoryCount > 0 || !legacyHistoryFileExists() {
@@ -421,14 +430,16 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     func reloadAsync() {
-        reloadGeneration += 1
+        invalidatePendingLoads()
         let generation = reloadGeneration
         let repository = repository
+        isLoading = true
 
         let url: URL?
         do {
             url = try historyFileURL()
         } catch {
+            isLoading = false
             applyReloadedEntries([], resetPagination: true)
             return
         }
@@ -461,23 +472,42 @@ final class TranscriptionHistoryStore: ObservableObject {
 
             DispatchQueue.main.async {
                 guard let self, generation == self.reloadGeneration else { return }
+                self.isLoading = false
                 self.applyLoadedEntries(loadedEntries, totalCount: totalCount, resetPagination: false)
             }
         }
     }
 
     func loadNextPage() {
-        guard hasMore else { return }
-        let page = historyEntries(kind: nil, query: "", limit: pageSize, offset: loadedCount)
-        guard !page.isEmpty else {
-            totalEntryCount = loadedCount
-            publishVisibleEntries()
-            return
+        guard hasMore, !isLoadingNextPage else { return }
+        isLoadingNextPage = true
+        let offset = loadedCount
+        let generation = reloadGeneration
+        nextPageRequestGeneration += 1
+        let requestGeneration = nextPageRequestGeneration
+        let repository = repository
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let page = (try? repository.entries(kind: nil, query: "", limit: 40, offset: offset)) ?? []
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard requestGeneration == self.nextPageRequestGeneration else { return }
+                self.isLoadingNextPage = false
+                guard generation == self.reloadGeneration,
+                      offset == self.loadedCount
+                else {
+                    return
+                }
+                guard !page.isEmpty else {
+                    self.totalEntryCount = self.loadedCount
+                    self.publishVisibleEntries()
+                    return
+                }
+                self.mergeLoadedEntries(page)
+                self.loadedCount = min(self.loadedCount + page.count, self.totalEntryCount)
+                self.refreshEntryIndexes()
+                self.publishVisibleEntries()
+            }
         }
-        mergeLoadedEntries(page)
-        loadedCount = min(loadedCount + page.count, totalEntryCount)
-        refreshEntryIndexes()
-        publishVisibleEntries()
     }
 
     func historyEntries(
@@ -646,6 +676,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             return false
         }
 
+        invalidatePendingLoads()
         removeCachedEntry(id: id)
         if removed != nil || wasCached {
             totalEntryCount = max(0, totalEntryCount - 1)
@@ -665,6 +696,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             return
         }
 
+        invalidatePendingLoads()
         audioPaths.forEach(audioArchive.removeArchive(relativePath:))
         allEntries = []
         loadedCount = 0
@@ -948,6 +980,7 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     private func persistEntry(_ entry: TranscriptionHistoryEntry) {
+        invalidatePendingLoads()
         do {
             try repository.upsert(entry)
         } catch {
@@ -1013,6 +1046,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate
         let removedEntries = (try? repository.deleteEntries(olderThan: cutoff)) ?? []
         guard !removedEntries.isEmpty else { return }
+        invalidatePendingLoads()
         removedEntries.forEach(audioArchive.removeArchive(for:))
         let removedIDs = Set(removedEntries.map(\.id))
         allEntries.removeAll { removedIDs.contains($0.id) }
@@ -1028,6 +1062,13 @@ final class TranscriptionHistoryStore: ObservableObject {
 
     private func publishVisibleEntries() {
         entries = Array(allEntries.prefix(loadedCount))
+    }
+
+    private func invalidatePendingLoads() {
+        reloadGeneration += 1
+        nextPageRequestGeneration += 1
+        isLoading = false
+        isLoadingNextPage = false
     }
 
     private func cacheUpdatedEntry(_ entry: TranscriptionHistoryEntry) {

@@ -41,4 +41,56 @@ final class VoxtLogRedactorTests: XCTestCase {
         XCTAssertFalse(redacted.contains(home))
         XCTAssertTrue(redacted.contains("~/Documents/private.txt"))
     }
+
+    func testSensitivePrivacyOmitsEntireUserContent() {
+        let redacted = VoxtLogRedactor.redact(
+            "private transcript and model response",
+            privacy: .sensitive
+        )
+
+        XCTAssertEqual(redacted, "<redacted>")
+        XCTAssertFalse(redacted.contains("transcript"))
+    }
+
+    func testLLMContentLoggerDoesNotEvaluateSensitiveMessage() {
+        let defaults = UserDefaults.standard
+        let previousValue = defaults.object(forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+        defaults.set(true, forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+        defer {
+            if let previousValue {
+                defaults.set(previousValue, forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+            }
+        }
+
+        var evaluated = false
+        VoxtLog.llm({
+            evaluated = true
+            return "private prompt and response"
+        }())
+
+        XCTAssertFalse(evaluated)
+    }
+
+    func testLLMDebugLoggerEvaluatesSafeMetadataWhenEnabled() {
+        let defaults = UserDefaults.standard
+        let previousValue = defaults.object(forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+        defaults.set(true, forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+        defer {
+            if let previousValue {
+                defaults.set(previousValue, forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.llmDebugLoggingEnabled)
+            }
+        }
+
+        var evaluated = false
+        VoxtLog.llmDebug({
+            evaluated = true
+            return "model=test, inputChars=42"
+        }())
+
+        XCTAssertTrue(evaluated)
+    }
 }

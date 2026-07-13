@@ -420,6 +420,7 @@ enum DictionaryStoreError: LocalizedError {
 final class DictionaryStore: ObservableObject {
     @Published private(set) var entries: [DictionaryEntry] = []
     @Published private(set) var categories: [DictionaryCategory] = [DictionaryCategory.defaultCategory]
+    @Published private(set) var isLoading = false
 
     private let defaults: UserDefaults
     private let fileManager: FileManager
@@ -446,12 +447,15 @@ final class DictionaryStore: ObservableObject {
         self.repository = persistenceEnabled ? (repository ?? DictionaryRepository()) : repository
         if let initialEntries {
             applyReloadedEntries(initialEntries)
+        } else if repository == nil, persistenceEnabled {
+            reloadAsync()
         } else {
             reload()
         }
     }
 
     func reload() {
+        invalidatePendingReload()
         do {
             if let repository {
                 let decoded = try repository.allEntries()
@@ -478,12 +482,14 @@ final class DictionaryStore: ObservableObject {
     func reloadAsync() {
         reloadGeneration += 1
         let generation = reloadGeneration
+        isLoading = true
 
         let repository = repository
         let url: URL?
         do {
             url = try dictionaryFileURL()
         } catch {
+            isLoading = false
             applyReloadedEntries([])
             return
         }
@@ -495,7 +501,8 @@ final class DictionaryStore: ObservableObject {
                !repositoryEntries.isEmpty || url.map({ !FileManager.default.fileExists(atPath: $0.path) }) == true {
                 let repositoryCategories = (try? repository.allCategories()) ?? [DictionaryCategory.defaultCategory]
                 DispatchQueue.main.async { [weak self] in
-                    self?.applyReloadedCategories(repositoryCategories)
+                    guard let self, generation == self.reloadGeneration else { return }
+                    self.applyReloadedCategories(repositoryCategories)
                 }
                 decodedEntries = repositoryEntries
             } else if let url, FileManager.default.fileExists(atPath: url.path) {
@@ -511,6 +518,7 @@ final class DictionaryStore: ObservableObject {
 
             DispatchQueue.main.async {
                 guard let self, generation == self.reloadGeneration else { return }
+                self.isLoading = false
                 self.applyReloadedEntries(decodedEntries)
             }
         }
@@ -621,6 +629,7 @@ final class DictionaryStore: ObservableObject {
 
     func deleteCategory(id: UUID, deleteEntries: Bool = false) {
         guard id != DictionaryCategory.defaultID else { return }
+        invalidatePendingReload()
         let targetCategory = categories.first(where: { $0.id == id })
         let fallback = resolvedDefaultCategory()
         if deleteEntries {
@@ -1334,6 +1343,7 @@ final class DictionaryStore: ObservableObject {
         let mergedCategories = Array(mergedCategoriesByID.values)
         replaceCategories(mergedCategories)
         guard persistenceEnabled, let repository else { return }
+        invalidatePendingReload()
         for category in resolvedCategories() {
             try? repository.upsertCategory(category)
         }
@@ -1486,6 +1496,7 @@ final class DictionaryStore: ObservableObject {
 
     private func persist() {
         guard persistenceEnabled, let repository else { return }
+        invalidatePendingReload()
         do {
             try repository.replaceAll(entries)
         } catch {
@@ -1503,16 +1514,19 @@ final class DictionaryStore: ObservableObject {
 
     private func upsertPersistedEntry(_ entry: DictionaryEntry) throws {
         guard persistenceEnabled, let repository else { return }
+        invalidatePendingReload()
         try repository.upsert(entry)
     }
 
     private func upsertPersistedCategory(_ category: DictionaryCategory) throws {
         guard persistenceEnabled, let repository else { return }
+        invalidatePendingReload()
         try repository.upsertCategory(category)
     }
 
     private func persistEntries(_ updatedEntries: [DictionaryEntry]) {
         guard persistenceEnabled, let repository else { return }
+        invalidatePendingReload()
         do {
             for entry in updatedEntries {
                 try repository.upsert(entry)
@@ -1524,6 +1538,7 @@ final class DictionaryStore: ObservableObject {
 
     private func deletePersistedEntry(id: UUID) -> Bool {
         guard persistenceEnabled, let repository else { return true }
+        invalidatePendingReload()
         do {
             try repository.delete(id: id)
             return true
@@ -1534,12 +1549,18 @@ final class DictionaryStore: ObservableObject {
 
     private func clearPersistedEntries() -> Bool {
         guard persistenceEnabled, let repository else { return true }
+        invalidatePendingReload()
         do {
             try repository.clearAll()
             return true
         } catch {
             return false
         }
+    }
+
+    private func invalidatePendingReload() {
+        reloadGeneration += 1
+        isLoading = false
     }
 
     private func legacyDictionaryFileExists() -> Bool {

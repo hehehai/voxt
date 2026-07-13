@@ -493,7 +493,7 @@ final class GGUFTranslationModelManager: ObservableObject {
         guard !instructions.isEmpty || !prompt.isEmpty else { return request.fallbackText }
 
         let maxTokens = resolvedOutputTokenBudget(for: request)
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "GGUF compiled request start. task=\(request.taskLabel), model=\(modelID.rawValue), instructionsChars=\(instructions.count), promptChars=\(prompt.count), inputChars=\(request.inputCharacterCount), outputBudget=\(maxTokens)"
         )
         let generated = try await runtime.generate(
@@ -504,7 +504,7 @@ final class GGUFTranslationModelManager: ObservableObject {
             onPartialText: onPartialText
         )
         let trimmed = generated.trimmingCharacters(in: .whitespacesAndNewlines)
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "GGUF compiled request finished. task=\(request.taskLabel), model=\(modelID.rawValue), outputChars=\(trimmed.count), usedFallback=\(trimmed.isEmpty)"
         )
         return trimmed.isEmpty ? request.fallbackText : trimmed
@@ -576,7 +576,7 @@ actor GGUFTranslationRuntime {
             )
         }
 
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "GGUF runtime start. model=\(modelURL.lastPathComponent), promptChars=\(formattedPrompt.count), promptTokens=\(promptTokens.count), maxTokens=\(maxTokens), nCtx=\(contextSize), nBatch=\(batchSize), trainedCtx=\(modelContextLimit)"
         )
 
@@ -692,13 +692,13 @@ actor GGUFTranslationRuntime {
             }
         }
         if outputAccumulator.finalizedWithReplacementCharacters {
-            VoxtLog.llm(
+            VoxtLog.llmDebug(
                 "GGUF runtime output contained invalid UTF-8 bytes after token accumulation. model=\(modelURL.lastPathComponent), outputTokens=\(generatedTokenCount)"
             )
         }
 
         let totalElapsedMs = millisecondsSince(startedAt)
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "GGUF runtime finished. model=\(modelURL.lastPathComponent), outputChars=\(generated.count), outputTokens=\(generatedTokenCount), prefillMs=\(prefillElapsedMs), firstTokenMs=\(firstTokenLatencyMs.map(String.init) ?? "n/a"), totalMs=\(totalElapsedMs), stop=\(stopReason)"
         )
         return generated

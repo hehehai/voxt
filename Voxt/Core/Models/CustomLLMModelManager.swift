@@ -468,7 +468,7 @@ class CustomLLMModelManager: ObservableObject {
 
             let modelStartedAt = Date()
             let setupMs = Int(modelStartedAt.timeIntervalSince(overallStartedAt) * 1000) - containerSnapshot.elapsedMs
-            VoxtLog.llm(startLogMessage(for: request, params: params, behavior: behavior))
+            VoxtLog.llmDebug(startLogMessage(for: request, params: params, behavior: behavior))
             VoxtLog.llm(contentLogMessage(for: request))
 
             var aggregated = ""
@@ -524,7 +524,7 @@ class CustomLLMModelManager: ObservableObject {
                 cleaned = sanitizeModelOutput(response)
             }
 
-            VoxtLog.llm(
+            VoxtLog.llmDebug(
                 "Custom LLM \(request.kind.logLabel) completed. repo=\(request.repo), outputChars=\(cleaned.count), elapsedMs=\(modelElapsedMs), totalElapsedMs=\(totalElapsedMs)"
             )
             var diagnostics = CustomLLMRunDiagnostics(
@@ -569,7 +569,7 @@ class CustomLLMModelManager: ObservableObject {
                     modelOverheadMs: modelOverheadMs,
                     totalOverheadMs: totalOverheadMs
                 )
-                VoxtLog.llm(
+                VoxtLog.llmDebug(
                     "Custom LLM \(request.kind.logLabel) metrics. repo=\(request.repo), containerSource=\(containerSnapshot.source.rawValue), containerLoadMs=\(containerSnapshot.elapsedMs), setupMs=\(max(0, setupMs)), firstChunkMs=\(firstChunkText), overallFirstChunkMs=\(diagnostics.overallFirstChunkMs.map(String.init) ?? "n/a"), promptTokens=\(completionInfo.promptTokenCount), generationTokens=\(completionInfo.generationTokenCount), prefillMs=\(prefillMs), generationMs=\(generationMs), modelOverheadMs=\(modelOverheadMs), totalOverheadMs=\(totalOverheadMs), promptTPS=\(promptTPS), generationTPS=\(generationTPS), stopReason=\(completionInfo.stopReason)"
                 )
             }
@@ -1561,9 +1561,9 @@ class CustomLLMModelManager: ObservableObject {
             additionalContext: additionalContext
         )
         if additionalContext?["enable_thinking"] as? Bool == false {
-            VoxtLog.llm("Custom LLM thinking disabled for repo=\(repo) using chat-template additionalContext.")
+            VoxtLog.llmDebug("Custom LLM thinking disabled for repo=\(repo) using chat-template additionalContext.")
         } else if additionalContext?["enable_thinking"] as? Bool == true {
-            VoxtLog.llm("Custom LLM thinking enabled for repo=\(repo) using chat-template additionalContext.")
+            VoxtLog.llmDebug("Custom LLM thinking enabled for repo=\(repo) using chat-template additionalContext.")
         }
         return session
     }

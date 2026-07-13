@@ -730,21 +730,22 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             model: effectiveModel,
             hintPayload: hintPayload
         )
-        let body = try makeMultipartBody(
+        let body = try makeMultipartFileBody(
             fileURL: fileURL,
             boundary: boundary,
             model: effectiveModel,
             extraFields: extraFields
         )
+        defer { body.remove() }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, text/plain", forHTTPHeaderField: "Accept")
         request.setValue(authorizationValue, forHTTPHeaderField: "Authorization")
-        request.httpBody = body
+        request.setValue(String(body.byteCount), forHTTPHeaderField: "Content-Length")
 
-        let (data, response) = try await VoxtNetworkSession.active.data(for: request)
+        let (data, response) = try await VoxtNetworkSession.active.upload(for: request, fromFile: body.url)
         guard let http = response as? HTTPURLResponse else {
             throw NSError(domain: "Voxt.RemoteASR", code: -10, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response."])
         }
@@ -1787,24 +1788,24 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             }
         }
 
-        let fileData = try Data(contentsOf: fileURL)
+        let file = try FileHandle(forReadingFrom: fileURL)
+        defer { try? file.close() }
         let chunkSize = 3200
-        var offset = 0
         var sequence: Int32 = 2
-        while offset < fileData.count {
-            let end = min(offset + chunkSize, fileData.count)
-            let chunk = fileData[offset..<end]
-            let isLast = end >= fileData.count
+        var chunk = try file.read(upToCount: chunkSize) ?? Data()
+        while !chunk.isEmpty {
+            let nextChunk = try file.read(upToCount: chunkSize) ?? Data()
+            let isLast = nextChunk.isEmpty
             try await sendDoubaoAudioPacket(
                 ws: ws,
-                payload: Data(chunk),
+                payload: chunk,
                 isLast: isLast,
                 sequence: sequence
             )
             if !isLast {
                 sequence += 1
             }
-            offset = end
+            chunk = nextChunk
             try? await Task.sleep(for: .milliseconds(24))
         }
 
@@ -2899,19 +2900,21 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         let effectiveModel = model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? RemoteASRProvider.glmASR.suggestedModel
             : model
-        let body = try makeMultipartBody(
+        let body = try makeMultipartFileBody(
             fileURL: fileURL,
             boundary: boundary,
             model: effectiveModel,
             extraFields: extraFields
         )
+        defer { body.remove() }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream, application/json, text/plain", forHTTPHeaderField: "Accept")
         request.setValue(authorizationValue, forHTTPHeaderField: "Authorization")
-        request.httpBody = body
+        request.setValue(String(body.byteCount), forHTTPHeaderField: "Content-Length")
+        request.httpBodyStream = InputStream(url: body.url)
 
         let (bytes, response) = try await VoxtNetworkSession.active.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -2957,38 +2960,21 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         return aggregate
     }
 
-    private func makeMultipartBody(
+    private func makeMultipartFileBody(
         fileURL: URL,
         boundary: String,
         model: String,
         extraFields: [String: String]
-    ) throws -> Data {
-        var body = Data()
-
-        func appendField(name: String, value: String) {
-            guard !value.isEmpty else { return }
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(value)\r\n".data(using: .utf8)!)
-        }
-
-        appendField(name: "model", value: model)
-        for (name, value) in extraFields where !value.isEmpty {
-            appendField(name: name, value: value)
-        }
-
-        let filename = fileURL.lastPathComponent
-        let mimeType = "audio/wav"
-        let fileData = try Data(contentsOf: fileURL)
-
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-        body.append(fileData)
-        body.append("\r\n".data(using: .utf8)!)
-
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        return body
+    ) throws -> MultipartFileBody {
+        let fields = [(name: "model", value: model)] + extraFields
+            .sorted(by: { $0.key < $1.key })
+            .map { (name: $0.key, value: $0.value) }
+        return try MultipartFileBody.create(
+            sourceFileURL: fileURL,
+            boundary: boundary,
+            fields: fields,
+            mimeType: "audio/wav"
+        )
     }
 
     private func startMeteringTimer() {

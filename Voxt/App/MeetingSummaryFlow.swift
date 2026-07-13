@@ -394,7 +394,7 @@ extension AppDelegate {
             previousResponseID: nil,
             responseFormat: nil
         )
-        VoxtLog.llm("Meeting summary runtime dispatch. model=\(modelLabel), runtime=llm-execution-plan")
+        VoxtLog.llmDebug("Meeting summary runtime dispatch. model=\(modelLabel), runtime=llm-execution-plan")
         return try await executeLLMExecutionPlan(plan)
     }
 

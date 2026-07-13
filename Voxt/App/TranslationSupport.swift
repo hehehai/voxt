@@ -131,7 +131,7 @@ extension AppDelegate {
             glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
         )
         let translationModel = translationModelLogDescriptor(for: modelProvider)
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "Translation request. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
         )
 
@@ -242,7 +242,7 @@ extension AppDelegate {
                 glossarySelectionPolicy: nil
             )
         let rewriteRepo = rewriteCustomLLMRepo
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "Rewrite request. promptChars=\(promptResolution.content.count), dictatedChars=\(dictatedPrompt.count), sourceChars=\(sourceText.count), provider=\(modelProvider.rawValue), rewriteRepo=\(rewriteRepo), structuredAnswerOutput=\(structuredAnswerOutput), directAnswerMode=\(directAnswerMode), forceNonEmptyAnswer=\(forceNonEmptyAnswer), delivery=\(String(describing: promptResolution.delivery))"
         )
         if shouldUseProviderManagedConversation, let remoteContext {
@@ -373,7 +373,7 @@ extension AppDelegate {
             glossarySelectionPolicy: provisionalStrategy.glossarySelectionPolicy
         )
         let translationModel = translationModelLogDescriptor(for: modelProvider)
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "Strict translation retry. promptChars=\(promptResolution.content.count), inputChars=\(text.count), provider=\(modelProvider.rawValue), selectedProvider=\(translationModelProvider.rawValue), translationModel=\(translationModel), delivery=\(String(describing: promptResolution.delivery)), promptProfile=\(promptResolution.promptProfile)"
         )
 

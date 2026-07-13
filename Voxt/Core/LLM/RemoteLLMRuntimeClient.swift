@@ -680,11 +680,10 @@ struct RemoteLLMRuntimeClient {
             throw NSError(domain: "Voxt.RemoteLLM", code: -305, userInfo: [NSLocalizedDescriptionKey: "Invalid remote LLM response."])
         }
         guard (200...299).contains(http.statusCode) else {
-            let payload = responsePayloadPreview(from: data, limit: 260)
             throw NSError(
                 domain: "Voxt.RemoteLLM",
                 code: http.statusCode,
-                userInfo: [NSLocalizedDescriptionKey: "Remote LLM request failed (HTTP \(http.statusCode)): \(payload)"]
+                userInfo: [NSLocalizedDescriptionKey: "Remote LLM request failed (HTTP \(http.statusCode))."]
             )
         }
 
@@ -695,7 +694,7 @@ struct RemoteLLMRuntimeClient {
         } catch {
             let payloadPreview = responsePayloadPreview(from: data)
             VoxtLog.llmWarning(
-                "Remote LLM Responses response rejected. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payload=\(VoxtLog.llmPreview(payloadPreview)), detail=\(error.localizedDescription)"
+                "Remote LLM Responses response rejected. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payloadChars=\(payloadPreview.count), detail=\(error.localizedDescription)"
             )
             throw error
         }
@@ -717,7 +716,7 @@ struct RemoteLLMRuntimeClient {
         guard let content = extractPrimaryText(from: object), !content.isEmpty else {
             let payloadPreview = responsePayloadPreview(from: data)
             VoxtLog.llmWarning(
-                "Remote LLM Responses response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payload=\(VoxtLog.llmPreview(payloadPreview))"
+                "Remote LLM Responses response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payloadChars=\(payloadPreview.count)"
             )
             throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
         }
@@ -1014,11 +1013,10 @@ struct RemoteLLMRuntimeClient {
                     throw NSError(domain: "Voxt.RemoteLLM", code: -305, userInfo: [NSLocalizedDescriptionKey: "Invalid remote LLM response."])
                 }
                 guard (200...299).contains(http.statusCode) else {
-                    let payload = responsePayloadPreview(from: data, limit: 260)
                     throw NSError(
                         domain: "Voxt.RemoteLLM",
                         code: http.statusCode,
-                        userInfo: [NSLocalizedDescriptionKey: "Remote LLM request failed (HTTP \(http.statusCode)): \(payload)"]
+                        userInfo: [NSLocalizedDescriptionKey: "Remote LLM request failed (HTTP \(http.statusCode))."]
                     )
                 }
 
@@ -1055,7 +1053,7 @@ struct RemoteLLMRuntimeClient {
                 }
 
                 VoxtLog.llmWarning(
-                    "Remote LLM response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs), payload=\(VoxtLog.llmPreview(responsePayloadPreview(from: data)))"
+                    "Remote LLM response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), attempt=\(attempt)/\(endpoints.count), bytes=\(data.count), networkMs=\(responseElapsedMs), decodeMs=\(decodeElapsedMs), totalMs=\(totalElapsedMs)"
                 )
                 throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
             } catch {

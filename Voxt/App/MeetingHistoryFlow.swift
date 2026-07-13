@@ -88,7 +88,7 @@ extension AppDelegate {
             meetingDetailWindowManager.closeLiveWindow()
             meetingOverlayWindow.hide { [weak self] in
                 guard let appDelegate = self else { return }
-                appDelegate.historyStore.reload()
+                appDelegate.historyStore.reloadAsync()
                 appDelegate.showMeetingDetailWindow(for: entry)
             }
         }

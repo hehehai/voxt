@@ -117,7 +117,7 @@ enum TranscriptionAppContextCaptureService {
         let allowsImageInput = settings.screenshotEnabled && modelCapabilities.supportsImageInput
         guard allowsTextContext || allowsImageInput else { return nil }
         guard let resolvedApp = resolvedRunningApp(from: snapshot) else {
-            VoxtLog.llm(
+            VoxtLog.llmDebug(
                 "App context capture skipped. reason=appUnavailable, bundleID=\(snapshot.bundleID ?? "unknown"), pid=\(snapshot.pid.map(String.init) ?? "nil")"
             )
             return nil
@@ -156,13 +156,13 @@ enum TranscriptionAppContextCaptureService {
         let attachments = imageCaptureResult.attachment.map { [LLMInputAttachment.image($0)] } ?? []
 
         guard !textContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty else {
-            VoxtLog.llm(
+            VoxtLog.llmDebug(
                 "App context capture produced no payload. bundleID=\(resolvedApp.bundleIdentifier ?? "unknown"), textChars=0, attachmentCount=0"
             )
             return nil
         }
 
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             "App context capture. bundleID=\(resolvedApp.bundleIdentifier ?? "unknown"), appName=\(resolvedApp.localizedName ?? "unknown"), textChars=\(textContext.count), visibleLines=\(visibleLineCount), image=\(imageCaptureSummary(for: imageCaptureResult))"
         )
 

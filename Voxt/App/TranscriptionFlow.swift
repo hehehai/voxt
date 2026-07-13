@@ -174,7 +174,7 @@ extension AppDelegate {
                 VoxtLog.asrWarning("Enhancement provider remoteLLM unavailable: no configured model.")
                 return text
             }
-            VoxtLog.llm(
+            VoxtLog.llmDebug(
                 "Remote LLM enhancement request. provider=\(context.provider.rawValue), model=\(context.configuration.model)"
             )
         }

@@ -316,7 +316,7 @@ extension AppDelegate {
         }
         guard inputCount > 0 || outputCount > 0 else { return }
 
-        VoxtLog.llm(
+        VoxtLog.llmDebug(
             """
             Unicode replacement characters detected before delivery. stage=\(stage), outputMode=\(RecordingSessionSupport.outputLabel(for: outputMode)), inputReplacementChars=\(inputCount), outputReplacementChars=\(outputCount), inputChars=\(inputText.count), outputChars=\(outputText.count)
             [output]

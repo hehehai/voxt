@@ -77,7 +77,17 @@ enum VoxtLog {
 
     nonisolated static func llm(_ message: @autoclosure () -> String) {
         guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
-        llmLogger.info(message(), privacy: .preview(limit: 4_000))
+        // LLM prompts, user input, and generated output can contain arbitrary private
+        // content. The regular model-debug switch must never make that content part of
+        // persistent diagnostics; callers should log dimensions and timings separately.
+        // Do not evaluate the autoclosure either, which avoids constructing and scanning
+        // large prompt/response strings merely to redact them.
+        _ = message
+    }
+
+    nonisolated static func llmDebug(_ message: @autoclosure () -> String) {
+        guard UserDefaults.standard.bool(forKey: AppPreferenceKey.llmDebugLoggingEnabled) else { return }
+        llmLogger.info(message())
     }
 
     nonisolated static func llmInfo(_ message: @autoclosure () -> String, verbose: Bool = false) {
