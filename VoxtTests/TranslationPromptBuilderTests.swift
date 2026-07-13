@@ -14,7 +14,7 @@ final class TranslationPromptBuilderTests: XCTestCase {
             strict: false
         )
 
-        XCTAssertContains(prompt, "Voxt's content cleanup and translation assistant")
+        XCTAssertContains(prompt, "Voxt's cleanup and translation assistant")
         XCTAssertContains(prompt, "Translate to English")
         XCTAssertContains(prompt, "Return translated text only.")
     }
