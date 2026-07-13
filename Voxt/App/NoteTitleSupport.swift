@@ -19,7 +19,10 @@ extension AppDelegate {
     ) -> Bool {
         let fallbackTitle = VoxtNoteTitleSupport.fallbackTitle(from: text)
         let resolvedTitleModel = resolvedVoxtNoteTitleModel()
-        let initialState: NoteTitleGenerationState = resolvedTitleModel == nil ? .fallback : .pending
+        let shouldEnhanceText = source == .transcription && enhancementMode != .off
+        let initialState: NoteTitleGenerationState = resolvedTitleModel == nil && !shouldEnhanceText
+            ? .fallback
+            : .pending
 
         guard let item = noteStore.append(
             sessionID: sessionID,
@@ -33,6 +36,17 @@ extension AppDelegate {
 
         noteWindowManager.show()
 
+        if shouldEnhanceText {
+            Task { @MainActor [weak self] in
+                await self?.enhanceVoxtNoteAndGenerateTitle(
+                    for: item.id,
+                    rawText: item.text,
+                    titleModel: resolvedTitleModel
+                )
+            }
+            return true
+        }
+
         guard let resolvedTitleModel else { return true }
         Task { @MainActor [weak self] in
             await self?.generateVoxtNoteTitle(
@@ -43,6 +57,46 @@ extension AppDelegate {
             )
         }
         return true
+    }
+
+    private func enhanceVoxtNoteAndGenerateTitle(
+        for noteID: UUID,
+        rawText: String,
+        titleModel: VoxtNoteTitleModel?
+    ) async {
+        let resolvedText: String
+        do {
+            let enhancedText = try await enhanceTextForCurrentMode(rawText)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            resolvedText = enhancedText.isEmpty ? rawText : enhancedText
+            VoxtLog.history(
+                "Voxt note enhancement completed. noteID=\(noteID.uuidString), inputChars=\(rawText.count), outputChars=\(resolvedText.count)"
+            )
+        } catch {
+            resolvedText = rawText
+            VoxtLog.historyWarning(
+                "Voxt note enhancement failed; preserving raw text. noteID=\(noteID.uuidString), error=\(error.localizedDescription)"
+            )
+        }
+
+        guard let currentItem = noteStore.updateText(
+            resolvedText,
+            ifUnchangedFrom: rawText,
+            for: noteID
+        ) else { return }
+
+        let finalText = currentItem.text
+        let fallbackTitle = VoxtNoteTitleSupport.fallbackTitle(from: finalText)
+        guard let titleModel else {
+            _ = noteStore.updateTitle(fallbackTitle, state: .fallback, for: noteID)
+            return
+        }
+        await generateVoxtNoteTitle(
+            for: noteID,
+            text: finalText,
+            fallbackTitle: fallbackTitle,
+            model: titleModel
+        )
     }
 
     private func generateVoxtNoteTitle(

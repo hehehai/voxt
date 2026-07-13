@@ -131,6 +131,35 @@ final class VoxtNoteStoreTests: XCTestCase {
         XCTAssertEqual(VoxtNoteStore(fileURL: fileURL).items.first?.source, .selection)
     }
 
+    func testConditionalTextUpdateDoesNotOverwriteUserEdit() throws {
+        let store = VoxtNoteStore(inMemory: true)
+        let item = try XCTUnwrap(store.append(
+            sessionID: UUID(),
+            text: "Raw transcription",
+            title: "Raw transcription",
+            titleGenerationState: .pending
+        ))
+
+        let enhanced = try XCTUnwrap(store.updateText(
+            "Enhanced transcription",
+            ifUnchangedFrom: "Raw transcription",
+            for: item.id
+        ))
+        XCTAssertEqual(enhanced.text, "Enhanced transcription")
+
+        XCTAssertTrue(store.updateDetails(
+            item.id,
+            title: enhanced.title,
+            text: "User-edited note"
+        ))
+        let preserved = try XCTUnwrap(store.updateText(
+            "Late enhancement result",
+            ifUnchangedFrom: "Enhanced transcription",
+            for: item.id
+        ))
+        XCTAssertEqual(preserved.text, "User-edited note")
+    }
+
     func testLegacyJSONMigrationPreservesContentAndArchivesSource() throws {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -35,6 +35,7 @@ enum TranscriptionCapturePipeline: String, Equatable, Sendable {
                 "noteSegment",
                 "stop",
                 "finalASR",
+                "enhance",
                 "deliver"
             ]
         }

@@ -574,6 +574,22 @@ final class VoxtNoteStore: ObservableObject {
     }
 
     @discardableResult
+    func updateText(
+        _ text: String,
+        ifUnchangedFrom expectedText: String,
+        for noteID: UUID
+    ) -> VoxtNoteItem? {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedExpectedText = expectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty, let record = recordsByID[noteID] else { return nil }
+        guard record.text == trimmedExpectedText else { return record.item }
+        guard record.text != trimmedText else { return record.item }
+        record.text = trimmedText
+        record.updatedAt = now()
+        return saveAndReturn(noteID)
+    }
+
+    @discardableResult
     func rename(_ noteID: UUID, to title: String) -> Bool {
         let normalizedTitle = Self.normalizedTitle(title)
         guard !normalizedTitle.isEmpty, let record = recordsByID[noteID] else { return false }

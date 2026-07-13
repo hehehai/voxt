@@ -59,7 +59,7 @@ final class TranscriptionCapturePipelineTests: XCTestCase {
     func testNoteSessionStageLabelsIncludeNoteSegmentStage() {
         XCTAssertEqual(
             TranscriptionCapturePipeline.noteSession.stageLabels,
-            ["record", "livePartial", "noteSegment", "stop", "finalASR", "deliver"]
+            ["record", "livePartial", "noteSegment", "stop", "finalASR", "enhance", "deliver"]
         )
     }
 
