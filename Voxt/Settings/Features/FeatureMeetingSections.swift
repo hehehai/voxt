@@ -18,7 +18,9 @@ extension FeatureSettingsView {
                         value: asrSelectionSummary(featureSettings.meeting.asrSelectionID),
                         action: { selectorSheet = .meetingASR }
                     )
+                }
 
+                FeatureSettingSection(title: "", detail: "") {
                     FeatureSelectorRow(
                         title: featureSettingsLocalized("Summary Model"),
                         value: llmSelectionSummary(featureSettings.meeting.summaryModelSelectionID),
