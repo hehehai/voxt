@@ -4,7 +4,7 @@
 import Foundation
 
 enum RewriteAnswerPayloadParser {
-    nonisolated private static let fallbackTitle = String(localized: "AI Answer")
+    nonisolated private static let fallbackTitle = AppLocalization.localizedString("AI Answer")
 
     nonisolated static func normalize(_ payload: RewriteAnswerPayload) -> RewriteAnswerPayload {
         let normalizedTitle = payload.trimmedTitle.isEmpty ? fallbackTitle : payload.trimmedTitle
@@ -30,7 +30,7 @@ enum RewriteAnswerPayloadParser {
 
     nonisolated static func extract(
         from text: String,
-        fallbackTitle: String = String(localized: "AI Answer")
+        fallbackTitle: String = AppLocalization.localizedString("AI Answer")
     ) -> RewriteAnswerPayload? {
         let trimmed = sanitizeStructuredCandidate(
             normalizedStreamChunkEnvelope(in: text) ?? text
@@ -59,7 +59,7 @@ enum RewriteAnswerPayloadParser {
 
     nonisolated static func preview(
         from text: String,
-        fallbackTitle: String = String(localized: "AI Answer")
+        fallbackTitle: String = AppLocalization.localizedString("AI Answer")
     ) -> RewriteAnswerPayload? {
         let normalizedText = sanitizeStructuredCandidate(normalizedStreamChunkEnvelope(in: text) ?? text)
 

@@ -53,7 +53,7 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
         do {
             try startAudioCapture()
         } catch {
-            let message = String(localized: "Sherpa ONNX failed to start recording.")
+            let message = AppLocalization.localizedString("Sherpa ONNX failed to start recording.")
             pendingRuntimeFailureMessage = "\(message) \(error.localizedDescription)"
             onStartFailure?(pendingRuntimeFailureMessage ?? message)
         }
@@ -110,7 +110,7 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
             throw NSError(
                 domain: "SherpaOnnxTranscriber",
                 code: 2004,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Sherpa ONNX model is not installed.")]
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Sherpa ONNX model is not installed.")]
             )
         }
 

@@ -18,18 +18,41 @@ enum HistoryFilterTab: String, CaseIterable, Hashable, Identifiable {
 
     var id: String { rawValue }
 
+    var titleKey: LocalizedStringKey {
+        LocalizedStringKey(rawTitleKey)
+    }
+
     var title: String {
+        localized(rawTitleKey)
+    }
+
+    var correspondingFeatureTab: FeatureSettingsTab {
         switch self {
         case .transcription:
-            return localized("Transcription")
+            return .transcription
         case .translation:
-            return localized("Translation")
+            return .translation
         case .transcript:
-            return localized("Meeting")
+            return .meeting
         case .rewrite:
-            return localized("Rewrite")
+            return .rewrite
         case .note:
-            return localized("Notes")
+            return .note
+        }
+    }
+
+    private var rawTitleKey: String {
+        switch self {
+        case .transcription:
+            return "Transcription"
+        case .translation:
+            return "Translation"
+        case .transcript:
+            return "Meeting"
+        case .rewrite:
+            return "Rewrite"
+        case .note:
+            return "Notes"
         }
     }
 
@@ -49,27 +72,6 @@ enum HistoryFilterTab: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
-struct HistoryFilterTabPicker: View {
-    @Binding var selectedTab: HistoryFilterTab
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(HistoryFilterTab.allCases) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    Text(tab.title)
-                        .padding(.horizontal, 4)
-                }
-                .buttonStyle(SettingsSegmentedButtonStyle(isSelected: selectedTab == tab))
-            }
-        }
-        .padding(2)
-        .fixedSize(horizontal: true, vertical: false)
-        .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
-    }
-}
-
 struct HistoryNoteStatusFilterSelect: View {
     @Binding var selection: Set<VoxtNoteStatus>
     @State private var isPresented = false
@@ -77,7 +79,7 @@ struct HistoryNoteStatusFilterSelect: View {
     private let statuses: [VoxtNoteStatus] = [.todo, .inProgress, .done, .backlog]
 
     var body: some View {
-        SettingsSelectionButton(width: 136, height: 32) {
+        SettingsSelectionButton(width: 70, height: 32, allowsCompactWidth: true) {
             isPresented = true
         } label: {
             Text(selectionSummary)
@@ -310,11 +312,12 @@ enum HistoryActionIconKind {
 
 struct HistoryActionIcon: View {
     let kind: HistoryActionIconKind
+    var color: Color = HistoryRowStyle.actionIconColor
 
     var body: some View {
         AppSVGIcon(
-            kind: kind == .detail ? .viewDetails : .delete,
-            color: HistoryRowStyle.actionIconColor,
+            kind: kind == .detail ? .historyDetails : .delete,
+            color: color,
             size: 17
         )
         .contentShape(Rectangle())

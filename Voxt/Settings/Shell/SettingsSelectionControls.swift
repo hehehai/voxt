@@ -88,11 +88,12 @@ struct SettingsFixedSelectionBlock: View {
 struct SettingsSelectionButton<Label: View>: View {
     let width: CGFloat
     var height: CGFloat = 34
+    var allowsCompactWidth = false
     let action: () -> Void
     @ViewBuilder let label: () -> Label
 
     private var resolvedWidth: CGFloat {
-        SettingsUIStyle.resolvedSelectWidth(width)
+        allowsCompactWidth ? max(ceil(width), 1) : SettingsUIStyle.resolvedSelectWidth(width)
     }
 
     var body: some View {
@@ -113,7 +114,7 @@ struct SettingsSelectionButton<Label: View>: View {
 }
 
 struct SettingsPathSelectionRow: View {
-    let title: LocalizedStringKey
+    let title: String
     let displayedPath: String
     let fallbackPath: String
     var pathWidth: CGFloat = 260
@@ -127,7 +128,7 @@ struct SettingsPathSelectionRow: View {
     }
 
     var body: some View {
-        GeneralFieldRow(title: title) {
+        GeneralFieldRow(titleText: title) {
             Button(action: onOpen) {
                 HStack(spacing: 6) {
                     Image(systemName: "folder")
@@ -566,10 +567,7 @@ private final class SettingsMenuHostView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard !popupMenu.items.isEmpty else { return }
-        let selectedItem = selectedIndex.flatMap { index in
-            popupMenu.items.first(where: { $0.tag == index })
-        }
-        _ = popupMenu.popUp(positioning: selectedItem, at: NSPoint(x: 0, y: bounds.height + 8), in: self)
+        _ = popupMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.height + 8), in: self)
     }
 
     @objc

@@ -15,6 +15,7 @@ enum ModelLogoKey: String {
     case deepSeek
     case grok
     case cohere
+    case moss
     case granite
     case fireRed
     case sense
@@ -58,6 +59,8 @@ enum ModelLogoKey: String {
             return "grok"
         case .cohere:
             return "cohere"
+        case .moss:
+            return "moss"
         case .granite:
             return "ibm"
         case .fireRed:
@@ -105,7 +108,7 @@ enum ModelLogoKey: String {
         switch self {
         case .apple, .openAI, .grok, .ollama, .openRouter, .lmStudio, .kimi, .liquid:
             return true
-        case .anthropic, .google, .gemini, .qwen, .zhipu, .deepSeek, .cohere, .granite, .fireRed, .sense,
+        case .anthropic, .google, .gemini, .qwen, .zhipu, .deepSeek, .cohere, .moss, .granite, .fireRed, .sense,
              .mistral, .gemma, .meta, .nvidia, .minimax, .doubao, .xiaomi, .volcengine, .alibaba, .stepFun, .generic:
             return false
         case .hunyuan:
@@ -135,6 +138,8 @@ enum ModelLogoKey: String {
             return "x"
         case .cohere:
             return "Co"
+        case .moss:
+            return "M"
         case .granite:
             return "IBM"
         case .fireRed:
@@ -194,6 +199,9 @@ enum ModelLogoKey: String {
         }
         if value.contains("cohere") {
             return .cohere
+        }
+        if value.contains("moss") {
+            return .moss
         }
         if value.contains("granite") || value.contains("ibm") {
             return .granite

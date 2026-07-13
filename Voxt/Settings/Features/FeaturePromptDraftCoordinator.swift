@@ -16,6 +16,11 @@ struct FeaturePromptDraftCoordinator: Equatable {
         draft = newValue
     }
 
+    mutating func replaceDraft(with newValue: String) {
+        draft = newValue
+        lastSyncedText = newValue
+    }
+
     mutating func syncExternalText(_ newValue: String) {
         // Ignore the round-trip echo of our own write so the active TextEditor
         // does not receive a redundant string assignment mid-typing.

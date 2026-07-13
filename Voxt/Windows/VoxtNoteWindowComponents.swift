@@ -78,6 +78,7 @@ private struct VoxtNotePanelSurface: ViewModifier {
 }
 
 struct VoxtNoteWindowView: View {
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @ObservedObject var store: VoxtNoteStore
     @ObservedObject var uiState: VoxtNotePanelUIState
     @ObservedObject var settingsState: VoxtNotePanelSettingsState
@@ -86,6 +87,7 @@ struct VoxtNoteWindowView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let _ = interfaceLanguageRaw
         let snapshot = store.snapshot(for: uiState.selectedScope)
 
         VStack(spacing: 0) {
@@ -134,8 +136,8 @@ struct VoxtNoteWindowView: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help(String(localized: "Settings"))
-            .accessibilityLabel(String(localized: "Settings"))
+            .help(AppLocalization.localizedString("Settings"))
+            .accessibilityLabel(AppLocalization.localizedString("Settings"))
         }
         .padding(.leading, VoxtNotePanelStyle.horizontalPadding)
         .padding(.trailing, VoxtNotePanelStyle.horizontalPadding - 4)
@@ -211,12 +213,12 @@ struct VoxtNoteWindowView: View {
     private var emptyState: some View {
         VStack(spacing: 5) {
             Text(uiState.selectedScope == .notes
-                ? String(localized: "Nothing hiding here")
-                : String(localized: "No notes waiting"))
+                ? AppLocalization.localizedString("Nothing hiding here")
+                : AppLocalization.localizedString("No notes waiting"))
                 .font(.system(size: 13, weight: .medium, design: .rounded))
             Text(uiState.selectedScope == .notes
-                ? String(localized: "Capture a note during transcription and it will stay close by.")
-                : String(localized: "Move a note here to keep it for later."))
+                ? AppLocalization.localizedString("Capture a note during transcription and it will stay close by.")
+                : AppLocalization.localizedString("Move a note here to keep it for later."))
                 .font(.system(size: 11, design: .rounded))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -230,11 +232,11 @@ struct VoxtNoteWindowView: View {
         switch uiState.selectedScope {
         case .notes:
             return count == 1
-                ? String(localized: "1 Active Note")
+                ? AppLocalization.localizedString("1 Active Note")
                 : String(format: AppLocalization.localizedString("%d Active Notes"), count)
         case .backlog:
             return count == 1
-                ? String(localized: "1 Backlog Note")
+                ? AppLocalization.localizedString("1 Backlog Note")
                 : String(format: AppLocalization.localizedString("%d Backlog Notes"), count)
         }
     }
@@ -289,7 +291,7 @@ private struct VoxtNoteSectionView: View {
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
                     .onHover { isLoadMoreHovered = $0 }
-                    .accessibilityLabel(String(localized: "More"))
+                    .accessibilityLabel(AppLocalization.localizedString("More"))
                 }
             }
         }
@@ -357,17 +359,17 @@ private struct VoxtNoteStatusButton: View {
         .help(primaryActionTitle)
         .animation(reduceMotion ? nil : VoxtNotePanelStyle.spring, value: item.status)
         .accessibilityLabel(primaryActionTitle)
-        .accessibilityValue("\(item.priority.title) \(String(localized: "priority"))")
+        .accessibilityValue("\(item.priority.title) \(AppLocalization.localizedString("priority"))")
     }
 
     private var primaryActionTitle: String {
         switch item.status {
         case .backlog:
-            return String(localized: "Move to To do")
+            return AppLocalization.localizedString("Move to To do")
         case .todo, .inProgress:
-            return String(localized: "Mark done")
+            return AppLocalization.localizedString("Mark done")
         case .done:
-            return String(localized: "Move back to To do")
+            return AppLocalization.localizedString("Move back to To do")
         }
     }
 }
@@ -395,7 +397,7 @@ private struct VoxtNoteListRow: View {
 
             Group {
                 if isEditing {
-                    TextField(String(localized: "Note title"), text: $editTitle, axis: .vertical)
+                    TextField(AppLocalization.localizedString("Note title"), text: $editTitle, axis: .vertical)
                         .textFieldStyle(.plain)
                         .lineLimit(1...6)
                         .focused($isRenameFocused)
@@ -413,7 +415,7 @@ private struct VoxtNoteListRow: View {
                         .contentShape(Rectangle())
                         .onTapGesture(perform: showDetail)
                     .accessibilityAddTraits(.isButton)
-                    .accessibilityHint(String(localized: "Open note details"))
+                    .accessibilityHint(AppLocalization.localizedString("Open note details"))
                 }
             }
             .font(.system(
@@ -478,7 +480,7 @@ private struct VoxtNoteListRow: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 if isDetailEditing {
-                    TextField(String(localized: "Note title"), text: $detailTitle)
+                    TextField(AppLocalization.localizedString("Note title"), text: $detailTitle)
                         .textFieldStyle(.plain)
                         .font(.headline)
                         .settingsFieldSurface(minHeight: 32)
@@ -495,7 +497,7 @@ private struct VoxtNoteListRow: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Close"))
+                .accessibilityLabel(AppLocalization.localizedString("Close"))
             }
             if isDetailEditing {
                 TextEditor(text: $detailContent)
@@ -524,12 +526,12 @@ private struct VoxtNoteListRow: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if isDetailEditing {
-                    Button(String(localized: "Cancel"), action: cancelDetailEditing)
-                    Button(String(localized: "Save"), action: saveDetailEditing)
+                    Button(AppLocalization.localizedString("Cancel"), action: cancelDetailEditing)
+                    Button(AppLocalization.localizedString("Save"), action: saveDetailEditing)
                         .disabled(!canSaveDetail)
                 } else {
-                    Button(String(localized: "Edit"), action: beginDetailEditing)
-                    Button(String(localized: "Copy")) {
+                    Button(AppLocalization.localizedString("Edit"), action: beginDetailEditing)
+                    Button(AppLocalization.localizedString("Copy")) {
                         copyBody()
                     }
                 }
@@ -577,13 +579,13 @@ private struct VoxtNoteListRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(String(localized: "Save title"))
+            .help(AppLocalization.localizedString("Save title"))
         } else {
             AppSVGMenuButton(icon: .more) {
                 noteActions
             }
             .opacity(isHovering ? 1 : 0.38)
-            .help(String(localized: "Note actions"))
+            .help(AppLocalization.localizedString("Note actions"))
         }
     }
 
@@ -592,22 +594,22 @@ private struct VoxtNoteListRow: View {
         Button {
             showDetail()
         } label: {
-            AppSVGMenuLabel(title: String(localized: "View note…"), icon: .viewDetails)
+            AppSVGMenuLabel(title: AppLocalization.localizedString("View note…"), icon: .viewDetails)
         }
 
         Button {
             uiState.beginEditing(item.id)
         } label: {
-            AppSVGMenuLabel(title: String(localized: "Edit title…"), icon: .edit)
+            AppSVGMenuLabel(title: AppLocalization.localizedString("Edit title…"), icon: .edit)
         }
 
         Button {
             copyBody()
         } label: {
-            AppSVGMenuLabel(title: String(localized: "Copy"), icon: .copy)
+            AppSVGMenuLabel(title: AppLocalization.localizedString("Copy"), icon: .copy)
         }
 
-        Menu(String(localized: "Priority")) {
+        Menu(AppLocalization.localizedString("Priority")) {
             ForEach(VoxtNotePriority.allCases.reversed()) { priority in
                 Button {
                     store.setPriority(priority, for: item.id)
@@ -621,7 +623,7 @@ private struct VoxtNoteListRow: View {
             }
         }
 
-        Menu(String(localized: "Move to")) {
+        Menu(AppLocalization.localizedString("Move to")) {
             ForEach(VoxtNoteStatus.moveMenuOrder) { status in
                 Button {
                     store.setStatus(status, for: item.id)
@@ -640,7 +642,7 @@ private struct VoxtNoteListRow: View {
         Button(role: .destructive) {
             store.delete(id: item.id)
         } label: {
-            AppSVGMenuLabel(title: String(localized: "Delete"), icon: .delete, color: .red)
+            AppSVGMenuLabel(title: AppLocalization.localizedString("Delete"), icon: .delete, color: .red)
         }
     }
 

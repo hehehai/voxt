@@ -7,6 +7,7 @@ enum AppSVGIconKind: Hashable {
     case listView
     case linearView
     case viewDetails
+    case historyDetails
     case copy
     case edit
     case delete
@@ -118,6 +119,8 @@ private enum AppSVGIconCatalog {
                 fillPaths: [viewDetailsCenterPath],
                 strokePaths: [viewDetailsOutlinePath]
             )
+        case .historyDetails:
+            return AppSVGIconDefinition(fillPaths: historyDetailsPaths)
         case .copy:
             return AppSVGIconDefinition(fillPaths: copyPaths)
         case .edit:
@@ -145,6 +148,12 @@ private enum AppSVGIconCatalog {
 
     private static let viewDetailsOutlinePath = "M2.25 12C4.42 8.48 7.82 6.25 12 6.25C16.18 6.25 19.58 8.48 21.75 12C19.58 15.52 16.18 17.75 12 17.75C7.82 17.75 4.42 15.52 2.25 12Z"
     private static let viewDetailsCenterPath = "M12 15.75C9.93 15.75 8.25 14.07 8.25 12C8.25 9.93 9.93 8.25 12 8.25C14.07 8.25 15.75 9.93 15.75 12C15.75 14.07 14.07 15.75 12 15.75ZM12 9.75C10.76 9.75 9.75 10.76 9.75 12C9.75 13.24 10.76 14.25 12 14.25C13.24 14.25 14.25 13.24 14.25 12C14.25 10.76 13.24 9.75 12 9.75Z"
+
+    private static let historyDetailsPaths = [
+        "M15 22.75H9C3.57 22.75 1.25 20.43 1.25 15V9C1.25 3.57 3.57 1.25 9 1.25H15C20.43 1.25 22.75 3.57 22.75 9V15C22.75 20.43 20.43 22.75 15 22.75ZM9 2.75C4.39 2.75 2.75 4.39 2.75 9V15C2.75 19.61 4.39 21.25 9 21.25H15C19.61 21.25 21.25 19.61 21.25 15V9C21.25 4.39 19.61 2.75 15 2.75H9Z",
+        "M15.75 9.75H8.25C7.84 9.75 7.5 9.41 7.5 9C7.5 8.59 7.84 8.25 8.25 8.25H15.75C16.16 8.25 16.5 8.59 16.5 9C16.5 9.41 16.16 9.75 15.75 9.75Z",
+        "M15.75 15.75H8.25C7.84 15.75 7.5 15.41 7.5 15C7.5 14.59 7.84 14.25 8.25 14.25H15.75C16.16 14.25 16.5 14.59 16.5 15C16.5 15.41 16.16 15.75 15.75 15.75Z",
+    ]
 
     private static let copyPaths = [
         "M15 12.9492H8C7.59 12.9492 7.25 12.6092 7.25 12.1992C7.25 11.7892 7.59 11.4492 8 11.4492H15C15.41 11.4492 15.75 11.7892 15.75 12.1992C15.75 12.6092 15.41 12.9492 15 12.9492Z",

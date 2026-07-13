@@ -30,8 +30,10 @@ nonisolated enum SessionOutputMode {
 @main
 struct VoxtApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
 
     var body: some Scene {
+        let _ = interfaceLanguageRaw
         Settings {
             EmptyView()
         }
@@ -56,10 +58,12 @@ struct VoxtApp: App {
 struct MainWindowNavigationCommands: Commands {
     @AppStorage(AppPreferenceKey.appEnhancementEnabled) private var appEnhancementEnabled = true
     @AppStorage(AppPreferenceKey.featureSettings) private var featureSettingsRaw = ""
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     let appDelegate: AppDelegate
 
     var body: some Commands {
-        CommandMenu("Navigate") {
+        let _ = interfaceLanguageRaw
+        CommandMenu(AppLocalization.localizedString("Navigate")) {
             Button(AppLocalization.localizedString("Dashboard")) {
                 appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .report))
             }
@@ -176,12 +180,14 @@ struct MainWindowNavigationCommands: Commands {
 }
 
 struct HelpNavigationCommands: Commands {
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     let appDelegate: AppDelegate
     private let projectURL = URL(string: "https://github.com/hehehai/voxt")!
     private let feedbackURL = URL(string: "https://github.com/hehehai/voxt/issues/new/choose")!
     private let authorURL = URL(string: "https://www.hehehai.cn/")!
 
     var body: some Commands {
+        let _ = interfaceLanguageRaw
         CommandGroup(after: .help) {
             Divider()
             Button(AppLocalization.localizedString("Voxt")) {

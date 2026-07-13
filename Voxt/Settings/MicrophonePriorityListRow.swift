@@ -49,7 +49,7 @@ struct MicrophonePriorityListRow: View {
                         .font(.system(size: 12, weight: .semibold))
                 }
                 .buttonStyle(.borderless)
-                .help(String(localized: "Move to Top"))
+                .help(AppLocalization.localizedString("Move to Top"))
             }
 
             if entry.isAvailable && !entry.isActive {

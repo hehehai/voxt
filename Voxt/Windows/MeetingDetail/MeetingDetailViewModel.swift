@@ -75,8 +75,10 @@ final class MeetingDetailViewModel: ObservableObject {
     private let summaryChatAnswerer: MeetingDetailWindowManager.SummaryChatAnswerer?
     private let summaryChatPersistence: MeetingDetailWindowManager.SummaryChatPersistence?
     private let transcriptSegmentsPersistence: MeetingDetailWindowManager.TranscriptSegmentsPersistence?
+    private let historySubtitle: String?
 
     private var cancellables = Set<AnyCancellable>()
+    private var isLiveRecording = false
     private var translationTasks: [UUID: Task<Void, Never>] = [:]
     private var summaryTask: Task<Void, Never>?
     private var summaryChatTask: Task<Void, Never>?
@@ -124,6 +126,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.summaryChatAnswerer = summaryChatAnswerer
         self.summaryChatPersistence = summaryChatPersistence
         self.transcriptSegmentsPersistence = transcriptSegmentsPersistence
+        self.historySubtitle = subtitle
 
         self.translationDraftLanguageRaw = Self.initialTranslationLanguageRaw()
         self.translationEnabled = Self.segmentsContainTranslations(segments)
@@ -140,6 +143,7 @@ final class MeetingDetailViewModel: ObservableObject {
         if initialSummary != nil {
             summaryState = .idle
         }
+        bindInterfaceLanguageChanges()
     }
 
     init(
@@ -152,10 +156,10 @@ final class MeetingDetailViewModel: ObservableObject {
     ) {
         self.mode = .live
         self.captureMode = liveState.captureMode
-        self.title = String(localized: "Meeting Details")
+        self.title = AppLocalization.localizedString("Meeting Details")
         let liveSubtitle = liveState.isPaused
-            ? String(localized: "Meeting Paused")
-            : String(localized: "Meeting In Progress")
+            ? AppLocalization.localizedString("Meeting Paused")
+            : AppLocalization.localizedString("Meeting In Progress")
         self.subtitle = AppLocalization.format("%@ · %@", liveState.captureMode.title, liveSubtitle)
         self.historyEntryID = nil
         self.summary = nil
@@ -174,6 +178,8 @@ final class MeetingDetailViewModel: ObservableObject {
         self.summaryChatAnswerer = nil
         self.summaryChatPersistence = nil
         self.transcriptSegmentsPersistence = nil
+        self.historySubtitle = nil
+        self.isLiveRecording = liveState.isRecording
 
         self.translationDraftLanguageRaw = Self.initialTranslationLanguageRaw()
         self.translationEnabled = liveState.realtimeTranslateEnabled || Self.segmentsContainTranslations(liveState.segments)
@@ -198,9 +204,12 @@ final class MeetingDetailViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] isPaused, isRecording in
                 self?.isPaused = isPaused
+                self?.isLiveRecording = isRecording
                 self?.updateLiveSubtitle(isPaused: isPaused, isRecording: isRecording)
             }
             .store(in: &cancellables)
+
+        bindInterfaceLanguageChanges()
 
         liveState.$realtimeTranslateEnabled
             .receive(on: RunLoop.main)
@@ -614,14 +623,35 @@ final class MeetingDetailViewModel: ObservableObject {
     ) {
         guard mode == .live else { return }
         if isFinalizing {
-            subtitle = String(localized: "Preparing final meeting details")
+            subtitle = AppLocalization.localizedString("Preparing final meeting details")
         } else if isPaused ?? self.isPaused {
-            subtitle = String(localized: "Meeting Paused")
-        } else if isRecording ?? false {
-            subtitle = String(localized: "Meeting In Progress")
+            subtitle = AppLocalization.localizedString("Meeting Paused")
+        } else if isRecording ?? isLiveRecording {
+            subtitle = AppLocalization.localizedString("Meeting In Progress")
         } else {
-            subtitle = String(localized: "Meeting Ended")
+            subtitle = AppLocalization.localizedString("Meeting Ended")
         }
+    }
+
+    private func bindInterfaceLanguageChanges() {
+        NotificationCenter.default.publisher(for: .voxtInterfaceLanguageDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                switch self.mode {
+                case .history:
+                    guard let historySubtitle = self.historySubtitle else { return }
+                    self.subtitle = AppLocalization.format(
+                        "%@ · %@",
+                        self.captureMode.title,
+                        historySubtitle
+                    )
+                case .live:
+                    self.title = AppLocalization.localizedString("Meeting Details")
+                    self.updateLiveSubtitle()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func refreshSummaryConfiguration(

@@ -325,7 +325,7 @@ extension OnboardingSettingsView {
     var modelStorageCard: some View {
         GeneralSettingsCard(title: "Model Storage") {
             SettingsPathSelectionRow(
-                title: LocalizedStringKey(localized("Storage Path")),
+                title: localized("Storage Path"),
                 displayedPath: modelStorageDisplayPath,
                 fallbackPath: ModelStorageDirectoryManager.defaultRootURL.path,
                 openButtonHelp: localized("Open folder"),

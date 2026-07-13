@@ -287,6 +287,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 enum SettingsSidebarMode: Equatable {
     case root
     case feature
+    case history
     case settings
 }
 

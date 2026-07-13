@@ -50,7 +50,7 @@ final class MeetingDetailWindowManager {
         let summaryModelOptions = summaryModelOptionsProvider()
 
         let viewModel = MeetingDetailViewModel(
-            title: String(localized: "Meeting Details"),
+            title: AppLocalization.localizedString("Meeting Details"),
             subtitle: entry.createdAt.formatted(date: .abbreviated, time: .shortened),
             historyEntryID: entry.id,
             initialSummary: entry.transcriptSummary,
@@ -294,6 +294,7 @@ private final class MeetingDetailPlaybackController: ObservableObject {
 }
 
 private struct MeetingDetailWindowView: View {
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @ObservedObject var viewModel: MeetingDetailViewModel
     @StateObject private var playbackController: MeetingDetailPlaybackController
     @State private var activeSegmentID: UUID?
@@ -308,6 +309,7 @@ private struct MeetingDetailWindowView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguageRaw
         ZStack {
             GeometryReader { proxy in
                 let sidebarWidth = max(300, min(proxy.size.width / 3.0, 380))
@@ -393,17 +395,17 @@ private struct MeetingDetailWindowView: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 8) {
-                Button(String(localized: "Search")) {
+                Button(AppLocalization.localizedString("Search")) {
                     viewModel.toggleSearchPresentation()
                 }
                 .buttonStyle(MeetingToolbarButtonStyle(isActive: viewModel.isSearchPresented))
 
-                Button(String(localized: "Translate")) {
+                Button(AppLocalization.localizedString("Translate")) {
                     viewModel.toggleTranslation()
                 }
                 .buttonStyle(MeetingToolbarButtonStyle(isActive: viewModel.translationEnabled))
 
-                Button(String(localized: "Export")) {
+                Button(AppLocalization.localizedString("Export")) {
                     try? viewModel.export()
                 }
                 .buttonStyle(MeetingToolbarButtonStyle())
@@ -415,8 +417,8 @@ private struct MeetingDetailWindowView: View {
 
                 Button(
                     viewModel.isSummaryCollapsed
-                        ? String(localized: "Expand Summary")
-                        : String(localized: "Collapse Summary")
+                        ? AppLocalization.localizedString("Expand Summary")
+                        : AppLocalization.localizedString("Collapse Summary")
                 ) {
                     viewModel.toggleSummaryCollapsed()
                 }
@@ -476,9 +478,9 @@ private struct MeetingDetailWindowView: View {
     private func transcriptTabTitle(for mode: MeetingDetailViewModel.TranscriptPresentationMode) -> String {
         switch mode {
         case .timeline:
-            return String(localized: "Timeline")
+            return AppLocalization.localizedString("Timeline")
         case .speakerMarks:
-            return String(localized: "Speaker Marks")
+            return AppLocalization.localizedString("Speaker Marks")
         }
     }
 
@@ -526,9 +528,9 @@ private struct MeetingDetailWindowView: View {
     ) -> String {
         switch mode {
         case .source:
-            return String(localized: "Audio Source")
+            return AppLocalization.localizedString("Audio Source")
         case .speaker:
-            return String(localized: "Speaker")
+            return AppLocalization.localizedString("Speaker")
         }
     }
 
@@ -538,7 +540,7 @@ private struct MeetingDetailWindowView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            TextField(String(localized: "Search transcript"), text: $viewModel.searchQuery)
+            TextField(AppLocalization.localizedString("Search transcript"), text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
 
             if !viewModel.searchQuery.isEmpty {
@@ -619,7 +621,7 @@ private struct MeetingDetailWindowView: View {
 
     private var transcriptCaption: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(String(localized: "Meeting Transcript"))
+            Text(AppLocalization.localizedString("Meeting Transcript"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
 
@@ -640,7 +642,7 @@ private struct MeetingDetailWindowView: View {
 
                 Text(
                     viewModel.isFinalizing
-                        ? String(localized: "Preparing final transcript…")
+                        ? AppLocalization.localizedString("Preparing final transcript…")
                         : transcriptEmptyTitle
                 )
                     .font(.system(size: 15, weight: .medium))
@@ -648,7 +650,7 @@ private struct MeetingDetailWindowView: View {
 
                 Text(
                     viewModel.isFinalizing
-                        ? String(localized: "Voxt is finishing audio flushing, final transcription, and speaker analysis.")
+                        ? AppLocalization.localizedString("Voxt is finishing audio flushing, final transcription, and speaker analysis.")
                         : transcriptEmptyMessage
                 )
                     .font(.system(size: 12, weight: .medium))
@@ -657,11 +659,11 @@ private struct MeetingDetailWindowView: View {
             .frame(maxWidth: .infinity, minHeight: 280, alignment: .center)
         } else {
             VStack(spacing: 10) {
-                Text(String(localized: "No matching transcript segments."))
+                Text(AppLocalization.localizedString("No matching transcript segments."))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                Text(String(localized: "Try a different keyword or clear the current search."))
+                Text(AppLocalization.localizedString("Try a different keyword or clear the current search."))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary.opacity(0.85))
             }
@@ -671,16 +673,16 @@ private struct MeetingDetailWindowView: View {
 
     private var transcriptEmptyTitle: String {
         if viewModel.mode == .history, viewModel.audioURL != nil {
-            return String(localized: "No transcript was produced for this recording.")
+            return AppLocalization.localizedString("No transcript was produced for this recording.")
         }
-        return String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts.")
+        return AppLocalization.localizedString("The transcript timeline for Me / Them will appear here once the meeting starts.")
     }
 
     private var transcriptEmptyMessage: String {
         if viewModel.mode == .history, viewModel.audioURL != nil {
-            return String(localized: "The audio recording is saved and available for playback.")
+            return AppLocalization.localizedString("The audio recording is saved and available for playback.")
         }
-        return String(localized: "This panel stays focused on the detailed transcript and synced playback.")
+        return AppLocalization.localizedString("This panel stays focused on the detailed transcript and synced playback.")
     }
 
     private var meetingFinalizationBanner: some View {
@@ -689,11 +691,11 @@ private struct MeetingDetailWindowView: View {
                 .controlSize(.small)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(String(localized: "Preparing final meeting details…"))
+                Text(AppLocalization.localizedString("Preparing final meeting details…"))
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text(String(localized: "Current transcript is available now. Final text, speaker labels, audio playback, and summary will update when processing finishes."))
+                Text(AppLocalization.localizedString("Current transcript is available now. Final text, speaker labels, audio playback, and summary will update when processing finishes."))
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -813,7 +815,7 @@ private struct MeetingDetailWindowView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .help(String(localized: "Rename Speaker"))
+                    .help(AppLocalization.localizedString("Rename Speaker"))
                 }
             }
 
@@ -840,16 +842,16 @@ private struct MeetingDetailWindowView: View {
     private var speakerRenameDialog: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(String(localized: "Rename Speaker"))
+                Text(AppLocalization.localizedString("Rename Speaker"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text(String(localized: "This name will be applied to all matching transcript segments."))
+                Text(AppLocalization.localizedString("This name will be applied to all matching transcript segments."))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
             }
 
-            TextField(String(localized: "Speaker name"), text: $speakerRenameDraft)
+            TextField(AppLocalization.localizedString("Speaker name"), text: $speakerRenameDraft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13, weight: .medium))
                 .padding(.horizontal, 12)
@@ -864,14 +866,14 @@ private struct MeetingDetailWindowView: View {
                 )
 
             HStack(spacing: 10) {
-                Button(String(localized: "Cancel")) {
+                Button(AppLocalization.localizedString("Cancel")) {
                     cancelSpeakerRename()
                 }
                 .buttonStyle(MeetingPillButtonStyle())
 
                 Spacer(minLength: 8)
 
-                Button(String(localized: "Save")) {
+                Button(AppLocalization.localizedString("Save")) {
                     commitSpeakerRename()
                 }
                 .buttonStyle(MeetingPrimaryButtonStyle())
@@ -934,15 +936,15 @@ private struct MeetingDetailWindowView: View {
                         ProgressView()
                             .controlSize(.small)
 
-                        Text(String(localized: "Audio playback will be available after the meeting is saved."))
+                        Text(AppLocalization.localizedString("Audio playback will be available after the meeting is saved."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 } else {
                     Text(
                         viewModel.canExport
-                            ? String(localized: "The meeting is paused. You can export the current record.")
-                            : String(localized: "The meeting is in progress. Pause it to export the current record.")
+                            ? AppLocalization.localizedString("The meeting is paused. You can export the current record.")
+                            : AppLocalization.localizedString("The meeting is in progress. Pause it to export the current record.")
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -959,11 +961,11 @@ private struct MeetingDetailWindowView: View {
 
     private var translationLanguageDialog: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(String(localized: "Choose Translation Language"))
+            Text(AppLocalization.localizedString("Choose Translation Language"))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.primary)
 
-            Text(String(localized: "Realtime translation in detail view only translates Them segments."))
+            Text(AppLocalization.localizedString("Realtime translation in detail view only translates Them segments."))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
 
@@ -1013,14 +1015,14 @@ private struct MeetingDetailWindowView: View {
             .frame(maxHeight: 220)
 
             HStack(spacing: 10) {
-                Button(String(localized: "Cancel")) {
+                Button(AppLocalization.localizedString("Cancel")) {
                     viewModel.cancelTranslationLanguageSelection()
                 }
                 .buttonStyle(MeetingPillButtonStyle())
 
                 Spacer(minLength: 8)
 
-                Button(String(localized: "Start Translation")) {
+                Button(AppLocalization.localizedString("Start Translation")) {
                     viewModel.confirmTranslationLanguageSelection()
                 }
                 .buttonStyle(MeetingPrimaryButtonStyle())
@@ -1217,7 +1219,7 @@ private struct MeetingDetailSegmentRow: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if showsTranslation, segment.isTranslationPending {
-                Text(String(localized: "Translating…"))
+                Text(AppLocalization.localizedString("Translating…"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary.opacity(0.75))
             }

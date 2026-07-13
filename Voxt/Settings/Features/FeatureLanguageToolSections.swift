@@ -39,7 +39,7 @@ extension FeatureSettingsView {
                             SettingsMenuOption(value: $0, title: $0.title)
                         },
                         selectedTitle: featureSettings.translation.targetLanguage.title,
-                        width: 220
+                        width: 280
                     )
                 }
 
@@ -63,10 +63,23 @@ extension FeatureSettingsView {
                             kind: .translation
                         ),
                         defaultText: AppPromptDefaults.text(for: .translation),
+                        kind: .translation,
+                        selectedPresetID: Binding(
+                            get: { featureSettings.translation.promptPresetID },
+                            set: { featureSettings.translation.promptPresetID = $0 }
+                        ),
                         variables: ModelSettingsPromptVariables.translation,
                         guidance: "",
                         persistChanges: { prompt in
-                            FeatureSettingsStore.saveTranslationPrompt(prompt)
+                            FeatureSettingsStore.saveTranslationPrompt(
+                                prompt,
+                                presetID: featureSettings.translation.promptPresetID
+                            )
+                        },
+                        persistPresetSelection: { presetID, prompt in
+                            featureSettings.translation.promptPresetID = presetID
+                            featureSettings.translation.prompt = prompt
+                            FeatureSettingsStore.saveTranslationPrompt(prompt, presetID: presetID)
                         }
                     )
                 }
@@ -108,10 +121,23 @@ extension FeatureSettingsView {
                             kind: .rewrite
                         ),
                         defaultText: AppPromptDefaults.text(for: .rewrite),
+                        kind: .rewrite,
+                        selectedPresetID: Binding(
+                            get: { featureSettings.rewrite.promptPresetID },
+                            set: { featureSettings.rewrite.promptPresetID = $0 }
+                        ),
                         variables: ModelSettingsPromptVariables.rewrite,
                         guidance: "",
                         persistChanges: { prompt in
-                            FeatureSettingsStore.saveRewritePrompt(prompt)
+                            FeatureSettingsStore.saveRewritePrompt(
+                                prompt,
+                                presetID: featureSettings.rewrite.promptPresetID
+                            )
+                        },
+                        persistPresetSelection: { presetID, prompt in
+                            featureSettings.rewrite.promptPresetID = presetID
+                            featureSettings.rewrite.prompt = prompt
+                            FeatureSettingsStore.saveRewritePrompt(prompt, presetID: presetID)
                         }
                     )
                 }

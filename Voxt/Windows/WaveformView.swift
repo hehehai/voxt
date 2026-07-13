@@ -17,6 +17,7 @@ struct WaveformView: View {
     @AppStorage(AppPreferenceKey.overlayCardOpacity) private var overlayCardOpacity = 82
     @AppStorage(AppPreferenceKey.overlayCardCornerRadius) private var overlayCardCornerRadius = 24
     @AppStorage(AppPreferenceKey.realtimeTextDisplayEnabled) private var realtimeTextDisplayEnabled = true
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
 
     static let defaultWaveformBarWidth: CGFloat = 3.2
     static let defaultWaveformBarSpacing: CGFloat = 2.5
@@ -177,6 +178,7 @@ struct WaveformView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguageRaw
         VStack(alignment: .leading, spacing: 10) {
             cardView
         }

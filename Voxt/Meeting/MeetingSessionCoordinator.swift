@@ -47,6 +47,7 @@ final class MeetingSessionCoordinator {
     private let realtimeTranslationTargetLanguageProvider: @MainActor () -> TranslationTargetLanguage?
     private let realtimeTranslationHandler: @MainActor (String, TranslationTargetLanguage) async throws -> String
     private var isStarting = false
+    private var isReconfiguringCaptureMode = false
 
     init(
         mlxModelManager: MLXModelManager,
@@ -316,6 +317,7 @@ final class MeetingSessionCoordinator {
     func setCaptureMode(_ mode: MeetingCaptureMode) async -> String? {
         guard overlayState.captureMode != mode else { return nil }
         let previousMode = overlayState.captureMode
+        let sourceTransition = previousMode.sourceTransition(to: mode)
         overlayState.captureMode = mode
         mode.persist()
         VoxtLog.meeting("Meeting capture mode changed. previous=\(previousMode.rawValue), current=\(mode.rawValue)")
@@ -335,7 +337,8 @@ final class MeetingSessionCoordinator {
         }
 
         finalizeCurrentRecordingSlice()
-        stopCaptures()
+        isReconfiguringCaptureMode = true
+        stopCaptureSources(for: sourceTransition)
         await flushPendingAudio()
         await finishLiveSessionsIfNeeded()
 
@@ -343,12 +346,16 @@ final class MeetingSessionCoordinator {
             if let context = activeEngineContext, context.resolvedMode.usesLiveSessions {
                 try await startLiveSessionsIfNeeded(for: context)
             }
-            try startCaptures()
+            try startCaptureSources(for: sourceTransition)
             recordingStartedAt = Date()
             overlayState.waveformState.reset()
             overlayState.waveformState.setActive(true)
+            isReconfiguringCaptureMode = false
             return nil
         } catch {
+            await cancelLiveSessionsIfNeeded()
+            stopCaptures()
+            isReconfiguringCaptureMode = false
             overlayState.isRecording = false
             overlayState.isPaused = true
             overlayState.audioLevel = 0
@@ -363,6 +370,7 @@ final class MeetingSessionCoordinator {
 
     private func handleBuffer(_ buffer: AVAudioPCMBuffer, level: Float, speaker: MeetingSpeaker) {
         guard overlayState.isRecording || isStarting else { return }
+        guard !isReconfiguringCaptureMode else { return }
         guard overlayState.captureMode.includes(speaker: speaker) else { return }
         let sampleRate = buffer.format.sampleRate
         let bufferEndSeconds = currentTimelineOffsetSeconds()
@@ -603,32 +611,13 @@ final class MeetingSessionCoordinator {
         loggedSampleExtractionFailureSpeakers.remove(.me)
         loggedSampleExtractionFailureSpeakers.remove(.them)
 
-        let resolvedInputDeviceID: AudioDeviceID?
-        if captureMode.usesMicrophone {
-            let availableDevices = AudioInputDeviceManager.snapshotAvailableInputDevices()
-            resolvedInputDeviceID = AudioInputDeviceManager.resolvedInputDeviceID(
-                from: availableDevices,
-                preferredID: preferredInputDeviceIDProvider()
-            )
-            if let preferredInputDeviceID = preferredInputDeviceIDProvider(),
-               preferredInputDeviceID != resolvedInputDeviceID {
-                VoxtLog.meeting(
-                    "Meeting microphone input device fallback applied. preferred=\(preferredInputDeviceID), resolved=\(resolvedInputDeviceID.map(String.init(describing:)) ?? "default")"
-                )
-            }
-            microphoneCapture.setPreferredInputDevice(resolvedInputDeviceID)
-            try startMicrophoneCapture(with: resolvedInputDeviceID)
-        } else {
-            resolvedInputDeviceID = nil
-        }
+        let resolvedInputDeviceID = captureMode.usesMicrophone
+            ? try startConfiguredMicrophoneCapture(scheduleWatchdog: false)
+            : nil
 
         if captureMode.usesSystemAudio {
             do {
-                try systemAudioCapture.start { [weak self] buffer, level in
-                    Task { @MainActor [weak self] in
-                        self?.handleBuffer(buffer, level: level, speaker: .them)
-                    }
-                }
+                try startSystemAudioCapture()
             } catch {
                 if captureMode.usesMicrophone {
                     microphoneCapture.stop()
@@ -639,6 +628,56 @@ final class MeetingSessionCoordinator {
 
         if captureMode.usesMicrophone {
             scheduleMicrophoneStartupWatchdog(with: resolvedInputDeviceID)
+        }
+
+    }
+
+    private func stopCaptureSources(for transition: MeetingCaptureSourceTransition) {
+        if transition.stopsMicrophone {
+            microphoneStartupWatchdogTask?.cancel()
+            microphoneStartupWatchdogTask = nil
+            microphoneCapture.stop()
+        }
+        if transition.stopsSystemAudio {
+            systemAudioCapture.stop()
+        }
+    }
+
+    private func startCaptureSources(for transition: MeetingCaptureSourceTransition) throws {
+        if transition.startsMicrophone {
+            _ = try startConfiguredMicrophoneCapture()
+        }
+        if transition.startsSystemAudio {
+            try startSystemAudioCapture()
+        }
+    }
+
+    private func startConfiguredMicrophoneCapture(
+        scheduleWatchdog: Bool = true
+    ) throws -> AudioDeviceID? {
+        let availableDevices = AudioInputDeviceManager.snapshotAvailableInputDevices()
+        let preferredInputDeviceID = preferredInputDeviceIDProvider()
+        let resolvedInputDeviceID = AudioInputDeviceManager.resolvedInputDeviceID(
+            from: availableDevices,
+            preferredID: preferredInputDeviceID
+        )
+        if let preferredInputDeviceID, preferredInputDeviceID != resolvedInputDeviceID {
+            VoxtLog.meeting(
+                "Meeting microphone input device fallback applied. preferred=\(preferredInputDeviceID), resolved=\(resolvedInputDeviceID.map(String.init(describing:)) ?? "default")"
+            )
+        }
+        try startMicrophoneCapture(with: resolvedInputDeviceID)
+        if scheduleWatchdog {
+            scheduleMicrophoneStartupWatchdog(with: resolvedInputDeviceID)
+        }
+        return resolvedInputDeviceID
+    }
+
+    private func startSystemAudioCapture() throws {
+        try systemAudioCapture.start { [weak self] buffer, level in
+            Task { @MainActor [weak self] in
+                self?.handleBuffer(buffer, level: level, speaker: .them)
+            }
         }
     }
 

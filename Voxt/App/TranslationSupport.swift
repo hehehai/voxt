@@ -17,30 +17,30 @@ extension AppDelegate {
         var errorDescription: String? {
             switch self {
             case .translationModelNotInstalled:
-                return String(localized: "Translation failed because the selected local LLM model is not installed.")
+                return AppLocalization.localizedString("Translation failed because the selected local LLM model is not installed.")
             case .translationRemoteModelNotConfigured:
-                return String(localized: "Translation failed because no remote LLM model is configured.")
+                return AppLocalization.localizedString("Translation failed because no remote LLM model is configured.")
             case .translationProviderUnavailable:
-                return String(localized: "Translation failed because the selected translation provider is unavailable for this request.")
+                return AppLocalization.localizedString("Translation failed because the selected translation provider is unavailable for this request.")
             case .translationPlanUnavailable:
-                return String(localized: "Translation failed because Voxt could not prepare the translation request.")
+                return AppLocalization.localizedString("Translation failed because Voxt could not prepare the translation request.")
             case .translationRejectedByGuard:
-                return String(localized: "Translation failed because the model output looked incomplete.")
+                return AppLocalization.localizedString("Translation failed because the model output looked incomplete.")
             case .rewriteModelNotInstalled:
-                return String(localized: "Rewrite failed because the selected local LLM model is not installed.")
+                return AppLocalization.localizedString("Rewrite failed because the selected local LLM model is not installed.")
             case .rewriteRemoteModelNotConfigured:
-                return String(localized: "Rewrite failed because no remote LLM model is configured.")
+                return AppLocalization.localizedString("Rewrite failed because no remote LLM model is configured.")
             case .rewriteRejectedByGuard:
-                return String(localized: "Rewrite failed because the model output looked incomplete.")
+                return AppLocalization.localizedString("Rewrite failed because the model output looked incomplete.")
             }
         }
 
         var recoverySuggestion: String? {
             switch self {
             case .translationModelNotInstalled, .rewriteModelNotInstalled:
-                return String(localized: "Open Settings > Model to install it.")
+                return AppLocalization.localizedString("Open Settings > Model to install it.")
             case .translationRemoteModelNotConfigured, .rewriteRemoteModelNotConfigured:
-                return String(localized: "Configure a provider in Settings > Model.")
+                return AppLocalization.localizedString("Configure a provider in Settings > Model.")
             case .translationRejectedByGuard, .rewriteRejectedByGuard,
                  .translationProviderUnavailable, .translationPlanUnavailable:
                 return nil
@@ -610,7 +610,7 @@ extension AppDelegate {
                 }
 
                 self.overlayState.replaceCurrentAnswer(
-                    title: String(localized: "Translation"),
+                    title: AppLocalization.localizedString("Translation"),
                     content: translated
                 )
             } catch {

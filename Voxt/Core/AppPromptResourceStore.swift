@@ -23,6 +23,28 @@ enum AppPromptResourceStore {
         return text.removingSingleTrailingNewline()
     }
 
+    static func presetText(
+        for kind: AppPromptKind,
+        presetID: String,
+        language: AppInterfaceLanguage
+    ) -> String? {
+        let languageDirectory = resourceLanguageDirectory(for: language)
+        let resourceName = "\(languageDirectory)-\(kind.promptResourceName)-\(presetID)"
+        let subdirectory = "Resources/Prompts/\(languageDirectory)"
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "txt")
+            ?? Bundle.main.url(
+                forResource: resourceName,
+                withExtension: "txt",
+                subdirectory: subdirectory
+            ) else {
+            return nil
+        }
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return text.removingSingleTrailingNewline()
+    }
+
     private static func resourceLanguageDirectory(for language: AppInterfaceLanguage) -> String {
         switch language {
         case .english:

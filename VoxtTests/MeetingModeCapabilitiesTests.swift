@@ -26,4 +26,43 @@ final class MeetingModeCapabilitiesTests: XCTestCase {
         XCTAssertTrue(recording.finalDiarizationSources.isEmpty)
         XCTAssertEqual(recording.defaultSpeaker(for: .microphone), .me)
     }
+
+    func testCaptureModeTransitionsPreserveSharedAudioSources() {
+        XCTAssertEqual(
+            MeetingCaptureMode.meeting.sourceTransition(to: .subtitles),
+            MeetingCaptureSourceTransition(
+                stopsMicrophone: true,
+                stopsSystemAudio: false,
+                startsMicrophone: false,
+                startsSystemAudio: false
+            )
+        )
+        XCTAssertEqual(
+            MeetingCaptureMode.subtitles.sourceTransition(to: .meeting),
+            MeetingCaptureSourceTransition(
+                stopsMicrophone: false,
+                stopsSystemAudio: false,
+                startsMicrophone: true,
+                startsSystemAudio: false
+            )
+        )
+        XCTAssertEqual(
+            MeetingCaptureMode.subtitles.sourceTransition(to: .recording),
+            MeetingCaptureSourceTransition(
+                stopsMicrophone: false,
+                stopsSystemAudio: true,
+                startsMicrophone: true,
+                startsSystemAudio: false
+            )
+        )
+        XCTAssertEqual(
+            MeetingCaptureMode.recording.sourceTransition(to: .subtitles),
+            MeetingCaptureSourceTransition(
+                stopsMicrophone: true,
+                stopsSystemAudio: false,
+                startsMicrophone: false,
+                startsSystemAudio: true
+            )
+        )
+    }
 }

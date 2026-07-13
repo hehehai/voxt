@@ -42,6 +42,7 @@ struct SettingsView: View {
     @AppStorage(AppPreferenceKey.hotkeyPreset) private var hotkeyPreset = HotkeyPreference.defaultPreset.rawValue
     @State private var selectedTab: SettingsTab
     @State private var selectedFeatureTab: FeatureSettingsTab
+    @State private var selectedHistoryFilter: HistoryFilterTab
     @State private var sidebarMode: SettingsSidebarMode
     @State private var navigationRequest: SettingsNavigationRequest?
     @State private var hasMissingPermissions = false
@@ -93,6 +94,7 @@ struct SettingsView: View {
         self.mainWindowState = mainWindowState
         _selectedTab = State(initialValue: initialNavigationTarget.tab)
         _selectedFeatureTab = State(initialValue: initialNavigationTarget.featureTab ?? .transcription)
+        _selectedHistoryFilter = State(initialValue: initialNavigationTarget.historyFilter ?? .transcription)
         _sidebarMode = State(initialValue: Self.initialSidebarMode(for: initialNavigationTarget.tab))
         _navigationRequest = State(initialValue: SettingsNavigationRequest(target: initialNavigationTarget))
         _displayMode = State(initialValue: initialDisplayMode)
@@ -232,6 +234,7 @@ struct SettingsView: View {
                 sidebarMode: $sidebarMode,
                 selectedTab: $selectedTab,
                 selectedFeatureTab: $selectedFeatureTab,
+                selectedHistoryFilter: $selectedHistoryFilter,
                 onSelectTab: { tab in
                     navigationRequest = nil
                     switchToRootTab(tab)
@@ -240,10 +243,14 @@ struct SettingsView: View {
                     navigationRequest = nil
                     switchToFeatureTab(tab)
                 },
+                onSelectHistoryFilter: { filter in
+                    navigationRequest = nil
+                    switchToHistoryFilter(filter)
+                },
                 onReturnToRoot: {
                     navigationRequest = nil
                     sidebarMode = .root
-                    if selectedTab == .feature || Self.isSettingsTab(selectedTab) {
+                    if selectedTab == .feature || selectedTab == .history || Self.isSettingsTab(selectedTab) {
                         selectedTab = .report
                     }
                 },
@@ -478,6 +485,7 @@ struct SettingsView: View {
                         noteStore: noteStore,
                         dictionaryStore: dictionaryStore,
                         dictionarySuggestionStore: dictionarySuggestionStore,
+                        selectedFilter: $selectedHistoryFilter,
                         navigationRequest: navigationRequest
                     )
                 }
@@ -675,7 +683,14 @@ struct SettingsView: View {
     }
 
     private var currentTitle: LocalizedStringKey {
-        sidebarMode == .feature ? selectedFeatureTab.titleKey : selectedTab.titleKey
+        switch sidebarMode {
+        case .feature:
+            return selectedFeatureTab.titleKey
+        case .history:
+            return selectedHistoryFilter.titleKey
+        case .root, .settings:
+            return selectedTab.titleKey
+        }
     }
 
     private var showsFeatureExperimentalBadge: Bool {
@@ -683,7 +698,7 @@ struct SettingsView: View {
     }
 
     private var showsContentHeader: Bool {
-        true
+        selectedTab != .history || sidebarMode != .history
     }
 
     private var contentTopPadding: CGFloat {
@@ -708,9 +723,15 @@ struct SettingsView: View {
                 selectedFeatureTab = .transcription
             }
         }
+        if let historyFilter = target.historyFilter {
+            selectedHistoryFilter = historyFilter
+        }
         if target.tab == .feature {
             sidebarMode = .feature
             selectedTab = .feature
+        } else if target.tab == .history {
+            sidebarMode = .history
+            selectedTab = .history
         } else if Self.isSettingsTab(target.tab) {
             sidebarMode = .settings
             selectedTab = target.tab
@@ -732,6 +753,11 @@ struct SettingsView: View {
             }
             return
         }
+        if tab == .history {
+            selectedTab = .history
+            sidebarMode = .history
+            return
+        }
         if Self.isSettingsTab(tab) {
             sidebarMode = .settings
             selectedTab = tab
@@ -745,6 +771,12 @@ struct SettingsView: View {
         selectedTab = .feature
         sidebarMode = .feature
         selectedFeatureTab = tab
+    }
+
+    private func switchToHistoryFilter(_ filter: HistoryFilterTab) {
+        selectedTab = .history
+        sidebarMode = .history
+        selectedHistoryFilter = filter
     }
 
     private func openOfficialWebsite() {
@@ -1132,6 +1164,9 @@ struct SettingsView: View {
         if tab == .feature {
             return .feature
         }
+        if tab == .history {
+            return .history
+        }
         if isSettingsTab(tab) {
             return .settings
         }
@@ -1183,8 +1218,10 @@ private struct SettingsSidebar: View {
     @Binding var sidebarMode: SettingsSidebarMode
     @Binding var selectedTab: SettingsTab
     @Binding var selectedFeatureTab: FeatureSettingsTab
+    @Binding var selectedHistoryFilter: HistoryFilterTab
     let onSelectTab: (SettingsTab) -> Void
     let onSelectFeatureTab: (FeatureSettingsTab) -> Void
+    let onSelectHistoryFilter: (HistoryFilterTab) -> Void
     let onReturnToRoot: () -> Void
     let appEnhancementEnabled: Bool
     let noteEnabled: Bool
@@ -1219,8 +1256,10 @@ private struct SettingsSidebar: View {
                 settingsTabs: visibleSettingsTabs,
                 selectedTab: selectedTab,
                 selectedFeatureTab: selectedFeatureTab,
+                selectedHistoryFilter: selectedHistoryFilter,
                 onSelectTab: onSelectTab,
-                onSelectFeatureTab: onSelectFeatureTab
+                onSelectFeatureTab: onSelectFeatureTab,
+                onSelectHistoryFilter: onSelectHistoryFilter
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
@@ -1337,8 +1376,10 @@ private struct SettingsSidebarMenuPager: View {
     let settingsTabs: [SettingsTab]
     let selectedTab: SettingsTab
     let selectedFeatureTab: FeatureSettingsTab
+    let selectedHistoryFilter: HistoryFilterTab
     let onSelectTab: (SettingsTab) -> Void
     let onSelectFeatureTab: (FeatureSettingsTab) -> Void
+    let onSelectHistoryFilter: (HistoryFilterTab) -> Void
 
     @State private var visibleSubmenuKind: SettingsSidebarSubmenuKind = .feature
     @State private var visiblePageIndex: CGFloat = 0
@@ -1417,6 +1458,8 @@ private struct SettingsSidebarMenuPager: View {
         switch kind {
         case .feature:
             featureMenu
+        case .history:
+            historyMenu
         case .settings:
             settingsMenu
         }
@@ -1449,10 +1492,26 @@ private struct SettingsSidebarMenuPager: View {
             }
         }
     }
+
+    private var historyMenu: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(HistoryFilterTab.allCases) { filter in
+                let featureTab = filter.correspondingFeatureTab
+                SettingsSidebarTabButton(
+                    iconKind: featureTab.sidebarIconKind,
+                    systemImageName: featureTab.sidebarIconKind == nil ? featureTab.iconName : nil,
+                    title: filter.titleKey,
+                    isActive: filter == selectedHistoryFilter,
+                    action: { onSelectHistoryFilter(filter) }
+                )
+            }
+        }
+    }
 }
 
 private enum SettingsSidebarSubmenuKind {
     case feature
+    case history
     case settings
 }
 
@@ -1463,6 +1522,8 @@ private extension SettingsSidebarMode {
             return nil
         case .feature:
             return .feature
+        case .history:
+            return .history
         case .settings:
             return .settings
         }
@@ -1555,7 +1616,7 @@ private struct SettingsSidebarHeader: View {
                     }
                 }
 
-            case .feature, .settings:
+            case .feature, .history, .settings:
                 Spacer(minLength: 0)
 
                 Button(action: onReturnToRoot) {

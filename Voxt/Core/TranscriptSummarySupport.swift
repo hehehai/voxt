@@ -277,7 +277,7 @@ enum TranscriptSummarySupport {
     }
 
     static func fallbackSummaryTitle(for settings: TranscriptSummarySettingsSnapshot) -> String {
-        String(localized: "Transcript Summary")
+        AppLocalization.localizedString("Transcript Summary")
     }
 
     private static func snapshot(

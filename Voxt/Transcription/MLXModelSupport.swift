@@ -366,7 +366,7 @@ struct MLXModelCatalog {
         ),
         Option(
             id: "OpenMOSS-Team/MOSS-Transcribe-Diarize",
-            title: "MOSS Transcribe Diarize",
+            title: "MOSS",
             description: "One-pass timestamped transcription and speaker-label model for meeting-style audio."
         ),
         Option(

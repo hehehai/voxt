@@ -40,7 +40,7 @@ extension AppDelegate {
 
         guard !isSessionActive else {
             showOverlayStatus(
-                String(localized: "Finish the current recording before starting Meeting Notes."),
+                AppLocalization.localizedString("Finish the current recording before starting Meeting Notes."),
                 clearAfter: 2.2
             )
             return
@@ -295,7 +295,7 @@ extension AppDelegate {
         if isSessionActive {
             VoxtLog.meeting("Meeting start blocked because another recording session is active.")
             showOverlayStatus(
-                String(localized: "Finish the current recording before starting Meeting Notes."),
+                AppLocalization.localizedString("Finish the current recording before starting Meeting Notes."),
                 clearAfter: 2.2
             )
             return false
@@ -335,7 +335,7 @@ extension AppDelegate {
         if !AccessibilityPermissionManager.isTrusted() {
             VoxtLog.meetingWarning("Meeting start proceeding without accessibility trust. Some injection shortcuts may be unavailable.")
             showOverlayStatus(
-                String(localized: "Please enable required permissions in Settings > Permissions."),
+                AppLocalization.localizedString("Please enable required permissions in Settings > Permissions."),
                 clearAfter: 2.2
             )
         }
@@ -347,7 +347,7 @@ extension AppDelegate {
         if mode.usesMicrophone && AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
             VoxtLog.meetingWarning("Meeting capture mode requires microphone permission. mode=\(mode.rawValue)")
             showOverlayReminder(
-                String(localized: "Microphone permission is required. Enable it in Settings > Permissions.")
+                AppLocalization.localizedString("Microphone permission is required. Enable it in Settings > Permissions.")
             )
             return false
         }
@@ -355,7 +355,7 @@ extension AppDelegate {
         if mode.usesSystemAudio && SystemAudioCapturePermission.authorizationStatus() != .authorized {
             VoxtLog.meetingWarning("Meeting capture mode requires system audio permission. mode=\(mode.rawValue)")
             showOverlayReminder(
-                String(localized: "System Audio Recording permission is required for Meeting Notes. Enable it in Settings > Permissions.")
+                AppLocalization.localizedString("System Audio Recording permission is required for Meeting Notes. Enable it in Settings > Permissions.")
             )
             return false
         }

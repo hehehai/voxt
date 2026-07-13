@@ -234,7 +234,7 @@ private struct DashboardCardHeader: View {
                     SettingsMenuOption(value: range, title: range.title)
                 },
                 selectedTitle: selectedRange.title,
-                width: 60,
+                width: 72,
                 allowsCompactWidth: true,
                 isCompact: true
             )
@@ -251,7 +251,7 @@ private struct BranchRankingCard: View {
     var body: some View {
         DashboardCard {
             VStack(alignment: .leading, spacing: 10) {
-                DashboardCardHeader(title: reportLocalized("Enhancement"), selectedRange: $selectedRange)
+                DashboardCardHeader(title: reportLocalized("Branch"), selectedRange: $selectedRange)
 
                 if items.isEmpty {
                     DashboardEmptyState(text: reportLocalized("No usage records yet"))

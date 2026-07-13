@@ -598,19 +598,27 @@ final class MeetingDetailViewModelTests: XCTestCase {
             },
             translationHandler: { text, _ in text }
         )
+        let localeIdentifiers = ["en", "zh-Hans", "ja"]
+        let inProgressSubtitles = localeIdentifiers.map { localeIdentifier in
+            String(
+                format: "%@ · %@",
+                AppLocalization.localizedString("Meeting", localeIdentifier: localeIdentifier),
+                AppLocalization.localizedString("Meeting In Progress", localeIdentifier: localeIdentifier)
+            )
+        }
 
         XCTAssertFalse(viewModel.isFinalizing)
-        XCTAssertEqual(
-            viewModel.subtitle,
-            AppLocalization.format("%@ · %@", MeetingCaptureMode.meeting.title, String(localized: "Meeting In Progress"))
-        )
+        XCTAssertTrue(inProgressSubtitles.contains(viewModel.subtitle))
 
         liveState.isRecording = false
         liveState.isFinalizing = true
         try? await Task.sleep(for: .milliseconds(50))
 
         XCTAssertTrue(viewModel.isFinalizing)
-        XCTAssertEqual(viewModel.subtitle, String(localized: "Preparing final meeting details"))
+        let finalizingSubtitles = localeIdentifiers.map {
+            AppLocalization.localizedString("Preparing final meeting details", localeIdentifier: $0)
+        }
+        XCTAssertTrue(finalizingSubtitles.contains(viewModel.subtitle))
     }
 
     func testLiveViewModelSplitsLongDisplaySegments() {

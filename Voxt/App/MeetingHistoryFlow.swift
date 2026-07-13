@@ -81,7 +81,7 @@ extension AppDelegate {
                 VoxtLog.meetingWarning("Meeting save-and-open failed: no history entry could be created.")
                 meetingDetailWindowManager.closeLiveWindow()
                 meetingOverlayWindow.hide()
-                showOverlayReminder(String(localized: "Couldn't save Meeting Notes history."))
+                showOverlayReminder(AppLocalization.localizedString("Couldn't save Meeting Notes history."))
                 return
             }
             VoxtLog.meeting("Meeting history saved. entryID=\(entry.id.uuidString), kind=\(entry.kind.rawValue)")

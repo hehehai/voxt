@@ -1029,7 +1029,7 @@ nonisolated struct HotkeyPreference {
             sidedModifiers: distinguishModifierSides ? hotkey.sidedModifiers : []
         )
         if case .keyboard(let keyCode) = hotkey.input, keyCode == modifierOnlyKeyCode {
-            return symbols.isEmpty ? "Unassigned" : symbols
+            return symbols.isEmpty ? AppLocalization.localizedString("Unassigned") : symbols
         }
         let key = inputDisplayString(hotkey.input)
         return symbols.isEmpty ? key : "\(symbols) \(key)"
@@ -1148,13 +1148,13 @@ nonisolated struct HotkeyPreference {
         }
 
         guard Thread.isMainThread else {
-            return "Key \(keyCode)"
+            return AppLocalization.format("Key %d", Int(keyCode))
         }
 
         if let translated = translateKeyCode(keyCode), !translated.isEmpty {
             return translated.uppercased()
         }
-        return "Key \(keyCode)"
+        return AppLocalization.format("Key %d", Int(keyCode))
     }
 
     static func inputDisplayString(_ input: Hotkey.Input) -> String {

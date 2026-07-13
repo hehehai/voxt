@@ -12,11 +12,11 @@ enum MeetingStartBlockReason: Equatable {
     var userMessage: String {
         switch self {
         case .dictationUnsupported:
-            return String(localized: "Meeting Notes currently supports MLX Audio and Remote ASR. Direct Dictation is not available for meetings.")
+            return AppLocalization.localizedString("Meeting Notes currently supports MLX Audio and Remote ASR. Direct Dictation is not available for meetings.")
         case .recording(let reason):
             return reason.userMessage
         case .remoteASRUnavailable:
-            return String(localized: "Remote ASR is not configured yet. Open Settings > Model to finish the provider setup.")
+            return AppLocalization.localizedString("Remote ASR is not configured yet. Open Settings > Model to finish the provider setup.")
         case .remoteASRMeetingUnavailable(let provider):
             return RemoteASRMeetingConfiguration.startBlockedMessage(for: provider)
         }

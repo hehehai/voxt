@@ -66,20 +66,35 @@ struct ResettablePromptSection: View {
     var variablesTitle: String? = nil
     var promptHeight: CGFloat = 124
     var titleUsesFeatureRowStyle = false
+    var promptPresets: [FeaturePromptPreset] = []
+    var promptPresetWidth: CGFloat = 200
+    var showsResetButton = true
+    var selectedPromptPresetID: String?
+    var onSelectPromptPreset: ((FeaturePromptPreset) -> Void)?
     var onTextChange: ((String) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             Text(title)
                 .font(titleUsesFeatureRowStyle ? .body.weight(.semibold) : .subheadline.weight(.medium))
                 .foregroundStyle(Color.primary.opacity(titleUsesFeatureRowStyle ? 0.92 : 1))
             Spacer()
-            Button(AppLocalization.localizedString("Reset to Default")) {
-                text = defaultText
+            if !promptPresets.isEmpty {
+                SettingsMenuPicker(
+                    selection: promptPresetSelection,
+                    options: promptPresetOptions,
+                    selectedTitle: selectedPromptPresetTitle,
+                    width: promptPresetWidth
+                )
             }
-            .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10))
-            .disabled(text == defaultText)
+            if showsResetButton {
+                Button(AppLocalization.localizedString("Reset to Default")) {
+                    resetPrompt()
+                }
+                .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10))
+                .disabled(text == resetPromptText)
+            }
         }
 
         if let guidance, !guidance.isEmpty {
@@ -96,6 +111,67 @@ struct ResettablePromptSection: View {
             onTextChange: onTextChange,
             onFocusChange: onFocusChange
         )
+    }
+
+    private var selectedPromptPreset: FeaturePromptPreset? {
+        promptPresets.first { $0.id == selectedPromptPresetID }
+    }
+
+    private var resetPromptText: String {
+        selectedPromptPreset?.prompt ?? promptPresets.first?.prompt ?? defaultText
+    }
+
+    private var selectedPromptPresetTitle: String {
+        guard let preset = selectedPromptPreset else {
+            return AppLocalization.localizedString("Custom")
+        }
+        guard text != preset.prompt else { return preset.title }
+        return String(
+            format: AppLocalization.localizedString("%@ (Modified)"),
+            preset.title
+        )
+    }
+
+    private var promptPresetOptions: [SettingsMenuOption<String>] {
+        var options = promptPresets.map { preset in
+            SettingsMenuOption(
+                value: preset.id,
+                title: preset.id == selectedPromptPresetID
+                    ? selectedPromptPresetTitle
+                    : preset.title
+            )
+        }
+        if selectedPromptPreset == nil {
+            options.insert(
+                SettingsMenuOption(
+                    value: FeaturePromptPresetCatalog.customPresetID,
+                    title: AppLocalization.localizedString("Custom")
+                ),
+                at: 0
+            )
+        }
+        return options
+    }
+
+    private var promptPresetSelection: Binding<String> {
+        Binding(
+            get: { selectedPromptPresetID ?? FeaturePromptPresetCatalog.customPresetID },
+            set: { newValue in
+                guard newValue != FeaturePromptPresetCatalog.customPresetID,
+                      let preset = promptPresets.first(where: { $0.id == newValue }) else {
+                    return
+                }
+                onSelectPromptPreset?(preset)
+            }
+        )
+    }
+
+    private func resetPrompt() {
+        if let preset = selectedPromptPreset ?? promptPresets.first {
+            onSelectPromptPreset?(preset)
+        } else {
+            text = defaultText
+        }
     }
 }
 

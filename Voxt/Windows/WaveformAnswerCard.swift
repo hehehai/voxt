@@ -35,7 +35,7 @@ struct WaveformAnswerCard: View {
 
     private var displayTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? String(localized: "AI Answer") : trimmed
+        return trimmed.isEmpty ? AppLocalization.localizedString("AI Answer") : trimmed
     }
 
     private var showsTranslationLoadingIndicator: Bool {
@@ -126,7 +126,7 @@ struct WaveformAnswerCard: View {
 
         if canInjectAnswer {
             AnswerHeaderActionButton(
-                accessibilityLabel: String(localized: "Inject into Current Input"),
+                accessibilityLabel: AppLocalization.localizedString("Inject into Current Input"),
                 action: onInject,
                 isEnabled: true
             ) {
@@ -138,7 +138,7 @@ struct WaveformAnswerCard: View {
 
         if canShowHistoryDetail && !showsSessionTranslationSelector {
             AnswerHeaderActionButton(
-                accessibilityLabel: String(localized: "Detail"),
+                accessibilityLabel: AppLocalization.localizedString("Detail"),
                 action: onShowDetail,
                 isEnabled: true
             ) {
@@ -149,7 +149,7 @@ struct WaveformAnswerCard: View {
         }
 
         AnswerHeaderActionButton(
-            accessibilityLabel: String(localized: "Copy Answer"),
+            accessibilityLabel: AppLocalization.localizedString("Copy Answer"),
             action: onCopy,
             isEnabled: canCopyAnswer
         ) {
@@ -163,7 +163,7 @@ struct WaveformAnswerCard: View {
         }
 
         AnswerHeaderActionButton(
-            accessibilityLabel: String(localized: "Close"),
+            accessibilityLabel: AppLocalization.localizedString("Close"),
             action: onClose,
             isEnabled: true
         ) {
