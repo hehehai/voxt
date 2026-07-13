@@ -1297,13 +1297,14 @@ class CustomLLMModelManager: ObservableObject {
         )
     }
 
-    func deleteModel() {
+    @discardableResult
+    func deleteModel() -> Result<Void, Error> {
         setPausedStatusMessage(nil, for: modelRepo)
-        deleteModel(repo: modelRepo)
-        setState(.notDownloaded, for: modelRepo)
+        return deleteModel(repo: modelRepo)
     }
 
-    func deleteModel(repo: String) {
+    @discardableResult
+    func deleteModel(repo: String) -> Result<Void, Error> {
         let canonicalRepo = Self.canonicalModelRepo(repo)
         if canonicalRepo == modelRepo {
             setPausedStatusMessage(nil, for: canonicalRepo)
@@ -1322,17 +1323,16 @@ class CustomLLMModelManager: ObservableObject {
                 try FileManager.default.removeItem(at: modelDir)
                 VoxtLog.modelInfo("Deleted custom LLM model directory. repo=\(canonicalRepo), path=\(modelDir.path)")
             } catch {
-                if canonicalRepo == modelRepo {
-                    setState(.error("Couldn't uninstall local LLM. It may still be in use."), for: canonicalRepo)
-                }
+                setState(.error("Couldn't uninstall local LLM: \(error.localizedDescription)"), for: canonicalRepo)
                 VoxtLog.modelError("Failed to delete custom LLM model directory. repo=\(canonicalRepo), error=\(error.localizedDescription)")
-                return
+                return .failure(error)
             }
         }
         clearSelectedDownloadSource(for: canonicalRepo)
         invalidateLocalCache(for: canonicalRepo)
         clearPerRepoState(for: canonicalRepo)
         setState(.notDownloaded, for: canonicalRepo)
+        return .success(())
     }
 
     private func invalidateLocalCache(for repo: String) {

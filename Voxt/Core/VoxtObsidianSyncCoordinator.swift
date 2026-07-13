@@ -108,13 +108,15 @@ final class VoxtObsidianSyncCoordinator {
         reason: String
     ) {
         guard settings.enabled else { return }
-        guard let vaultURL = SecurityScopedBookmarkSupport.resolveDirectoryURL(
+        guard let vaultAccess = SecurityScopedBookmarkSupport.accessDirectoryURL(
             bookmarkData: settings.vaultBookmarkData,
             fallbackPath: settings.vaultPath
         ) else {
             VoxtLog.warning("Obsidian sync skipped because vault access is unavailable. reason=\(reason)")
             return
         }
+        let vaultURL = vaultAccess.url
+        defer { withExtendedLifetime(vaultAccess) {} }
 
         let previousRecordsByNoteID = exportStore.recordsByNoteID
         var nextRecordsByNoteID: [UUID: VoxtNoteObsidianExportRecord] = [:]

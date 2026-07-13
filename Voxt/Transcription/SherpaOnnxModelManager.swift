@@ -212,13 +212,20 @@ final class SherpaOnnxModelManager: ObservableObject {
         markModelNotDownloaded(id: id)
     }
 
-    func deleteModel(id: SherpaOnnxModelID) {
+    @discardableResult
+    func deleteModel(id: SherpaOnnxModelID) -> Result<Void, Error> {
         cancelDownload(id: id)
         for directory in allReadableModelDirectories(for: id, requireValid: false) {
-            try? FileManager.default.removeItem(at: directory)
+            do {
+                try FileManager.default.removeItem(at: directory)
+            } catch {
+                setState(.error("Couldn't uninstall model: \(error.localizedDescription)"), for: id)
+                return .failure(error)
+            }
         }
         clearSelectedDownloadSource(for: id)
         markModelNotDownloaded(id: id, clearsLocalSize: true)
+        return .success(())
     }
 
     func openModelDirectory(id: SherpaOnnxModelID) {

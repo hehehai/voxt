@@ -283,14 +283,14 @@ class MLXModelManager: ObservableObject {
         return try await performDownloadWithFallback(for: canonicalRepo)
     }
 
-    func deleteModel(repo: String) {
+    @discardableResult
+    func deleteModel(repo: String) -> Result<Void, Error> {
         let canonicalRepo = Self.canonicalModelRepo(repo)
         if canonicalRepo == modelRepo {
             pausedStatusMessage = nil
         }
         if canonicalRepo == modelRepo {
-            deleteModel()
-            return
+            return deleteModel()
         }
 
         let modelDirectories = allReadableCacheDirectories(for: canonicalRepo, requireValid: false)
@@ -304,13 +304,15 @@ class MLXModelManager: ObservableObject {
                 try FileManager.default.removeItem(at: modelDir)
                 VoxtLog.modelInfo("Deleted MLX Audio managed artifact. repo=\(canonicalRepo), path=\(modelDir.path)")
             } catch {
+                setState(.error("Couldn't uninstall MLX model: \(error.localizedDescription)"), for: canonicalRepo)
                 VoxtLog.modelError("Failed to delete MLX Audio managed artifact. repo=\(canonicalRepo), error=\(error.localizedDescription)")
-                return
+                return .failure(error)
             }
         }
         invalidateLocalCache(for: canonicalRepo)
         clearSelectedDownloadSource(for: canonicalRepo)
         clearPerRepoState(for: canonicalRepo)
+        return .success(())
     }
 
     func downloadModel(repo: String) async {
@@ -696,7 +698,8 @@ class MLXModelManager: ObservableObject {
         }
     }
 
-    func deleteModel() {
+    @discardableResult
+    func deleteModel() -> Result<Void, Error> {
         setPausedStatusMessage(nil, for: modelRepo)
         cancelIdleUnloadTask()
         loadingTask?.cancel()
@@ -717,21 +720,22 @@ class MLXModelManager: ObservableObject {
         guard !managedDirectories.isEmpty else {
             setState(.notDownloaded, for: modelRepo)
             invalidateLocalCache(for: modelRepo)
-            return
+            return .success(())
         }
         for modelDir in managedDirectories {
             do {
                 try FileManager.default.removeItem(at: modelDir)
                 VoxtLog.modelInfo("Deleted MLX Audio managed artifact. repo=\(modelRepo), path=\(modelDir.path)")
             } catch {
-                setState(.error("Couldn't uninstall MLX model. It may still be in use."), for: modelRepo)
+                setState(.error("Couldn't uninstall MLX model: \(error.localizedDescription)"), for: modelRepo)
                 VoxtLog.modelError("Failed to delete MLX Audio managed artifact. repo=\(modelRepo), error=\(error.localizedDescription)")
-                return
+                return .failure(error)
             }
         }
         invalidateLocalCache(for: modelRepo)
         clearSelectedDownloadSource(for: modelRepo)
         setState(.notDownloaded, for: modelRepo)
+        return .success(())
     }
 
     func beginActiveUse() {

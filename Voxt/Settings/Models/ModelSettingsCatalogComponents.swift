@@ -79,12 +79,24 @@ enum ModelCatalogTag {
         ]
     }
 
-    static var exclusiveSelectionTags: Set<String> {
-        locationTags
-    }
-
     static var statusFilterTags: Set<String> {
         Set([localized("Installed"), localized("Configured"), localized("In Use")])
+    }
+
+    static func toggledTags(current: Set<String>, tag: String) -> Set<String> {
+        var next = current
+        if next.contains(tag) {
+            next.remove(tag)
+            return next
+        }
+        if locationTags.contains(tag) {
+            next.subtract(locationTags)
+        }
+        if statusFilterTags.contains(tag) {
+            next.subtract(statusFilterTags)
+        }
+        next.insert(tag)
+        return next
     }
 
     static var priority: [String] {

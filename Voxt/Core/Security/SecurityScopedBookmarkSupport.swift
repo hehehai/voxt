@@ -4,7 +4,23 @@
 import Foundation
 
 enum SecurityScopedBookmarkSupport {
-    private static var activeURLs: [String: URL] = [:]
+    final class Access: @unchecked Sendable {
+        let url: URL
+        private let didStartAccessing: Bool
+
+        fileprivate init(url: URL, startsSecurityScopedAccess: Bool) {
+            self.url = url
+            didStartAccessing = startsSecurityScopedAccess
+                ? url.startAccessingSecurityScopedResource()
+                : false
+        }
+
+        deinit {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+    }
 
     static func createBookmark(for url: URL) throws -> Data {
         try url.standardizedFileURL.bookmarkData(
@@ -42,6 +58,44 @@ enum SecurityScopedBookmarkSupport {
         return URL(fileURLWithPath: trimmedPath, isDirectory: false)
     }
 
+    static func accessDirectoryURL(
+        bookmarkData: Data?,
+        fallbackPath: String
+    ) -> Access? {
+        accessURL(
+            bookmarkData: bookmarkData,
+            fallbackPath: fallbackPath,
+            isDirectory: true
+        )
+    }
+
+    static func accessFileURL(
+        bookmarkData: Data?,
+        fallbackPath: String
+    ) -> Access? {
+        accessURL(
+            bookmarkData: bookmarkData,
+            fallbackPath: fallbackPath,
+            isDirectory: false
+        )
+    }
+
+    private static func accessURL(
+        bookmarkData: Data?,
+        fallbackPath: String,
+        isDirectory: Bool
+    ) -> Access? {
+        if let bookmarkData, let resolved = resolveURL(from: bookmarkData) {
+            return Access(url: resolved, startsSecurityScopedAccess: true)
+        }
+        let trimmedPath = fallbackPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else { return nil }
+        return Access(
+            url: URL(fileURLWithPath: trimmedPath, isDirectory: isDirectory),
+            startsSecurityScopedAccess: false
+        )
+    }
+
     private static func resolveURL(from bookmarkData: Data) -> URL? {
         var isStale = false
         guard let resolved = try? URL(
@@ -53,13 +107,6 @@ enum SecurityScopedBookmarkSupport {
             return nil
         }
 
-        let key = resolved.standardizedFileURL.path
-        if activeURLs[key] == nil {
-            if resolved.startAccessingSecurityScopedResource() {
-                activeURLs[key] = resolved
-            }
-        }
-
-        return activeURLs[key] ?? resolved
+        return resolved.standardizedFileURL
     }
 }

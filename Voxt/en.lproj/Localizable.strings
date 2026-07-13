@@ -2207,3 +2207,11 @@
 "Natural Translation" = "Natural Translation";
 "Strict Instructions" = "Strict Instructions";
 "%@ (Modified)" = "%@ (Modified)";
+"Configuration saved for %@." = "Configuration saved for %@.";
+"This model is unavailable because the sherpa-onnx runtime is not included in this build." = "This model is unavailable because the sherpa-onnx runtime is not included in this build.";
+"Uninstalled %@." = "Uninstalled %@.";
+"Uninstall failed: %@" = "Uninstall failed: %@";
+"Endpoint must be a valid HTTP or HTTPS URL." = "Endpoint must be a valid HTTP or HTTPS URL.";
+"Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL.";
+"Endpoint must not contain a username or password." = "Endpoint must not contain a username or password.";
+"Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts." = "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts.";

@@ -5,7 +5,7 @@ import XCTest
 @testable import Voxt
 
 final class FeatureModelSelectorFilteringTests: XCTestCase {
-    func testDefaultSelectedTagsPreferInstalledAndConfigured() {
+    func testDefaultSelectedTagsDoesNotPreselectMutuallyExclusiveStatus() {
         let entries = [
             makeEntry(
                 id: .dictation,
@@ -23,7 +23,7 @@ final class FeatureModelSelectorFilteringTests: XCTestCase {
 
         let tags = FeatureModelSelectorFiltering.defaultSelectedTags(entries: entries)
 
-        XCTAssertEqual(tags, Set([localized("Installed"), localized("Configured")]))
+        XCTAssertTrue(tags.isEmpty)
     }
 
     func testToggledTagsTreatsLocalAndRemoteAsMutuallyExclusive() {
@@ -60,7 +60,38 @@ final class FeatureModelSelectorFilteringTests: XCTestCase {
         XCTAssertTrue(cleared.isEmpty)
     }
 
-    func testFilteredEntriesTreatsInstalledAndConfiguredAsUnionAndSortsInUseFirst() {
+    func testToggledTagsTreatsStatusFiltersAsMutuallyExclusive() {
+        let installed = localized("Installed")
+        let configured = localized("Configured")
+        let inUse = localized("In Use")
+        let entries = [
+            makeEntry(id: .localLLM("installed"), filterTags: [installed]),
+            makeEntry(id: .remoteLLM(.openAI), filterTags: [configured]),
+            makeEntry(id: .mlx("in-use"), filterTags: [inUse])
+        ]
+
+        let installedOnly = FeatureModelSelectorFiltering.toggledTags(
+            current: [], tag: installed, entries: entries
+        )
+        XCTAssertEqual(installedOnly, [installed])
+
+        let configuredOnly = FeatureModelSelectorFiltering.toggledTags(
+            current: installedOnly, tag: configured, entries: entries
+        )
+        XCTAssertEqual(configuredOnly, [configured])
+
+        let inUseOnly = FeatureModelSelectorFiltering.toggledTags(
+            current: configuredOnly, tag: inUse, entries: entries
+        )
+        XCTAssertEqual(inUseOnly, [inUse])
+
+        let cleared = FeatureModelSelectorFiltering.toggledTags(
+            current: inUseOnly, tag: inUse, entries: entries
+        )
+        XCTAssertTrue(cleared.isEmpty)
+    }
+
+    func testFilteredEntriesAppliesSingleSelectedStatus() {
         let entries = [
             makeEntry(
                 id: .localLLM("installed"),
@@ -81,14 +112,24 @@ final class FeatureModelSelectorFilteringTests: XCTestCase {
 
         let filtered = FeatureModelSelectorFiltering.filteredEntries(
             entries: entries,
-            selectedTags: Set([localized("Installed"), localized("Configured")])
+            selectedTags: Set([localized("Configured")])
         )
 
         XCTAssertEqual(filtered.map(\.selectionID), [
             .remoteLLM(.openAI),
-            .localLLM("installed"),
             .localLLM("idle-configured")
         ])
+    }
+
+    func testConfigurationRoutingSupportsConfigurableModelKindsOnly() {
+        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.mlx("repo")))
+        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.sherpaOnnx(.init(rawValue: "model"))))
+        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.remoteASR(.openAIWhisper)))
+        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.localLLM("repo")))
+        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.remoteLLM(.openAI)))
+        XCTAssertFalse(FeatureModelConfigurationRouting.canConfigure(.dictation))
+        XCTAssertFalse(FeatureModelConfigurationRouting.canConfigure(.appleIntelligence))
+        XCTAssertFalse(FeatureModelConfigurationRouting.canConfigure(.localGGUFTranslation(.hyMT2Q6K)))
     }
 
     func testAvailableTagsDoNotExposeMultilingualFilter() {

@@ -64,6 +64,18 @@ final class RelativeNoteTimestampFormatterTests: XCTestCase {
         )
     }
 
+    func testHistoryListTimeUsesTwoDigitHourAndMinuteOnly() throws {
+        let calendar = utcCalendar()
+        let date = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 7, day: 12, hour: 7, minute: 5, second: 42)
+        ))
+
+        XCTAssertEqual(
+            RelativeNoteTimestampFormatter.historyListTime(for: date, calendar: calendar),
+            "07:05"
+        )
+    }
+
     private func timestamp(daysBefore: Int, now: Date, calendar: Calendar) -> String {
         let date = calendar.date(byAdding: .day, value: -daysBefore, to: now)!
         return RelativeNoteTimestampFormatter.historyCardTimestamp(

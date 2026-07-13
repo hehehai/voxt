@@ -613,12 +613,32 @@ extension RemoteProviderConfigurationSheet {
         if let message = validationMessage() {
             testResultIsSuccess = false
             testResultMessage = message
+            showOperationToast(message)
             return nil
         }
         return currentConfigurationSnapshot
     }
 
     func validationMessage() -> String? {
+        let hasCredentials = switch testTarget {
+        case .asr:
+            RemoteEndpointSecurityPolicy.hasExplicitCredentials(currentConfigurationSnapshot)
+        case .llm(let provider):
+            RemoteEndpointSecurityPolicy.hasLLMCredentials(
+                provider: provider,
+                configuration: currentConfigurationSnapshot
+            )
+        }
+        if let endpointMessage = RemoteEndpointSecurityPolicy.validationMessage(
+            endpoint: endpoint,
+            hasCredentials: hasCredentials,
+            allowsWebSocket: {
+                if case .asr = testTarget { return true }
+                return false
+            }()
+        ) {
+            return endpointMessage
+        }
         if let generationMessage = validationMessageForGenerationSettings() {
             return generationMessage
         }
@@ -988,6 +1008,7 @@ extension RemoteProviderConfigurationSheet {
                     testResultIsSuccess = false
                     let message = VoxtNetworkSession.directModeConflictMessage(for: error) ?? error.localizedDescription
                     testResultMessage = message
+                    showOperationToast(message)
                     VoxtLog.settingsWarning(
                         "Remote provider test failed. target=\(RemoteProviderConfigurationPolicy.testTargetLogName(target)), provider=\(configuration.providerID), model=\(modelForLog), error=\(message)"
                     )
@@ -997,7 +1018,21 @@ extension RemoteProviderConfigurationSheet {
     }
 
     func sanitizedEndpointForLog(_ endpoint: String) -> String {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "<default>" : trimmed
+        RemoteEndpointSecurityPolicy.sanitizedForLog(endpoint)
+    }
+
+    func showOperationToast(_ message: String, duration: Duration = .seconds(4)) {
+        operationToastDismissTask?.cancel()
+        operationToastMessage = message
+        operationToastDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            operationToastMessage = ""
+        }
+    }
+
+    func dismissOperationToast() {
+        operationToastDismissTask?.cancel()
+        operationToastMessage = ""
     }
 }

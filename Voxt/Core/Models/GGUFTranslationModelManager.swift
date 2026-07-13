@@ -127,14 +127,24 @@ final class GGUFTranslationModelManager: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    func deleteModel(id: GGUFTranslationModelID) {
+    @discardableResult
+    func deleteModel(id: GGUFTranslationModelID) -> Result<Void, Error> {
         if activeDownloadModelID == id || hasResumableDownload(id: id) {
             cancelDownload(id: id)
         }
         pausedStatusMessageByID[id] = nil
-        try? ResumableModelDownloadSupport.purgePartialArtifacts(for: modelFileURL(for: id))
-        try? FileManager.default.removeItem(at: modelFileURL(for: id))
+        do {
+            try ResumableModelDownloadSupport.purgePartialArtifacts(for: modelFileURL(for: id))
+            let modelURL = modelFileURL(for: id)
+            if FileManager.default.fileExists(atPath: modelURL.path) {
+                try FileManager.default.removeItem(at: modelURL)
+            }
+        } catch {
+            stateByID[id] = .error("Couldn't uninstall model: \(error.localizedDescription)")
+            return .failure(error)
+        }
         stateByID[id] = .notDownloaded
+        return .success(())
     }
 
     func downloadModel(id: GGUFTranslationModelID) {

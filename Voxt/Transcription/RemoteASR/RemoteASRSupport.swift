@@ -412,7 +412,9 @@ enum RemoteASRTextSupport {
         if fragment.contains(current) { return fragment }
         if current.contains(fragment) { return current }
 
-        let maxOverlap = min(current.count, fragment.count)
+        // Streaming deltas overlap only at their boundary. Bounding the scan avoids
+        // quadratic work as a long transcript grows while preserving ample context.
+        let maxOverlap = min(min(current.count, fragment.count), 512)
         if maxOverlap > 0 {
             for length in stride(from: maxOverlap, through: 1, by: -1) {
                 let currentSuffix = String(current.suffix(length))

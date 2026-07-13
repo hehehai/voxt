@@ -76,6 +76,10 @@ struct ModelSettingsView: View {
     @State var pendingModelRemovalTarget: LocalModelRemovalTarget?
     @State var uninstallingModelTarget: LocalModelRemovalTarget?
     @State var cancellingInstallTargets = Set<LocalModelInstallTarget>()
+    @State private var lastHandledConfigurationNavigationRequestID: UUID?
+    @State private var modelOperationToastMessage = ""
+    @State private var modelOperationToastDismissTask: Task<Void, Never>?
+    @State private var presentedModelErrorMessagesByTarget: [String: String] = [:]
 
     let modelStateRefreshTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
 
@@ -312,6 +316,9 @@ struct ModelSettingsView: View {
                 )
             ) { updated in
                 saveRemoteASRConfiguration(updated)
+                showModelOperationToast(
+                    AppLocalization.format("Configuration saved for %@.", provider.title)
+                )
             }
         }
         .sheet(item: $editingLLMProvider) { provider in
@@ -326,6 +333,9 @@ struct ModelSettingsView: View {
                 )
             ) { updated in
                 saveRemoteLLMConfiguration(updated)
+                showModelOperationToast(
+                    AppLocalization.format("Configuration saved for %@.", provider.title)
+                )
             }
         }
         .sheet(item: $activeASRHintTarget) { target in
@@ -368,7 +378,134 @@ struct ModelSettingsView: View {
 
     var body: some View {
         contentWithSheets
+        .overlay(alignment: .top) {
+            if !modelOperationToastMessage.isEmpty {
+                ModelDebugToast(message: modelOperationToastMessage) {
+                    dismissModelOperationToast()
+                }
+                .padding(.top, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.16), value: modelOperationToastMessage)
         .id(interfaceLanguageRaw)
+        .onAppear(perform: handleConfigurationNavigationRequest)
+        .onChange(of: navigationRequest?.id) { _, _ in
+            handleConfigurationNavigationRequest()
+        }
+        .onReceive(sherpaOnnxModelManager.$stateByID) { states in
+            presentSherpaErrors(states)
+        }
+        .onReceive(ggufTranslationModelManager.$stateByID) { states in
+            presentGGUFErrors(states)
+        }
+    }
+
+    func showModelOperationToast(_ message: String, duration: Duration = .seconds(4)) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        modelOperationToastDismissTask?.cancel()
+        modelOperationToastMessage = trimmed
+        modelOperationToastDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            modelOperationToastMessage = ""
+        }
+    }
+
+    private func dismissModelOperationToast() {
+        modelOperationToastDismissTask?.cancel()
+        modelOperationToastMessage = ""
+    }
+
+    private func presentSherpaErrors(_ states: [SherpaOnnxModelID: MLXModelManager.ModelState]) {
+        for (modelID, state) in states {
+            let targetID = "sherpa:\(modelID.rawValue)"
+            if case .error(let message) = state {
+                presentModelError(
+                    targetID: targetID,
+                    modelName: sherpaOnnxModelManager.displayTitle(for: modelID),
+                    message: message
+                )
+            } else {
+                clearPresentedModelError(targetID: targetID)
+            }
+        }
+    }
+
+    private func presentGGUFErrors(_ states: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState]) {
+        for (modelID, state) in states {
+            let targetID = "gguf-translation:\(modelID.rawValue)"
+            if case .error(let message) = state {
+                presentModelError(
+                    targetID: targetID,
+                    modelName: ggufTranslationModelManager.displayTitle(for: modelID),
+                    message: message
+                )
+            } else {
+                clearPresentedModelError(targetID: targetID)
+            }
+        }
+    }
+
+    func presentModelError(targetID: String, modelName: String, message: String) {
+        guard presentedModelErrorMessagesByTarget[targetID] != message else { return }
+        presentedModelErrorMessagesByTarget[targetID] = message
+        showModelOperationToast(
+            AppLocalization.format("%@: %@", modelName, localizedModelOperationMessage(message))
+        )
+    }
+
+    func clearPresentedModelError(targetID: String) {
+        presentedModelErrorMessagesByTarget[targetID] = nil
+    }
+
+    private func localizedModelOperationMessage(_ message: String) -> String {
+        let downloadPrefix = "Download failed: "
+        if message.hasPrefix(downloadPrefix) {
+            return AppLocalization.format(
+                "Download failed: %@",
+                String(message.dropFirst(downloadPrefix.count))
+            )
+        }
+        return AppLocalization.localizedString(message)
+    }
+
+    private func handleConfigurationNavigationRequest() {
+        guard let navigationRequest,
+              navigationRequest.id != lastHandledConfigurationNavigationRequestID,
+              navigationRequest.target.tab == .model,
+              let selectionID = navigationRequest.target.modelSelectionID
+        else { return }
+
+        lastHandledConfigurationNavigationRequestID = navigationRequest.id
+        if let selection = selectionID.asrSelection {
+            catalogTab = .asr
+            switch selection {
+            case .dictation:
+                break
+            case .mlx(let repo):
+                activeLocalASRConfigurationTarget = .mlx(repo: repo)
+            case .sherpaOnnx(let modelID):
+                activeLocalASRConfigurationTarget = .sherpaOnnx(modelID: modelID)
+            case .remote(let provider):
+                editingASRProvider = provider
+            }
+            return
+        }
+
+        if let selection = selectionID.textSelection {
+            catalogTab = .llm
+            switch selection {
+            case .appleIntelligence:
+                break
+            case .localLLM(let repo):
+                customLLMConfigurationRepo = repo
+                isCustomLLMConfigurationPresented = true
+            case .remoteLLM(let provider):
+                editingLLMProvider = provider
+            }
+        }
     }
 
     func reloadCachedConfigurationState() {
@@ -567,14 +704,7 @@ struct ModelSettingsView: View {
     }
 
     private func toggleTag(_ tag: String) {
-        if selectedTags.contains(tag) {
-            selectedTags.remove(tag)
-        } else {
-            if ModelCatalogTag.exclusiveSelectionTags.contains(tag) {
-                selectedTags.subtract(ModelCatalogTag.exclusiveSelectionTags)
-            }
-            selectedTags.insert(tag)
-        }
+        selectedTags = ModelCatalogTag.toggledTags(current: selectedTags, tag: tag)
     }
 
     func pruneSelectedTags() {

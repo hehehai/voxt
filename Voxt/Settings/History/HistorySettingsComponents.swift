@@ -235,7 +235,7 @@ struct HistoryRow: View {
                 Text(timeText)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 92, alignment: .leading)
+                    .frame(width: 48, alignment: .leading)
                     .padding(.top, 1)
 
                 Button(action: onCopy) {
@@ -301,7 +301,7 @@ struct HistoryRow: View {
     }
 
     private var timeText: String {
-        RelativeNoteTimestampFormatter.historyCardTimestamp(for: entry.createdAt)
+        RelativeNoteTimestampFormatter.historyListTime(for: entry.createdAt)
     }
 }
 

@@ -174,6 +174,26 @@ nonisolated struct VoxtNoteCornerHoverStateMachine {
         reset()
     }
 
+    func nextEvaluationDelay(
+        at timestamp: TimeInterval,
+        revealDelay: TimeInterval,
+        hideDelay: TimeInterval
+    ) -> TimeInterval? {
+        if !isVisible, let hotspotEnteredAt {
+            return max(0, revealDelay - (timestamp - hotspotEnteredAt))
+        }
+        if isVisible,
+           !panelHasBeenEntered,
+           let revealedAt,
+           timestamp - revealedAt < revealGrace {
+            return max(0, revealGrace - (timestamp - revealedAt))
+        }
+        if isVisible, let leaveBeganAt {
+            return max(0, max(0, hideDelay) - (timestamp - leaveBeganAt))
+        }
+        return nil
+    }
+
     private mutating func reset() {
         isVisible = false
         hotspotEnteredAt = nil
@@ -471,8 +491,13 @@ final class VoxtNoteCornerHoverMonitor {
     private let settingsState: VoxtNotePanelSettingsState
     private let store: VoxtNoteStore
     private var stateMachine = VoxtNoteCornerHoverStateMachine()
-    private var pollingTimer: DispatchSourceTimer?
+    private var transitionTimer: DispatchSourceTimer?
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
     private var screenChangeToken: NSObjectProtocol?
+    private var stateChangeCancellables: Set<AnyCancellable> = []
+    private var isMonitoring = false
+    private var hasPendingStateChangeSample = false
 
     init(
         panelController: VoxtNotePanelController,
@@ -487,14 +512,27 @@ final class VoxtNoteCornerHoverMonitor {
     }
 
     func start() {
-        guard pollingTimer == nil else { return }
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(50), leeway: .milliseconds(15))
-        timer.setEventHandler { [weak self] in
+        guard !isMonitoring else { return }
+        isMonitoring = true
+        let mouseEvents: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDragged,
+            .rightMouseDragged,
+            .otherMouseDragged,
+            .leftMouseUp,
+            .rightMouseUp,
+            .otherMouseUp
+        ]
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseEvents) { [weak self] event in
             MainActor.assumeIsolated { self?.samplePointer() }
+            return event
         }
-        pollingTimer = timer
-        timer.resume()
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, self.isMonitoring else { return }
+                self.samplePointer()
+            }
+        }
 
         screenChangeToken = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -503,13 +541,22 @@ final class VoxtNoteCornerHoverMonitor {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.samplePointer() }
         }
+        observeStateChanges()
+        samplePointer()
     }
 
     func stop() {
-        pollingTimer?.cancel()
-        pollingTimer = nil
+        isMonitoring = false
+        hasPendingStateChangeSample = false
+        transitionTimer?.cancel()
+        transitionTimer = nil
+        if let localMouseMonitor { NSEvent.removeMonitor(localMouseMonitor) }
+        if let globalMouseMonitor { NSEvent.removeMonitor(globalMouseMonitor) }
+        localMouseMonitor = nil
+        globalMouseMonitor = nil
         if let screenChangeToken { NotificationCenter.default.removeObserver(screenChangeToken) }
         screenChangeToken = nil
+        stateChangeCancellables.removeAll()
         stateMachine.forceHidden()
         panelController.hide()
     }
@@ -519,6 +566,7 @@ final class VoxtNoteCornerHoverMonitor {
         uiState.selectScope(.notes)
         stateMachine.forceVisible(at: ProcessInfo.processInfo.systemUptime, grace: 3)
         panelController.show(on: screen)
+        samplePointer()
     }
 
     private func samplePointer() {
@@ -538,8 +586,9 @@ final class VoxtNoteCornerHoverMonitor {
         }
 
         let settings = settingsState.value
+        let timestamp = ProcessInfo.processInfo.systemUptime
         let transition = stateMachine.update(
-            at: ProcessInfo.processInfo.systemUptime,
+            at: timestamp,
             isInHotspot: isInHotspot,
             isInPanel: isInPanel,
             isInteractionLocked: uiState.isInteractionLocked || isMouseButtonPressed,
@@ -550,11 +599,63 @@ final class VoxtNoteCornerHoverMonitor {
         case .none:
             break
         case .reveal:
-            guard let activeScreen else { return }
-            panelController.show(on: activeScreen)
+            if let activeScreen {
+                panelController.show(on: activeScreen)
+            }
         case .hide:
             panelController.hide()
         }
+        scheduleNextEvaluationIfNeeded(at: timestamp, settings: settings)
+    }
+
+    private func observeStateChanges() {
+        uiState.objectWillChange
+            .sink { [weak self] _ in
+                self?.samplePointerAfterStateChange()
+            }
+            .store(in: &stateChangeCancellables)
+
+        settingsState.$value
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.samplePointerAfterStateChange()
+            }
+            .store(in: &stateChangeCancellables)
+    }
+
+    private func samplePointerAfterStateChange() {
+        guard isMonitoring, !hasPendingStateChangeSample else { return }
+        hasPendingStateChangeSample = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hasPendingStateChangeSample = false
+            guard self.isMonitoring else { return }
+            self.samplePointer()
+        }
+    }
+
+    private func scheduleNextEvaluationIfNeeded(
+        at timestamp: TimeInterval,
+        settings: VoxtNotePanelSettings
+    ) {
+        transitionTimer?.cancel()
+        transitionTimer = nil
+        guard let delay = stateMachine.nextEvaluationDelay(
+            at: timestamp,
+            revealDelay: settings.revealDelay,
+            hideDelay: settings.hideDelay
+        ) else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + max(delay, 0.01), leeway: .milliseconds(10))
+        timer.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                self?.transitionTimer = nil
+                self?.samplePointer()
+            }
+        }
+        transitionTimer = timer
+        timer.resume()
     }
 
     private func screen(containing point: CGPoint) -> NSScreen? {

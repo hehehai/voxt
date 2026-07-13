@@ -112,7 +112,9 @@ struct CodexOAuthCredentialProvider {
     }
 
     func credential() async throws -> Credential {
-        let url = authFileURL()
+        let access = authFileAccess()
+        let url = access?.url ?? URL(fileURLWithPath: authFilePath(), isDirectory: false)
+        defer { withExtendedLifetime(access) {} }
         var auth = try readAuthFile(url: url)
         guard let tokens = auth.tokens,
               let accessToken = tokens.accessToken,
@@ -163,14 +165,11 @@ struct CodexOAuthCredentialProvider {
         return (userHomeDirectory as NSString).appendingPathComponent(".codex/auth.json")
     }
 
-    private func authFileURL() -> URL {
-        if let url = SecurityScopedBookmarkSupport.resolveFileURL(
+    private func authFileAccess() -> SecurityScopedBookmarkSupport.Access? {
+        SecurityScopedBookmarkSupport.accessFileURL(
             bookmarkData: authFileBookmark,
             fallbackPath: authFilePath()
-        ) {
-            return url
-        }
-        return URL(fileURLWithPath: authFilePath(), isDirectory: false)
+        )
     }
 
     private static func defaultUserHomeDirectory(

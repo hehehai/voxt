@@ -71,6 +71,8 @@ struct RemoteProviderConfigurationSheet: View {
     @State var isTestingConnection = false
     @State var testResultMessage: String?
     @State var testResultIsSuccess = false
+    @State var operationToastMessage = ""
+    @State var operationToastDismissTask: Task<Void, Never>?
 
     private var dialogWidth: CGFloat {
         SettingsUIStyle.modelConfigurationDialogWidth
@@ -158,6 +160,16 @@ struct RemoteProviderConfigurationSheet: View {
             }
         }
         .settingsDialogChrome(width: dialogWidth, maxHeight: dialogMaxHeight, cornerRadius: cornerRadius, onClose: close)
+        .overlay(alignment: .top) {
+            if !operationToastMessage.isEmpty {
+                ModelDebugToast(message: operationToastMessage) {
+                    dismissOperationToast()
+                }
+                .padding(.top, 10)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.16), value: operationToastMessage)
         .onAppear {
             configureModelSelection()
             customModelID = configuration.model
@@ -193,6 +205,7 @@ struct RemoteProviderConfigurationSheet: View {
     }
 
     private func close() {
+        operationToastDismissTask?.cancel()
         if let onClose {
             onClose()
         } else {

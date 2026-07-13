@@ -214,28 +214,43 @@ extension ModelSettingsView {
     }
 
     func downloadModel(_ repo: String) {
+        clearPresentedModelError(targetID: "mlx:\(MLXModelManager.canonicalModelRepo(repo))")
         Task {
             await mlxModelManager.downloadModel(repo: repo)
+            if case .error(let message) = mlxModelManager.state(for: repo) {
+                presentModelError(
+                    targetID: "mlx:\(MLXModelManager.canonicalModelRepo(repo))",
+                    modelName: mlxModelManager.displayTitle(for: repo),
+                    message: message
+                )
+            }
         }
     }
 
     func downloadSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
-        guard SherpaOnnxRuntimeSupport.isAvailable else { return }
+        guard SherpaOnnxRuntimeSupport.isAvailable else {
+            showModelOperationToast(
+                AppLocalization.localizedString("This model is unavailable because the sherpa-onnx runtime is not included in this build.")
+            )
+            return
+        }
         sherpaOnnxModelManager.downloadModel(id: modelID)
     }
 
-    func deleteModel(_ repo: String) {
-        mlxModelManager.deleteModel(repo: repo)
+    func deleteModel(_ repo: String) -> Result<Void, Error> {
+        let result = mlxModelManager.deleteModel(repo: repo)
         if MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(modelRepo) {
             mlxModelManager.checkExistingModel()
         }
+        return result
     }
 
-    func deleteSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
-        sherpaOnnxModelManager.deleteModel(id: modelID)
+    func deleteSherpaOnnxModel(_ modelID: SherpaOnnxModelID) -> Result<Void, Error> {
+        let result = sherpaOnnxModelManager.deleteModel(id: modelID)
         if sherpaOnnxModelManager.selectedModelID == modelID {
             sherpaOnnxModelManager.checkExistingModel()
         }
+        return result
     }
 
     func isCurrentModel(_ repo: String) -> Bool {
@@ -265,16 +280,25 @@ extension ModelSettingsView {
     }
 
     func downloadCustomLLM(_ repo: String) {
+        clearPresentedModelError(targetID: "custom-llm:\(CustomLLMModelManager.canonicalModelRepo(repo))")
         Task {
             await customLLMManager.downloadModel(repo: repo)
+            if case .error(let message) = customLLMManager.state(for: repo) {
+                presentModelError(
+                    targetID: "custom-llm:\(CustomLLMModelManager.canonicalModelRepo(repo))",
+                    modelName: customLLMManager.displayTitle(for: repo),
+                    message: message
+                )
+            }
         }
     }
 
-    func deleteCustomLLM(_ repo: String) {
-        customLLMManager.deleteModel(repo: repo)
+    func deleteCustomLLM(_ repo: String) -> Result<Void, Error> {
+        let result = customLLMManager.deleteModel(repo: repo)
         if repo == customLLMRepo {
             customLLMManager.checkExistingModel()
         }
+        return result
     }
 
     func requestDeleteModel(_ repo: String) {
@@ -299,15 +323,32 @@ extension ModelSettingsView {
 
         Task { @MainActor in
             await Task.yield()
+            clearPresentedModelError(targetID: target.id)
+            let result: Result<Void, Error>
             switch target {
             case .mlx(let repo):
-                deleteModel(repo)
+                result = deleteModel(repo)
             case .sherpaOnnx(let modelID):
-                deleteSherpaOnnxModel(modelID)
+                result = deleteSherpaOnnxModel(modelID)
             case .customLLM(let repo):
-                deleteCustomLLM(repo)
+                result = deleteCustomLLM(repo)
             case .ggufTranslation(let modelID):
-                deleteGGUFTranslationModel(modelID)
+                result = deleteGGUFTranslationModel(modelID)
+            }
+            switch result {
+            case .success:
+                showModelOperationToast(
+                    AppLocalization.format("Uninstalled %@.", modelDisplayName(for: target))
+                )
+            case .failure(let error):
+                presentModelError(
+                    targetID: target.id,
+                    modelName: modelDisplayName(for: target),
+                    message: AppLocalization.format(
+                        "Uninstall failed: %@",
+                        error.localizedDescription
+                    )
+                )
             }
             uninstallingModelTarget = nil
             refreshCatalogSnapshot()
@@ -335,21 +376,24 @@ extension ModelSettingsView {
     }
 
     func uninstallConfirmationMessage(for target: LocalModelRemovalTarget) -> String {
-        let modelName: String
-        switch target {
-        case .mlx(let repo):
-            modelName = mlxModelManager.displayTitle(for: repo)
-        case .sherpaOnnx(let modelID):
-            modelName = sherpaOnnxModelManager.displayTitle(for: modelID)
-        case .customLLM(let repo):
-            modelName = customLLMManager.displayTitle(for: repo)
-        case .ggufTranslation(let modelID):
-            modelName = ggufTranslationModelManager.displayTitle(for: modelID)
-        }
+        let modelName = modelDisplayName(for: target)
         return AppLocalization.format(
             "Uninstall %@ from this Mac? You can download it again later.",
             modelName
         )
+    }
+
+    func modelDisplayName(for target: LocalModelRemovalTarget) -> String {
+        switch target {
+        case .mlx(let repo):
+            return mlxModelManager.displayTitle(for: repo)
+        case .sherpaOnnx(let modelID):
+            return sherpaOnnxModelManager.displayTitle(for: modelID)
+        case .customLLM(let repo):
+            return customLLMManager.displayTitle(for: repo)
+        case .ggufTranslation(let modelID):
+            return ggufTranslationModelManager.displayTitle(for: modelID)
+        }
     }
 
     func isCurrentCustomLLM(_ repo: String) -> Bool {
@@ -383,9 +427,10 @@ extension ModelSettingsView {
         refreshCatalogSnapshot()
     }
 
-    func deleteGGUFTranslationModel(_ modelID: GGUFTranslationModelID) {
-        ggufTranslationModelManager.deleteModel(id: modelID)
+    func deleteGGUFTranslationModel(_ modelID: GGUFTranslationModelID) -> Result<Void, Error> {
+        let result = ggufTranslationModelManager.deleteModel(id: modelID)
         refreshCatalogSnapshot()
+        return result
     }
 
     func openGGUFTranslationModelDirectory(_ modelID: GGUFTranslationModelID) {

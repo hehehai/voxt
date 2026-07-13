@@ -5,6 +5,21 @@ import XCTest
 @testable import Voxt
 
 final class ModelSettingsCatalogSnapshotBuilderTests: XCTestCase {
+    func testModelCatalogStatusTagsAreMutuallyExclusive() {
+        let inUseTag = AppLocalization.localizedString("In Use")
+
+        let installedOnly = ModelCatalogTag.toggledTags(current: [], tag: installedTag)
+        XCTAssertEqual(installedOnly, [installedTag])
+
+        let configuredOnly = ModelCatalogTag.toggledTags(current: installedOnly, tag: configuredTag)
+        XCTAssertEqual(configuredOnly, [configuredTag])
+
+        let inUseOnly = ModelCatalogTag.toggledTags(current: configuredOnly, tag: inUseTag)
+        XCTAssertEqual(inUseOnly, [inUseTag])
+
+        XCTAssertTrue(ModelCatalogTag.toggledTags(current: inUseOnly, tag: inUseTag).isEmpty)
+    }
+
     func testBuildPrioritizesEntriesAlreadyInUse() {
         let snapshot = ModelSettingsCatalogSnapshotBuilder.build(
             entries: [
@@ -43,17 +58,17 @@ final class ModelSettingsCatalogSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(snapshot.filteredEntries.map(\.id), ["installed-local"])
     }
 
-    func testBuildTreatsStatusFiltersAsUnion() {
+    func testBuildAppliesSingleSelectedStatusFilter() {
         let snapshot = ModelSettingsCatalogSnapshotBuilder.build(
             entries: [
                 makeEntry(id: "installed-local", filterTags: [localTag, installedTag]),
                 makeEntry(id: "configured-remote", filterTags: [remoteTag, configuredTag]),
                 makeEntry(id: "plain-local", filterTags: [localTag])
             ],
-            selectedTags: [installedTag, configuredTag]
+            selectedTags: [configuredTag]
         )
 
-        XCTAssertEqual(snapshot.filteredEntries.map(\.id), ["installed-local", "configured-remote"])
+        XCTAssertEqual(snapshot.filteredEntries.map(\.id), ["configured-remote"])
     }
 
     private func makeEntry(

@@ -5,8 +5,7 @@ import Foundation
 
 enum RemoteProviderConnectivityTestLogging {
     static func sanitizedEndpointForLog(_ endpoint: String) -> String {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "<default>" : trimmed
+        RemoteEndpointSecurityPolicy.sanitizedForLog(endpoint)
     }
 
     static func logHTTPRequest(context: String, request: URLRequest, bodyPreview: String) {
@@ -53,13 +52,12 @@ enum RemoteProviderConnectivityTestLogging {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url.absoluteString
         }
-        components.queryItems = components.queryItems?.map { item in
-            let lower = item.name.lowercased()
-            if lower == "key" || lower == "api_key" || lower.contains("token") {
-                return URLQueryItem(name: item.name, value: "<redacted>")
-            }
-            return item
+        components.queryItems = components.queryItems?.map {
+            URLQueryItem(name: $0.name, value: "<redacted>")
         }
+        components.user = nil
+        components.password = nil
+        components.fragment = nil
         return components.string ?? url.absoluteString
     }
 

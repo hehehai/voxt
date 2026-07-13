@@ -107,17 +107,20 @@ struct SettingsNavigationTarget: Hashable {
     let section: SettingsNavigationSection?
     let featureTab: FeatureSettingsTab?
     let historyFilter: HistoryFilterTab?
+    let modelSelectionID: FeatureModelSelectionID?
 
     init(
         tab: SettingsTab,
         section: SettingsNavigationSection? = nil,
         featureTab: FeatureSettingsTab? = nil,
-        historyFilter: HistoryFilterTab? = nil
+        historyFilter: HistoryFilterTab? = nil,
+        modelSelectionID: FeatureModelSelectionID? = nil
     ) {
         self.tab = tab
         self.section = section
         self.featureTab = featureTab ?? Self.defaultFeatureTab(for: tab, section: section)
         self.historyFilter = historyFilter
+        self.modelSelectionID = modelSelectionID
     }
 
     init?(notification: Notification) {
@@ -151,11 +154,20 @@ struct SettingsNavigationTarget: Hashable {
             historyFilter = nil
         }
 
+        let modelSelectionID: FeatureModelSelectionID?
+        if let rawModelSelectionID = notification.userInfo?["modelSelectionID"] as? String,
+           !rawModelSelectionID.isEmpty {
+            modelSelectionID = FeatureModelSelectionID(rawValue: rawModelSelectionID)
+        } else {
+            modelSelectionID = nil
+        }
+
         self.init(
             tab: tab == .appEnhancement ? .feature : tab,
             section: section,
             featureTab: featureTab,
-            historyFilter: historyFilter
+            historyFilter: historyFilter,
+            modelSelectionID: modelSelectionID
         )
     }
 
@@ -164,7 +176,8 @@ struct SettingsNavigationTarget: Hashable {
             "tab": tab.rawValue,
             "section": section?.rawValue ?? "",
             "featureTab": featureTab?.rawValue ?? "",
-            "historyFilter": historyFilter?.rawValue ?? ""
+            "historyFilter": historyFilter?.rawValue ?? "",
+            "modelSelectionID": modelSelectionID?.rawValue ?? ""
         ]
     }
 

@@ -139,4 +139,29 @@ final class VoxtNoteCornerHoverStateMachineTests: XCTestCase {
         ), .none)
         XCTAssertTrue(machine.isVisible)
     }
+
+    func testStateMachineExposesOnlyPendingTransitionDeadlines() {
+        var machine = VoxtNoteCornerHoverStateMachine()
+        XCTAssertNil(machine.nextEvaluationDelay(at: 1, revealDelay: 0.2, hideDelay: 0.3))
+
+        _ = machine.update(
+            at: 1,
+            isInHotspot: true,
+            isInPanel: false,
+            isInteractionLocked: false,
+            revealDelay: 0.2,
+            hideDelay: 0.3
+        )
+        XCTAssertEqual(machine.nextEvaluationDelay(at: 1.05, revealDelay: 0.2, hideDelay: 0.3) ?? -1, 0.15, accuracy: 0.001)
+
+        _ = machine.update(
+            at: 1.21,
+            isInHotspot: true,
+            isInPanel: false,
+            isInteractionLocked: false,
+            revealDelay: 0.2,
+            hideDelay: 0.3
+        )
+        XCTAssertEqual(machine.nextEvaluationDelay(at: 1.41, revealDelay: 0.2, hideDelay: 0.3) ?? -1, 0.6, accuracy: 0.001)
+    }
 }

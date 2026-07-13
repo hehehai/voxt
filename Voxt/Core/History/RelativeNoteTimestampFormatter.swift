@@ -4,6 +4,19 @@
 import Foundation
 
 enum RelativeNoteTimestampFormatter {
+    static func historyListTime(
+        for date: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        return String(
+            format: "%02d:%02d",
+            locale: Locale(identifier: "en_US_POSIX"),
+            components.hour ?? 0,
+            components.minute ?? 0
+        )
+    }
+
     static func noteCardTimestamp(for date: Date, now: Date = Date()) -> String? {
         historyCardTimestamp(for: date, now: now)
     }

@@ -67,6 +67,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     var preferredInputDeviceID: AudioDeviceID?
     private let streamingFinalWaitTimeout: TimeInterval = 20
     private var lastPresentedRuntimeErrorMessage = ""
+    private var pendingIntermediateTranscription: String?
+    private var intermediateTranscriptionPublishTask: Task<Void, Never>?
     var recordingGenerationID = UUID()
     private var doubaoCaptureStartupWatchdogTask: Task<Void, Never>?
     private var didRetryDoubaoCaptureStartup = false
@@ -120,12 +122,27 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         sampleStore.clear()
         streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         transcribedText = ""
+        resetIntermediateTranscriptionPublishing()
         audioLevel = 0
         isRequesting = false
         stopRequested = false
         lastPresentedRuntimeErrorMessage = ""
         let provider = selectedProvider
         let configuration = selectedProviderConfiguration(for: provider)
+        if let message = RemoteEndpointSecurityPolicy.validationMessage(
+            endpoint: configuration.endpoint,
+            hasCredentials: RemoteEndpointSecurityPolicy.hasExplicitCredentials(configuration),
+            allowsWebSocket: true
+        ) {
+            notifyStartFailure(
+                NSError(
+                    domain: "Voxt.RemoteASR",
+                    code: -20,
+                    userInfo: [NSLocalizedDescriptionKey: message]
+                )
+            )
+            return
+        }
         let hintPayload = resolvedHintPayload(for: provider, configuration: configuration)
         activeProvider = provider
         let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3009,6 +3026,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func cleanupRecorderState() {
+        resetIntermediateTranscriptionPublishing()
         recorder?.stop()
         recorder = nil
         recordingFileURL = nil
@@ -3210,7 +3228,24 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             VoxtLog.asrWarning("Remote ASR intermediate transcription suppressed because it matched prompt guidance.")
             return
         }
-        transcribedText = visibleText
+        pendingIntermediateTranscription = visibleText
+        guard intermediateTranscriptionPublishTask == nil else { return }
+        intermediateTranscriptionPublishTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled, let self else { return }
+            let pending = self.pendingIntermediateTranscription
+            self.pendingIntermediateTranscription = nil
+            self.intermediateTranscriptionPublishTask = nil
+            if let pending {
+                self.transcribedText = pending
+            }
+        }
+    }
+
+    private func resetIntermediateTranscriptionPublishing() {
+        intermediateTranscriptionPublishTask?.cancel()
+        intermediateTranscriptionPublishTask = nil
+        pendingIntermediateTranscription = nil
     }
 
     private func normalizeWAVHeaderForSnapshot(at fileURL: URL) {

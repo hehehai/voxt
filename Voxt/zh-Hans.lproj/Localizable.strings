@@ -2207,3 +2207,11 @@
 "Natural Translation" = "自然表达";
 "Strict Instructions" = "严格执行";
 "%@ (Modified)" = "%@（已修改）";
+"Configuration saved for %@." = "已保存 %@ 的配置。";
+"This model is unavailable because the sherpa-onnx runtime is not included in this build." = "此版本未包含 sherpa-onnx 运行时，因此该模型不可用。";
+"Uninstalled %@." = "已卸载 %@。";
+"Uninstall failed: %@" = "卸载失败：%@";
+"Endpoint must be a valid HTTP or HTTPS URL." = "端点必须是有效的 HTTP 或 HTTPS URL。";
+"Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "端点必须是有效的 HTTP、HTTPS、WS 或 WSS URL。";
+"Endpoint must not contain a username or password." = "端点中不能包含用户名或密码。";
+"Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts." = "只有本机的不安全端点可以接收凭据；远程主机请使用 HTTPS 或 WSS。";

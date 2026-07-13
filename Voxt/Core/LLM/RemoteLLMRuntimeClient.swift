@@ -48,6 +48,7 @@ struct RemoteLLMRuntimeClient {
         configuration: RemoteProviderConfiguration
     ) async throws -> [String: String] {
         guard provider == .codex else { return [:] }
+        try validateEndpointSecurity(provider: provider, configuration: configuration)
         return try await CodexOAuthCredentialProvider(
             authFilePath: configuration.codexAuthFilePath,
             authFileBookmark: configuration.codexAuthFileBookmark
@@ -85,6 +86,7 @@ struct RemoteLLMRuntimeClient {
         provider: RemoteLLMProvider,
         configuration: RemoteProviderConfiguration
     ) async throws {
+        try validateEndpointSecurity(provider: provider, configuration: configuration)
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? provider.suggestedModel
             : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -578,6 +580,7 @@ struct RemoteLLMRuntimeClient {
         onPartialText: (@Sendable (String) -> Void)? = nil,
         onResponseID: ((String) -> Void)? = nil
     ) async throws -> ResponsesStreamingResult {
+        try validateEndpointSecurity(provider: provider, configuration: configuration)
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? provider.suggestedModel
             : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -906,6 +909,7 @@ struct RemoteLLMRuntimeClient {
         openAICompatibleResponseFormat: OpenAICompatibleResponseFormat? = nil,
         onPartialText: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
+        try validateEndpointSecurity(provider: provider, configuration: configuration)
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? provider.suggestedModel
             : configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1937,6 +1941,24 @@ struct RemoteLLMRuntimeClient {
             return "auto"
         }
         return "\(tuning.maxTokens)"
+    }
+
+    private func validateEndpointSecurity(
+        provider: RemoteLLMProvider,
+        configuration: RemoteProviderConfiguration
+    ) throws {
+        guard let message = RemoteEndpointSecurityPolicy.validationMessage(
+            endpoint: configuration.endpoint,
+            hasCredentials: RemoteEndpointSecurityPolicy.hasLLMCredentials(
+                provider: provider,
+                configuration: configuration
+            )
+        ) else { return }
+        throw NSError(
+            domain: "Voxt.RemoteLLM",
+            code: -901,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
     }
 
     private func completeStreaming(

@@ -431,6 +431,17 @@ final class SettingsTypesTests: XCTestCase {
         XCTAssertEqual(parsedTarget?.historyFilter, .note)
     }
 
+    func testModelNavigationTargetRoundTripsConfigurationSelection() {
+        let selectionID = FeatureModelSelectionID.remoteLLM(.openAI)
+        let target = SettingsNavigationTarget(tab: .model, modelSelectionID: selectionID)
+        let notification = Notification(name: .voxtSettingsNavigate, object: nil, userInfo: target.userInfo)
+
+        let parsedTarget = SettingsNavigationTarget(notification: notification)
+
+        XCTAssertEqual(parsedTarget?.tab, .model)
+        XCTAssertEqual(parsedTarget?.modelSelectionID, selectionID)
+    }
+
     func testPermissionRequirementResolverAggregatesFeatureSelections() {
         let context = SettingsPermissionRequirementContext(
             selectedEngine: .mlxAudio,

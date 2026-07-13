@@ -20,10 +20,6 @@ struct FeatureModelSelectorDialog: View {
     @State private var expandedGroupIDs = Set<String>()
     @State private var collapsedGroupIDs = Set<String>()
 
-    private var statusFilterTags: Set<String> {
-        FeatureModelSelectorFiltering.statusFilterTags
-    }
-
     private var defaultSelectedTags: Set<String> {
         FeatureModelSelectorFiltering.defaultSelectedTags(entries: entries)
     }
@@ -165,7 +161,10 @@ struct FeatureModelSelectorDialog: View {
                 onSelect: {
                     onSelect(entry.selectionID)
                     dismiss()
-                }
+                },
+                onConfigure: FeatureModelConfigurationRouting.canConfigure(entry.selectionID)
+                    ? { openConfiguration(for: entry.selectionID) }
+                    : nil
             )
         case .group(let group):
             FeatureModelSelectorGroupCard(
@@ -176,7 +175,22 @@ struct FeatureModelSelectorDialog: View {
                 onSelect: { selectionID in
                     onSelect(selectionID)
                     dismiss()
+                },
+                onConfigure: { selectionID in
+                    openConfiguration(for: selectionID)
                 }
+            )
+        }
+    }
+
+    private func openConfiguration(for selectionID: FeatureModelSelectionID) {
+        dismiss()
+        DispatchQueue.main.async {
+            AppDelegate.shared?.openMainWindow(
+                target: SettingsNavigationTarget(
+                    tab: .model,
+                    modelSelectionID: selectionID
+                )
             )
         }
     }
@@ -217,10 +231,8 @@ enum FeatureModelSelectorFiltering {
         Set<String>([localized("Installed"), localized("Configured"), localized("In Use")])
     }
 
-    static func defaultSelectedTags(entries: [FeatureModelSelectorEntry]) -> Set<String> {
-        Set<String>([localized("Installed"), localized("Configured")]).intersection(
-            Set<String>(availableTags(entries: entries, selectedTags: []))
-        )
+    static func defaultSelectedTags(entries _: [FeatureModelSelectorEntry]) -> Set<String> {
+        []
     }
 
     static func locationScopedEntries(
@@ -288,8 +300,11 @@ enum FeatureModelSelectorFiltering {
         if next.contains(tag) {
             next.remove(tag)
         } else {
-            if FeatureSelectorTagPriority.exclusiveSelectionTags.contains(tag) {
-                next.subtract(FeatureSelectorTagPriority.exclusiveSelectionTags)
+            if FeatureSelectorTagPriority.locationTags.contains(tag) {
+                next.subtract(FeatureSelectorTagPriority.locationTags)
+            }
+            if statusFilterTags.contains(tag) {
+                next.subtract(statusFilterTags)
             }
             next.insert(tag)
         }
@@ -297,10 +312,38 @@ enum FeatureModelSelectorFiltering {
     }
 }
 
+enum FeatureModelConfigurationRouting {
+    static func canConfigure(_ selectionID: FeatureModelSelectionID) -> Bool {
+        if let selection = selectionID.asrSelection {
+            switch selection {
+            case .dictation:
+                return false
+            case .mlx, .sherpaOnnx, .remote:
+                return true
+            }
+        }
+
+        if let selection = selectionID.textSelection {
+            switch selection {
+            case .appleIntelligence:
+                return false
+            case .localLLM, .remoteLLM:
+                return true
+            }
+        }
+
+        if case .localGGUF? = selectionID.translationSelection {
+            return false
+        }
+        return false
+    }
+}
+
 private struct FeatureModelSelectorRow: View {
     let entry: FeatureModelSelectorEntry
     let isSelected: Bool
     let onSelect: () -> Void
+    let onConfigure: (() -> Void)?
     let titleOverride: String?
     let showsEngine: Bool
     let showsTags: Bool
@@ -331,6 +374,7 @@ private struct FeatureModelSelectorRow: View {
         entry: FeatureModelSelectorEntry,
         isSelected: Bool,
         onSelect: @escaping () -> Void,
+        onConfigure: (() -> Void)? = nil,
         titleOverride: String? = nil,
         showsEngine: Bool = true,
         showsTags: Bool = true,
@@ -340,6 +384,7 @@ private struct FeatureModelSelectorRow: View {
         self.entry = entry
         self.isSelected = isSelected
         self.onSelect = onSelect
+        self.onConfigure = onConfigure
         self.titleOverride = titleOverride
         self.showsEngine = showsEngine
         self.showsTags = showsTags
@@ -408,29 +453,36 @@ private struct FeatureModelSelectorRow: View {
 
             Spacer(minLength: 0)
 
-            if isSelected {
-                HStack(spacing: 5) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(localized("Selected"))
-                        .font(.caption.weight(.semibold))
+            HStack(spacing: 8) {
+                if let onConfigure {
+                    Button(localized("Configure"), action: onConfigure)
+                        .buttonStyle(SettingsCompactActionButtonStyle())
                 }
-                .foregroundStyle(Color.accentColor)
-                .padding(.horizontal, 9)
-                .frame(height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.10))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.24), lineWidth: 1)
-                )
-            } else if entry.isSelectable {
-                Button(localized("Select")) {
-                    onSelect()
+
+                if isSelected {
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(localized("Selected"))
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 9)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.10))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(0.24), lineWidth: 1)
+                    )
+                } else if entry.isSelectable {
+                    Button(localized("Select")) {
+                        onSelect()
+                    }
+                    .buttonStyle(SettingsCompactActionButtonStyle())
                 }
-                .buttonStyle(SettingsCompactActionButtonStyle())
             }
         }
         .padding(.horizontal, 12)
@@ -477,6 +529,7 @@ private struct FeatureModelSelectorGroupCard: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     let onSelect: (FeatureModelSelectionID) -> Void
+    let onConfigure: (FeatureModelSelectionID) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -542,6 +595,9 @@ private struct FeatureModelSelectorGroupCard: View {
                             entry: entry,
                             isSelected: entry.selectionID == selectedID,
                             onSelect: { onSelect(entry.selectionID) },
+                            onConfigure: FeatureModelConfigurationRouting.canConfigure(entry.selectionID)
+                                ? { onConfigure(entry.selectionID) }
+                                : nil,
                             titleOverride: entry.groupedVariantTitle,
                             showsEngine: false,
                             showsTags: false,
@@ -708,10 +764,6 @@ private enum FeatureSelectorTagPriority {
             [localized("Fast"), localized("Balanced"), localized("Accurate"), localized("Realtime")],
             [localized("Installed"), localized("Configured"), localized("In Use")]
         ]
-    }
-
-    static var exclusiveSelectionTags: Set<String> {
-        locationTags
     }
 
     static var priority: [String] {

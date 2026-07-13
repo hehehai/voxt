@@ -2202,3 +2202,11 @@
 "Natural Translation" = "自然な翻訳";
 "Strict Instructions" = "指示を厳守";
 "%@ (Modified)" = "%@（変更済み）";
+"Configuration saved for %@." = "%@ の設定を保存しました。";
+"This model is unavailable because the sherpa-onnx runtime is not included in this build." = "このビルドには sherpa-onnx ランタイムが含まれていないため、このモデルは利用できません。";
+"Uninstalled %@." = "%@ をアンインストールしました。";
+"Uninstall failed: %@" = "アンインストールに失敗しました: %@";
+"Endpoint must be a valid HTTP or HTTPS URL." = "エンドポイントには有効な HTTP または HTTPS URL を指定してください。";
+"Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "エンドポイントには有効な HTTP、HTTPS、WS、または WSS URL を指定してください。";
+"Endpoint must not contain a username or password." = "エンドポイントにユーザー名やパスワードを含めることはできません。";
+"Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts." = "資格情報を送信できる安全でないエンドポイントはこの Mac 上のものだけです。リモートホストには HTTPS または WSS を使用してください。";

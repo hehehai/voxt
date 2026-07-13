@@ -92,13 +92,6 @@ struct WaveformView: View {
     private let waveformSlotWidth: CGFloat = Self.defaultWaveformSlotWidth
     private let transcriptAnimationGrowthThreshold: CGFloat = 6
     private let barCount = 16
-    private let basePhases: [Double] = (0..<16).map { Double($0) * 0.4 }
-    private let baseTravelPhase = 0.0
-
-    @State private var phases: [Double] = (0..<16).map { Double($0) * 0.4 }
-    @State private var travelPhase = 0.0
-    @State private var animTimer: Timer?
-    @State private var currentAnimationInterval: TimeInterval?
     @State private var appeared = false
     @State private var textScrollID = UUID()
     @State private var measuredTranscriptWidth: CGFloat = 0
@@ -191,27 +184,22 @@ struct WaveformView: View {
             onSessionTranslationLanguageHoverChanged(hovering)
         }
         .onAppear {
-            updateAnimationState()
             updateWaveformStateActivity()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
                 appeared = true
             }
         }
         .onDisappear {
-            stopAnimating()
             waveformState.setActive(false)
             appeared = false
         }
         .onChange(of: shouldAnimate) {
-            updateAnimationState()
             updateWaveformStateActivity()
         }
         .onChange(of: displayMode) {
-            updateAnimationState()
             updateWaveformStateActivity()
         }
         .onChange(of: isRecording) {
-            updateAnimationState()
             updateWaveformStateActivity()
         }
         .onChange(of: isModelInitializing) {
@@ -519,7 +507,7 @@ struct WaveformView: View {
 
     private func barHeight(for index: Int) -> CGFloat {
         let minH: CGFloat = 4
-        let phase = phases[index]
+        let phase = Double(index) * 0.4
         let sine = (sin(phase) + 1) / 2
 
         if isModelInitializing {
@@ -579,94 +567,6 @@ struct WaveformView: View {
     private func staticBarHeight(for index: Int) -> CGFloat {
         let pattern: [CGFloat] = [5, 7, 10, 12, 9, 6, 8, 11]
         return pattern[index % pattern.count]
-    }
-
-    private func recordingTravelEnvelope(for index: Int) -> CGFloat {
-        let head = travelPhase
-        let distance = wrappedDistance(from: Double(index), to: head, period: Double(barCount))
-        let sigma = 2.15
-        let gaussian = exp(-(distance * distance) / (2 * sigma * sigma))
-        return CGFloat(gaussian)
-    }
-
-    private func wrappedDistance(from index: Double, to head: Double, period: Double) -> Double {
-        var delta = index - head
-        if delta > period / 2 {
-            delta -= period
-        } else if delta < -period / 2 {
-            delta += period
-        }
-        return delta
-    }
-
-    private var desiredAnimationInterval: TimeInterval? {
-        guard shouldAnimate else { return nil }
-
-        switch displayMode {
-        case .recording:
-            return isRecording ? (1.0 / 20.0) : nil
-        case .processing:
-            return 1.0 / 10.0
-        case .answer:
-            return nil
-        }
-    }
-
-    private var animationSpeed: Double {
-        switch displayMode {
-        case .recording:
-            return isRecording ? 0.16 : 0
-        case .processing:
-            return 0.06
-        case .answer:
-            return 0
-        }
-    }
-
-    private func updateAnimationState() {
-        guard let interval = desiredAnimationInterval else {
-            stopAnimating(resetPhases: true)
-            return
-        }
-
-        guard animTimer == nil || currentAnimationInterval != interval else { return }
-        startAnimating(interval: interval)
-    }
-
-    private func startAnimating(interval: TimeInterval) {
-        stopAnimating(resetPhases: false)
-        currentAnimationInterval = interval
-        animTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            MainActor.assumeIsolated {
-                let speed = animationSpeed
-                guard speed > 0 else { return }
-                if displayMode == .recording && isRecording {
-                    travelPhase.formTruncatingRemainder(dividingBy: Double(barCount))
-                    travelPhase += 0.62
-                    if travelPhase >= Double(barCount) {
-                        travelPhase -= Double(barCount)
-                    }
-
-                    for i in 0..<barCount {
-                        phases[i] += 0.11 + Double(i) * 0.004
-                    }
-                } else {
-                    for i in 0..<barCount {
-                        phases[i] += speed + Double(i) * 0.006
-                    }
-                }
-            }
-        }
-    }
-
-    private func stopAnimating(resetPhases: Bool = true) {
-        animTimer?.invalidate()
-        animTimer = nil
-        currentAnimationInterval = nil
-        if resetPhases {
-            phases = basePhases
-            travelPhase = baseTravelPhase
-        }
     }
 
     private func copyAnswerToPasteboard() {
