@@ -162,13 +162,13 @@ nonisolated enum VoxtNotePanelCorner: String, Codable, CaseIterable, Identifiabl
     var title: String {
         switch self {
         case .topLeft:
-            return String(localized: "Top left")
+            return AppLocalization.localizedString("Top left")
         case .topRight:
-            return String(localized: "Top right")
+            return AppLocalization.localizedString("Top right")
         case .bottomLeft:
-            return String(localized: "Bottom left")
+            return AppLocalization.localizedString("Bottom left")
         case .bottomRight:
-            return String(localized: "Bottom right")
+            return AppLocalization.localizedString("Bottom right")
         }
     }
 }
@@ -333,6 +333,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
     var llmEnabled: Bool
     var llmSelectionID: FeatureModelSelectionID
     var prompt: String
+    var promptPresetID: String?
     var appContext: TranscriptionAppContextSettings
     var notes: TranscriptionNoteFeatureSettings
 
@@ -341,6 +342,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
         llmEnabled: Bool,
         llmSelectionID: FeatureModelSelectionID,
         prompt: String,
+        promptPresetID: String? = nil,
         appContext: TranscriptionAppContextSettings = .init(),
         notes: TranscriptionNoteFeatureSettings? = nil
     ) {
@@ -348,6 +350,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
         self.llmEnabled = llmEnabled
         self.llmSelectionID = llmSelectionID
         self.prompt = prompt
+        self.promptPresetID = promptPresetID
         self.appContext = appContext
         self.notes = notes ?? TranscriptionNoteFeatureSettings(
             enabled: true,
@@ -363,6 +366,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
         case llmEnabled
         case llmSelectionID
         case prompt
+        case promptPresetID
         case appContext
         case notes
     }
@@ -379,6 +383,7 @@ struct TranscriptionFeatureSettings: Codable, Hashable, Sendable {
             llmEnabled: llmEnabled,
             llmSelectionID: llmSelectionID,
             prompt: prompt,
+            promptPresetID: try container.decodeIfPresent(String.self, forKey: .promptPresetID),
             appContext: try container.decodeIfPresent(TranscriptionAppContextSettings.self, forKey: .appContext) ?? .init(),
             notes: decodedNotes
         )
@@ -390,6 +395,7 @@ struct TranslationFeatureSettings: Codable, Hashable, Sendable {
     var modelSelectionID: FeatureModelSelectionID
     var targetLanguageRawValue: String
     var prompt: String
+    var promptPresetID: String?
     var showResultWindow: Bool
 
     init(
@@ -397,12 +403,14 @@ struct TranslationFeatureSettings: Codable, Hashable, Sendable {
         modelSelectionID: FeatureModelSelectionID,
         targetLanguageRawValue: String,
         prompt: String,
+        promptPresetID: String? = nil,
         showResultWindow: Bool = true
     ) {
         self.asrSelectionID = asrSelectionID
         self.modelSelectionID = modelSelectionID
         self.targetLanguageRawValue = targetLanguageRawValue
         self.prompt = prompt
+        self.promptPresetID = promptPresetID
         self.showResultWindow = showResultWindow
     }
 
@@ -415,6 +423,7 @@ struct TranslationFeatureSettings: Codable, Hashable, Sendable {
         case modelSelectionID
         case targetLanguageRawValue
         case prompt
+        case promptPresetID
         case showResultWindow
     }
 
@@ -425,6 +434,7 @@ struct TranslationFeatureSettings: Codable, Hashable, Sendable {
             modelSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .modelSelectionID),
             targetLanguageRawValue: try container.decode(String.self, forKey: .targetLanguageRawValue),
             prompt: try container.decode(String.self, forKey: .prompt),
+            promptPresetID: try container.decodeIfPresent(String.self, forKey: .promptPresetID),
             showResultWindow: try container.decodeIfPresent(Bool.self, forKey: .showResultWindow) ?? true
         )
     }
@@ -434,6 +444,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
     var asrSelectionID: FeatureModelSelectionID
     var llmSelectionID: FeatureModelSelectionID
     var prompt: String
+    var promptPresetID: String?
     var appContext: TranscriptionAppContextSettings
     var appEnhancementEnabled: Bool
     var continueShortcut: TranscriptionContinueShortcutSettings
@@ -442,6 +453,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
         asrSelectionID: FeatureModelSelectionID,
         llmSelectionID: FeatureModelSelectionID,
         prompt: String,
+        promptPresetID: String? = nil,
         appContext: TranscriptionAppContextSettings = .init(),
         appEnhancementEnabled: Bool,
         continueShortcut: TranscriptionContinueShortcutSettings = .defaultShortcut
@@ -449,6 +461,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
         self.asrSelectionID = asrSelectionID
         self.llmSelectionID = llmSelectionID
         self.prompt = prompt
+        self.promptPresetID = promptPresetID
         self.appContext = appContext
         self.appEnhancementEnabled = appEnhancementEnabled
         self.continueShortcut = continueShortcut
@@ -458,6 +471,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
         case asrSelectionID
         case llmSelectionID
         case prompt
+        case promptPresetID
         case appContext
         case appEnhancementEnabled
         case continueShortcut
@@ -469,6 +483,7 @@ struct RewriteFeatureSettings: Codable, Hashable, Sendable {
             asrSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .asrSelectionID),
             llmSelectionID: try container.decode(FeatureModelSelectionID.self, forKey: .llmSelectionID),
             prompt: try container.decode(String.self, forKey: .prompt),
+            promptPresetID: try container.decodeIfPresent(String.self, forKey: .promptPresetID),
             appContext: try container.decodeIfPresent(TranscriptionAppContextSettings.self, forKey: .appContext) ?? .init(),
             appEnhancementEnabled: try container.decode(Bool.self, forKey: .appEnhancementEnabled),
             continueShortcut: try container.decodeIfPresent(TranscriptionContinueShortcutSettings.self, forKey: .continueShortcut) ?? .defaultShortcut

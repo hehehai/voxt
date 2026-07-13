@@ -308,9 +308,9 @@ private enum MLXStructuredTranscriptionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .senseVoiceLongFormVADUnavailable:
-            return String(localized: "SenseVoice long audio processing is unavailable because the VAD model could not be prepared.")
+            return AppLocalization.localizedString("SenseVoice long audio processing is unavailable because the VAD model could not be prepared.")
         case .senseVoiceLongFormNoSpeechSegments:
-            return String(localized: "SenseVoice could not detect any speech segments in this long audio clip.")
+            return AppLocalization.localizedString("SenseVoice could not detect any speech segments in this long audio clip.")
         }
     }
 
@@ -1254,7 +1254,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             VoxtLog.asrError("MLXTranscriber start recording failed: \(error)")
             stopAudioEngine()
             audioEngine.inputNode.removeTap(onBus: 0)
-            return String(localized: "Failed to start the microphone. Please try again.")
+            return AppLocalization.localizedString("Failed to start the microphone. Please try again.")
         }
     }
 

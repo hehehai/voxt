@@ -100,9 +100,13 @@ nonisolated enum AppLocalization {
         return snapshot
     }
 
-    private static func makeLanguageSnapshot(defaults: UserDefaults = .standard) -> LanguageSnapshot {
+    private static func configuredLanguage(defaults: UserDefaults = .standard) -> AppInterfaceLanguage {
         let raw = defaults.string(forKey: AppPreferenceKey.interfaceLanguage)
-        let language = AppInterfaceLanguage(rawValue: raw ?? "") ?? .system
+        return AppInterfaceLanguage(rawValue: raw ?? "") ?? .system
+    }
+
+    private static func makeLanguageSnapshot(defaults: UserDefaults = .standard) -> LanguageSnapshot {
+        let language = configuredLanguage(defaults: defaults)
         let localeIdentifier = language.localeIdentifier
         return LanguageSnapshot(
             language: language,

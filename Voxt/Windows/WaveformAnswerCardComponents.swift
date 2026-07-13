@@ -120,7 +120,7 @@ struct AnswerSessionTranslationMenuPicker: View {
         )
         .frame(width: fixedWidth ?? style.fixedWidth, height: style.height)
         .fixedSize(horizontal: true, vertical: false)
-        .accessibilityLabel(Text(String(localized: "Target Language")))
+        .accessibilityLabel(Text(AppLocalization.localizedString("Target Language")))
     }
 }
 
@@ -510,7 +510,7 @@ struct AnswerConversationBodyView: View {
                                     HStack {
                                         Spacer(minLength: 48)
                                         conversationBubble(
-                                            title: String(localized: "You"),
+                                            title: AppLocalization.localizedString("You"),
                                             content: turn.userPromptText,
                                             alignment: .trailing,
                                             isUser: true
@@ -535,7 +535,7 @@ struct AnswerConversationBodyView: View {
                                 HStack {
                                     Spacer(minLength: 48)
                                     conversationBubble(
-                                        title: String(localized: "You"),
+                                        title: AppLocalization.localizedString("You"),
                                         content: streamingUserPromptText,
                                         alignment: .trailing,
                                         isUser: true,
@@ -632,7 +632,7 @@ struct AnswerConversationBodyView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.down")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text(String(localized: "Latest"))
+                                Text(AppLocalization.localizedString("Latest"))
                                     .font(.system(size: 12, weight: .semibold))
                             }
                             .foregroundStyle(.white.opacity(0.92))
@@ -756,7 +756,7 @@ struct RewriteConversationBubble: View {
 
     private var resolvedTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? String(localized: "AI Answer") : trimmed
+        return trimmed.isEmpty ? AppLocalization.localizedString("AI Answer") : trimmed
     }
 
     private var copyText: String {
@@ -804,7 +804,7 @@ struct RewriteConversationBubble: View {
                     HStack(spacing: 4) {
                         Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 9, weight: .semibold))
-                        Text(didCopy ? String(localized: "Copied") : String(localized: "Copy"))
+                        Text(didCopy ? AppLocalization.localizedString("Copied") : AppLocalization.localizedString("Copy"))
                             .font(.system(size: 10, weight: .semibold))
                     }
                     .foregroundStyle(.white.opacity(0.94))
@@ -854,7 +854,7 @@ struct AnswerContinueButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(String(localized: "Continue"))
+            Text(AppLocalization.localizedString("Continue"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.94))
                 .padding(.horizontal, 10)
@@ -869,7 +869,7 @@ struct AnswerContinueButton: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(String(localized: "Continue")))
+        .accessibilityLabel(Text(AppLocalization.localizedString("Continue")))
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering

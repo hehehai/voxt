@@ -15,6 +15,6 @@ enum SherpaOnnxRuntimeSupport {
     nonisolated static var unavailableDetail: String? {
         isAvailable
             ? nil
-            : String(localized: "Sherpa ONNX runtime is not bundled in this build.")
+            : AppLocalization.localizedString("Sherpa ONNX runtime is not bundled in this build.")
     }
 }

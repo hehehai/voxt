@@ -13,6 +13,7 @@ enum TranscriptionDetailPresentationStyle {
 }
 
 struct TranscriptionDetailContentView: View {
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @ObservedObject var viewModel: TranscriptionDetailViewModel
     let locale: Locale
     let style: TranscriptionDetailPresentationStyle
@@ -73,6 +74,7 @@ struct TranscriptionDetailContentView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguageRaw
         ScrollView {
             VStack(alignment: .leading, spacing: stackSpacing) {
                 detailSection(
@@ -417,7 +419,7 @@ struct TranscriptionDetailContentView: View {
     private func formattedDate(_ date: Date) -> String {
         date.formatted(
             .dateTime
-                .locale(locale)
+                .locale(AppLocalization.locale)
                 .year()
                 .month(.abbreviated)
                 .day()
@@ -431,22 +433,22 @@ struct TranscriptionDetailContentView: View {
         guard let seconds else { return nil }
         if seconds < 1 {
             let format = localized("%d ms")
-            return String(format: format, locale: locale, Int(seconds * 1000))
+            return String(format: format, locale: AppLocalization.locale, Int(seconds * 1000))
         }
         if seconds < 60 {
             let format = localized("%.1f s")
-            return String(format: format, locale: locale, seconds)
+            return String(format: format, locale: AppLocalization.locale, seconds)
         }
         let minutes = Int(seconds) / 60
         let remain = Int(seconds) % 60
         let format = localized("%dm %ds")
-        return String(format: format, locale: locale, minutes, remain)
+        return String(format: format, locale: AppLocalization.locale, minutes, remain)
     }
 
     private func timeRangeLabel(for timing: WhisperHistoryWordTiming) -> String {
         String(
             format: localized("%.2fs → %.2fs"),
-            locale: locale,
+            locale: AppLocalization.locale,
             timing.startSeconds,
             timing.endSeconds
         )

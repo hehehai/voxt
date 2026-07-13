@@ -143,7 +143,7 @@ struct TranscriptionDetailConversationView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.down")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text(String(localized: "New Message"))
+                                Text(AppLocalization.localizedString("New Message"))
                                     .font(.system(size: 12, weight: .semibold))
                             }
                             .foregroundStyle(.white.opacity(0.94))
@@ -171,12 +171,12 @@ struct TranscriptionDetailConversationView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Follow-up Input"))
+            Text(AppLocalization.localizedString("Follow-up Input"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
-                TextField(String(localized: "Ask about this saved result"), text: $viewModel.draft)
+                TextField(AppLocalization.localizedString("Ask about this saved result"), text: $viewModel.draft)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
@@ -298,7 +298,7 @@ private struct TranscriptionDetailMessageBubble: View {
     }
 
     private var headerTitle: String {
-        isUserMessage ? String(localized: "You") : String(localized: "Assistant")
+        isUserMessage ? AppLocalization.localizedString("You") : AppLocalization.localizedString("Assistant")
     }
 
     private var fillColor: Color {
@@ -361,7 +361,7 @@ private struct TranscriptionDetailMessageBubble: View {
                     HStack(spacing: 4) {
                         Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 9, weight: .semibold))
-                        Text(didCopy ? String(localized: "Copied") : String(localized: "Copy"))
+                        Text(didCopy ? AppLocalization.localizedString("Copied") : AppLocalization.localizedString("Copy"))
                             .font(.system(size: 10, weight: .semibold))
                     }
                     .foregroundStyle(.white.opacity(0.96))
@@ -412,10 +412,10 @@ private struct TranscriptionDetailLoadingRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Text(String(localized: "Assistant"))
+                    Text(AppLocalization.localizedString("Assistant"))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
-                    Text(String(localized: "Thinking…"))
+                    Text(AppLocalization.localizedString("Thinking…"))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -424,7 +424,7 @@ private struct TranscriptionDetailLoadingRow: View {
                     ProgressView()
                         .controlSize(.small)
 
-                    Text(String(localized: "Generating answer…"))
+                    Text(AppLocalization.localizedString("Generating answer…"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.primary.opacity(0.86))
                 }

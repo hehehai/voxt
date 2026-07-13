@@ -38,7 +38,7 @@ extension OverlayState {
 
     func presentStreamingAnswer(title: String, content: String, canInject: Bool) {
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? String(localized: "AI Answer")
+            ? AppLocalization.localizedString("AI Answer")
             : title
         let previewPayload = RewriteAnswerPayload(
             title: normalizedTitle,

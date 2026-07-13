@@ -124,6 +124,61 @@ final class FeatureSettingsStoreTests: XCTestCase {
         }
     }
 
+    func testPromptSpecificSaveHelpersPersistPresetSelection() throws {
+        try withEphemeralDefaults { defaults in
+            let transcriptionPreset = FeaturePromptPresetCatalog.preset(
+                id: "structured",
+                for: .enhancement,
+                language: .english
+            )!
+            let translationPreset = FeaturePromptPresetCatalog.preset(
+                id: "natural",
+                for: .translation,
+                language: .english
+            )!
+            let rewritePreset = FeaturePromptPresetCatalog.preset(
+                id: "concise",
+                for: .rewrite,
+                language: .english
+            )!
+
+            FeatureSettingsStore.saveTranscriptionPrompt(
+                transcriptionPreset.prompt,
+                presetID: transcriptionPreset.id,
+                defaults: defaults
+            )
+            FeatureSettingsStore.saveTranslationPrompt(
+                translationPreset.prompt,
+                presetID: translationPreset.id,
+                defaults: defaults
+            )
+            FeatureSettingsStore.saveRewritePrompt(
+                rewritePreset.prompt,
+                presetID: rewritePreset.id,
+                defaults: defaults
+            )
+
+            let reloaded = FeatureSettingsStore.load(defaults: defaults)
+            XCTAssertEqual(reloaded.transcription.promptPresetID, "structured")
+            XCTAssertEqual(reloaded.translation.promptPresetID, "natural")
+            XCTAssertEqual(reloaded.rewrite.promptPresetID, "concise")
+        }
+    }
+
+    func testLegacyCustomPromptsRemainCustomAfterPresetMigration() throws {
+        try withEphemeralDefaults { defaults in
+            defaults.set("My custom cleanup prompt", forKey: AppPreferenceKey.enhancementSystemPrompt)
+            defaults.set("My custom translation prompt", forKey: AppPreferenceKey.translationSystemPrompt)
+            defaults.set("My custom rewrite prompt", forKey: AppPreferenceKey.rewriteSystemPrompt)
+
+            let settings = FeatureSettingsStore.load(defaults: defaults)
+
+            XCTAssertNil(settings.transcription.promptPresetID)
+            XCTAssertNil(settings.translation.promptPresetID)
+            XCTAssertNil(settings.rewrite.promptPresetID)
+        }
+    }
+
     func testLocalVADModeDefaultsToAutomatic() throws {
         try withEphemeralDefaults { defaults in
             _ = FeatureSettingsStore.load(defaults: defaults)

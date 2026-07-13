@@ -99,7 +99,7 @@ struct HistoryAudioPlayerView: View {
                 }
                 .buttonStyle(.plain)
 
-                Text(controller.isPlaying ? String(localized: "Playing") : String(localized: "Ready to play"))
+                Text(controller.isPlaying ? AppLocalization.localizedString("Playing") : AppLocalization.localizedString("Ready to play"))
                     .font(.system(size: compact ? 11 : 12, weight: .medium))
                     .foregroundStyle(.secondary)
 
@@ -152,8 +152,8 @@ struct HistoryAudioUnavailableView: View {
 
     private var message: String {
         if historyAudioStorageEnabled {
-            return String(localized: "No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed.")
+            return AppLocalization.localizedString("No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed.")
         }
-        return String(localized: "Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records.")
+        return AppLocalization.localizedString("Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records.")
     }
 }

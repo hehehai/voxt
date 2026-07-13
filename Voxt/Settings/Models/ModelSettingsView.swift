@@ -361,7 +361,7 @@ struct ModelSettingsView: View {
                 primaryButton: .destructive(Text(AppLocalization.localizedString("Uninstall"))) {
                     confirmDeleteModel(target)
                 },
-                secondaryButton: .cancel()
+                secondaryButton: .cancel(Text(AppLocalization.localizedString("Cancel")))
             )
         }
     }

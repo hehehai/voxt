@@ -538,12 +538,7 @@ final class LLMDebugViewModel: ObservableObject {
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
-        let useMirror = UserDefaults.standard.bool(forKey: AppPreferenceKey.useHfMirror)
-        let hubURL = useMirror ? CustomLLMModelManager.mirrorHubBaseURL : CustomLLMModelManager.defaultHubBaseURL
-        customLLMManager = CustomLLMModelManager(
-            modelRepo: appDelegate.customLLMManager.currentModelRepo,
-            hubBaseURL: hubURL
-        )
+        customLLMManager = appDelegate.customLLMManager
         remoteConfigurations = RemoteModelConfigurationStore.loadConfigurations(
             from: UserDefaults.standard.string(forKey: AppPreferenceKey.remoteLLMProviderConfigurations) ?? ""
         )

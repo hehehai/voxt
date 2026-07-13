@@ -29,7 +29,7 @@ struct MeetingDetailSummarySidebar: View {
     private var summaryHeader: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(String(localized: "Meeting Summary"))
+                Text(AppLocalization.localizedString("Meeting Summary"))
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
 
@@ -48,7 +48,7 @@ struct MeetingDetailSummarySidebar: View {
 
             Spacer(minLength: 8)
 
-            Button(String(localized: "Settings")) {
+            Button(AppLocalization.localizedString("Settings")) {
                 viewModel.presentSummarySettings()
             }
             .buttonStyle(MeetingToolbarButtonStyle())
@@ -67,7 +67,7 @@ struct MeetingDetailSummarySidebar: View {
                                         ProgressView()
                                             .controlSize(.small)
 
-                                        Text(String(localized: "Generating meeting summary…"))
+                                        Text(AppLocalization.localizedString("Generating meeting summary…"))
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(.primary)
                                     }
@@ -95,7 +95,7 @@ struct MeetingDetailSummarySidebar: View {
 
                                 if !summary.body.isEmpty {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text(String(localized: "Summary"))
+                                        Text(AppLocalization.localizedString("Summary"))
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(.secondary)
 
@@ -110,7 +110,7 @@ struct MeetingDetailSummarySidebar: View {
 
                                 if !summary.todoItems.isEmpty {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text(String(localized: "TODO"))
+                                        Text(AppLocalization.localizedString("TODO"))
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(.secondary)
 
@@ -136,7 +136,7 @@ struct MeetingDetailSummarySidebar: View {
 
                                 if !viewModel.summaryChatMessages.isEmpty || viewModel.isSummaryChatLoading || viewModel.summaryChatErrorMessage != nil {
                                     VStack(alignment: .leading, spacing: 12) {
-                                        Text(String(localized: "Follow-up"))
+                                        Text(AppLocalization.localizedString("Follow-up"))
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(.secondary)
 
@@ -149,7 +149,7 @@ struct MeetingDetailSummarySidebar: View {
                                                 ProgressView()
                                                     .controlSize(.small)
 
-                                                Text(String(localized: "Thinking…"))
+                                                Text(AppLocalization.localizedString("Thinking…"))
                                                     .font(.system(size: 12, weight: .medium))
                                                     .foregroundStyle(.secondary)
                                             }
@@ -200,7 +200,7 @@ struct MeetingDetailSummarySidebar: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.down")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text(String(localized: "New Message"))
+                                Text(AppLocalization.localizedString("New Message"))
                                     .font(.system(size: 12, weight: .semibold))
                             }
                             .foregroundStyle(.white.opacity(0.92))
@@ -249,7 +249,7 @@ struct MeetingDetailSummarySidebar: View {
                 ProgressView()
                     .controlSize(.small)
 
-                Text(String(localized: "Generating meeting summary…"))
+                Text(AppLocalization.localizedString("Generating meeting summary…"))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
 
@@ -262,7 +262,7 @@ struct MeetingDetailSummarySidebar: View {
         case .unavailable(let message):
             summaryEmptyState(
                 icon: "sparkles",
-                title: String(localized: "Summary Unavailable"),
+                title: AppLocalization.localizedString("Summary Unavailable"),
                 message: message
             )
 
@@ -270,12 +270,12 @@ struct MeetingDetailSummarySidebar: View {
             VStack(alignment: .leading, spacing: 12) {
                 summaryEmptyState(
                     icon: "exclamationmark.triangle",
-                    title: String(localized: "Summary Failed"),
+                    title: AppLocalization.localizedString("Summary Failed"),
                     message: message
                 )
 
                 if viewModel.canRegenerateSummary {
-                    Button(String(localized: "Try Again")) {
+                    Button(AppLocalization.localizedString("Try Again")) {
                         viewModel.regenerateSummary()
                     }
                     .buttonStyle(MeetingPillButtonStyle())
@@ -286,25 +286,25 @@ struct MeetingDetailSummarySidebar: View {
             if viewModel.isFinalizing {
                 summaryEmptyState(
                     icon: "clock.arrow.circlepath",
-                    title: String(localized: "Preparing Summary"),
+                    title: AppLocalization.localizedString("Preparing Summary"),
                     message: AppLocalization.localizedString("Voxt will start summary generation after the final meeting record is saved.")
                 )
             } else if viewModel.mode == .live {
                 summaryEmptyState(
                     icon: "clock.arrow.circlepath",
-                    title: String(localized: "Waiting For Saved Record"),
+                    title: AppLocalization.localizedString("Waiting For Saved Record"),
                     message: AppLocalization.localizedString("Summary generation starts after this meeting is saved to history.")
                 )
             } else if !viewModel.summaryAutoGenerate {
                 summaryEmptyState(
                     icon: "sparkles",
-                    title: String(localized: "Auto Summary Disabled"),
+                    title: AppLocalization.localizedString("Auto Summary Disabled"),
                     message: AppLocalization.localizedString("Enable automatic summary generation or use the settings dialog to regenerate manually.")
                 )
             } else {
                 summaryEmptyState(
                     icon: "doc.text.magnifyingglass",
-                    title: String(localized: "No Summary Yet"),
+                    title: AppLocalization.localizedString("No Summary Yet"),
                     message: AppLocalization.localizedString("Open the settings dialog to trigger a manual summary generation.")
                 )
             }
@@ -333,12 +333,12 @@ struct MeetingDetailSummarySidebar: View {
 
     private var summaryComposerPane: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Follow-up Input"))
+            Text(AppLocalization.localizedString("Follow-up Input"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
-                TextField(String(localized: "Ask a follow-up about this meeting"), text: $viewModel.summaryChatDraft)
+                TextField(AppLocalization.localizedString("Ask a follow-up about this meeting"), text: $viewModel.summaryChatDraft)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
@@ -374,14 +374,14 @@ struct MeetingDetailSummarySettingsDialog: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                Text(String(localized: "Summary Settings"))
+                Text(AppLocalization.localizedString("Summary Settings"))
                     .font(.title3.weight(.semibold))
 
                 Spacer(minLength: 8)
             }
 
             HStack(alignment: .center, spacing: 12) {
-                Text(String(localized: "Auto-generate Summary"))
+                Text(AppLocalization.localizedString("Auto-generate Summary"))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
 
@@ -400,7 +400,7 @@ struct MeetingDetailSummarySettingsDialog: View {
 
             if viewModel.hasSummaryModelOptions {
                 FeatureSelectorRow(
-                    title: String(localized: "Summary Model"),
+                    title: AppLocalization.localizedString("Summary Model"),
                     value: summaryModelSelectionTitle,
                     action: { isSummaryModelSelectorPresented = true }
                 )
@@ -417,20 +417,20 @@ struct MeetingDetailSummarySettingsDialog: View {
                     )
                 }
             } else {
-                Text(String(localized: "No summary model is available right now."))
+                Text(AppLocalization.localizedString("No summary model is available right now."))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(alignment: .center, spacing: 10) {
-                    Text(String(localized: "Summary Prompt"))
+                    Text(AppLocalization.localizedString("Summary Prompt"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
 
                     Spacer(minLength: 8)
 
-                    Button(String(localized: "Reset")) {
+                    Button(AppLocalization.localizedString("Reset")) {
                         viewModel.resetSummaryPromptTemplate()
                     }
                     .buttonStyle(SettingsPillButtonStyle())
@@ -449,25 +449,25 @@ struct MeetingDetailSummarySettingsDialog: View {
                 )
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(String(localized: "Expected result: return JSON only with transcript_summary.title, transcript_summary.content, and todo_list. Do not wrap it in markdown or add extra keys."))
+                    Text(AppLocalization.localizedString("Expected result: return JSON only with transcript_summary.title, transcript_summary.content, and todo_list. Do not wrap it in markdown or add extra keys."))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
                 .fixedSize(horizontal: false, vertical: true)
 
-                Text(String(localized: "Add custom summary instructions, tone constraints, or output emphasis here."))
+                Text(AppLocalization.localizedString("Add custom summary instructions, tone constraints, or output emphasis here."))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
             }
 
             SettingsDialogActionRow {
-                Button(String(localized: "Cancel")) {
+                Button(AppLocalization.localizedString("Cancel")) {
                     viewModel.isSummarySettingsPresented = false
                 }
                 .buttonStyle(SettingsPillButtonStyle())
                 .keyboardShortcut(.cancelAction)
 
-                Button(String(localized: "Regenerate Summary")) {
+                Button(AppLocalization.localizedString("Regenerate Summary")) {
                     viewModel.isSummarySettingsPresented = false
                     viewModel.regenerateSummary()
                 }
@@ -613,7 +613,7 @@ struct SummaryChatMessageRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(message.role == .user ? String(localized: "You") : String(localized: "Assistant"))
+            Text(message.role == .user ? AppLocalization.localizedString("You") : AppLocalization.localizedString("Assistant"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
 

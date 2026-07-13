@@ -443,7 +443,7 @@ struct GeneralModelStorageCard: View {
     var body: some View {
         GeneralSettingsCard(title: localizedKey("Model Storage")) {
             SettingsPathSelectionRow(
-                title: localizedKey("Storage Path"),
+                title: localized("Storage Path"),
                 displayedPath: displayPath,
                 fallbackPath: ModelStorageDirectoryManager.defaultRootURL.path,
                 openButtonHelp: localized("Open folder"),
@@ -755,19 +755,39 @@ struct GeneralLanguageSettingBlock<Control: View>: View {
 }
 
 struct GeneralFieldRow<TrailingContent: View>: View {
-    let title: LocalizedStringKey
-    var description: LocalizedStringKey? = nil
+    private let titleText: Text
+    private let descriptionText: Text?
     @ViewBuilder let trailingContent: () -> TrailingContent
+
+    init(
+        title: LocalizedStringKey,
+        description: LocalizedStringKey? = nil,
+        @ViewBuilder trailingContent: @escaping () -> TrailingContent
+    ) {
+        titleText = Text(title)
+        descriptionText = description.map { Text($0) }
+        self.trailingContent = trailingContent
+    }
+
+    init(
+        titleText: String,
+        descriptionText: String? = nil,
+        @ViewBuilder trailingContent: @escaping () -> TrailingContent
+    ) {
+        self.titleText = Text(titleText)
+        self.descriptionText = descriptionText.map { Text($0) }
+        self.trailingContent = trailingContent
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title)
+                titleText
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary.opacity(0.92))
 
-                if let description {
-                    Text(description)
+                if let descriptionText {
+                    descriptionText
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -786,24 +806,30 @@ struct GeneralFieldRow<TrailingContent: View>: View {
 }
 
 struct GeneralToggleRow: View {
-    let title: LocalizedStringKey
+    let titleText: Text
     let description: Text?
     @Binding var isOn: Bool
 
     init(title: LocalizedStringKey, description: LocalizedStringKey, isOn: Binding<Bool>) {
-        self.title = title
+        self.titleText = Text(title)
         self.description = Text(description)
         self._isOn = isOn
     }
 
     init(title: LocalizedStringKey, descriptionText: String, isOn: Binding<Bool>) {
-        self.title = title
+        self.titleText = Text(title)
         self.description = Text(descriptionText)
         self._isOn = isOn
     }
 
     init(title: LocalizedStringKey, isOn: Binding<Bool>) {
-        self.title = title
+        self.titleText = Text(title)
+        self.description = nil
+        self._isOn = isOn
+    }
+
+    init(titleText: String, isOn: Binding<Bool>) {
+        self.titleText = Text(titleText)
         self.description = nil
         self._isOn = isOn
     }
@@ -811,7 +837,7 @@ struct GeneralToggleRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                titleText
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary.opacity(0.92))
                 if let description {

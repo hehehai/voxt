@@ -14,23 +14,23 @@ enum RecordingStartBlockReason: Equatable {
     var userMessage: String {
         switch self {
         case .mlxModelNotInstalled:
-            return String(localized: "MLX model is not downloaded. Open Settings > Model to install it.")
+            return AppLocalization.localizedString("MLX model is not downloaded. Open Settings > Model to install it.")
         case .mlxModelDownloading:
-            return String(localized: "MLX model is still downloading. Wait for installation to finish and try again.")
+            return AppLocalization.localizedString("MLX model is still downloading. Wait for installation to finish and try again.")
         case .mlxModelUnavailable(let detail):
             return detailedUnavailableMessage(
-                base: String(localized: "MLX model is unavailable. Open Settings > Model to fix it."),
-                detailedFormat: String(localized: "MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
+                base: AppLocalization.localizedString("MLX model is unavailable. Open Settings > Model to fix it."),
+                detailedFormat: AppLocalization.localizedString("MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
                 detail: detail
             )
         case .sherpaModelNotInstalled:
-            return String(localized: "Sherpa ONNX model is not downloaded. Open Settings > Model to install it.")
+            return AppLocalization.localizedString("Sherpa ONNX model is not downloaded. Open Settings > Model to install it.")
         case .sherpaModelDownloading:
-            return String(localized: "Sherpa ONNX model is still downloading. Wait for installation to finish and try again.")
+            return AppLocalization.localizedString("Sherpa ONNX model is still downloading. Wait for installation to finish and try again.")
         case .sherpaModelUnavailable(let detail):
             return detailedUnavailableMessage(
-                base: String(localized: "Sherpa ONNX model is unavailable. Open Settings > Model to fix it."),
-                detailedFormat: String(localized: "Sherpa ONNX model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
+                base: AppLocalization.localizedString("Sherpa ONNX model is unavailable. Open Settings > Model to fix it."),
+                detailedFormat: AppLocalization.localizedString("Sherpa ONNX model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
                 detail: detail
             )
         }

@@ -1083,7 +1083,7 @@ extension AppDelegate {
 
     func injectLatestResultByCustomPasteHotkey() {
         guard let latestText = resolvedLatestInjectableOutputText() else {
-            showOverlayStatus(String(localized: "No recent result available to paste yet."), clearAfter: 2.0)
+            showOverlayStatus(AppLocalization.localizedString("No recent result available to paste yet."), clearAfter: 2.0)
             return
         }
 

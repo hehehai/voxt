@@ -53,7 +53,7 @@ extension AppDelegate {
             sherpa.startRecording()
             guard sherpa.isRecording else {
                 let failureMessage = sherpa.consumePendingRuntimeFailureMessage()
-                    ?? String(localized: "Sherpa ONNX failed to start recording.")
+                    ?? AppLocalization.localizedString("Sherpa ONNX failed to start recording.")
                 self.handleRecordingStartFailure(failureMessage)
                 return
             }
@@ -134,7 +134,7 @@ extension AppDelegate {
             self.speechTranscriber.startRecording()
             guard self.speechTranscriber.isRecording else {
                 let failureMessage = self.speechTranscriber.lastStartFailureMessage
-                    ?? String(localized: "Direct Dictation failed to start recording.")
+                    ?? AppLocalization.localizedString("Direct Dictation failed to start recording.")
                 VoxtLog.asrWarning("Speech recording session did not enter recording state. reason=\(failureMessage)")
                 self.handleRecordingStartFailure(failureMessage)
                 return
@@ -248,7 +248,7 @@ extension AppDelegate {
         if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
             VoxtLog.asrWarning("Recording blocked: microphone permission not granted.")
             showOverlayReminder(
-                String(localized: "Microphone permission is required. Enable it in Settings > Permissions.")
+                AppLocalization.localizedString("Microphone permission is required. Enable it in Settings > Permissions.")
             )
             return false
         }
@@ -256,7 +256,7 @@ extension AppDelegate {
         if engine == .dictation && SFSpeechRecognizer.authorizationStatus() != .authorized {
             VoxtLog.asrWarning("Recording blocked: speech recognition permission not granted for Direct Dictation.")
             showOverlayReminder(
-                String(localized: "Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions.")
+                AppLocalization.localizedString("Speech Recognition permission is required for Direct Dictation. Enable it in Settings > Permissions.")
             )
             return false
         }
@@ -264,7 +264,7 @@ extension AppDelegate {
         if !AccessibilityPermissionManager.isTrusted() {
             VoxtLog.asrWarning("Recording start proceeding without accessibility trust. Injection may be unavailable.")
             showOverlayStatus(
-                String(localized: "Please enable required permissions in Settings > Permissions."),
+                AppLocalization.localizedString("Please enable required permissions in Settings > Permissions."),
                 clearAfter: 2.2
             )
         }
@@ -290,7 +290,7 @@ extension AppDelegate {
 
         guard let currentDevice = microphoneResolvedState.activeDevice else {
             if isSessionActive {
-                showOverlayReminder(String(localized: "No available microphone devices."))
+                showOverlayReminder(AppLocalization.localizedString("No available microphone devices."))
                 finishSession(after: 0)
             }
             return
@@ -410,7 +410,7 @@ extension AppDelegate {
 
     private func handleRecordingPermissionDenied() {
         handleRecordingStartFailure(
-            String(localized: "Please enable required permissions in Settings > Permissions.")
+            AppLocalization.localizedString("Please enable required permissions in Settings > Permissions.")
         )
     }
 

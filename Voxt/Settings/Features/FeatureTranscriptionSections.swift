@@ -42,10 +42,23 @@ extension FeatureSettingsView {
                                 kind: .enhancement
                             ),
                             defaultText: AppPromptDefaults.text(for: .enhancement),
+                            kind: .enhancement,
+                            selectedPresetID: Binding(
+                                get: { featureSettings.transcription.promptPresetID },
+                                set: { featureSettings.transcription.promptPresetID = $0 }
+                            ),
                             variables: ModelSettingsPromptVariables.enhancement,
                             guidance: "",
                             persistChanges: { prompt in
-                                FeatureSettingsStore.saveTranscriptionPrompt(prompt)
+                                FeatureSettingsStore.saveTranscriptionPrompt(
+                                    prompt,
+                                    presetID: featureSettings.transcription.promptPresetID
+                                )
+                            },
+                            persistPresetSelection: { presetID, prompt in
+                                featureSettings.transcription.promptPresetID = presetID
+                                featureSettings.transcription.prompt = prompt
+                                FeatureSettingsStore.saveTranscriptionPrompt(prompt, presetID: presetID)
                             }
                         )
                     }

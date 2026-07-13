@@ -54,7 +54,7 @@ enum MeetingCaptureMode: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    var usesMicrophone: Bool {
+    nonisolated var usesMicrophone: Bool {
         switch self {
         case .meeting, .recording:
             return true
@@ -63,7 +63,7 @@ enum MeetingCaptureMode: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var usesSystemAudio: Bool {
+    nonisolated var usesSystemAudio: Bool {
         switch self {
         case .meeting, .subtitles:
             return true
@@ -137,6 +137,22 @@ enum MeetingCaptureMode: String, Codable, CaseIterable, Identifiable, Sendable {
     func persist(in defaults: UserDefaults = .standard) {
         defaults.set(rawValue, forKey: AppPreferenceKey.meetingCaptureMode)
     }
+
+    nonisolated func sourceTransition(to nextMode: MeetingCaptureMode) -> MeetingCaptureSourceTransition {
+        MeetingCaptureSourceTransition(
+            stopsMicrophone: usesMicrophone && !nextMode.usesMicrophone,
+            stopsSystemAudio: usesSystemAudio && !nextMode.usesSystemAudio,
+            startsMicrophone: !usesMicrophone && nextMode.usesMicrophone,
+            startsSystemAudio: !usesSystemAudio && nextMode.usesSystemAudio
+        )
+    }
+}
+
+nonisolated struct MeetingCaptureSourceTransition: Equatable, Sendable {
+    let stopsMicrophone: Bool
+    let stopsSystemAudio: Bool
+    let startsMicrophone: Bool
+    let startsSystemAudio: Bool
 }
 
 struct MeetingModeCapabilities: Equatable, Sendable {

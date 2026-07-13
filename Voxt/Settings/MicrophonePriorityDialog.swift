@@ -103,7 +103,7 @@ struct MicrophonePriorityDialog: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(localized("Microphone Priority"))
                 .font(.headline)
-            Text(state.activeDevice?.name ?? String(localized: "No available microphone devices"))
+            Text(state.activeDevice?.name ?? AppLocalization.localizedString("No available microphone devices"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 

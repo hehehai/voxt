@@ -12,13 +12,13 @@ enum TranscriptionDetailSupport {
     static func title(for kind: TranscriptionHistoryKind) -> String {
         switch kind {
         case .normal:
-            return String(localized: "Transcription Details")
+            return AppLocalization.localizedString("Transcription Details")
         case .translation:
-            return String(localized: "Translation Details")
+            return AppLocalization.localizedString("Translation Details")
         case .rewrite:
-            return String(localized: "Rewrite Details")
+            return AppLocalization.localizedString("Rewrite Details")
         case .transcript:
-            return String(localized: "Transcript Details")
+            return AppLocalization.localizedString("Transcript Details")
         }
     }
 

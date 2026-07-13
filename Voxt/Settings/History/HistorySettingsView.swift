@@ -46,12 +46,12 @@ struct HistorySettingsView: View {
     @ObservedObject var noteStore: VoxtNoteStore
     @ObservedObject var dictionaryStore: DictionaryStore
     @ObservedObject var dictionarySuggestionStore: DictionarySuggestionStore
+    @Binding var selectedFilter: HistoryFilterTab
     let navigationRequest: SettingsNavigationRequest?
     @State private var copyToastMessage = ""
     @State private var copyToastDismissTask: Task<Void, Never>?
     @State private var copiedEntryID: UUID?
     @State private var copiedNoteID: UUID?
-    @State private var selectedFilter: HistoryFilterTab = .transcription
     @State private var isHistoryAudioSettingsPresented = false
     @State private var historyAudioStorageDisplayPath = ""
     @State private var historyAudioStorageSelectionError: String?
@@ -201,46 +201,51 @@ struct HistorySettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(selectedFilter.title)
+                    .font(.title3.weight(.semibold))
+
+                Spacer(minLength: 12)
+
+                if isNoteTabSelected {
+                    HistoryNoteStatusFilterSelect(selection: $selectedNoteStatuses)
+                }
+
+                Button {
+                    showHistorySearchDialog = true
+                } label: {
+                    SettingsSearchIconView()
+                }
+                .buttonStyle(SettingsCompactIconButtonStyle())
+                .help(localized(isNoteTabSelected ? "Search Notes" : "Search History"))
+
+                Button {
+                    pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history
+                } label: {
+                    HistoryActionIcon(kind: .delete, color: .secondary)
+                }
+                .buttonStyle(HistoryToolbarDeleteButtonStyle())
+                .help(localized("Delete All"))
+                .disabled(isNoteTabSelected ? noteStore.items.isEmpty : totalHistoryEntryCount == 0)
+
+                if isNoteTabSelected {
+                    HistoryNoteViewPicker(selection: $noteViewMode)
+                } else {
+                    Button {
+                        historyAudioStorageSelectionError = nil
+                        historyAudioExportResultMessage = nil
+                        isHistoryAudioSettingsPresented = true
+                    } label: {
+                        HistoryToolbarSettingsIcon(size: 16)
+                    }
+                    .buttonStyle(SettingsCompactIconButtonStyle())
+                    .help(localized("History Audio Settings"))
+                }
+            }
+
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .center, spacing: 12) {
-                        HistoryFilterTabPicker(selectedTab: $selectedFilter)
-                        if isNoteTabSelected {
-                            HistoryNoteStatusFilterSelect(selection: $selectedNoteStatuses)
-                        }
-                        Spacer(minLength: 12)
-                        Button {
-                            showHistorySearchDialog = true
-                        } label: {
-                            SettingsSearchIconView()
-                        }
-                        .buttonStyle(SettingsCompactIconButtonStyle())
-                        .help(localized(isNoteTabSelected ? "Search Notes" : "Search History"))
-                        Button {
-                            pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history
-                        } label: {
-                            HistoryActionIcon(kind: .delete)
-                        }
-                        .buttonStyle(HistoryToolbarDeleteButtonStyle())
-                        .help(localized("Delete All"))
-                        .disabled(isNoteTabSelected ? noteStore.items.isEmpty : totalHistoryEntryCount == 0)
-                        if isNoteTabSelected {
-                            HistoryNoteViewPicker(selection: $noteViewMode)
-                        }
-                        if !isNoteTabSelected {
-                            Button {
-                                historyAudioStorageSelectionError = nil
-                                historyAudioExportResultMessage = nil
-                                isHistoryAudioSettingsPresented = true
-                            } label: {
-                                HistoryToolbarSettingsIcon(size: 16)
-                            }
-                            .buttonStyle(SettingsCompactIconButtonStyle())
-                            .help(localized("History Audio Settings"))
-                        }
-                    }
-
                     if isSearchActive {
                         HStack(spacing: 8) {
                             Text(AppLocalization.format("Filtered by \"%@\"", historySearchText))
@@ -326,7 +331,7 @@ struct HistorySettingsView: View {
                 primaryButton: .destructive(Text(localized("Delete"))) {
                     confirmBulkDeletion(target)
                 },
-                secondaryButton: .cancel()
+                secondaryButton: .cancel(Text(localized("Cancel")))
             )
         }
         .onAppear {

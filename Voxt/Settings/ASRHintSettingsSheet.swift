@@ -3,6 +3,10 @@
 
 import SwiftUI
 
+private func asrHintSettingsLocalized(_ key: String) -> String {
+    AppLocalization.localizedString(key)
+}
+
 @MainActor
 struct ASRHintSettingsSheet: View {
     let target: ASRHintTarget
@@ -85,47 +89,65 @@ struct ASRHintSettingsSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            Toggle("Follow User Main Language", isOn: $draftSettings.followsUserMainLanguage)
+            Toggle(
+                asrHintSettingsLocalized("Follow User Main Language"),
+                isOn: $draftSettings.followsUserMainLanguage
+            )
 
             HStack(alignment: .top, spacing: 16) {
-                infoRow(label: "Primary language", value: mainLanguage.title())
+                infoRow(label: asrHintSettingsLocalized("Primary language"), value: mainLanguage.title())
                 infoRow(
-                    label: target == .dictation ? "Resolved locale" : "Resolved language",
+                    label: asrHintSettingsLocalized(
+                        target == .dictation ? "Resolved locale" : "Resolved language"
+                    ),
                     value: target == .dictation ? dictationLocalePreview : languagePreview
                 )
             }
 
-            infoRow(label: "Other languages", value: secondaryLanguagePreview)
+            infoRow(label: asrHintSettingsLocalized("Other languages"), value: secondaryLanguagePreview)
 
             if target == .aliyunBailianASR {
-                infoRow(label: "Language hints", value: hintsPreview)
+                infoRow(label: asrHintSettingsLocalized("Language hints"), value: hintsPreview)
             }
 
             if target == .doubaoASR {
                 infoRow(
-                    label: "Chinese output",
+                    label: asrHintSettingsLocalized("Chinese output"),
                     value: ASRHintResolver.outputVariantDescription(for: mainLanguage)
                 )
             }
 
             if target == .mlxAudio, let mlxModelRepo, !mlxModelRepo.isEmpty {
-                infoRow(label: "Current model", value: mlxModelRepo)
+                infoRow(label: asrHintSettingsLocalized("Current model"), value: mlxModelRepo)
             }
 
             if target == .dictation {
-                Toggle("Prefer On-Device Recognition", isOn: $draftSettings.prefersOnDeviceRecognition)
-                Toggle("Add Punctuation", isOn: $draftSettings.addsPunctuation)
-                Toggle("Report Partial Results", isOn: $draftSettings.reportsPartialResults)
+                Toggle(
+                    asrHintSettingsLocalized("Prefer On-Device Recognition"),
+                    isOn: $draftSettings.prefersOnDeviceRecognition
+                )
+                Toggle(
+                    asrHintSettingsLocalized("Add Punctuation"),
+                    isOn: $draftSettings.addsPunctuation
+                )
+                Toggle(
+                    asrHintSettingsLocalized("Report Partial Results"),
+                    isOn: $draftSettings.reportsPartialResults
+                )
 
-                Text("Contextual Phrases")
+                Text(asrHintSettingsLocalized("Contextual Phrases"))
                     .font(.subheadline.weight(.medium))
                 PromptEditorView(text: $draftSettings.contextualPhrasesText, height: 120)
-                Text("One phrase per line for names and domain terms.")
+                Text(
+                    asrHintSettingsLocalized(
+                        "Enter one phrase per line. These phrases bias Apple's recognizer toward names, products, and domain terms."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 infoRow(
-                    label: "Phrases count",
+                    label: asrHintSettingsLocalized("Phrases count"),
                     value: String(resolvedDictationSettings.contextualPhrases.count)
                 )
             }
@@ -135,7 +157,7 @@ struct ASRHintSettingsSheet: View {
                 .foregroundStyle(.secondary)
 
             if target.supportsPromptEditor {
-                Text("Prompt")
+                Text(asrHintSettingsLocalized("Prompt"))
                     .font(.subheadline.weight(.medium))
                 PromptEditorView(
                     text: $draftSettings.promptTemplate,
@@ -145,19 +167,19 @@ struct ASRHintSettingsSheet: View {
             }
 
             SettingsDialogActionRow {
-                Button("Reset to Default") {
+                Button(asrHintSettingsLocalized("Reset to Default")) {
                     draftSettings = ASRHintSettingsStore.defaultSettings(for: target)
                 }
                 .buttonStyle(SettingsPillButtonStyle())
                 .disabled(draftSettings == initialSettings && initialSettings == ASRHintSettingsStore.defaultSettings(for: target))
             } trailing: {
-                Button("Cancel") {
+                Button(asrHintSettingsLocalized("Cancel")) {
                     dismiss()
                 }
                 .buttonStyle(SettingsPillButtonStyle())
                 .keyboardShortcut(.cancelAction)
 
-                Button("Save") {
+                Button(asrHintSettingsLocalized("Save")) {
                     onSave(ASRHintSettingsStore.sanitized(draftSettings, for: target))
                     dismiss()
                 }
@@ -168,7 +190,7 @@ struct ASRHintSettingsSheet: View {
         .settingsDialogChrome(width: 520, onClose: { dismiss() })
     }
 
-    private func infoRow(label: LocalizedStringKey, value: String) -> some View {
+    private func infoRow(label: String, value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(label)
                 .foregroundStyle(.secondary)

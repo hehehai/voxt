@@ -23,13 +23,13 @@ nonisolated enum VoxtNoteStatus: String, Codable, CaseIterable, Identifiable, Se
     var title: String {
         switch self {
         case .todo:
-            return String(localized: "To do")
+            return AppLocalization.localizedString("To do")
         case .inProgress:
-            return String(localized: "In Progress")
+            return AppLocalization.localizedString("In Progress")
         case .done:
-            return String(localized: "Done")
+            return AppLocalization.localizedString("Done")
         case .backlog:
-            return String(localized: "Backlog")
+            return AppLocalization.localizedString("Backlog")
         }
     }
 
@@ -67,9 +67,9 @@ nonisolated enum VoxtNoteScope: String, Codable, CaseIterable, Identifiable, Sen
     var title: String {
         switch self {
         case .notes:
-            return String(localized: "Notes")
+            return AppLocalization.localizedString("Notes")
         case .backlog:
-            return String(localized: "Backlog")
+            return AppLocalization.localizedString("Backlog")
         }
     }
 
@@ -103,13 +103,13 @@ nonisolated enum VoxtNotePriority: String, Codable, CaseIterable, Identifiable, 
     var title: String {
         switch self {
         case .none:
-            return String(localized: "None")
+            return AppLocalization.localizedString("None")
         case .low:
-            return String(localized: "Low")
+            return AppLocalization.localizedString("Low")
         case .medium:
-            return String(localized: "Medium")
+            return AppLocalization.localizedString("Medium")
         case .high:
-            return String(localized: "High")
+            return AppLocalization.localizedString("High")
         }
     }
 

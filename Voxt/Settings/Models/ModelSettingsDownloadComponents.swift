@@ -24,7 +24,7 @@ struct ModelDownloadSettingsSheet: View {
 
             GeneralSettingsCard(titleText: modelSettingsDownloadLocalized("Model Storage")) {
                 SettingsPathSelectionRow(
-                    title: LocalizedStringKey(modelSettingsDownloadLocalized("Storage Path")),
+                    title: modelSettingsDownloadLocalized("Storage Path"),
                     displayedPath: modelStorageDisplayPath,
                     fallbackPath: modelStorageFallbackPath,
                     openButtonHelp: modelSettingsDownloadLocalized("Open folder"),

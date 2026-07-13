@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct MeetingOverlayContainerView: View {
+    @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
     @ObservedObject var state: MeetingOverlayState
     let onClose: () -> Void
     let onToggleCollapse: () -> Void
@@ -21,6 +22,7 @@ struct MeetingOverlayContainerView: View {
     let onCopySegment: (MeetingTranscriptSegment) -> Void
 
     var body: some View {
+        let _ = interfaceLanguageRaw
         MeetingOverlayCard(
             state: state,
             onClose: onClose,
@@ -165,7 +167,7 @@ private struct MeetingOverlayCard: View {
 
                 if !state.isCollapsed {
                     HStack(spacing: 8) {
-                        Text(String(localized: "Realtime Translation"))
+                        Text(AppLocalization.localizedString("Realtime Translation"))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.white.opacity(0.72))
 
@@ -193,7 +195,7 @@ private struct MeetingOverlayCard: View {
                         .frame(width: 1, height: 18)
 
                     AnswerHeaderActionButton(
-                        accessibilityLabel: state.isPaused ? String(localized: "Resume") : String(localized: "Pause"),
+                        accessibilityLabel: state.isPaused ? AppLocalization.localizedString("Resume") : AppLocalization.localizedString("Pause"),
                         action: onTogglePause,
                         isEnabled: true
                     ) {
@@ -203,7 +205,7 @@ private struct MeetingOverlayCard: View {
                     }
 
                     AnswerHeaderActionButton(
-                        accessibilityLabel: String(localized: "Detail"),
+                        accessibilityLabel: AppLocalization.localizedString("Detail"),
                         action: onShowDetail,
                         isEnabled: true
                     ) {
@@ -213,7 +215,7 @@ private struct MeetingOverlayCard: View {
                     }
 
                     AnswerHeaderActionButton(
-                        accessibilityLabel: String(localized: "Collapse"),
+                        accessibilityLabel: AppLocalization.localizedString("Collapse"),
                         action: onToggleCollapse,
                         isEnabled: true
                     ) {
@@ -223,7 +225,7 @@ private struct MeetingOverlayCard: View {
                     }
                 } else {
                     AnswerHeaderActionButton(
-                        accessibilityLabel: state.isPaused ? String(localized: "Resume") : String(localized: "Pause"),
+                        accessibilityLabel: state.isPaused ? AppLocalization.localizedString("Resume") : AppLocalization.localizedString("Pause"),
                         action: onTogglePause,
                         isEnabled: true
                     ) {
@@ -233,7 +235,7 @@ private struct MeetingOverlayCard: View {
                     }
 
                     AnswerHeaderActionButton(
-                        accessibilityLabel: String(localized: "Expand"),
+                        accessibilityLabel: AppLocalization.localizedString("Expand"),
                         action: onToggleCollapse,
                         isEnabled: true
                     ) {
@@ -244,7 +246,7 @@ private struct MeetingOverlayCard: View {
                 }
 
                 AnswerHeaderActionButton(
-                    accessibilityLabel: String(localized: "Close"),
+                    accessibilityLabel: AppLocalization.localizedString("Close"),
                     action: onClose,
                     isEnabled: true
                 ) {
@@ -293,11 +295,11 @@ private struct MeetingOverlayCard: View {
 
     private var realtimeTranslationLanguageDialogHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Choose Translation Language"))
+            Text(AppLocalization.localizedString("Choose Translation Language"))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.92))
 
-            Text(String(localized: "Realtime translation only translates Them segments."))
+            Text(AppLocalization.localizedString("Realtime translation only translates Them segments."))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
         }
@@ -356,7 +358,7 @@ private struct MeetingOverlayCard: View {
 
     private var realtimeTranslationLanguageDialogActions: some View {
         HStack(spacing: 10) {
-            Button(String(localized: "Cancel")) {
+            Button(AppLocalization.localizedString("Cancel")) {
                 onCancelRealtimeTranslationLanguage()
             }
             .buttonStyle(.plain)
@@ -366,7 +368,7 @@ private struct MeetingOverlayCard: View {
             .background(realtimeTranslationActionBackground(isPrimary: false))
             .overlay(realtimeTranslationActionBorder(isPrimary: false))
 
-            Button(String(localized: "Start Translation")) {
+            Button(AppLocalization.localizedString("Start Translation")) {
                 onConfirmRealtimeTranslationLanguage()
             }
             .buttonStyle(.plain)
@@ -391,16 +393,16 @@ private struct MeetingOverlayCard: View {
 
     private var meetingCloseConfirmationDialog: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(String(localized: "End this meeting transcription?"))
+            Text(AppLocalization.localizedString("End this meeting transcription?"))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.92))
 
-            Text(String(localized: "Canceling will discard this meeting; finishing will save it and open Meeting Details."))
+            Text(AppLocalization.localizedString("Canceling will discard this meeting; finishing will save it and open Meeting Details."))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
 
             HStack(spacing: 10) {
-                Button(String(localized: "Cancel Transcription")) {
+                Button(AppLocalization.localizedString("Cancel Transcription")) {
                     onConfirmCancelMeeting()
                 }
                 .buttonStyle(.plain)
@@ -416,7 +418,7 @@ private struct MeetingOverlayCard: View {
                         .strokeBorder(Color.red.opacity(0.28), lineWidth: 1)
                 )
 
-                Button(String(localized: "Finish Transcription")) {
+                Button(AppLocalization.localizedString("Finish Transcription")) {
                     onConfirmFinishMeeting()
                 }
                 .buttonStyle(.plain)
@@ -508,7 +510,7 @@ private struct MeetingCaptureModeSelectorButton: View {
         }
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
-        .accessibilityLabel(Text(String(localized: "Meeting Capture Mode")))
+        .accessibilityLabel(Text(AppLocalization.localizedString("Meeting Capture Mode")))
         .help(selection.accessibilityDescription)
         .anchorPreference(
             key: MeetingCaptureModeSelectorBoundsPreferenceKey.self,
@@ -570,7 +572,7 @@ private struct MeetingCaptureModePicker: View {
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.22), radius: 16, y: 10)
-        .accessibilityLabel(Text(String(localized: "Meeting Capture Mode")))
+        .accessibilityLabel(Text(AppLocalization.localizedString("Meeting Capture Mode")))
     }
 
     private func captureModeRow(for mode: MeetingCaptureMode) -> some View {

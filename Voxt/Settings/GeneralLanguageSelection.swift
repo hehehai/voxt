@@ -46,10 +46,10 @@ struct UserMainLanguageSelectionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Select User Languages")
+            Text(AppLocalization.localizedString("Select User Languages"))
                 .font(.title3.weight(.semibold))
 
-            TextField("Search languages", text: $searchText)
+            TextField(AppLocalization.localizedString("Search languages"), text: $searchText)
                 .textFieldStyle(.plain)
                 .settingsFieldSurface(minHeight: 34)
 
@@ -70,19 +70,19 @@ struct UserMainLanguageSelectionSheet: View {
             .frame(minHeight: 320)
 
             if filteredOptions.isEmpty {
-                Text("No languages found.")
+                Text(AppLocalization.localizedString("No languages found."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             SettingsDialogActionRow {
-                Button("Cancel") {
+                Button(AppLocalization.localizedString("Cancel")) {
                     dismiss()
                 }
                 .buttonStyle(SettingsPillButtonStyle())
                 .keyboardShortcut(.cancelAction)
 
-                Button("Save") {
+                Button(AppLocalization.localizedString("Save")) {
                     onSave(draftCodes)
                     dismiss()
                 }
@@ -145,7 +145,7 @@ private struct UserMainLanguageRow: View {
                         .foregroundStyle(isPrimary ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
-                .help(String(localized: "Set as primary language"))
+                .help(AppLocalization.localizedString("Set as primary language"))
             }
         }
         .padding(.horizontal, 10)

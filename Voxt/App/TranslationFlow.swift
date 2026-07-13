@@ -107,7 +107,7 @@ extension AppDelegate {
                 self.failCurrentTextTransformSession(
                     self.textTransformFailureMessage(
                         for: error,
-                        fallbackMessage: String(localized: "Translation failed. Try again after checking the selected model.")
+                        fallbackMessage: AppLocalization.localizedString("Translation failed. Try again after checking the selected model.")
                     )
                 )
             }
@@ -335,7 +335,7 @@ extension AppDelegate {
                 self.failCurrentTextTransformSession(
                     self.textTransformFailureMessage(
                         for: error,
-                        fallbackMessage: String(localized: "Rewrite failed. Try again after checking the selected model.")
+                        fallbackMessage: AppLocalization.localizedString("Rewrite failed. Try again after checking the selected model.")
                     )
                 )
             }
@@ -376,7 +376,7 @@ extension AppDelegate {
                 self.failCurrentTextTransformSession(
                     self.textTransformFailureMessage(
                         for: error,
-                        fallbackMessage: String(localized: "Translation failed. Try again after checking the selected model.")
+                        fallbackMessage: AppLocalization.localizedString("Translation failed. Try again after checking the selected model.")
                     )
                 )
             }

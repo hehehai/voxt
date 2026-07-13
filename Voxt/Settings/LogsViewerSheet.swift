@@ -9,10 +9,6 @@ private func logsViewerLocalized(_ key: String) -> String {
     AppLocalization.localizedString(key)
 }
 
-private func logsViewerLocalizedKey(_ key: String) -> LocalizedStringKey {
-    LocalizedStringKey(logsViewerLocalized(key))
-}
-
 private struct LogsPreviewTextView: NSViewRepresentable {
     let text: String
 
@@ -86,7 +82,7 @@ struct LogsViewerSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
-                Text(logsViewerLocalizedKey("Export Logs"))
+                Text(logsViewerLocalized("Export Logs"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
 

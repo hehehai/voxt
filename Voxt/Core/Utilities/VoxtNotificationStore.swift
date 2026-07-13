@@ -116,7 +116,14 @@ final class VoxtNotificationStore: ObservableObject {
                     ? "Notification service is temporarily unavailable. Please try again later."
                     : "Notification service is temporarily unavailable. Showing previously loaded notifications."
             )
-            VoxtLog.warning("Failed to refresh app notifications. error=\(error.localizedDescription)")
+            if notifications.isEmpty {
+                VoxtLog.warning("Failed to refresh app notifications. error=\(error.localizedDescription)")
+            } else {
+                VoxtLog.info(
+                    "App notification refresh failed; using cached notifications. error=\(error.localizedDescription)",
+                    verbose: true
+                )
+            }
         }
     }
 

@@ -29,7 +29,7 @@ struct HistoryAudioSettingsSheet: View {
 
             GeneralSettingsCard(titleText: localizedHistoryAudioSettings("Cleanup")) {
                 GeneralToggleRow(
-                    title: LocalizedStringKey(localizedHistoryAudioSettings("History Cleanup")),
+                    titleText: localizedHistoryAudioSettings("History Cleanup"),
                     isOn: $historyCleanupEnabled
                 )
 
@@ -56,13 +56,13 @@ struct HistoryAudioSettingsSheet: View {
 
             GeneralSettingsCard(titleText: localizedHistoryAudioSettings("Audio Storage")) {
                 GeneralToggleRow(
-                    title: LocalizedStringKey(localizedHistoryAudioSettings("Save history audio")),
+                    titleText: localizedHistoryAudioSettings("Save history audio"),
                     isOn: $historyAudioStorageEnabled
                 )
 
                 if historyAudioStorageEnabled {
                     SettingsPathSelectionRow(
-                        title: LocalizedStringKey(localizedHistoryAudioSettings("Storage Path")),
+                        title: localizedHistoryAudioSettings("Storage Path"),
                         displayedPath: historyAudioStorageDisplayPath,
                         fallbackPath: HistoryAudioStorageDirectoryManager.defaultRootURL.path,
                         openButtonHelp: localizedHistoryAudioSettings("Open folder"),

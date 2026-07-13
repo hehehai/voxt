@@ -36,7 +36,7 @@ extension AppDelegate {
                   customLLMManager.isModelDownloaded(repo: enhancementRepo) else {
                 VoxtLog.asrWarning("Custom LLM selected but local model is not installed. Using raw transcription.")
                 showOverlayStatus(
-                    String(localized: "Custom LLM model is not installed. Open Settings > Model to install it."),
+                    AppLocalization.localizedString("Custom LLM model is not installed. Open Settings > Model to install it."),
                     clearAfter: 2.5
                 )
                 setEnhancingState(false)

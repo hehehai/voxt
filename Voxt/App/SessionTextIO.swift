@@ -878,7 +878,7 @@ extension AppDelegate {
         }
 
         return RewriteAnswerPayload(
-            title: String(localized: "AI Answer"),
+            title: AppLocalization.localizedString("AI Answer"),
             content: context.outputText
         )
     }
@@ -899,7 +899,7 @@ extension AppDelegate {
         let canInjectIntoFocusedInput = resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: true)
         overlayState.presentAnswer(
             title: resolvedPayload.trimmedTitle.isEmpty
-                ? String(localized: "AI Answer")
+                ? AppLocalization.localizedString("AI Answer")
                 : resolvedPayload.trimmedTitle,
             content: trimmedContent,
             canInject: canInjectIntoFocusedInput
@@ -923,7 +923,7 @@ extension AppDelegate {
             allowsSwitching: true
         )
         overlayState.presentAnswer(
-            title: String(localized: "Translation"),
+            title: AppLocalization.localizedString("Translation"),
             content: trimmedContent,
             canInject: true
         )
@@ -950,7 +950,7 @@ extension AppDelegate {
 
     func presentRewriteAnswerStreamingPreview(rawText: String) {
         let previewPayload = RewriteAnswerPayloadParser.preview(from: rawText) ?? RewriteAnswerPayload(
-            title: String(localized: "AI Answer"),
+            title: AppLocalization.localizedString("AI Answer"),
             content: rawText
         )
         guard !previewPayload.trimmedTitle.isEmpty || !previewPayload.trimmedContent.isEmpty else { return }

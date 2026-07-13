@@ -12,6 +12,19 @@ final class HistorySettingsDataTests: XCTestCase {
         )
     }
 
+    func testHistoryTabsReuseCorrespondingFeatureTabs() {
+        XCTAssertEqual(
+            HistoryFilterTab.allCases.map(\.correspondingFeatureTab.rawValue),
+            [
+                FeatureSettingsTab.transcription,
+                .translation,
+                .rewrite,
+                .note,
+                .meeting
+            ].map(\.rawValue)
+        )
+    }
+
     func testFilteredEntriesUsesSelectedHistoryTab() {
         let entries = [
             makeHistoryEntry(kind: .normal, text: "a"),

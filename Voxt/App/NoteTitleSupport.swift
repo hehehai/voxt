@@ -112,7 +112,7 @@ extension AppDelegate {
                 throw NSError(
                     domain: "Voxt.NoteTitle",
                     code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: String(localized: "Apple Intelligence is unavailable.")]
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Apple Intelligence is unavailable.")]
                 )
             }
             if #available(macOS 26.0, *) {
@@ -121,7 +121,7 @@ extension AppDelegate {
             throw NSError(
                 domain: "Voxt.NoteTitle",
                 code: -2,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Apple Intelligence requires macOS 26 or later.")]
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Apple Intelligence requires macOS 26 or later.")]
             )
         case .customLLM(let repo):
             return try await customLLMManager.enhance(userPrompt: trimmedPrompt, repo: repo)

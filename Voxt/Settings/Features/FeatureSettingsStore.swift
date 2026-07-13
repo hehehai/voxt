@@ -50,21 +50,36 @@ enum FeatureSettingsStore {
         save(settings, defaults: defaults)
     }
 
-    static func saveTranscriptionPrompt(_ prompt: String, defaults: UserDefaults = .standard) {
+    static func saveTranscriptionPrompt(
+        _ prompt: String,
+        presetID: String? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         update(defaults: defaults) { settings in
             settings.transcription.prompt = AppPromptDefaults.canonicalStoredText(prompt, kind: .enhancement)
+            settings.transcription.promptPresetID = presetID
         }
     }
 
-    static func saveTranslationPrompt(_ prompt: String, defaults: UserDefaults = .standard) {
+    static func saveTranslationPrompt(
+        _ prompt: String,
+        presetID: String? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         update(defaults: defaults) { settings in
             settings.translation.prompt = AppPromptDefaults.canonicalStoredText(prompt, kind: .translation)
+            settings.translation.promptPresetID = presetID
         }
     }
 
-    static func saveRewritePrompt(_ prompt: String, defaults: UserDefaults = .standard) {
+    static func saveRewritePrompt(
+        _ prompt: String,
+        presetID: String? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         update(defaults: defaults) { settings in
             settings.rewrite.prompt = AppPromptDefaults.canonicalStoredText(prompt, kind: .rewrite)
+            settings.rewrite.promptPresetID = presetID
         }
     }
 
@@ -84,16 +99,34 @@ enum FeatureSettingsStore {
         let transcriptionText = legacyTranscriptionTextSelection(defaults: defaults)
         let translationText = legacyTranslationSelection(defaults: defaults)
         let rewriteText = legacyRewriteSelection(defaults: defaults)
+        let promptLanguage = AppPromptDefaults.interfaceLanguage(from: defaults)
+        let transcriptionPrompt = AppPromptDefaults.resolvedStoredText(
+            defaults.string(forKey: AppPreferenceKey.enhancementSystemPrompt),
+            kind: .enhancement,
+            defaults: defaults
+        )
+        let translationPrompt = AppPromptDefaults.resolvedStoredText(
+            defaults.string(forKey: AppPreferenceKey.translationSystemPrompt),
+            kind: .translation,
+            defaults: defaults
+        )
+        let rewritePrompt = AppPromptDefaults.resolvedStoredText(
+            defaults.string(forKey: AppPreferenceKey.rewriteSystemPrompt),
+            kind: .rewrite,
+            defaults: defaults
+        )
 
         return FeatureSettings(
             transcription: TranscriptionFeatureSettings(
                 asrSelectionID: transcriptionASR,
                 llmEnabled: (EnhancementMode(rawValue: defaults.string(forKey: AppPreferenceKey.enhancementMode) ?? "") ?? .off) != .off,
                 llmSelectionID: transcriptionText,
-                prompt: AppPromptDefaults.resolvedStoredText(
-                    defaults.string(forKey: AppPreferenceKey.enhancementSystemPrompt),
+                prompt: transcriptionPrompt,
+                promptPresetID: FeaturePromptPresetCatalog.inferredPresetID(
+                    storedID: nil,
+                    prompt: transcriptionPrompt,
                     kind: .enhancement,
-                    defaults: defaults
+                    language: promptLanguage
                 ),
                 appContext: .init(),
                 notes: TranscriptionNoteFeatureSettings(
@@ -108,20 +141,24 @@ enum FeatureSettingsStore {
                 asrSelectionID: transcriptionASR,
                 modelSelectionID: translationText,
                 targetLanguageRawValue: (TranslationTargetLanguage(rawValue: defaults.string(forKey: AppPreferenceKey.translationTargetLanguage) ?? "") ?? .english).rawValue,
-                prompt: AppPromptDefaults.resolvedStoredText(
-                    defaults.string(forKey: AppPreferenceKey.translationSystemPrompt),
+                prompt: translationPrompt,
+                promptPresetID: FeaturePromptPresetCatalog.inferredPresetID(
+                    storedID: nil,
+                    prompt: translationPrompt,
                     kind: .translation,
-                    defaults: defaults
+                    language: promptLanguage
                 ),
                 showResultWindow: defaults.object(forKey: AppPreferenceKey.showSelectedTextTranslationResultWindow) as? Bool ?? true
             ),
             rewrite: RewriteFeatureSettings(
                 asrSelectionID: transcriptionASR,
                 llmSelectionID: rewriteText,
-                prompt: AppPromptDefaults.resolvedStoredText(
-                    defaults.string(forKey: AppPreferenceKey.rewriteSystemPrompt),
+                prompt: rewritePrompt,
+                promptPresetID: FeaturePromptPresetCatalog.inferredPresetID(
+                    storedID: nil,
+                    prompt: rewritePrompt,
                     kind: .rewrite,
-                    defaults: defaults
+                    language: promptLanguage
                 ),
                 appContext: .init(),
                 appEnhancementEnabled: true,
@@ -280,6 +317,40 @@ enum FeatureSettingsStore {
 
     private static func sanitize(_ settings: FeatureSettings, defaults: UserDefaults) -> FeatureSettings {
         let fallback = deriveFromLegacy(defaults: defaults)
+        let promptLanguage = AppPromptDefaults.interfaceLanguage(from: defaults)
+        let resolvedTranscriptionPrompt = AppPromptDefaults.resolvedStoredText(
+            sanitizedPrompt(settings.transcription.prompt),
+            kind: .enhancement,
+            defaults: defaults
+        )
+        let transcriptionPrompt = FeaturePromptPresetCatalog.resolvedPrompt(
+            storedID: settings.transcription.promptPresetID,
+            prompt: resolvedTranscriptionPrompt,
+            kind: .enhancement,
+            language: promptLanguage
+        )
+        let resolvedTranslationPrompt = AppPromptDefaults.resolvedStoredText(
+            sanitizedPrompt(settings.translation.prompt),
+            kind: .translation,
+            defaults: defaults
+        )
+        let translationPrompt = FeaturePromptPresetCatalog.resolvedPrompt(
+            storedID: settings.translation.promptPresetID,
+            prompt: resolvedTranslationPrompt,
+            kind: .translation,
+            language: promptLanguage
+        )
+        let resolvedRewritePrompt = AppPromptDefaults.resolvedStoredText(
+            sanitizedPrompt(settings.rewrite.prompt),
+            kind: .rewrite,
+            defaults: defaults
+        )
+        let rewritePrompt = FeaturePromptPresetCatalog.resolvedPrompt(
+            storedID: settings.rewrite.promptPresetID,
+            prompt: resolvedRewritePrompt,
+            kind: .rewrite,
+            language: promptLanguage
+        )
         let transcriptionASR = sanitizedASRSelection(
             settings.transcription.asrSelectionID,
             fallback: fallback.transcription.asrSelectionID
@@ -297,10 +368,12 @@ enum FeatureSettingsStore {
                 asrSelectionID: transcriptionASR,
                 llmEnabled: settings.transcription.llmEnabled,
                 llmSelectionID: settings.transcription.llmSelectionID.textSelection == nil ? fallback.transcription.llmSelectionID : settings.transcription.llmSelectionID,
-                prompt: AppPromptDefaults.resolvedStoredText(
-                    sanitizedPrompt(settings.transcription.prompt),
+                prompt: transcriptionPrompt,
+                promptPresetID: FeaturePromptPresetCatalog.inferredPresetID(
+                    storedID: settings.transcription.promptPresetID,
+                    prompt: transcriptionPrompt,
                     kind: .enhancement,
-                    defaults: defaults
+                    language: promptLanguage
                 ),
                 appContext: settings.transcription.appContext,
                 notes: sanitizedNotesSettings(
@@ -315,20 +388,24 @@ enum FeatureSettingsStore {
                     fallback: fallback.translation.modelSelectionID
                 ),
                 targetLanguageRawValue: settings.translation.targetLanguage.rawValue,
-                prompt: AppPromptDefaults.resolvedStoredText(
-                    sanitizedPrompt(settings.translation.prompt),
+                prompt: translationPrompt,
+                promptPresetID: FeaturePromptPresetCatalog.inferredPresetID(
+                    storedID: settings.translation.promptPresetID,
+                    prompt: translationPrompt,
                     kind: .translation,
-                    defaults: defaults
+                    language: promptLanguage
                 ),
                 showResultWindow: settings.translation.showResultWindow
             ),
             rewrite: RewriteFeatureSettings(
                 asrSelectionID: rewriteASR,
                 llmSelectionID: settings.rewrite.llmSelectionID.textSelection == nil ? fallback.rewrite.llmSelectionID : settings.rewrite.llmSelectionID,
-                prompt: AppPromptDefaults.resolvedStoredText(
-                    sanitizedPrompt(settings.rewrite.prompt),
+                prompt: rewritePrompt,
+                promptPresetID: FeaturePromptPresetCatalog.inferredPresetID(
+                    storedID: settings.rewrite.promptPresetID,
+                    prompt: rewritePrompt,
                     kind: .rewrite,
-                    defaults: defaults
+                    language: promptLanguage
                 ),
                 appContext: settings.rewrite.appContext,
                 appEnhancementEnabled: true,
@@ -390,6 +467,7 @@ enum FeatureSettingsStore {
                 llmEnabled: settings.transcription.llmEnabled,
                 llmSelectionID: settings.transcription.llmSelectionID,
                 prompt: AppPromptDefaults.canonicalStoredText(settings.transcription.prompt, kind: .enhancement),
+                promptPresetID: settings.transcription.promptPresetID,
                 appContext: settings.transcription.appContext,
                 notes: settings.transcription.notes
             ),
@@ -398,12 +476,14 @@ enum FeatureSettingsStore {
                 modelSelectionID: settings.translation.modelSelectionID,
                 targetLanguageRawValue: settings.translation.targetLanguageRawValue,
                 prompt: AppPromptDefaults.canonicalStoredText(settings.translation.prompt, kind: .translation),
+                promptPresetID: settings.translation.promptPresetID,
                 showResultWindow: settings.translation.showResultWindow
             ),
             rewrite: RewriteFeatureSettings(
                 asrSelectionID: settings.rewrite.asrSelectionID,
                 llmSelectionID: settings.rewrite.llmSelectionID,
                 prompt: AppPromptDefaults.canonicalStoredText(settings.rewrite.prompt, kind: .rewrite),
+                promptPresetID: settings.rewrite.promptPresetID,
                 appContext: settings.rewrite.appContext,
                 appEnhancementEnabled: true,
                 continueShortcut: settings.rewrite.continueShortcut

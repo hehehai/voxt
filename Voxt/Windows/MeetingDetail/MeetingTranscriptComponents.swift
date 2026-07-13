@@ -30,11 +30,11 @@ struct MeetingTranscriptScrollView: View {
                         LazyVStack(alignment: .leading, spacing: 12) {
                             if segments.isEmpty {
                                 VStack(spacing: 10) {
-                                    Text(String(localized: "The transcript timeline for Me / Them will appear here once the meeting starts."))
+                                    Text(AppLocalization.localizedString("The transcript timeline for Me / Them will appear here once the meeting starts."))
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundStyle(.white.opacity(0.7))
 
-                                    Text(String(localized: "Automatic scrolling pauses when you scroll away from the bottom."))
+                                    Text(AppLocalization.localizedString("Automatic scrolling pauses when you scroll away from the bottom."))
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(.white.opacity(0.42))
                                 }
@@ -97,7 +97,7 @@ struct MeetingTranscriptScrollView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.down")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text(String(localized: "Latest"))
+                                Text(AppLocalization.localizedString("Latest"))
                                     .font(.system(size: 12, weight: .semibold))
                             }
                             .foregroundStyle(.white.opacity(0.92))
@@ -201,7 +201,7 @@ private struct MeetingTranscriptRow: View {
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else if segment.isTranslationPending {
-                    Text(String(localized: "Translating…"))
+                    Text(AppLocalization.localizedString("Translating…"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.44))
                         .frame(maxWidth: .infinity, alignment: .leading)

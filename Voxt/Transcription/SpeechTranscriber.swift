@@ -93,13 +93,13 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         refreshSpeechRecognizer(localeIdentifier: settings.localeIdentifier)
 
         guard let recognizer = speechRecognizer else {
-            let message = String(localized: "Direct Dictation is unavailable for the current language.")
+            let message = AppLocalization.localizedString("Direct Dictation is unavailable for the current language.")
             lastStartFailureMessage = message
             VoxtLog.asrWarning("Speech transcriber start blocked: recognizer is unavailable for current locale.")
             return
         }
         if settings.prefersOnDeviceRecognition && !recognizer.supportsOnDeviceRecognition {
-            let message = String(localized: "Direct Dictation on-device recognition is unavailable for the selected language.")
+            let message = AppLocalization.localizedString("Direct Dictation on-device recognition is unavailable for the selected language.")
             lastStartFailureMessage = message
             VoxtLog.asrWarning(
                 "Speech transcriber start blocked: on-device recognition is unavailable. locale=\(recognizer.locale.identifier)"
@@ -107,7 +107,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             return
         }
         guard recognizer.isAvailable else {
-            let message = String(localized: "Direct Dictation is temporarily unavailable. Try again in a moment.")
+            let message = AppLocalization.localizedString("Direct Dictation is temporarily unavailable. Try again in a moment.")
             lastStartFailureMessage = message
             VoxtLog.asrWarning("Speech transcriber start blocked: recognizer is not currently available.")
             return
@@ -124,7 +124,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             isRecording = true
             lastStartFailureMessage = nil
         } catch {
-            lastStartFailureMessage = String(localized: "Direct Dictation failed to start recording.")
+            lastStartFailureMessage = AppLocalization.localizedString("Direct Dictation failed to start recording.")
             VoxtLog.asrError("Speech transcriber start recording failed: \(error)")
             cleanupSessionState()
         }
@@ -362,7 +362,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         let locale = localeIdentifier.map(Locale.init(identifier:)) ?? Locale.current
         speechRecognizer = SFSpeechRecognizer(locale: locale)
         if speechRecognizer == nil {
-            lastStartFailureMessage = String(localized: "Direct Dictation is unavailable for the current language.")
+            lastStartFailureMessage = AppLocalization.localizedString("Direct Dictation is unavailable for the current language.")
             VoxtLog.asrWarning("Speech recognizer initialization failed for locale=\(locale.identifier).")
         }
     }
