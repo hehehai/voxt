@@ -8,7 +8,7 @@ import AVFoundation
 final class MeetingSessionCoordinator {
     let overlayState = MeetingOverlayState()
 
-    var onSessionFinished: (@MainActor (MeetingSessionResult) -> Void)?
+    var onSessionFinished: (@MainActor (MeetingSessionResult) -> Bool)?
 
     private let mlxModelManager: MLXModelManager
     private let sherpaOnnxModelManager: SherpaOnnxModelManager
@@ -16,10 +16,12 @@ final class MeetingSessionCoordinator {
     private let systemAudioCapture = MeetingSystemAudioCapture()
     private static let micSpeechThreshold: Float = 0.012
     private static let systemSpeechThreshold: Float = 0.025
+    private static let waveformPublishIntervalSeconds: TimeInterval = 1.0 / 20.0
     private var micAccumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: micSpeechThreshold, profile: .quality)
     private var systemAccumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: systemSpeechThreshold, profile: .quality)
     private let voiceActivityDetector = MeetingVoiceActivityDetector()
     private let offlineVoiceActivityDetector = MeetingOfflineVoiceActivityDetector()
+    private let audioAnalysisScheduler = MeetingAudioAnalysisScheduler()
     private var transcriber: (any MeetingSegmentTranscribing)?
     private var liveSessionFactory: (any MeetingLiveSessionFactory)?
     private var liveSessions: [MeetingSpeaker: any MeetingLiveTranscribingSession] = [:]
@@ -35,17 +37,22 @@ final class MeetingSessionCoordinator {
     private var pendingTasks: [UUID: Task<Void, Never>] = [:]
     private var completedPendingTaskIDs = Set<UUID>()
     private var pendingChunks: [BufferedMeetingChunk] = []
-    private var translationTasks: [UUID: Task<Void, Never>] = [:]
+    private let realtimeTranslationScheduler = MeetingRealtimeTranslationScheduler()
     private var microphoneStartupWatchdogTask: Task<Void, Never>?
     private var microphoneStartupRetryCount = 0
     private var micLevel: Float = 0
     private var systemLevel: Float = 0
+    private var captureTimeline = MeetingCaptureTimelineTracker()
+    private var lastWaveformPublishUptime: TimeInterval = 0
     private var loggedInitialBufferSpeakers = Set<MeetingSpeaker>()
     private var loggedChunkSpeakers = Set<MeetingSpeaker>()
     private var loggedSampleExtractionFailureSpeakers = Set<MeetingSpeaker>()
+    private var hasLoggedAudioAnalysisOverload = false
+    private var hasLoggedTranslationOverload = false
     private let audioArchive = MeetingAudioArchive()
+    private let memoryPressureMonitor = MeetingMemoryPressureMonitor()
     private let realtimeTranslationTargetLanguageProvider: @MainActor () -> TranslationTargetLanguage?
-    private let realtimeTranslationHandler: @MainActor (String, TranslationTargetLanguage) async throws -> String
+    private let realtimeTranslationHandler: @MainActor (String, TranslationTargetLanguage) -> MeetingTranslationOperation
     private var isStarting = false
     private var isReconfiguringCaptureMode = false
 
@@ -54,13 +61,18 @@ final class MeetingSessionCoordinator {
         sherpaOnnxModelManager: SherpaOnnxModelManager,
         preferredInputDeviceIDProvider: @escaping () -> AudioDeviceID?,
         realtimeTranslationTargetLanguageProvider: @escaping @MainActor () -> TranslationTargetLanguage?,
-        realtimeTranslationHandler: @escaping @MainActor (String, TranslationTargetLanguage) async throws -> String
+        realtimeTranslationHandler: @escaping @MainActor (String, TranslationTargetLanguage) -> MeetingTranslationOperation
     ) {
         self.mlxModelManager = mlxModelManager
         self.sherpaOnnxModelManager = sherpaOnnxModelManager
         self.preferredInputDeviceIDProvider = preferredInputDeviceIDProvider
         self.realtimeTranslationTargetLanguageProvider = realtimeTranslationTargetLanguageProvider
         self.realtimeTranslationHandler = realtimeTranslationHandler
+        memoryPressureMonitor.start { isConstrained in
+            Task {
+                await MeetingLocalInferenceCoordinator.shared.setMemoryPressureConstrained(isConstrained)
+            }
+        }
         self.liveAudioPrebuffers = [
             .me: MeetingLiveAudioPrebuffer(maxDuration: 1.0),
             .them: MeetingLiveAudioPrebuffer(maxDuration: 1.0)
@@ -86,12 +98,12 @@ final class MeetingSessionCoordinator {
         overlayState.isCollapsed = UserDefaults.standard.object(forKey: AppPreferenceKey.meetingOverlayCollapsed) as? Bool ?? false
         overlayState.captureMode = MeetingCaptureMode.stored()
         overlayState.realtimeTranslateEnabled = UserDefaults.standard.object(forKey: AppPreferenceKey.meetingRealtimeTranslateEnabled) as? Bool ?? false
-        overlayState.audioLevel = 0
         overlayState.waveformState.reset()
         overlayState.waveformState.setActive(!engineContext.needsModelInitialization)
         overlayState.isRecording = !engineContext.needsModelInitialization
         overlayState.isModelInitializing = engineContext.needsModelInitialization
         isStarting = true
+        Task { await MeetingLocalInferenceCoordinator.shared.setRecordingActive(true) }
     }
 
     func cancelPendingStart() {
@@ -142,6 +154,7 @@ final class MeetingSessionCoordinator {
         overlayState.isRecording = true
         overlayState.isPaused = false
         overlayState.waveformState.setActive(true)
+        await MeetingLocalInferenceCoordinator.shared.setRecordingActive(true)
         return nil
     }
 
@@ -149,10 +162,10 @@ final class MeetingSessionCoordinator {
         guard overlayState.isPresented, overlayState.isRecording, !isStopping else { return }
         overlayState.isRecording = false
         overlayState.isPaused = true
-        overlayState.audioLevel = 0
         overlayState.waveformState.setActive(false)
         finalizeCurrentRecordingSlice()
         stopCaptures()
+        await MeetingLocalInferenceCoordinator.shared.setRecordingActive(false)
         await flushPendingAudio()
         await finishLiveSessionsIfNeeded()
     }
@@ -171,9 +184,9 @@ final class MeetingSessionCoordinator {
             overlayState.isRecording = true
             overlayState.waveformState.reset()
             overlayState.waveformState.setActive(true)
+            await MeetingLocalInferenceCoordinator.shared.setRecordingActive(true)
             return nil
         } catch {
-            overlayState.audioLevel = 0
             overlayState.waveformState.setActive(false)
             return error.localizedDescription
         }
@@ -191,11 +204,12 @@ final class MeetingSessionCoordinator {
         overlayState.isPaused = false
         overlayState.isModelInitializing = false
         overlayState.isFinalizing = shouldFlushPendingAudio
-        overlayState.audioLevel = 0
         overlayState.waveformState.setActive(false)
 
         finalizeCurrentRecordingSlice()
         stopCaptures()
+        Task { await MeetingLocalInferenceCoordinator.shared.setRecordingActive(false) }
+        let finalizationSessionID = UUID()
 
         let finalizationTask = Task { [weak self] in
             guard let self else { return }
@@ -217,6 +231,22 @@ final class MeetingSessionCoordinator {
             let archivedAudioURL = shouldFlushPendingAudio ? (try? await self.persistMeetingAudioArchive()) : nil
             let finalSegmentsBeforeSpeakerAnalysis = await MainActor.run {
                 self.finalizedSegments(from: self.overlayState.segments)
+            }
+            if shouldFlushPendingAudio {
+                await MeetingFinalizationCheckpointStore.shared.save(
+                    MeetingFinalizationCheckpoint(
+                        sessionID: finalizationSessionID,
+                        updatedAt: Date(),
+                        stage: .captured,
+                        captureMode: captureMode,
+                        transcriptionEngineRawValue: (self.activeEngineContext?.engine ?? self.resolvedTranscriptionEngine()).rawValue,
+                        transcriptionModelDescription: self.activeEngineContext?.historyModelDescription ?? self.fallbackHistoryModelDescription(),
+                        segments: finalSegmentsBeforeSpeakerAnalysis,
+                        visibleSnapshotSegments: visibleSnapshotSegments,
+                        audioDurationSeconds: duration,
+                        archivedAudioPath: archivedAudioURL?.path
+                    )
+                )
             }
             let finalTranscriptionDescriptors = shouldFlushPendingAudio ? await self.audioArchive.finalTranscriptionAssetDescriptors() : []
             let speakerAnalysisDescriptors = shouldFlushPendingAudio ? await self.audioArchive.analysisAssetDescriptors(for: captureMode) : []
@@ -240,17 +270,40 @@ final class MeetingSessionCoordinator {
                 policy: finalVADPolicy,
                 evidence: finalSpeechEvidence
             )
+            if shouldFlushPendingAudio {
+                await MeetingFinalizationCheckpointStore.shared.save(
+                    MeetingFinalizationCheckpoint(
+                        sessionID: finalizationSessionID,
+                        updatedAt: Date(),
+                        stage: .finalTranscript,
+                        captureMode: captureMode,
+                        transcriptionEngineRawValue: (self.activeEngineContext?.engine ?? self.resolvedTranscriptionEngine()).rawValue,
+                        transcriptionModelDescription: self.activeEngineContext?.historyModelDescription ?? self.fallbackHistoryModelDescription(),
+                        segments: speechValidatedFinalTranscriptSegments,
+                        visibleSnapshotSegments: visibleSnapshotSegments,
+                        audioDurationSeconds: duration,
+                        archivedAudioPath: archivedAudioURL?.path
+                    )
+                )
+            }
             let speakerAnalysisOptions = MeetingSpeakerDiarizationOptions.fromPreferences()
             let finalSegments: [MeetingTranscriptSegment]
             if captureMode.capabilities.allowsSpeakerFeatures {
-                finalSegments = await MeetingSpeakerAnalysisPipeline.analyzedSegmentsPreservingStructuredSpeakerData(
-                    from: speechValidatedFinalTranscriptSegments,
-                    descriptors: speakerAnalysisDescriptors,
-                    loadAsset: { descriptor in
-                        await self.audioArchive.loadAsset(descriptor)
-                    },
-                    options: speakerAnalysisOptions
-                )
+                do {
+                    finalSegments = try await MeetingLocalInferenceCoordinator.shared.withPermit(.speakerAnalysis) {
+                        await MeetingSpeakerAnalysisPipeline.analyzedSegmentsPreservingStructuredSpeakerData(
+                            from: speechValidatedFinalTranscriptSegments,
+                            descriptors: speakerAnalysisDescriptors,
+                            loadAsset: { descriptor in
+                                await self.audioArchive.loadAsset(descriptor)
+                            },
+                            options: speakerAnalysisOptions
+                        )
+                    }
+                } catch {
+                    VoxtLog.meetingWarning("Meeting speaker analysis skipped by device safety policy: \(error.localizedDescription)")
+                    finalSegments = MeetingTranscriptPostProcessor.process(speechValidatedFinalTranscriptSegments)
+                }
             } else {
                 finalSegments = MeetingTranscriptPostProcessor.process(speechValidatedFinalTranscriptSegments)
             }
@@ -268,7 +321,24 @@ final class MeetingSessionCoordinator {
             await MainActor.run {
                 self.overlayState.segments = sortedFinalSegments
             }
+            if shouldFlushPendingAudio {
+                await MeetingFinalizationCheckpointStore.shared.save(
+                    MeetingFinalizationCheckpoint(
+                        sessionID: finalizationSessionID,
+                        updatedAt: Date(),
+                        stage: .speakerAnalysis,
+                        captureMode: captureMode,
+                        transcriptionEngineRawValue: (self.activeEngineContext?.engine ?? self.resolvedTranscriptionEngine()).rawValue,
+                        transcriptionModelDescription: self.activeEngineContext?.historyModelDescription ?? self.fallbackHistoryModelDescription(),
+                        segments: sortedFinalSegments,
+                        visibleSnapshotSegments: visibleSnapshotSegments,
+                        audioDurationSeconds: duration,
+                        archivedAudioPath: archivedAudioURL?.path
+                    )
+                )
+            }
             let result = MeetingSessionResult(
+                recoverySessionID: shouldFlushPendingAudio ? finalizationSessionID : nil,
                 captureMode: captureMode,
                 transcriptionEngine: self.activeEngineContext?.engine ?? self.resolvedTranscriptionEngine(),
                 transcriptionModelDescription: self.activeEngineContext?.historyModelDescription ?? self.fallbackHistoryModelDescription(),
@@ -283,6 +353,34 @@ final class MeetingSessionCoordinator {
                 archivedAudioURL: archivedAudioURL
             )
 
+            if shouldFlushPendingAudio {
+                let archiveStatistics = await self.audioArchive.currentIOStatistics()
+                let analysisStatistics = await self.audioAnalysisScheduler.currentStatistics()
+                let inferenceStatistics = await MeetingLocalInferenceCoordinator.shared.currentStatistics()
+                let translationStatistics = self.realtimeTranslationScheduler.currentStatistics()
+                await MainActor.run {
+                    VoxtLog.meeting(
+                        "Meeting audio archive I/O summary. appends=\(archiveStatistics.appendCount), resamples=\(archiveStatistics.resampleCount), writes=\(archiveStatistics.writeOperationCount), writeHandleOpens=\(archiveStatistics.writeHandleOpenCount), writtenBytes=\(archiveStatistics.writtenByteCount), reads=\(archiveStatistics.readOperationCount), readHandleOpens=\(archiveStatistics.readHandleOpenCount), readBytes=\(archiveStatistics.readByteCount)",
+                        verbose: true
+                    )
+                    VoxtLog.meeting(
+                        "Meeting audio analysis summary. submittedFrames=\(analysisStatistics.submittedFrameCount), mergedFrames=\(analysisStatistics.mergedFrameCount), processedBatches=\(analysisStatistics.processedBatchCount), overloadedFrames=\(analysisStatistics.overloadedFrameCount), peakPendingAudioSeconds=\(String(format: "%.2f", analysisStatistics.peakPendingAudioSeconds))",
+                        verbose: true
+                    )
+                    VoxtLog.meeting(
+                        "Meeting realtime translation summary. submitted=\(translationStatistics.submittedCount), completed=\(translationStatistics.completedCount), failed=\(translationStatistics.failedCount), cancelled=\(translationStatistics.cancelledCount), overloaded=\(translationStatistics.overloadedCount), peakScheduled=\(translationStatistics.peakScheduledCount), batches=\(translationStatistics.inferenceBatchCount), peakBatch=\(translationStatistics.peakBatchSize)",
+                        verbose: true
+                    )
+                    VoxtLog.meeting(
+                        "Meeting local inference summary. submitted=\(inferenceStatistics.submittedCount), completed=\(inferenceStatistics.completedCount), cancelled=\(inferenceStatistics.cancelledCount), overloaded=\(inferenceStatistics.overloadedCount), thermalDeferrals=\(inferenceStatistics.thermalDeferralCount), memoryDeferrals=\(inferenceStatistics.memoryDeferralCount), peakQueued=\(inferenceStatistics.peakQueuedCount), totalWaitMs=\(inferenceStatistics.totalWaitMilliseconds)",
+                        verbose: true
+                    )
+                    self.realtimeTranslationScheduler.resetStatistics()
+                }
+                await self.audioAnalysisScheduler.resetStatistics()
+                await MeetingLocalInferenceCoordinator.shared.resetStatistics()
+            }
+
             await MainActor.run {
                 VoxtLog.meeting(
                     "Meeting session finished. visibleSegments=\(visibleSnapshotSegments.count), persistedSegments=\(result.persistedSegments.count), duration=\(String(format: "%.2f", duration))s"
@@ -291,7 +389,10 @@ final class MeetingSessionCoordinator {
             self.cleanupSessionState()
             self.resetSessionPresentationState()
             self.overlayState.reset()
-            self.onSessionFinished?(result)
+            let didSafelyHandleResult = self.onSessionFinished?(result) ?? false
+            if shouldFlushPendingAudio, didSafelyHandleResult {
+                await MeetingFinalizationCheckpointStore.shared.clear(sessionID: finalizationSessionID)
+            }
             self.stopFinalizationTask = nil
         }
         stopFinalizationTask = finalizationTask
@@ -358,7 +459,6 @@ final class MeetingSessionCoordinator {
             isReconfiguringCaptureMode = false
             overlayState.isRecording = false
             overlayState.isPaused = true
-            overlayState.audioLevel = 0
             overlayState.waveformState.setActive(false)
             return error.localizedDescription
         }
@@ -368,12 +468,16 @@ final class MeetingSessionCoordinator {
         overlayState.isPaused && !overlayState.segments.isEmpty
     }
 
-    private func handleBuffer(_ buffer: AVAudioPCMBuffer, level: Float, speaker: MeetingSpeaker) {
+    private func handleSamples(
+        _ samples: [Float],
+        sampleRate: Double,
+        level: Float,
+        speaker: MeetingSpeaker,
+        captureGeneration: UInt64
+    ) {
         guard overlayState.isRecording || isStarting else { return }
         guard !isReconfiguringCaptureMode else { return }
         guard overlayState.captureMode.includes(speaker: speaker) else { return }
-        let sampleRate = buffer.format.sampleRate
-        let bufferEndSeconds = currentTimelineOffsetSeconds()
         if speaker == .me {
             micLevel = level
             if loggedInitialBufferSpeakers.contains(.me) == false {
@@ -389,36 +493,29 @@ final class MeetingSessionCoordinator {
             (systemLevel * 0.42) +
             max(micLevel * 0.16, systemLevel * 0.1)
         )
-        if overlayState.isModelInitializing {
-            overlayState.audioLevel = 0
-            overlayState.waveformState.ingest(level: 0)
-        } else {
-            overlayState.audioLevel = displayLevel
-            overlayState.waveformState.ingest(level: displayLevel)
-        }
+        publishWaveformLevel(overlayState.isModelInitializing ? 0 : displayLevel)
 
         if !loggedInitialBufferSpeakers.contains(speaker) {
             loggedInitialBufferSpeakers.insert(speaker)
             VoxtLog.meeting(
-                "Meeting audio buffer received. speaker=\(speaker.rawValue), level=\(String(format: "%.3f", level)), sampleRate=\(Int(buffer.format.sampleRate)), channels=\(buffer.format.channelCount), format=\(buffer.format.commonFormat.rawValue)",
+                "Meeting audio buffer received. speaker=\(speaker.rawValue), level=\(String(format: "%.3f", level)), sampleRate=\(Int(sampleRate)), sampleCount=\(samples.count)",
                 verbose: true
             )
         }
 
-        guard let samples = Self.extractMonoSamples(from: buffer) else {
-            if !loggedSampleExtractionFailureSpeakers.contains(speaker) {
-                loggedSampleExtractionFailureSpeakers.insert(speaker)
-                VoxtLog.meetingWarning(
-                    "Meeting audio sample extraction failed. speaker=\(speaker.rawValue), interleaved=\(buffer.format.isInterleaved), sampleRate=\(Int(buffer.format.sampleRate)), channels=\(buffer.format.channelCount), format=\(buffer.format.commonFormat.rawValue)"
-                )
-            }
-            return
-        }
         guard !samples.isEmpty else { return }
         hasCapturedAudio = true
 
         let bufferDuration = Double(samples.count) / sampleRate
-        let bufferStartSeconds = max(bufferEndSeconds - bufferDuration, 0)
+        let fallbackEndSeconds = currentTimelineOffsetSeconds()
+        guard let timelineRange = captureTimeline.nextRange(
+            for: speaker,
+            generation: captureGeneration,
+            durationSeconds: bufferDuration,
+            fallbackEndSeconds: fallbackEndSeconds
+        ) else { return }
+        let bufferStartSeconds = timelineRange.lowerBound
+        let bufferEndSeconds = timelineRange.upperBound
 
         let taskID = UUID()
         let task = Task { [weak self] in
@@ -434,60 +531,37 @@ final class MeetingSessionCoordinator {
                 speaker: speaker,
                 startSeconds: bufferStartSeconds
             )
-            if await MainActor.run(body: { self.usesLiveSessionPath }) {
+            if let safetyMessage = await self.audioArchive.consumeSafetyFailureMessage() {
                 await MainActor.run {
-                    self.liveAudioPrebuffers[speaker, default: MeetingLiveAudioPrebuffer(maxDuration: 1.0)]
-                        .append(samples: samples, sampleRate: sampleRate)
+                    self.overlayState.safetyMessage = safetyMessage
+                    _ = self.stop(shouldFlushPendingAudio: true)
                 }
-                let hadLiveSession = await MainActor.run { self.liveSessions[speaker] != nil }
-                if hadLiveSession,
-                   let liveSession = await MainActor.run(body: { self.liveSessions[speaker] }) {
-                    await liveSession.append(samples: samples, sampleRate: sampleRate)
-                } else if await MainActor.run(body: { self.shouldReconnectLiveSession(for: speaker, level: level) }),
-                          let _ = await self.ensureLiveSession(for: speaker) {}
                 return
             }
-            if let liveSession = await MainActor.run(body: { self.liveSessions[speaker] }) {
-                await liveSession.append(samples: samples, sampleRate: sampleRate)
-                return
-            }
-            let voiceActivity = await self.voiceActivityDetector.activity(
+            let frame = MeetingAudioAnalysisFrame(
                 samples: samples,
                 sampleRate: sampleRate,
+                level: level,
                 speaker: speaker,
-                fallbackLevel: level,
-                fallbackThreshold: Self.speechThreshold(for: speaker),
-                serverVADActive: await MainActor.run { self.serverVADActive }
+                startSeconds: bufferStartSeconds,
+                endSeconds: bufferEndSeconds
             )
-            let chunk: BufferedMeetingChunk?
-            if speaker == .me {
-                chunk = await self.micAccumulator.append(
-                    samples: samples,
-                    sampleRate: sampleRate,
-                    level: level,
-                    voiceActivityIsSpeech: voiceActivity.isSpeech,
-                    bufferEndSeconds: bufferEndSeconds
-                )
+            if await MainActor.run(body: { self.usesLiveSessionPath }) {
+                await self.processAudioAnalysisFrame(frame)
             } else {
-                chunk = await self.systemAccumulator.append(
-                    samples: samples,
-                    sampleRate: sampleRate,
-                    level: level,
-                    voiceActivityIsSpeech: voiceActivity.isSpeech,
-                    bufferEndSeconds: bufferEndSeconds
-                )
-            }
-            guard let chunk else { return }
-            await MainActor.run {
-                if !self.loggedChunkSpeakers.contains(speaker) {
-                    self.loggedChunkSpeakers.insert(speaker)
-                    VoxtLog.meeting(
-                        "Meeting audio chunk ready. speaker=\(speaker.rawValue), duration=\(String(format: "%.2f", chunk.endSeconds - chunk.startSeconds))s, sampleCount=\(chunk.samples.count)",
-                        verbose: true
-                    )
+                let submission = await self.audioAnalysisScheduler.submit(frame) { [weak self] frame in
+                    await self?.processAudioAnalysisFrame(frame)
+                }
+                if case .overloaded(let pendingAudioSeconds) = submission {
+                    await MainActor.run {
+                        guard !self.hasLoggedAudioAnalysisOverload else { return }
+                        self.hasLoggedAudioAnalysisOverload = true
+                        VoxtLog.meetingWarning(
+                            "Meeting realtime audio analysis reached its 10-second safety bound; archived audio remains complete and the overloaded realtime frame was skipped. pendingAudioSeconds=\(String(format: "%.2f", pendingAudioSeconds))"
+                        )
+                    }
                 }
             }
-            await self.enqueue(chunk: chunk)
         }
         pendingTasks[taskID] = task
         pruneCompletedTasks()
@@ -507,6 +581,58 @@ final class MeetingSessionCoordinator {
 
         let speechLevelThreshold: Float = (speaker == .me) ? 0.08 : 0.11
         return level >= speechLevelThreshold
+    }
+
+    private func processAudioAnalysisFrame(_ frame: MeetingAudioAnalysisFrame) async {
+        if usesLiveSessionPath {
+            liveAudioPrebuffers[frame.speaker, default: MeetingLiveAudioPrebuffer(maxDuration: 1.0)]
+                .append(samples: frame.samples, sampleRate: frame.sampleRate)
+            if let liveSession = liveSessions[frame.speaker] {
+                await liveSession.append(samples: frame.samples, sampleRate: frame.sampleRate)
+            } else if shouldReconnectLiveSession(for: frame.speaker, level: frame.level),
+                      let _ = await ensureLiveSession(for: frame.speaker) {}
+            return
+        }
+        if let liveSession = liveSessions[frame.speaker] {
+            await liveSession.append(samples: frame.samples, sampleRate: frame.sampleRate)
+            return
+        }
+
+        let voiceActivity = await voiceActivityDetector.activity(
+            samples: frame.samples,
+            sampleRate: frame.sampleRate,
+            speaker: frame.speaker,
+            fallbackLevel: frame.level,
+            fallbackThreshold: Self.speechThreshold(for: frame.speaker),
+            serverVADActive: serverVADActive
+        )
+        let chunk: BufferedMeetingChunk?
+        if frame.speaker == .me {
+            chunk = await micAccumulator.append(
+                samples: frame.samples,
+                sampleRate: frame.sampleRate,
+                level: frame.level,
+                voiceActivityIsSpeech: voiceActivity.isSpeech,
+                bufferEndSeconds: frame.endSeconds
+            )
+        } else {
+            chunk = await systemAccumulator.append(
+                samples: frame.samples,
+                sampleRate: frame.sampleRate,
+                level: frame.level,
+                voiceActivityIsSpeech: voiceActivity.isSpeech,
+                bufferEndSeconds: frame.endSeconds
+            )
+        }
+        guard let chunk else { return }
+        if !loggedChunkSpeakers.contains(frame.speaker) {
+            loggedChunkSpeakers.insert(frame.speaker)
+            VoxtLog.meeting(
+                "Meeting audio chunk ready. speaker=\(frame.speaker.rawValue), duration=\(String(format: "%.2f", chunk.endSeconds - chunk.startSeconds))s, sampleCount=\(chunk.samples.count)",
+                verbose: true
+            )
+        }
+        await enqueue(chunk: chunk)
     }
 
     private static func speechThreshold(for speaker: MeetingSpeaker) -> Float {
@@ -566,9 +692,12 @@ final class MeetingSessionCoordinator {
         cancelTranslationTasks()
         micLevel = 0
         systemLevel = 0
+        captureTimeline.resetCursors()
+        lastWaveformPublishUptime = 0
         loggedInitialBufferSpeakers.removeAll()
         loggedChunkSpeakers.removeAll()
         loggedSampleExtractionFailureSpeakers.removeAll()
+        hasLoggedAudioAnalysisOverload = false
         recordingStartedAt = nil
         accumulatedRecordingDuration = 0
         hasCapturedAudio = false
@@ -576,6 +705,8 @@ final class MeetingSessionCoordinator {
         pendingChunks.removeAll()
         Task {
             await voiceActivityDetector.reset()
+            await audioAnalysisScheduler.cancel()
+            await MeetingLocalInferenceCoordinator.shared.setRecordingActive(false)
         }
         microphoneStartupWatchdogTask?.cancel()
         microphoneStartupWatchdogTask = nil
@@ -602,6 +733,17 @@ final class MeetingSessionCoordinator {
         UserDefaults.standard.set(false, forKey: AppPreferenceKey.meetingRealtimeTranslateEnabled)
     }
 
+    private func publishWaveformLevel(_ level: Float) {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard lastWaveformPublishUptime == 0 ||
+                now - lastWaveformPublishUptime >= Self.waveformPublishIntervalSeconds
+        else {
+            return
+        }
+        lastWaveformPublishUptime = now
+        overlayState.waveformState.ingest(level: level)
+    }
+
     private func startCaptures() throws {
         let captureMode = overlayState.captureMode
         VoxtLog.meeting("Meeting capture start requested. captureMode=\(captureMode.rawValue)", verbose: true)
@@ -610,6 +752,7 @@ final class MeetingSessionCoordinator {
         loggedInitialBufferSpeakers.remove(.them)
         loggedSampleExtractionFailureSpeakers.remove(.me)
         loggedSampleExtractionFailureSpeakers.remove(.them)
+        captureTimeline.resetCursors()
 
         let resolvedInputDeviceID = captureMode.usesMicrophone
             ? try startConfiguredMicrophoneCapture(scheduleWatchdog: false)
@@ -674,11 +817,40 @@ final class MeetingSessionCoordinator {
     }
 
     private func startSystemAudioCapture() throws {
+        let generation = beginCaptureEpoch(for: .them)
         try systemAudioCapture.start { [weak self] buffer, level in
+            let sampleRate = buffer.format.sampleRate
+            guard let samples = Self.extractMonoSamples(from: buffer) else {
+                let format = buffer.format
+                let isInterleaved = format.isInterleaved
+                let channelCount = format.channelCount
+                let commonFormatRawValue = Int(format.commonFormat.rawValue)
+                Task { @MainActor [weak self] in
+                    self?.logSampleExtractionFailureIfNeeded(
+                        isInterleaved: isInterleaved,
+                        sampleRate: sampleRate,
+                        channelCount: channelCount,
+                        commonFormatRawValue: commonFormatRawValue,
+                        speaker: .them
+                    )
+                }
+                return
+            }
             Task { @MainActor [weak self] in
-                self?.handleBuffer(buffer, level: level, speaker: .them)
+                self?.handleSamples(
+                    samples,
+                    sampleRate: sampleRate,
+                    level: level,
+                    speaker: .them,
+                    captureGeneration: generation
+                )
             }
         }
+        captureTimeline.anchorEpoch(
+            for: .them,
+            generation: generation,
+            minimumStartSeconds: currentTimelineOffsetSeconds()
+        )
     }
 
     private func stopCaptures(shouldLog: Bool = true) {
@@ -693,11 +865,58 @@ final class MeetingSessionCoordinator {
 
     private func startMicrophoneCapture(with deviceID: AudioDeviceID?) throws {
         microphoneCapture.setPreferredInputDevice(deviceID)
+        let generation = beginCaptureEpoch(for: .me)
         try microphoneCapture.start { [weak self] buffer, level in
+            let sampleRate = buffer.format.sampleRate
+            guard let samples = Self.extractMonoSamples(from: buffer) else {
+                let format = buffer.format
+                let isInterleaved = format.isInterleaved
+                let channelCount = format.channelCount
+                let commonFormatRawValue = Int(format.commonFormat.rawValue)
+                Task { @MainActor [weak self] in
+                    self?.logSampleExtractionFailureIfNeeded(
+                        isInterleaved: isInterleaved,
+                        sampleRate: sampleRate,
+                        channelCount: channelCount,
+                        commonFormatRawValue: commonFormatRawValue,
+                        speaker: .me
+                    )
+                }
+                return
+            }
             Task { @MainActor [weak self] in
-                self?.handleBuffer(buffer, level: level, speaker: .me)
+                self?.handleSamples(
+                    samples,
+                    sampleRate: sampleRate,
+                    level: level,
+                    speaker: .me,
+                    captureGeneration: generation
+                )
             }
         }
+        captureTimeline.anchorEpoch(
+            for: .me,
+            generation: generation,
+            minimumStartSeconds: currentTimelineOffsetSeconds()
+        )
+    }
+
+    private func beginCaptureEpoch(for speaker: MeetingSpeaker) -> UInt64 {
+        captureTimeline.beginEpoch(for: speaker)
+    }
+
+    private func logSampleExtractionFailureIfNeeded(
+        isInterleaved: Bool,
+        sampleRate: Double,
+        channelCount: AVAudioChannelCount,
+        commonFormatRawValue: Int,
+        speaker: MeetingSpeaker
+    ) {
+        guard !loggedSampleExtractionFailureSpeakers.contains(speaker) else { return }
+        loggedSampleExtractionFailureSpeakers.insert(speaker)
+        VoxtLog.meetingWarning(
+            "Meeting audio sample extraction failed. speaker=\(speaker.rawValue), interleaved=\(isInterleaved), sampleRate=\(Int(sampleRate)), channels=\(channelCount), format=\(commonFormatRawValue)"
+        )
     }
 
     private func scheduleMicrophoneStartupWatchdog(with deviceID: AudioDeviceID?) {
@@ -756,6 +975,7 @@ final class MeetingSessionCoordinator {
             await task.value
         }
         completedPendingTaskIDs.removeAll()
+        await audioAnalysisScheduler.flush()
 
         guard liveSessions.isEmpty else { return }
 
@@ -773,13 +993,13 @@ final class MeetingSessionCoordinator {
         pendingTasks.removeAll()
         completedPendingTaskIDs.removeAll()
         pendingChunks.removeAll()
+        Task {
+            await audioAnalysisScheduler.cancel()
+        }
     }
 
     private func flushPendingTranslations() async {
-        let activeTasks = Array(translationTasks.values)
-        for task in activeTasks {
-            await task.value
-        }
+        await realtimeTranslationScheduler.flush()
     }
 
     private func persistMeetingAudioArchive() async throws -> URL? {
@@ -822,7 +1042,6 @@ final class MeetingSessionCoordinator {
     private func queueRealtimeTranslation(for segment: MeetingTranscriptSegment) {
         guard overlayState.realtimeTranslateEnabled,
               segment.speaker == .them,
-              translationTasks[segment.id] == nil,
               let targetLanguage = realtimeTranslationTargetLanguageProvider()
         else {
             return
@@ -835,12 +1054,23 @@ final class MeetingSessionCoordinator {
             )
         }
 
-        let task = Task { @MainActor [weak self] in
+        let operation = realtimeTranslationHandler(segment.text, targetLanguage)
+        let submission = realtimeTranslationScheduler.submit(
+            segmentID: segment.id,
+            sourceText: segment.text,
+            targetLanguage: targetLanguage,
+            operation: operation
+        ) { [weak self] result in
             guard let self else { return }
-            defer { self.translationTasks[segment.id] = nil }
-
-            do {
-                let translatedText = try await self.realtimeTranslationHandler(segment.text, targetLanguage)
+            guard let current = self.overlayState.segments.first(where: { $0.id == segment.id }),
+                  current.text.trimmingCharacters(in: .whitespacesAndNewlines) ==
+                    segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            else {
+                self.queueOutstandingRealtimeTranslationsIfNeeded()
+                return
+            }
+            switch result {
+            case .success(let translatedText):
                 let trimmed = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
                 self.updateSegment(segment.id) { current in
                     current.updatingTranslation(
@@ -848,7 +1078,7 @@ final class MeetingSessionCoordinator {
                         isTranslationPending: false
                     )
                 }
-            } catch {
+            case .failure(let error):
                 VoxtLog.meetingWarning("Meeting realtime translation failed: \(error)")
                 self.updateSegment(segment.id) { current in
                     current.updatingTranslation(
@@ -857,20 +1087,35 @@ final class MeetingSessionCoordinator {
                     )
                 }
             }
+            self.queueOutstandingRealtimeTranslationsIfNeeded()
         }
-        translationTasks[segment.id] = task
+
+        if submission == .overloaded, !hasLoggedTranslationOverload {
+            hasLoggedTranslationOverload = true
+            VoxtLog.meetingWarning(
+                "Meeting realtime translation reached its 9-segment safety bound; pending finalized segments will be retried as capacity becomes available."
+            )
+        }
     }
 
     private func cancelTranslationTask(for segmentID: UUID) {
-        translationTasks[segmentID]?.cancel()
-        translationTasks[segmentID] = nil
+        realtimeTranslationScheduler.cancel(segmentID: segmentID)
     }
 
     private func cancelTranslationTasks() {
-        for task in translationTasks.values {
-            task.cancel()
+        realtimeTranslationScheduler.cancelAll()
+        hasLoggedTranslationOverload = false
+    }
+
+    private func queueOutstandingRealtimeTranslationsIfNeeded() {
+        guard overlayState.realtimeTranslateEnabled else { return }
+        for segment in overlayState.segments where
+            segment.speaker == .them &&
+            segment.isTranslationPending &&
+            (segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        {
+            queueRealtimeTranslation(for: segment)
         }
-        translationTasks.removeAll()
     }
 
     private func clearPendingTranslationState() {
@@ -1172,6 +1417,9 @@ final class MeetingSessionCoordinator {
         case .mlxAudio:
             mlxModelManager.beginActiveUse()
             activeLocalEngine = .mlxAudio
+            if case .liveLocal = context.resolvedMode {
+                liveSessionFactory = MeetingMLXNativeLiveSessionFactory(modelManager: mlxModelManager)
+            }
             return MeetingMLXSegmentTranscriber(modelManager: mlxModelManager)
         case .remote:
             if context.resolvedMode.usesLiveSessions {
@@ -1290,7 +1538,7 @@ final class MeetingSessionCoordinator {
         return (provider, configuration)
     }
 
-    private static func extractMonoSamples(from buffer: AVAudioPCMBuffer) -> [Float]? {
+    private nonisolated static func extractMonoSamples(from buffer: AVAudioPCMBuffer) -> [Float]? {
         AudioLevelMeter.monoSamples(from: buffer)
     }
 
@@ -1299,7 +1547,11 @@ final class MeetingSessionCoordinator {
     }
 
     private var serverVADActive: Bool {
-        activeEngineContext?.resolvedMode.usesLiveSessions == true
+        guard let resolvedMode = activeEngineContext?.resolvedMode else { return false }
+        if case .liveRemote = resolvedMode {
+            return true
+        }
+        return false
     }
 
     private var activeCaptureSpeakers: [MeetingSpeaker] {

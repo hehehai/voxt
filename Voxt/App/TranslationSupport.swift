@@ -99,9 +99,10 @@ extension AppDelegate {
 
     func translateText(
         _ text: String,
-        targetLanguage: TranslationTargetLanguage
+        targetLanguage: TranslationTargetLanguage,
+        providerResolution: TranslationProviderResolution? = nil
     ) async throws -> String {
-        let resolution = resolvedTranslationProviderResolution(
+        let resolution = providerResolution ?? resolvedTranslationProviderResolution(
             targetLanguage: targetLanguage,
             isSelectedTextTranslation: isSelectedTextTranslationFlow
         )

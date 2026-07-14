@@ -196,7 +196,7 @@ extension AppDelegate {
                 self.currentMeetingSummarySettingsSnapshot()
             },
             translationHandler: { @MainActor text, targetLanguage in
-                try await self.translateMeetingRealtimeText(text, targetLanguage: targetLanguage)
+                self.makeMeetingTranslationOperation(text, targetLanguage: targetLanguage)
             }
         )
     }
@@ -254,7 +254,7 @@ extension AppDelegate {
         pendingMeetingSessionCompletionDisposition = .save
 
         meetingSessionCoordinator.onSessionFinished = { [weak self] result in
-            self?.handleMeetingSessionFinished(result)
+            self?.handleMeetingSessionFinished(result) ?? false
         }
 
         meetingSessionCoordinator.prepareForStart()

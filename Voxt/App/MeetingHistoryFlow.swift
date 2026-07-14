@@ -5,6 +5,32 @@ import Foundation
 import AppKit
 
 extension AppDelegate {
+    func recoverInterruptedMeetingFinalizationIfNeeded() async {
+        guard let checkpoint = await MeetingFinalizationCheckpointStore.shared.load() else { return }
+
+        let archivedAudioURL = checkpoint.archivedAudioPath.map(URL.init(fileURLWithPath:))
+        let result = MeetingSessionResult(
+            recoverySessionID: checkpoint.sessionID,
+            captureMode: checkpoint.captureMode,
+            transcriptionEngine: TranscriptionEngine(rawValue: checkpoint.transcriptionEngineRawValue) ?? .mlxAudio,
+            transcriptionModelDescription: checkpoint.transcriptionModelDescription,
+            segments: checkpoint.segments,
+            visibleSnapshotSegments: checkpoint.visibleSnapshotSegments,
+            audioDurationSeconds: checkpoint.audioDurationSeconds,
+            archivedAudioURL: archivedAudioURL
+        )
+        VoxtLog.meeting("Recovering interrupted meeting finalization. stage=\(checkpoint.stage.rawValue), segments=\(checkpoint.segments.count)")
+        guard persistMeetingHistory(result, forceSave: true) != nil else {
+            VoxtLog.meetingWarning("Interrupted meeting recovery remains pending because durable history persistence failed.")
+            return
+        }
+        if let archivedAudioURL {
+            try? FileManager.default.removeItem(at: archivedAudioURL)
+        }
+        await MeetingFinalizationCheckpointStore.shared.clear(sessionID: checkpoint.sessionID)
+        historyStore.reloadAsync()
+    }
+
     func showMeetingDetailWindow(for entry: TranscriptionHistoryEntry) {
         meetingDetailWindowManager.presentHistoryMeeting(
             entry: entry,
@@ -17,7 +43,7 @@ extension AppDelegate {
                 self.currentMeetingSummarySettingsSnapshot()
             },
             translationHandler: { @MainActor text, targetLanguage in
-                try await self.translateMeetingRealtimeText(text, targetLanguage: targetLanguage)
+                self.makeMeetingTranslationOperation(text, targetLanguage: targetLanguage)
             },
             summaryStatusProvider: { @MainActor settings in
                 self.meetingSummaryProviderStatus(settings: settings)
@@ -46,11 +72,11 @@ extension AppDelegate {
         )
     }
 
-    func persistMeetingHistoryIfNeeded(_ result: MeetingSessionResult) {
-        _ = persistMeetingHistory(result)
+    func persistMeetingHistoryIfNeeded(_ result: MeetingSessionResult) -> TranscriptionHistoryEntry? {
+        persistMeetingHistory(result)
     }
 
-    func handleMeetingSessionFinished(_ result: MeetingSessionResult) {
+    func handleMeetingSessionFinished(_ result: MeetingSessionResult) -> Bool {
         hotkeyManager.setCommonStopKeyEnabled(false)
         let disposition = pendingMeetingSessionCompletionDisposition
         pendingMeetingSessionCompletionDisposition = .save
@@ -62,27 +88,34 @@ extension AppDelegate {
             if let archivedAudioURL = result.archivedAudioURL {
                 try? FileManager.default.removeItem(at: archivedAudioURL)
             }
+            return true
         case .save:
             meetingDetailWindowManager.closeLiveWindow()
             meetingOverlayWindow.hide()
-            defer {
+            guard historyEnabled else {
                 if let archivedAudioURL = result.archivedAudioURL {
                     try? FileManager.default.removeItem(at: archivedAudioURL)
                 }
+                return true
             }
-            persistMeetingHistoryIfNeeded(result)
+            guard persistMeetingHistoryIfNeeded(result) != nil else {
+                showOverlayReminder(AppLocalization.localizedString("Couldn't save Meeting Notes history."))
+                return false
+            }
+            if let archivedAudioURL = result.archivedAudioURL {
+                try? FileManager.default.removeItem(at: archivedAudioURL)
+            }
+            return true
         case .saveAndOpenDetail:
-            defer {
-                if let archivedAudioURL = result.archivedAudioURL {
-                    try? FileManager.default.removeItem(at: archivedAudioURL)
-                }
-            }
             guard let entry = persistMeetingHistory(result, forceSave: true) else {
                 VoxtLog.meetingWarning("Meeting save-and-open failed: no history entry could be created.")
                 meetingDetailWindowManager.closeLiveWindow()
                 meetingOverlayWindow.hide()
                 showOverlayReminder(AppLocalization.localizedString("Couldn't save Meeting Notes history."))
-                return
+                return false
+            }
+            if let archivedAudioURL = result.archivedAudioURL {
+                try? FileManager.default.removeItem(at: archivedAudioURL)
             }
             VoxtLog.meeting("Meeting history saved. entryID=\(entry.id.uuidString), kind=\(entry.kind.rawValue)")
             meetingDetailWindowManager.closeLiveWindow()
@@ -91,6 +124,7 @@ extension AppDelegate {
                 appDelegate.historyStore.reloadAsync()
                 appDelegate.showMeetingDetailWindow(for: entry)
             }
+            return true
         }
     }
 
@@ -98,6 +132,10 @@ extension AppDelegate {
         guard forceSave || historyEnabled else {
             VoxtLog.meeting("Meeting history persistence skipped: history is disabled.")
             return nil
+        }
+        if let recoverySessionID = result.recoverySessionID,
+           let existingEntry = historyStore.entry(id: recoverySessionID) {
+            return existingEntry
         }
 
         let persistedSegments = result.persistedSegments
@@ -121,20 +159,14 @@ extension AppDelegate {
                 audioRelativePath = try historyStore.importAudioArchive(from: archivedAudioURL, kind: .transcript)
             } catch {
                 VoxtLog.meetingWarning("Meeting audio persistence failed. error=\(error.localizedDescription)")
-                if result.captureMode == .recording || !hasMeaningfulText {
-                    return nil
-                }
-                audioRelativePath = nil
+                return nil
             }
         } else {
-            if let archivedAudioURL = result.archivedAudioURL,
-               FileManager.default.fileExists(atPath: archivedAudioURL.path) {
-                try? FileManager.default.removeItem(at: archivedAudioURL)
-            }
             audioRelativePath = nil
         }
 
         guard let entryID = historyStore.append(
+            entryID: result.recoverySessionID ?? UUID(),
             text: persistedText,
             transcriptionEngine: result.transcriptionEngine.title,
             transcriptionModel: result.transcriptionModelDescription,

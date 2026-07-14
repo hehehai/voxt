@@ -43,7 +43,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
                 )
             ],
             audioURL: nil,
-            translationHandler: { text, _ in text },
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } },
             summaryStatusProvider: { _ in
                 MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
             },
@@ -122,7 +122,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
                 )
             ],
             audioURL: nil,
-            translationHandler: { text, _ in text },
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } },
             summaryStatusProvider: { _ in
                 MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
             },
@@ -197,7 +197,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
                 )
             ],
             audioURL: nil,
-            translationHandler: { text, _ in text },
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } },
             summaryStatusProvider: { _ in
                 MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
             },
@@ -267,7 +267,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
             },
             segments: [],
             audioURL: nil,
-            translationHandler: { text, _ in text },
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } },
             summaryStatusProvider: { _ in
                 MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
             },
@@ -450,7 +450,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
                 )
             ],
             audioURL: nil,
-            translationHandler: { text, _ in text },
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } },
             summaryStatusProvider: { _ in
                 MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
             },
@@ -534,7 +534,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
                 )
             ],
             audioURL: nil,
-            translationHandler: { text, _ in text },
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } },
             summaryStatusProvider: { _ in
                 MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
             },
@@ -596,7 +596,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
             summaryModelOptionsProvider: {
                 [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")]
             },
-            translationHandler: { text, _ in text }
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } }
         )
         let localeIdentifiers = ["en", "zh-Hans", "ja"]
         let inProgressSubtitles = localeIdentifiers.map { localeIdentifier in
@@ -681,7 +681,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
             summaryModelOptionsProvider: {
                 [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test Model", subtitle: "Local")]
             },
-            translationHandler: { text, _ in text }
+            translationHandler: { text, _ in MeetingTranslationOperation(executionScope: .externalRequest) { text } }
         )
 
         liveState.segments = [
@@ -706,11 +706,130 @@ final class MeetingDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.segments.first?.displaySpeakerTitle, "Speaker 2")
     }
 
+    func testFailedDetailTranslationDoesNotRetryIndefinitely() async {
+        var invocationCount = 0
+        let segment = MeetingTranscriptSegment(
+            speaker: .them,
+            startSeconds: 0,
+            endSeconds: 1,
+            text: "Translate once"
+        )
+        let viewModel = makeHistoryViewModel(
+            initialSettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: nil,
+                modelSelectionID: "custom-llm:test"
+            ),
+            modelOptions: [],
+            segments: [segment],
+            translationHandler: { _, _ in
+                MeetingTranslationOperation(executionScope: .externalRequest) {
+                    invocationCount += 1
+                    throw MeetingDetailTranslationTestError.failed
+                }
+            }
+        )
+
+        viewModel.translationDraftLanguageRaw = TranslationTargetLanguage.english.rawValue
+        viewModel.confirmTranslationLanguageSelection()
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(invocationCount, 1)
+        XCTAssertFalse(viewModel.segments[0].isTranslationPending)
+    }
+
+    func testEmptyDetailTranslationDoesNotRetryIndefinitely() async {
+        var invocationCount = 0
+        let viewModel = makeHistoryViewModel(
+            initialSettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: nil,
+                modelSelectionID: "custom-llm:test"
+            ),
+            modelOptions: [],
+            segments: [MeetingTranscriptSegment(
+                speaker: .them,
+                startSeconds: 0,
+                endSeconds: 1,
+                text: "Empty result"
+            )],
+            translationHandler: { _, _ in
+                MeetingTranslationOperation(executionScope: .externalRequest) {
+                    invocationCount += 1
+                    return "   "
+                }
+            }
+        )
+
+        viewModel.translationDraftLanguageRaw = TranslationTargetLanguage.english.rawValue
+        viewModel.confirmTranslationLanguageSelection()
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(invocationCount, 1)
+        XCTAssertFalse(viewModel.segments[0].isTranslationPending)
+    }
+
+    func testUpdatedSegmentTextIsTranslatedAfterActiveRevisionCompletes() async {
+        let segmentID = UUID()
+        let gate = MeetingDetailTranslationGate()
+        var translatedSources: [String] = []
+        let liveState = MeetingOverlayState()
+        liveState.isPresented = true
+        liveState.isRecording = true
+        liveState.segments = [MeetingTranscriptSegment(
+            id: segmentID,
+            speaker: .them,
+            startSeconds: 0,
+            endSeconds: 1,
+            text: "old text"
+        )]
+        let viewModel = MeetingDetailViewModel(
+            liveState: liveState,
+            initialSummarySettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: nil,
+                modelSelectionID: "custom-llm:test"
+            ),
+            summaryModelOptions: [],
+            summarySettingsProvider: {
+                MeetingSummarySettingsSnapshot(autoGenerate: false, promptTemplate: nil, modelSelectionID: "custom-llm:test")
+            },
+            summaryModelOptionsProvider: { [] },
+            translationHandler: { source, _ in
+                MeetingTranslationOperation(executionScope: .externalRequest) {
+                    translatedSources.append(source)
+                    if source == "old text" { await gate.wait() }
+                    return "translated: \(source)"
+                }
+            }
+        )
+
+        viewModel.translationDraftLanguageRaw = TranslationTargetLanguage.english.rawValue
+        viewModel.confirmTranslationLanguageSelection()
+        await gate.waitUntilStarted()
+        viewModel.updateLiveSegments([MeetingTranscriptSegment(
+            id: segmentID,
+            speaker: .them,
+            startSeconds: 0,
+            endSeconds: 2,
+            text: "new text"
+        )])
+        await gate.open()
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(translatedSources, ["old text", "new text"])
+        XCTAssertEqual(viewModel.segments.first?.translatedText, "translated: new text")
+        XCTAssertFalse(viewModel.segments.first?.isTranslationPending ?? true)
+    }
+
     private func makeHistoryViewModel(
         initialSettings: MeetingSummarySettingsSnapshot,
         modelOptions: [MeetingSummaryModelOption],
         captureMode: MeetingCaptureMode? = nil,
-        segments: [MeetingTranscriptSegment] = []
+        segments: [MeetingTranscriptSegment] = [],
+        translationHandler: @escaping MeetingDetailWindowManager.TranslationHandler = { text, _ in
+            MeetingTranslationOperation(executionScope: .externalRequest) { text }
+        }
     ) -> MeetingDetailViewModel {
         MeetingDetailViewModel(
             title: "Meeting Details",
@@ -725,7 +844,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
             segments: segments,
             captureMode: captureMode,
             audioURL: nil,
-            translationHandler: { text, _ in text },
+            translationHandler: translationHandler,
             summaryStatusProvider: { _ in
                 MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
             },
@@ -763,5 +882,28 @@ final class MeetingDetailViewModelTests: XCTestCase {
             }
         }
         try body()
+    }
+}
+
+private enum MeetingDetailTranslationTestError: Error {
+    case failed
+}
+
+private actor MeetingDetailTranslationGate {
+    private var started = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        started = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func waitUntilStarted() async {
+        while !started { await Task.yield() }
+    }
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
     }
 }

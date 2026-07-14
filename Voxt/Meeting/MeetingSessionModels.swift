@@ -5,6 +5,7 @@ import Foundation
 import Combine
 
 struct MeetingSessionResult {
+    let recoverySessionID: UUID?
     let captureMode: MeetingCaptureMode
     let transcriptionEngine: TranscriptionEngine
     let transcriptionModelDescription: String
@@ -14,6 +15,7 @@ struct MeetingSessionResult {
     let archivedAudioURL: URL?
 
     init(
+        recoverySessionID: UUID? = nil,
         captureMode: MeetingCaptureMode = .meeting,
         transcriptionEngine: TranscriptionEngine,
         transcriptionModelDescription: String,
@@ -22,6 +24,7 @@ struct MeetingSessionResult {
         audioDurationSeconds: TimeInterval,
         archivedAudioURL: URL?
     ) {
+        self.recoverySessionID = recoverySessionID
         self.captureMode = captureMode
         self.transcriptionEngine = transcriptionEngine
         self.transcriptionModelDescription = transcriptionModelDescription
@@ -214,13 +217,13 @@ final class MeetingOverlayState: ObservableObject {
     @Published var isFinalizing = false
     @Published var isPaused = false
     @Published var isCollapsed = false
-    @Published var audioLevel: Float = 0
     @Published var realtimeTranslateEnabled = false
     @Published var captureMode: MeetingCaptureMode = .meeting
     @Published var isCaptureModePickerPresented = false
     @Published var isRealtimeTranslationLanguagePickerPresented = false
     @Published var isCloseConfirmationPresented = false
     @Published var realtimeTranslationDraftLanguageRaw = TranslationTargetLanguage.english.rawValue
+    @Published var safetyMessage: String?
     @Published var segments: [MeetingTranscriptSegment] = []
 
     let waveformState = RecentAudioWaveformState()
@@ -232,7 +235,6 @@ final class MeetingOverlayState: ObservableObject {
         isFinalizing = false
         isPaused = false
         isCollapsed = false
-        audioLevel = 0
         waveformState.reset()
         waveformState.setActive(false)
         realtimeTranslateEnabled = false
@@ -241,6 +243,7 @@ final class MeetingOverlayState: ObservableObject {
         isRealtimeTranslationLanguagePickerPresented = false
         isCloseConfirmationPresented = false
         realtimeTranslationDraftLanguageRaw = TranslationTargetLanguage.english.rawValue
+        safetyMessage = nil
         segments = []
     }
 }

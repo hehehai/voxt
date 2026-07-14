@@ -330,6 +330,7 @@ actor OmniStreamVoiceActivityBackend: ASRVoiceActivityBackend {
     private var baseHandle: OmniStreamVADHandleBox?
     private var handles: [String: OmniStreamVADHandleBox] = [:]
     private var pendingSamples: [String: [Float]] = [:]
+    private var pendingSampleOffsets: [String: Int] = [:]
     private var lastDecisions: [String: ASRVoiceActivityFrameDecision] = [:]
 
     init(
@@ -355,6 +356,7 @@ actor OmniStreamVoiceActivityBackend: ASRVoiceActivityBackend {
     func reset() {
         guard let library else {
             pendingSamples.removeAll()
+            pendingSampleOffsets.removeAll()
             lastDecisions.removeAll()
             return
         }
@@ -365,6 +367,7 @@ actor OmniStreamVoiceActivityBackend: ASRVoiceActivityBackend {
             library.reset(handle.pointer)
         }
         pendingSamples.removeAll()
+        pendingSampleOffsets.removeAll()
         lastDecisions.removeAll()
     }
 
@@ -394,11 +397,13 @@ actor OmniStreamVoiceActivityBackend: ASRVoiceActivityBackend {
 
         var pending = pendingSamples[streamID] ?? []
         pending.append(contentsOf: prepared)
+        var pendingOffset = min(pendingSampleOffsets[streamID] ?? 0, pending.count)
 
         var latestDecision: ASRVoiceActivityFrameDecision?
-        while pending.count >= Self.chunkSize {
-            let chunk = Array(pending.prefix(Self.chunkSize))
-            pending.removeFirst(Self.chunkSize)
+        while pending.count - pendingOffset >= Self.chunkSize {
+            let endOffset = pendingOffset + Self.chunkSize
+            let chunk = Array(pending[pendingOffset..<endOffset])
+            pendingOffset = endOffset
             let result = try process(chunk: chunk, handle: handle)
             latestDecision = ASRVoiceActivityFrameDecision(
                 startSeconds: frame.startSeconds,
@@ -408,12 +413,27 @@ actor OmniStreamVoiceActivityBackend: ASRVoiceActivityBackend {
             )
         }
 
+        Self.compactPendingSamples(&pending, offset: &pendingOffset)
         pendingSamples[streamID] = pending
+        pendingSampleOffsets[streamID] = pendingOffset
         if let latestDecision {
             lastDecisions[streamID] = latestDecision
             return latestDecision
         }
         return lastDecisions[streamID]
+    }
+
+    private nonisolated static func compactPendingSamples(
+        _ samples: inout [Float],
+        offset: inout Int
+    ) {
+        if offset == samples.count {
+            samples.removeAll(keepingCapacity: true)
+            offset = 0
+        } else if offset >= chunkSize * 8 {
+            samples.removeFirst(offset)
+            offset = 0
+        }
     }
 
     private func handle(for streamID: String) throws -> OmniStreamVADHandleBox {

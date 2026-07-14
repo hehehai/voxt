@@ -79,7 +79,7 @@ enum MeetingChunkingMode: String, CaseIterable, Identifiable, Codable, Hashable,
 
     static func stored(in defaults: UserDefaults = .standard) -> MeetingChunkingMode {
         let rawValue = defaults.string(forKey: AppPreferenceKey.meetingChunkingMode) ?? ""
-        return MeetingChunkingMode(rawValue: rawValue) ?? .quality
+        return MeetingChunkingMode(rawValue: rawValue) ?? .automatic
     }
 
     func resolvedProfile(automaticProfile: MeetingChunkingProfile) -> MeetingChunkingProfile {
@@ -122,15 +122,15 @@ actor MeetingChunkAccumulator {
             self.config = .init(
                 silenceFlushSeconds: 0.45,
                 minSpeechSeconds: 0.35,
-                maxChunkSeconds: 2.6,
+                maxChunkSeconds: 7.0,
                 partialEmitIntervalSeconds: nil
             )
         case .realtime:
             self.config = .init(
-                silenceFlushSeconds: 0.18,
+                silenceFlushSeconds: 0.30,
                 minSpeechSeconds: 0.18,
-                maxChunkSeconds: 1.0,
-                partialEmitIntervalSeconds: 0.55
+                maxChunkSeconds: 6.0,
+                partialEmitIntervalSeconds: 2.0
             )
         }
     }

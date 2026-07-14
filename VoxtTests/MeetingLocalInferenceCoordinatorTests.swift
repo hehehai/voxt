@@ -1,0 +1,123 @@
+// MeetingLocalInferenceCoordinatorTests.swift
+// Verifies serialization, priority, and recording-time resource protection.
+
+import XCTest
+@testable import Voxt
+
+final class MeetingLocalInferenceCoordinatorTests: XCTestCase {
+    func testHeavyInferenceRunsOneOperationAtATime() async throws {
+        let coordinator = MeetingLocalInferenceCoordinator()
+        let tracker = MeetingInferenceConcurrencyTracker()
+
+        async let first: Void = coordinator.withPermit(.liveASRFinal) {
+            await tracker.begin()
+            try await Task.sleep(for: .milliseconds(20))
+            await tracker.end()
+        }
+        async let second: Void = coordinator.withPermit(.realtimeTranslation) {
+            await tracker.begin()
+            try await Task.sleep(for: .milliseconds(20))
+            await tracker.end()
+        }
+
+        _ = try await (first, second)
+        let peakCount = await tracker.peakCount()
+        XCTAssertEqual(peakCount, 1)
+    }
+
+    func testHigherPriorityWorkRunsBeforeQueuedBackgroundWork() async throws {
+        let coordinator = MeetingLocalInferenceCoordinator()
+        let gate = MeetingInferenceGate()
+        let order = MeetingInferenceOrderRecorder()
+
+        let active = Task {
+            try await coordinator.withPermit(.liveASRFinal) {
+                await gate.wait()
+            }
+        }
+        await gate.waitUntilStarted()
+
+        let background = Task {
+            try await coordinator.withPermit(.summary) {
+                await order.append("summary")
+            }
+        }
+        await Task.yield()
+        let live = Task {
+            try await coordinator.withPermit(.liveASRFeed) {
+                await order.append("live")
+            }
+        }
+        await Task.yield()
+        await gate.open()
+
+        _ = try await (active.value, background.value, live.value)
+        let values = await order.values()
+        XCTAssertEqual(values, ["live", "summary"])
+    }
+
+    func testBackgroundWorkWaitsWhileRecording() async throws {
+        let coordinator = MeetingLocalInferenceCoordinator()
+        let tracker = MeetingInferenceConcurrencyTracker()
+        await coordinator.setRecordingActive(true)
+
+        let task = Task {
+            try await coordinator.withPermit(.summary) {
+                await tracker.begin()
+                await tracker.end()
+            }
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        let peakWhileRecording = await tracker.peakCount()
+        XCTAssertEqual(peakWhileRecording, 0)
+
+        await coordinator.setRecordingActive(false)
+        try await task.value
+        let peakAfterRecording = await tracker.peakCount()
+        XCTAssertEqual(peakAfterRecording, 1)
+    }
+}
+
+private actor MeetingInferenceConcurrencyTracker {
+    private var active = 0
+    private var peak = 0
+
+    func begin() {
+        active += 1
+        peak = max(peak, active)
+    }
+
+    func end() {
+        active -= 1
+    }
+
+    func peakCount() -> Int { peak }
+}
+
+private actor MeetingInferenceGate {
+    private var started = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        started = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func waitUntilStarted() async {
+        while !started {
+            await Task.yield()
+        }
+    }
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private actor MeetingInferenceOrderRecorder {
+    private var recorded: [String] = []
+
+    func append(_ value: String) { recorded.append(value) }
+    func values() -> [String] { recorded }
+}

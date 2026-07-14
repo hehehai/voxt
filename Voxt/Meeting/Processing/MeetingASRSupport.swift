@@ -5,20 +5,21 @@ import Foundation
 
 enum MeetingASRResolvedMode: Equatable, Sendable {
     case chunk(profile: MeetingChunkingProfile)
+    case liveLocal(mode: MLXLiveMode)
     case liveRemote(provider: RemoteASRProvider)
 
     var chunkingProfile: MeetingChunkingProfile {
         switch self {
         case .chunk(let profile):
             return profile
-        case .liveRemote:
+        case .liveLocal, .liveRemote:
             return .realtime
         }
     }
 
     var usesLiveSessions: Bool {
         switch self {
-        case .liveRemote:
+        case .liveLocal, .liveRemote:
             return true
         case .chunk:
             return false
@@ -67,12 +68,11 @@ enum MeetingASRSupport {
     ) -> MeetingASREngineContext {
         switch transcriptionEngine {
         case .mlxAudio:
+            let localMode = resolveLocalMode(repo: mlxCurrentModelRepo)
             return MeetingASREngineContext(
                 engine: .mlxAudio,
                 historyModelDescription: "\(mlxDisplayTitle(mlxCurrentModelRepo)) (\(mlxCurrentModelRepo))",
-                resolvedMode: .chunk(
-                    profile: MLXModelManager.isRealtimeCapableModelRepo(mlxCurrentModelRepo) ? .realtime : .quality
-                ),
+                resolvedMode: localMode,
                 needsModelInitialization: !mlxIsCurrentModelLoaded && modelStateNeedsInitialization(mlxModelState),
                 mlxModelRepo: mlxCurrentModelRepo
             )
@@ -109,6 +109,20 @@ enum MeetingASRSupport {
                 resolvedMode: .chunk(profile: .quality),
                 needsModelInitialization: false
             )
+        }
+    }
+
+    static func resolveLocalMode(repo: String) -> MeetingASRResolvedMode {
+        guard MLXModelCatalog.isAvailableModelRepo(repo) else {
+            return .chunk(profile: .quality)
+        }
+        let liveMode = MLXModelCatalog.liveMode(for: repo)
+        switch liveMode {
+        case .nativeQwenLive, .nativeStreamingLive, .nativeNemotronLive:
+            return .liveLocal(mode: liveMode)
+        case .batchPreview, .nativeVoxtralLive:
+            // nativeVoxtralLive belongs to hidden support and intentionally keeps its old path.
+            return .chunk(profile: .quality)
         }
     }
 

@@ -10,7 +10,7 @@ import SwiftUI
 final class MeetingDetailWindowManager {
     static let shared = MeetingDetailWindowManager()
 
-    typealias TranslationHandler = @MainActor (String, TranslationTargetLanguage) async throws -> String
+    typealias TranslationHandler = @MainActor (String, TranslationTargetLanguage) -> MeetingTranslationOperation
     typealias SummarySettingsProvider = @MainActor () -> MeetingSummarySettingsSnapshot
     typealias SummaryModelOptionsProvider = @MainActor () -> [MeetingSummaryModelOption]
     typealias SummaryStatusProvider = @MainActor (MeetingSummarySettingsSnapshot) -> MeetingSummaryProviderStatus
@@ -352,7 +352,7 @@ private struct MeetingDetailWindowView: View {
         .sheet(isPresented: $viewModel.isSummarySettingsPresented) {
             MeetingDetailSummarySettingsDialog(viewModel: viewModel)
         }
-        .onChange(of: viewModel.segments) { _, _ in
+        .onChange(of: viewModel.segmentStructureRevision) { _, _ in
             refreshSpeakerOrdinalMap()
             updateActiveSegment(for: playbackController.currentTime)
         }
@@ -605,10 +605,10 @@ private struct MeetingDetailWindowView: View {
                     proxy.scrollTo(activeSegmentID, anchor: .center)
                 }
             }
-            .onChange(of: viewModel.segments) { _, newValue in
+            .onChange(of: viewModel.segmentStructureRevision) { _, _ in
                 guard viewModel.mode == .live,
                       viewModel.transcriptPresentationMode == .timeline,
-                      let newest = displayedNewestSegmentID(in: newValue)
+                      let newest = displayedNewestSegmentID(in: viewModel.segments)
                 else {
                     return
                 }

@@ -104,6 +104,49 @@ final class MeetingAudioArchiveTests: XCTestCase {
         XCTAssertTrue(recordingDescriptors.isEmpty)
     }
 
+    func testSmallContinuousAppendsUseBatchedPersistentWrites() async {
+        let archive = MeetingAudioArchive()
+        let frame = [Float](repeating: 0.25, count: 160)
+
+        for index in 0..<100 {
+            await archive.append(
+                samples: frame,
+                sampleRate: 16_000,
+                speaker: .me,
+                startSeconds: Double(index * frame.count) / 16_000
+            )
+        }
+
+        let statistics = await archive.currentIOStatistics()
+        XCTAssertEqual(statistics.appendCount, 100)
+        XCTAssertEqual(statistics.resampleCount, 0)
+        XCTAssertEqual(statistics.writeOperationCount, 1)
+        XCTAssertEqual(statistics.writeHandleOpenCount, 1)
+        XCTAssertEqual(statistics.writtenByteCount, Int64(16_000 * MemoryLayout<Float>.size))
+    }
+
+    func testWindowReadOnlyLoadsRequestedFloatSamples() async throws {
+        let archive = MeetingAudioArchive()
+        await archive.append(
+            samples: [Float](repeating: 0.4, count: 32_000),
+            sampleRate: 16_000,
+            speaker: .me,
+            startSeconds: 0
+        )
+
+        let loadedAsset = await archive.loadAssetWindow(
+            source: .microphone,
+            startSeconds: 0.5,
+            endSeconds: 0.6
+        )
+        let asset = try XCTUnwrap(loadedAsset)
+        let statistics = await archive.currentIOStatistics()
+
+        XCTAssertEqual(asset.samples.count, 1_600)
+        XCTAssertEqual(statistics.readOperationCount, 1)
+        XCTAssertEqual(statistics.readByteCount, Int64(1_600 * MemoryLayout<Float>.size))
+    }
+
     private func decodeMono16BitWAVSamples(from url: URL) throws -> [Float] {
         let data = try Data(contentsOf: url)
         let dataRange = try findDataChunk(in: data)

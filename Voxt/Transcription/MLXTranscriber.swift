@@ -245,7 +245,7 @@ nonisolated final class MLXAudioLevelDelivery: @unchecked Sendable {
     }
 }
 
-private protocol MLXNativeStreamingSession: AnyObject, Sendable {
+nonisolated protocol MLXNativeStreamingSession: AnyObject, Sendable {
     var events: AsyncStream<TranscriptionEvent> { get }
     func feedAudio(samples: [Float])
     func stop()
@@ -254,6 +254,13 @@ private protocol MLXNativeStreamingSession: AnyObject, Sendable {
 
 extension StreamingInferenceSession: MLXNativeStreamingSession {}
 extension NemotronASRStreamingSession: MLXNativeStreamingSession {}
+
+nonisolated struct MLXMeetingNativeStreamingConfiguration: Sendable {
+    let session: any MLXNativeStreamingSession
+    let liveMode: MLXLiveMode
+    let qwenUsesAutomaticLanguageProtocol: Bool
+    let mossVisibleOutputMode: MossASROutputMode?
+}
 
 private final class MLXVoxtralNativeStreamingSession: MLXNativeStreamingSession, @unchecked Sendable {
     let events: AsyncStream<TranscriptionEvent>
@@ -1960,6 +1967,101 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private func resolvedSessionLiveMode() -> MLXLiveMode {
         guard sessionAllowsRealtimeTextDisplay else { return .batchPreview }
         return MLXModelManager.liveMode(for: modelManager.currentModelRepo)
+    }
+
+    func makeMeetingNativeStreamingConfiguration() async throws -> MLXMeetingNativeStreamingConfiguration {
+        let liveMode = MLXModelManager.liveMode(for: modelManager.currentModelRepo)
+        let loadedModel = try await modelManager.loadModel()
+
+        switch liveMode {
+        case .nativeQwenLive:
+            guard let model = loadedModel as? Qwen3ASRModel else {
+                throw NSError(
+                    domain: "Voxt.Meeting.NativeMLX",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "The selected Qwen ASR model could not create a streaming session."]
+                )
+            }
+            let language = resolvedNativeQwenLiveLanguage()
+            return MLXMeetingNativeStreamingConfiguration(
+                session: StreamingInferenceSession(
+                    model: model,
+                    config: StreamingConfig(
+                        language: language,
+                        temperature: 0,
+                        maxTokensPerPass: 1024
+                    )
+                ),
+                liveMode: liveMode,
+                qwenUsesAutomaticLanguageProtocol: language == nil,
+                mossVisibleOutputMode: nil
+            )
+        case .nativeStreamingLive:
+            guard loadedModel is CohereTranscribeModel || loadedModel is MossTranscribeDiarizeModel else {
+                throw NSError(
+                    domain: "Voxt.Meeting.NativeMLX",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "The selected MLX model does not support a native streaming meeting session."]
+                )
+            }
+            let inferenceConfiguration = resolvedInferenceConfiguration(for: .intermediate)
+            let isMoss = loadedModel is MossTranscribeDiarizeModel
+            return MLXMeetingNativeStreamingConfiguration(
+                session: StreamingInferenceSession(
+                    model: loadedModel,
+                    config: StreamingConfig(
+                        language: inferenceConfiguration.languageHint,
+                        temperature: inferenceConfiguration.generationParameters.temperature,
+                        maxTokensPerPass: inferenceConfiguration.generationParameters.maxTokens,
+                        prompt: isMoss ? inferenceConfiguration.mossPrompt : nil,
+                        usePunctuation: inferenceConfiguration.generationParameters.usePunctuation
+                    )
+                ),
+                liveMode: liveMode,
+                qwenUsesAutomaticLanguageProtocol: false,
+                // The final offline MOSS pass preserves structured speaker/timestamp output.
+                // The live overlay strips protocol tags to keep incremental text readable.
+                mossVisibleOutputMode: isMoss ? .plainText : nil
+            )
+        case .nativeNemotronLive:
+            guard let model = loadedModel as? NemotronASRModel else {
+                throw NSError(
+                    domain: "Voxt.Meeting.NativeMLX",
+                    code: -3,
+                    userInfo: [NSLocalizedDescriptionKey: "The selected Nemotron model could not create a streaming session."]
+                )
+            }
+            let tuningSettings = resolvedLocalTuningSettings()
+            let chunkMilliseconds = tuningSettings.nemotronStreamLatency.rawValue
+            let language = MLXTranscriptionPlanning.nativeNemotronLanguage(
+                requested: resolvedNativeNemotronLiveLanguage(),
+                availableLanguages: Array(model.promptDictionary.keys),
+                defaultLanguage: model.defaultLanguage
+            )
+            return MLXMeetingNativeStreamingConfiguration(
+                session: NemotronASRStreamingSession(
+                    model: model,
+                    config: StreamingConfig(
+                        decodeIntervalSeconds: Double(chunkMilliseconds) / 1000,
+                        boundaryDecodeIntervalSeconds: 0.2,
+                        boundaryBoostSeconds: 1.0,
+                        delayPreset: .custom(ms: chunkMilliseconds),
+                        language: language,
+                        temperature: 0,
+                        maxTokensPerPass: 1024
+                    )
+                ),
+                liveMode: liveMode,
+                qwenUsesAutomaticLanguageProtocol: false,
+                mossVisibleOutputMode: nil
+            )
+        case .batchPreview, .nativeVoxtralLive:
+            throw NSError(
+                domain: "Voxt.Meeting.NativeMLX",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "The selected model is not eligible for the visible local meeting streaming path."]
+            )
+        }
     }
 
     private func startNativeQwenLiveSession(revision: Int) {

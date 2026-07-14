@@ -170,10 +170,22 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
     }
 
     func transcribeSegments(chunk: BufferedMeetingChunk) async -> [MeetingTranscriptSegment] {
-        guard let result = await mlxTranscriber.transcribeMeetingChunkResult(
-            samples: chunk.samples,
-            sampleRate: chunk.sampleRate
-        ) else {
+        let workClass: MeetingLocalInferenceWorkClass = chunk.isFinal ? .liveASRFinal : .liveASRPartial
+        let result: MLXBufferedTranscriptionResult?
+        do {
+            result = try await MeetingLocalInferenceCoordinator.shared.withPermit(workClass) { [mlxTranscriber] in
+                await mlxTranscriber.transcribeMeetingChunkResult(
+                    samples: chunk.samples,
+                    sampleRate: chunk.sampleRate
+                )
+            }
+        } catch {
+            if !(error is CancellationError) {
+                VoxtLog.meetingWarning("Meeting MLX inference deferred or rejected: \(error.localizedDescription)")
+            }
+            return []
+        }
+        guard let result else {
             return []
         }
 
@@ -193,10 +205,13 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
         guard MLXModelFamily.family(for: modelManager.currentModelRepo) == .mossTranscribeDiarize else {
             return nil
         }
-        guard let result = try await mlxTranscriber.transcribeBufferedResult(
-            samples: asset.samples,
-            sampleRate: asset.sampleRate
-        ) else {
+        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(.finalASR) { [mlxTranscriber] in
+            try await mlxTranscriber.transcribeBufferedResult(
+                samples: asset.samples,
+                sampleRate: asset.sampleRate
+            )
+        }
+        guard let result else {
             return []
         }
         return meetingSegments(

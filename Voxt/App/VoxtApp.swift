@@ -167,8 +167,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.meetingRealtimeTranslationTargetLanguage
         },
         realtimeTranslationHandler: { [weak self] text, targetLanguage in
-            guard let self else { return text }
-            return try await self.translateMeetingRealtimeText(text, targetLanguage: targetLanguage)
+            guard let self else { return .cancelled() }
+            return self.makeMeetingTranslationOperation(text, targetLanguage: targetLanguage)
         }
     )
     var statusItem: NSStatusItem?
@@ -506,6 +506,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startObservingAudioInputDevices()
         refreshInputDevicesSnapshot(reason: "launch")
         buildMenu()
+        Task { @MainActor [weak self] in
+            await self?.recoverInterruptedMeetingFinalizationIfNeeded()
+        }
         appUpdateManager.onUpdatePresentationWillBegin = { [weak self] in
             self?.prepareMainWindowForUpdatePresentation()
         }

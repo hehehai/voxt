@@ -81,6 +81,14 @@ private struct MeetingOverlayCard: View {
                         .padding(.top, 6)
                         .padding(.bottom, 8)
 
+                    if let safetyMessage = state.safetyMessage {
+                        Text(safetyMessage)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.orange.opacity(0.95))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.bottom, 8)
+                    }
+
                     transcriptContent
                 }
             }

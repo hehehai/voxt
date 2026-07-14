@@ -274,11 +274,13 @@ actor ASRSileroStreamingVoiceActivityDetector {
     private var model: SileroVAD?
     private var states: [String: SileroVADStreamingState] = [:]
     private var pendingSamples: [String: [Float]] = [:]
+    private var pendingSampleOffsets: [String: Int] = [:]
     private var lastProbabilities: [String: Float] = [:]
 
     func reset() {
         states.removeAll()
         pendingSamples.removeAll()
+        pendingSampleOffsets.removeAll()
         lastProbabilities.removeAll()
     }
 
@@ -299,11 +301,13 @@ actor ASRSileroStreamingVoiceActivityDetector {
 
         var pending = pendingSamples[streamID] ?? []
         pending.append(contentsOf: prepared)
+        var pendingOffset = min(pendingSampleOffsets[streamID] ?? 0, pending.count)
         var latestProbability: Float?
 
-        while pending.count >= chunkSize {
-            let chunk = Array(pending.prefix(chunkSize))
-            pending.removeFirst(chunkSize)
+        while pending.count - pendingOffset >= chunkSize {
+            let endOffset = pendingOffset + chunkSize
+            let chunk = Array(pending[pendingOffset..<endOffset])
+            pendingOffset = endOffset
             let state = states[streamID]
             let (probabilityArray, nextState) = try model.feed(
                 chunk: MLXArray(chunk),
@@ -317,12 +321,28 @@ actor ASRSileroStreamingVoiceActivityDetector {
             states[streamID] = nextState
         }
 
+        Self.compactPendingSamples(&pending, offset: &pendingOffset, chunkSize: chunkSize)
         pendingSamples[streamID] = pending
+        pendingSampleOffsets[streamID] = pendingOffset
         if let latestProbability {
             lastProbabilities[streamID] = latestProbability
             return latestProbability
         }
         return nil
+    }
+
+    private nonisolated static func compactPendingSamples(
+        _ samples: inout [Float],
+        offset: inout Int,
+        chunkSize: Int
+    ) {
+        if offset == samples.count {
+            samples.removeAll(keepingCapacity: true)
+            offset = 0
+        } else if offset >= chunkSize * 8 {
+            samples.removeFirst(offset)
+            offset = 0
+        }
     }
 
     private func loadModelIfAvailable() async throws -> SileroVAD {

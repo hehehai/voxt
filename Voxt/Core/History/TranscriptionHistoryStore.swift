@@ -572,6 +572,7 @@ final class TranscriptionHistoryStore: ObservableObject {
 
     @discardableResult
     func append(
+        entryID: UUID = UUID(),
         text: String,
         transcriptionEngine: String,
         transcriptionModel: String,
@@ -613,9 +614,12 @@ final class TranscriptionHistoryStore: ObservableObject {
     ) -> UUID? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || (allowEmptyTextWithAudio && audioRelativePath != nil) else { return nil }
+        if (try? repository.entry(id: entryID)) != nil {
+            return entryID
+        }
 
         let entry = TranscriptionHistoryEntry(
-            id: UUID(),
+            id: entryID,
             text: trimmed,
             createdAt: Date(),
             transcriptionEngine: transcriptionEngine,
@@ -656,12 +660,13 @@ final class TranscriptionHistoryStore: ObservableObject {
             dictionarySuggestedTerms: dictionarySuggestedTerms
         )
 
+        guard persistEntry(entry) else { return nil }
+
         totalEntryCount += 1
         cacheUpdatedEntry(entry)
         loadedCount = min(max(loadedCount + 1, min(pageSize, allEntries.count)), totalEntryCount)
         refreshEntryIndexes()
         publishVisibleEntries()
-        persistEntry(entry)
         cleanupRetainedEntriesIfNeeded()
         return entry.id
     }
@@ -982,18 +987,20 @@ final class TranscriptionHistoryStore: ObservableObject {
         return updatedEntry
     }
 
-    private func persistEntry(_ entry: TranscriptionHistoryEntry) {
+    @discardableResult
+    private func persistEntry(_ entry: TranscriptionHistoryEntry) -> Bool {
         let interruptedReload = invalidatePendingLoads()
         var didPersist = false
         do {
             try repository.upsert(entry)
             didPersist = true
         } catch {
-            // Keep UI responsive even if persistence fails.
+            VoxtLog.historyWarning("History entry persistence failed. entryID=\(entry.id.uuidString), error=\(error.localizedDescription)")
         }
         if interruptedReload, didPersist {
             reloadAsync()
         }
+        return didPersist
     }
 
     private var historyCleanupEnabled: Bool {

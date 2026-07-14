@@ -29,6 +29,27 @@ extension AppDelegate {
         try await translateText(text, targetLanguage: targetLanguage)
     }
 
+    func makeMeetingTranslationOperation(
+        _ text: String,
+        targetLanguage: TranslationTargetLanguage
+    ) -> MeetingTranslationOperation {
+        let resolution = resolvedTranslationProviderResolution(
+            targetLanguage: targetLanguage,
+            isSelectedTextTranslation: false
+        )
+        let executionScope: MeetingTranslationExecutionScope = resolution.provider == .remoteLLM
+            ? .externalRequest
+            : .localInference
+        return MeetingTranslationOperation(executionScope: executionScope) { [weak self] in
+            guard let self else { throw CancellationError() }
+            return try await self.translateText(
+                text,
+                targetLanguage: targetLanguage,
+                providerResolution: resolution
+            )
+        }
+    }
+
     var meetingSummaryAutoGenerateEnabled: Bool {
         meetingFeatureSettings.summaryAutoGenerate
     }
@@ -203,45 +224,23 @@ extension AppDelegate {
             )
         }
 
-        let prompt = MeetingSummarySupport.summaryPrompt(
-            transcript: trimmedTranscript,
-            settings: settings,
-            userMainLanguage: userMainLanguagePromptValue
-        )
         let modelLabel = meetingSummaryModelLogLabel(model)
         let startedAt = Date()
         VoxtLog.meeting(
-            "Meeting summary generation started. model=\(modelLabel), transcriptChars=\(trimmedTranscript.count), promptChars=\(prompt.count)"
-        )
-        VoxtLog.llm(
-            """
-            Meeting summary generation content. model=\(modelLabel)
-            [transcript]
-            \(VoxtLog.llmPreview(trimmedTranscript, limit: 4000))
-            [prompt]
-            \(VoxtLog.llmPreview(prompt, limit: 4000))
-            """
+            "Meeting summary generation started. model=\(modelLabel), transcriptChars=\(trimmedTranscript.count), templateChars=\(settings.promptTemplate?.count ?? 0)"
         )
         do {
-            let output = try await runMeetingSummaryPrompt(
-                prompt,
+            let output = try await runHierarchicalMeetingSummary(
                 transcript: trimmedTranscript,
+                settings: settings,
                 resolvedModel: model
             )
             let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            VoxtLog.llm(
-                """
-                Meeting summary generation output. model=\(modelLabel)
-                [output]
-                \(VoxtLog.llmPreview(output, limit: 4000))
-                """
-            )
 
             guard let summary = MeetingSummarySupport.decodeSummary(from: output, settings: settings) else {
                 VoxtLog.meetingWarning(
                     "Meeting summary generation parse failed. model=\(modelLabel), outputChars=\(output.count), elapsedMs=\(elapsedMs)"
                 )
-                VoxtLog.llm("Meeting summary generation parse failure output. model=\(modelLabel)\n\(VoxtLog.llmPreview(output, limit: 4000))")
                 throw NSError(
                     domain: "Voxt.MeetingSummary",
                     code: -5,
@@ -249,7 +248,7 @@ extension AppDelegate {
                 )
             }
             VoxtLog.meeting(
-                "Meeting summary generation succeeded. model=\(modelLabel), elapsedMs=\(elapsedMs), title=\(summary.title), todoCount=\(summary.todoItems.count), bodyChars=\(summary.body.count)"
+                "Meeting summary generation succeeded. model=\(modelLabel), elapsedMs=\(elapsedMs), titleChars=\(summary.title.count), todoCount=\(summary.todoItems.count), bodyChars=\(summary.body.count)"
             )
             return summary
         } catch {
@@ -309,31 +308,13 @@ extension AppDelegate {
         VoxtLog.meeting(
             "Meeting summary follow-up started. model=\(modelLabel), transcriptChars=\(trimmedTranscript.count), questionChars=\(trimmedQuestion.count), historyCount=\(history.count), hasSummary=\(summary != nil)"
         )
-        VoxtLog.llm(
-            """
-            Meeting summary follow-up content. model=\(modelLabel)
-            [question]
-            \(VoxtLog.llmPreview(trimmedQuestion, limit: 2000))
-            [transcript]
-            \(VoxtLog.llmPreview(trimmedTranscript, limit: 4000))
-            [prompt]
-            \(VoxtLog.llmPreview(prompt, limit: 4000))
-            """
-        )
         do {
-            let output = try await runMeetingSummaryPrompt(
+            let output = try await runMeetingSummaryPromptCoordinated(
                 prompt,
                 transcript: trimmedTranscript,
                 resolvedModel: model
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            VoxtLog.llm(
-                """
-                Meeting summary follow-up output. model=\(modelLabel)
-                [output]
-                \(VoxtLog.llmPreview(output, limit: 4000))
-                """
-            )
             VoxtLog.meeting(
                 "Meeting summary follow-up succeeded. model=\(modelLabel), elapsedMs=\(elapsedMs), outputChars=\(output.count)"
             )
@@ -396,6 +377,88 @@ extension AppDelegate {
         )
         VoxtLog.llmDebug("Meeting summary runtime dispatch. model=\(modelLabel), runtime=llm-execution-plan")
         return try await executeLLMExecutionPlan(plan)
+    }
+
+    private func runHierarchicalMeetingSummary(
+        transcript: String,
+        settings: MeetingSummarySettingsSnapshot,
+        resolvedModel: MeetingSummaryModel
+    ) async throws -> String {
+        var units = MeetingSummaryContextPlanning.windows(for: transcript)
+        guard !units.isEmpty else { return "" }
+
+        while true {
+            let groups = groupedSummaryUnits(units)
+            var outputs: [String] = []
+            outputs.reserveCapacity(groups.count)
+            for group in groups {
+                try Task.checkCancellation()
+                let boundedInput = group.joined(separator: "\n\n")
+                let prompt = MeetingSummarySupport.summaryPrompt(
+                    transcript: boundedInput,
+                    settings: settings,
+                    userMainLanguage: userMainLanguagePromptValue
+                )
+                let output = try await runMeetingSummaryPromptCoordinated(
+                    prompt,
+                    transcript: boundedInput,
+                    resolvedModel: resolvedModel
+                )
+                outputs.append(output)
+            }
+            if outputs.count == 1 {
+                return outputs[0]
+            }
+            units = outputs.map { output in
+                let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                return String(trimmed.prefix(4_000))
+            }
+        }
+    }
+
+    private func groupedSummaryUnits(_ units: [String]) -> [[String]] {
+        let limit = MeetingSummaryContextPlanning.summaryWindowCharacterLimit
+        var groups: [[String]] = []
+        var current: [String] = []
+        var currentCount = 0
+        for unit in units {
+            let bounded = String(unit.prefix(limit))
+            let addedCount = bounded.count + (current.isEmpty ? 0 : 2)
+            if !current.isEmpty, currentCount + addedCount > limit {
+                groups.append(current)
+                current = []
+                currentCount = 0
+            }
+            current.append(bounded)
+            currentCount += addedCount
+        }
+        if !current.isEmpty {
+            groups.append(current)
+        }
+        return groups
+    }
+
+    private func runMeetingSummaryPromptCoordinated(
+        _ prompt: String,
+        transcript: String,
+        resolvedModel: MeetingSummaryModel
+    ) async throws -> String {
+        switch resolvedModel {
+        case .remoteLLM:
+            return try await runMeetingSummaryPrompt(
+                prompt,
+                transcript: transcript,
+                resolvedModel: resolvedModel
+            )
+        case .appleIntelligence, .customLLM:
+            return try await MeetingLocalInferenceCoordinator.shared.withPermit(.summary) {
+                try await self.runMeetingSummaryPrompt(
+                    prompt,
+                    transcript: transcript,
+                    resolvedModel: resolvedModel
+                )
+            }
+        }
     }
 
     private func meetingSummaryExecutionProvider(

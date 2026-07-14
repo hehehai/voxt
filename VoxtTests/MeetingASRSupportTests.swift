@@ -15,6 +15,8 @@ final class MeetingASRSupportTests: XCTestCase {
         switch context.resolvedMode {
         case .chunk(let profile):
             XCTAssertEqual(profile, expectedProfile, file: file, line: line)
+        case .liveLocal(let mode):
+            XCTFail("Expected chunk mode, got live local for \(mode)", file: file, line: line)
         case .liveRemote(let provider):
             XCTFail("Expected chunk mode, got live remote for \(provider)", file: file, line: line)
         }
@@ -29,6 +31,8 @@ final class MeetingASRSupportTests: XCTestCase {
         switch context.resolvedMode {
         case .liveRemote(let provider):
             XCTAssertEqual(provider, expectedProvider, file: file, line: line)
+        case .liveLocal(let mode):
+            XCTFail("Expected live remote mode, got live local mode \(mode)", file: file, line: line)
         case .chunk(let profile):
             XCTFail("Expected live remote mode, got chunk mode \(profile)", file: file, line: line)
         }
@@ -46,7 +50,7 @@ final class MeetingASRSupportTests: XCTestCase {
         )
 
         XCTAssertEqual(context.engine, .mlxAudio)
-        XCTAssertEqual(context.chunkingProfile, .realtime)
+        XCTAssertEqual(context.chunkingProfile, .quality)
         XCTAssertFalse(context.needsModelInitialization)
         XCTAssertEqual(
             context.historyModelDescription,
@@ -54,7 +58,7 @@ final class MeetingASRSupportTests: XCTestCase {
         )
     }
 
-    func testMLXRealtimeModelUsesRealtimeProfile() {
+    func testHiddenMLXRealtimeModelDoesNotEnterOptimizedLivePath() {
         let context = MeetingASRSupport.resolveContext(
             transcriptionEngine: .mlxAudio,
             mlxModelState: .ready,
@@ -66,8 +70,31 @@ final class MeetingASRSupportTests: XCTestCase {
         )
 
         XCTAssertEqual(context.engine, .mlxAudio)
-        XCTAssertEqual(context.chunkingProfile, .realtime)
+        XCTAssertEqual(context.chunkingProfile, .quality)
         XCTAssertFalse(context.needsModelInitialization)
+        assertChunkMode(context, profile: .quality)
+    }
+
+    func testVisibleQwenModelUsesNativeLocalLiveMode() {
+        let mode = MeetingASRSupport.resolveLocalMode(repo: "mlx-community/Qwen3-ASR-0.6B-4bit")
+
+        XCTAssertEqual(mode, .liveLocal(mode: .nativeQwenLive))
+        XCTAssertTrue(mode.usesLiveSessions)
+    }
+
+    func testVisibleCohereMossAndNemotronUseTheirNativeLocalLiveModes() {
+        XCTAssertEqual(
+            MeetingASRSupport.resolveLocalMode(repo: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"),
+            .liveLocal(mode: .nativeStreamingLive)
+        )
+        XCTAssertEqual(
+            MeetingASRSupport.resolveLocalMode(repo: "OpenMOSS-Team/MOSS-Transcribe-Diarize"),
+            .liveLocal(mode: .nativeStreamingLive)
+        )
+        XCTAssertEqual(
+            MeetingASRSupport.resolveLocalMode(repo: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"),
+            .liveLocal(mode: .nativeNemotronLive)
+        )
     }
 
     func testSherpaMeetingContextUsesSelectedModelDescription() {

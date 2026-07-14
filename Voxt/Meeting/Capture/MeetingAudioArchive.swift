@@ -3,19 +3,56 @@
 
 import Foundation
 
+nonisolated struct MeetingAudioArchiveIOStatistics: Equatable, Sendable {
+    var appendCount = 0
+    var resampleCount = 0
+    var writeOperationCount = 0
+    var writeHandleOpenCount = 0
+    var writtenByteCount: Int64 = 0
+    var readOperationCount = 0
+    var readHandleOpenCount = 0
+    var readByteCount: Int64 = 0
+}
+
 actor MeetingAudioArchive {
     private static let segmentDurationSeconds: TimeInterval = 300
-    private static let maxAssetDurationSeconds: TimeInterval = 300
+    private static let maxAssetDurationSeconds: TimeInterval = 60
     private static let exportWindowDurationSeconds: TimeInterval = 60
+    private static let writeBatchDurationSeconds: TimeInterval = 1
     private static let silenceThreshold: Float = 0.0001
+    private static let diskCapacityCheckInterval: TimeInterval = 60
+    private static let minimumDiskReserveBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
+
+    private struct PendingWrite {
+        let segmentIndex: Int
+        let sampleOffset: Int
+        var samples: [Float]
+
+        var endSampleOffset: Int {
+            sampleOffset + samples.count
+        }
+    }
+
+    private struct ActiveWriteHandle {
+        let segmentIndex: Int
+        let handle: FileHandle
+    }
 
     private let targetSampleRate: Double = HistoryAudioArchiveSupport.targetSampleRate
     private let fileManager = FileManager.default
     private var tempDirectoryURL: URL?
     private var meWrittenRange: Range<Int>?
     private var themWrittenRange: Range<Int>?
+    private var pendingWrites: [MeetingSpeaker: PendingWrite] = [:]
+    private var activeWriteHandles: [MeetingSpeaker: ActiveWriteHandle] = [:]
+    private var ioStatistics = MeetingAudioArchiveIOStatistics()
+    private var lastDiskCapacityCheckAt: Date?
+    private var safetyFailureMessage: String?
 
     deinit {
+        for writer in activeWriteHandles.values {
+            try? writer.handle.close()
+        }
         if let tempDirectoryURL {
             try? fileManager.removeItem(at: tempDirectoryURL)
         }
@@ -28,12 +65,17 @@ actor MeetingAudioArchive {
         startSeconds: TimeInterval
     ) {
         guard !samples.isEmpty else { return }
+        ioStatistics.appendCount += 1
+        if abs(sampleRate - targetSampleRate) > 1 {
+            ioStatistics.resampleCount += 1
+        }
         let preparedSamples = Self.resample(samples: samples, from: sampleRate, to: targetSampleRate)
         guard !preparedSamples.isEmpty else { return }
 
         let startIndex = max(Int((startSeconds * targetSampleRate).rounded()), 0)
         do {
-            try write(preparedSamples, at: startIndex, speaker: speaker)
+            try validateDiskCapacityIfNeeded(additionalSampleCount: preparedSamples.count)
+            try enqueueWrite(preparedSamples, at: startIndex, speaker: speaker)
             switch speaker {
             case .me:
                 meWrittenRange = Self.union(meWrittenRange, with: startIndex..<(startIndex + preparedSamples.count))
@@ -41,11 +83,13 @@ actor MeetingAudioArchive {
                 themWrittenRange = Self.union(themWrittenRange, with: startIndex..<(startIndex + preparedSamples.count))
             }
         } catch {
+            safetyFailureMessage = "Recording stopped to protect this Mac because meeting audio could not be written safely. Free some disk space, then try again."
             VoxtLog.meetingWarning("Meeting audio archive append failed: \(error.localizedDescription)")
         }
     }
 
     func exportWAV(to destinationURL: URL) throws -> Bool {
+        try prepareForReading()
         guard let range = combinedWrittenRange(), range.lowerBound < range.upperBound else {
             return false
         }
@@ -127,6 +171,12 @@ actor MeetingAudioArchive {
     }
 
     func loadVoiceActivityAsset(_ descriptor: MeetingAudioAssetDescriptor) -> MeetingAudioAsset? {
+        do {
+            try prepareForReading()
+        } catch {
+            VoxtLog.meetingWarning("Meeting audio archive flush before read failed: \(error.localizedDescription)")
+            return nil
+        }
         let range = descriptor.startSample..<(descriptor.startSample + descriptor.sampleCount)
         guard range.lowerBound >= 0, range.lowerBound < range.upperBound else { return nil }
         let samples: [Float]
@@ -169,12 +219,52 @@ actor MeetingAudioArchive {
     }
 
     func reset() {
+        closeActiveWriteHandles()
         if let tempDirectoryURL {
             try? fileManager.removeItem(at: tempDirectoryURL)
         }
         tempDirectoryURL = nil
         meWrittenRange = nil
         themWrittenRange = nil
+        pendingWrites.removeAll(keepingCapacity: false)
+        ioStatistics = MeetingAudioArchiveIOStatistics()
+        lastDiskCapacityCheckAt = nil
+        safetyFailureMessage = nil
+    }
+
+    func currentIOStatistics() -> MeetingAudioArchiveIOStatistics {
+        ioStatistics
+    }
+
+    func consumeSafetyFailureMessage() -> String? {
+        defer { safetyFailureMessage = nil }
+        return safetyFailureMessage
+    }
+
+    private func validateDiskCapacityIfNeeded(additionalSampleCount: Int) throws {
+        let now = Date()
+        if let lastDiskCapacityCheckAt,
+           now.timeIntervalSince(lastDiskCapacityCheckAt) < Self.diskCapacityCheckInterval {
+            return
+        }
+        lastDiskCapacityCheckAt = now
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let values = try directory.resourceValues(forKeys: [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeTotalCapacityKey
+        ])
+        guard let available = values.volumeAvailableCapacityForImportantUsage else { return }
+        let total = Int64(values.volumeTotalCapacity ?? 0)
+        let reserve = max(Self.minimumDiskReserveBytes, total / 20)
+        let pendingBytes = Int64(max(additionalSampleCount, 0) * MemoryLayout<Float>.size)
+        guard available - pendingBytes >= reserve else {
+            throw NSError(
+                domain: "Voxt.MeetingAudioArchive",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Insufficient disk reserve for safe meeting capture."]
+            )
+        }
     }
 
     private func descriptors(
@@ -199,9 +289,10 @@ actor MeetingAudioArchive {
         return output
     }
 
-    private func write(_ samples: [Float], at startIndex: Int, speaker: MeetingSpeaker) throws {
+    private func enqueueWrite(_ samples: [Float], at startIndex: Int, speaker: MeetingSpeaker) throws {
         guard !samples.isEmpty else { return }
         let samplesPerSegment = max(Int(Self.segmentDurationSeconds * targetSampleRate), 1)
+        let writeBatchSamples = max(Int(Self.writeBatchDurationSeconds * targetSampleRate), 1)
         var remainingStart = startIndex
         var sampleOffset = 0
 
@@ -209,22 +300,83 @@ actor MeetingAudioArchive {
             let segmentIndex = remainingStart / samplesPerSegment
             let offsetInSegment = remainingStart % samplesPerSegment
             let writableCount = min(samplesPerSegment - offsetInSegment, samples.count - sampleOffset)
-            let segmentSamples = Array(samples[sampleOffset..<(sampleOffset + writableCount)])
-            try write(segmentSamples, to: segmentURL(for: speaker, index: segmentIndex), sampleOffset: offsetInSegment)
+            let newSamples = samples[sampleOffset..<(sampleOffset + writableCount)]
+
+            if var pending = pendingWrites[speaker],
+               pending.segmentIndex == segmentIndex,
+               pending.endSampleOffset == offsetInSegment {
+                pending.samples.append(contentsOf: newSamples)
+                pendingWrites[speaker] = pending
+            } else {
+                try flushPendingWrite(for: speaker)
+                pendingWrites[speaker] = PendingWrite(
+                    segmentIndex: segmentIndex,
+                    sampleOffset: offsetInSegment,
+                    samples: Array(newSamples)
+                )
+            }
+
+            if let pending = pendingWrites[speaker],
+               pending.samples.count >= writeBatchSamples || pending.endSampleOffset >= samplesPerSegment {
+                try flushPendingWrite(for: speaker)
+            }
             sampleOffset += writableCount
             remainingStart += writableCount
         }
     }
 
-    private func write(_ samples: [Float], to url: URL, sampleOffset: Int) throws {
-        let byteOffset = UInt64(sampleOffset * MemoryLayout<Float>.size)
+    private func flushPendingWrites() throws {
+        for speaker in [MeetingSpeaker.me, .them] {
+            try flushPendingWrite(for: speaker)
+        }
+    }
+
+    private func flushPendingWrite(for speaker: MeetingSpeaker) throws {
+        guard let pending = pendingWrites[speaker], !pending.samples.isEmpty else {
+            pendingWrites[speaker] = nil
+            return
+        }
+        let url = try segmentURL(for: speaker, index: pending.segmentIndex)
         if !fileManager.fileExists(atPath: url.path) {
             fileManager.createFile(atPath: url.path, contents: nil, attributes: nil)
         }
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
+        let handle = try writeHandle(for: speaker, segmentIndex: pending.segmentIndex, url: url)
+        let byteOffset = UInt64(pending.sampleOffset * MemoryLayout<Float>.size)
         try handle.seek(toOffset: byteOffset)
-        try handle.write(contentsOf: Self.floatData(from: samples))
+        let data = Self.floatData(from: pending.samples)
+        try handle.write(contentsOf: data)
+        ioStatistics.writeOperationCount += 1
+        ioStatistics.writtenByteCount += Int64(data.count)
+        pendingWrites[speaker] = nil
+    }
+
+    private func writeHandle(
+        for speaker: MeetingSpeaker,
+        segmentIndex: Int,
+        url: URL
+    ) throws -> FileHandle {
+        if let active = activeWriteHandles[speaker], active.segmentIndex == segmentIndex {
+            return active.handle
+        }
+        if let active = activeWriteHandles.removeValue(forKey: speaker) {
+            try? active.handle.close()
+        }
+        let handle = try FileHandle(forWritingTo: url)
+        activeWriteHandles[speaker] = ActiveWriteHandle(segmentIndex: segmentIndex, handle: handle)
+        ioStatistics.writeHandleOpenCount += 1
+        return handle
+    }
+
+    private func prepareForReading() throws {
+        try flushPendingWrites()
+        closeActiveWriteHandles()
+    }
+
+    private func closeActiveWriteHandles() {
+        for writer in activeWriteHandles.values {
+            try? writer.handle.close()
+        }
+        activeWriteHandles.removeAll(keepingCapacity: false)
     }
 
     private func readMixedSamples(in range: Range<Int>) -> [Float] {
@@ -252,14 +404,25 @@ actor MeetingAudioArchive {
             let segmentIndex = cursor / samplesPerSegment
             let offsetInSegment = cursor % samplesPerSegment
             let readableCount = min(samplesPerSegment - offsetInSegment, range.upperBound - cursor)
-            let url = segmentURLIfPresent(for: speaker, index: segmentIndex)
-            if let url, let data = try? Data(contentsOf: url), !data.isEmpty {
-                let byteStart = offsetInSegment * MemoryLayout<Float>.size
-                let availableSamples = max((data.count - byteStart) / MemoryLayout<Float>.size, 0)
-                let count = min(readableCount, availableSamples)
-                if count > 0 {
-                    let samples = Self.floatSamples(from: data, sampleOffset: offsetInSegment, count: count)
-                    output.replaceSubrange((cursor - range.lowerBound)..<(cursor - range.lowerBound + count), with: samples)
+            if let url = segmentURLIfPresent(for: speaker, index: segmentIndex),
+               let handle = try? FileHandle(forReadingFrom: url) {
+                ioStatistics.readHandleOpenCount += 1
+                defer { try? handle.close() }
+                let byteStart = UInt64(offsetInSegment * MemoryLayout<Float>.size)
+                let requestedBytes = readableCount * MemoryLayout<Float>.size
+                do {
+                    try handle.seek(toOffset: byteStart)
+                    if let data = try handle.read(upToCount: requestedBytes), !data.isEmpty {
+                        ioStatistics.readOperationCount += 1
+                        ioStatistics.readByteCount += Int64(data.count)
+                        let count = min(readableCount, data.count / MemoryLayout<Float>.size)
+                        if count > 0 {
+                            let samples = Self.floatSamples(from: data, sampleOffset: 0, count: count)
+                            output.replaceSubrange((cursor - range.lowerBound)..<(cursor - range.lowerBound + count), with: samples)
+                        }
+                    }
+                } catch {
+                    VoxtLog.meetingWarning("Meeting audio archive window read failed: \(error.localizedDescription)")
                 }
             }
             cursor += readableCount

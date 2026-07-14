@@ -52,7 +52,10 @@ enum TranscriptAssembler {
     ) -> TranscriptAssemblyResult {
         var segments = existingSegments
 
-        if let existingIndex = segments.firstIndex(where: { $0.id == segment.id }) {
+        let existingIndex = segments.last?.id == segment.id
+            ? segments.indices.last
+            : segments.firstIndex(where: { $0.id == segment.id })
+        if let existingIndex {
             let existing = segments[existingIndex]
             let existingTranslatedText = existing.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines)
             let preservesTranslatedText = existingTranslatedText?.isEmpty == false
@@ -76,24 +79,40 @@ enum TranscriptAssembler {
             return finalizeIfNeeded(at: existingIndex, isFinal: isFinal, in: segments)
         }
 
-        segments.append(segment)
-        segments.sort { lhs, rhs in
-            if lhs.startSeconds == rhs.startSeconds {
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            return lhs.startSeconds < rhs.startSeconds
-        }
-
-        guard let insertedIndex = segments.firstIndex(where: { $0.id == segment.id }) else {
-            return TranscriptAssemblyResult(
-                segments: segments,
-                affectedSegmentID: nil,
-                finalizedSegmentID: nil,
-                supersededSegmentIDs: []
-            )
+        let insertedIndex: Int
+        if let last = segments.last, orderedBefore(segment, last) {
+            insertedIndex = insertionIndex(for: segment, in: segments)
+            segments.insert(segment, at: insertedIndex)
+        } else {
+            insertedIndex = segments.count
+            segments.append(segment)
         }
 
         return finalizeIfNeeded(at: insertedIndex, isFinal: isFinal, in: segments)
+    }
+
+    private static func insertionIndex(
+        for segment: TranscriptSegment,
+        in segments: [TranscriptSegment]
+    ) -> Int {
+        var lowerBound = 0
+        var upperBound = segments.count
+        while lowerBound < upperBound {
+            let middle = lowerBound + (upperBound - lowerBound) / 2
+            if orderedBefore(segments[middle], segment) {
+                lowerBound = middle + 1
+            } else {
+                upperBound = middle
+            }
+        }
+        return lowerBound
+    }
+
+    private static func orderedBefore(_ lhs: TranscriptSegment, _ rhs: TranscriptSegment) -> Bool {
+        if lhs.startSeconds == rhs.startSeconds {
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+        return lhs.startSeconds < rhs.startSeconds
     }
 
     private static func finalizeIfNeeded(

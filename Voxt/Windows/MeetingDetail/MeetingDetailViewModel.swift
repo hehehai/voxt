@@ -38,6 +38,7 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published private(set) var title: String
     @Published private(set) var subtitle: String
     @Published private(set) var segments: [MeetingTranscriptSegment]
+    @Published private(set) var segmentStructureRevision = 0
     @Published private(set) var isPaused = false
     @Published private(set) var isFinalizing = false
     @Published var translationEnabled: Bool
@@ -79,9 +80,11 @@ final class MeetingDetailViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var isLiveRecording = false
-    private var translationTasks: [UUID: Task<Void, Never>] = [:]
+    private let translationScheduler = MeetingRealtimeTranslationScheduler(workClass: .detailTranslation)
+    private var failedTranslationRevisions: [UUID: String] = [:]
     private var summaryTask: Task<Void, Never>?
     private var summaryChatTask: Task<Void, Never>?
+    private var cachedSummaryTranscript: String?
     private var hasHandledInitialAppearance = false
 
     init(
@@ -232,7 +235,6 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     deinit {
-        translationTasks.values.forEach { $0.cancel() }
         summaryTask?.cancel()
         summaryChatTask?.cancel()
     }
@@ -359,11 +361,14 @@ final class MeetingDetailViewModel: ObservableObject {
             translationEnabled = false
             cancelTranslationTasks()
             clearPendingTranslationState()
+            failedTranslationRevisions.removeAll()
             return
         }
 
         if Self.segmentsContainTranslations(segments) {
             translationEnabled = true
+            failedTranslationRevisions.removeAll()
+            translateEligibleSegmentsIfNeeded(targetLanguage: resolvedStoredTranslationLanguage())
             return
         }
 
@@ -384,6 +389,7 @@ final class MeetingDetailViewModel: ObservableObject {
         )
         isTranslationLanguagePickerPresented = false
         translationEnabled = true
+        failedTranslationRevisions.removeAll()
         translateEligibleSegmentsIfNeeded(targetLanguage: language)
     }
 
@@ -430,6 +436,8 @@ final class MeetingDetailViewModel: ObservableObject {
 
         guard updatedSegments != segments else { return }
         segments = updatedSegments
+        segmentStructureRevision &+= 1
+        cachedSummaryTranscript = nil
         _ = transcriptSegmentsPersistence?(historyEntryID, updatedSegments)
     }
 
@@ -512,10 +520,7 @@ final class MeetingDetailViewModel: ObservableObject {
                 if isAutomatic {
                     try await Task.sleep(for: .milliseconds(220))
                 }
-                let transcript = await Task.detached(priority: .userInitiated) {
-                    MeetingTranscriptFormatter.llmInputText(for: segmentsSnapshot)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }.value
+                let transcript = await self.summaryTranscript(for: segmentsSnapshot)
                 guard !transcript.isEmpty else {
                     await MainActor.run {
                         self.summaryState = .failed(AppLocalization.localizedString("No meeting transcript is available yet."))
@@ -567,12 +572,15 @@ final class MeetingDetailViewModel: ObservableObject {
         summaryChatTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let transcript = await Task.detached(priority: .userInitiated) {
-                    MeetingTranscriptFormatter.llmInputText(for: segmentsSnapshot)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                let transcript = await self.summaryTranscript(for: segmentsSnapshot)
+                let relevantContext = await Task.detached(priority: .utility) {
+                    MeetingSummaryContextPlanning.relevantFollowUpContext(
+                        transcript: transcript,
+                        question: question
+                    )
                 }.value
                 let answer = try await summaryChatAnswerer(
-                    transcript,
+                    relevantContext,
                     currentSummary,
                     existingHistory,
                     question,
@@ -600,11 +608,25 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     func updateLiveSegments(_ incomingSegments: [MeetingTranscriptSegment]) {
-        segments = mergeSegmentsPreservingTranslationState(
+        cachedSummaryTranscript = nil
+        let targetLanguage = resolvedStoredTranslationLanguage()
+        let updatedSegments = mergeSegmentsPreservingTranslationState(
             Self.liveDisplaySegments(from: incomingSegments)
-        )
+        ).map { segment in
+            guard failedTranslationRevisions[segment.id] == translationRevision(
+                for: segment,
+                targetLanguage: targetLanguage
+            ) else { return segment }
+            return segment.updatingTranslation(
+                translatedText: segment.translatedText,
+                isTranslationPending: false
+            )
+        }
+        guard updatedSegments != segments else { return }
+        segments = updatedSegments
+        segmentStructureRevision &+= 1
         if translationEnabled {
-            translateEligibleSegmentsIfNeeded(targetLanguage: resolvedStoredTranslationLanguage())
+            translateEligibleSegmentsIfNeeded(targetLanguage: targetLanguage)
         }
     }
 
@@ -652,6 +674,18 @@ final class MeetingDetailViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func summaryTranscript(for snapshot: [MeetingTranscriptSegment]) async -> String {
+        if let cachedSummaryTranscript {
+            return cachedSummaryTranscript
+        }
+        let transcript = await Task.detached(priority: .utility) {
+            MeetingTranscriptFormatter.llmInputText(for: snapshot)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }.value
+        cachedSummaryTranscript = transcript
+        return transcript
     }
 
     func refreshSummaryConfiguration(
@@ -702,46 +736,72 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     private func translateEligibleSegmentsIfNeeded(targetLanguage: TranslationTargetLanguage) {
-        for segment in segments where shouldTranslate(segment: segment) {
+        for segment in segments where shouldTranslate(segment: segment, targetLanguage: targetLanguage) {
             markSegment(segment.id) { current in
                 current.updatingTranslation(translatedText: current.translatedText, isTranslationPending: true)
             }
 
-            translationTasks[segment.id]?.cancel()
-            translationTasks[segment.id] = Task { [weak self] in
-                guard let self else { return }
-                do {
-                    let translatedText = try await self.translationHandler(segment.text, targetLanguage)
-                    await MainActor.run {
-                        self.markSegment(segment.id) { current in
-                            current.updatingTranslation(
-                                translatedText: translatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? nil
-                                    : translatedText.trimmingCharacters(in: .whitespacesAndNewlines),
-                                isTranslationPending: false
-                            )
-                        }
-                        self.translationTasks[segment.id] = nil
+            let revision = translationRevision(for: segment, targetLanguage: targetLanguage)
+            let operation = translationHandler(segment.text, targetLanguage)
+            _ = translationScheduler.submit(
+                segmentID: segment.id,
+                sourceText: segment.text,
+                targetLanguage: targetLanguage,
+                operation: operation
+            ) { [weak self] result in
+                guard let self,
+                      let current = self.segments.first(where: { $0.id == segment.id })
+                else { return }
+                guard self.translationRevision(for: current, targetLanguage: targetLanguage) == revision else {
+                    self.translateEligibleSegmentsIfNeeded(targetLanguage: targetLanguage)
+                    return
+                }
+                switch result {
+                case .success(let translatedText):
+                    let trimmed = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty {
+                        self.failedTranslationRevisions[segment.id] = revision
+                    } else {
+                        self.failedTranslationRevisions[segment.id] = nil
                     }
-                } catch {
-                    await MainActor.run {
-                        self.markSegment(segment.id) { current in
-                            current.updatingTranslation(
-                                translatedText: current.translatedText,
-                                isTranslationPending: false
-                            )
-                        }
-                        self.translationTasks[segment.id] = nil
+                    self.markSegment(segment.id) { current in
+                        current.updatingTranslation(
+                            translatedText: trimmed.isEmpty ? nil : trimmed,
+                            isTranslationPending: false
+                        )
+                    }
+                case .failure:
+                    self.failedTranslationRevisions[segment.id] = revision
+                    self.markSegment(segment.id) { current in
+                        current.updatingTranslation(
+                            translatedText: current.translatedText,
+                            isTranslationPending: false
+                        )
                     }
                 }
+                self.translateEligibleSegmentsIfNeeded(targetLanguage: targetLanguage)
             }
         }
     }
 
-    private func shouldTranslate(segment: MeetingTranscriptSegment) -> Bool {
+    private func shouldTranslate(
+        segment: MeetingTranscriptSegment,
+        targetLanguage: TranslationTargetLanguage
+    ) -> Bool {
         guard segment.speaker == .them else { return false }
+        guard failedTranslationRevisions[segment.id] != translationRevision(
+            for: segment,
+            targetLanguage: targetLanguage
+        ) else { return false }
         let translatedText = segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return (translatedText.isEmpty || segment.isTranslationPending) && translationTasks[segment.id] == nil
+        return translatedText.isEmpty || segment.isTranslationPending
+    }
+
+    private func translationRevision(
+        for segment: MeetingTranscriptSegment,
+        targetLanguage: TranslationTargetLanguage
+    ) -> String {
+        segment.text.trimmingCharacters(in: .whitespacesAndNewlines) + "\u{0}" + targetLanguage.rawValue
     }
 
     private func markSegment(_ id: UUID, update: (MeetingTranscriptSegment) -> MeetingTranscriptSegment) {
@@ -750,8 +810,7 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     private func cancelTranslationTasks() {
-        translationTasks.values.forEach { $0.cancel() }
-        translationTasks.removeAll()
+        translationScheduler.cancelAll()
     }
 
     private func clearPendingTranslationState() {

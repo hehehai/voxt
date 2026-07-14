@@ -60,12 +60,12 @@ final class MeetingAudioChunkingTests: XCTestCase {
         XCTAssertLessThan(meChunk?.startSeconds ?? .greatestFiniteMagnitude, secondThem?.startSeconds ?? 0)
     }
 
-    func testQualityAccumulatorEmitsRealtimeFinalChunksThatCanBeMerged() async {
+    func testQualityAccumulatorEmitsBoundedSevenSecondFinalChunks() async {
         let accumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: 0.025, profile: .quality)
         let speechSamples = [Float](repeating: 0.2, count: 19_200) // 0.4s @ 48kHz
         let silenceSamples = [Float](repeating: 0, count: 24_000) // 0.5s @ 48kHz
 
-        for index in 1...6 {
+        for index in 1...17 {
             let chunk = await accumulator.append(
                 samples: speechSamples,
                 sampleRate: 48_000,
@@ -75,67 +75,59 @@ final class MeetingAudioChunkingTests: XCTestCase {
             XCTAssertNil(chunk)
         }
 
-        let realtimeChunk = await accumulator.append(
+        let boundedChunk = await accumulator.append(
             samples: speechSamples,
             sampleRate: 48_000,
             level: 0.1,
-            bufferEndSeconds: 2.8
+            bufferEndSeconds: 7.2
         )
 
-        XCTAssertNotNil(realtimeChunk)
-        XCTAssertEqual(realtimeChunk?.speaker, .them)
-        XCTAssertTrue(realtimeChunk?.isFinal ?? false)
-        XCTAssertFalse(realtimeChunk?.preventsAdjacentMerge ?? true)
-        XCTAssertEqual(realtimeChunk?.startSeconds ?? -1, 0, accuracy: 0.001)
-        XCTAssertEqual(realtimeChunk?.endSeconds ?? -1, 2.8, accuracy: 0.001)
+        XCTAssertNotNil(boundedChunk)
+        XCTAssertEqual(boundedChunk?.speaker, .them)
+        XCTAssertTrue(boundedChunk?.isFinal ?? false)
+        XCTAssertFalse(boundedChunk?.preventsAdjacentMerge ?? true)
+        XCTAssertEqual(boundedChunk?.startSeconds ?? -1, 0, accuracy: 0.001)
+        XCTAssertEqual(boundedChunk?.endSeconds ?? -1, 7.2, accuracy: 0.001)
 
         _ = await accumulator.append(
             samples: speechSamples,
             sampleRate: 48_000,
             level: 0.1,
-            bufferEndSeconds: 3.2
+            bufferEndSeconds: 7.6
         )
         let pauseChunk = await accumulator.append(
             samples: silenceSamples,
             sampleRate: 48_000,
             level: 0,
-            bufferEndSeconds: 3.7
+            bufferEndSeconds: 8.1
         )
 
         XCTAssertNotNil(pauseChunk)
         XCTAssertTrue(pauseChunk?.isFinal ?? false)
         XCTAssertTrue(pauseChunk?.preventsAdjacentMerge ?? false)
-        XCTAssertNotEqual(pauseChunk?.segmentID, realtimeChunk?.segmentID)
+        XCTAssertNotEqual(pauseChunk?.segmentID, boundedChunk?.segmentID)
     }
 
     func testRealtimeAccumulatorEmitsPartialAndShortFinalChunks() async {
         let accumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: 0.012, profile: .realtime)
         let speechSamples = [Float](repeating: 0.2, count: 14_400) // 0.3s @ 48kHz
 
-        _ = await accumulator.append(
-            samples: speechSamples,
-            sampleRate: 48_000,
-            level: 0.1,
-            bufferEndSeconds: 0.3
-        )
-        let partial = await accumulator.append(
-            samples: speechSamples,
-            sampleRate: 48_000,
-            level: 0.1,
-            bufferEndSeconds: 0.6
-        )
-        _ = await accumulator.append(
-            samples: speechSamples,
-            sampleRate: 48_000,
-            level: 0.1,
-            bufferEndSeconds: 0.9
-        )
-        let finalChunk = await accumulator.append(
-            samples: speechSamples,
-            sampleRate: 48_000,
-            level: 0.1,
-            bufferEndSeconds: 1.2
-        )
+        var partial: BufferedMeetingChunk?
+        var finalChunk: BufferedMeetingChunk?
+        for index in 1...20 {
+            let chunk = await accumulator.append(
+                samples: speechSamples,
+                sampleRate: 48_000,
+                level: 0.1,
+                bufferEndSeconds: Double(index) * 0.3
+            )
+            if chunk?.isFinal == false, partial == nil {
+                partial = chunk
+            }
+            if chunk?.isFinal == true {
+                finalChunk = chunk
+            }
+        }
 
         XCTAssertNotNil(partial)
         XCTAssertFalse(partial?.isFinal ?? true)
@@ -144,6 +136,7 @@ final class MeetingAudioChunkingTests: XCTestCase {
         XCTAssertTrue(finalChunk?.isFinal ?? false)
         XCTAssertEqual(finalChunk?.segmentID, partial?.segmentID)
         XCTAssertFalse(finalChunk?.preventsAdjacentMerge ?? true)
-        XCTAssertEqual(finalChunk?.endSeconds ?? -1, 1.2, accuracy: 0.001)
+        XCTAssertEqual(partial?.endSeconds ?? -1, 2.1, accuracy: 0.001)
+        XCTAssertEqual(finalChunk?.endSeconds ?? -1, 6.0, accuracy: 0.001)
     }
 }
