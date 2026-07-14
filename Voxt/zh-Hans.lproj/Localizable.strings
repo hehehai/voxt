@@ -522,6 +522,8 @@
 "Audio export failed: %@" = "导出音频失败：%@";
 "Playing" = "播放中";
 "Ready to play" = "可播放";
+"No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed." = "此记录没有可用的已保存音频文件。它可能创建于启用音频保存之前，或音频文件已被删除。";
+"Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records." = "历史音频保存已关闭，因此无法播放音频。请在录音前开启，以便为之后的记录保存音频。";
 "Audio Duration" = "音频时长";
 "After switching to a new path, previously downloaded models won't be detected and must be downloaded again." = "切换到新路径后，之前已下载的模型将无法被检测到，需要重新下载。";
 "Add Browser" = "添加浏览器";

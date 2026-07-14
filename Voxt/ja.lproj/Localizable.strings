@@ -513,6 +513,8 @@
 "Audio export failed: %@" = "音声の書き出しに失敗しました: %@";
 "Playing" = "再生中";
 "Ready to play" = "再生可能";
+"No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed." = "この履歴には再生できる保存済み音声ファイルがありません。音声保存を有効にする前に作成されたか、音声ファイルが削除された可能性があります。";
+"Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records." = "履歴音声の保存が無効になっているため、音声を再生できません。今後の履歴に音声を残すには、録音前に有効にしてください。";
 "Audio Duration" = "音声の長さ";
 "After switching to a new path, previously downloaded models won't be detected and must be downloaded again." = "新しい保存先に切り替えると、以前にダウンロード済みのモデルは検出されず、再ダウンロードが必要になります。";
 "Add Browser" = "ブラウザを追加";

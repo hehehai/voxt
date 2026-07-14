@@ -115,6 +115,27 @@ final class LocalizationResourcesTests: XCTestCase {
         XCTAssertEqual(AppLocalization.localizedString("Storage Path", localeIdentifier: "ja"), "保存パス")
     }
 
+    func testHistoryAudioUnavailableMessagesAreLocalizedInSupportedLanguages() {
+        let keys = [
+            "No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed.",
+            "Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records."
+        ]
+
+        for key in keys {
+            XCTAssertEqual(AppLocalization.localizedString(key, localeIdentifier: "en"), key)
+            XCTAssertNotEqual(
+                AppLocalization.localizedString(key, localeIdentifier: "zh-Hans"),
+                key,
+                "Missing zh-Hans localization for \(key)"
+            )
+            XCTAssertNotEqual(
+                AppLocalization.localizedString(key, localeIdentifier: "ja"),
+                key,
+                "Missing ja localization for \(key)"
+            )
+        }
+    }
+
     func testConfirmationDialogCopyIsLocalizedInSupportedLanguages() {
         let keys = [
             "Cancel",

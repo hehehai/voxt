@@ -522,6 +522,8 @@
 "Audio export failed: %@" = "Audio export failed: %@";
 "Playing" = "Playing";
 "Ready to play" = "Ready to play";
+"No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed." = "No saved audio file is available for this record. It may have been created before audio saving was enabled, or the audio file may have been removed.";
+"Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records." = "Audio playback is unavailable because history audio saving is turned off. Turn it on before recording to keep audio for future records.";
 "Audio Duration" = "Audio Duration";
 "After switching to a new path, previously downloaded models won't be detected and must be downloaded again." = "After switching to a new path, previously downloaded models won't be detected and must be downloaded again.";
 "Add Browser" = "Add Browser";

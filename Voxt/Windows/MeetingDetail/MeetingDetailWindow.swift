@@ -334,12 +334,6 @@ private struct MeetingDetailWindowView: View {
                 updateActiveSegment(for: playbackController.currentTime)
             }
 
-            if viewModel.isTranslationLanguagePickerPresented {
-                dialogDimmingMask(opacity: 0.14)
-
-                translationLanguageDialog
-            }
-
             if speakerRenameGroupID != nil {
                 dialogDimmingMask(opacity: 0.14)
 
@@ -349,6 +343,9 @@ private struct MeetingDetailWindowView: View {
         }
         .background(MeetingDetailUIStyle.windowFillColor)
         .ignoresSafeArea(.container, edges: .top)
+        .sheet(isPresented: $viewModel.isTranslationLanguagePickerPresented) {
+            translationLanguageDialog
+        }
         .sheet(isPresented: $viewModel.isSummarySettingsPresented) {
             MeetingDetailSummarySettingsDialog(viewModel: viewModel)
         }
@@ -960,85 +957,43 @@ private struct MeetingDetailWindowView: View {
     }
 
     private var translationLanguageDialog: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             Text(AppLocalization.localizedString("Choose Translation Language"))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
+                .font(.title3.weight(.semibold))
 
-            Text(AppLocalization.localizedString("Realtime translation in detail view only translates Them segments."))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
+            SettingsMenuPicker(
+                selection: $viewModel.translationDraftLanguageRaw,
+                options: TranslationTargetLanguage.allCases.map { language in
+                    SettingsMenuOption(value: language.rawValue, title: language.title)
+                },
+                selectedTitle: translationDraftLanguage.title,
+                width: 320
+            )
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 8)
+            .accessibilityLabel(AppLocalization.localizedString("Target Language"))
 
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(TranslationTargetLanguage.allCases) { language in
-                        Button {
-                            viewModel.translationDraftLanguageRaw = language.rawValue
-                        } label: {
-                            HStack(spacing: 10) {
-                                Text(language.title)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.primary)
-
-                                Spacer(minLength: 8)
-
-                                if viewModel.translationDraftLanguageRaw == language.rawValue {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(Color.accentColor.opacity(0.95))
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(
-                                        viewModel.translationDraftLanguageRaw == language.rawValue
-                                            ? Color.accentColor.opacity(0.14)
-                                            : MeetingDetailUIStyle.mutedFillColor
-                                    )
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(
-                                        viewModel.translationDraftLanguageRaw == language.rawValue
-                                            ? Color.accentColor.opacity(0.28)
-                                            : MeetingDetailUIStyle.borderColor,
-                                        lineWidth: 1
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .frame(maxHeight: 220)
-
-            HStack(spacing: 10) {
+            SettingsDialogActionRow {
                 Button(AppLocalization.localizedString("Cancel")) {
                     viewModel.cancelTranslationLanguageSelection()
                 }
-                .buttonStyle(MeetingPillButtonStyle())
-
-                Spacer(minLength: 8)
+                .buttonStyle(SettingsPillButtonStyle())
+                .keyboardShortcut(.cancelAction)
 
                 Button(AppLocalization.localizedString("Start Translation")) {
                     viewModel.confirmTranslationLanguageSelection()
                 }
-                .buttonStyle(MeetingPrimaryButtonStyle())
+                .buttonStyle(SettingsPrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(SettingsUIStyle.dialogPadding)
-        .frame(width: 340)
-        .background(SettingsUIStyle.windowBackgroundColor)
-        .clipShape(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.dialogCornerRadius, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsUIStyle.dialogCornerRadius, style: .continuous)
-                .strokeBorder(SettingsUIStyle.dialogBorderColor, lineWidth: 0.7)
-        )
+        .settingsDialogChrome(width: 400, onClose: {
+            viewModel.cancelTranslationLanguageSelection()
+        })
+    }
+
+    private var translationDraftLanguage: TranslationTargetLanguage {
+        TranslationTargetLanguage(rawValue: viewModel.translationDraftLanguageRaw) ?? .english
     }
 
     private var timerLabel: String {
