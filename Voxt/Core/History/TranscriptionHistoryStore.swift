@@ -676,7 +676,7 @@ final class TranscriptionHistoryStore: ObservableObject {
             return false
         }
 
-        invalidatePendingLoads()
+        let interruptedReload = invalidatePendingLoads()
         removeCachedEntry(id: id)
         if removed != nil || wasCached {
             totalEntryCount = max(0, totalEntryCount - 1)
@@ -685,6 +685,9 @@ final class TranscriptionHistoryStore: ObservableObject {
         refreshEntryIndexes()
         publishVisibleEntries()
         removed.map(audioArchive.removeArchive(for:))
+        if interruptedReload {
+            reloadAsync()
+        }
         return true
     }
 
@@ -980,11 +983,16 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     private func persistEntry(_ entry: TranscriptionHistoryEntry) {
-        invalidatePendingLoads()
+        let interruptedReload = invalidatePendingLoads()
+        var didPersist = false
         do {
             try repository.upsert(entry)
+            didPersist = true
         } catch {
             // Keep UI responsive even if persistence fails.
+        }
+        if interruptedReload, didPersist {
+            reloadAsync()
         }
     }
 
@@ -1046,7 +1054,7 @@ final class TranscriptionHistoryStore: ObservableObject {
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate
         let removedEntries = (try? repository.deleteEntries(olderThan: cutoff)) ?? []
         guard !removedEntries.isEmpty else { return }
-        invalidatePendingLoads()
+        let interruptedReload = invalidatePendingLoads()
         removedEntries.forEach(audioArchive.removeArchive(for:))
         let removedIDs = Set(removedEntries.map(\.id))
         allEntries.removeAll { removedIDs.contains($0.id) }
@@ -1054,6 +1062,9 @@ final class TranscriptionHistoryStore: ObservableObject {
         loadedCount = min(loadedCount, allEntries.count)
         refreshEntryIndexes()
         publishVisibleEntries()
+        if interruptedReload {
+            reloadAsync()
+        }
     }
 
     private func refreshEntryIndexes() {
@@ -1064,11 +1075,14 @@ final class TranscriptionHistoryStore: ObservableObject {
         entries = Array(allEntries.prefix(loadedCount))
     }
 
-    private func invalidatePendingLoads() {
+    @discardableResult
+    private func invalidatePendingLoads() -> Bool {
+        let interruptedReload = isLoading
         reloadGeneration += 1
         nextPageRequestGeneration += 1
         isLoading = false
         isLoadingNextPage = false
+        return interruptedReload
     }
 
     private func cacheUpdatedEntry(_ entry: TranscriptionHistoryEntry) {

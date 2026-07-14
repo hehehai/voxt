@@ -2217,3 +2217,4 @@
 "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "端点必须是有效的 HTTP、HTTPS、WS 或 WSS URL。";
 "Endpoint must not contain a username or password." = "端点中不能包含用户名或密码。";
 "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts." = "只有本机的不安全端点可以接收凭据；远程主机请使用 HTTPS 或 WSS。";
+"Dictionary data is temporarily unavailable. Please try again." = "词典数据暂时不可用，请重试。";

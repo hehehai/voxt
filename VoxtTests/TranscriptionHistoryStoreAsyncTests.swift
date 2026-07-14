@@ -42,6 +42,46 @@ final class TranscriptionHistoryStoreAsyncTests: XCTestCase {
         XCTAssertTrue(store.hasMore)
     }
 
+    func testMutationRestartsInterruptedReload() async throws {
+        let initialEntries = [makeEntry(index: 0), makeEntry(index: 1)]
+        let repository = try makeFixture(entries: initialEntries)
+        let store = TranscriptionHistoryStore(repository: repository)
+        let externallyAddedEntry = makeEntry(index: 2)
+        try repository.upsert(externallyAddedEntry)
+
+        repository.blockNextEntriesRequest()
+        store.reloadAsync()
+        XCTAssertTrue(repository.waitUntilRequestIsBlocked())
+
+        XCTAssertTrue(store.delete(id: initialEntries[1].id))
+        repository.releaseBlockedRequest()
+        await drainMainQueue()
+
+        XCTAssertNil(store.entry(id: initialEntries[1].id))
+        XCTAssertNotNil(store.entry(id: externallyAddedEntry.id))
+        XCTAssertTrue(store.entries.contains { $0.id == externallyAddedEntry.id })
+    }
+
+    func testFailedPersistenceDoesNotRestartReloadAndDiscardOptimisticState() async throws {
+        let initialEntry = makeEntry(index: 0)
+        let repository = try makeFixture(entries: [initialEntry])
+        let store = TranscriptionHistoryStore(repository: repository)
+        let externallyAddedEntry = makeEntry(index: 1)
+        try repository.upsert(externallyAddedEntry)
+
+        repository.blockNextEntriesRequest()
+        store.reloadAsync()
+        XCTAssertTrue(repository.waitUntilRequestIsBlocked())
+        repository.failNextUpsertRequest()
+
+        XCTAssertNotNil(store.updateSummaryChatMessages([], for: initialEntry.id))
+        repository.releaseBlockedRequest()
+        await drainMainQueue()
+
+        XCTAssertNotNil(store.entry(id: initialEntry.id))
+        XCTAssertFalse(store.entries.contains { $0.id == externallyAddedEntry.id })
+    }
+
     private func makeFixture(entries: [TranscriptionHistoryEntry]) throws -> BlockingHistoryRepository {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("voxt-history-async-tests-\(UUID().uuidString)", isDirectory: true)
@@ -103,6 +143,7 @@ private final class BlockingHistoryRepository: HistoryRepositoryProtocol, @unche
     private let requestStarted = DispatchSemaphore(value: 0)
     private let requestRelease = DispatchSemaphore(value: 0)
     private var shouldBlockNextEntriesRequest = false
+    private var shouldFailNextUpsertRequest = false
 
     init(base: HistoryRepositoryProtocol) {
         self.base = base
@@ -120,6 +161,12 @@ private final class BlockingHistoryRepository: HistoryRepositoryProtocol, @unche
 
     func releaseBlockedRequest() {
         requestRelease.signal()
+    }
+
+    func failNextUpsertRequest() {
+        lock.withLock {
+            shouldFailNextUpsertRequest = true
+        }
     }
 
     func entries(
@@ -170,6 +217,14 @@ private final class BlockingHistoryRepository: HistoryRepositoryProtocol, @unche
     }
 
     func upsert(_ entry: TranscriptionHistoryEntry) throws {
+        let shouldFail = lock.withLock {
+            let value = shouldFailNextUpsertRequest
+            shouldFailNextUpsertRequest = false
+            return value
+        }
+        if shouldFail {
+            throw HistoryTestRepositoryError.writeFailed
+        }
         try base.upsert(entry)
     }
 
@@ -184,4 +239,8 @@ private final class BlockingHistoryRepository: HistoryRepositoryProtocol, @unche
     func deleteEntries(olderThan cutoff: Date) throws -> [TranscriptionHistoryEntry] {
         try base.deleteEntries(olderThan: cutoff)
     }
+}
+
+private enum HistoryTestRepositoryError: Error {
+    case writeFailed
 }

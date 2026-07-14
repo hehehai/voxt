@@ -110,6 +110,10 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        settingsWithStateObservers
+    }
+
+    private var settingsContent: some View {
         ZStack {
             SettingsUIStyle.windowBackgroundColor
             Group {
@@ -148,6 +152,10 @@ struct SettingsView: View {
             )
         }
         .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private var settingsWithNotifications: some View {
+        settingsContent
         .onAppear {
             refreshPermissionBadge()
             refreshMicrophoneBadge()
@@ -193,6 +201,10 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
             refreshPermissionBadge()
         }
+    }
+
+    private var settingsWithStateObservers: some View {
+        settingsWithNotifications
         .onChange(of: mainWindowState.isVisible) { _, isVisible in
             guard isVisible else { return }
             refreshPermissionBadge()

@@ -6,6 +6,12 @@ import LocalAuthentication
 import Security
 
 enum VoxtSecureStorage {
+    enum MigrationLookupResult: Equatable {
+        case value(String)
+        case missing
+        case unavailable
+    }
+
     nonisolated private static let defaultServiceName: String = {
         let bundleID = Bundle.main.bundleIdentifier ?? "com.voxt.Voxt"
         return "\(bundleID).secure-storage"
@@ -107,6 +113,92 @@ enum VoxtSecureStorage {
         default:
             VoxtLog.securityWarning("Legacy Keychain presence check failed. account=\(account), status=\(legacyStatus)")
             return false
+        }
+    }
+
+    /// Performs the one-time legacy lookup used by configuration migration.
+    /// `missing` is returned only when both stores are definitively empty;
+    /// transient Keychain failures remain `unavailable` so callers never erase
+    /// configuration metadata based on an inconclusive read.
+    nonisolated static func migrationValue(for account: String) -> MigrationLookupResult {
+        if isUsingInMemoryStoreForTesting {
+            if let value = protectedValueForTesting(for: account) {
+                cache(value, for: account)
+                _ = deleteLegacyValueForTesting(for: account)
+                return .value(value)
+            }
+            guard let legacyValue = legacyValueForTesting(for: account) else {
+                return .missing
+            }
+            guard !legacyValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .missing
+            }
+            guard setProtectedValueForTesting(legacyValue, for: account),
+                  protectedValueForTesting(for: account) == legacyValue
+            else {
+                return .unavailable
+            }
+            _ = deleteLegacyValueForTesting(for: account)
+            return .value(legacyValue)
+        }
+
+        var protectedLookup = protectedQuery(for: account)
+        protectedLookup[kSecReturnData as String] = kCFBooleanTrue
+        protectedLookup[kSecMatchLimit as String] = kSecMatchLimitOne
+        var protectedItem: CFTypeRef?
+        let protectedStatus = SecItemCopyMatching(protectedLookup as CFDictionary, &protectedItem)
+        switch protectedStatus {
+        case errSecSuccess:
+            guard let data = protectedItem as? Data,
+                  let value = String(data: data, encoding: .utf8)
+            else {
+                return .unavailable
+            }
+            cache(value, for: account)
+            _ = deleteLegacyValue(for: account, interactionAllowed: false)
+            return .value(value)
+        case errSecItemNotFound:
+            break
+        default:
+            VoxtLog.securityWarning(
+                "Data Protection Keychain migration lookup failed. account=\(account), status=\(protectedStatus)"
+            )
+            return .unavailable
+        }
+
+        var legacyLookup = legacyQuery(for: account, interactionAllowed: false)
+        legacyLookup[kSecReturnData as String] = kCFBooleanTrue
+        legacyLookup[kSecMatchLimit as String] = kSecMatchLimitOne
+        var legacyItem: CFTypeRef?
+        let legacyStatus = SecItemCopyMatching(legacyLookup as CFDictionary, &legacyItem)
+        switch legacyStatus {
+        case errSecSuccess:
+            guard let legacyData = legacyItem as? Data,
+                  let value = String(data: legacyData, encoding: .utf8)
+            else {
+                return .unavailable
+            }
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .missing
+            }
+            guard set(value, for: account), protectedData(for: account) == legacyData else {
+                VoxtLog.securityWarning("Legacy Keychain migration could not be committed. account=\(account)")
+                return .unavailable
+            }
+            if !deleteLegacyValue(for: account, interactionAllowed: false) {
+                VoxtLog.securityWarning("Legacy Keychain migration cleanup failed. account=\(account)")
+            }
+            return .value(value)
+        case errSecItemNotFound:
+            return .missing
+        case errSecInteractionNotAllowed, errSecAuthFailed:
+            VoxtLog.securityWarning(
+                "Legacy Keychain migration is temporarily unavailable. account=\(account), status=\(legacyStatus)"
+            )
+            return .unavailable
+        default:
+            VoxtLog.securityWarning("Legacy Keychain migration lookup failed. account=\(account), status=\(legacyStatus)")
+            return .unavailable
         }
     }
 
@@ -212,6 +304,18 @@ enum VoxtSecureStorage {
         stateLock.lock()
         defer { stateLock.unlock() }
         return protectedValuesForTesting[account] != nil
+    }
+
+    nonisolated static func removeProtectedValueForTesting(
+        for account: String,
+        preservingCache: Bool = false
+    ) {
+        stateLock.lock()
+        protectedValuesForTesting.removeValue(forKey: account)
+        if !preservingCache {
+            cachedValues.removeValue(forKey: account)
+        }
+        stateLock.unlock()
     }
 
     nonisolated static func setProtectedWritesFailForTesting(_ shouldFail: Bool) {
@@ -393,14 +497,18 @@ enum VoxtSecureStorage {
         ]
     }
 
-    nonisolated private static func legacyQuery(
+    nonisolated static func legacyQuery(
         for account: String,
         interactionAllowed: Bool
     ) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: account,
+            // An unqualified macOS Keychain query also matches Data Protection
+            // items. Explicitly select the legacy store so cleanup cannot delete
+            // the protected item that was just written and leave only the cache.
+            kSecUseDataProtectionKeychain as String: kCFBooleanFalse as Any,
         ]
         if !interactionAllowed {
             let context = LAContext()

@@ -295,15 +295,18 @@ extension AppDelegate {
         }
         let appContextCapture = await captureRewriteAppContextIfNeeded(for: providerOverride)
         let appContextAttachmentCost = appContextCapture?.attachments.estimatedPromptCharacterCost ?? 0
+        let strategyInputText = directAnswerMode ? dictatedPrompt : sourceText
+        var strategyPromptCharacterCount = promptResolution.content.count
+        strategyPromptCharacterCount += promptResolution.dictionaryGlossary?.count ?? 0
+        strategyPromptCharacterCount += appContextCapture?.textContext.count ?? 0
+        strategyPromptCharacterCount += appContextAttachmentCost
+        let providerCapabilities = llmProviderModelCapabilities(for: providerOverride)
         let strategy = TaskLLMStrategyResolver.resolve(
             taskKind: .rewrite,
-            rawText: directAnswerMode ? dictatedPrompt : sourceText,
-            promptCharacterCount: promptResolution.content.count +
-                (promptResolution.dictionaryGlossary?.count ?? 0) +
-                (appContextCapture?.textContext.count ?? 0) +
-                appContextAttachmentCost,
+            rawText: strategyInputText,
+            promptCharacterCount: strategyPromptCharacterCount,
             baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.rewrite.selectionPolicy,
-            capabilities: llmProviderModelCapabilities(for: providerOverride)
+            capabilities: providerCapabilities
         )
         let plan = buildRewriteExecutionPlan(
             dictatedPrompt: dictatedPrompt,

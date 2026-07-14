@@ -190,6 +190,10 @@ fileprivate nonisolated struct RemoteStoredCredentialPresence: Codable, Hashable
     private static func isPresent(_ value: String) -> Bool {
         !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    var isEmpty: Bool {
+        !apiKey && !appID && !accessToken
+    }
 }
 
 struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
@@ -449,6 +453,8 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
 }
 
 enum RemoteModelConfigurationStore {
+    private static let currentCredentialMigrationVersion = 1
+
     enum SaveError: LocalizedError, Equatable {
         case secureStorageUnavailable
         case metadataEncodingFailed
@@ -509,6 +515,12 @@ enum RemoteModelConfigurationStore {
             )
             return resolved
         }
+    }
+
+    private nonisolated enum CredentialMigrationResolution {
+        case values(StoredSensitiveValues)
+        case missing
+        case unavailable
     }
 
     static func loadConfigurations(
@@ -578,13 +590,24 @@ enum RemoteModelConfigurationStore {
     }
 
     static func migrateLegacyStoredSecrets(defaults: UserDefaults = .standard) {
-        migrateLegacyStoredSecrets(
+        guard defaults.integer(forKey: AppPreferenceKey.remoteCredentialMigrationVersion)
+            < currentCredentialMigrationVersion
+        else {
+            return
+        }
+
+        let asrCompleted = migrateLegacyStoredSecrets(
             defaultsKey: AppPreferenceKey.remoteASRProviderConfigurations,
             defaults: defaults
         )
-        migrateLegacyStoredSecrets(
+        let llmCompleted = migrateLegacyStoredSecrets(
             defaultsKey: AppPreferenceKey.remoteLLMProviderConfigurations,
             defaults: defaults
+        )
+        guard asrCompleted, llmCompleted else { return }
+        defaults.set(
+            currentCredentialMigrationVersion,
+            forKey: AppPreferenceKey.remoteCredentialMigrationVersion
         )
     }
 
@@ -680,39 +703,71 @@ enum RemoteModelConfigurationStore {
         return configuration.isConfigured && configuration.hasUsableModel
     }
 
-    private static func migrateLegacyStoredSecrets(defaultsKey: String, defaults: UserDefaults) {
+    @discardableResult
+    private static func migrateLegacyStoredSecrets(defaultsKey: String, defaults: UserDefaults) -> Bool {
         let raw = defaults.string(forKey: defaultsKey) ?? ""
-        guard !raw.isEmpty else { return }
+        guard !raw.isEmpty else { return true }
         let decoded = decodedConfigurations(from: raw)
         let normalized = decoded.map(normalizedCompatibilityValues(for:))
         var changed = false
+        var completed = true
         let migrated = normalized.map { configuration in
             if hasInlineSensitiveValues(configuration) {
                 guard persistSensitiveValues(for: configuration) else {
+                    completed = false
                     return configuration
                 }
                 changed = true
                 return configuration.withoutSensitiveValues
             }
 
-            guard configuration.storedCredentialPresence == nil,
-                  hasStoredCredentialItem(for: configuration.providerID)
-            else {
+            // An explicit empty presence mask means the user never configured a
+            // credential (or intentionally cleared it). Do not touch Keychain.
+            if configuration.storedCredentialPresence?.isEmpty == true {
                 return configuration
             }
 
-            guard let resolved = resolvedSensitiveValuesForMigration(for: configuration) else {
+            switch credentialMigrationResolution(for: configuration) {
+            case .values(let values):
+                // An empty bundled tombstone is not a configured credential. It
+                // only needs to replace a stale positive presence mask.
+                guard !values.isEmpty || configuration.storedCredentialPresence != nil else {
+                    return configuration
+                }
+                let resolved = values.applying(to: configuration).withoutSensitiveValues
+                if resolved != configuration {
+                    changed = true
+                }
+                return resolved
+            case .missing:
+                // No metadata and no stored value means this provider was never
+                // configured, so there is nothing to migrate.
+                guard configuration.storedCredentialPresence != nil else {
+                    return configuration
+                }
+                // A previous build may have left a positive mask after losing
+                // the Keychain item. Persist one definitive empty mask so the UI
+                // asks for the credential once and future launches do no work.
+                let resolved = configuration.withoutSensitiveValues
+                if resolved != configuration {
+                    changed = true
+                }
+                return resolved
+            case .unavailable:
+                // Never turn an inconclusive Keychain read into data loss. Leave
+                // the migration pending and retry on a later launch.
+                completed = false
                 return configuration
             }
-            changed = true
-            return resolved.withoutSensitiveValues
         }
 
-        guard changed else { return }
-        let encoded = encodeConfigurations(migrated)
-        if encoded != raw {
-            defaults.set(encoded, forKey: defaultsKey)
+        if changed {
+            let encoded = encodeConfigurations(migrated)
+            if encoded != raw {
+                defaults.set(encoded, forKey: defaultsKey)
+            }
         }
+        return completed
     }
 
     nonisolated private static func decodedConfigurations(from raw: String) -> [RemoteProviderConfiguration] {
@@ -789,42 +844,52 @@ enum RemoteModelConfigurationStore {
         return resolved
     }
 
-    nonisolated private static func resolvedSensitiveValuesForMigration(
+    nonisolated private static func credentialMigrationResolution(
         for configuration: RemoteProviderConfiguration
-    ) -> RemoteProviderConfiguration? {
+    ) -> CredentialMigrationResolution {
         let bundledAccount = bundledKeychainAccount(providerID: configuration.providerID)
-        if VoxtSecureStorage.hasString(for: bundledAccount) {
-            guard let stored = VoxtSecureStorage.string(for: bundledAccount),
-                  let data = stored.data(using: .utf8),
-                  let values = try? JSONDecoder().decode(StoredSensitiveValues.self, from: data)
-            else {
-                return nil
+        switch VoxtSecureStorage.migrationValue(for: bundledAccount) {
+        case .value(let stored):
+            if let data = stored.data(using: .utf8),
+               let values = try? JSONDecoder().decode(StoredSensitiveValues.self, from: data) {
+                return .values(values)
             }
-            return values.applying(to: configuration)
+            // A corrupt bundled item is unusable, but an older per-field copy
+            // may still be recoverable below.
+        case .missing:
+            break
+        case .unavailable:
+            return .unavailable
         }
 
         var resolved = configuration
+        for field in SensitiveField.allCases {
+            setSensitiveValue("", for: field, in: &resolved)
+        }
         var foundLegacyValue = false
         for field in SensitiveField.allCases {
             let account = legacyKeychainAccount(providerID: configuration.providerID, field: field)
-            let hasStoredValue = VoxtSecureStorage.hasString(for: account)
-            guard hasStoredValue else {
+            switch VoxtSecureStorage.migrationValue(for: account) {
+            case .value(let value):
+                guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    continue
+                }
+                foundLegacyValue = true
+                setSensitiveValue(value, for: field, in: &resolved)
+            case .missing:
                 continue
+            case .unavailable:
+                return .unavailable
             }
-            guard let value = VoxtSecureStorage.string(for: account) else { return nil }
-            foundLegacyValue = true
-            setSensitiveValue(value, for: field, in: &resolved)
         }
 
-        guard foundLegacyValue, persistSensitiveValues(for: resolved) else {
-            return nil
+        guard foundLegacyValue else {
+            return .missing
         }
-        resolved.storedCredentialPresence = RemoteStoredCredentialPresence(
-            apiKey: resolved.apiKey,
-            appID: resolved.appID,
-            accessToken: resolved.accessToken
-        )
-        return resolved
+        guard persistSensitiveValues(for: resolved) else {
+            return .unavailable
+        }
+        return .values(StoredSensitiveValues(configuration: resolved))
     }
 
     nonisolated private static func resolvedSensitiveValuePresence(for configuration: RemoteProviderConfiguration) -> RemoteProviderConfiguration {
@@ -909,17 +974,6 @@ enum RemoteModelConfigurationStore {
             !sensitiveValue(for: field, in: configuration)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .isEmpty
-        }
-    }
-
-    nonisolated private static func hasStoredCredentialItem(for providerID: String) -> Bool {
-        if VoxtSecureStorage.hasString(for: bundledKeychainAccount(providerID: providerID)) {
-            return true
-        }
-        return SensitiveField.allCases.contains { field in
-            VoxtSecureStorage.hasString(
-                for: legacyKeychainAccount(providerID: providerID, field: field)
-            )
         }
     }
 

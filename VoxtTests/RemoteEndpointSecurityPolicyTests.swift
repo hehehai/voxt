@@ -75,6 +75,32 @@ final class RemoteEndpointSecurityPolicyTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testRemoteASRFileTranscriptionRejectsRemoteHTTPBeforeUploadingAPIKey() async {
+        let configuration = RemoteProviderConfiguration(
+            providerID: RemoteASRProvider.openAIWhisper.rawValue,
+            model: RemoteASRProvider.openAIWhisper.suggestedModel,
+            endpoint: "http://api.example.com/v1/audio/transcriptions",
+            apiKey: "secret"
+        )
+
+        do {
+            _ = try await RemoteASRTranscriber().transcribeDebugAudioFile(
+                URL(fileURLWithPath: "/path/that/does/not/exist.wav"),
+                provider: .openAIWhisper,
+                configuration: configuration
+            )
+            XCTFail("Expected insecure endpoint validation to fail")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                AppLocalization.localizedString(
+                    "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts."
+                )
+            )
+        }
+    }
+
     func testAllowsHTTPSCredentialsAndLoopbackHTTP() {
         XCTAssertNil(RemoteEndpointSecurityPolicy.validationMessage(endpoint: "https://api.example.com/v1", hasCredentials: true))
         XCTAssertNil(RemoteEndpointSecurityPolicy.validationMessage(endpoint: "http://127.0.0.1:11434/v1", hasCredentials: true))

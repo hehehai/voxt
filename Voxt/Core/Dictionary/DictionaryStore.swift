@@ -388,6 +388,7 @@ struct DictionaryProjectImportResult: Equatable {
 }
 
 enum DictionaryStoreError: LocalizedError {
+    case dataUnavailable
     case emptyTerm
     case emptyCategoryName
     case duplicateCategory
@@ -397,6 +398,8 @@ enum DictionaryStoreError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .dataUnavailable:
+            return AppLocalization.localizedString("Dictionary data is temporarily unavailable. Please try again.")
         case .emptyTerm:
             return AppLocalization.localizedString("Dictionary term cannot be empty.")
         case .emptyCategoryName:
@@ -454,28 +457,32 @@ final class DictionaryStore: ObservableObject {
         }
     }
 
-    func reload() {
+    @discardableResult
+    func reload() -> Bool {
         invalidatePendingReload()
         do {
             if let repository {
                 let decoded = try repository.allEntries()
-                applyReloadedCategories(try repository.allCategories())
+                let decodedCategories = try repository.allCategories()
                 if !decoded.isEmpty || !legacyDictionaryFileExists() {
+                    applyReloadedCategories(decodedCategories)
                     applyReloadedEntries(decoded)
-                    return
+                    return true
                 }
             }
 
             let url = try dictionaryFileURL()
             guard fileManager.fileExists(atPath: url.path) else {
                 applyReloadedEntries([])
-                return
+                return true
             }
             let data = try Data(contentsOf: url)
             let decoded = try JSONDecoder().decode([DictionaryEntry].self, from: data)
             applyReloadedEntries(decoded)
+            return true
         } catch {
-            applyReloadedEntries([])
+            VoxtLog.dictionary("Dictionary reload failed; preserving the current snapshot. error=\(error.localizedDescription)")
+            return false
         }
     }
 
@@ -565,6 +572,7 @@ final class DictionaryStore: ObservableObject {
     }
 
     func createCategory(name: String) throws -> DictionaryCategory {
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
         let preparedName = try prepareCategoryName(name)
         let now = Date()
         let category = DictionaryCategory(
@@ -582,6 +590,7 @@ final class DictionaryStore: ObservableObject {
     }
 
     func ensureCategory(id: UUID?, name: String?) -> DictionaryCategory {
+        guard completePendingReloadIfNeeded() else { return resolvedDefaultCategory() }
         guard let id else { return resolvedDefaultCategory() }
         if let existing = categories.first(where: { $0.id == id }) {
             return existing
@@ -602,6 +611,7 @@ final class DictionaryStore: ObservableObject {
     }
 
     func updateCategory(id: UUID, name: String) throws {
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let preparedName = try prepareCategoryName(name, excluding: id)
         var category = categories[index]
@@ -617,6 +627,7 @@ final class DictionaryStore: ObservableObject {
     }
 
     func setCategoryExpanded(id: UUID, expanded: Bool) {
+        guard completePendingReloadIfNeeded() else { return }
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         var category = categories[index]
         category.isExpanded = expanded
@@ -628,6 +639,7 @@ final class DictionaryStore: ObservableObject {
     }
 
     func deleteCategory(id: UUID, deleteEntries: Bool = false) {
+        guard completePendingReloadIfNeeded() else { return }
         guard id != DictionaryCategory.defaultID else { return }
         invalidatePendingReload()
         let targetCategory = categories.first(where: { $0.id == id })
@@ -904,6 +916,7 @@ final class DictionaryStore: ObservableObject {
         groupNameSnapshot: String?,
         source: DictionaryEntrySource
     ) throws {
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
         let prepared = try prepareEntryInput(
             term: term,
             replacementTerms: replacementTerms,
@@ -937,6 +950,7 @@ final class DictionaryStore: ObservableObject {
         groupNameSnapshot: String?,
         source: DictionaryEntrySource
     ) throws -> DictionaryEntryUpsertResult {
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
         let trimmedTerm = term.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = Self.normalizeTerm(trimmedTerm)
         guard !trimmedTerm.isEmpty, !normalized.isEmpty else {
@@ -977,6 +991,7 @@ final class DictionaryStore: ObservableObject {
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws {
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
         let prepared = try prepareEntryInput(
             term: term,
             replacementTerms: replacementTerms,
@@ -1005,26 +1020,33 @@ final class DictionaryStore: ObservableObject {
 
     @discardableResult
     func delete(id: UUID) -> Bool {
+        guard completePendingReloadIfNeeded() else { return false }
         guard deletePersistedEntry(id: id) else { return false }
         replaceEntries(entries.filter { $0.id != id }, sort: false)
         return true
     }
 
     func clearAll() {
+        guard completePendingReloadIfNeeded() else { return }
         guard clearPersistedEntries() else { return }
         replaceEntries([], sort: false)
     }
 
     func exportTransferJSONString() throws -> String {
-        try DictionaryTransferManager.exportJSONString(entries: entries, categories: resolvedCategories())
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
+        return try DictionaryTransferManager.exportJSONString(entries: entries, categories: resolvedCategories())
     }
 
     func importTransferJSONString(_ json: String) throws -> DictionaryImportResult {
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
         let payload = try DictionaryTransferManager.importPayload(from: json)
         return importTransferEntries(payload.entries, categories: payload.categories)
     }
 
     func importProjectTerms(_ terms: [String], source: DictionaryEntrySource) -> DictionaryProjectImportResult {
+        guard completePendingReloadIfNeeded() else {
+            return DictionaryProjectImportResult(addedCount: 0, reinforcedCount: 0, skippedCount: terms.count)
+        }
         var mergedEntries = entries
         var importValidationIndex = DictionaryValidationIndex(entries: mergedEntries)
         var addedCount = 0
@@ -1100,6 +1122,7 @@ final class DictionaryStore: ObservableObject {
     }
 
     func makeMatcherIfEnabled(for text: String, activeGroupID: UUID?) -> DictionaryMatcher? {
+        guard completePendingReloadIfNeeded() else { return nil }
         let configuration = matcherConfiguration(for: activeGroupID, sourceText: text)
         guard !configuration.entries.isEmpty else { return nil }
         return DictionaryMatcher(
@@ -1165,11 +1188,13 @@ final class DictionaryStore: ObservableObject {
     }
 
     func activeEntriesAcrossAllScopesForRemoteSync() -> [DictionaryEntry] {
+        guard completePendingReloadIfNeeded() else { return [] }
         return entries.filter { $0.status == .active }
     }
 
     @discardableResult
     func incrementOccurrences(in text: String, activeGroupID: UUID?) -> [String] {
+        guard completePendingReloadIfNeeded() else { return [] }
         let normalizedSource = Self.normalizeTerm(text)
         guard !normalizedSource.isEmpty else { return [] }
 
@@ -1204,6 +1229,7 @@ final class DictionaryStore: ObservableObject {
     }
 
     func recordMatches(_ candidates: [DictionaryMatchCandidate]) {
+        guard completePendingReloadIfNeeded() else { return }
         guard !candidates.isEmpty else { return }
         objectWillChange.send()
         let updatedEntries = recordCandidates(candidates)
@@ -1561,6 +1587,14 @@ final class DictionaryStore: ObservableObject {
     private func invalidatePendingReload() {
         reloadGeneration += 1
         isLoading = false
+    }
+
+    private func completePendingReloadIfNeeded() -> Bool {
+        guard isLoading else { return true }
+        // Normal startup remains asynchronous. Only a data-dependent action that
+        // races that first load pays the synchronous read, so validation and
+        // replace-all operations never run against a partial in-memory snapshot.
+        return reload()
     }
 
     private func legacyDictionaryFileExists() -> Bool {

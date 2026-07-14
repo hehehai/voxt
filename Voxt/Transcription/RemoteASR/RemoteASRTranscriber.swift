@@ -130,11 +130,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         lastPresentedRuntimeErrorMessage = ""
         let provider = selectedProvider
         let configuration = selectedProviderConfiguration(for: provider)
-        if let message = RemoteEndpointSecurityPolicy.validationMessage(
-            endpoint: configuration.endpoint,
-            hasCredentials: RemoteEndpointSecurityPolicy.hasExplicitCredentials(configuration),
-            allowsWebSocket: true
-        ) {
+        if let message = endpointSecurityValidationMessage(for: configuration) {
             notifyStartFailure(
                 NSError(
                     domain: "Voxt.RemoteASR",
@@ -614,6 +610,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         configuration: RemoteProviderConfiguration,
         hintPayload: ResolvedASRHintPayload
     ) async throws -> String {
+        if let message = endpointSecurityValidationMessage(for: configuration) {
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -20,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+
         switch provider {
         case .openAIWhisper:
             return try await transcribeOpenAI(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
@@ -628,6 +632,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         case .xiaomiMiMoASR:
             return try await transcribeXiaomiMiMo(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
         }
+    }
+
+    private func endpointSecurityValidationMessage(
+        for configuration: RemoteProviderConfiguration
+    ) -> String? {
+        RemoteEndpointSecurityPolicy.validationMessage(
+            endpoint: configuration.endpoint,
+            hasCredentials: RemoteEndpointSecurityPolicy.hasExplicitCredentials(configuration),
+            allowsWebSocket: true
+        )
     }
 
     private func startFileRecordingMode() throws {

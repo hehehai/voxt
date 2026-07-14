@@ -71,71 +71,90 @@ struct FeatureModelSelectorDialog: View {
     }
 
     var body: some View {
+        dialogContent
+            .settingsDialogChrome(width: 640, onClose: { dismiss() })
+            .onAppear(perform: initializeDefaultTags)
+            .id(interfaceLanguageRaw)
+    }
+
+    private var dialogContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title)
-                        .font(.title3.weight(.semibold))
-                }
-            }
+            dialogHeader
+            selectionReminderView
+            tagFilters
+            modelEntries
+        }
+    }
 
-            if let selectionReminder {
-                HStack(spacing: 6) {
-                    Image(systemName: "info.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.accentColor)
-                    Text(selectionReminder)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
+    private var dialogHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
             }
+        }
+    }
 
-            if !availableTags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(availableTagGroups.enumerated()), id: \.offset) { index, group in
-                            HStack(spacing: 8) {
-                                ForEach(group, id: \.self) { tag in
-                                    FeatureModelTagChip(
-                                        title: tag,
-                                        isSelected: selectedTags.contains(tag)
-                                    ) {
-                                        toggleTag(tag)
-                                    }
+    @ViewBuilder
+    private var selectionReminderView: some View {
+        if let selectionReminder {
+            HStack(spacing: 6) {
+                Image(systemName: "info.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                Text(selectionReminder)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tagFilters: some View {
+        if !availableTags.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(availableTagGroups.enumerated()), id: \.offset) { index, group in
+                        HStack(spacing: 8) {
+                            ForEach(group, id: \.self) { tag in
+                                FeatureModelTagChip(
+                                    title: tag,
+                                    isSelected: selectedTags.contains(tag)
+                                ) {
+                                    toggleTag(tag)
                                 }
                             }
-
-                            if index < availableTagGroups.count - 1 {
-                                Rectangle()
-                                    .fill(SettingsUIStyle.subtleBorderColor.opacity(0.95))
-                                    .frame(width: 1, height: 20)
-                                    .padding(.horizontal, 4)
-                            }
                         }
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    if filteredEntries.isEmpty {
-                        FeatureSelectorEmptyState()
-                    } else {
-                        ForEach(displayItems) { item in
-                            displayItemView(item)
+                        if index < availableTagGroups.count - 1 {
+                            Rectangle()
+                                .fill(SettingsUIStyle.subtleBorderColor.opacity(0.95))
+                                .frame(width: 1, height: 20)
+                                .padding(.horizontal, 4)
                         }
                     }
                 }
                 .padding(.vertical, 2)
             }
-            .frame(height: 400)
         }
-        .settingsDialogChrome(width: 640, onClose: { dismiss() })
-        .onAppear(perform: initializeDefaultTags)
-        .id(interfaceLanguageRaw)
+    }
+
+    private var modelEntries: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                if filteredEntries.isEmpty {
+                    FeatureSelectorEmptyState()
+                } else {
+                    ForEach(displayItems) { item in
+                        displayItemView(item)
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .frame(height: 400)
     }
 
     private func toggleTag(_ tag: String) {
@@ -532,111 +551,123 @@ private struct FeatureModelSelectorGroupCard: View {
     let onConfigure: (FeatureModelSelectionID) -> Void
 
     var body: some View {
+        groupContent
+            .clipped()
+            .animation(.easeInOut(duration: 0.18), value: isExpanded)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(SettingsUIStyle.modelGroupFillColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(SettingsUIStyle.modelCardBorderColor, lineWidth: 1)
+            )
+    }
+
+    private var groupContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    onToggle()
-                }
-            } label: {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .center, spacing: 8) {
-                        ModelLogoView(key: group.modelLogoKey, fallbackTitle: group.title, size: 18)
+            groupHeader
+            expandedEntries
+        }
+    }
 
-                        Text(group.title)
-                            .font(.headline)
-
-                        if let badgeText = group.badgeText {
-                            ModelBadgeView(badgeText: badgeText, showsCapsuleForText: true)
-                        }
-
-                        Text(group.engine)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(SettingsUIStyle.groupedFillColor)
-                            )
-
-                        Spacer(minLength: 0)
-
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 18, height: 18)
-                    }
-
-                    HStack(spacing: 12) {
-                        FeatureSelectorMetaText(title: localized("Models"), value: "\(group.entries.count)")
-                        FeatureSelectorMetaText(title: localized("Installed"), value: "\(group.installedCount)/\(group.entries.count)")
-                        FeatureSelectorMetaText(title: localized("Score"), value: group.ratingText)
-                        if !group.usageLocations.isEmpty {
-                            FeatureSelectorMetaText(
-                                title: localized("Usage"),
-                                value: group.usageLocations.joined(separator: " · ")
-                            )
-                        }
-                    }
-
-                    if !group.tags.isEmpty {
-                        FeatureSelectorTagStrip(tags: group.tags)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+    private var groupHeader: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                onToggle()
             }
-            .buttonStyle(.plain)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 8) {
+                    ModelLogoView(key: group.modelLogoKey, fallbackTitle: group.title, size: 18)
 
-            if isExpanded {
-                VStack(spacing: 0) {
-                    ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
-                        FeatureModelSelectorRow(
-                            entry: entry,
-                            isSelected: entry.selectionID == selectedID,
-                            onSelect: { onSelect(entry.selectionID) },
-                            onConfigure: FeatureModelConfigurationRouting.canConfigure(entry.selectionID)
-                                ? { onConfigure(entry.selectionID) }
-                                : nil,
-                            titleOverride: entry.groupedVariantTitle,
-                            showsEngine: false,
-                            showsTags: false,
-                            showsIcon: false,
-                            surface: .listItem
+                    Text(group.title)
+                        .font(.headline)
+
+                    if let badgeText = group.badgeText {
+                        ModelBadgeView(badgeText: badgeText, showsCapsuleForText: true)
+                    }
+
+                    Text(group.engine)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(SettingsUIStyle.groupedFillColor)
                         )
 
-                        if index < group.entries.count - 1 {
-                            Divider()
-                                .padding(.leading, 12)
-                        }
+                    Spacer(minLength: 0)
+
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                }
+
+                HStack(spacing: 12) {
+                    FeatureSelectorMetaText(title: localized("Models"), value: "\(group.entries.count)")
+                    FeatureSelectorMetaText(title: localized("Installed"), value: "\(group.installedCount)/\(group.entries.count)")
+                    FeatureSelectorMetaText(title: localized("Score"), value: group.ratingText)
+                    if !group.usageLocations.isEmpty {
+                        FeatureSelectorMetaText(
+                            title: localized("Usage"),
+                            value: group.usageLocations.joined(separator: " · ")
+                        )
                     }
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(SettingsUIStyle.modelGroupListFillColor)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(SettingsUIStyle.modelCardBorderColor, lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .clipped()
-                .transition(.opacity)
+
+                if !group.tags.isEmpty {
+                    FeatureSelectorTagStrip(tags: group.tags)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .clipped()
-        .animation(.easeInOut(duration: 0.18), value: isExpanded)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(SettingsUIStyle.modelGroupFillColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(SettingsUIStyle.modelCardBorderColor, lineWidth: 1)
-        )
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var expandedEntries: some View {
+        if isExpanded {
+            VStack(spacing: 0) {
+                ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                    FeatureModelSelectorRow(
+                        entry: entry,
+                        isSelected: entry.selectionID == selectedID,
+                        onSelect: { onSelect(entry.selectionID) },
+                        onConfigure: FeatureModelConfigurationRouting.canConfigure(entry.selectionID)
+                            ? { onConfigure(entry.selectionID) }
+                            : nil,
+                        titleOverride: entry.groupedVariantTitle,
+                        showsEngine: false,
+                        showsTags: false,
+                        showsIcon: false,
+                        surface: .listItem
+                    )
+
+                    if index < group.entries.count - 1 {
+                        Divider()
+                            .padding(.leading, 12)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(SettingsUIStyle.modelGroupListFillColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(SettingsUIStyle.modelCardBorderColor, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipped()
+            .transition(.opacity)
+        }
     }
 }
 

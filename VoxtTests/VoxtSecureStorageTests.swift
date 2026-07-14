@@ -2,6 +2,7 @@
 // Verifies Data Protection Keychain migration behavior without touching the user's keychain.
 
 import XCTest
+import Security
 @testable import Voxt
 
 final class VoxtSecureStorageTests: XCTestCase {
@@ -89,5 +90,14 @@ final class VoxtSecureStorageTests: XCTestCase {
 
         XCTAssertTrue(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
         XCTAssertTrue(VoxtSecureStorage.hasLegacyValueForTesting(for: account))
+    }
+
+    func testLegacyQueryExplicitlyExcludesDataProtectionKeychain() {
+        let query = VoxtSecureStorage.legacyQuery(
+            for: "remote-provider.doubaoASR.credentials",
+            interactionAllowed: false
+        )
+
+        XCTAssertEqual(query[kSecUseDataProtectionKeychain as String] as? Bool, false)
     }
 }

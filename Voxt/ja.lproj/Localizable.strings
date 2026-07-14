@@ -2212,3 +2212,4 @@
 "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "エンドポイントには有効な HTTP、HTTPS、WS、または WSS URL を指定してください。";
 "Endpoint must not contain a username or password." = "エンドポイントにユーザー名やパスワードを含めることはできません。";
 "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts." = "資格情報を送信できる安全でないエンドポイントはこの Mac 上のものだけです。リモートホストには HTTPS または WSS を使用してください。";
+"Dictionary data is temporarily unavailable. Please try again." = "辞書データを一時的に利用できません。もう一度お試しください。";

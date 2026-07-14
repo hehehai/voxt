@@ -416,26 +416,72 @@ final class RemoteModelConfigurationTests: XCTestCase {
         let migratedRaw = defaults.string(
             forKey: AppPreferenceKey.remoteASRProviderConfigurations
         ) ?? ""
-        let stillAvailable = RemoteModelConfigurationStore.loadConfiguration(
-            providerID: RemoteASRProvider.doubaoASR.rawValue,
-            from: migratedRaw
-        )
-        XCTAssertTrue(migratedRaw.contains("storedCredentialPresence"))
-        XCTAssertEqual(stillAvailable?.appID, "legacy-app")
-        XCTAssertEqual(stillAvailable?.accessToken, "legacy-token")
+        XCTAssertEqual(migratedRaw, legacyRaw)
+        XCTAssertEqual(defaults.integer(forKey: AppPreferenceKey.remoteCredentialMigrationVersion), 0)
         XCTAssertTrue(VoxtSecureStorage.hasLegacyValueForTesting(for: account))
         XCTAssertFalse(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
 
         VoxtSecureStorage.setProtectedWritesFailForTesting(false)
         VoxtSecureStorage.clearCacheForTesting()
+        RemoteModelConfigurationStore.migrateLegacyStoredSecrets(defaults: defaults)
 
+        let retriedRaw = defaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
         let retried = RemoteModelConfigurationStore.loadConfiguration(
             providerID: RemoteASRProvider.doubaoASR.rawValue,
-            from: migratedRaw
+            from: retriedRaw
         )
+        XCTAssertTrue(retriedRaw.contains("storedCredentialPresence"))
         XCTAssertEqual(retried?.appID, "legacy-app")
         XCTAssertEqual(retried?.accessToken, "legacy-token")
         XCTAssertFalse(VoxtSecureStorage.hasLegacyValueForTesting(for: account))
+        XCTAssertTrue(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
+        XCTAssertEqual(defaults.integer(forKey: AppPreferenceKey.remoteCredentialMigrationVersion), 1)
+    }
+
+    func testStaleCredentialPresenceIsCorrectedOnceAndOneSaveRestoresStableStorage() throws {
+        let suiteName = "RemoteModelConfigurationTests.staleCredentialPresence.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let providerID = RemoteASRProvider.doubaoASR.rawValue
+        let account = "remote-provider.\(providerID).credentials"
+        let configured = TestFactories.makeRemoteConfiguration(
+            providerID: providerID,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app",
+            accessToken: "doubao-token"
+        )
+        let staleRaw = RemoteModelConfigurationStore.saveConfigurations([providerID: configured])
+        // Reproduce the old failure mode: the item is gone but a process-local
+        // cache still contains the value. Migration must trust Keychain state.
+        VoxtSecureStorage.removeProtectedValueForTesting(for: account, preservingCache: true)
+        defaults.set(staleRaw, forKey: AppPreferenceKey.remoteASRProviderConfigurations)
+
+        RemoteModelConfigurationStore.migrateLegacyStoredSecrets(defaults: defaults)
+
+        let correctedRaw = defaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
+        let corrected = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: providerID,
+                from: correctedRaw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        XCTAssertFalse(corrected.isConfigured)
+        XCTAssertEqual(defaults.integer(forKey: AppPreferenceKey.remoteCredentialMigrationVersion), 1)
+
+        let savedRaw = try RemoteModelConfigurationStore.saveConfiguration(
+            configured,
+            updating: correctedRaw
+        ).get()
+        VoxtSecureStorage.clearCacheForTesting()
+        RemoteModelConfigurationStore.migrateLegacyStoredSecrets(defaults: defaults)
+        let reloaded = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(providerID: providerID, from: savedRaw)
+        )
+
+        XCTAssertEqual(reloaded.appID, "doubao-app")
+        XCTAssertEqual(reloaded.accessToken, "doubao-token")
         XCTAssertTrue(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
     }
 
@@ -1333,6 +1379,12 @@ final class RemoteModelConfigurationTests: XCTestCase {
                 for: "remote-provider.openAI.apiKey"
             )
         )
+        XCTAssertNil(
+            VoxtSecureStorage.string(
+                for: "remote-provider.openAI.credentials"
+            )
+        )
+        XCTAssertEqual(defaults.integer(forKey: AppPreferenceKey.remoteCredentialMigrationVersion), 1)
     }
 
     func testSavingOneRemoteASRProviderPreservesOtherProviderSecrets() throws {

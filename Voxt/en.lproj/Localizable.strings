@@ -2217,3 +2217,4 @@
 "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL.";
 "Endpoint must not contain a username or password." = "Endpoint must not contain a username or password.";
 "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts." = "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts.";
+"Dictionary data is temporarily unavailable. Please try again." = "Dictionary data is temporarily unavailable. Please try again.";

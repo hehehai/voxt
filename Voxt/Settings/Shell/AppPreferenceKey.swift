@@ -28,6 +28,7 @@ enum AppPreferenceKey {
     static let remoteASRProviderConfigurations = "remoteASRProviderConfigurations"
     static let remoteLLMSelectedProvider = "remoteLLMSelectedProvider"
     static let remoteLLMProviderConfigurations = "remoteLLMProviderConfigurations"
+    static let remoteCredentialMigrationVersion = "remoteCredentialMigrationVersion"
     static let translationRemoteLLMProvider = "translationRemoteLLMProvider"
     static let rewriteRemoteLLMProvider = "rewriteRemoteLLMProvider"
     static let asrHintSettings = "asrHintSettings"

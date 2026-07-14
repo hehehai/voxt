@@ -119,6 +119,11 @@ struct GeneralSettingsView: View {
     }
 
     var body: some View {
+        settingsWithSheets
+            .id(interfaceLanguageRaw)
+    }
+
+    private var settingsCards: some View {
         VStack(alignment: .leading, spacing: 16) {
             GeneralTranscriptionUICard(
                 overlayPosition: overlayPosition,
@@ -196,6 +201,10 @@ struct GeneralSettingsView: View {
             }
             .settingsNavigationAnchor(.generalAdvanced)
         }
+    }
+
+    private var settingsWithAppBehaviorLifecycle: some View {
+        settingsCards
         .onAppear {
             refreshInputDevices()
 
@@ -261,6 +270,10 @@ struct GeneralSettingsView: View {
                     : AppLocalization.localizedString("System audio recording permission is required for this feature. You can grant it in Settings > Permissions.")
             }
         }
+    }
+
+    private var settingsWithAppearanceLifecycle: some View {
+        settingsWithAppBehaviorLifecycle
         .onChange(of: interfaceLanguageRaw) { _, _ in
             NotificationCenter.default.post(name: .voxtInterfaceLanguageDidChange, object: nil)
         }
@@ -291,12 +304,20 @@ struct GeneralSettingsView: View {
         .onChange(of: navigationRequest) { _, _ in
             syncAdvancedExpansionWithNavigationRequest()
         }
+    }
+
+    private var settingsWithLifecycle: some View {
+        settingsWithAppearanceLifecycle
         .onReceive(NotificationCenter.default.publisher(for: .voxtAudioInputDevicesDidChange)) { _ in
             refreshInputDevices()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtSelectedInputDeviceDidChange)) { _ in
             refreshInputDevices()
         }
+    }
+
+    private var settingsWithSheets: some View {
+        settingsWithLifecycle
         .sheet(isPresented: $isUserMainLanguageSheetPresented) {
             UserMainLanguageSelectionSheet(
                 selectedCodes: selectedUserMainLanguageCodes,
@@ -322,7 +343,6 @@ struct GeneralSettingsView: View {
         .sheet(isPresented: $isLogsViewerPresented) {
             LogsViewerSheet()
         }
-        .id(interfaceLanguageRaw)
     }
 
     private func refreshInputDevices() {

@@ -444,7 +444,8 @@ nonisolated private func recognizeWithSherpa(
     let chunks = sherpaRecognitionChunks(samples: samples, sampleRate: sampleRate, option: option)
     if chunks.count > 1 {
         let durationMilliseconds = Int((Double(samples.count) / Double(sampleRate)) * 1000)
-        let chunkMilliseconds = Int((Double(chunks.first?.count ?? 0) / Double(sampleRate)) * 1000)
+        let firstChunkSampleCount = chunks.first?.count ?? 0
+        let chunkMilliseconds = Int((Double(firstChunkSampleCount) / Double(sampleRate)) * 1000)
         VoxtLog.asr(
             "Sherpa ONNX FunASR chunking enabled. durationMs=\(durationMilliseconds), chunks=\(chunks.count), chunkMs=\(chunkMilliseconds)"
         )

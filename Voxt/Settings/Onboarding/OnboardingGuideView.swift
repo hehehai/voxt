@@ -281,6 +281,16 @@ struct OnboardingGuideView: View {
     }
 
     var body: some View {
+        guideWithNotifications
+            .background(
+                OnboardingGuideHotkeyObserver { hotkeyKind in
+                    handleShortcutObserved(hotkeyKind)
+                }
+                .frame(width: 0, height: 0)
+            )
+    }
+
+    private var guideShell: some View {
         ZStack {
             GeometryReader { proxy in
                 let shellHeight = max(
@@ -342,6 +352,10 @@ struct OnboardingGuideView: View {
 
             onboardingModalOverlay
         }
+    }
+
+    private var styledGuideShell: some View {
+        guideShell
         .background(OnboardingGuideStyle.windowBackground)
         .clipShape(RoundedRectangle(cornerRadius: OnboardingGuideStyle.windowCornerRadius, style: .continuous))
         .overlay(
@@ -351,6 +365,10 @@ struct OnboardingGuideView: View {
         .frame(width: Self.windowSize.width, height: Self.windowSize.height)
         .environment(\.locale, interfaceLanguage.locale)
         .groupBoxStyle(SettingsPanelGroupBoxStyle())
+    }
+
+    private var guideWithStateLifecycle: some View {
+        styledGuideShell
         .onAppear {
             refreshInputDevices()
             refreshModelStorageDisplayPath()
@@ -398,6 +416,10 @@ struct OnboardingGuideView: View {
                 syncFeatureSelections()
             }
         }
+    }
+
+    private var guideWithNotifications: some View {
+        guideWithStateLifecycle
         .onReceive(NotificationCenter.default.publisher(for: .voxtAudioInputDevicesDidChange)) { _ in
             refreshInputDevices()
             restartMicrophoneMeterIfNeeded()
@@ -418,12 +440,6 @@ struct OnboardingGuideView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissionRefreshRevision += 1
         }
-        .background(
-            OnboardingGuideHotkeyObserver { hotkeyKind in
-                handleShortcutObserved(hotkeyKind)
-            }
-            .frame(width: 0, height: 0)
-        )
     }
 
     private var topChrome: some View {

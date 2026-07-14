@@ -402,37 +402,8 @@ private struct MeetingOverlayCard: View {
                 .foregroundStyle(.white.opacity(0.6))
 
             HStack(spacing: 10) {
-                Button(AppLocalization.localizedString("Cancel Transcription")) {
-                    onConfirmCancelMeeting()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.94))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.red.opacity(0.16))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.red.opacity(0.28), lineWidth: 1)
-                )
-
-                Button(AppLocalization.localizedString("Finish Transcription")) {
-                    onConfirmFinishMeeting()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.94))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.22))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)
-                )
+                cancelMeetingButton
+                finishMeetingButton
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -447,6 +418,42 @@ private struct MeetingOverlayCard: View {
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.28), radius: 20, y: 12)
+    }
+
+    private var cancelMeetingButton: some View {
+        Button(AppLocalization.localizedString("Cancel Transcription")) {
+            onConfirmCancelMeeting()
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white.opacity(0.94))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.red.opacity(0.16))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.red.opacity(0.28), lineWidth: 1)
+        )
+    }
+
+    private var finishMeetingButton: some View {
+        Button(AppLocalization.localizedString("Finish Transcription")) {
+            onConfirmFinishMeeting()
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white.opacity(0.94))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.accentColor.opacity(0.22))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)
+        )
     }
 
     private var cornerRadius: CGFloat {

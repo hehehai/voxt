@@ -91,16 +91,24 @@ struct RecentAudioWaveformModel {
             return Array(repeating: minimumLevel, count: barCount)
         }
 
-        return (0..<barCount).map { index in
-            let start = Int((Double(index) / Double(barCount)) * Double(samples.count))
-            let end = Int((Double(index + 1) / Double(barCount)) * Double(samples.count))
-            let clampedStart = min(max(start, 0), max(samples.count - 1, 0))
-            let clampedEnd = min(max(end, clampedStart + 1), samples.count)
-            let bucket = Array(samples[clampedStart..<clampedEnd])
+        let sampleCount = samples.count
+        let barCountAsDouble = Double(barCount)
+        let sampleCountAsDouble = Double(sampleCount)
+        var bars: [Float] = []
+        bars.reserveCapacity(barCount)
+
+        for index in 0..<barCount {
+            let start = Int((Double(index) / barCountAsDouble) * sampleCountAsDouble)
+            let end = Int((Double(index + 1) / barCountAsDouble) * sampleCountAsDouble)
+            let clampedStart = min(max(start, 0), sampleCount - 1)
+            let clampedEnd = min(max(end, clampedStart + 1), sampleCount)
+            let bucket = samples[clampedStart..<clampedEnd]
             let peak = bucket.max() ?? minimumLevel
             let average = bucket.reduce(0, +) / Float(max(bucket.count, 1))
-            return max(minimumLevel, min(1, peak * 0.68 + average * 0.32))
+            bars.append(max(minimumLevel, min(1, peak * 0.68 + average * 0.32)))
         }
+
+        return bars
     }
 }
 

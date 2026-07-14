@@ -626,36 +626,7 @@ struct ModelSettingsView: View {
             Spacer(minLength: 0)
 
             if !missingConfigurationIssues.isEmpty {
-                Menu {
-                    ForEach(missingConfigurationIssueDescriptions, id: \.self) { description in
-                        Text(description)
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text(
-                            missingConfigurationIssues.count == 1
-                            ? localized("1 model needs setup")
-                            : AppLocalization.format("%d models need setup", missingConfigurationIssues.count)
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.orange.opacity(0.10))
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(Color.orange.opacity(0.18), lineWidth: 1)
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .help(missingConfigurationIssueDescriptions.joined(separator: "\n"))
+                missingConfigurationMenu
             }
 
             Text(AppLocalization.format("%d items", filteredEntries.count))
@@ -674,6 +645,45 @@ struct ModelSettingsView: View {
             }
             .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 12))
         }
+    }
+
+    private var missingConfigurationMenu: some View {
+        Menu {
+            ForEach(missingConfigurationIssueDescriptions, id: \.self) { description in
+                Text(description)
+            }
+        } label: {
+            missingConfigurationMenuLabel
+        }
+        .menuStyle(.borderlessButton)
+        .help(missingConfigurationIssueDescriptions.joined(separator: "\n"))
+    }
+
+    private var missingConfigurationMenuLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(missingConfigurationIssueCountLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.orange.opacity(0.10))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private var missingConfigurationIssueCountLabel: String {
+        missingConfigurationIssues.count == 1
+            ? localized("1 model needs setup")
+            : AppLocalization.format("%d models need setup", missingConfigurationIssues.count)
     }
 
     private var modelDownloadSettingsSheet: some View {
