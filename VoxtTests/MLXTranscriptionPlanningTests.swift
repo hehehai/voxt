@@ -484,6 +484,94 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         )
     }
 
+    func testQwenStreamingTextHidesProtocolUntilTextMarkerCompletes() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText("language Chinese<asr_te"),
+            ""
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText("language Chinese<asr_text>\u{4f60}\u{597d}\u{3002}"),
+            "\u{4f60}\u{597d}\u{3002}"
+        )
+    }
+
+    func testQwenStreamingTextParsesMarkerSplitAcrossConfirmedAndProvisionalText() {
+        let parts = MLXTranscriptionPlanning.qwenStreamingVisibleTextParts(
+            confirmedText: "language Chinese<asr_",
+            provisionalText: "text>\u{4f60}\u{597d}\u{3002}"
+        )
+
+        XCTAssertEqual(parts.confirmedText, "")
+        XCTAssertEqual(parts.provisionalText, "\u{4f60}\u{597d}\u{3002}")
+    }
+
+    func testQwenStreamingTextRemovesProtocolAfterWindowReset() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                "language Chinese<asr_text>\u{4f60}\u{597d}\u{3002} language Chinese<asr_text>\u{4e16}\u{754c}\u{3002}"
+            ),
+            "\u{4f60}\u{597d}\u{3002} \u{4e16}\u{754c}\u{3002}"
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                "language Chinese<asr_text>\u{4f60}\u{597d}\u{3002} language Chin"
+            ),
+            "\u{4f60}\u{597d}\u{3002}"
+        )
+    }
+
+    func testQwenStreamingTextPreservesOrdinaryLanguageTextBeforeWindowHeader() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                "I study language models language Chinese<asr_text>hello"
+            ),
+            "I study language models hello"
+        )
+
+        let parts = MLXTranscriptionPlanning.qwenStreamingVisibleTextParts(
+            confirmedText: "I study language models language Chin",
+            provisionalText: "ese<asr_text>hello"
+        )
+        XCTAssertEqual(parts.confirmedText, "I study language models")
+        XCTAssertEqual(parts.provisionalText, " hello")
+    }
+
+    func testQwenFinalTextPreservesOrdinaryTrailingLanguageName() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                "language English<asr_text>I study language Chinese",
+                suppressIncompleteWindowHeader: false
+            ),
+            "I study language Chinese"
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                "language English<asr_text>call lang",
+                suppressIncompleteWindowHeader: false
+            ),
+            "call lang"
+        )
+    }
+
+    func testQwenStreamingTextLeavesOrdinaryDecodedTextUnchanged() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText("Use language models carefully."),
+            "Use language models carefully."
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                "language English<asr_text>language models"
+            ),
+            "language models"
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                "language Models<asr_text>hello"
+            ),
+            "language Models<asr_text>hello"
+        )
+    }
+
     func testMergedHiddenPostStopPreviewKeepsLongerBaseWhenCandidateIsContained() {
         let base = "文档目录结构都能被读取。你可以在文档列表中复制一份或多份文档，直接发起对话。"
         let candidate = "你可以在文档列表中复制一份或多份文档"

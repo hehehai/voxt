@@ -154,6 +154,29 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(payload.language, "Traditional Chinese")
     }
 
+    func testResolveMLXKeepsQwenPrimaryLanguageWhenSecondaryLanguagesAreConfigured() {
+        let payload = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hans", "en"],
+            mlxModelRepo: "mlx-community/Qwen3-ASR-0.6B-4bit"
+        )
+
+        XCTAssertEqual(payload.language, "Simplified Chinese")
+        XCTAssertEqual(payload.otherLanguages, ["English"])
+    }
+
+    func testResolveMLXAllowsQwenAutomaticLanguageWhenFollowingMainLanguageIsDisabled() {
+        let payload = ASRHintResolver.resolve(
+            target: .mlxAudio,
+            settings: ASRHintSettings(followsUserMainLanguage: false),
+            userLanguageCodes: ["zh-Hans", "en"],
+            mlxModelRepo: "mlx-community/Qwen3-ASR-0.6B-4bit"
+        )
+
+        XCTAssertNil(payload.language)
+    }
+
     func testResolveMLXUsesSenseVoiceLanguageRoutingOnlyForSupportedLocales() {
         let cantonesePayload = ASRHintResolver.resolve(
             target: .mlxAudio,

@@ -108,7 +108,7 @@ nonisolated struct MLXASRModelCapability: Equatable, Sendable {
         switch languageRouting {
         case .iso6391(let required):
             return required
-        case .localeOrISO6391:
+        case .languageName, .localeOrISO6391:
             return true
         default:
             return false

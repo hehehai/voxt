@@ -696,6 +696,125 @@ enum MLXTranscriptionPlanning {
         return combined
     }
 
+    nonisolated static func qwenStreamingVisibleTextParts(
+        confirmedText: String,
+        provisionalText: String
+    ) -> (confirmedText: String, provisionalText: String) {
+        let visibleConfirmed = qwenStreamingVisibleText(confirmedText)
+        let visibleCombined = qwenStreamingVisibleText(confirmedText + provisionalText)
+
+        guard visibleCombined.hasPrefix(visibleConfirmed) else {
+            return (confirmedText: "", provisionalText: visibleCombined)
+        }
+
+        return (
+            confirmedText: visibleConfirmed,
+            provisionalText: String(visibleCombined.dropFirst(visibleConfirmed.count))
+        )
+    }
+
+    nonisolated static func qwenStreamingVisibleText(
+        _ decodedText: String,
+        suppressIncompleteWindowHeader: Bool = true
+    ) -> String {
+        let protocolPrefix = "language "
+        let textMarker = "<asr_text>"
+        let trimmed = decodedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        var visible = ""
+        var cursor = trimmed.startIndex
+
+        while cursor < trimmed.endIndex,
+              let prefixRange = trimmed.range(
+                  of: protocolPrefix,
+                  range: cursor..<trimmed.endIndex
+              ) {
+            visible.append(contentsOf: trimmed[cursor..<prefixRange.lowerBound])
+
+            if prefixRange.lowerBound != trimmed.startIndex,
+               !trimmed[trimmed.index(before: prefixRange.lowerBound)].isWhitespace {
+                visible.append(contentsOf: protocolPrefix)
+                cursor = prefixRange.upperBound
+                continue
+            }
+
+            let metadataStart = prefixRange.upperBound
+            let metadataTail = trimmed[metadataStart...]
+
+            if let markerRange = metadataTail.range(of: textMarker) {
+                let language = metadataTail[..<markerRange.lowerBound]
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard isQwenLanguageName(language) else {
+                    visible.append(contentsOf: protocolPrefix)
+                    cursor = metadataStart
+                    continue
+                }
+                cursor = markerRange.upperBound
+                continue
+            }
+
+            let isInitialHeader = prefixRange.lowerBound == trimmed.startIndex
+            if (isInitialHeader || suppressIncompleteWindowHeader),
+               isIncompleteQwenProtocolMetadata(metadataTail, textMarker: textMarker) {
+                cursor = trimmed.endIndex
+                break
+            }
+
+            visible.append(contentsOf: protocolPrefix)
+            cursor = metadataStart
+        }
+
+        if cursor < trimmed.endIndex {
+            visible.append(contentsOf: trimmed[cursor...])
+        }
+
+        return removingInitialIncompleteQwenProtocolPrefix(from: visible)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private nonisolated static func isIncompleteQwenProtocolMetadata<S: StringProtocol>(
+        _ value: S,
+        textMarker: String
+    ) -> Bool {
+        let tail = String(value)
+        guard let markerStart = tail.firstIndex(of: "<") else {
+            let language = tail.trimmingCharacters(in: .whitespacesAndNewlines)
+            return language.isEmpty || isQwenLanguageNamePrefix(language)
+        }
+
+        let language = tail[..<markerStart].trimmingCharacters(in: .whitespacesAndNewlines)
+        let partialMarker = String(tail[markerStart...])
+        return isQwenLanguageName(language) && textMarker.hasPrefix(partialMarker)
+    }
+
+    private nonisolated static func isQwenLanguageName<S: StringProtocol>(_ value: S) -> Bool {
+        let candidate = String(value).lowercased()
+        return qwenLanguageNames.contains(candidate)
+    }
+
+    private nonisolated static func isQwenLanguageNamePrefix<S: StringProtocol>(_ value: S) -> Bool {
+        let candidate = String(value).lowercased()
+        return qwenLanguageNames.contains { $0.hasPrefix(candidate) }
+    }
+
+    private nonisolated static func removingInitialIncompleteQwenProtocolPrefix(from text: String) -> String {
+        let protocolPrefix = "language "
+        for prefixLength in stride(from: protocolPrefix.count - 1, through: 3, by: -1) {
+            let partialPrefix = String(protocolPrefix.prefix(prefixLength))
+            if text == partialPrefix { return "" }
+        }
+        return text
+    }
+
+    private nonisolated static let qwenLanguageNames: Set<String> = [
+        "arabic", "cantonese", "chinese", "czech", "danish", "dutch", "english",
+        "finnish", "french", "german", "greek", "hindi", "hungarian",
+        "indonesian", "italian", "japanese", "korean", "macedonian", "malay",
+        "persian", "polish", "portuguese", "romanian", "russian", "spanish",
+        "swedish", "tagalog", "thai", "turkish", "vietnamese",
+    ]
+
     static func correctionPassSchedulingDecision(
         requestedPass: MLXCorrectionPassKind,
         inFlightPass: MLXCorrectionPassKind?
@@ -1132,6 +1251,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var latestNativeLiveConfirmedText = ""
     private var latestNativeLivePreviewText = ""
     private var latestNativeLiveEndedText = ""
+    private var nativeQwenLiveUsesAutomaticLanguageProtocol = false
     var sessionAllowsRealtimeTextDisplay = true
     private var didRetryCaptureStartup = false
     private var activeCaptureUsesPreferredInputDevice = false
@@ -1414,6 +1534,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         )
         if MLXTranscriptionPlanning.isNativeLiveMode(activeLiveMode) {
             await waitForNativeLiveEndedPreviewIfNeeded(revision: revision)
+            guard revision == sessionRevision else { return }
+            releaseNativeLiveSession(cancelSession: true)
         }
         let shouldRunQuickPass = MLXTranscriptionPlanning.shouldRunQuickStopPass(
             plan: plan,
@@ -1639,6 +1761,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         latestNativeLiveConfirmedText = ""
         latestNativeLivePreviewText = ""
         latestNativeLiveEndedText = ""
+        nativeQwenLiveUsesAutomaticLanguageProtocol = false
     }
 
     private var currentCorrectionIntervalSeconds: Double {
@@ -1888,10 +2011,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     private func installNativeQwenLiveSession(_ model: Qwen3ASRModel, revision: Int) {
         releaseNativeLiveSession(cancelSession: true)
+        let language = resolvedNativeQwenLiveLanguage()
+        nativeQwenLiveUsesAutomaticLanguageProtocol = language == nil
         let session = StreamingInferenceSession(
             model: model,
             config: StreamingConfig(
-                language: resolvedNativeQwenLiveLanguage(),
+                language: language,
                 temperature: 0.0,
                 maxTokensPerPass: 1024
             )
@@ -2106,10 +2231,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         latestNativeLiveConfirmedText = ""
         latestNativeLivePreviewText = ""
         latestNativeLiveEndedText = ""
+        if activeLiveMode != .nativeQwenLive {
+            nativeQwenLiveUsesAutomaticLanguageProtocol = false
+        }
         let feedPollInterval = qwenLiveFeedPollInterval
 
         qwenStreamingEventTask = Task { [weak self, session] in
             for await event in session.events {
+                guard !Task.isCancelled else { return }
                 self?.handleNativeLiveEvent(event, revision: revision)
             }
         }
@@ -2223,27 +2352,45 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         switch event {
         case .displayUpdate(let confirmedText, let provisionalText):
-            let visibleConfirmedText = renderedMossTextIfNeeded(confirmedText)
-            let visibleProvisionalText = renderedMossTextIfNeeded(provisionalText)
+            let visibleParts: (confirmedText: String, provisionalText: String)
+            if nativeQwenLiveUsesAutomaticLanguageProtocol {
+                visibleParts = MLXTranscriptionPlanning.qwenStreamingVisibleTextParts(
+                    confirmedText: confirmedText,
+                    provisionalText: provisionalText
+                )
+            } else {
+                visibleParts = (
+                    confirmedText: renderedMossTextIfNeeded(confirmedText),
+                    provisionalText: renderedMossTextIfNeeded(provisionalText)
+                )
+            }
             guard let combined = MLXTranscriptionPlanning.resolvedNativeLiveVisiblePreview(
                 previousPreview: latestNativeLivePreviewText,
                 previousConfirmedText: latestNativeLiveConfirmedText,
-                confirmedText: visibleConfirmedText,
-                provisionalText: visibleProvisionalText
+                confirmedText: visibleParts.confirmedText,
+                provisionalText: visibleParts.provisionalText
             ) else { return }
-            latestNativeLiveConfirmedText = normalizeText(visibleConfirmedText)
+            latestNativeLiveConfirmedText = normalizeText(visibleParts.confirmedText)
+            latestNativeLivePreviewText = combined
             internalTranscribedText = combined
             transcribedText = combined
-            latestNativeLivePreviewText = combined
             publishPartial(combined)
         case .ended(let fullText):
-            let normalized = normalizeText(renderedMossTextIfNeeded(fullText))
+            let visibleText = nativeQwenLiveUsesAutomaticLanguageProtocol
+                ? MLXTranscriptionPlanning.qwenStreamingVisibleText(
+                    fullText,
+                    suppressIncompleteWindowHeader: false
+                )
+                : renderedMossTextIfNeeded(fullText)
+            let normalized = normalizeText(visibleText)
             latestNativeLiveConfirmedText = normalized
             latestNativeLiveEndedText = normalized
             if !normalized.isEmpty {
+                latestNativeLivePreviewText = normalized
+            }
+            if !normalized.isEmpty {
                 internalTranscribedText = normalized
                 transcribedText = normalized
-                latestNativeLivePreviewText = normalized
                 publishPartial(normalized)
             }
         case .failed(let failure):
