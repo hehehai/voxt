@@ -13,6 +13,7 @@ enum OverlayDisplayMode: Equatable {
 
 enum OverlaySessionIconMode: Equatable {
     case transcription
+    case note
     case translation
     case rewrite
 }

@@ -64,6 +64,10 @@ final class RecordingSessionSupportTests: XCTestCase {
     func testOutputLabelAndOverlayIconModeStayAligned() {
         XCTAssertEqual(RecordingSessionSupport.outputLabel(for: .transcription), "transcription")
         XCTAssertEqual(RecordingSessionSupport.overlayIconMode(for: .transcription), .transcription)
+        XCTAssertEqual(
+            RecordingSessionSupport.overlayIconMode(for: .transcription, isNoteSession: true),
+            .note
+        )
         XCTAssertEqual(RecordingSessionSupport.outputLabel(for: .translation), "translation")
         XCTAssertEqual(RecordingSessionSupport.overlayIconMode(for: .translation), .translation)
         XCTAssertEqual(RecordingSessionSupport.outputLabel(for: .rewrite), "rewrite")

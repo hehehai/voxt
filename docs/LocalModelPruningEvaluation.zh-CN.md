@@ -36,9 +36,10 @@
 | 低性能 | 默认通用 ASR | Qwen3-ASR 0.6B 4bit | `mlx-community/Qwen3-ASR-0.6B-4bit` | 0.71 GB | 保留为默认 |
 | 中性能 | 主推通用 ASR | Qwen3-ASR 1.7B 6bit | `mlx-community/Qwen3-ASR-1.7B-6bit` | 2.03 GB | 保留为主推质量档 |
 | 高性能 | 高精度通用 ASR | Qwen3-ASR 1.7B 8bit | `mlx-community/Qwen3-ASR-1.7B-8bit` | 2.47 GB | 保留为高性能档 |
-| 中性能 | 实时多语言 | Voxtral Realtime Mini 4B 6bit | `mlx-community/Voxtral-Mini-4B-Realtime-6bit` | 3.62 GB | 只保留 Voxtral 平衡档 |
+| 兼容 | 实时多语言 | Voxtral Realtime Mini 4B | Voxtral Realtime repos | 3.15–8.89 GB | 全系列隐藏支持，仅保留已有安装和旧配置兼容 |
 | 低 / 中性能 | 英文专用 | Parakeet TDT 0.6B v3 | `mlx-community/parakeet-tdt-0.6b-v3` | 2.51 GB | 只保留 Parakeet 英文主入口 |
-| 高性能 | 离线准确率 | FireRed ASR 2 | `mlx-community/FireRedASR2-AED-mlx` | 4.57 GB | 保留 |
+| 兼容 | 离线准确率 | FireRed ASR 2 | MLX 与 sherpa FireRed IDs | 0.54–4.57 GB | 全系列隐藏支持，仅保留已有安装、旧配置和迁移兼容 |
+| 兼容 | 离线多语言 | FunASR Nano | `funasr-nano-int8` | 0.95 GB | 隐藏支持，仅保留已有安装和旧配置兼容 |
 | 中性能 | 多语言 / 事件检测 | SenseVoice Small | `mlx-community/SenseVoiceSmall` | 936 MB | 保留 |
 | 兼容 | MLX Whisper 历史迁移 | Whisper Tiny / Base / Small / Large v3 / Large v3 Turbo | MLX Whisper repos | 76 MB 到 3.09 GB | 保留 MLX 路径；旧短 ID 迁移 |
 | 低 / 中性能 | 流式 ASR | Nemotron ASR Streaming 0.6B 8bit | `mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit` | 约 0.76 GB | 保留为流式 ASR 入口 |
@@ -66,7 +67,7 @@
 | Qwen3-ASR | 1.7B 8bit | 可见保留 | 90 | 高性能档清晰，仍比 bf16 更可控 |
 | Qwen3-ASR | 1.7B bf16 | 隐藏兼容 | 76 | 高资源占用，默认 UI 中没有足够区分度 |
 | Voxtral Realtime | 4bit | 隐藏兼容 | 77 | 实时定位明确，但和 6bit 差异不如 6bit 平衡 |
-| Voxtral Realtime | 6bit | 可见保留 | 87 | 实时多语言唯一主推入口，质量和体积平衡最好 |
+| Voxtral Realtime | 6bit | 隐藏兼容 | 87 | 不再默认展示，保留已有安装和旧配置兼容 |
 | Voxtral Realtime | fp16 | 隐藏兼容 | 69 | 8.89 GB 体积过重，不适合默认展示 |
 | Parakeet | TDT CTC 110M | 隐藏兼容 | 72 | 极小英文模型有价值，但质量阶段不如 0.6B v3 清晰 |
 | Parakeet | TDT 0.6B v2 | 隐藏兼容 | 65 | 被 v3 替代，仅保留已安装用户卸载路径 |
@@ -91,7 +92,8 @@
 | GLM-ASR Nano 2512 4bit | `mlx-community/GLM-ASR-Nano-2512-4bit` | 隐藏兼容 | 72 | 小体积中文/多语言备用，但默认价值低于 Qwen3-ASR 0.6B 4bit |
 | Granite Speech 4.0 1B 5bit | `mlx-community/granite-4.0-1b-speech-5bit` | 隐藏兼容 | 70 | 仅支持英语、法语、德语、西班牙语、葡萄牙语、日语；和 Qwen3-ASR 默认入口重叠 |
 | Nemotron ASR Streaming 0.6B 8bit | `mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit` | 可见保留 | 82 | 新增依赖已支持，流式定位清晰，体积适合作为默认展示入口 |
-| FireRed ASR 2 | `mlx-community/FireRedASR2-AED-mlx` | 可见保留 | 82 | 离线准确率入口清晰，作为 MLX ASR 高质量补充 |
+| FireRed ASR 2 | MLX 与 sherpa FireRed IDs | 隐藏兼容 | 82 | 不再默认展示，保留已有安装、旧配置和迁移兼容 |
+| FunASR Nano | `funasr-nano-int8` | 隐藏兼容 | 72 | 当前 sherpa ONNX 路径为离线识别，不进入默认模型列表 |
 | SenseVoice Small | `mlx-community/SenseVoiceSmall` | 可见保留 | 80 | 多语言和事件检测有差异化，体积也适合默认展示 |
 
 ## LLM 系列评估
@@ -144,7 +146,7 @@
 
 | 优先级 | 动作 | 范围 |
 |---:|---|---|
-| P0 | 将默认可见 ASR 收敛为 11 个入口 | MLX Audio 11 个：Qwen3-ASR 3 个、Voxtral 1 个、Parakeet 1 个、Nemotron 1 个、FireRed 1 个、SenseVoice 1 个、MLX Whisper 3 个 |
+| P0 | 将默认可见 ASR 收敛为 9 个入口 | MLX Audio 9 个：Qwen3-ASR 3 个、Parakeet 1 个、Nemotron 1 个、SenseVoice 1 个、MLX Whisper 3 个；Voxtral、FireRed 和 FunASR Nano 隐藏支持 |
 | P0 | 将默认可见 LLM 收敛为精简入口 | Qwen3.5、Gemma4、GLM 4 9B、Mistral 3 3B |
 | P0 | 已修正 Qwen3.5 0.8B OptiQ repo ID | 当前代码使用 `mlx-community/Qwen3.5-0.8B-OptiQ-4bit`，并为旧 `mlx-community/Qwen3.5-0.8B-4bit-OptiQ` 保留 alias |
 | P1 | 将旧系列移入隐藏兼容 | Qwen2 / Qwen2.5、Qwen3、Llama、Mistral、Gemma2、MLX Whisper 旧档位 |

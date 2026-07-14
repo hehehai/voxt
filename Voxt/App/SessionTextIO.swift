@@ -455,7 +455,10 @@ extension AppDelegate {
         }
 
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-        let stored = RemoteModelConfigurationStore.loadConfigurations(from: raw)
+        let stored = RemoteModelConfigurationStore.loadConfigurations(
+            from: raw,
+            sensitiveValueLoading: .metadataOnly
+        )
         let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: stored)
 
         switch configuration.doubaoDictionaryModeValue {
@@ -731,7 +734,10 @@ extension AppDelegate {
             return ("sherpa-onnx", modelID.rawValue)
         case .remote(let provider):
             let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-            let stored = RemoteModelConfigurationStore.loadConfigurations(from: raw)
+            let stored = RemoteModelConfigurationStore.loadConfigurations(
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
             let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: stored)
             return ("remote:\(provider.rawValue)", configuration.model)
         case .none:

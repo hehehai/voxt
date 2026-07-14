@@ -26,6 +26,7 @@ The script clones `k2-fsa/sherpa-onnx`, runs upstream `build-swift-macos.sh`, an
 
 - FireRed uses the official sherpa-onnx FireRed ASR 2 CTC int8 package.
 - FunASR Nano uses the official sherpa-onnx FunASR Nano int8 package.
+- FireRed 2 Mini and FunASR Nano are hidden compatibility models. Existing installations and stored selections remain supported, but neither model is offered as a new default download.
 - Model downloads are managed by Voxt and stored under the same configurable model storage root as other local models.
 
 ## Integration Notes

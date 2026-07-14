@@ -8,6 +8,11 @@ enum SherpaOnnxModelKind: String, Hashable, Sendable {
     case funASRNano
 }
 
+enum SherpaOnnxModelVisibility: String, Hashable, Sendable {
+    case visible
+    case hiddenSupport
+}
+
 nonisolated struct SherpaOnnxModelID: RawRepresentable, Codable, Hashable, Sendable, Identifiable {
     let rawValue: String
 
@@ -30,6 +35,7 @@ struct SherpaOnnxModelOption: Identifiable, Hashable, Sendable {
     let requiredRelativePaths: [String]
     let ratingText: String
     let tagKeys: [String]
+    let visibility: SherpaOnnxModelVisibility
 
     var downloadURL: URL {
         downloadSources[0].url
@@ -79,7 +85,8 @@ enum SherpaOnnxModelCatalog {
             extractedDirectoryName: "sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25",
             requiredRelativePaths: ["model.int8.onnx", "tokens.txt"],
             ratingText: "4.8",
-            tagKeys: ["Local", "Multilingual", "Accurate", "Compact"]
+            tagKeys: ["Local", "Multilingual", "Accurate", "Compact"],
+            visibility: .hiddenSupport
         ),
         SherpaOnnxModelOption(
             id: funASRNanoModelID,
@@ -108,9 +115,19 @@ enum SherpaOnnxModelCatalog {
                 "Qwen3-0.6B",
             ],
             ratingText: "4.5",
-            tagKeys: ["Local", "Multilingual", "Fast", "Compact"]
+            tagKeys: ["Local", "Multilingual", "Fast", "Compact"],
+            visibility: .hiddenSupport
         ),
     ]
+
+    nonisolated static let availableModels = allModels.filter { $0.visibility == .visible }
+    nonisolated static let supportedModels = allModels
+
+    nonisolated static func displayModels(including modelIDs: Set<SherpaOnnxModelID>) -> [SherpaOnnxModelOption] {
+        allModels.filter { model in
+            model.visibility == .visible || modelIDs.contains(model.id)
+        }
+    }
 
     nonisolated static func canonicalModelID(_ id: String) -> String {
         let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)

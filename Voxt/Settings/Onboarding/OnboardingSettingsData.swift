@@ -471,20 +471,38 @@ extension OnboardingSettingsView {
         }
     }
 
-    func saveRemoteASRConfiguration(_ configuration: RemoteProviderConfiguration) {
-        remoteASRProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+    func saveRemoteASRConfiguration(
+        _ configuration: RemoteProviderConfiguration
+    ) -> Result<Void, RemoteModelConfigurationStore.SaveError> {
+        let result = RemoteModelConfigurationStore.saveConfiguration(
             configuration,
             updating: remoteASRProviderConfigurationsRaw
         )
-        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+        switch result {
+        case .success(let raw):
+            remoteASRProviderConfigurationsRaw = raw
+            NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+            return .success(())
+        case .failure(let error):
+            return .failure(error)
+        }
     }
 
-    func saveRemoteLLMConfiguration(_ configuration: RemoteProviderConfiguration) {
-        remoteLLMProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+    func saveRemoteLLMConfiguration(
+        _ configuration: RemoteProviderConfiguration
+    ) -> Result<Void, RemoteModelConfigurationStore.SaveError> {
+        let result = RemoteModelConfigurationStore.saveConfiguration(
             configuration,
             updating: remoteLLMProviderConfigurationsRaw
         )
-        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+        switch result {
+        case .success(let raw):
+            remoteLLMProviderConfigurationsRaw = raw
+            NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+            return .success(())
+        case .failure(let error):
+            return .failure(error)
+        }
     }
 
     func syncLocalizedOnboardingSamples() {

@@ -4,10 +4,17 @@
 import Foundation
 
 extension AppDelegate {
+    var currentRecordingOverlayIconMode: OverlaySessionIconMode {
+        RecordingSessionSupport.overlayIconMode(
+            for: sessionOutputMode,
+            isNoteSession: isCurrentTranscriptionNoteSessionActive
+        )
+    }
+
     func showOverlayStatus(_ message: String, clearAfter seconds: TimeInterval = 2.4) {
         overlayStatusClearTask?.cancel()
         overlayState.statusMessage = message
-        overlayState.presentRecording(iconMode: RecordingSessionSupport.overlayIconMode(for: sessionOutputMode))
+        overlayState.presentRecording(iconMode: currentRecordingOverlayIconMode)
         overlayStatusClearTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .seconds(seconds))
@@ -24,7 +31,7 @@ extension AppDelegate {
         overlayStatusClearTask?.cancel()
         overlayState.reset()
         overlayState.statusMessage = message
-        overlayState.presentRecording(iconMode: RecordingSessionSupport.overlayIconMode(for: sessionOutputMode))
+        overlayState.presentRecording(iconMode: currentRecordingOverlayIconMode)
         overlayWindow.show(state: overlayState, position: overlayPosition)
 
         overlayReminderTask = Task { [weak self] in

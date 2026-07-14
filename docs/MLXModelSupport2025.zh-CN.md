@@ -18,7 +18,7 @@
 |---|---:|---|---|---|
 | Qwen3-ASR 0.6B | 2026-01-29 | `4bit` 0.71 GB, `6bit` 0.86 GB, `8bit` 1.01 GB, `bf16` 1.56 GB | 已接入全部 4 个变体；默认模型是 `4bit` | 保留。建议把 `4bit` 作为默认，`6bit` 作为推荐平衡档，`bf16` 仅高级用户可见 |
 | Qwen3-ASR 1.7B | 2026-01-29 | `4bit` 1.60 GB, `6bit` 2.03 GB, `8bit` 2.46 GB, `bf16` 4.08 GB | 已接入全部 4 个变体 | 保留。建议突出 `6bit` / `8bit`，`bf16` 作为高质量大内存档 |
-| Voxtral Mini 4B Realtime 2602 | 2026-02-06 | `4bit` 3.15 GB, `6bit` 3.62 GB, `fp16` 8.89 GB | 已接入全部 3 个变体；`6bit` 已 canonical 到实际 HF repo | 保留。适合实时方向，但 `fp16` 建议降级为高级选项 |
+| Voxtral Mini 4B Realtime 2602 | 2026-02-06 | `4bit` 3.15 GB, `6bit` 3.62 GB, `fp16` 8.89 GB | 已接入全部 3 个变体；`6bit` 已 canonical 到实际 HF repo | 全系列隐藏兼容，不再向新用户展示或推荐下载 |
 | Cohere Transcribe 03-2026 | 2026-03-26 | `fp16` 4.13 GB | 已接入 | 保留。适合高准确率多语言；体积中等偏大 |
 | Parakeet 110M | 2025-05-10 | `tdt_ctc-110m` 0.46 GB | 已接入 | 保留为英文轻量极速档 |
 | Parakeet 0.6B | 2025-05-10 / 2025-08-16 | `tdt-v2` 2.47 GB, `tdt-v3` 2.51 GB, `ctc` 2.44 GB, `rnnt` 2.47 GB | 已接入全部 4 个变体 | 建议收敛。保留 `tdt-v3`，其余 `v2` / `ctc` / `rnnt` 可隐藏兼容 |
@@ -135,8 +135,8 @@
 | 最终可见 | Qwen3-ASR 0.6B 6bit | `mlx-community/Qwen3-ASR-0.6B-6bit` | 轻量平衡档 |
 | 最终可见 | Qwen3-ASR 1.7B 6bit | `mlx-community/Qwen3-ASR-1.7B-6bit` | 主推高质量平衡档 |
 | 最终可见 | Qwen3-ASR 1.7B 8bit | `mlx-community/Qwen3-ASR-1.7B-8bit` | 高精度本地 ASR |
-| 最终可见 | Voxtral Realtime Mini 4B 4bit | `mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit` | 实时多语言低体积档 |
-| 最终可见 | Voxtral Realtime Mini 4B 6bit | `mlx-community/Voxtral-Mini-4B-Realtime-6bit` | 实时多语言平衡档 |
+| 隐藏兼容 | Voxtral Realtime Mini 4B 4bit | `mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit` | 保留已有安装和旧配置兼容 |
+| 隐藏兼容 | Voxtral Realtime Mini 4B 6bit | `mlx-community/Voxtral-Mini-4B-Realtime-6bit` | 保留已有安装和旧配置兼容 |
 | 最终可见 | Cohere Transcribe 03-2026 fp16 | `beshkenadze/cohere-transcribe-03-2026-mlx-fp16` | 高准确率多语言档 |
 | 最终可见 | Parakeet TDT CTC 110M | `mlx-community/parakeet-tdt_ctc-110m` | 英文极速轻量档 |
 | 最终可见 | Parakeet TDT 0.6B v3 | `mlx-community/parakeet-tdt-0.6b-v3` | 英文主推轻量档 |
@@ -227,7 +227,7 @@
 | 类型 | 组 | 保留系列 | 处理原则 |
 |---|---|---|---|
 | ASR / STT | 核心通用 ASR | Qwen3-ASR | 作为默认和主推质量档，只保留 0.6B 4bit、1.7B 6bit、1.7B 8bit |
-| ASR / STT | 流式 / 实时 ASR | Nemotron 3.5 ASR Streaming、Voxtral Mini Realtime | Nemotron 保留小体积流式入口；Voxtral 只保留 6bit 平衡入口 |
+| ASR / STT | 流式 / 实时 ASR | Nemotron 3.5 ASR Streaming | Nemotron 保留小体积流式入口；Voxtral 全系列转为隐藏兼容 |
 | ASR / STT | 英文专用 ASR | Parakeet | 只保留 0.6B `tdt-v3` 可见，其余同尺寸解码变体隐藏或剔除 |
 | ASR / STT | 高准确率批处理 | Cohere Transcribe | 只保留一个 fp16 入口，面向高性能和高准确率场景 |
 | LLM | 核心通用 LLM | Qwen3.5、Qwen3.6 | Qwen3.5 是主线；Qwen3.6 只保留一个高端入口 |
@@ -240,7 +240,7 @@
 | 设备阶段 | ASR / STT 主推 | LLM 主推 | 说明 |
 |---|---|---|---|
 | 低性能电脑 | Qwen3-ASR 0.6B 4bit；需要流式时用 Nemotron 3.5 ASR Streaming 8bit | Qwen3.5 2B 4bit | 低下载体积、低内存、低配置成本 |
-| 中性能电脑 | Qwen3-ASR 1.7B 6bit；实时多语言用 Voxtral Mini 4B 6bit | Qwen3.5 4B OptiQ；中文/多语言备用用 GLM 4 9B；非 Qwen 备用用 Gemma 4 E4B 4bit | 主推档，覆盖大多数用户 |
+| 中性能电脑 | Qwen3-ASR 1.7B 6bit；实时方向用 Nemotron 3.5 ASR Streaming | Qwen3.5 4B OptiQ；中文/多语言备用用 GLM 4 9B；非 Qwen 备用用 Gemma 4 E4B 4bit | 主推档，覆盖大多数用户 |
 | 高性能电脑 | Qwen3-ASR 1.7B 8bit；高准确率批处理用 Cohere Transcribe fp16 | Qwen3.5 9B OptiQ；高端实验用 Qwen3.6 27B 4bit | 只保留少量高性能入口，不展开大模型全家桶 |
 
 ### ASR / STT 最终可见模型
@@ -251,7 +251,7 @@
 | 核心通用 ASR | 中性能 | Qwen3-ASR 1.7B | 6bit | `mlx-community/Qwen3-ASR-1.7B-6bit` | 2.03 GB | 主推高质量平衡档，替代 0.6B 6bit / 1.7B 4bit |
 | 核心通用 ASR | 高性能 | Qwen3-ASR 1.7B | 8bit | `mlx-community/Qwen3-ASR-1.7B-8bit` | 2.46 GB | 高精度本地 ASR，仍比 bf16 更可控 |
 | 流式 / 实时 ASR | 低性能 | Nemotron 3.5 ASR Streaming 0.6B | 8bit | `mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit` | 0.76 GB | 新流式路线，比 base 更适合低配尝试 |
-| 流式 / 实时 ASR | 中性能 | Voxtral Mini 4B Realtime 2602 | 6bit | `mlx-community/Voxtral-Mini-4B-Realtime-6bit` | 3.62 GB | Voxtral 只保留一个实时多语言平衡入口 |
+| 隐藏兼容 ASR | 中性能 | Voxtral Mini 4B Realtime 2602 | 6bit | `mlx-community/Voxtral-Mini-4B-Realtime-6bit` | 3.62 GB | 不再默认展示，仅保留已有安装和旧配置兼容 |
 | 英文专用 ASR | 低 / 中性能 | Parakeet 0.6B | `tdt-v3` | `mlx-community/parakeet-tdt-0.6b-v3` | 2.51 GB | 仅保留一个英文轻量入口，删除其他 0.6B 解码变体 |
 | 高准确率批处理 | 高性能 | Cohere Transcribe 03-2026 | fp16 | `beshkenadze/cohere-transcribe-03-2026-mlx-fp16` | 4.13 GB | 高准确率多语言批处理入口 |
 
@@ -264,8 +264,8 @@
 | 隐藏兼容 | Qwen3-ASR 1.7B 4bit / bf16 | 4bit 被 0.6B 4bit 和 1.7B 6bit 夹住；bf16 资源占用偏高 |
 | 可见保留 | Nemotron 3.5 ASR Streaming 0.6B 8bit | 作为新流式路线的唯一可见入口 |
 | 隐藏兼容 | Nemotron 3.5 ASR Streaming base | 先主推 8bit，base 等实测后再决定是否恢复可见 |
-| 可见保留 | Voxtral Mini 4B Realtime 6bit | 6bit 比 4bit 更稳、比 fp16 更可控 |
-| 隐藏兼容 | Voxtral Mini 4B Realtime 4bit / fp16 | 4bit 与 6bit 选择差异不够清晰；fp16 体积 8.89 GB |
+| 隐藏兼容 | Voxtral Mini 4B Realtime 6bit | 不再默认展示，保留已有安装和旧配置兼容 |
+| 隐藏兼容 | Voxtral Mini 4B Realtime 4bit / fp16 | 保留已有安装和旧配置兼容；fp16 体积 8.89 GB |
 | 可见保留 | Parakeet 0.6B `tdt-v3` | 英文轻量只保留一个最清晰的新版本 |
 | 隐藏兼容 | Parakeet 110M、Parakeet TDT CTC 1.1B、GLM-ASR Nano 2512 4bit | 有特定场景价值，但不进入默认可见列表 |
 | 剔除/不推荐 | Parakeet 0.6B v2 / CTC / RNNT、Parakeet 1.1B TDT / CTC / RNNT | 同系列同尺寸变体太多，安装和解释成本高 |

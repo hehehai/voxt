@@ -438,20 +438,33 @@ extension ModelSettingsView {
     }
 
     func useRemoteASRProvider(_ provider: RemoteASRProvider) {
-        remoteASRSelectedProviderRaw = provider.rawValue
         let resolved = RemoteModelConfigurationStore.resolvedASRConfiguration(
             provider: provider,
-            stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteASRProviderConfigurationsRaw)
+            from: remoteASRProviderConfigurationsRaw
         )
-        saveRemoteASRConfiguration(resolved)
+        switch saveRemoteASRConfiguration(resolved) {
+        case .success:
+            remoteASRSelectedProviderRaw = provider.rawValue
+        case .failure(let error):
+            showModelOperationToast(error.localizedDescription)
+        }
     }
 
-    func saveRemoteASRConfiguration(_ configuration: RemoteProviderConfiguration) {
-        remoteASRProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+    func saveRemoteASRConfiguration(
+        _ configuration: RemoteProviderConfiguration
+    ) -> Result<Void, RemoteModelConfigurationStore.SaveError> {
+        let result = RemoteModelConfigurationStore.saveConfiguration(
             configuration,
             updating: remoteASRProviderConfigurationsRaw
         )
-        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+        switch result {
+        case .success(let raw):
+            remoteASRProviderConfigurationsRaw = raw
+            NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+            return .success(())
+        case .failure(let error):
+            return .failure(error)
+        }
     }
 
     func remoteASRStatusText(
@@ -556,12 +569,21 @@ extension ModelSettingsView {
         remoteLLMSelectedProviderRaw = provider.rawValue
     }
 
-    func saveRemoteLLMConfiguration(_ configuration: RemoteProviderConfiguration) {
-        remoteLLMProviderConfigurationsRaw = RemoteModelConfigurationStore.saveConfiguration(
+    func saveRemoteLLMConfiguration(
+        _ configuration: RemoteProviderConfiguration
+    ) -> Result<Void, RemoteModelConfigurationStore.SaveError> {
+        let result = RemoteModelConfigurationStore.saveConfiguration(
             configuration,
             updating: remoteLLMProviderConfigurationsRaw
         )
-        NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+        switch result {
+        case .success(let raw):
+            remoteLLMProviderConfigurationsRaw = raw
+            NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+            return .success(())
+        case .failure(let error):
+            return .failure(error)
+        }
     }
 
     func refreshModelInstallStateIfNeeded() {

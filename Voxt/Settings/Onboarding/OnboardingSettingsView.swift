@@ -355,7 +355,7 @@ struct OnboardingSettingsView: View {
                 testTarget: .asr(provider),
                 configuration: RemoteModelConfigurationStore.resolvedASRConfiguration(
                     provider: provider,
-                    stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteASRProviderConfigurationsRaw)
+                    from: remoteASRProviderConfigurationsRaw
                 )
             ) { configuration in
                 saveRemoteASRConfiguration(configuration)
@@ -369,7 +369,7 @@ struct OnboardingSettingsView: View {
                 testTarget: .llm(provider),
                 configuration: RemoteModelConfigurationStore.resolvedLLMConfiguration(
                     provider: provider,
-                    stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteLLMProviderConfigurationsRaw)
+                    from: remoteLLMProviderConfigurationsRaw
                 )
             ) { configuration in
                 saveRemoteLLMConfiguration(configuration)

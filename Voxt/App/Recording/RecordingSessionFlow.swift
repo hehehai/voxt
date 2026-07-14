@@ -191,7 +191,7 @@ extension AppDelegate {
         } else {
             overlayState.reset()
             overlayState.statusMessage = ""
-            overlayState.presentRecording(iconMode: RecordingSessionSupport.overlayIconMode(for: outputMode))
+            overlayState.presentRecording(iconMode: currentRecordingOverlayIconMode)
         }
         if outputMode == .translation {
             prepareMicrophoneTranslationSessionState()
@@ -233,7 +233,7 @@ extension AppDelegate {
             transcriptionProcessingStartedAt = recordingStoppedAt
         }
         prewarmLLMForPendingPostASRProcessing(outputMode: sessionOutputMode)
-        overlayState.presentProcessing(iconMode: RecordingSessionSupport.overlayIconMode(for: sessionOutputMode))
+        overlayState.presentProcessing(iconMode: currentRecordingOverlayIconMode)
         voiceEndCommandState.lastDetectedCommand = false
         enhancementContextSnapshot = captureEnhancementContextSnapshot()
         stopActiveRecordingTranscriberAfterPendingVADFlush(sessionID: stoppingSessionID)

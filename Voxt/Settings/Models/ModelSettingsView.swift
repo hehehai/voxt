@@ -312,13 +312,16 @@ struct ModelSettingsView: View {
                 testTarget: .asr(provider),
                 configuration: RemoteModelConfigurationStore.resolvedASRConfiguration(
                     provider: provider,
-                    stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteASRProviderConfigurationsRaw)
+                    from: remoteASRProviderConfigurationsRaw
                 )
             ) { updated in
-                saveRemoteASRConfiguration(updated)
-                showModelOperationToast(
-                    AppLocalization.format("Configuration saved for %@.", provider.title)
-                )
+                let result = saveRemoteASRConfiguration(updated)
+                if case .success = result {
+                    showModelOperationToast(
+                        AppLocalization.format("Configuration saved for %@.", provider.title)
+                    )
+                }
+                return result
             }
         }
         .sheet(item: $editingLLMProvider) { provider in
@@ -329,13 +332,16 @@ struct ModelSettingsView: View {
                 testTarget: .llm(provider),
                 configuration: RemoteModelConfigurationStore.resolvedLLMConfiguration(
                     provider: provider,
-                    stored: RemoteModelConfigurationStore.loadConfigurations(from: remoteLLMProviderConfigurationsRaw)
+                    from: remoteLLMProviderConfigurationsRaw
                 )
             ) { updated in
-                saveRemoteLLMConfiguration(updated)
-                showModelOperationToast(
-                    AppLocalization.format("Configuration saved for %@.", provider.title)
-                )
+                let result = saveRemoteLLMConfiguration(updated)
+                if case .success = result {
+                    showModelOperationToast(
+                        AppLocalization.format("Configuration saved for %@.", provider.title)
+                    )
+                }
+                return result
             }
         }
         .sheet(item: $activeASRHintTarget) { target in

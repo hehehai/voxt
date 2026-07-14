@@ -164,6 +164,7 @@ jobs:
       DEVELOPER_ID_APP_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_APP_CERT_PASSWORD }}
       DEVELOPER_ID_INSTALLER_CERT_P12: ${{ secrets.DEVELOPER_ID_INSTALLER_CERT_P12 }}
       DEVELOPER_ID_INSTALLER_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_INSTALLER_CERT_PASSWORD }}
+      DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.DEVELOPER_ID_PROVISIONING_PROFILE }}
       DEVELOPER_ID_APP_IDENTITY: ${{ secrets.DEVELOPER_ID_APP_IDENTITY }}
       DEVELOPER_ID_INSTALLER_IDENTITY: ${{ secrets.DEVELOPER_ID_INSTALLER_IDENTITY }}
       KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
@@ -187,6 +188,7 @@ jobs:
             DEVELOPER_ID_APP_CERT_PASSWORD \
             DEVELOPER_ID_INSTALLER_CERT_P12 \
             DEVELOPER_ID_INSTALLER_CERT_PASSWORD \
+            DEVELOPER_ID_PROVISIONING_PROFILE \
             DEVELOPER_ID_APP_IDENTITY \
             DEVELOPER_ID_INSTALLER_IDENTITY \
             KEYCHAIN_PASSWORD; do
@@ -273,6 +275,39 @@ jobs:
             echo "::error::Developer ID Installer identity not found in keychain: $DEVELOPER_ID_INSTALLER_IDENTITY"
             exit 1
           fi
+
+      - name: Decode Developer ID provisioning profile
+        run: |
+          set -euo pipefail
+          PROFILE_PATH="build/Voxt_Developer_ID.provisionprofile"
+          PROFILE_PLIST="build/Voxt_Developer_ID.plist"
+
+          mkdir -p build
+          printf '%s' "$DEVELOPER_ID_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+          security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
+
+          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST" 2>/dev/null || true)"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST" 2>/dev/null || true)"
+          PROFILE_PREFIX="$(/usr/libexec/PlistBuddy -c 'Print :ApplicationIdentifierPrefix:0' "$PROFILE_PLIST" 2>/dev/null || true)"
+          PROFILE_TEAM_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$PROFILE_PLIST" 2>/dev/null || true)"
+          PROVISIONS_ALL_DEVICES="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$PROFILE_PLIST" 2>/dev/null || true)"
+          if [ -z "$PROFILE_NAME" ] || [ -z "$PROFILE_UUID" ] || [ -z "$PROFILE_PREFIX" ] || [ -z "$PROFILE_TEAM_IDENTIFIER" ]; then
+            echo "::error::Developer ID provisioning profile is missing Name, UUID, ApplicationIdentifierPrefix, or TeamIdentifier"
+            exit 1
+          fi
+          if [ "$PROVISIONS_ALL_DEVICES" != "true" ]; then
+            echo "::error::Provisioning profile is not a Developer ID distribution profile: $PROFILE_NAME"
+            exit 1
+          fi
+
+          EXPIRATION="$(plutil -extract ExpirationDate raw -o - "$PROFILE_PLIST" 2>/dev/null || true)"
+          EXPIRATION_EPOCH="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$EXPIRATION" '+%s' 2>/dev/null || true)"
+          if [ -z "$EXPIRATION_EPOCH" ] || [ "$EXPIRATION_EPOCH" -le "$(date '+%s')" ]; then
+            echo "::error::Developer ID provisioning profile is expired or has an invalid expiration date: ${EXPIRATION:-<missing>}"
+            exit 1
+          fi
+
+          echo "Validated Developer ID provisioning profile: $PROFILE_NAME ($PROFILE_UUID)"
 
       - name: Setup notarytool authentication mode
         run: |
@@ -399,11 +434,56 @@ jobs:
             exit 1
           fi
 
+          PROFILE_PATH="build/Voxt_Developer_ID.provisionprofile"
+          PROFILE_PLIST="build/Voxt_Developer_ID.plist"
+          if [ ! -f "$PROFILE_PATH" ] || [ ! -f "$PROFILE_PLIST" ]; then
+            echo "::error::Decoded Developer ID provisioning profile is missing"
+            exit 1
+          fi
+
+          PROFILE_PREFIX="$(/usr/libexec/PlistBuddy -c 'Print :ApplicationIdentifierPrefix:0' "$PROFILE_PLIST" 2>/dev/null || true)"
+          PROFILE_TEAM_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$PROFILE_PLIST" 2>/dev/null || true)"
+          APP_IDENTIFIER="${PROFILE_PREFIX}.${APP_BUNDLE_ID}"
+          PROFILE_APP_IDENTIFIER="$(
+            /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$PROFILE_PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PROFILE_PLIST" 2>/dev/null \
+              || true
+          )"
+          if [ "$PROFILE_APP_IDENTIFIER" != "$APP_IDENTIFIER" ]; then
+            echo "::error::Provisioning profile App ID($PROFILE_APP_IDENTIFIER) does not match expected App ID($APP_IDENTIFIER)"
+            exit 1
+          fi
+
+          PROFILE_ENTITLEMENT_TEAM_IDENTIFIER="$(
+            /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$PROFILE_PLIST" 2>/dev/null \
+              || true
+          )"
+          if [ "$PROFILE_ENTITLEMENT_TEAM_IDENTIFIER" != "$PROFILE_TEAM_IDENTIFIER" ]; then
+            echo "::error::Provisioning profile entitlement Team ID($PROFILE_ENTITLEMENT_TEAM_IDENTIFIER) does not match profile Team ID($PROFILE_TEAM_IDENTIFIER)"
+            exit 1
+          fi
+
+          PROFILE_KEYCHAIN_GROUPS="$(
+            /usr/libexec/PlistBuddy -c 'Print :Entitlements:keychain-access-groups' "$PROFILE_PLIST" 2>/dev/null || true
+          )"
+          if ! printf '%s\n' "$PROFILE_KEYCHAIN_GROUPS" | grep -F "$APP_IDENTIFIER" >/dev/null \
+            && ! printf '%s\n' "$PROFILE_KEYCHAIN_GROUPS" | grep -F "${PROFILE_PREFIX}.*" >/dev/null; then
+            echo "::error::Provisioning profile does not authorize Keychain access group: $APP_IDENTIFIER"
+            exit 1
+          fi
+
+          cp "$PROFILE_PATH" "$APP_PATH/Contents/embedded.provisionprofile"
+
           SIGNING_ENTITLEMENTS="$(mktemp)"
-          trap 'rm -f "$SIGNING_ENTITLEMENTS"' EXIT
-          sed "s#\\\$(PRODUCT_BUNDLE_IDENTIFIER)#${APP_BUNDLE_ID}#g" Voxt/Voxt.entitlements > "$SIGNING_ENTITLEMENTS"
-          if grep -q '\\$(PRODUCT_BUNDLE_IDENTIFIER)' "$SIGNING_ENTITLEMENTS"; then
-            echo "::error::Failed to expand PRODUCT_BUNDLE_IDENTIFIER in entitlements"
+          SIGNED_ENTITLEMENTS="$(mktemp)"
+          trap 'rm -f "$SIGNING_ENTITLEMENTS" "$SIGNED_ENTITLEMENTS"' EXIT
+          sed \
+            -e "s#\\\$(PRODUCT_BUNDLE_IDENTIFIER)#${APP_BUNDLE_ID}#g" \
+            -e "s#\\\$(AppIdentifierPrefix)#${PROFILE_PREFIX}.#g" \
+            -e "s#\\\$(DEVELOPMENT_TEAM)#${PROFILE_TEAM_IDENTIFIER}#g" \
+            Voxt/Voxt.entitlements > "$SIGNING_ENTITLEMENTS"
+          if grep -q '\\$(' "$SIGNING_ENTITLEMENTS"; then
+            echo "::error::Failed to expand build settings in entitlements"
             echo "Generated entitlements:"
             cat "$SIGNING_ENTITLEMENTS"
             exit 1
@@ -453,6 +533,41 @@ jobs:
             "$APP_PATH"
 
           codesign --verify --strict --verbose=2 "$APP_PATH"
+
+          codesign --display --entitlements - --xml "$APP_PATH" > "$SIGNED_ENTITLEMENTS"
+          SIGNED_APP_IDENTIFIER="$(
+            /usr/libexec/PlistBuddy -c 'Print :com.apple.application-identifier' "$SIGNED_ENTITLEMENTS" 2>/dev/null || true
+          )"
+          SIGNED_KEYCHAIN_GROUP="$(
+            /usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:0' "$SIGNED_ENTITLEMENTS" 2>/dev/null || true
+          )"
+          SIGNED_ENTITLEMENT_TEAM_IDENTIFIER="$(
+            /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$SIGNED_ENTITLEMENTS" 2>/dev/null || true
+          )"
+          SIGNED_CERT_TEAM_IDENTIFIER="$(
+            codesign --display --verbose=4 "$APP_PATH" 2>&1 \
+              | awk -F= '/^TeamIdentifier=/{print $2; exit}'
+          )"
+          if [ "$SIGNED_APP_IDENTIFIER" != "$APP_IDENTIFIER" ]; then
+            echo "::error::Signed application identifier($SIGNED_APP_IDENTIFIER) does not match expected value($APP_IDENTIFIER)"
+            exit 1
+          fi
+          if [ "$SIGNED_KEYCHAIN_GROUP" != "$APP_IDENTIFIER" ]; then
+            echo "::error::Signed Keychain access group($SIGNED_KEYCHAIN_GROUP) does not match expected value($APP_IDENTIFIER)"
+            exit 1
+          fi
+          if [ "$SIGNED_ENTITLEMENT_TEAM_IDENTIFIER" != "$PROFILE_TEAM_IDENTIFIER" ]; then
+            echo "::error::Signed entitlement Team ID($SIGNED_ENTITLEMENT_TEAM_IDENTIFIER) does not match profile Team ID($PROFILE_TEAM_IDENTIFIER)"
+            exit 1
+          fi
+          if [ "$SIGNED_CERT_TEAM_IDENTIFIER" != "$PROFILE_TEAM_IDENTIFIER" ]; then
+            echo "::error::Signing certificate Team ID($SIGNED_CERT_TEAM_IDENTIFIER) does not match profile Team ID($PROFILE_TEAM_IDENTIFIER)"
+            exit 1
+          fi
+          if [ ! -f "$APP_PATH/Contents/embedded.provisionprofile" ]; then
+            echo "::error::Signed app does not contain embedded.provisionprofile"
+            exit 1
+          fi
 
       - name: Build zip, dmg, and pkg artifacts
         run: |

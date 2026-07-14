@@ -39,6 +39,26 @@ struct TranscriptionModeIconView: View {
     }
 }
 
+struct NoteModeIconView: View {
+    private let viewport = CGSize(width: 392, height: 392)
+
+    var body: some View {
+        ZStack {
+            SVGPathShape(
+                pathData: WaveformIconPathData.noteStem,
+                viewport: viewport
+            )
+            .fill(.white)
+
+            SVGPathShape(
+                pathData: WaveformIconPathData.noteMicrophone,
+                viewport: viewport
+            )
+            .fill(.white)
+        }
+    }
+}
+
 struct TranslationModeIconView: View {
     private let viewport = CGSize(width: 392, height: 392)
 
@@ -100,6 +120,8 @@ struct CompactModeIconView: View {
             switch sessionIconMode {
             case .transcription:
                 TranscriptionModeIconView()
+            case .note:
+                NoteModeIconView()
             case .translation:
                 TranslationModeIconView()
             case .rewrite:

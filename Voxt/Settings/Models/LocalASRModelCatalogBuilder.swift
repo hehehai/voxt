@@ -72,7 +72,7 @@ extension ModelCatalogBuilder {
     }
 
     func sherpaOnnxASREntries() -> [ModelCatalogEntry] {
-        return SherpaOnnxModelCatalog.allModels.map { model in
+        return sherpaOnnxDisplayModelsIncludingFeatureSelections().map { model in
             let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
             let installSnapshot = sherpaOnnxCatalogSnapshot(for: model.id)
             let decoration = catalogDecoration(
@@ -93,12 +93,25 @@ extension ModelCatalogBuilder {
                 displayTags: decoration.displayTags,
                 statusText: sherpaOnnxASRStatusText(installSnapshot.statusText),
                 usageLocations: decoration.usageLocations,
-                badgeText: installSnapshot.badgeText
-                    ?? (model.id == SherpaOnnxModelCatalog.fireRedModelID ? localizedModelCatalog("Recommended") : nil),
+                badgeText: installSnapshot.badgeText,
                 primaryAction: catalogPrimaryAction(installSnapshot),
                 secondaryActions: catalogSecondaryActions(installSnapshot)
             )
         }
+    }
+
+    private func sherpaOnnxDisplayModelsIncludingFeatureSelections() -> [SherpaOnnxModelOption] {
+        let selections = [
+            featureSettings.transcription.asrSelectionID,
+            featureSettings.translation.asrSelectionID,
+            featureSettings.rewrite.asrSelectionID,
+            featureSettings.meeting.asrSelectionID,
+        ]
+        let selectedModelIDs = Set(selections.compactMap { selectionID -> SherpaOnnxModelID? in
+            guard case .sherpaOnnx(let modelID)? = selectionID.asrSelection else { return nil }
+            return modelID
+        })
+        return sherpaOnnxModelManager.displayModelsIncludingInstalled(including: selectedModelIDs)
     }
 
     private func localASRSecondaryActions(

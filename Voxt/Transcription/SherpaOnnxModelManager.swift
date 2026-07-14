@@ -69,6 +69,19 @@ final class SherpaOnnxModelManager: ObservableObject {
         SherpaOnnxModelCatalog.option(for: id)
     }
 
+    func displayModelsIncludingInstalled(
+        including modelIDs: Set<SherpaOnnxModelID> = []
+    ) -> [SherpaOnnxModelOption] {
+        var includedModelIDs = modelIDs
+        for model in SherpaOnnxModelCatalog.supportedModels {
+            let snapshot = catalogSnapshot(for: model.id)
+            if snapshot.isDownloaded || snapshot.isDownloading || snapshot.isPaused {
+                includedModelIDs.insert(model.id)
+            }
+        }
+        return SherpaOnnxModelCatalog.displayModels(including: includedModelIDs)
+    }
+
     func isModelDownloaded(id: SherpaOnnxModelID) -> Bool {
         if let cached = downloadedStateByID[id] {
             return cached

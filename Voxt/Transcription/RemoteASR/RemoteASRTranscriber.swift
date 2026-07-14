@@ -64,6 +64,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private var transcribeTask: Task<Void, Never>?
     var stopRequested = false
     private var activeProvider: RemoteASRProvider?
+    private var activeConfiguration: RemoteProviderConfiguration?
     var preferredInputDeviceID: AudioDeviceID?
     private let streamingFinalWaitTimeout: TimeInterval = 20
     private var lastPresentedRuntimeErrorMessage = ""
@@ -145,6 +146,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
         let hintPayload = resolvedHintPayload(for: provider, configuration: configuration)
         activeProvider = provider
+        activeConfiguration = configuration
         let configuredModel = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedModel = configuredModel.isEmpty
             ? provider.suggestedModel
@@ -184,6 +186,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 cleanupRecorderState()
                 cleanupDoubaoStreamingState()
                 activeProvider = nil
+                activeConfiguration = nil
                 notifyStartFailure(error)
             }
             return
@@ -205,6 +208,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 cleanupRecorderState()
                 cleanupAliyunStreamingState()
                 activeProvider = nil
+                activeConfiguration = nil
                 notifyStartFailure(error)
             }
             return
@@ -219,6 +223,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 cleanupRecorderState()
                 cleanupStepFunStreamingState()
                 activeProvider = nil
+                activeConfiguration = nil
                 notifyStartFailure(error)
             }
             return
@@ -235,6 +240,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             VoxtLog.asrError("Remote ASR recorder setup failed: \(error.localizedDescription)")
             cleanupRecorderState()
             activeProvider = nil
+            activeConfiguration = nil
             notifyStartFailure(error)
         }
     }
@@ -316,10 +322,28 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return
         }
 
+        guard let provider = activeProvider,
+              let configuration = activeConfiguration
+        else {
+            notifyRuntimeFailure(
+                NSError(
+                    domain: "Voxt.RemoteASR",
+                    code: -102,
+                    userInfo: [NSLocalizedDescriptionKey: "Remote ASR session configuration is unavailable."]
+                )
+            )
+            finish(with: transcribedText, generationID: generationID)
+            return
+        }
+
         isRequesting = true
         transcribeTask = Task { [weak self] in
             guard let self else { return }
-            let uploadPreparation = await self.prepareUploadAudioForRemoteASR(originalFileURL: fileURL)
+            let uploadPreparation = await self.prepareUploadAudioForRemoteASR(
+                originalFileURL: fileURL,
+                provider: provider,
+                configuration: configuration
+            )
             defer {
                 uploadPreparation.cleanupTemporaryUploadFileIfNeeded()
             }
@@ -337,7 +361,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 return
             }
             do {
-                let result = try await self.transcribeRecordedAudio(fileURL: uploadPreparation.uploadFileURL)
+                let result = try await self.transcribeRecordedAudio(
+                    fileURL: uploadPreparation.uploadFileURL,
+                    provider: provider,
+                    configuration: configuration
+                )
                 await MainActor.run {
                     guard self.isCurrentGeneration(generationID) else { return }
                     self.transcribedText = result
@@ -356,9 +384,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func prepareUploadAudioForRemoteASR(originalFileURL: URL) async -> RemoteASRAudioUploadPreparation {
-        let provider = activeProvider ?? selectedProvider
-        let configuration = selectedProviderConfiguration(for: provider)
+    private func prepareUploadAudioForRemoteASR(
+        originalFileURL: URL,
+        provider: RemoteASRProvider,
+        configuration: RemoteProviderConfiguration
+    ) async -> RemoteASRAudioUploadPreparation {
         let localVADMode = LocalVADMode.stored()
         let startedAt = ProcessInfo.processInfo.systemUptime
         do {
@@ -564,9 +594,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func transcribeRecordedAudio(fileURL: URL) async throws -> String {
-        let provider = activeProvider ?? selectedProvider
-        let configuration = selectedProviderConfiguration(for: provider)
+    private func transcribeRecordedAudio(
+        fileURL: URL,
+        provider: RemoteASRProvider,
+        configuration: RemoteProviderConfiguration
+    ) async throws -> String {
         let hintPayload = resolvedHintPayload(for: provider, configuration: configuration)
         return try await transcribeAudioFile(
             fileURL: fileURL,
@@ -627,8 +659,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     private func selectedProviderConfiguration(for provider: RemoteASRProvider) -> RemoteProviderConfiguration {
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-        let all = RemoteModelConfigurationStore.loadConfigurations(from: raw)
-        return RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: all)
+        let stored = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: provider.rawValue,
+            from: raw
+        ).map { [provider.rawValue: $0] } ?? [:]
+        return RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: stored)
     }
 
     func transcribeDebugAudioFile(
@@ -2246,6 +2281,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                                     await context.responseState.markCompletedWithError(error)
                                     self.cleanupDoubaoStreamingState()
                                     self.activeProvider = nil
+                                    self.activeConfiguration = nil
                                     return
                                 }
                             }
@@ -3107,6 +3143,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupAliyunStreamingState()
         cleanupStepFunStreamingState()
         activeProvider = nil
+        activeConfiguration = nil
         stopRequested = false
         lastPresentedRuntimeErrorMessage = ""
     }
@@ -3285,6 +3322,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupAliyunStreamingState()
         cleanupStepFunStreamingState()
         activeProvider = nil
+        activeConfiguration = nil
         lastPresentedRuntimeErrorMessage = ""
         onTranscriptionFinished?(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }

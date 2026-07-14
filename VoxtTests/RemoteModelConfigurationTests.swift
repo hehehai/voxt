@@ -225,6 +225,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         ]
 
         let raw = RemoteModelConfigurationStore.saveConfigurations(stored)
+        VoxtSecureStorage.clearCacheForTesting()
         let roundTrip = RemoteModelConfigurationStore.loadConfigurations(from: raw)
 
         XCTAssertFalse(raw.contains("secret"))
@@ -256,6 +257,438 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertTrue(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.isConfigured ?? false)
     }
 
+    func testTargetedLoadResolvesOnlyRequestedProviderConfiguration() {
+        let stored: [String: RemoteProviderConfiguration] = [
+            RemoteASRProvider.doubaoASR.rawValue: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteASRProvider.doubaoASR.rawValue,
+                model: DoubaoASRConfiguration.modelV2,
+                appID: "doubao-app",
+                accessToken: "doubao-token"
+            ),
+            RemoteASRProvider.aliyunBailianASR.rawValue: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteASRProvider.aliyunBailianASR.rawValue,
+                model: "fun-asr-realtime",
+                apiKey: "aliyun-key"
+            )
+        ]
+
+        let raw = RemoteModelConfigurationStore.saveConfigurations(stored)
+        let doubao = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            from: raw
+        )
+
+        XCTAssertEqual(doubao?.providerID, RemoteASRProvider.doubaoASR.rawValue)
+        XCTAssertEqual(doubao?.appID, "doubao-app")
+        XCTAssertEqual(doubao?.accessToken, "doubao-token")
+    }
+
+    func testTargetedMetadataLoadDoesNotReturnStoredCredential() {
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app",
+            accessToken: "doubao-token"
+        )
+
+        let raw = RemoteModelConfigurationStore.saveConfigurations([stored.providerID: stored])
+        let metadata = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: stored.providerID,
+            from: raw,
+            sensitiveValueLoading: .metadataOnly
+        )
+
+        XCTAssertNotEqual(metadata?.appID, "doubao-app")
+        XCTAssertNotEqual(metadata?.accessToken, "doubao-token")
+        XCTAssertTrue(metadata?.isConfigured ?? false)
+    }
+
+    func testMetadataOnlyLoadPreservesExactBundledCredentialFieldPresence() {
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app",
+            accessToken: ""
+        )
+
+        let raw = RemoteModelConfigurationStore.saveConfigurations([stored.providerID: stored])
+        let metadata = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: stored.providerID,
+            from: raw,
+            sensitiveValueLoading: .metadataOnly
+        )
+
+        XCTAssertTrue(raw.contains("storedCredentialPresence"))
+        XCTAssertFalse(metadata?.appID.isEmpty ?? true)
+        XCTAssertTrue(metadata?.apiKey.isEmpty ?? false)
+        XCTAssertTrue(metadata?.accessToken.isEmpty ?? false)
+        XCTAssertFalse(metadata?.isConfigured ?? true)
+    }
+
+    func testMetadataOnlyLoadDerivesExactPresenceFromLegacyBundleWithoutMask() throws {
+        let bundledValues = """
+        {"apiKey":"","appID":"legacy-app","accessToken":""}
+        """
+        XCTAssertTrue(
+            VoxtSecureStorage.set(
+                bundledValues,
+                for: "remote-provider.doubaoASR.credentials"
+            )
+        )
+
+        let legacyRaw = """
+        [
+          {
+            "providerID": "doubaoASR",
+            "model": "\(DoubaoASRConfiguration.modelV2)",
+            "endpoint": "",
+            "apiKey": "",
+            "appID": "",
+            "accessToken": ""
+          }
+        ]
+        """
+
+        let metadata = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: RemoteASRProvider.doubaoASR.rawValue,
+                from: legacyRaw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+
+        XCTAssertFalse(metadata.appID.isEmpty)
+        XCTAssertTrue(metadata.apiKey.isEmpty)
+        XCTAssertTrue(metadata.accessToken.isEmpty)
+        XCTAssertFalse(metadata.isConfigured)
+    }
+
+    func testLegacyBundleMigrationPersistsCredentialPresenceMetadata() {
+        let suiteName = "RemoteModelConfigurationTests.credentialPresence.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertTrue(
+            VoxtSecureStorage.set(
+                "{\"apiKey\":\"\",\"appID\":\"legacy-app\",\"accessToken\":\"\"}",
+                for: "remote-provider.doubaoASR.credentials"
+            )
+        )
+        defaults.set(
+            """
+            [{"providerID":"doubaoASR","model":"\(DoubaoASRConfiguration.modelV2)","apiKey":"","appID":"","accessToken":""}]
+            """,
+            forKey: AppPreferenceKey.remoteASRProviderConfigurations
+        )
+
+        RemoteModelConfigurationStore.migrateLegacyStoredSecrets(defaults: defaults)
+
+        let migratedRaw = defaults.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
+        let metadata = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            from: migratedRaw,
+            sensitiveValueLoading: .metadataOnly
+        )
+        XCTAssertTrue(migratedRaw.contains("storedCredentialPresence"))
+        XCTAssertFalse(metadata?.appID.isEmpty ?? true)
+        XCTAssertTrue(metadata?.apiKey.isEmpty ?? false)
+        XCTAssertTrue(metadata?.accessToken.isEmpty ?? false)
+    }
+
+    func testLegacyBundleProtectedWriteFailureKeepsCredentialAvailableAndRetriesLater() {
+        let suiteName = "RemoteModelConfigurationTests.credentialPresenceRetry.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let account = "remote-provider.doubaoASR.credentials"
+        let legacyRaw = """
+        [{"providerID":"doubaoASR","model":"\(DoubaoASRConfiguration.modelV2)","apiKey":"","appID":"","accessToken":""}]
+        """
+        VoxtSecureStorage.setLegacyValueForTesting(
+            "{\"apiKey\":\"\",\"appID\":\"legacy-app\",\"accessToken\":\"legacy-token\"}",
+            for: account
+        )
+        VoxtSecureStorage.setProtectedWritesFailForTesting(true)
+        defaults.set(legacyRaw, forKey: AppPreferenceKey.remoteASRProviderConfigurations)
+
+        RemoteModelConfigurationStore.migrateLegacyStoredSecrets(defaults: defaults)
+
+        let migratedRaw = defaults.string(
+            forKey: AppPreferenceKey.remoteASRProviderConfigurations
+        ) ?? ""
+        let stillAvailable = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            from: migratedRaw
+        )
+        XCTAssertTrue(migratedRaw.contains("storedCredentialPresence"))
+        XCTAssertEqual(stillAvailable?.appID, "legacy-app")
+        XCTAssertEqual(stillAvailable?.accessToken, "legacy-token")
+        XCTAssertTrue(VoxtSecureStorage.hasLegacyValueForTesting(for: account))
+        XCTAssertFalse(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
+
+        VoxtSecureStorage.setProtectedWritesFailForTesting(false)
+        VoxtSecureStorage.clearCacheForTesting()
+
+        let retried = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            from: migratedRaw
+        )
+        XCTAssertEqual(retried?.appID, "legacy-app")
+        XCTAssertEqual(retried?.accessToken, "legacy-token")
+        XCTAssertFalse(VoxtSecureStorage.hasLegacyValueForTesting(for: account))
+        XCTAssertTrue(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
+    }
+
+    func testLegacyBundleCleanupFailureDoesNotHideCredentialOnFirstLoad() throws {
+        let account = "remote-provider.doubaoASR.credentials"
+        let raw = """
+        [{"providerID":"doubaoASR","model":"\(DoubaoASRConfiguration.modelV2)","apiKey":"","appID":"","accessToken":""}]
+        """
+        VoxtSecureStorage.setLegacyValueForTesting(
+            "{\"apiKey\":\"\",\"appID\":\"legacy-app\",\"accessToken\":\"legacy-token\"}",
+            for: account
+        )
+        VoxtSecureStorage.setDeletesFailForTesting(true)
+
+        let firstLoad = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: RemoteASRProvider.doubaoASR.rawValue,
+                from: raw
+            )
+        )
+
+        XCTAssertEqual(firstLoad.appID, "legacy-app")
+        XCTAssertEqual(firstLoad.accessToken, "legacy-token")
+        XCTAssertTrue(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
+        XCTAssertTrue(VoxtSecureStorage.hasLegacyValueForTesting(for: account))
+
+        VoxtSecureStorage.setDeletesFailForTesting(false)
+        VoxtSecureStorage.clearCacheForTesting()
+
+        let retriedLoad = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: RemoteASRProvider.doubaoASR.rawValue,
+                from: raw
+            )
+        )
+        XCTAssertEqual(retriedLoad.appID, "legacy-app")
+        XCTAssertEqual(retriedLoad.accessToken, "legacy-token")
+        XCTAssertFalse(VoxtSecureStorage.hasLegacyValueForTesting(for: account))
+    }
+
+    func testSaveConfigurationFailurePreservesPreviousMetadata() {
+        let existingRaw = RemoteModelConfigurationStore.saveConfigurations([:])
+        let updated = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app",
+            accessToken: "doubao-token"
+        )
+        VoxtSecureStorage.setProtectedWritesFailForTesting(true)
+
+        let result = RemoteModelConfigurationStore.saveConfiguration(
+            updated,
+            updating: existingRaw
+        )
+
+        XCTAssertEqual(result, .failure(.secureStorageUnavailable))
+        XCTAssertFalse(
+            VoxtSecureStorage.hasProtectedValueForTesting(
+                for: "remote-provider.doubaoASR.credentials"
+            )
+        )
+    }
+
+    func testMetadataEncodingFailureDoesNotCommitCredential() {
+        let existingRaw = RemoteModelConfigurationStore.saveConfigurations([:])
+        let updated = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteLLMProvider.openAI.rawValue,
+            model: "gpt-5.2",
+            apiKey: "new-secret",
+            generationSettings: LLMGenerationSettings(temperature: .nan)
+        )
+
+        let result = RemoteModelConfigurationStore.saveConfiguration(
+            updated,
+            updating: existingRaw
+        )
+
+        XCTAssertEqual(result, .failure(.metadataEncodingFailed))
+        XCTAssertFalse(
+            VoxtSecureStorage.hasProtectedValueForTesting(
+                for: "remote-provider.openAI.credentials"
+            )
+        )
+    }
+
+    func testLegacyCredentialCleanupFailureKeepsBundledSaveConsistent() throws {
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app",
+            accessToken: "doubao-token"
+        )
+        let existingRaw = RemoteModelConfigurationStore.saveConfigurations([stored.providerID: stored])
+        let cleared = TestFactories.makeRemoteConfiguration(
+            providerID: stored.providerID,
+            model: stored.model
+        )
+        VoxtSecureStorage.setLegacyValueForTesting(
+            "legacy-app",
+            for: "remote-provider.doubaoASR.appID"
+        )
+        VoxtSecureStorage.setLegacyValueForTesting(
+            "legacy-token",
+            for: "remote-provider.doubaoASR.accessToken"
+        )
+        VoxtSecureStorage.setDeletesFailForTesting(true)
+
+        let clearedRaw = try RemoteModelConfigurationStore.saveConfiguration(
+            cleared,
+            updating: existingRaw
+        ).get()
+
+        XCTAssertNotEqual(clearedRaw, existingRaw)
+        let resolved = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(providerID: stored.providerID, from: clearedRaw)
+        )
+        XCTAssertTrue(resolved.appID.isEmpty)
+        XCTAssertTrue(resolved.accessToken.isEmpty)
+        XCTAssertFalse(resolved.isConfigured)
+        XCTAssertTrue(
+            VoxtSecureStorage.hasLegacyValueForTesting(
+                for: "remote-provider.doubaoASR.appID"
+            )
+        )
+        XCTAssertTrue(
+            VoxtSecureStorage.hasLegacyValueForTesting(
+                for: "remote-provider.doubaoASR.accessToken"
+            )
+        )
+
+        VoxtSecureStorage.setDeletesFailForTesting(false)
+        let cleanedRaw = try RemoteModelConfigurationStore.saveConfiguration(
+            cleared,
+            updating: clearedRaw
+        ).get()
+        let cleaned = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(providerID: stored.providerID, from: cleanedRaw)
+        )
+
+        XCTAssertTrue(cleaned.appID.isEmpty)
+        XCTAssertTrue(cleaned.accessToken.isEmpty)
+        XCTAssertFalse(
+            VoxtSecureStorage.hasString(
+                for: "remote-provider.doubaoASR.credentials"
+            )
+        )
+        XCTAssertFalse(
+            VoxtSecureStorage.hasLegacyValueForTesting(
+                for: "remote-provider.doubaoASR.appID"
+            )
+        )
+        XCTAssertFalse(
+            VoxtSecureStorage.hasLegacyValueForTesting(
+                for: "remote-provider.doubaoASR.accessToken"
+            )
+        )
+    }
+
+    func testLegacyCleanupFailureDoesNotPairNewCredentialWithOldMetadata() throws {
+        let providerID = RemoteASRProvider.aliyunBailianASR.rawValue
+        let initial = TestFactories.makeRemoteConfiguration(
+            providerID: providerID,
+            model: "fun-asr-realtime",
+            endpoint: "wss://old.example.com/realtime",
+            apiKey: "old-key"
+        )
+        let existingRaw = RemoteModelConfigurationStore.saveConfigurations([providerID: initial])
+        let updated = TestFactories.makeRemoteConfiguration(
+            providerID: providerID,
+            model: "qwen3-asr-flash-realtime",
+            endpoint: "wss://new.example.com/realtime",
+            apiKey: "new-key"
+        )
+        VoxtSecureStorage.setLegacyValueForTesting(
+            "old-key",
+            for: "remote-provider.\(providerID).apiKey"
+        )
+        VoxtSecureStorage.setDeletesFailForTesting(true)
+
+        let updatedRaw = try RemoteModelConfigurationStore.saveConfiguration(
+            updated,
+            updating: existingRaw
+        ).get()
+        let resolved = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(providerID: providerID, from: updatedRaw)
+        )
+
+        XCTAssertEqual(resolved.model, "qwen3-asr-flash-realtime")
+        XCTAssertEqual(resolved.endpoint, "wss://new.example.com/realtime")
+        XCTAssertEqual(resolved.apiKey, "new-key")
+    }
+
+    func testProviderCredentialsUseSingleBundledKeychainItem() {
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app",
+            accessToken: "doubao-token"
+        )
+
+        _ = RemoteModelConfigurationStore.saveConfigurations([stored.providerID: stored])
+        VoxtSecureStorage.clearCacheForTesting()
+
+        XCTAssertTrue(
+            VoxtSecureStorage.hasString(for: "remote-provider.doubaoASR.credentials")
+        )
+        XCTAssertFalse(
+            VoxtSecureStorage.hasString(for: "remote-provider.doubaoASR.appID")
+        )
+        XCTAssertFalse(
+            VoxtSecureStorage.hasString(for: "remote-provider.doubaoASR.accessToken")
+        )
+    }
+
+    func testLegacyPerFieldCredentialsMigrateToBundledItemOnFirstRead() throws {
+        VoxtSecureStorage.set("legacy-app", for: "remote-provider.doubaoASR.appID")
+        VoxtSecureStorage.set("legacy-token", for: "remote-provider.doubaoASR.accessToken")
+        VoxtSecureStorage.clearCacheForTesting()
+
+        let raw = """
+        [
+          {
+            "providerID": "doubaoASR",
+            "model": "\(DoubaoASRConfiguration.modelV2)",
+            "endpoint": "",
+            "apiKey": "",
+            "appID": "",
+            "accessToken": ""
+          }
+        ]
+        """
+
+        let migrated = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: RemoteASRProvider.doubaoASR.rawValue,
+                from: raw
+            )
+        )
+        VoxtSecureStorage.clearCacheForTesting()
+
+        XCTAssertEqual(migrated.appID, "legacy-app")
+        XCTAssertEqual(migrated.accessToken, "legacy-token")
+        XCTAssertTrue(
+            VoxtSecureStorage.hasString(for: "remote-provider.doubaoASR.credentials")
+        )
+        XCTAssertFalse(
+            VoxtSecureStorage.hasString(for: "remote-provider.doubaoASR.appID")
+        )
+        XCTAssertFalse(
+            VoxtSecureStorage.hasString(for: "remote-provider.doubaoASR.accessToken")
+        )
+    }
+
     func testOllamaConfigurationIsConfiguredWithoutAPIKeyWhenModelExists() {
         let configuration = TestFactories.makeRemoteConfiguration(
             providerID: RemoteLLMProvider.ollama.rawValue,
@@ -281,6 +714,29 @@ final class RemoteModelConfigurationTests: XCTestCase {
         )
 
         XCTAssertFalse(configuration.isConfigured)
+    }
+
+    func testDoubaoConfigurationRequiresBothAppIDAndAccessToken() {
+        let onlyAppID = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app"
+        )
+        let onlyAccessToken = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            accessToken: "doubao-token"
+        )
+        let complete = TestFactories.makeRemoteConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "doubao-app",
+            accessToken: "doubao-token"
+        )
+
+        XCTAssertFalse(onlyAppID.isConfigured)
+        XCTAssertFalse(onlyAccessToken.isConfigured)
+        XCTAssertTrue(complete.isConfigured)
     }
 
     func testCodexConfigurationUsesLocalLoginAndDoesNotRequireAPIKey() {
@@ -879,7 +1335,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         )
     }
 
-    func testSavingOneRemoteASRProviderPreservesOtherProviderSecrets() {
+    func testSavingOneRemoteASRProviderPreservesOtherProviderSecrets() throws {
         let initial: [String: RemoteProviderConfiguration] = [
             RemoteASRProvider.doubaoASR.rawValue: TestFactories.makeRemoteConfiguration(
                 providerID: RemoteASRProvider.doubaoASR.rawValue,
@@ -903,10 +1359,10 @@ final class RemoteModelConfigurationTests: XCTestCase {
             apiKey: "aliyun-key-updated"
         )
 
-        let mergedRaw = RemoteModelConfigurationStore.saveConfiguration(
+        let mergedRaw = try RemoteModelConfigurationStore.saveConfiguration(
             updatedAliyun,
             updating: raw
-        )
+        ).get()
         let loaded = RemoteModelConfigurationStore.loadConfigurations(from: mergedRaw)
 
         XCTAssertEqual(loaded[RemoteASRProvider.aliyunBailianASR.rawValue]?.apiKey, "aliyun-key-updated")

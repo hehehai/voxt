@@ -3,7 +3,7 @@
 
 VOXT_CODE_SIGN_STYLE = Automatic
 VOXT_DEVELOPMENT_TEAM = RY2TQTYSKQ
-VOXT_CODE_SIGN_IDENTITY =
+VOXT_CODE_SIGN_IDENTITY = Apple Development
 
 #include? "Signing.local.xcconfig"
 #include? "SherpaOnnx.local.xcconfig"

@@ -180,4 +180,49 @@ final class MLXModelSupportTests: XCTestCase {
 
         XCTAssertTrue(displayReposIncludingInstalled.contains("mlx-community/whisper-base-mlx"))
     }
+
+    func testVoxtralReposAreHiddenUnlessInstalled() {
+        let repos = [
+            "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+            "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
+            "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
+        ]
+        let defaultDisplayRepos = Set(MLXModelCatalog.displayModels(includingInstalled: []).map(\.id))
+
+        for repo in repos {
+            XCTAssertFalse(defaultDisplayRepos.contains(repo))
+        }
+
+        let installedRepo = "mlx-community/Voxtral-Mini-4B-Realtime-6bit"
+        let displayReposIncludingInstalled = Set(
+            MLXModelCatalog.displayModels(includingInstalled: [installedRepo]).map(\.id)
+        )
+
+        XCTAssertTrue(displayReposIncludingInstalled.contains(installedRepo))
+        XCTAssertEqual(MLXModelCatalog.liveMode(for: installedRepo), .nativeVoxtralLive)
+    }
+
+    func testCanaryRepoIsHiddenUnlessInstalled() {
+        let repo = "Mediform/canary-1b-v2-mlx-q8"
+
+        XCTAssertFalse(
+            MLXModelCatalog.displayModels(includingInstalled: []).contains { $0.id == repo }
+        )
+        XCTAssertTrue(
+            MLXModelCatalog.displayModels(includingInstalled: [repo]).contains { $0.id == repo }
+        )
+        XCTAssertEqual(MLXModelCatalog.capability(for: repo).family, .canary)
+    }
+
+    func testGraniteRepoIsHiddenUnlessInstalled() {
+        let repo = "mlx-community/granite-4.0-1b-speech-5bit"
+
+        XCTAssertFalse(
+            MLXModelCatalog.displayModels(includingInstalled: []).contains { $0.id == repo }
+        )
+        XCTAssertTrue(
+            MLXModelCatalog.displayModels(includingInstalled: [repo]).contains { $0.id == repo }
+        )
+        XCTAssertEqual(MLXModelCatalog.capability(for: repo).family, .graniteSpeech)
+    }
 }

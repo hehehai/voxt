@@ -2,6 +2,7 @@
 // Provides Voxt Secure Storage for permissions and secure storage.
 
 import Foundation
+import LocalAuthentication
 import Security
 
 enum VoxtSecureStorage {
@@ -10,12 +11,42 @@ enum VoxtSecureStorage {
         return "\(bundleID).secure-storage"
     }()
 
+    nonisolated private static let stateLock = NSLock()
+    nonisolated(unsafe) private static var cachedValues: [String: String] = [:]
+
+    // Unit tests run with code signing disabled in CI. Keep their credentials out
+    // of the user's real keychain while exercising the same migration behavior.
+    nonisolated(unsafe) private static var usesInMemoryStoreForTesting = isRunningUnderXCTest
+    nonisolated(unsafe) private static var protectedValuesForTesting: [String: String] = [:]
+    nonisolated(unsafe) private static var legacyValuesForTesting: [String: String] = [:]
+    nonisolated(unsafe) private static var protectedWritesFailForTesting = false
+    nonisolated(unsafe) private static var deletesFailForTesting = false
+
+    nonisolated private static let isRunningUnderXCTest: Bool = {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+            NSClassFromString("XCTestCase") != nil ||
+            NSClassFromString("XCTest.XCTestCase") != nil
+    }()
+
     nonisolated private static var serviceName: String {
         defaultServiceName
     }
 
     nonisolated static func string(for account: String) -> String? {
-        var query = baseQuery(for: account)
+        if let cached = cachedValue(for: account) {
+            return cached
+        }
+
+        if isUsingInMemoryStoreForTesting {
+            if let value = protectedValueForTesting(for: account) {
+                cache(value, for: account)
+                _ = deleteLegacyValueForTesting(for: account)
+                return value
+            }
+            return migrateLegacyValueForTesting(for: account)
+        }
+
+        var query = protectedQuery(for: account)
         query[kSecReturnData as String] = kCFBooleanTrue
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -23,89 +54,359 @@ enum VoxtSecureStorage {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
         case errSecSuccess:
-            guard let data = item as? Data else { return nil }
-            return String(data: data, encoding: .utf8)
+            guard let data = item as? Data,
+                  let value = String(data: data, encoding: .utf8)
+            else {
+                return nil
+            }
+            cache(value, for: account)
+            // A readable Data Protection item is authoritative. Legacy cleanup
+            // is best effort and must never make the current value unavailable.
+            _ = deleteLegacyValue(for: account, interactionAllowed: false)
+            return value
         case errSecItemNotFound:
-            return nil
+            return migrateLegacyValue(for: account)
         default:
-            VoxtLog.securityWarning("Keychain read failed. account=\(account), status=\(status)")
+            VoxtLog.securityWarning("Data Protection Keychain read failed. account=\(account), status=\(status)")
             return nil
         }
     }
 
     nonisolated static func hasString(for account: String) -> Bool {
-        var query = baseQuery(for: account)
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        if cachedValue(for: account) != nil {
+            return true
+        }
 
-        let status = SecItemCopyMatching(query as CFDictionary, nil)
-        switch status {
+        if isUsingInMemoryStoreForTesting {
+            return protectedValueForTesting(for: account) != nil || legacyValueForTesting(for: account) != nil
+        }
+
+        var protectedLookup = protectedQuery(for: account)
+        protectedLookup[kSecMatchLimit as String] = kSecMatchLimitOne
+        let protectedStatus = SecItemCopyMatching(protectedLookup as CFDictionary, nil)
+        switch protectedStatus {
         case errSecSuccess:
             return true
         case errSecItemNotFound:
+            break
+        default:
+            VoxtLog.securityWarning(
+                "Data Protection Keychain presence check failed. account=\(account), status=\(protectedStatus)"
+            )
+            return false
+        }
+
+        var legacyLookup = legacyQuery(for: account, interactionAllowed: false)
+        legacyLookup[kSecMatchLimit as String] = kSecMatchLimitOne
+        let legacyStatus = SecItemCopyMatching(legacyLookup as CFDictionary, nil)
+        switch legacyStatus {
+        case errSecSuccess:
+            return true
+        case errSecItemNotFound, errSecInteractionNotAllowed, errSecAuthFailed:
             return false
         default:
-            VoxtLog.securityWarning("Keychain presence check failed. account=\(account), status=\(status)")
+            VoxtLog.securityWarning("Legacy Keychain presence check failed. account=\(account), status=\(legacyStatus)")
             return false
         }
     }
 
-    nonisolated static func set(_ value: String, for account: String) {
+    @discardableResult
+    nonisolated static func set(_ value: String, for account: String) -> Bool {
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            removeValue(for: account)
-            return
+            return removeValue(for: account)
         }
 
-        let data = Data(value.utf8)
-        let query = baseQuery(for: account)
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        ]
+        if isUsingInMemoryStoreForTesting {
+            return setProtectedValueForTesting(value, for: account)
+        }
 
+        let query = protectedQuery(for: account)
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         switch status {
         case errSecSuccess:
+            let attributes: [String: Any] = [
+                kSecValueData as String: Data(value.utf8),
+                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            ]
             let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-            if updateStatus != errSecSuccess {
-                VoxtLog.securityWarning("Keychain update failed. account=\(account), status=\(updateStatus)")
+            guard updateStatus == errSecSuccess else {
+                VoxtLog.securityWarning(
+                    "Data Protection Keychain update failed. account=\(account), status=\(updateStatus)"
+                )
+                return false
             }
         case errSecItemNotFound:
             var item = query
-            attributes.forEach { item[$0.key] = $0.value }
+            item[kSecValueData as String] = Data(value.utf8)
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             let addStatus = SecItemAdd(item as CFDictionary, nil)
-            if addStatus != errSecSuccess {
-                VoxtLog.securityWarning("Keychain add failed. account=\(account), status=\(addStatus)")
+            guard addStatus == errSecSuccess else {
+                VoxtLog.securityWarning("Data Protection Keychain add failed. account=\(account), status=\(addStatus)")
+                return false
             }
         default:
-            VoxtLog.securityWarning("Keychain lookup before write failed. account=\(account), status=\(status)")
+            VoxtLog.securityWarning(
+                "Data Protection Keychain lookup before write failed. account=\(account), status=\(status)"
+            )
+            return false
         }
+
+        cache(value, for: account)
+        return true
     }
 
-    nonisolated static func removeValue(for account: String) {
-        let status = SecItemDelete(baseQuery(for: account) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            VoxtLog.securityWarning("Keychain delete failed. account=\(account), status=\(status)")
-            return
+    @discardableResult
+    nonisolated static func removeValue(for account: String) -> Bool {
+        removeCachedValue(for: account)
+
+        if isUsingInMemoryStoreForTesting {
+            return removeValuesForTesting(for: account)
         }
+
+        // Delete the legacy copy first. If its ACL prevents noninteractive
+        // deletion, keep the protected copy intact so callers can retry without
+        // reviving an older credential.
+        guard deleteLegacyValue(for: account, interactionAllowed: false) else {
+            return false
+        }
+        return deleteProtectedValue(for: account)
+    }
+
+    @discardableResult
+    nonisolated static func removeValueWithoutUserInteraction(for account: String) -> Bool {
+        removeValue(for: account)
     }
 
     nonisolated static func clearAllForTesting() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceName
-        ]
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            VoxtLog.securityWarning("Keychain reset failed. status=\(status)")
-            return
+        stateLock.lock()
+        usesInMemoryStoreForTesting = true
+        cachedValues.removeAll()
+        protectedValuesForTesting.removeAll()
+        legacyValuesForTesting.removeAll()
+        protectedWritesFailForTesting = false
+        deletesFailForTesting = false
+        stateLock.unlock()
+    }
+
+    nonisolated static func clearCacheForTesting() {
+        stateLock.lock()
+        cachedValues.removeAll()
+        stateLock.unlock()
+    }
+
+    nonisolated static func setLegacyValueForTesting(_ value: String, for account: String) {
+        stateLock.lock()
+        usesInMemoryStoreForTesting = true
+        legacyValuesForTesting[account] = value
+        cachedValues.removeValue(forKey: account)
+        stateLock.unlock()
+    }
+
+    nonisolated static func hasLegacyValueForTesting(for account: String) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return legacyValuesForTesting[account] != nil
+    }
+
+    nonisolated static func hasProtectedValueForTesting(for account: String) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return protectedValuesForTesting[account] != nil
+    }
+
+    nonisolated static func setProtectedWritesFailForTesting(_ shouldFail: Bool) {
+        stateLock.lock()
+        usesInMemoryStoreForTesting = true
+        protectedWritesFailForTesting = shouldFail
+        stateLock.unlock()
+    }
+
+    nonisolated static func setDeletesFailForTesting(_ shouldFail: Bool) {
+        stateLock.lock()
+        usesInMemoryStoreForTesting = true
+        deletesFailForTesting = shouldFail
+        stateLock.unlock()
+    }
+
+    nonisolated private static func migrateLegacyValue(for account: String) -> String? {
+        var query = legacyQuery(for: account, interactionAllowed: false)
+        query[kSecReturnData as String] = kCFBooleanTrue
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess:
+            guard let legacyData = item as? Data,
+                  let value = String(data: legacyData, encoding: .utf8)
+            else {
+                VoxtLog.securityWarning("Legacy Keychain value is not valid UTF-8. account=\(account)")
+                return nil
+            }
+            guard set(value, for: account) else {
+                VoxtLog.securityWarning("Legacy Keychain migration write failed. account=\(account)")
+                cache(value, for: account)
+                return value
+            }
+            guard protectedData(for: account) == legacyData else {
+                removeCachedValue(for: account)
+                VoxtLog.securityWarning("Legacy Keychain migration verification failed. account=\(account)")
+                cache(value, for: account)
+                return value
+            }
+
+            if !deleteLegacyValue(for: account, interactionAllowed: false) {
+                VoxtLog.securityWarning("Legacy Keychain migration cleanup failed. account=\(account)")
+            }
+            return value
+        case errSecItemNotFound:
+            return nil
+        case errSecInteractionNotAllowed, errSecAuthFailed:
+            VoxtLog.securityWarning(
+                "Legacy Keychain migration requires user interaction; migration deferred. account=\(account), status=\(status)"
+            )
+            return nil
+        default:
+            VoxtLog.securityWarning("Legacy Keychain read failed. account=\(account), status=\(status)")
+            return nil
         }
     }
 
-    nonisolated private static func baseQuery(for account: String) -> [String: Any] {
+    nonisolated private static func protectedData(for account: String) -> Data? {
+        var query = protectedQuery(for: account)
+        query[kSecReturnData as String] = kCFBooleanTrue
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
+            return nil
+        }
+        return item as? Data
+    }
+
+    nonisolated private static func deleteProtectedValue(for account: String) -> Bool {
+        let status = SecItemDelete(protectedQuery(for: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            VoxtLog.securityWarning("Data Protection Keychain delete failed. account=\(account), status=\(status)")
+            return false
+        }
+        return true
+    }
+
+    nonisolated private static func deleteLegacyValue(for account: String, interactionAllowed: Bool) -> Bool {
+        let status = SecItemDelete(
+            legacyQuery(for: account, interactionAllowed: interactionAllowed) as CFDictionary
+        )
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            VoxtLog.securityWarning("Legacy Keychain delete failed. account=\(account), status=\(status)")
+            return false
+        }
+        return true
+    }
+
+    nonisolated private static var isUsingInMemoryStoreForTesting: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return usesInMemoryStoreForTesting
+    }
+
+    nonisolated private static func protectedValueForTesting(for account: String) -> String? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return protectedValuesForTesting[account]
+    }
+
+    nonisolated private static func legacyValueForTesting(for account: String) -> String? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return legacyValuesForTesting[account]
+    }
+
+    nonisolated private static func setProtectedValueForTesting(_ value: String, for account: String) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard !protectedWritesFailForTesting else { return false }
+        protectedValuesForTesting[account] = value
+        cachedValues[account] = value
+        return true
+    }
+
+    nonisolated private static func removeValuesForTesting(for account: String) -> Bool {
+        stateLock.lock()
+        guard !deletesFailForTesting else {
+            stateLock.unlock()
+            return false
+        }
+        protectedValuesForTesting.removeValue(forKey: account)
+        legacyValuesForTesting.removeValue(forKey: account)
+        stateLock.unlock()
+        return true
+    }
+
+    nonisolated private static func migrateLegacyValueForTesting(for account: String) -> String? {
+        guard let legacyValue = legacyValueForTesting(for: account) else {
+            return nil
+        }
+        guard setProtectedValueForTesting(legacyValue, for: account),
+              protectedValueForTesting(for: account) == legacyValue
+        else {
+            cache(legacyValue, for: account)
+            return legacyValue
+        }
+
+        _ = deleteLegacyValueForTesting(for: account)
+        return legacyValue
+    }
+
+    nonisolated private static func deleteLegacyValueForTesting(for account: String) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard !deletesFailForTesting else { return false }
+        legacyValuesForTesting.removeValue(forKey: account)
+        return true
+    }
+
+    nonisolated private static func cachedValue(for account: String) -> String? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return cachedValues[account]
+    }
+
+    nonisolated private static func cache(_ value: String, for account: String) {
+        stateLock.lock()
+        cachedValues[account] = value
+        stateLock.unlock()
+    }
+
+    nonisolated private static func removeCachedValue(for account: String) {
+        stateLock.lock()
+        cachedValues.removeValue(forKey: account)
+        stateLock.unlock()
+    }
+
+    nonisolated private static func protectedQuery(for account: String) -> [String: Any] {
         [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: kCFBooleanTrue as Any
+        ]
+    }
+
+    nonisolated private static func legacyQuery(
+        for account: String,
+        interactionAllowed: Bool
+    ) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account
         ]
+        if !interactionAllowed {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        }
+        return query
     }
 }

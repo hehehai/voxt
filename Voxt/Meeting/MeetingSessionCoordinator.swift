@@ -1278,11 +1278,14 @@ final class MeetingSessionCoordinator {
         let provider = RemoteASRProvider(
             rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? ""
         ) ?? .openAIWhisper
+        let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
+        let stored = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: provider.rawValue,
+            from: raw
+        ).map { [provider.rawValue: $0] } ?? [:]
         let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(
             provider: provider,
-            stored: RemoteModelConfigurationStore.loadConfigurations(
-                from: UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-            )
+            stored: stored
         )
         return (provider, configuration)
     }

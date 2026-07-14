@@ -61,7 +61,10 @@ brew install --cask voxt
 - `Voxt` app target 和 `VoxtTests` 现在都从同一份 xcconfig 读取签名设置，避免多人协作时各改各的。
 - `VoxtTests` 仍然保留 `GENERATE_INFOPLIST_FILE = YES`，避免测试 bundle 因 plist 为空出现问题。
 - GitHub Actions 测试流程不受影响：`.github/workflows/tests.yml` 仍然通过 `CODE_SIGNING_ALLOWED=NO` 跑测试，不依赖本地签名文件。
-- 版本发布流程也不受本地覆盖文件影响：`.github/workflows/release.yml` 仍然先做 unsigned build，再在 workflow 内完成 Developer ID 签名与发布。
+- 版本发布仍先做 unsigned build，再由 `.github/workflows/release.yml` 完成 Developer ID 签名，因此本地签名覆盖不会影响发布。
+- 发布必须为显式 App ID `com.voxt.Voxt` 准备 **Developer ID** Provisioning Profile，并把 profile 的 Base64 内容保存到 GitHub Actions Secret `DEVELOPER_ID_PROVISIONING_PROFILE`；不能使用 Mac App Store Profile。
+- 在 macOS 上执行 `base64 -i Voxt_Developer_ID.provisionprofile | tr -d '\n'`，把输出完整粘贴到上述 Secret。
+- 发布流程会嵌入该 Profile，并在打包前验证有效期、App ID、Keychain access group 与最终签名 entitlements。后续版本必须保持 Team ID、Bundle ID 和 Keychain access group 稳定，才能持续读取已有的 Data Protection Keychain 凭证。
 
 ## 模型支持
 
@@ -100,12 +103,14 @@ Whisper 已迁移为 `MLX Audio` 本地模型家族；旧 Whisper 选择会自�
 | --- | --- | --- | --- |
 | Qwen3-ASR 0.6B | `4bit`、`6bit`、`8bit`、`bf16` | 多语言通用 ASR，Qwen3 里体积最小的一组 | 默认本地 ASR，质量 / 速度最均衡 |
 | Qwen3-ASR 1.7B | `4bit`、`6bit`、`8bit`、`bf16` | 更大的多语言 Qwen3 系列，精度更高，内存占用也更高 | 精度优先 |
-| Voxtral Realtime Mini 4B | `4bit`、`6bit`、`fp16` | 面向实时场景的多语言家族；也是当前 Voxt 里被标记为 realtime-capable 的 MLX Audio 模型 | 适合追求本地实时体验 |
+| Voxtral Realtime Mini 4B | `4bit`、`6bit`、`fp16` | 隐藏兼容支持；已有安装和旧配置仍可继续使用 | 不再向新用户展示或推荐下载 |
 | Cohere Transcribe | `03-2026`、`fp16` | 高精度多语言 encoder-decoder ASR，默认带标点 | 更看重本地识别质量时适合使用 |
+| Canary | `1b-v2-mlx-q8` | 隐藏兼容支持；已有安装和旧配置仍可继续使用 | 不再向新用户展示或推荐下载 |
 | Parakeet | `tdt_ctc-110m`、`tdt-0.6b-v2`、`tdt-0.6b-v3`、`ctc-0.6b`、`rnnt-0.6b`、`tdt-1.1b`、`tdt_ctc-1.1b`、`ctc-1.1b`、`rnnt-1.1b` | 英文优先，覆盖轻量和高容量多个版本 | 英文场景、快速本地迭代 |
 | GLM-ASR Nano | `2512-4bit` | 当前体积最小的一档，模型卡主要覆盖中英 | 低门槛起步模型 |
-| Granite Speech 4.0 | `1b-speech-5bit` | 紧凑型多语言语音模型，定位在 nano 与更大多语模型之间 | 想要比 nano 更稳一点的折中选择 |
-| FireRed ASR 2 | `AED-mlx` | 更偏离线质量路线，走 beam search ASR | 更看重离线精度时使用 |
+| Granite Speech 4.0 | `1b-speech-5bit` | 隐藏兼容支持；已有安装和旧配置仍可继续使用 | 不再向新用户展示或推荐下载 |
+| FireRed ASR 2 | MLX `AED-mlx`、sherpa CTC int8 | 隐藏兼容支持；已有安装、旧配置和旧 ID 迁移仍可继续使用 | 不再向新用户展示或推荐下载 |
+| FunASR Nano | sherpa int8 | 隐藏兼容支持；已有安装和旧配置仍可继续使用 | 不再向新用户展示或推荐下载 |
 | SenseVoice | `SenseVoiceSmall` | 快速多语言模型，附带语言 / 事件检测能力 | 混合语言或事件较多的音频 |
 
 当前 MLX Audio 集成还有几条重要说明：

@@ -228,7 +228,10 @@ struct ModelCatalogRow: View {
                 }
 
                 HStack(spacing: 12) {
-                    ModelMetaText(title: localized("Size"), value: entry.sizeText)
+                    ModelMetaText(
+                        title: localized(entry.id.hasPrefix("remote-asr:") ? "Model" : "Size"),
+                        value: entry.sizeText
+                    )
                     ModelMetaText(title: localized("Score"), value: entry.ratingText)
                     if !entry.usageLocations.isEmpty {
                         ModelMetaText(

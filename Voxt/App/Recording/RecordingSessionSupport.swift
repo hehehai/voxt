@@ -61,10 +61,13 @@ enum RecordingSessionSupport {
         }
     }
 
-    static func overlayIconMode(for outputMode: SessionOutputMode) -> OverlaySessionIconMode {
+    static func overlayIconMode(
+        for outputMode: SessionOutputMode,
+        isNoteSession: Bool = false
+    ) -> OverlaySessionIconMode {
         switch outputMode {
         case .transcription:
-            return .transcription
+            return isNoteSession ? .note : .transcription
         case .translation:
             return .translation
         case .rewrite:

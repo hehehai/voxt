@@ -127,6 +127,7 @@ extension AppDelegate {
 
         transcriptionCaptureSessionMode = .noteSession
         configureTranscriptionCapturePipelineForCurrentSession()
+        overlayState.sessionIconMode = currentRecordingOverlayIconMode
         refreshVoxtNoteTranscriptDisplay()
         VoxtLog.info("Voxt note captured. reason=\(reason), characters=\(trimmedText.count)")
         return true

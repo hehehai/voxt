@@ -116,7 +116,10 @@ extension RemoteASRTranscriber {
         let rawProvider = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? ""
         let provider = RemoteASRProvider(rawValue: rawProvider) ?? .openAIWhisper
         let rawConfigurations = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-        let configurations = RemoteModelConfigurationStore.loadConfigurations(from: rawConfigurations)
+        let configurations = RemoteModelConfigurationStore.loadConfiguration(
+            providerID: provider.rawValue,
+            from: rawConfigurations
+        ).map { [provider.rawValue: $0] } ?? [:]
         let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(
             provider: provider,
             stored: configurations

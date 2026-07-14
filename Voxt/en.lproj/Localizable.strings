@@ -2208,6 +2208,8 @@
 "Strict Instructions" = "Strict Instructions";
 "%@ (Modified)" = "%@ (Modified)";
 "Configuration saved for %@." = "Configuration saved for %@.";
+"Configuration could not be saved securely. Check Keychain access and try again." = "Configuration could not be saved securely. Check Keychain access and try again.";
+"Configuration could not be encoded. Please try again." = "Configuration could not be encoded. Please try again.";
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "This model is unavailable because the sherpa-onnx runtime is not included in this build.";
 "Uninstalled %@." = "Uninstalled %@.";
 "Uninstall failed: %@" = "Uninstall failed: %@";

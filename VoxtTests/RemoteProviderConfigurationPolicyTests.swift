@@ -497,7 +497,7 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
                 endpoint: "",
                 apiKey: ""
             ),
-            onSave: { _ in }
+            onSave: { _ in .success(()) }
         )
     }
 

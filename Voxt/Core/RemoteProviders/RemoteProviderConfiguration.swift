@@ -176,6 +176,22 @@ enum OpenAITextVerbosity: String, CaseIterable, Identifiable {
     }
 }
 
+fileprivate nonisolated struct RemoteStoredCredentialPresence: Codable, Hashable {
+    var apiKey: Bool
+    var appID: Bool
+    var accessToken: Bool
+
+    init(apiKey: String, appID: String, accessToken: String) {
+        self.apiKey = Self.isPresent(apiKey)
+        self.appID = Self.isPresent(appID)
+        self.accessToken = Self.isPresent(accessToken)
+    }
+
+    private static func isPresent(_ value: String) -> Bool {
+        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     let providerID: String
     var model: String
@@ -183,6 +199,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     var apiKey: String
     var appID: String
     var accessToken: String
+    fileprivate var storedCredentialPresence: RemoteStoredCredentialPresence?
     var searchEnabled: Bool
     var openAIChunkPseudoRealtimeEnabled: Bool
     var openAIReasoningEffort: String
@@ -216,6 +233,11 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     var isConfigured: Bool {
         if RemoteLLMProvider(rawValue: providerID)?.apiKeyIsOptional == true {
             return hasUsableModel
+        }
+        if providerID == RemoteASRProvider.doubaoASR.rawValue {
+            return hasUsableModel &&
+                !appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         return hasUsableModel && (
             !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
@@ -288,6 +310,11 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         self.apiKey = apiKey
         self.appID = appID
         self.accessToken = accessToken
+        storedCredentialPresence = RemoteStoredCredentialPresence(
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken
+        )
         self.searchEnabled = searchEnabled
         self.openAIChunkPseudoRealtimeEnabled = openAIChunkPseudoRealtimeEnabled
         self.openAIReasoningEffort = openAIReasoningEffort
@@ -331,6 +358,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         case apiKey
         case appID
         case accessToken
+        case storedCredentialPresence
         case searchEnabled
         case openAIChunkPseudoRealtimeEnabled
         case openAIReasoningEffort
@@ -364,6 +392,10 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
         appID = try container.decodeIfPresent(String.self, forKey: .appID) ?? ""
         accessToken = try container.decodeIfPresent(String.self, forKey: .accessToken) ?? ""
+        storedCredentialPresence = try container.decodeIfPresent(
+            RemoteStoredCredentialPresence.self,
+            forKey: .storedCredentialPresence
+        )
         let defaultSearchEnabled = RemoteLLMProvider(rawValue: providerID)?.defaultSearchEnabled ?? false
         searchEnabled = try container.decodeIfPresent(Bool.self, forKey: .searchEnabled) ?? defaultSearchEnabled
         openAIChunkPseudoRealtimeEnabled = try container.decodeIfPresent(Bool.self, forKey: .openAIChunkPseudoRealtimeEnabled) ?? false
@@ -404,6 +436,11 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
 
     nonisolated var withoutSensitiveValues: RemoteProviderConfiguration {
         var sanitized = self
+        sanitized.storedCredentialPresence = RemoteStoredCredentialPresence(
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken
+        )
         sanitized.apiKey = ""
         sanitized.appID = ""
         sanitized.accessToken = ""
@@ -412,6 +449,24 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
 }
 
 enum RemoteModelConfigurationStore {
+    enum SaveError: LocalizedError, Equatable {
+        case secureStorageUnavailable
+        case metadataEncodingFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .secureStorageUnavailable:
+                return AppLocalization.localizedString(
+                    "Configuration could not be saved securely. Check Keychain access and try again."
+                )
+            case .metadataEncodingFailed:
+                return AppLocalization.localizedString(
+                    "Configuration could not be encoded. Please try again."
+                )
+            }
+        }
+    }
+
     enum SensitiveValueLoading {
         case metadataOnly
         case includeStoredValues
@@ -423,6 +478,37 @@ enum RemoteModelConfigurationStore {
         case apiKey
         case appID
         case accessToken
+    }
+
+    private nonisolated struct StoredSensitiveValues: Codable {
+        var apiKey: String
+        var appID: String
+        var accessToken: String
+
+        init(configuration: RemoteProviderConfiguration) {
+            apiKey = configuration.apiKey
+            appID = configuration.appID
+            accessToken = configuration.accessToken
+        }
+
+        var isEmpty: Bool {
+            [apiKey, appID, accessToken].allSatisfy {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+        }
+
+        func applying(to configuration: RemoteProviderConfiguration) -> RemoteProviderConfiguration {
+            var resolved = configuration
+            resolved.apiKey = apiKey
+            resolved.appID = appID
+            resolved.accessToken = accessToken
+            resolved.storedCredentialPresence = RemoteStoredCredentialPresence(
+                apiKey: apiKey,
+                appID: appID,
+                accessToken: accessToken
+            )
+            return resolved
+        }
     }
 
     static func loadConfigurations(
@@ -441,6 +527,26 @@ enum RemoteModelConfigurationStore {
         })
     }
 
+    static func loadConfiguration(
+        providerID: String,
+        from raw: String,
+        sensitiveValueLoading: SensitiveValueLoading = .includeStoredValues
+    ) -> RemoteProviderConfiguration? {
+        guard let item = decodedConfigurations(from: raw)
+            .map(normalizedCompatibilityValues(for:))
+            .first(where: { $0.providerID == providerID })
+        else {
+            return nil
+        }
+
+        switch sensitiveValueLoading {
+        case .metadataOnly:
+            return resolvedSensitiveValuePresence(for: item)
+        case .includeStoredValues:
+            return resolvedSensitiveValues(for: item)
+        }
+    }
+
     static func saveConfigurations(_ values: [String: RemoteProviderConfiguration]) -> String {
         let items = values.values.sorted(by: { $0.providerID < $1.providerID })
         for item in items {
@@ -452,7 +558,7 @@ enum RemoteModelConfigurationStore {
     static func saveConfiguration(
         _ configuration: RemoteProviderConfiguration,
         updating raw: String
-    ) -> String {
+    ) -> Result<String, SaveError> {
         var items = decodedConfigurations(from: raw).map(normalizedCompatibilityValues(for:))
         let sanitized = configuration.withoutSensitiveValues
 
@@ -462,8 +568,13 @@ enum RemoteModelConfigurationStore {
             items.append(sanitized)
         }
 
-        persistSensitiveValues(for: configuration)
-        return encodeConfigurations(items.sorted(by: { $0.providerID < $1.providerID }))
+        guard let encoded = encodedConfigurations(items.sorted(by: { $0.providerID < $1.providerID })) else {
+            return .failure(.metadataEncodingFailed)
+        }
+        guard persistSensitiveValues(for: configuration) else {
+            return .failure(.secureStorageUnavailable)
+        }
+        return .success(encoded)
     }
 
     static func migrateLegacyStoredSecrets(defaults: UserDefaults = .standard) {
@@ -517,6 +628,15 @@ enum RemoteModelConfigurationStore {
         )
     }
 
+    static func resolvedASRConfiguration(
+        provider: RemoteASRProvider,
+        from raw: String
+    ) -> RemoteProviderConfiguration {
+        let stored = loadConfiguration(providerID: provider.rawValue, from: raw)
+            .map { [provider.rawValue: $0] } ?? [:]
+        return resolvedASRConfiguration(provider: provider, stored: stored)
+    }
+
     private static func allowsCustomASRModel(provider: RemoteASRProvider, model: String) -> Bool {
         guard provider == .openAIWhisper else { return false }
         return !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -542,6 +662,15 @@ enum RemoteModelConfigurationStore {
         )
     }
 
+    static func resolvedLLMConfiguration(
+        provider: RemoteLLMProvider,
+        from raw: String
+    ) -> RemoteProviderConfiguration {
+        let stored = loadConfiguration(providerID: provider.rawValue, from: raw)
+            .map { [provider.rawValue: $0] } ?? [:]
+        return resolvedLLMConfiguration(provider: provider, stored: stored)
+    }
+
     static func isStoredLLMConfigurationConfigured(
         provider: RemoteLLMProvider,
         stored: [String: RemoteProviderConfiguration]
@@ -555,15 +684,34 @@ enum RemoteModelConfigurationStore {
         let raw = defaults.string(forKey: defaultsKey) ?? ""
         guard !raw.isEmpty else { return }
         let decoded = decodedConfigurations(from: raw)
-        guard decoded.contains(where: hasInlineSensitiveValues) else { return }
-
         let normalized = decoded.map(normalizedCompatibilityValues(for:))
-        for configuration in normalized {
-            persistSensitiveValues(for: configuration)
+        var changed = false
+        let migrated = normalized.map { configuration in
+            if hasInlineSensitiveValues(configuration) {
+                guard persistSensitiveValues(for: configuration) else {
+                    return configuration
+                }
+                changed = true
+                return configuration.withoutSensitiveValues
+            }
+
+            guard configuration.storedCredentialPresence == nil,
+                  hasStoredCredentialItem(for: configuration.providerID)
+            else {
+                return configuration
+            }
+
+            guard let resolved = resolvedSensitiveValuesForMigration(for: configuration) else {
+                return configuration
+            }
+            changed = true
+            return resolved.withoutSensitiveValues
         }
-        let sanitized = encodeConfigurations(normalized.map(\.withoutSensitiveValues))
-        if sanitized != raw {
-            defaults.set(sanitized, forKey: defaultsKey)
+
+        guard changed else { return }
+        let encoded = encodeConfigurations(migrated)
+        if encoded != raw {
+            defaults.set(encoded, forKey: defaultsKey)
         }
     }
 
@@ -579,12 +727,14 @@ enum RemoteModelConfigurationStore {
     }
 
     nonisolated private static func encodeConfigurations(_ items: [RemoteProviderConfiguration]) -> String {
-        guard let data = try? JSONEncoder().encode(items),
-              let text = String(data: data, encoding: .utf8)
-        else {
-            return ""
-        }
-        return text
+        encodedConfigurations(items) ?? ""
+    }
+
+    nonisolated private static func encodedConfigurations(
+        _ items: [RemoteProviderConfiguration]
+    ) -> String? {
+        guard let data = try? JSONEncoder().encode(items) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     nonisolated private static func normalizedCompatibilityValues(
@@ -614,24 +764,94 @@ enum RemoteModelConfigurationStore {
     }
 
     nonisolated private static func resolvedSensitiveValues(for configuration: RemoteProviderConfiguration) -> RemoteProviderConfiguration {
+        let bundledAccount = bundledKeychainAccount(providerID: configuration.providerID)
+        if let stored = VoxtSecureStorage.string(for: bundledAccount),
+           let data = stored.data(using: .utf8),
+           let values = try? JSONDecoder().decode(StoredSensitiveValues.self, from: data) {
+            return values.applying(to: configuration)
+        }
+
         var resolved = configuration
+        var foundLegacyValue = false
         for field in SensitiveField.allCases {
-            let keychainValue = VoxtSecureStorage.string(for: keychainAccount(providerID: configuration.providerID, field: field))
+            let keychainValue = VoxtSecureStorage.string(
+                for: legacyKeychainAccount(providerID: configuration.providerID, field: field)
+            )
             let currentValue = sensitiveValue(for: field, in: configuration)
             let finalValue = keychainValue ?? currentValue
-            if keychainValue == nil, !currentValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                VoxtSecureStorage.set(currentValue, for: keychainAccount(providerID: configuration.providerID, field: field))
-            }
+            foundLegacyValue = foundLegacyValue || keychainValue != nil
             setSensitiveValue(finalValue, for: field, in: &resolved)
         }
+
+        if foundLegacyValue || hasInlineSensitiveValues(resolved) {
+            _ = persistSensitiveValues(for: resolved)
+        }
+        return resolved
+    }
+
+    nonisolated private static func resolvedSensitiveValuesForMigration(
+        for configuration: RemoteProviderConfiguration
+    ) -> RemoteProviderConfiguration? {
+        let bundledAccount = bundledKeychainAccount(providerID: configuration.providerID)
+        if VoxtSecureStorage.hasString(for: bundledAccount) {
+            guard let stored = VoxtSecureStorage.string(for: bundledAccount),
+                  let data = stored.data(using: .utf8),
+                  let values = try? JSONDecoder().decode(StoredSensitiveValues.self, from: data)
+            else {
+                return nil
+            }
+            return values.applying(to: configuration)
+        }
+
+        var resolved = configuration
+        var foundLegacyValue = false
+        for field in SensitiveField.allCases {
+            let account = legacyKeychainAccount(providerID: configuration.providerID, field: field)
+            let hasStoredValue = VoxtSecureStorage.hasString(for: account)
+            guard hasStoredValue else {
+                continue
+            }
+            guard let value = VoxtSecureStorage.string(for: account) else { return nil }
+            foundLegacyValue = true
+            setSensitiveValue(value, for: field, in: &resolved)
+        }
+
+        guard foundLegacyValue, persistSensitiveValues(for: resolved) else {
+            return nil
+        }
+        resolved.storedCredentialPresence = RemoteStoredCredentialPresence(
+            apiKey: resolved.apiKey,
+            appID: resolved.appID,
+            accessToken: resolved.accessToken
+        )
         return resolved
     }
 
     nonisolated private static func resolvedSensitiveValuePresence(for configuration: RemoteProviderConfiguration) -> RemoteProviderConfiguration {
         var resolved = configuration.withoutSensitiveValues
+        if let presence = configuration.storedCredentialPresence {
+            applySensitiveValuePresence(presence, to: &resolved)
+            return resolved
+        }
+
+        let bundledAccount = bundledKeychainAccount(providerID: configuration.providerID)
+        if let stored = VoxtSecureStorage.string(for: bundledAccount),
+           let data = stored.data(using: .utf8),
+           let values = try? JSONDecoder().decode(StoredSensitiveValues.self, from: data) {
+            applySensitiveValuePresence(
+                RemoteStoredCredentialPresence(
+                    apiKey: values.apiKey,
+                    appID: values.appID,
+                    accessToken: values.accessToken
+                ),
+                to: &resolved
+            )
+            return resolved
+        }
+
         for field in SensitiveField.allCases {
             let hasKeychainValue = VoxtSecureStorage.hasString(
-                for: keychainAccount(providerID: configuration.providerID, field: field)
+                for: legacyKeychainAccount(providerID: configuration.providerID, field: field)
             )
             let currentValue = sensitiveValue(for: field, in: configuration)
             let hasValue = hasKeychainValue || !currentValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -640,11 +860,48 @@ enum RemoteModelConfigurationStore {
         return resolved
     }
 
-    nonisolated private static func persistSensitiveValues(for configuration: RemoteProviderConfiguration) {
-        for field in SensitiveField.allCases {
-            let value = sensitiveValue(for: field, in: configuration)
-            VoxtSecureStorage.set(value, for: keychainAccount(providerID: configuration.providerID, field: field))
+    nonisolated private static func applySensitiveValuePresence(
+        _ presence: RemoteStoredCredentialPresence,
+        to configuration: inout RemoteProviderConfiguration
+    ) {
+        configuration.apiKey = presence.apiKey ? redactedSensitiveValuePlaceholder : ""
+        configuration.appID = presence.appID ? redactedSensitiveValuePlaceholder : ""
+        configuration.accessToken = presence.accessToken ? redactedSensitiveValuePlaceholder : ""
+        configuration.storedCredentialPresence = presence
+    }
+
+    @discardableResult
+    nonisolated private static func persistSensitiveValues(
+        for configuration: RemoteProviderConfiguration
+    ) -> Bool {
+        let values = StoredSensitiveValues(configuration: configuration)
+        let bundledAccount = bundledKeychainAccount(providerID: configuration.providerID)
+        guard let data = try? JSONEncoder().encode(values),
+              let encoded = String(data: data, encoding: .utf8),
+              VoxtSecureStorage.set(encoded, for: bundledAccount)
+        else {
+            return false
         }
+
+        // The bundled item is authoritative as soon as it is written. In
+        // particular, an encoded empty value acts as a tombstone so a failed
+        // cleanup cannot make an old per-field credential visible again.
+        var removedAllLegacyItems = true
+        for field in SensitiveField.allCases {
+            if !VoxtSecureStorage.removeValueWithoutUserInteraction(
+                for: legacyKeychainAccount(providerID: configuration.providerID, field: field)
+            ) {
+                removedAllLegacyItems = false
+            }
+        }
+
+        // Once every legacy account is gone, an empty tombstone is no longer
+        // needed. Failure to remove it is harmless: it still resolves to the
+        // same empty credential set and can be retried on a later save.
+        if values.isEmpty, removedAllLegacyItems {
+            _ = VoxtSecureStorage.removeValueWithoutUserInteraction(for: bundledAccount)
+        }
+        return true
     }
 
     nonisolated private static func hasInlineSensitiveValues(_ configuration: RemoteProviderConfiguration) -> Bool {
@@ -655,7 +912,22 @@ enum RemoteModelConfigurationStore {
         }
     }
 
-    nonisolated private static func keychainAccount(providerID: String, field: SensitiveField) -> String {
+    nonisolated private static func hasStoredCredentialItem(for providerID: String) -> Bool {
+        if VoxtSecureStorage.hasString(for: bundledKeychainAccount(providerID: providerID)) {
+            return true
+        }
+        return SensitiveField.allCases.contains { field in
+            VoxtSecureStorage.hasString(
+                for: legacyKeychainAccount(providerID: providerID, field: field)
+            )
+        }
+    }
+
+    nonisolated private static func bundledKeychainAccount(providerID: String) -> String {
+        "remote-provider.\(providerID).credentials"
+    }
+
+    nonisolated private static func legacyKeychainAccount(providerID: String, field: SensitiveField) -> String {
         "remote-provider.\(providerID).\(field.rawValue)"
     }
 

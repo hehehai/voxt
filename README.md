@@ -61,7 +61,10 @@ brew install --cask voxt
 - Both the `Voxt` app target and `VoxtTests` now read signing settings from the same xcconfig so local overrides stay consistent.
 - `VoxtTests` still keeps `GENERATE_INFOPLIST_FILE = YES` to avoid empty test bundle plist issues.
 - GitHub Actions tests are unchanged: `.github/workflows/tests.yml` still runs with `CODE_SIGNING_ALLOWED=NO`, so no local signing file is required in CI.
-- Release packaging is also unchanged: `.github/workflows/release.yml` builds unsigned first and performs Developer ID signing in the workflow, so local signing overrides do not affect version publishing.
+- Release packaging builds unsigned first and performs Developer ID signing in `.github/workflows/release.yml`, so local signing overrides do not affect publishing.
+- Releases require a **Developer ID** provisioning profile for the explicit App ID `com.voxt.Voxt`. Store its base64-encoded contents in the `DEVELOPER_ID_PROVISIONING_PROFILE` GitHub Actions secret. A Mac App Store profile is not accepted.
+- Encode the downloaded profile on macOS with `base64 -i Voxt_Developer_ID.provisionprofile | tr -d '\n'`, then paste the output into that secret.
+- The release workflow embeds that profile and verifies its App ID, Keychain access group, expiration, and final signed entitlements before packaging. Keep the Team ID, bundle ID, and Keychain access group stable across releases so existing Data Protection Keychain credentials remain readable.
 
 ## Model Support
 

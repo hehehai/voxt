@@ -283,10 +283,12 @@ enum VoxtNetworkSession {
         password: String,
         defaults: UserDefaults = .standard
     ) {
-        VoxtSecureStorage.set(username, for: secureAccount(for: .customProxyUsername))
-        VoxtSecureStorage.set(password, for: secureAccount(for: .customProxyPassword))
-        defaults.removeObject(forKey: AppPreferenceKey.customProxyUsername)
-        defaults.removeObject(forKey: AppPreferenceKey.customProxyPassword)
+        if VoxtSecureStorage.set(username, for: secureAccount(for: .customProxyUsername)) {
+            defaults.removeObject(forKey: AppPreferenceKey.customProxyUsername)
+        }
+        if VoxtSecureStorage.set(password, for: secureAccount(for: .customProxyPassword)) {
+            defaults.removeObject(forKey: AppPreferenceKey.customProxyPassword)
+        }
     }
 
     static func migrateLegacyProxyCredentials(defaults: UserDefaults = .standard) {
@@ -431,8 +433,9 @@ enum VoxtNetworkSession {
 
         let legacyValue = defaults.string(forKey: fallbackDefaultsKey) ?? ""
         if !legacyValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            VoxtSecureStorage.set(legacyValue, for: secureAccount(for: field))
-            defaults.removeObject(forKey: fallbackDefaultsKey)
+            if VoxtSecureStorage.set(legacyValue, for: secureAccount(for: field)) {
+                defaults.removeObject(forKey: fallbackDefaultsKey)
+            }
         }
         return legacyValue
     }
@@ -440,7 +443,9 @@ enum VoxtNetworkSession {
     private static func migrateLegacyValue(for field: SecureField, defaultsKey: String, defaults: UserDefaults) {
         let legacyValue = defaults.string(forKey: defaultsKey) ?? ""
         if !legacyValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            VoxtSecureStorage.set(legacyValue, for: secureAccount(for: field))
+            guard VoxtSecureStorage.set(legacyValue, for: secureAccount(for: field)) else {
+                return
+            }
         }
         defaults.removeObject(forKey: defaultsKey)
     }

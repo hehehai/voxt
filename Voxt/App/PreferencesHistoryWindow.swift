@@ -696,7 +696,10 @@ extension AppDelegate {
     }
 
     private func remoteConfigurations(forKey key: String) -> [String: RemoteProviderConfiguration] {
-        RemoteModelConfigurationStore.loadConfigurations(from: stringValue(forKey: key))
+        RemoteModelConfigurationStore.loadConfigurations(
+            from: stringValue(forKey: key),
+            sensitiveValueLoading: .metadataOnly
+        )
     }
 
     private func enumValue<T: RawRepresentable>(forKey key: String, default defaultValue: T) -> T where T.RawValue == String {

@@ -15,14 +15,15 @@
 | System ASR | Apple 系统听写 | 可见 | 无需下载，系统内置 |
 | Whisper | MLX Audio | 部分可见 | OpenAI Whisper 的 MLX 本地模型；旧 Whisper ID 会迁移到对应 MLX repo |
 | Qwen3 | MLX Audio | 部分可见 | 阿里 Qwen3-ASR 本地模型 |
-| Voxtral | MLX Audio | 部分可见 | Mistral Voxtral Realtime 系列 |
+| Voxtral | MLX Audio | 隐藏支持 | Mistral Voxtral Realtime 系列，仅保留已有安装和旧配置兼容 |
 | Cohere | MLX Audio | 隐藏支持 | Cohere Transcribe MLX 移植 |
+| Canary | MLX Audio | 隐藏支持 | NVIDIA Canary 系列，仅保留已有安装和旧配置兼容 |
 | Parakeet | MLX Audio | 部分可见 | NVIDIA Parakeet 系列 |
 | GLM | MLX Audio | 隐藏支持 | 智谱 GLM-ASR Nano |
 | Granite | MLX Audio | 隐藏支持 | IBM Granite Speech |
 | Nemotron | MLX Audio | 可见 | NVIDIA Nemotron ASR Streaming |
-| FireRed | sherpa-onnx | 可见 | FireRed ASR 2 CTC int8；旧 MLX FireRed ID 会迁移到该模型 |
-| FunASR Nano | sherpa-onnx | 可见 | FunASR Nano int8，来自 sherpa-onnx |
+| FireRed | sherpa-onnx | 隐藏支持 | FireRed ASR 2 CTC int8；保留已有安装、旧配置和旧 MLX ID 迁移兼容 |
+| FunASR Nano | sherpa-onnx | 隐藏支持 | FunASR Nano int8；保留已有安装和旧配置兼容 |
 | SenseVoice | MLX Audio | 可见 | SenseVoice Small |
 
 ## 本地系统 ASR
@@ -61,7 +62,7 @@
 | 系列名称 | 模型显示名称 | Repo ID | 可见性 | 当前描述 |
 | --- | --- | --- | --- | --- |
 | Voxtral | Voxtral 4B (4bit) | `mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit` | 隐藏支持 | Realtime-oriented multilingual model with reduced memory use. |
-| Voxtral | Voxtral 4B (6bit) | `mlx-community/Voxtral-Mini-4B-Realtime-6bit` | 可见 | Realtime multilingual model with a balanced quality-to-memory tradeoff. |
+| Voxtral | Voxtral 4B (6bit) | `mlx-community/Voxtral-Mini-4B-Realtime-6bit` | 隐藏支持 | Realtime multilingual model with a balanced quality-to-memory tradeoff. |
 | Voxtral | Voxtral 4B (fp16) | `mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16` | 隐藏支持 | Realtime-oriented model with larger memory footprint. |
 
 ### Cohere
@@ -69,6 +70,12 @@
 | 系列名称 | 模型显示名称 | Repo ID | 可见性 | 当前描述 |
 | --- | --- | --- | --- | --- |
 | Cohere | Cohere 03-2026 (fp16) | `beshkenadze/cohere-transcribe-03-2026-mlx-fp16` | 隐藏支持 | High-accuracy multilingual encoder-decoder model with punctuation enabled. |
+
+### Canary
+
+| 系列名称 | 模型显示名称 | Repo ID | 可见性 | 当前描述 |
+| --- | --- | --- | --- | --- |
+| Canary | Canary | `Mediform/canary-1b-v2-mlx-q8` | 隐藏支持 | Canary-compatible NeMo encoder-decoder checkpoint for multilingual transcription. |
 
 ### Parakeet
 
@@ -118,8 +125,8 @@
 
 | 系列名称 | 模型显示名称 | 内部 ID | 来源包 | 可见性 | 当前描述 |
 | --- | --- | --- | --- | --- | --- |
-| FireRed | FireRed ASR 2 (CTC int8) | `fire-red-asr-v2-onnx` | `sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25` | 可见 | 中文/英文 CTC int8 离线模型；作为当前 FireRed 默认实现。 |
-| FunASR Nano | FunASR Nano (int8) | `funasr-nano-int8` | `sherpa-onnx-funasr-nano-int8-2025-12-30` | 可见 | sherpa-onnx FunASR Nano int8 包，使用 `encoder_adaptor`、`llm`、`embedding` 和 `Qwen3-0.6B` tokenizer 目录。 |
+| FireRed | FireRed ASR 2 (CTC int8) | `fire-red-asr-v2-onnx` | `sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25` | 隐藏支持 | 中文/英文 CTC int8 离线模型；保留已有安装、旧配置和旧 MLX ID 迁移兼容。 |
+| FunASR Nano | FunASR Nano (int8) | `funasr-nano-int8` | `sherpa-onnx-funasr-nano-int8-2025-12-30` | 隐藏支持 | 保留已有安装和旧配置兼容；使用 `encoder_adaptor`、`llm`、`embedding` 和 `Qwen3-0.6B` tokenizer 目录。 |
 
 ## 远程 ASR Provider 与模型选项
 

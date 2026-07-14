@@ -5,6 +5,16 @@ import XCTest
 @testable import Voxt
 
 final class VoxtNetworkSessionTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        VoxtSecureStorage.clearAllForTesting()
+    }
+
+    override func tearDown() {
+        VoxtSecureStorage.clearAllForTesting()
+        super.tearDown()
+    }
+
     func testClearProcessProxyEnvironmentOverridesRemovesStandardProxyVariables() {
         let keys = [
             "http_proxy",
@@ -39,5 +49,56 @@ final class VoxtNetworkSessionTests: XCTestCase {
                 unsetenv(key)
             }
         }
+    }
+
+    func testLegacyProxyMigrationKeepsDefaultsWhenProtectedWriteFails() {
+        let suiteName = "VoxtNetworkSessionTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("proxy-user", forKey: AppPreferenceKey.customProxyUsername)
+        defaults.set("proxy-password", forKey: AppPreferenceKey.customProxyPassword)
+        VoxtSecureStorage.setProtectedWritesFailForTesting(true)
+
+        VoxtNetworkSession.migrateLegacyProxyCredentials(defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.customProxyUsername), "proxy-user")
+        XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.customProxyPassword), "proxy-password")
+
+        VoxtSecureStorage.setProtectedWritesFailForTesting(false)
+        VoxtNetworkSession.migrateLegacyProxyCredentials(defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.customProxyUsername) ?? "", "")
+        XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.customProxyPassword) ?? "", "")
+        XCTAssertEqual(VoxtNetworkSession.proxyCredentials(defaults: defaults).username, "proxy-user")
+        XCTAssertEqual(VoxtNetworkSession.proxyCredentials(defaults: defaults).password, "proxy-password")
+    }
+
+    func testLegacyKeychainCleanupFailureKeepsProxyCredentialsAvailable() {
+        let suiteName = "VoxtNetworkSessionTests.keychainCleanup.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let usernameAccount = "network-proxy.customProxyUsername"
+        let passwordAccount = "network-proxy.customProxyPassword"
+        VoxtSecureStorage.setLegacyValueForTesting("proxy-user", for: usernameAccount)
+        VoxtSecureStorage.setLegacyValueForTesting("proxy-password", for: passwordAccount)
+        VoxtSecureStorage.setDeletesFailForTesting(true)
+
+        let firstLoad = VoxtNetworkSession.proxyCredentials(defaults: defaults)
+
+        XCTAssertEqual(firstLoad.username, "proxy-user")
+        XCTAssertEqual(firstLoad.password, "proxy-password")
+        XCTAssertTrue(VoxtSecureStorage.hasProtectedValueForTesting(for: usernameAccount))
+        XCTAssertTrue(VoxtSecureStorage.hasProtectedValueForTesting(for: passwordAccount))
+        XCTAssertTrue(VoxtSecureStorage.hasLegacyValueForTesting(for: usernameAccount))
+        XCTAssertTrue(VoxtSecureStorage.hasLegacyValueForTesting(for: passwordAccount))
+
+        VoxtSecureStorage.setDeletesFailForTesting(false)
+        VoxtSecureStorage.clearCacheForTesting()
+
+        let retriedLoad = VoxtNetworkSession.proxyCredentials(defaults: defaults)
+        XCTAssertEqual(retriedLoad.username, "proxy-user")
+        XCTAssertEqual(retriedLoad.password, "proxy-password")
+        XCTAssertFalse(VoxtSecureStorage.hasLegacyValueForTesting(for: usernameAccount))
+        XCTAssertFalse(VoxtSecureStorage.hasLegacyValueForTesting(for: passwordAccount))
     }
 }

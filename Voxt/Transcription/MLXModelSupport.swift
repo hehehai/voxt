@@ -351,7 +351,8 @@ struct MLXModelCatalog {
         Option(
             id: "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
             title: "Voxtral 4B (6bit)",
-            description: "Realtime multilingual model with a balanced quality-to-memory tradeoff."
+            description: "Realtime multilingual model with a balanced quality-to-memory tradeoff.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
@@ -372,7 +373,8 @@ struct MLXModelCatalog {
         Option(
             id: "Mediform/canary-1b-v2-mlx-q8",
             title: "Canary",
-            description: "Canary-compatible NeMo encoder-decoder checkpoint for multilingual transcription."
+            description: "Canary-compatible NeMo encoder-decoder checkpoint for multilingual transcription.",
+            visibility: .hiddenSupport
         ),
         Option(
             id: "UsefulSensors/moonshine-tiny",

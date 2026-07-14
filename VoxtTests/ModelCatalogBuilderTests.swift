@@ -56,10 +56,11 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(directDictation.displayTags.contains(AppLocalization.localizedString("In Use")))
     }
 
-    func testASRCatalogShowsSherpaModelsEvenWhenRuntimeUnavailable() throws {
+    func testASRCatalogShowsSelectedHiddenSherpaModelsEvenWhenRuntimeUnavailable() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
-                transcriptionASR: .dictation
+                transcriptionASR: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID),
+                translationASR: .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID)
             )
         )
 
@@ -181,7 +182,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
-    func testCanaryLanguageTagUsesItsOfficialLanguageList() throws {
+    func testCanaryLanguageTagUsesItsOfficialLanguageList() {
         let repo = "Mediform/canary-1b-v2-mlx-q8"
         let chineseBuilder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
@@ -191,17 +192,23 @@ final class ModelCatalogBuilderTests: XCTestCase {
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
             primaryUserLanguageCode: "de"
         )
-
-        let chineseEntry = try XCTUnwrap(
-            chineseBuilder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
+        let selectionID = FeatureModelSelectionID.mlx(repo)
+        let chineseTags = chineseBuilder.catalogDisplayTags(
+            base: [AppLocalization.localizedString("Local")],
+            requiresConfiguration: false,
+            configured: true,
+            selectionID: selectionID
         )
-        let germanEntry = try XCTUnwrap(
-            germanBuilder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
+        let germanTags = germanBuilder.catalogDisplayTags(
+            base: [AppLocalization.localizedString("Local")],
+            requiresConfiguration: false,
+            configured: true,
+            selectionID: selectionID
         )
 
-        XCTAssertTrue(chineseEntry.displayTags.contains(AppLocalization.localizedString("Does Not Support Primary Language")))
-        XCTAssertFalse(chineseEntry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
-        XCTAssertTrue(germanEntry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
+        XCTAssertTrue(chineseTags.contains(AppLocalization.localizedString("Does Not Support Primary Language")))
+        XCTAssertFalse(chineseTags.contains(AppLocalization.localizedString("Supports Primary Language")))
+        XCTAssertTrue(germanTags.contains(AppLocalization.localizedString("Supports Primary Language")))
     }
 
     func testMLXCatalogShowsPauseForDownloadingNonSelectedModel() throws {
@@ -381,7 +388,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
     }
 
     func testMLXCatalogUsesCuratedRatingAndTags() throws {
-        let repo = "mlx-community/Voxtral-Mini-4B-Realtime-6bit"
+        let repo = "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo))
         )
@@ -390,9 +397,9 @@ final class ModelCatalogBuilderTests: XCTestCase {
             builder.asrEntries().first(where: { $0.id == "mlx:\(repo)" })
         )
 
-        XCTAssertEqual(entry.ratingText, "4.7")
+        XCTAssertEqual(entry.ratingText, "4.8")
         XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Realtime")))
-        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Balanced")))
+        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Fast")))
     }
 
@@ -793,6 +800,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
 
     private func makeFeatureSettings(
         transcriptionASR: FeatureModelSelectionID = .dictation,
+        translationASR: FeatureModelSelectionID = .dictation,
         translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
     ) -> FeatureSettings {
         FeatureSettings(
@@ -803,7 +811,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
                 prompt: AppPreferenceKey.defaultEnhancementPrompt
             ),
             translation: .init(
-                asrSelectionID: .dictation,
+                asrSelectionID: translationASR,
                 modelSelectionID: translationModel,
                 targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
                 prompt: AppPreferenceKey.defaultTranslationPrompt

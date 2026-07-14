@@ -589,7 +589,7 @@ extension RemoteProviderConfigurationSheet {
 
         } trailing: {
             Button(AppLocalization.localizedString("Cancel")) {
-                dismiss()
+                close()
             }
             .buttonStyle(SettingsPillButtonStyle())
             .keyboardShortcut(.cancelAction)

@@ -146,7 +146,7 @@ struct FeatureModelCatalogBuilder {
             )
         })
 
-        entries.append(contentsOf: SherpaOnnxModelCatalog.allModels.map { model in
+        entries.append(contentsOf: sherpaOnnxDisplayModels(for: sheet).map { model in
             let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
             let isRuntimeAvailable = SherpaOnnxRuntimeSupport.isAvailable
             let isInstalled = isRuntimeAvailable && sherpaOnnxModelManager.isModelDownloaded(id: model.id)
@@ -174,7 +174,7 @@ struct FeatureModelCatalogBuilder {
                     ? (isInstalled ? localized("Installed") : localized("Not installed"))
                     : (SherpaOnnxRuntimeSupport.unavailableDetail ?? localized("Not available")),
                 usageLocations: usageLabels(for: selectionID),
-                badgeText: model.id == SherpaOnnxModelCatalog.fireRedModelID ? localized("Recommended") : nil,
+                badgeText: nil,
                 isSelectable: availability.isSelectable,
                 disabledReason: availability.disabledReason
             )
@@ -218,6 +218,30 @@ struct FeatureModelCatalogBuilder {
         })
 
         return entries
+    }
+
+    private func sherpaOnnxDisplayModels(for sheet: FeatureModelSelectorSheet) -> [SherpaOnnxModelOption] {
+        let selectionID: FeatureModelSelectionID
+        switch sheet {
+        case .transcriptionASR:
+            selectionID = featureSettings.transcription.asrSelectionID
+        case .translationASR:
+            selectionID = featureSettings.translation.asrSelectionID
+        case .rewriteASR:
+            selectionID = featureSettings.rewrite.asrSelectionID
+        case .meetingASR:
+            selectionID = featureSettings.meeting.asrSelectionID
+        case .transcriptionLLM, .transcriptionNoteTitle, .translationModel, .rewriteLLM, .meetingSummary:
+            selectionID = .dictation
+        }
+
+        let selectedModelIDs: Set<SherpaOnnxModelID>
+        if case .sherpaOnnx(let modelID)? = selectionID.asrSelection {
+            selectedModelIDs = [modelID]
+        } else {
+            selectedModelIDs = []
+        }
+        return sherpaOnnxModelManager.displayModelsIncludingInstalled(including: selectedModelIDs)
     }
 
     static func mlxSelectorAvailability(isInstalled: Bool) -> (isSelectable: Bool, disabledReason: String?) {

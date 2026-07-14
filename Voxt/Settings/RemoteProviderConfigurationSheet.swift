@@ -14,7 +14,7 @@ struct RemoteProviderConfigurationSheet: View {
     let showsDoubaoFields: Bool
     let testTarget: RemoteProviderTestTarget
     let configuration: RemoteProviderConfiguration
-    let onSave: (RemoteProviderConfiguration) -> Void
+    let onSave: (RemoteProviderConfiguration) -> Result<Void, RemoteModelConfigurationStore.SaveError>
     var cornerRadius: CGFloat = SettingsUIStyle.dialogCornerRadius
     var onClose: (() -> Void)? = nil
 
@@ -204,7 +204,7 @@ struct RemoteProviderConfigurationSheet: View {
         }
     }
 
-    private func close() {
+    func close() {
         operationToastDismissTask?.cancel()
         if let onClose {
             onClose()

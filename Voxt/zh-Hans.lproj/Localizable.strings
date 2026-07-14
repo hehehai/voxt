@@ -2208,6 +2208,8 @@
 "Strict Instructions" = "严格执行";
 "%@ (Modified)" = "%@（已修改）";
 "Configuration saved for %@." = "已保存 %@ 的配置。";
+"Configuration could not be saved securely. Check Keychain access and try again." = "无法安全保存配置。请检查钥匙串访问权限后重试。";
+"Configuration could not be encoded. Please try again." = "无法编码配置，请重试。";
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "此版本未包含 sherpa-onnx 运行时，因此该模型不可用。";
 "Uninstalled %@." = "已卸载 %@。";
 "Uninstall failed: %@" = "卸载失败：%@";

@@ -605,8 +605,14 @@ extension RemoteProviderConfigurationSheet {
 
     func saveConfiguration() {
         guard let snapshot = validatedCurrentConfigurationSnapshot() else { return }
-        onSave(snapshot)
-        dismiss()
+        switch onSave(snapshot) {
+        case .success:
+            close()
+        case .failure(let error):
+            testResultIsSuccess = false
+            testResultMessage = error.localizedDescription
+            showOperationToast(error.localizedDescription)
+        }
     }
 
     func validatedCurrentConfigurationSnapshot() -> RemoteProviderConfiguration? {

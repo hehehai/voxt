@@ -95,6 +95,30 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         )
     }
 
+    func testDoubaoEntryWithOnlyAppIDRemainsUnconfigured() throws {
+        let remoteASRConfigurations = RemoteModelConfigurationStore.saveConfigurations([
+            RemoteASRProvider.doubaoASR.rawValue: TestFactories.makeRemoteConfiguration(
+                providerID: RemoteASRProvider.doubaoASR.rawValue,
+                model: DoubaoASRConfiguration.modelV2,
+                appID: "doubao-app",
+                accessToken: ""
+            )
+        ])
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(translationASR: .remoteASR(.doubaoASR)),
+            remoteASRConfigurationsRaw: remoteASRConfigurations
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .translationASR)
+                .first(where: { $0.selectionID == .remoteASR(.doubaoASR) })
+        )
+
+        XCTAssertFalse(entry.isSelectable)
+        XCTAssertEqual(entry.statusText, AppLocalization.localizedString("Not configured"))
+        XCTAssertFalse(entry.filterTags.contains(AppLocalization.localizedString("Configured")))
+    }
+
     func testUnconfiguredRemoteLLMEntryRemainsNotConfiguredInSelector() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(translationModel: .remoteLLM(.openAI))
@@ -193,33 +217,32 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Multilingual")))
     }
 
-    func testCanarySelectorDoesNotClaimChinesePrimaryLanguageSupport() throws {
+    func testCanaryCapabilityDoesNotClaimChinesePrimaryLanguageSupport() {
         let repo = "Mediform/canary-1b-v2-mlx-q8"
-        let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(transcriptionASR: .mlx(repo)),
-            primaryUserLanguageCode: "zh-Hans"
-        )
 
-        let entry = try XCTUnwrap(
-            builder.entries(for: .transcriptionASR)
-                .first(where: { $0.selectionID == .mlx(repo) })
-        )
-
-        XCTAssertTrue(entry.displayTags.contains(AppLocalization.localizedString("Does Not Support Primary Language")))
-        XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Supports Primary Language")))
+        XCTAssertFalse(MLXModelCatalog.supportsLanguage("zh", for: repo))
+        XCTAssertTrue(MLXModelCatalog.supportsLanguage("de", for: repo))
     }
 
-    func testASRSelectorShowsSherpaModelsEvenWhenRuntimeUnavailable() throws {
-        let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(transcriptionASR: .dictation)
+    func testASRSelectorShowsSelectedHiddenSherpaModelsEvenWhenRuntimeUnavailable() throws {
+        let fireRedBuilder = makeBuilder(
+            featureSettings: makeFeatureSettings(
+                transcriptionASR: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
+            )
+        )
+        let funASRBuilder = makeBuilder(
+            featureSettings: makeFeatureSettings(
+                transcriptionASR: .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID)
+            )
         )
 
-        let entries = builder.entries(for: .transcriptionASR)
         let fireRed = try XCTUnwrap(
-            entries.first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID) })
+            fireRedBuilder.entries(for: .transcriptionASR)
+                .first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID) })
         )
         let funASR = try XCTUnwrap(
-            entries.first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID) })
+            funASRBuilder.entries(for: .transcriptionASR)
+                .first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID) })
         )
 
         XCTAssertEqual(fireRed.title, "FireRed 2 Mini")
