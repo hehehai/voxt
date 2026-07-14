@@ -6,6 +6,41 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.0-beta.4] - 2026-07-14
+
+### English
+
+#### Changed
+- Reduced CPU and memory pressure during long meetings by bounding audio analysis, local inference, real-time translation, and summary workloads.
+- Refined meeting history and detail views, standardized translation language selection, and expanded history status filtering.
+
+#### Fixed
+- Improved meeting finalization recovery and durable history persistence so captured audio and transcripts survive interrupted processing more reliably.
+- Fixed Qwen and MLX streaming transcript updates and translation revision ordering to reduce duplicated, missing, or stale text.
+- Localized unavailable-audio messages and removed unusable playback controls from transcription details.
+
+### 简体中文
+
+#### 改进
+- 限制音频分析、本地推理、实时翻译和摘要任务的并发与负载，降低长时间会议中的 CPU 和内存压力。
+- 优化会议历史与详情界面，统一翻译语言选择方式，并扩展历史状态筛选范围。
+
+#### 修复
+- 加强会议结束恢复和历史记录持久化，使处理中断后已采集的音频与转写更可靠地保留。
+- 修复 Qwen 与 MLX 流式转写更新及翻译修订顺序问题，减少文本重复、缺失或回退。
+- 本地化音频不可用提示，并移除转写详情中不可用的播放控件。
+
+### 日本語
+
+#### 変更
+- 音声解析、ローカル推論、リアルタイム翻訳、要約処理の同時実行と負荷を制御し、長時間の会議における CPU とメモリの負荷を軽減しました。
+- 会議履歴と詳細画面を改善し、翻訳言語の選択方法を統一するとともに、履歴ステータスの絞り込み範囲を拡張しました。
+
+#### 修正
+- 会議終了時の復旧と履歴の永続化を強化し、処理が中断された場合でも収録済みの音声と文字起こしをより確実に保持できるようにしました。
+- Qwen と MLX のストリーミング文字起こし更新、および翻訳の修正順序を修正し、テキストの重複、欠落、巻き戻りを軽減しました。
+- 音声を利用できない場合のメッセージをローカライズし、文字起こし詳細画面から利用できない再生コントロールを削除しました。
+
 ## [1.13.0-beta.3] - 2026-07-14
 
 ### English
