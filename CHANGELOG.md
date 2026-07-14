@@ -6,6 +6,50 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.0-beta.3] - 2026-07-14
+
+### English
+
+#### Added
+- Rebuilt voice notes with configurable hotkeys, transcription enhancement, richer floating panels, list and timeline history views, editing, pagination, and improved external sync.
+- Added OmniVAD support, expanded MLX Audio model capabilities, and automatic Silero VAD model provisioning for transcription and meetings.
+
+#### Changed
+- Refined onboarding, settings, model selection and download feedback, prompt presets, notifications, and history presentation.
+- Migrated remote provider credentials to the Data Protection Keychain and strengthened endpoint validation and privacy protections for diagnostics.
+
+#### Fixed
+- Improved meeting finalization, speaker transcript preservation, audio-only recording persistence, MLX streaming latency, and recording startup after idle.
+- Fixed GGUF UTF-8 output decoding, MOSS live transcription behavior, prompt editor autosave, and remote ASR upload reliability.
+
+### 简体中文
+
+#### 新增
+- 重构语音笔记，新增可配置快捷键、转写增强、更丰富的悬浮面板、列表与时间线历史视图、编辑、分页及外部同步改进。
+- 新增 OmniVAD 支持，扩展 MLX Audio 模型能力，并为转写和会议自动配置 Silero VAD 模型。
+
+#### 改进
+- 优化首次引导、设置、模型选择与下载反馈、提示词预设、通知和历史记录展示。
+- 将远程 provider 凭据迁移至 Data Protection Keychain，并加强 endpoint 校验和诊断日志隐私保护。
+
+#### 修复
+- 改进会议结束处理、说话人转写保留、纯音频录音持久化、MLX 流式延迟，以及应用闲置后的录音启动表现。
+- 修复 GGUF UTF-8 输出解码、MOSS 实时转写、提示词编辑器自动保存和远程 ASR 上传可靠性问题。
+
+### 日本語
+
+#### 追加
+- 音声ノートを再構築し、設定可能なホットキー、文字起こしの強化、より充実したフローティングパネル、リストとタイムラインの履歴表示、編集、ページ分割、外部同期の改善を追加しました。
+- OmniVAD 対応、MLX Audio モデル機能の拡張、文字起こしと会議向けの Silero VAD モデル自動準備を追加しました。
+
+#### 変更
+- オンボーディング、設定、モデル選択とダウンロードのフィードバック、プロンプトプリセット、通知、履歴表示を改善しました。
+- リモート provider の認証情報を Data Protection Keychain に移行し、endpoint 検証と診断ログのプライバシー保護を強化しました。
+
+#### 修正
+- 会議終了処理、話者別文字起こしの保持、音声のみの録音保存、MLX ストリーミング遅延、アイドル後の録音開始を改善しました。
+- GGUF の UTF-8 出力デコード、MOSS のライブ文字起こし、プロンプトエディタの自動保存、リモート ASR アップロードの信頼性を修正しました。
+
 ## [1.13.0-beta.2] - 2026-07-02
 
 ### English
