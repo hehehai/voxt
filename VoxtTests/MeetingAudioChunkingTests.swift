@@ -4,6 +4,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class MeetingAudioChunkingTests: XCTestCase {
     func testChunkAccumulatorsUseSharedTimelineAcrossSpeakers() async {
         let me = MeetingChunkAccumulator(speaker: .me, speechThreshold: 0.012, profile: .quality)

@@ -547,7 +547,7 @@ actor OmniStreamVoiceActivityBackend: ASRVoiceActivityBackend {
 }
 
 actor OmniOfflineVoiceActivityBackend: ASROfflineVoiceActivityBackend {
-    private static let sampleRate = 16_000
+    nonisolated private static let sampleRate = 16_000
 
     private let useCase: ASRVoiceActivityUseCase
     private let libraryProvider: @Sendable () throws -> OmniVADDynamicLibrary

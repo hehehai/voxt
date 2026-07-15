@@ -5,6 +5,16 @@ import Foundation
 import Logging
 
 enum VoxtLogRedactor {
+    nonisolated private static let sensitiveHTTPHeaderNames: Set<String> = [
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "x-api-access-key",
+        "x-api-app-key"
+    ]
+
     private static let sensitivePatterns: [String] = [
         #"(?i)(authorization\s*[:=]\s*bearer\s+)[A-Za-z0-9._~+/=-]+"#,
         #"(?i)([?&](?:api_key|apikey|key|token|access_token|refresh_token|secret|password)=)[^&#\s]+"#,
@@ -48,6 +58,16 @@ enum VoxtLogRedactor {
         return result
     }
 
+    nonisolated static func redactedHTTPHeaders(_ headers: [String: String]) -> [String: String] {
+        headers.reduce(into: [String: String]()) { result, pair in
+            if isSensitiveHTTPHeaderName(pair.key) {
+                result[pair.key] = "<redacted>"
+            } else {
+                result[pair.key] = redactSensitiveValues(in: pair.value)
+            }
+        }
+    }
+
     private nonisolated static func redactedMetadataValue(_ value: Logger.Metadata.Value) -> Logger.Metadata.Value {
         switch value {
         case .string(let string):
@@ -63,6 +83,17 @@ enum VoxtLogRedactor {
             }
             return .dictionary(result)
         }
+    }
+
+    private nonisolated static func isSensitiveHTTPHeaderName(_ name: String) -> Bool {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return sensitiveHTTPHeaderNames.contains(normalized)
+            || normalized.hasSuffix("-api-key")
+            || normalized.hasSuffix("-access-key")
+            || normalized.hasSuffix("-app-key")
+            || normalized.contains("token")
+            || normalized.contains("secret")
+            || normalized.contains("credential")
     }
 
     private nonisolated static func redactSensitiveValues(in text: String) -> String {
