@@ -4,42 +4,37 @@
 
 # Voxt
 
-macOS 菜单栏语音输入与翻译工具。按住说话，松开即贴，AI转写，不同 APP、URL 不同规则。
+MacOS 语音输入与翻译工具，支持不同应用和网址文本增强。笔记模式会议模式让你的音频不只是文本。
 
-[English](../README.md) · **简体中文** · [反馈问题][github-issues-link] · [提示词](./Prompt.zh-CN.md) · [转写文档](./Rewrite.zh-CN.md)
+[English](../README.md) · **简体中文** · [反馈问题][github-issues-link]
 
 [![][github-release-shield]][github-release-link]
 [![][macos-version-shield]][macos-version-link]
 [![][license-shield]][license-link]
 [![][release-date-shield]][release-date-link]
 
-<img width="1950" height="1510" alt="image" src="https://github.com/user-attachments/assets/9874598c-8df7-4566-8b3c-9dbbcb2e4d57" />
+<img width="2594" height="1676" alt="Xnip2026-07-15_21-43-50" src="https://github.com/user-attachments/assets/cbb3499f-3dd2-4393-b0e5-d5688e129d19" />
 
 </div>
 
-## ✨ 特性一览 Speak, don't type
+## ✨ 出口成文、因境而变
 
-**说出来，语音转文字** `fn`
+**转录，语音转文本**
 
 - 边说边转文字，实时查看文本内容
-- 结果增强，去除语气词，自动添加标点符号，Prompt 自定义，你的输出你来决定！
-- App 分组，不同的 App 或网址 设置不同的增强规则（自定义 Prompt）Coding、Chat、Email 。。。
-- 支持个人词典，可把命中的术语注入提示词，并在高置信度场景下把近似词自动纠正为准确写法
-- 多语言支持，混合语言输入无压力，想怎么说，就怎么说。
 
-**沟通无障碍，说完就翻译** `fn+shift`
+<video src="https://github.com/user-attachments/assets/75f08906-3e69-4ab5-9b29-f5c3745cebac">
+
+**翻译，文本翻译**
 
 - AI 翻译，说完自动翻译
 - 选中翻译，选择文本，快捷键直接翻译
-- 自定义翻译，自定义 Prompt 关键词，常用词自己定，你的习惯你来掌控！
-- 支持独立模型，那个强用那个，那个快用那个！
 
-**语言转写，帮我一下** `fn+control`
+<video src="https://github.com/user-attachments/assets/e69c2737-5d8c-4bd6-9f5b-1123947c7e39">
+
+**转写，语音对话，结果增强**
 
 - “帮我写一篇 200 字的自我介绍模板吧” 你的输入就是 Prompt，结果会自动输入编辑器
-- 选中文本转写 ～ “帮我把这段文本精简下，语句要通顺” 。。。
-- 可选“转写答案卡片”，在当前没有可写输入框时也能稳定查看和接收长结果
-- AI 助手，不止止语音输入
 
 [![][back-to-top]](#readme-top)
 
