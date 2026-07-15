@@ -205,6 +205,49 @@ enum CanaryLanguageSupport {
 }
 
 enum MossASRPromptSupport {
+    static func generationOutputMode(
+        requestedOutputMode: MossASROutputMode,
+        scope: MossASRUsageScope
+    ) -> MossASROutputMode {
+        // Meeting storage consumes typed timestamped speaker segments. Presentation
+        // preferences must not weaken that transport contract into unstructured text.
+        scope == .meeting ? .timestampedDiarization : requestedOutputMode
+    }
+
+    static func resolvedPrompt(
+        requestedOutputMode: MossASROutputMode,
+        scope: MossASRUsageScope,
+        customPrompt: String,
+        hotwords: String
+    ) -> String {
+        let outputMode = generationOutputMode(
+            requestedOutputMode: requestedOutputMode,
+            scope: scope
+        )
+        guard scope == .meeting else {
+            return resolvedPrompt(
+                outputMode: outputMode,
+                customPrompt: customPrompt,
+                hotwords: hotwords
+            )
+        }
+
+        let requiredStructure = resolvedPrompt(
+            outputMode: .timestampedDiarization,
+            customPrompt: "",
+            hotwords: ""
+        )
+        let trimmedCustomPrompt = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let combinedPrompt = trimmedCustomPrompt.isEmpty
+            ? requiredStructure
+            : "\(requiredStructure) Additional transcription instructions: \(trimmedCustomPrompt)"
+        return resolvedPrompt(
+            outputMode: .customPrompt,
+            customPrompt: combinedPrompt,
+            hotwords: hotwords
+        )
+    }
+
     static func resolvedPrompt(
         outputMode: MossASROutputMode,
         customPrompt: String,
@@ -319,10 +362,34 @@ enum MossASRTranscriptRendering {
         } else {
             result = replacingMatches(in: result, pattern: #"\[(S\d+)\]\s*"#, with: "[$1] ")
         }
+
+        // MOSS can emit acoustic annotations such as `[sniff]` in the transcript body.
+        // They are metadata for meeting processing, not user-visible spoken text.
+        result = replacingMatches(
+            in: result,
+            pattern: #"\[[a-z][a-z0-9 _-]{0,31}\]\s*"#,
+            with: ""
+        )
+
+        // Incremental decoding may publish a speaker tag before its closing bracket.
+        // Drop only the malformed protocol prefix and preserve the following speech.
+        result = replacingMatches(
+            in: result,
+            pattern: #"\[S[0-9O]{0,3}\s+"#,
+            with: ""
+        )
         result = replacingMatches(in: result, pattern: #"\[(?:\d|[\.,])*$"#, with: "")
+        result = replacingMatches(
+            in: result,
+            pattern: #"\[(?:S[0-9O]*|[a-z][a-z0-9 _-]*)$"#,
+            with: ""
+        )
         return result
             .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map {
+                replacingMatches(in: $0, pattern: #"[ \t]{2,}"#, with: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
     }

@@ -2728,6 +2728,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let hintPayload = resolvedHintPayload()
         let tuningSettings = resolvedLocalTuningSettings()
         let mossSettings = tuningSettings.mossSettings(for: transcriptionPurpose.mossUsageScope)
+        let mossGenerationOutputMode = MossASRPromptSupport.generationOutputMode(
+            requestedOutputMode: mossSettings.outputMode,
+            scope: transcriptionPurpose.mossUsageScope
+        )
         let userLanguageCodes = UserMainLanguageOption.storedSelection(
             from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
         )
@@ -2828,7 +2832,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             cohereLongFormStrategy: tuningSettings.cohereLongFormStrategy,
             mossPrompt: family == .mossTranscribeDiarize
                 ? MossASRPromptSupport.resolvedPrompt(
-                    outputMode: mossSettings.outputMode,
+                    requestedOutputMode: mossSettings.outputMode,
+                    scope: transcriptionPurpose.mossUsageScope,
                     customPrompt: resolvedBiasTemplate(
                         mossSettings.customPrompt,
                         userLanguageCodes: userLanguageCodes,
@@ -2841,7 +2846,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                     )
                 )
                 : nil,
-            mossOutputMode: mossSettings.outputMode
+            mossOutputMode: mossGenerationOutputMode
         )
     }
 
@@ -3160,10 +3165,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 return nil
             }
 
-            let speakerPrefix = "[\(speakerID)]"
-            let text = rawText.hasPrefix(speakerPrefix)
-                ? String(rawText.dropFirst(speakerPrefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                : rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Structured MOSS segments carry timing and speaker metadata separately,
+            // so their text should contain only user-visible speech. Reuse the MOSS
+            // plain-text renderer to remove speaker protocol and acoustic annotations
+            // such as `[sniff]` before the segment can reach meeting storage/export.
+            let text = MossASRTranscriptRendering.renderedText(rawText, outputMode: .plainText)
             guard !text.isEmpty else { return nil }
             return MLXStructuredTranscriptSegment(
                 startSeconds: start,

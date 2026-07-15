@@ -213,8 +213,15 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
         }
 
         let currentEnd = timelineOffsetSeconds + totalAudioSeconds
-        if silenceDurationSeconds >= Self.silenceFinalizeSeconds ||
-            currentEnd - currentSegmentStartSeconds >= Self.maximumLiveSegmentSeconds {
+        if MeetingNativeLiveSegmentationPolicy.shouldFinalizeBeforeStreamEnd(
+            // MOSS provisional windows can rewrite already visible words when the
+            // final window gains more context. Keep one partial segment until ended.
+            streamCanReviseEarlierText: configuration?.mossVisibleOutputMode != nil,
+            silenceDuration: silenceDurationSeconds,
+            segmentDuration: currentEnd - currentSegmentStartSeconds,
+            silenceThreshold: Self.silenceFinalizeSeconds,
+            maximumSegmentDuration: Self.maximumLiveSegmentSeconds
+        ) {
             finalizeVisibleSegment(at: currentEnd)
         }
     }

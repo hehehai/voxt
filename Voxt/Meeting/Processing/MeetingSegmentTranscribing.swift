@@ -260,6 +260,15 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             }
         }
 
+        if usesStructuredOutput,
+           MLXModelFamily.family(for: modelManager.currentModelRepo) == .mossTranscribeDiarize
+        {
+            VoxtLog.meetingWarning(
+                "Meeting MOSS structured output was unavailable; raw protocol text was suppressed."
+            )
+            return []
+        }
+
         let previewText = result.structuredSegments.isEmpty
             ? result.text
             : result.structuredSegments.map(\.text).joined(separator: " ")

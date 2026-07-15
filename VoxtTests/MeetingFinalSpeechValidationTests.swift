@@ -23,7 +23,7 @@ final class MeetingFinalSpeechValidationTests: XCTestCase {
         )
     }
 
-    func testPreserveTimelinePolicyKeepsSegmentsMarkedAsSilence() {
+    func testPreserveTimelinePolicyDropsSegmentsMarkedAsSilenceWithoutCompressingTimeline() {
         let segment = makeSegment(start: 1, end: 2)
         var evidence = MeetingFinalSpeechEvidence()
         evidence.record(
@@ -39,7 +39,7 @@ final class MeetingFinalSpeechValidationTests: XCTestCase {
             evidence: evidence
         )
 
-        XCTAssertEqual(output, [segment])
+        XCTAssertTrue(output.isEmpty)
     }
 
     func testModelManagedPolicyKeepsSegmentsMarkedAsSilence() {

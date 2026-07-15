@@ -32,7 +32,7 @@ enum MLXConfigurationSummarySupport {
                 AppLocalization.localizedString("Dictation Settings"),
                 tuning.mossOutputMode.title,
                 AppLocalization.localizedString("Meeting"),
-                tuning.mossMeetingOutputMode.title
+                AppLocalization.localizedString("Structured Meeting Segments")
             )
         case .cohereTranscribe:
             return AppLocalization.format(

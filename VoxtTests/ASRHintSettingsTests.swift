@@ -611,9 +611,10 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(settings.mossMeetingCustomPrompt, "Legacy prompt")
     }
 
-    func testMOSSStructuredSegmentsPreserveTimingSpeakerAndPlainText() {
+    func testMOSSStructuredSegmentsSanitizeTextWhilePreservingTimingAndSpeaker() {
         let segments = MLXTranscriber.mossStructuredSegments(from: [
-            ["start": 1.25, "end": 2.75, "speaker_id": "S02", "text": "[S02] Hello world"]
+            ["start": 1.25, "end": 2.75, "speaker_id": "S02", "text": "[S02] Hello [sniff] world"],
+            ["start": 2.80, "end": 3.10, "speaker_id": "S02", "text": "[S02] [breath]"]
         ])
 
         XCTAssertEqual(
@@ -648,6 +649,43 @@ final class ASRHintSettingsTests: XCTestCase {
         )
     }
 
+    func testMOSSMeetingAlwaysUsesStructuredGenerationOutput() {
+        XCTAssertEqual(
+            MossASRPromptSupport.generationOutputMode(
+                requestedOutputMode: .plainText,
+                scope: .meeting
+            ),
+            .timestampedDiarization
+        )
+        XCTAssertEqual(
+            MossASRPromptSupport.generationOutputMode(
+                requestedOutputMode: .customPrompt,
+                scope: .meeting
+            ),
+            .timestampedDiarization
+        )
+        XCTAssertEqual(
+            MossASRPromptSupport.generationOutputMode(
+                requestedOutputMode: .plainText,
+                scope: .dictation
+            ),
+            .plainText
+        )
+    }
+
+    func testMOSSMeetingCustomPromptKeepsRequiredStructure() {
+        let prompt = MossASRPromptSupport.resolvedPrompt(
+            requestedOutputMode: .plainText,
+            scope: .meeting,
+            customPrompt: "Keep product names verbatim.",
+            hotwords: "Voxt"
+        )
+
+        XCTAssertContains(prompt, "start with the timestamp and speaker ID")
+        XCTAssertContains(prompt, "Additional transcription instructions: Keep product names verbatim.")
+        XCTAssertContains(prompt, "Hotwords: Voxt")
+    }
+
     func testMOSSRenderingRemovesOnlyConfiguredStructuredTags() {
         let raw = "[0.48][S01]Welcome everyone[1.66][2.10][S02]Ready to begin[3.25]"
 
@@ -679,6 +717,32 @@ final class ASRHintSettingsTests: XCTestCase {
                 outputMode: .plainText
             ),
             "The server is healthy. Ready to deploy (version 2)."
+        )
+    }
+
+    func testMOSSPlainTextHidesAcousticEventsAndIncompleteSpeakerProtocol() {
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(
+                "[0.00][S01]Hello [sniff] there[1.20][1.30][S0",
+                outputMode: .plainText
+            ),
+            "Hello there"
+        )
+
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(
+                "[0.00][S What did you see?",
+                outputMode: .plainText
+            ),
+            "What did you see?"
+        )
+
+        XCTAssertEqual(
+            MossASRTranscriptRendering.renderedText(
+                "[0.00][SO Yeah, pretty every week.",
+                outputMode: .plainText
+            ),
+            "Yeah, pretty every week."
         )
     }
 

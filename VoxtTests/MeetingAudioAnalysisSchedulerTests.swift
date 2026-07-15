@@ -96,6 +96,68 @@ final class MeetingAudioAnalysisSchedulerTests: XCTestCase {
         let peakCount = await concurrency.peakCount()
         XCTAssertEqual(peakCount, 1)
     }
+
+    func testOrderedLiveSchedulerPreservesFrameBoundariesAndOrder() async {
+        let scheduler = MeetingOrderedLiveAudioScheduler()
+        let collector = MeetingAudioAnalysisFrameCollector()
+        let concurrency = MeetingAudioAnalysisConcurrencyTracker()
+        let sampleRate = 16_000.0
+
+        for index in 0..<10 {
+            let start = Double(index) * 0.01
+            let frame = MeetingAudioAnalysisFrame(
+                samples: [Float](repeating: Float(index), count: 160),
+                sampleRate: sampleRate,
+                level: Float(index),
+                speaker: .me,
+                startSeconds: start,
+                endSeconds: start + 0.01
+            )
+            _ = await scheduler.submit(frame) { frame in
+                await concurrency.begin()
+                try? await Task.sleep(for: .milliseconds(5))
+                await collector.append(frame)
+                await concurrency.end()
+            }
+        }
+
+        await scheduler.flush()
+        let processedFrames = await collector.frames()
+        let statistics = await scheduler.currentStatistics()
+        let peakConcurrency = await concurrency.peakCount()
+
+        XCTAssertEqual(processedFrames.count, 10)
+        XCTAssertEqual(processedFrames.map(\.startSeconds), (0..<10).map { Double($0) * 0.01 })
+        XCTAssertTrue(processedFrames.allSatisfy { $0.samples.count == 160 })
+        XCTAssertEqual(statistics.mergedFrameCount, 0)
+        XCTAssertEqual(statistics.processedBatchCount, 10)
+        XCTAssertEqual(peakConcurrency, 1)
+    }
+
+    func testOrderedLiveSchedulerRejectsPendingAudioBeyondSafetyBound() async {
+        let scheduler = MeetingOrderedLiveAudioScheduler()
+        let sampleRate = 16_000.0
+        let samples = [Float](repeating: 0.2, count: Int(sampleRate * 10.1))
+        let frame = MeetingAudioAnalysisFrame(
+            samples: samples,
+            sampleRate: sampleRate,
+            level: 0.2,
+            speaker: .them,
+            startSeconds: 0,
+            endSeconds: 10.1
+        )
+
+        let result = await scheduler.submit(frame) { _ in
+            XCTFail("An overloaded live frame must not be processed.")
+        }
+        let statistics = await scheduler.currentStatistics()
+
+        guard case .overloaded = result else {
+            return XCTFail("Expected the ordered live scheduler to enforce its 10-second bound.")
+        }
+        XCTAssertEqual(statistics.overloadedFrameCount, 1)
+        XCTAssertEqual(statistics.processedBatchCount, 0)
+    }
 }
 
 private actor MeetingAudioAnalysisFrameCollector {

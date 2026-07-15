@@ -159,3 +159,91 @@ actor MeetingAudioAnalysisScheduler {
         pendingFrames.values.reduce(0) { $0 + $1.durationSeconds }
     }
 }
+
+/// Serializes live audio without coalescing frames, so VAD decisions and model
+/// startup cannot reorder or drop speech at a session boundary.
+actor MeetingOrderedLiveAudioScheduler {
+    enum SubmissionResult: Equatable, Sendable {
+        case accepted
+        case overloaded(pendingAudioSeconds: TimeInterval)
+    }
+
+    typealias Processor = @Sendable (MeetingAudioAnalysisFrame) async -> Void
+
+    private static let maxPendingAudioSeconds: TimeInterval = 10
+
+    private var pendingFrames: [MeetingAudioAnalysisFrame] = []
+    private var drainTask: Task<Void, Never>?
+    private var pendingProcessor: Processor?
+    private var statistics = MeetingAudioAnalysisStatistics()
+
+    func submit(
+        _ frame: MeetingAudioAnalysisFrame,
+        processor: @escaping Processor
+    ) -> SubmissionResult {
+        statistics.submittedFrameCount += 1
+        let pendingAfterSubmission = pendingAudioSeconds + frame.durationSeconds
+        guard pendingAfterSubmission <= Self.maxPendingAudioSeconds else {
+            statistics.overloadedFrameCount += 1
+            statistics.peakPendingAudioSeconds = max(
+                statistics.peakPendingAudioSeconds,
+                pendingAudioSeconds
+            )
+            return .overloaded(pendingAudioSeconds: pendingAudioSeconds)
+        }
+
+        pendingFrames.append(frame)
+        statistics.peakPendingAudioSeconds = max(
+            statistics.peakPendingAudioSeconds,
+            pendingAfterSubmission
+        )
+        pendingProcessor = processor
+        startDrainIfNeeded()
+        return .accepted
+    }
+
+    func flush() async {
+        while let task = drainTask {
+            await task.value
+        }
+    }
+
+    func cancel() {
+        drainTask?.cancel()
+        pendingProcessor = nil
+        pendingFrames.removeAll(keepingCapacity: false)
+    }
+
+    func currentStatistics() -> MeetingAudioAnalysisStatistics {
+        statistics
+    }
+
+    func resetStatistics() {
+        statistics = MeetingAudioAnalysisStatistics()
+    }
+
+    private func drain(processor: @escaping Processor) async {
+        defer {
+            drainTask = nil
+            if !pendingFrames.isEmpty {
+                startDrainIfNeeded()
+            }
+        }
+        while !Task.isCancelled, !pendingFrames.isEmpty {
+            let frame = pendingFrames.removeFirst()
+            await processor(frame)
+            statistics.processedBatchCount += 1
+        }
+    }
+
+    private func startDrainIfNeeded() {
+        guard drainTask == nil, let pendingProcessor else { return }
+        drainTask = Task { [weak self] in
+            await self?.drain(processor: pendingProcessor)
+        }
+    }
+
+    private var pendingAudioSeconds: TimeInterval {
+        pendingFrames.reduce(0) { $0 + $1.durationSeconds }
+    }
+}

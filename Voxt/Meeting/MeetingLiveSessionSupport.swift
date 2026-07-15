@@ -11,6 +11,55 @@ enum MeetingLiveSessionState: Equatable, Sendable {
     case failed
 }
 
+nonisolated struct MeetingLocalLiveVoiceActivityGate: Sendable {
+    enum Action: Equatable, Sendable {
+        case buffer
+        case start
+        case append
+        case hold
+        case finish
+    }
+
+    private(set) var silenceDuration: TimeInterval = 0
+
+    mutating func consume(
+        isSpeech: Bool,
+        frameDuration: TimeInterval,
+        hasActiveSession: Bool,
+        endpointSilence: TimeInterval
+    ) -> Action {
+        if isSpeech {
+            silenceDuration = 0
+            return hasActiveSession ? .append : .start
+        }
+
+        guard hasActiveSession else {
+            silenceDuration = 0
+            return .buffer
+        }
+
+        silenceDuration += max(frameDuration, 0)
+        guard silenceDuration >= max(endpointSilence, 0) else {
+            return .hold
+        }
+        silenceDuration = 0
+        return .finish
+    }
+}
+
+nonisolated enum MeetingNativeLiveSegmentationPolicy {
+    static func shouldFinalizeBeforeStreamEnd(
+        streamCanReviseEarlierText: Bool,
+        silenceDuration: TimeInterval,
+        segmentDuration: TimeInterval,
+        silenceThreshold: TimeInterval,
+        maximumSegmentDuration: TimeInterval
+    ) -> Bool {
+        guard !streamCanReviseEarlierText else { return false }
+        return silenceDuration >= silenceThreshold || segmentDuration >= maximumSegmentDuration
+    }
+}
+
 struct MeetingLiveSessionPolicy: Equatable, Sendable {
     let idleKeepaliveEnabled: Bool
     let idleKeepaliveInterval: TimeInterval
@@ -180,6 +229,18 @@ struct MeetingLiveAudioPrebuffer: Sendable {
 
     mutating func removeAll() {
         frames.removeAll(keepingCapacity: false)
+    }
+
+    mutating func drain(replacingWithSilence: Bool = false) -> [Frame] {
+        let drainedFrames = frames
+        frames.removeAll(keepingCapacity: false)
+        guard replacingWithSilence else { return drainedFrames }
+        return drainedFrames.map { frame in
+            Frame(
+                samples: Array(repeating: 0, count: frame.samples.count),
+                sampleRate: frame.sampleRate
+            )
+        }
     }
 
     func snapshot() -> [Frame] {

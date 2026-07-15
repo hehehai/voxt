@@ -696,6 +696,8 @@
 "Recognition Context" = "Recognition Context";
 "Recognition Prompt" = "Recognition Prompt";
 "Output Format" = "Output Format";
+"Structured Meeting Segments" = "Structured Meeting Segments";
+"MOSS always generates timestamped speaker segments for meetings; the meeting view displays cleaned speech text." = "MOSS always generates timestamped speaker segments for meetings; the meeting view displays cleaned speech text.";
 "Timestamped Diarization" = "Timestamped Diarization";
 "Speaker Labels Only" = "Speaker Labels Only";
 "Custom Prompt" = "Custom Prompt";
@@ -708,6 +710,7 @@
 "Hotwords Off" = "Hotwords Off";
 "Names and terms are appended to the MOSS prompt using its official Hotwords format." = "Names and terms are appended to the MOSS prompt using its official Hotwords format.";
 "This instruction replaces the standard MOSS transcription format prompt." = "This instruction replaces the standard MOSS transcription format prompt.";
+"This optional meeting instruction is appended without replacing the required timestamp and speaker structure." = "This optional meeting instruction is appended without replacing the required timestamp and speaker structure.";
 "Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "Use concise domain terms, names, and product vocabulary to bias Qwen3 toward the right transcription.";
 "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology." = "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology.";
 "Enable ITN" = "Enable ITN";

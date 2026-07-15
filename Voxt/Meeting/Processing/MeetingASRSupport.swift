@@ -25,6 +25,13 @@ enum MeetingASRResolvedMode: Equatable, Sendable {
             return false
         }
     }
+
+    var usesLocalVoiceActivityGate: Bool {
+        if case .liveLocal = self {
+            return true
+        }
+        return false
+    }
 }
 
 struct MeetingASREngineContext: Equatable {

@@ -87,6 +87,63 @@ final class MeetingLiveSessionSupportTests: XCTestCase {
         XCTAssertEqual(frames.last?.samples.first ?? 0, 0.3, accuracy: 0.0001)
     }
 
+    func testPrebufferDrainPreservesSpeechOnsetAudio() {
+        var prebuffer = MeetingLiveAudioPrebuffer(maxDuration: 0.5)
+        prebuffer.append(samples: [0.1, 0.2], sampleRate: 100)
+        prebuffer.append(samples: [0.3, 0.4], sampleRate: 100)
+
+        let frames = prebuffer.drain()
+
+        XCTAssertEqual(frames.flatMap(\.samples), [0.1, 0.2, 0.3, 0.4])
+        XCTAssertTrue(prebuffer.snapshot().isEmpty)
+    }
+
+    func testPrebufferDrainReplacesConfirmedSilenceWithoutChangingTimeline() {
+        var prebuffer = MeetingLiveAudioPrebuffer(maxDuration: 0.5)
+        prebuffer.append(samples: [0.1, 0.2], sampleRate: 100)
+        prebuffer.append(samples: [0.3, 0.4], sampleRate: 100)
+        let originalDuration = prebuffer.snapshot().reduce(0) { $0 + $1.duration }
+
+        let frames = prebuffer.drain(replacingWithSilence: true)
+
+        XCTAssertEqual(frames.flatMap(\.samples), [0, 0, 0, 0])
+        XCTAssertEqual(frames.reduce(0) { $0 + $1.duration }, originalDuration, accuracy: 0.0001)
+        XCTAssertTrue(prebuffer.snapshot().isEmpty)
+    }
+
+    func testRevisionCapableNativeStreamDefersFinalizationUntilEnded() {
+        XCTAssertFalse(
+            MeetingNativeLiveSegmentationPolicy.shouldFinalizeBeforeStreamEnd(
+                streamCanReviseEarlierText: true,
+                silenceDuration: 1.0,
+                segmentDuration: 12,
+                silenceThreshold: 0.75,
+                maximumSegmentDuration: 8
+            )
+        )
+    }
+
+    func testAppendOnlyNativeStreamStillFinalizesAtSilenceOrDurationBoundary() {
+        XCTAssertTrue(
+            MeetingNativeLiveSegmentationPolicy.shouldFinalizeBeforeStreamEnd(
+                streamCanReviseEarlierText: false,
+                silenceDuration: 0.75,
+                segmentDuration: 2,
+                silenceThreshold: 0.75,
+                maximumSegmentDuration: 8
+            )
+        )
+        XCTAssertTrue(
+            MeetingNativeLiveSegmentationPolicy.shouldFinalizeBeforeStreamEnd(
+                streamCanReviseEarlierText: false,
+                silenceDuration: 0,
+                segmentDuration: 8,
+                silenceThreshold: 0.75,
+                maximumSegmentDuration: 8
+            )
+        )
+    }
+
     func testTranscriptStateSubtractsAllPriorFrozenText() {
         var state = MeetingLiveTranscriptState()
 

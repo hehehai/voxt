@@ -16,16 +16,24 @@ final class MeetingSessionCoordinator {
     private let systemAudioCapture = MeetingSystemAudioCapture()
     private static let micSpeechThreshold: Float = 0.012
     private static let systemSpeechThreshold: Float = 0.025
+    private static let localLiveSessionSilenceSeconds: TimeInterval = 0.75
+    private static let localLivePrebufferSeconds: TimeInterval = 0.5
+    private static let localLivePendingAudioSeconds: TimeInterval = 1.25
+    private static let remoteLivePrebufferSeconds: TimeInterval = 1.0
     private static let waveformPublishIntervalSeconds: TimeInterval = 1.0 / 20.0
     private var micAccumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: micSpeechThreshold, profile: .quality)
     private var systemAccumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: systemSpeechThreshold, profile: .quality)
     private let voiceActivityDetector = MeetingVoiceActivityDetector()
     private let offlineVoiceActivityDetector = MeetingOfflineVoiceActivityDetector()
     private let audioAnalysisScheduler = MeetingAudioAnalysisScheduler()
+    private let orderedLiveAudioScheduler = MeetingOrderedLiveAudioScheduler()
     private var transcriber: (any MeetingSegmentTranscribing)?
     private var liveSessionFactory: (any MeetingLiveSessionFactory)?
     private var liveSessions: [MeetingSpeaker: any MeetingLiveTranscribingSession] = [:]
+    private var liveSessionTokens: [MeetingSpeaker: UUID] = [:]
     private var liveAudioPrebuffers: [MeetingSpeaker: MeetingLiveAudioPrebuffer] = [:]
+    private var localLiveVoiceActivityGates: [MeetingSpeaker: MeetingLocalLiveVoiceActivityGate] = [:]
+    private var localLivePendingAudio: [MeetingSpeaker: MeetingLiveAudioPrebuffer] = [:]
     private var activeLocalEngine: TranscriptionEngine?
     private var activeEngineContext: MeetingASREngineContext?
     private var isStopping = false
@@ -73,10 +81,9 @@ final class MeetingSessionCoordinator {
                 await MeetingLocalInferenceCoordinator.shared.setMemoryPressureConstrained(isConstrained)
             }
         }
-        self.liveAudioPrebuffers = [
-            .me: MeetingLiveAudioPrebuffer(maxDuration: 1.0),
-            .them: MeetingLiveAudioPrebuffer(maxDuration: 1.0)
-        ]
+        self.liveAudioPrebuffers = Self.makeLiveAudioPrebuffers(
+            maxDuration: Self.remoteLivePrebufferSeconds
+        )
     }
 
     var isActive: Bool {
@@ -356,6 +363,7 @@ final class MeetingSessionCoordinator {
             if shouldFlushPendingAudio {
                 let archiveStatistics = await self.audioArchive.currentIOStatistics()
                 let analysisStatistics = await self.audioAnalysisScheduler.currentStatistics()
+                let liveAnalysisStatistics = await self.orderedLiveAudioScheduler.currentStatistics()
                 let inferenceStatistics = await MeetingLocalInferenceCoordinator.shared.currentStatistics()
                 let translationStatistics = self.realtimeTranslationScheduler.currentStatistics()
                 await MainActor.run {
@@ -365,6 +373,10 @@ final class MeetingSessionCoordinator {
                     )
                     VoxtLog.meeting(
                         "Meeting audio analysis summary. submittedFrames=\(analysisStatistics.submittedFrameCount), mergedFrames=\(analysisStatistics.mergedFrameCount), processedBatches=\(analysisStatistics.processedBatchCount), overloadedFrames=\(analysisStatistics.overloadedFrameCount), peakPendingAudioSeconds=\(String(format: "%.2f", analysisStatistics.peakPendingAudioSeconds))",
+                        verbose: true
+                    )
+                    VoxtLog.meeting(
+                        "Meeting ordered live audio summary. submittedFrames=\(liveAnalysisStatistics.submittedFrameCount), processedFrames=\(liveAnalysisStatistics.processedBatchCount), overloadedFrames=\(liveAnalysisStatistics.overloadedFrameCount), peakPendingAudioSeconds=\(String(format: "%.2f", liveAnalysisStatistics.peakPendingAudioSeconds))",
                         verbose: true
                     )
                     VoxtLog.meeting(
@@ -378,6 +390,7 @@ final class MeetingSessionCoordinator {
                     self.realtimeTranslationScheduler.resetStatistics()
                 }
                 await self.audioAnalysisScheduler.resetStatistics()
+                await self.orderedLiveAudioScheduler.resetStatistics()
                 await MeetingLocalInferenceCoordinator.shared.resetStatistics()
             }
 
@@ -547,24 +560,35 @@ final class MeetingSessionCoordinator {
                 endSeconds: bufferEndSeconds
             )
             if await MainActor.run(body: { self.usesLiveSessionPath }) {
-                await self.processAudioAnalysisFrame(frame)
+                let submission = await self.orderedLiveAudioScheduler.submit(frame) { [weak self] frame in
+                    await self?.processAudioAnalysisFrame(frame)
+                }
+                if case .overloaded(let pendingAudioSeconds) = submission {
+                    self.logAudioAnalysisOverloadIfNeeded(
+                        pendingAudioSeconds: pendingAudioSeconds
+                    )
+                }
             } else {
                 let submission = await self.audioAnalysisScheduler.submit(frame) { [weak self] frame in
                     await self?.processAudioAnalysisFrame(frame)
                 }
                 if case .overloaded(let pendingAudioSeconds) = submission {
-                    await MainActor.run {
-                        guard !self.hasLoggedAudioAnalysisOverload else { return }
-                        self.hasLoggedAudioAnalysisOverload = true
-                        VoxtLog.meetingWarning(
-                            "Meeting realtime audio analysis reached its 10-second safety bound; archived audio remains complete and the overloaded realtime frame was skipped. pendingAudioSeconds=\(String(format: "%.2f", pendingAudioSeconds))"
-                        )
-                    }
+                    self.logAudioAnalysisOverloadIfNeeded(
+                        pendingAudioSeconds: pendingAudioSeconds
+                    )
                 }
             }
         }
         pendingTasks[taskID] = task
         pruneCompletedTasks()
+    }
+
+    private func logAudioAnalysisOverloadIfNeeded(pendingAudioSeconds: TimeInterval) {
+        guard !hasLoggedAudioAnalysisOverload else { return }
+        hasLoggedAudioAnalysisOverload = true
+        VoxtLog.meetingWarning(
+            "Meeting realtime audio analysis reached its 10-second safety bound; archived audio remains complete and the overloaded realtime frame was skipped. pendingAudioSeconds=\(String(format: "%.2f", pendingAudioSeconds))"
+        )
     }
 
     private func shouldReconnectLiveSession(for speaker: MeetingSpeaker, level: Float) -> Bool {
@@ -585,6 +609,10 @@ final class MeetingSessionCoordinator {
 
     private func processAudioAnalysisFrame(_ frame: MeetingAudioAnalysisFrame) async {
         if usesLiveSessionPath {
+            if activeEngineContext?.resolvedMode.usesLocalVoiceActivityGate == true {
+                await processLocalLiveAudioAnalysisFrame(frame)
+                return
+            }
             liveAudioPrebuffers[frame.speaker, default: MeetingLiveAudioPrebuffer(maxDuration: 1.0)]
                 .append(samples: frame.samples, sampleRate: frame.sampleRate)
             if let liveSession = liveSessions[frame.speaker] {
@@ -633,6 +661,66 @@ final class MeetingSessionCoordinator {
             )
         }
         await enqueue(chunk: chunk)
+    }
+
+    private func processLocalLiveAudioAnalysisFrame(_ frame: MeetingAudioAnalysisFrame) async {
+        let voiceActivity = await voiceActivityDetector.activity(
+            samples: frame.samples,
+            sampleRate: frame.sampleRate,
+            speaker: frame.speaker,
+            fallbackLevel: frame.level,
+            fallbackThreshold: Self.speechThreshold(for: frame.speaker)
+        )
+
+        var gate = localLiveVoiceActivityGates[frame.speaker] ?? MeetingLocalLiveVoiceActivityGate()
+        let action = gate.consume(
+            isSpeech: voiceActivity.isSpeech,
+            frameDuration: frame.durationSeconds,
+            hasActiveSession: liveSessions[frame.speaker] != nil,
+            endpointSilence: Self.localLiveSessionSilenceSeconds
+        )
+        localLiveVoiceActivityGates[frame.speaker] = gate
+
+        switch action {
+        case .append:
+            if let liveSession = liveSessions[frame.speaker] {
+                await flushLocalLivePendingAudio(
+                    for: frame.speaker,
+                    to: liveSession,
+                    replacingWithSilence: false
+                )
+                await liveSession.append(samples: frame.samples, sampleRate: frame.sampleRate)
+            }
+        case .start:
+            liveAudioPrebuffers[
+                frame.speaker,
+                default: MeetingLiveAudioPrebuffer(maxDuration: Self.localLivePrebufferSeconds)
+            ].append(samples: frame.samples, sampleRate: frame.sampleRate)
+            _ = await ensureLiveSession(
+                for: frame.speaker,
+                timelineEndSeconds: frame.endSeconds
+            )
+        case .buffer:
+            // VAD confirms speech after its acoustic onset. Keep a short raw tail so
+            // the first phoneme is available when the following frame starts a session.
+            liveAudioPrebuffers[
+                frame.speaker,
+                default: MeetingLiveAudioPrebuffer(maxDuration: Self.localLivePrebufferSeconds)
+            ].append(samples: frame.samples, sampleRate: frame.sampleRate)
+        case .hold:
+            // Delay ambiguous in-session audio. Resume flushes it unchanged; a stable
+            // endpoint converts it to silence before the session is finalized.
+            localLivePendingAudio[
+                frame.speaker,
+                default: MeetingLiveAudioPrebuffer(maxDuration: Self.localLivePendingAudioSeconds)
+            ].append(samples: frame.samples, sampleRate: frame.sampleRate)
+        case .finish:
+            localLivePendingAudio[
+                frame.speaker,
+                default: MeetingLiveAudioPrebuffer(maxDuration: Self.localLivePendingAudioSeconds)
+            ].append(samples: frame.samples, sampleRate: frame.sampleRate)
+            await finishLiveSession(for: frame.speaker)
+        }
     }
 
     private static func speechThreshold(for speaker: MeetingSpeaker) -> Float {
@@ -706,15 +794,17 @@ final class MeetingSessionCoordinator {
         Task {
             await voiceActivityDetector.reset()
             await audioAnalysisScheduler.cancel()
+            await orderedLiveAudioScheduler.cancel()
             await MeetingLocalInferenceCoordinator.shared.setRecordingActive(false)
         }
         microphoneStartupWatchdogTask?.cancel()
         microphoneStartupWatchdogTask = nil
         microphoneStartupRetryCount = 0
-        liveAudioPrebuffers = [
-            .me: MeetingLiveAudioPrebuffer(maxDuration: 1.0),
-            .them: MeetingLiveAudioPrebuffer(maxDuration: 1.0)
-        ]
+        liveAudioPrebuffers = Self.makeLiveAudioPrebuffers(
+            maxDuration: Self.remoteLivePrebufferSeconds
+        )
+        localLiveVoiceActivityGates.removeAll(keepingCapacity: false)
+        localLivePendingAudio.removeAll(keepingCapacity: false)
         isStarting = false
         isStopping = false
         releaseActiveLocalEngine()
@@ -975,6 +1065,7 @@ final class MeetingSessionCoordinator {
             await task.value
         }
         completedPendingTaskIDs.removeAll()
+        await orderedLiveAudioScheduler.flush()
         await audioAnalysisScheduler.flush()
 
         guard liveSessions.isEmpty else { return }
@@ -995,6 +1086,7 @@ final class MeetingSessionCoordinator {
         pendingChunks.removeAll()
         Task {
             await audioAnalysisScheduler.cancel()
+            await orderedLiveAudioScheduler.cancel()
         }
     }
 
@@ -1146,14 +1238,17 @@ final class MeetingSessionCoordinator {
         overlayState.segments[index] = transform(overlayState.segments[index])
     }
 
-    private func applyTranscriptEvent(_ event: MeetingTranscriptEvent) {
+    private func applyTranscriptEvent(
+        _ event: MeetingTranscriptEvent,
+        sessionToken: UUID? = nil
+    ) {
         switch event {
         case .failed(let speaker, let message):
             VoxtLog.meetingError("Meeting live transcription failed. speaker=\(speaker.rawValue), detail=\(message)")
-            liveSessions[speaker] = nil
+            clearLiveSession(for: speaker, matching: sessionToken)
             return
         case .finished(let speaker):
-            liveSessions[speaker] = nil
+            clearLiveSession(for: speaker, matching: sessionToken)
             return
         case .partial, .final:
             break
@@ -1185,6 +1280,19 @@ final class MeetingSessionCoordinator {
         for segment in finalizedSegmentsForTranslation {
             queueRealtimeTranslation(for: segment)
         }
+    }
+
+    private func clearLiveSession(for speaker: MeetingSpeaker, matching sessionToken: UUID?) {
+        guard let sessionToken else {
+            liveSessions[speaker] = nil
+            liveSessionTokens[speaker] = nil
+            localLivePendingAudio[speaker] = nil
+            return
+        }
+        guard liveSessionTokens[speaker] == sessionToken else { return }
+        liveSessions[speaker] = nil
+        liveSessionTokens[speaker] = nil
+        localLivePendingAudio[speaker] = nil
     }
 
     private func normalizedTranscriptEvents(for event: MeetingTranscriptEvent) -> [MeetingTranscriptEvent] {
@@ -1345,9 +1453,9 @@ final class MeetingSessionCoordinator {
         shouldValidate: Bool
     ) async -> MeetingFinalSpeechEvidence? {
         guard shouldValidate, !descriptors.isEmpty else { return nil }
-        guard policy == .standard else {
+        guard policy.usesExternalFinalSpeechValidation else {
             VoxtLog.meeting(
-                "Meeting final external VAD skipped for model-owned timeline. policy=\(String(describing: policy))",
+                "Meeting final external VAD skipped because the model owns speech validation. policy=\(String(describing: policy))",
                 verbose: true
             )
             return nil
@@ -1457,28 +1565,67 @@ final class MeetingSessionCoordinator {
     private func startLiveSessionsIfNeeded(for context: MeetingASREngineContext) async throws {
         guard context.resolvedMode.usesLiveSessions, let liveSessionFactory else { return }
         liveSessions.removeAll()
+        liveSessionTokens.removeAll()
+        localLiveVoiceActivityGates.removeAll(keepingCapacity: false)
+        localLivePendingAudio.removeAll(keepingCapacity: false)
+
+        if context.resolvedMode.usesLocalVoiceActivityGate {
+            liveAudioPrebuffers = Self.makeLiveAudioPrebuffers(
+                maxDuration: Self.localLivePrebufferSeconds
+            )
+            return
+        }
+
+        liveAudioPrebuffers = Self.makeLiveAudioPrebuffers(
+            maxDuration: Self.remoteLivePrebufferSeconds
+        )
         let timelineOffsetSeconds = currentTimelineOffsetSeconds()
 
         for speaker in activeCaptureSpeakers {
             let session = try liveSessionFactory.makeSession(for: speaker, timelineOffsetSeconds: timelineOffsetSeconds)
+            let sessionToken = UUID()
             liveSessions[speaker] = session
+            liveSessionTokens[speaker] = sessionToken
             try await session.start(timelineOffsetSeconds: timelineOffsetSeconds) { [weak self] event in
-                self?.applyTranscriptEvent(event)
+                self?.applyTranscriptEvent(event, sessionToken: sessionToken)
             }
         }
     }
 
     private func finishLiveSessionsIfNeeded() async {
-        let sessions = liveSessions.values
+        let sessions = liveSessions
         liveSessions.removeAll()
-        for session in sessions {
+        liveSessionTokens.removeAll()
+        for (speaker, session) in sessions {
+            await flushLocalLivePendingAudio(
+                for: speaker,
+                to: session,
+                replacingWithSilence: true
+            )
             await session.finish()
+        }
+        localLivePendingAudio.removeAll(keepingCapacity: false)
+    }
+
+    private func finishLiveSession(for speaker: MeetingSpeaker) async {
+        guard let session = liveSessions.removeValue(forKey: speaker) else { return }
+        let sessionToken = liveSessionTokens[speaker]
+        await flushLocalLivePendingAudio(
+            for: speaker,
+            to: session,
+            replacingWithSilence: true
+        )
+        await session.finish()
+        if liveSessionTokens[speaker] == sessionToken {
+            liveSessionTokens[speaker] = nil
         }
     }
 
     private func cancelLiveSessionsIfNeeded() async {
         let sessions = liveSessions.values
         liveSessions.removeAll()
+        liveSessionTokens.removeAll()
+        localLivePendingAudio.removeAll(keepingCapacity: false)
         for session in sessions {
             await session.cancel()
         }
@@ -1565,7 +1712,10 @@ final class MeetingSessionCoordinator {
         return speakers
     }
 
-    private func ensureLiveSession(for speaker: MeetingSpeaker) async -> (any MeetingLiveTranscribingSession)? {
+    private func ensureLiveSession(
+        for speaker: MeetingSpeaker,
+        timelineEndSeconds: TimeInterval? = nil
+    ) async -> (any MeetingLiveTranscribingSession)? {
         if let session = liveSessions[speaker] {
             return session
         }
@@ -1580,19 +1730,25 @@ final class MeetingSessionCoordinator {
             return nil
         }
 
+        let sessionToken = UUID()
         do {
             let prebufferFrames = liveAudioPrebuffers[speaker]?.snapshot() ?? []
             let prebufferDuration = prebufferFrames.reduce(0) { $0 + $1.duration }
-            let timelineOffsetSeconds = max(currentTimelineOffsetSeconds() - prebufferDuration, 0)
+            let timelineOffsetSeconds = max(
+                (timelineEndSeconds ?? currentTimelineOffsetSeconds()) - prebufferDuration,
+                0
+            )
             let session = try liveSessionFactory.makeSession(for: speaker, timelineOffsetSeconds: timelineOffsetSeconds)
             liveSessions[speaker] = session
+            liveSessionTokens[speaker] = sessionToken
             try await session.start(timelineOffsetSeconds: timelineOffsetSeconds) { [weak self] event in
-                self?.applyTranscriptEvent(event)
+                self?.applyTranscriptEvent(event, sessionToken: sessionToken)
             }
             await flushLivePrebuffer(prebufferFrames, to: session)
+            liveAudioPrebuffers[speaker]?.removeAll()
             return session
         } catch {
-            liveSessions[speaker] = nil
+            clearLiveSession(for: speaker, matching: sessionToken)
             VoxtLog.meetingWarning("Meeting live session reconnect failed. speaker=\(speaker.rawValue), detail=\(error.localizedDescription)")
             return nil
         }
@@ -1607,8 +1763,28 @@ final class MeetingSessionCoordinator {
         }
     }
 
+    private func flushLocalLivePendingAudio(
+        for speaker: MeetingSpeaker,
+        to session: any MeetingLiveTranscribingSession,
+        replacingWithSilence: Bool
+    ) async {
+        guard var pendingAudio = localLivePendingAudio.removeValue(forKey: speaker) else { return }
+        let frames = pendingAudio.drain(replacingWithSilence: replacingWithSilence)
+        await flushLivePrebuffer(frames, to: session)
+    }
+
     private func currentTimelineOffsetSeconds() -> TimeInterval {
         let activeSlice = recordingStartedAt.map { max(Date().timeIntervalSince($0), 0) } ?? 0
         return accumulatedRecordingDuration + activeSlice
     }
+
+    private static func makeLiveAudioPrebuffers(
+        maxDuration: TimeInterval
+    ) -> [MeetingSpeaker: MeetingLiveAudioPrebuffer] {
+        [
+            .me: MeetingLiveAudioPrebuffer(maxDuration: maxDuration),
+            .them: MeetingLiveAudioPrebuffer(maxDuration: maxDuration)
+        ]
+    }
+
 }

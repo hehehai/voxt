@@ -696,6 +696,8 @@
 "Recognition Context" = "识别上下文";
 "Recognition Prompt" = "识别提示词";
 "Output Format" = "输出格式";
+"Structured Meeting Segments" = "结构化会议分段";
+"MOSS always generates timestamped speaker segments for meetings; the meeting view displays cleaned speech text." = "MOSS 在会议中始终生成带时间戳和说话人的结构化分段；会议界面只展示清理后的发言正文。";
 "Timestamped Diarization" = "带时间戳的说话人分离";
 "Speaker Labels Only" = "仅说话人标签";
 "Custom Prompt" = "自定义提示词";
@@ -708,6 +710,7 @@
 "Hotwords Off" = "热词关";
 "Names and terms are appended to the MOSS prompt using its official Hotwords format." = "人名和术语会按照 MOSS 官方 Hotwords 格式追加到提示词。";
 "This instruction replaces the standard MOSS transcription format prompt." = "这条指令会替换 MOSS 的标准转写格式提示词。";
+"This optional meeting instruction is appended without replacing the required timestamp and speaker structure." = "这条可选会议指令会追加到提示词中，不会替换必需的时间戳和说话人结构。";
 "Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "使用简洁的领域术语、人名和产品词汇，帮助 Qwen3 更准确地偏向正确转写。";
 "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology." = "Granite 使用提示词式指令。内容应保持围绕识别本身，例如拼写偏好或领域术语。";
 "Enable ITN" = "启用 ITN";

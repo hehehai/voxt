@@ -688,6 +688,8 @@
 "Recognition Context" = "認識コンテキスト";
 "Recognition Prompt" = "認識プロンプト";
 "Output Format" = "出力形式";
+"Structured Meeting Segments" = "構造化された会議セグメント";
+"MOSS always generates timestamped speaker segments for meetings; the meeting view displays cleaned speech text." = "MOSS は会議で常にタイムスタンプと話者を含む構造化セグメントを生成し、会議画面には整形済みの発話本文だけを表示します。";
 "Timestamped Diarization" = "タイムスタンプ付き話者分離";
 "Speaker Labels Only" = "話者ラベルのみ";
 "Custom Prompt" = "カスタムプロンプト";
@@ -700,6 +702,7 @@
 "Hotwords Off" = "ホットワード オフ";
 "Names and terms are appended to the MOSS prompt using its official Hotwords format." = "人名や用語を MOSS 公式の Hotwords 形式でプロンプトに追加します。";
 "This instruction replaces the standard MOSS transcription format prompt." = "この指示は MOSS の標準文字起こし形式プロンプトを置き換えます。";
+"This optional meeting instruction is appended without replacing the required timestamp and speaker structure." = "この任意の会議用指示は、必須のタイムスタンプと話者構造を置き換えずに追加されます。";
 "Use concise domain terms, names, and product vocabulary to bias Qwen3-ASR toward the right transcription." = "簡潔な業界用語、人名、製品語彙を使って、Qwen3 が正しい文字起こしに寄るよう補助します。";
 "Granite uses prompt-style instructions. Keep it recognition-focused, for example spelling preferences or domain terminology." = "Granite はプロンプト形式の指示を使います。綴りの好みや業界用語など、認識に関する内容に絞ってください。";
 "Enable ITN" = "ITN を有効化";

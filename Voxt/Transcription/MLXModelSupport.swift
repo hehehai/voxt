@@ -54,6 +54,10 @@ nonisolated enum MLXVADPolicy: Equatable, Sendable {
     case standard
     case preserveTimeline
     case modelManaged
+
+    var usesExternalFinalSpeechValidation: Bool {
+        self != .modelManaged
+    }
 }
 
 nonisolated struct MLXASRPurpose: OptionSet, Sendable {

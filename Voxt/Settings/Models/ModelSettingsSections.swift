@@ -473,23 +473,30 @@ private struct MLXASRConfigurationSheetView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(localized("Output Format"))
                                 .font(.subheadline.weight(.medium))
-                            SettingsMenuPicker(
-                                selection: Binding(
-                                    get: { mossOutputModeBinding.wrappedValue.rawValue },
-                                    set: { rawValue in
-                                        guard let mode = MossASROutputMode(rawValue: rawValue) else { return }
-                                        mossOutputModeBinding.wrappedValue = mode
-                                    }
-                                ),
-                                options: MossASROutputMode.allCases.map {
-                                    SettingsMenuOption(value: $0.rawValue, title: $0.title)
-                                },
-                                selectedTitle: mossOutputModeBinding.wrappedValue.title,
-                                width: 240
-                            )
-                            Text(mossOutputModeBinding.wrappedValue.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if mossUsageScope == .meeting {
+                                Text(localized("Structured Meeting Segments"))
+                                Text(localized("MOSS always generates timestamped speaker segments for meetings; the meeting view displays cleaned speech text."))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                SettingsMenuPicker(
+                                    selection: Binding(
+                                        get: { mossOutputModeBinding.wrappedValue.rawValue },
+                                        set: { rawValue in
+                                            guard let mode = MossASROutputMode(rawValue: rawValue) else { return }
+                                            mossOutputModeBinding.wrappedValue = mode
+                                        }
+                                    ),
+                                    options: MossASROutputMode.allCases.map {
+                                        SettingsMenuOption(value: $0.rawValue, title: $0.title)
+                                    },
+                                    selectedTitle: mossOutputModeBinding.wrappedValue.title,
+                                    width: 240
+                                )
+                                Text(mossOutputModeBinding.wrappedValue.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
 
                         Text(localized("Hotwords"))
@@ -503,7 +510,14 @@ private struct MLXASRConfigurationSheetView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        if mossOutputModeBinding.wrappedValue == .customPrompt {
+                        if mossUsageScope == .meeting {
+                            Text(localized("Recognition Prompt"))
+                                .font(.subheadline.weight(.medium))
+                            PromptEditorView(text: mossCustomPromptBinding, height: 120)
+                            Text(localized("This optional meeting instruction is appended without replacing the required timestamp and speaker structure."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if mossOutputModeBinding.wrappedValue == .customPrompt {
                             Text(localized("Recognition Prompt"))
                                 .font(.subheadline.weight(.medium))
                             PromptEditorView(text: mossCustomPromptBinding, height: 120)

@@ -80,21 +80,100 @@ final class MeetingASRSupportTests: XCTestCase {
 
         XCTAssertEqual(mode, .liveLocal(mode: .nativeQwenLive))
         XCTAssertTrue(mode.usesLiveSessions)
+        XCTAssertTrue(mode.usesLocalVoiceActivityGate)
     }
 
     func testVisibleCohereMossAndNemotronUseTheirNativeLocalLiveModes() {
-        XCTAssertEqual(
+        let modes: [MeetingASRResolvedMode] = [
             MeetingASRSupport.resolveLocalMode(repo: "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"),
-            .liveLocal(mode: .nativeStreamingLive)
-        )
-        XCTAssertEqual(
             MeetingASRSupport.resolveLocalMode(repo: "OpenMOSS-Team/MOSS-Transcribe-Diarize"),
-            .liveLocal(mode: .nativeStreamingLive)
+            MeetingASRSupport.resolveLocalMode(repo: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit")
+        ]
+
+        XCTAssertEqual(modes[0], .liveLocal(mode: .nativeStreamingLive))
+        XCTAssertEqual(modes[1], .liveLocal(mode: .nativeStreamingLive))
+        XCTAssertEqual(modes[2], .liveLocal(mode: .nativeNemotronLive))
+        XCTAssertTrue(modes.allSatisfy(\.usesLocalVoiceActivityGate))
+    }
+
+    func testRemoteAndChunkModesDoNotUseLocalVoiceActivityGate() {
+        XCTAssertFalse(
+            MeetingASRResolvedMode.liveRemote(provider: .doubaoASR).usesLocalVoiceActivityGate
+        )
+        XCTAssertFalse(
+            MeetingASRResolvedMode.chunk(profile: .quality).usesLocalVoiceActivityGate
+        )
+    }
+
+    func testLocalLiveVoiceActivityGateStartsOnlyOnSpeechAndFinishesAfterEndpoint() {
+        var gate = MeetingLocalLiveVoiceActivityGate()
+
+        XCTAssertEqual(
+            gate.consume(
+                isSpeech: false,
+                frameDuration: 0.2,
+                hasActiveSession: false,
+                endpointSilence: 0.75
+            ),
+            .buffer
         )
         XCTAssertEqual(
-            MeetingASRSupport.resolveLocalMode(repo: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit"),
-            .liveLocal(mode: .nativeNemotronLive)
+            gate.consume(
+                isSpeech: true,
+                frameDuration: 0.2,
+                hasActiveSession: false,
+                endpointSilence: 0.75
+            ),
+            .start
         )
+        XCTAssertEqual(
+            gate.consume(
+                isSpeech: true,
+                frameDuration: 0.2,
+                hasActiveSession: true,
+                endpointSilence: 0.75
+            ),
+            .append
+        )
+        XCTAssertEqual(
+            gate.consume(
+                isSpeech: false,
+                frameDuration: 0.4,
+                hasActiveSession: true,
+                endpointSilence: 0.75
+            ),
+            .hold
+        )
+        XCTAssertEqual(
+            gate.consume(
+                isSpeech: false,
+                frameDuration: 0.4,
+                hasActiveSession: true,
+                endpointSilence: 0.75
+            ),
+            .finish
+        )
+    }
+
+    func testLocalLiveVoiceActivityGateCancelsPendingEndpointWhenSpeechResumes() {
+        var gate = MeetingLocalLiveVoiceActivityGate()
+
+        _ = gate.consume(
+            isSpeech: false,
+            frameDuration: 0.5,
+            hasActiveSession: true,
+            endpointSilence: 0.75
+        )
+        XCTAssertEqual(
+            gate.consume(
+                isSpeech: true,
+                frameDuration: 0.1,
+                hasActiveSession: true,
+                endpointSilence: 0.75
+            ),
+            .append
+        )
+        XCTAssertEqual(gate.silenceDuration, 0)
     }
 
     func testSherpaMeetingContextUsesSelectedModelDescription() {
