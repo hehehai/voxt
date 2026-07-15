@@ -6,6 +6,62 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-15
+
+### English
+
+#### Added
+- Added meeting mode with live capture, speaker-aware transcripts, summaries, translation, resilient audio history, and meeting detail views.
+- Rebuilt voice notes with configurable hotkeys, transcription enhancement, richer floating panels, list and timeline history views, editing, pagination, and improved external sync.
+- Added OmniVAD, expanded MLX Audio and Sherpa ONNX local ASR support, Xiaomi MiMo remote ASR providers, dictionary categories, selected-text dictionary shortcuts, and guided setup.
+
+#### Changed
+- Reduced CPU and memory pressure during long meetings by bounding audio analysis, local inference, real-time translation, and summary workloads.
+- Improved MOSS meeting transcription with voice-activity-gated local sessions, preserved speech onsets, structured speaker segments, and cleaned display text.
+- Refined onboarding, model settings and download feedback, prompt presets, notifications, meeting history, translation language selection, and history status filtering.
+- Moved remote provider credentials to the Data Protection Keychain and strengthened endpoint validation and diagnostic log redaction.
+
+#### Fixed
+- Improved meeting finalization recovery and durable history persistence so captured audio and transcripts survive interrupted processing more reliably.
+- Fixed Qwen, MLX, and MOSS streaming transcript finalization and revision ordering to reduce duplicated, missing, stale, or protocol-formatted text.
+- Fixed hotkey routing, long-press release handling, prompt editor autosave, GGUF UTF-8 decoding, remote ASR uploads, and recording startup after idle.
+
+### 简体中文
+
+#### 新增
+- 新增会议模式，支持实时采集、按说话人整理的转写、摘要、翻译、可靠的音频历史记录和会议详情视图。
+- 重构语音笔记，新增可配置快捷键、转写增强、更丰富的悬浮面板、列表与时间线历史视图、编辑、分页及外部同步改进。
+- 新增 OmniVAD，扩展 MLX Audio 与 Sherpa ONNX 本地 ASR 支持，并加入小米 MiMo 远程 ASR provider、词典分类、选中文本词典快捷键和设置引导。
+
+#### 改进
+- 限制音频分析、本地推理、实时翻译和摘要任务的并发与负载，降低长时间会议中的 CPU 和内存压力。
+- 通过语音活动门控的本地会话、语音起始音频保留、结构化说话人片段和文本清理，提升 MOSS 会议转写质量。
+- 优化首次引导、模型设置与下载反馈、提示词预设、通知、会议历史、翻译语言选择和历史状态筛选。
+- 将远程 provider 凭据迁移至 Data Protection Keychain，并加强 endpoint 校验和诊断日志脱敏。
+
+#### 修复
+- 加强会议结束恢复和历史记录持久化，使处理中断后已采集的音频与转写更可靠地保留。
+- 修复 Qwen、MLX 与 MOSS 流式转写的结束处理和修订顺序，减少文本重复、缺失、过期或混入协议标记的问题。
+- 修复快捷键路由、长按释放处理、提示词编辑器自动保存、GGUF UTF-8 解码、远程 ASR 上传和应用闲置后的录音启动问题。
+
+### 日本語
+
+#### 追加
+- ライブキャプチャ、話者別の文字起こし、要約、翻訳、信頼性の高い音声履歴、会議詳細表示に対応した会議モードを追加しました。
+- 音声ノートを再構築し、設定可能なホットキー、文字起こしの強化、より充実したフローティングパネル、リストとタイムラインの履歴表示、編集、ページ分割、外部同期の改善を追加しました。
+- OmniVAD を追加し、MLX Audio と Sherpa ONNX のローカル ASR 対応を拡張するとともに、Xiaomi MiMo リモート ASR provider、辞書カテゴリ、選択テキスト用の辞書ショートカット、セットアップガイドを追加しました。
+
+#### 変更
+- 音声解析、ローカル推論、リアルタイム翻訳、要約処理の同時実行と負荷を制御し、長時間の会議における CPU とメモリの負荷を軽減しました。
+- 音声活動で制御するローカルセッション、発話開始部分の保持、構造化された話者セグメント、表示テキストの整理により、MOSS の会議文字起こしを改善しました。
+- オンボーディング、モデル設定とダウンロードのフィードバック、プロンプトプリセット、通知、会議履歴、翻訳言語の選択、履歴ステータスの絞り込みを改善しました。
+- リモート provider の認証情報を Data Protection Keychain に移行し、endpoint 検証と診断ログの機密情報除去を強化しました。
+
+#### 修正
+- 会議終了時の復旧と履歴の永続化を強化し、処理が中断された場合でも収録済みの音声と文字起こしをより確実に保持できるようにしました。
+- Qwen、MLX、MOSS のストリーミング文字起こしの終了処理と修正順序を改善し、テキストの重複、欠落、古い内容、プロトコル表記の混入を軽減しました。
+- ホットキーのルーティング、長押し解除、プロンプトエディタの自動保存、GGUF の UTF-8 デコード、リモート ASR のアップロード、アイドル後の録音開始を修正しました。
+
 ## [1.13.0-beta.4] - 2026-07-14
 
 ### English
