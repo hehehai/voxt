@@ -13,7 +13,7 @@ A macOS menu bar voice input and translation app. Hold to speak, release to past
 [![][license-shield]][license-link]
 [![][release-date-shield]][release-date-link]
 
-<img width="2028" height="1460" alt="image" src="https://github.com/user-attachments/assets/ee90a432-746a-457a-96b7-b67713dd49d9" />
+<img width="2664" height="1752" alt="Xnip2026-07-15_21-30-44" src="https://github.com/user-attachments/assets/67f6e1d7-0761-4685-992d-15cc89821475" />
 
 </div>
 
