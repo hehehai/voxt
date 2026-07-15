@@ -550,13 +550,14 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
     }
 
     private func makeBuilder(
-        mlxModelManager: MLXModelManager = TestModelManagers.mlx,
+        mlxModelManager: MLXModelManager? = nil,
         featureSettings: FeatureSettings,
         remoteASRConfigurationsRaw: String = "",
         remoteLLMConfigurationsRaw: String = "",
         primaryUserLanguageCode: String? = "en"
     ) -> FeatureModelCatalogBuilder {
-        FeatureModelCatalogBuilder(
+        let mlxModelManager = mlxModelManager ?? TestModelManagers.mlx
+        return FeatureModelCatalogBuilder(
             mlxModelManager: mlxModelManager,
             sherpaOnnxModelManager: TestModelManagers.sherpa,
             customLLMManager: TestModelManagers.customLLM,
@@ -570,16 +571,23 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
     }
 
     private func makeFeatureSettings(
-        transcriptionASR: FeatureModelSelectionID = .dictation,
-        transcriptionLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
-        translationASR: FeatureModelSelectionID = .dictation,
-        translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
+        transcriptionASR: FeatureModelSelectionID? = nil,
+        transcriptionLLM: FeatureModelSelectionID? = nil,
+        translationASR: FeatureModelSelectionID? = nil,
+        translationModel: FeatureModelSelectionID? = nil,
         translationTarget: TranslationTargetLanguage = .english,
-        rewriteASR: FeatureModelSelectionID = .dictation,
-        rewriteLLM: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo),
+        rewriteASR: FeatureModelSelectionID? = nil,
+        rewriteLLM: FeatureModelSelectionID? = nil,
         meetingSummary: FeatureModelSelectionID? = nil
     ) -> FeatureSettings {
-        FeatureSettings(
+        let defaultLLM = FeatureModelSelectionID.localLLM(CustomLLMModelManager.defaultModelRepo)
+        let transcriptionASR = transcriptionASR ?? .dictation
+        let transcriptionLLM = transcriptionLLM ?? defaultLLM
+        let translationASR = translationASR ?? .dictation
+        let translationModel = translationModel ?? defaultLLM
+        let rewriteASR = rewriteASR ?? .dictation
+        let rewriteLLM = rewriteLLM ?? defaultLLM
+        return FeatureSettings(
             transcription: .init(
                 asrSelectionID: transcriptionASR,
                 llmEnabled: true,

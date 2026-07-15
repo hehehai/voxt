@@ -799,11 +799,15 @@ final class ModelCatalogBuilderTests: XCTestCase {
     }
 
     private func makeFeatureSettings(
-        transcriptionASR: FeatureModelSelectionID = .dictation,
-        translationASR: FeatureModelSelectionID = .dictation,
-        translationModel: FeatureModelSelectionID = .localLLM(CustomLLMModelManager.defaultModelRepo)
+        transcriptionASR: FeatureModelSelectionID? = nil,
+        translationASR: FeatureModelSelectionID? = nil,
+        translationModel: FeatureModelSelectionID? = nil
     ) -> FeatureSettings {
-        FeatureSettings(
+        let transcriptionASR = transcriptionASR ?? .dictation
+        let translationASR = translationASR ?? .dictation
+        let translationModel = translationModel
+            ?? .localLLM(CustomLLMModelManager.defaultModelRepo)
+        return FeatureSettings(
             transcription: .init(
                 asrSelectionID: transcriptionASR,
                 llmEnabled: false,

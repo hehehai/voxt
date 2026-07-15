@@ -6,11 +6,11 @@ import AppKit
 import ApplicationServices
 
 private enum FocusedInputCDPSupport {
-    static let missingRemoteDebuggingPortCacheTTL: TimeInterval = 30
-    static let remoteDebuggingPortCacheTTL: TimeInterval = 5
-    static let remoteDebuggingPortCache = RemoteDebuggingPortCache()
+    nonisolated static let missingRemoteDebuggingPortCacheTTL: TimeInterval = 30
+    nonisolated static let remoteDebuggingPortCacheTTL: TimeInterval = 5
+    nonisolated static let remoteDebuggingPortCache = RemoteDebuggingPortCache()
 
-    final class RemoteDebuggingPortCache: @unchecked Sendable {
+    nonisolated final class RemoteDebuggingPortCache: @unchecked Sendable {
         private struct Entry {
             let port: Int?
             let expiresAt: Date

@@ -4,6 +4,7 @@
 import XCTest
 @testable import Voxt
 
+@MainActor
 final class MeetingAudioArchiveTests: XCTestCase {
     func testExportWAVPreservesStartOffsetsAcrossSpeakers() async throws {
         let archive = MeetingAudioArchive()

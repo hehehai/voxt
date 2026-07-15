@@ -81,10 +81,6 @@ final class GGUFTranslationModelManager: ObservableObject {
         GGUFTranslationModelCatalog.option(for: id)
     }
 
-    nonisolated static func displayModels(includingInstalled ids: Set<GGUFTranslationModelID>) -> [GGUFTranslationModelOption] {
-        GGUFTranslationModelCatalog.displayModels(includingInstalled: ids)
-    }
-
     func displayModelsIncludingInstalled() -> [GGUFTranslationModelOption] {
         let localStateIDs = Set(GGUFTranslationModelID.allCases.compactMap { modelID -> GGUFTranslationModelID? in
             switch state(for: modelID) {
@@ -94,7 +90,9 @@ final class GGUFTranslationModelManager: ObservableObject {
                 return nil
             }
         })
-        return Self.displayModels(includingInstalled: localStateIDs.union([selectedModelID]))
+        return GGUFTranslationModelCatalog.displayModels(
+            includingInstalled: localStateIDs.union([selectedModelID])
+        )
     }
 
     func displayTitle(for id: GGUFTranslationModelID) -> String {

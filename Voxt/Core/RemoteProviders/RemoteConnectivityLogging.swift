@@ -31,20 +31,16 @@ enum RemoteProviderConnectivityTestLogging {
     }
 
     private static func redactedHeaders(_ headers: [String: String]) -> String {
-        let redacted = headers.reduce(into: [String: String]()) { partialResult, pair in
-            let key = pair.key
-            let lower = key.lowercased()
-            if lower == "authorization" || lower == "x-api-key" || lower.contains("token") {
-                partialResult[key] = "<redacted>"
-            } else {
-                partialResult[key] = pair.value
-            }
-        }
+        let redacted = sanitizedHeadersForLog(headers)
         if let data = try? JSONSerialization.data(withJSONObject: redacted, options: [.sortedKeys]),
            let text = String(data: data, encoding: .utf8) {
             return text
         }
         return "\(redacted)"
+    }
+
+    static func sanitizedHeadersForLog(_ headers: [String: String]) -> [String: String] {
+        VoxtLogRedactor.redactedHTTPHeaders(headers)
     }
 
     private static func redactedURLString(_ url: URL?) -> String {

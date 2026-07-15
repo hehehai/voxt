@@ -550,7 +550,7 @@ App Branch 本身不一定需要额外权限，取决于你使用到哪一层：
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE).
+Apache 2.0. See [LICENSE](../LICENSE).
 
 
 [back-to-top]: https://img.shields.io/badge/-BACK_TO_TOP-151515?style=flat-square
