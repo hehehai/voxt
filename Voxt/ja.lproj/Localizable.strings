@@ -1434,8 +1434,10 @@
 "Auto" = "自動";
 "Delete All" = "すべて削除";
 "Delete All History?" = "履歴をすべて削除しますか？";
+"Delete All %@ History?" = "%@の履歴をすべて削除しますか？";
 "Delete All Notes?" = "メモをすべて削除しますか？";
 "This will permanently delete all history entries." = "すべての履歴項目を完全に削除します。";
+"This will permanently delete all entries in %@ history." = "%@の履歴項目をすべて完全に削除します。";
 "This will permanently delete all notes." = "すべてのメモを完全に削除します。";
 "Choose interface language and main language." = "表示言語と主要言語を選択してください。";
 "Choose one ASR model path and one LLM path for the rest of onboarding." = "残りのオンボーディングで使う ASR と LLM の経路をそれぞれ 1 つ選択してください。";

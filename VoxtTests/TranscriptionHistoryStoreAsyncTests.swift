@@ -22,8 +22,61 @@ final class TranscriptionHistoryStoreAsyncTests: XCTestCase {
         XCTAssertFalse(store.hasMore)
     }
 
+    func testClearKindPreservesOtherHistoryKinds() async throws {
+        let transcription = makeEntry(index: 0, kind: .normal)
+        let translation = makeEntry(index: 1, kind: .translation)
+        let rewrite = makeEntry(index: 2, kind: .rewrite)
+        let meeting = makeEntry(index: 3, kind: .transcript)
+        let repository = try makeFixture(entries: [transcription, translation, rewrite, meeting])
+        let store = TranscriptionHistoryStore(repository: repository)
+
+        XCTAssertTrue(store.clear(kind: .translation))
+
+        XCTAssertNil(store.entry(id: translation.id))
+        XCTAssertNotNil(store.entry(id: transcription.id))
+        XCTAssertNotNil(store.entry(id: rewrite.id))
+        XCTAssertNotNil(store.entry(id: meeting.id))
+        await drainMainQueue()
+    }
+
+    func testRetentionCleanupPreservesMeetingHistory() async throws {
+        let defaults = UserDefaults.standard
+        let cleanupEnabledKey = AppPreferenceKey.historyCleanupEnabled
+        let retentionPeriodKey = AppPreferenceKey.historyRetentionPeriod
+        let previousCleanupEnabled = defaults.object(forKey: cleanupEnabledKey)
+        let previousRetentionPeriod = defaults.object(forKey: retentionPeriodKey)
+        defer {
+            if let previousCleanupEnabled {
+                defaults.set(previousCleanupEnabled, forKey: cleanupEnabledKey)
+            } else {
+                defaults.removeObject(forKey: cleanupEnabledKey)
+            }
+            if let previousRetentionPeriod {
+                defaults.set(previousRetentionPeriod, forKey: retentionPeriodKey)
+            } else {
+                defaults.removeObject(forKey: retentionPeriodKey)
+            }
+        }
+
+        defaults.set(true, forKey: cleanupEnabledKey)
+        defaults.set(HistoryRetentionPeriod.oneDay.rawValue, forKey: retentionPeriodKey)
+        let oldDate = Date().addingTimeInterval(-2 * 24 * 60 * 60)
+        let transcription = makeEntry(index: 0, kind: .normal, createdAt: oldDate)
+        let translation = makeEntry(index: 1, kind: .translation, createdAt: oldDate)
+        let rewrite = makeEntry(index: 2, kind: .rewrite, createdAt: oldDate)
+        let meeting = makeEntry(index: 3, kind: .transcript, createdAt: oldDate)
+        let repository = try makeFixture(entries: [transcription, translation, rewrite, meeting])
+        let store = TranscriptionHistoryStore(repository: repository)
+
+        XCTAssertNil(store.entry(id: transcription.id))
+        XCTAssertNil(store.entry(id: translation.id))
+        XCTAssertNil(store.entry(id: rewrite.id))
+        XCTAssertNotNil(store.entry(id: meeting.id))
+        await drainMainQueue()
+    }
+
     func testMutationInvalidatesInFlightNextPage() async throws {
-        let entries = (0..<80).map(makeEntry(index:))
+        let entries = (0..<80).map { makeEntry(index: $0) }
         let target = entries[50]
         let repository = try makeFixture(entries: entries)
         let store = TranscriptionHistoryStore(repository: repository)
@@ -95,16 +148,20 @@ final class TranscriptionHistoryStoreAsyncTests: XCTestCase {
         return BlockingHistoryRepository(base: baseRepository)
     }
 
-    private func makeEntry(index: Int) -> TranscriptionHistoryEntry {
+    private func makeEntry(
+        index: Int,
+        kind: TranscriptionHistoryKind = .normal,
+        createdAt: Date? = nil
+    ) -> TranscriptionHistoryEntry {
         TranscriptionHistoryEntry(
             id: UUID(),
             text: "entry-\(index)",
-            createdAt: Date().addingTimeInterval(TimeInterval(-index)),
+            createdAt: createdAt ?? Date().addingTimeInterval(TimeInterval(-index)),
             transcriptionEngine: "engine",
             transcriptionModel: "model",
             enhancementMode: "off",
             enhancementModel: "none",
-            kind: .normal,
+            kind: kind,
             isTranslation: false,
             audioDurationSeconds: nil,
             transcriptionProcessingDurationSeconds: nil,
@@ -236,8 +293,15 @@ private final class BlockingHistoryRepository: HistoryRepositoryProtocol, @unche
         try base.clearAll()
     }
 
-    func deleteEntries(olderThan cutoff: Date) throws -> [TranscriptionHistoryEntry] {
-        try base.deleteEntries(olderThan: cutoff)
+    func deleteEntries(kind: TranscriptionHistoryKind) throws -> [TranscriptionHistoryEntry] {
+        try base.deleteEntries(kind: kind)
+    }
+
+    func deleteEntries(
+        olderThan cutoff: Date,
+        kinds: Set<TranscriptionHistoryKind>
+    ) throws -> [TranscriptionHistoryEntry] {
+        try base.deleteEntries(olderThan: cutoff, kinds: kinds)
     }
 }
 

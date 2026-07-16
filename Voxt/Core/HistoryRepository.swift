@@ -21,7 +21,11 @@ protocol HistoryRepositoryProtocol: AnyObject, Sendable {
     func upsert(_ entry: TranscriptionHistoryEntry) throws
     func delete(id: UUID) throws -> TranscriptionHistoryEntry?
     func clearAll() throws
-    func deleteEntries(olderThan cutoff: Date) throws -> [TranscriptionHistoryEntry]
+    func deleteEntries(kind: TranscriptionHistoryKind) throws -> [TranscriptionHistoryEntry]
+    func deleteEntries(
+        olderThan cutoff: Date,
+        kinds: Set<TranscriptionHistoryKind>
+    ) throws -> [TranscriptionHistoryEntry]
 }
 
 final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
@@ -368,12 +372,39 @@ final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
     }
 
     @discardableResult
-    func deleteEntries(olderThan cutoff: Date) throws -> [TranscriptionHistoryEntry] {
+    func deleteEntries(kind: TranscriptionHistoryKind) throws -> [TranscriptionHistoryEntry] {
+        try deleteEntries(
+            whereSQL: "kind = ?",
+            arguments: [kind.rawValue]
+        )
+    }
+
+    @discardableResult
+    func deleteEntries(
+        olderThan cutoff: Date,
+        kinds: Set<TranscriptionHistoryKind>
+    ) throws -> [TranscriptionHistoryEntry] {
+        let rawKinds = kinds.map(\.rawValue).sorted()
+        guard !rawKinds.isEmpty else { return [] }
+
+        let placeholders = Array(repeating: "?", count: rawKinds.count).joined(separator: ", ")
+        var arguments: StatementArguments = [cutoff.timeIntervalSince1970]
+        arguments += StatementArguments(rawKinds)
+        return try deleteEntries(
+            whereSQL: "createdAt < ? AND kind IN (\(placeholders))",
+            arguments: arguments
+        )
+    }
+
+    private func deleteEntries(
+        whereSQL: String,
+        arguments: StatementArguments
+    ) throws -> [TranscriptionHistoryEntry] {
         let removed = try database.dbQueue.read { db in
             let jsonEntries = try String.fetchAll(
                 db,
-                sql: "SELECT entryJSON FROM history_entries WHERE createdAt < ? ORDER BY createdAt DESC",
-                arguments: [cutoff.timeIntervalSince1970]
+                sql: "SELECT entryJSON FROM history_entries WHERE \(whereSQL) ORDER BY createdAt DESC",
+                arguments: arguments
             )
             return try jsonEntries.map {
                 try VoxtPersistenceCoding.decodeJSON(TranscriptionHistoryEntry.self, from: $0)

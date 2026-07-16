@@ -1513,8 +1513,10 @@
 "Auto" = "Auto";
 "Delete All" = "Delete All";
 "Delete All History?" = "Delete All History?";
+"Delete All %@ History?" = "Delete All %@ History?";
 "Delete All Notes?" = "Delete All Notes?";
 "This will permanently delete all history entries." = "This will permanently delete all history entries.";
+"This will permanently delete all entries in %@ history." = "This will permanently delete all entries in %@ history.";
 "This will permanently delete all notes." = "This will permanently delete all notes.";
 "Choose interface language and main language." = "Choose interface language and main language.";
 "Choose one ASR model path and one LLM path for the rest of onboarding." = "Choose one ASR model path and one LLM path for the rest of onboarding.";

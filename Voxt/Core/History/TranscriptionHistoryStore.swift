@@ -366,6 +366,11 @@ final class TranscriptionHistoryStore: ObservableObject {
     private var nextPageRequestGeneration = 0
     private var isLoadingNextPage = false
     private let pageSize = 40
+    private let retentionCleanupKinds: Set<TranscriptionHistoryKind> = [
+        .normal,
+        .translation,
+        .rewrite
+    ]
 
     private let fileManager = FileManager.default
     private let defaults = UserDefaults.standard
@@ -711,6 +716,28 @@ final class TranscriptionHistoryStore: ObservableObject {
         totalEntryCount = 0
         refreshEntryIndexes()
         publishVisibleEntries()
+    }
+
+    @discardableResult
+    func clear(kind: TranscriptionHistoryKind) -> Bool {
+        let removedEntries: [TranscriptionHistoryEntry]
+        do {
+            removedEntries = try repository.deleteEntries(kind: kind)
+        } catch {
+            return false
+        }
+
+        let interruptedReload = invalidatePendingLoads()
+        removedEntries.forEach(audioArchive.removeArchive(for:))
+        allEntries.removeAll { $0.kind == kind }
+        totalEntryCount = max(0, totalEntryCount - removedEntries.count)
+        loadedCount = min(loadedCount, allEntries.count)
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        if interruptedReload {
+            reloadAsync()
+        }
+        return true
     }
 
     func importAudioArchive(
@@ -1059,7 +1086,12 @@ final class TranscriptionHistoryStore: ObservableObject {
         guard let days = historyRetentionPeriod.days else { return }
 
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate
-        let removedEntries = (try? repository.deleteEntries(olderThan: cutoff)) ?? []
+        let removedEntries = (
+            try? repository.deleteEntries(
+                olderThan: cutoff,
+                kinds: retentionCleanupKinds
+            )
+        ) ?? []
         guard !removedEntries.isEmpty else { return }
         let interruptedReload = invalidatePendingLoads()
         removedEntries.forEach(audioArchive.removeArchive(for:))

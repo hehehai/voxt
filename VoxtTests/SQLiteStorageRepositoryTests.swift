@@ -306,9 +306,58 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
             ["needle focused app entry"]
         )
 
-        let removed = try repository.deleteEntries(olderThan: Date(timeIntervalSince1970: 2))
+        let removed = try repository.deleteEntries(
+            olderThan: Date(timeIntervalSince1970: 2),
+            kinds: [.normal, .translation, .rewrite]
+        )
         XCTAssertEqual(removed.map(\.id), [oldID])
         XCTAssertNil(try repository.entry(id: oldID))
+    }
+
+    func testHistoryRepositoryDeletesOnlyRequestedKind() throws {
+        let database = try makeDatabase()
+        let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let transcription = makeHistoryEntry(text: "transcription", createdAt: Date(), kind: .normal)
+        let translation = makeHistoryEntry(text: "translation", createdAt: Date(), kind: .translation)
+        let rewrite = makeHistoryEntry(text: "rewrite", createdAt: Date(), kind: .rewrite)
+        let meeting = makeHistoryEntry(text: "meeting", createdAt: Date(), kind: .transcript)
+        try repository.replaceAll([transcription, translation, rewrite, meeting])
+
+        let removed = try repository.deleteEntries(kind: .translation)
+
+        XCTAssertEqual(removed.map(\.id), [translation.id])
+        XCTAssertNil(try repository.entry(id: translation.id))
+        XCTAssertNotNil(try repository.entry(id: transcription.id))
+        XCTAssertNotNil(try repository.entry(id: rewrite.id))
+        XCTAssertNotNil(try repository.entry(id: meeting.id))
+    }
+
+    func testHistoryCleanupPreservesMeetings() throws {
+        let database = try makeDatabase()
+        let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let oldDate = Date(timeIntervalSince1970: 1)
+        let newDate = Date(timeIntervalSince1970: 10)
+        let oldTranscription = makeHistoryEntry(text: "old transcription", createdAt: oldDate, kind: .normal)
+        let oldTranslation = makeHistoryEntry(text: "old translation", createdAt: oldDate, kind: .translation)
+        let oldRewrite = makeHistoryEntry(text: "old rewrite", createdAt: oldDate, kind: .rewrite)
+        let oldMeeting = makeHistoryEntry(text: "old meeting", createdAt: oldDate, kind: .transcript)
+        let newTranscription = makeHistoryEntry(text: "new transcription", createdAt: newDate, kind: .normal)
+        try repository.replaceAll([
+            oldTranscription,
+            oldTranslation,
+            oldRewrite,
+            oldMeeting,
+            newTranscription
+        ])
+
+        let removed = try repository.deleteEntries(
+            olderThan: Date(timeIntervalSince1970: 5),
+            kinds: [.normal, .translation, .rewrite]
+        )
+
+        XCTAssertEqual(Set(removed.map(\.id)), Set([oldTranscription.id, oldTranslation.id, oldRewrite.id]))
+        XCTAssertNotNil(try repository.entry(id: oldMeeting.id))
+        XCTAssertNotNil(try repository.entry(id: newTranscription.id))
     }
 
     func testHistoryReportMetricsUseDatabaseAggregates() throws {

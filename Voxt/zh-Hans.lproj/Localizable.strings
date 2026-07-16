@@ -1460,8 +1460,10 @@
 "Auto" = "自动";
 "Delete All" = "删除全部";
 "Delete All History?" = "删除全部历史记录？";
+"Delete All %@ History?" = "删除全部%@历史记录？";
 "Delete All Notes?" = "删除全部笔记？";
 "This will permanently delete all history entries." = "这将永久删除全部历史记录。";
+"This will permanently delete all entries in %@ history." = "这将永久删除%@中的全部历史记录。";
 "This will permanently delete all notes." = "这将永久删除全部笔记。";
 "Choose interface language and main language." = "选择界面语言和主要语言。";
 "Choose one ASR model path and one LLM path for the rest of onboarding." = "为后续引导选择一条 ASR 路径和一条 LLM 路径。";

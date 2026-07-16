@@ -109,8 +109,14 @@ private final class FailingMeetingHistoryRepository: HistoryRepositoryProtocol, 
     func upsert(_ entry: TranscriptionHistoryEntry) throws { throw MeetingHistoryDurabilityTestError.upsertFailed }
     func delete(id: UUID) throws -> TranscriptionHistoryEntry? { try base.delete(id: id) }
     func clearAll() throws { try base.clearAll() }
-    func deleteEntries(olderThan cutoff: Date) throws -> [TranscriptionHistoryEntry] {
-        try base.deleteEntries(olderThan: cutoff)
+    func deleteEntries(kind: TranscriptionHistoryKind) throws -> [TranscriptionHistoryEntry] {
+        try base.deleteEntries(kind: kind)
+    }
+    func deleteEntries(
+        olderThan cutoff: Date,
+        kinds: Set<TranscriptionHistoryKind>
+    ) throws -> [TranscriptionHistoryEntry] {
+        try base.deleteEntries(olderThan: cutoff, kinds: kinds)
     }
 }
 

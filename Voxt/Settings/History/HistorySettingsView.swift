@@ -9,13 +9,13 @@ private func localized(_ key: String) -> String {
 }
 
 private enum HistoryBulkDeletionTarget: Identifiable {
-    case history
+    case history(HistoryFilterTab)
     case notes
 
     var id: String {
         switch self {
-        case .history:
-            return "history"
+        case .history(let filter):
+            return "history-\(filter.id)"
         case .notes:
             return "notes"
         }
@@ -221,7 +221,7 @@ struct HistorySettingsView: View {
                 .help(localized(isNoteTabSelected ? "Search Notes" : "Search History"))
 
                 Button {
-                    pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history
+                    pendingBulkDeletionTarget = isNoteTabSelected ? .notes : .history(selectedFilter)
                 } label: {
                     HistoryActionIcon(kind: .delete, color: .secondary)
                 }
@@ -659,8 +659,8 @@ struct HistorySettingsView: View {
         copiedNoteID = nil
         dismissCopyToast()
         switch target {
-        case .history:
-            historyStore.clearAll()
+        case .history(let filter):
+            guard let kind = historyKind(for: filter), historyStore.clear(kind: kind) else { return }
             reloadHistoryEntries(reset: true)
         case .notes:
             noteStore.clearAll()
@@ -734,7 +734,11 @@ struct HistorySettingsView: View {
     }
 
     private var selectedHistoryKind: TranscriptionHistoryKind? {
-        switch selectedFilter {
+        historyKind(for: selectedFilter)
+    }
+
+    private func historyKind(for filter: HistoryFilterTab) -> TranscriptionHistoryKind? {
+        switch filter {
         case .transcription:
             return .normal
         case .translation:
@@ -750,8 +754,8 @@ struct HistorySettingsView: View {
 
     private func bulkDeletionTitle(for target: HistoryBulkDeletionTarget) -> String {
         switch target {
-        case .history:
-            return localized("Delete All History?")
+        case .history(let filter):
+            return AppLocalization.format("Delete All %@ History?", filter.title)
         case .notes:
             return localized("Delete All Notes?")
         }
@@ -759,8 +763,11 @@ struct HistorySettingsView: View {
 
     private func bulkDeletionMessage(for target: HistoryBulkDeletionTarget) -> String {
         switch target {
-        case .history:
-            return localized("This will permanently delete all history entries.")
+        case .history(let filter):
+            return AppLocalization.format(
+                "This will permanently delete all entries in %@ history.",
+                filter.title
+            )
         case .notes:
             return localized("This will permanently delete all notes.")
         }
