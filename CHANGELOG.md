@@ -6,6 +6,29 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-07-16
+
+### English
+
+#### Fixed
+- Fixed rewrite conversations so follow-up context is preserved, canceled sessions restore the latest answer, and repeated or malformed responses are rejected.
+- Kept remote model credentials out of metadata loads and resolved protected values only when sending requests.
+- Fixed history clearing and retention so removing one category preserves other entries, including meeting history.
+
+### 简体中文
+
+#### 修复
+- 修复改写对话的后续上下文保留、取消会话后的最新答案恢复，以及重复或格式异常响应的拦截。
+- 避免在元数据加载时读取远程模型凭据，仅在发送请求时解析受保护的凭据值。
+- 修复历史记录清理与保留逻辑，删除单个类别时不再误删其他记录，包括会议历史。
+
+### 日本語
+
+#### 修正
+- 書き換え会話でフォローアップの文脈を保持し、キャンセル後に最新の回答を復元するとともに、重複または不正な形式の応答を拒否するよう修正しました。
+- リモートモデルの認証情報をメタデータ読み込みから除外し、リクエスト送信時にのみ保護された値を解決するよう修正しました。
+- 履歴の消去と保持処理を修正し、1 つのカテゴリを削除しても会議履歴を含む他の記録が保持されるようにしました。
+
 ## [1.13.0] - 2026-07-15
 
 ### English
