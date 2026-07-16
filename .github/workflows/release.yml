@@ -180,6 +180,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.16"
+
       - name: Validate required secrets
         run: |
           set -euo pipefail
@@ -581,19 +586,9 @@ jobs:
           ZIP_PATH="build/Voxt-${VERSION}-macOS.zip"
           DMG_PATH="build/Voxt-${VERSION}.dmg"
           PKG_PATH="build/Voxt-${VERSION}.pkg"
-          DMG_STAGING_DIR="build/dmg-staging"
 
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
-          rm -rf "$DMG_STAGING_DIR"
-          mkdir -p "$DMG_STAGING_DIR"
-          ditto "$APP_PATH" "$DMG_STAGING_DIR/Voxt.app"
-          ln -s /Applications "$DMG_STAGING_DIR/Applications"
-          hdiutil create \
-            -volname "Voxt" \
-            -srcfolder "$DMG_STAGING_DIR" \
-            -ov \
-            -format UDZO \
-            "$DMG_PATH"
+          tools/build_dmg.sh "$APP_PATH" "$DMG_PATH"
           productbuild \
             --component "$APP_PATH" /Applications \
             --sign "$DEVELOPER_ID_INSTALLER_IDENTITY" \
