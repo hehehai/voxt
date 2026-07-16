@@ -2209,6 +2209,10 @@
 "%@ (Modified)" = "%@（変更済み）";
 "Configuration saved for %@." = "%@ の設定を保存しました。";
 "Configuration could not be saved securely. Check Keychain access and try again." = "設定を安全に保存できませんでした。キーチェーンへのアクセスを確認して、もう一度お試しください。";
+"Stored provider credentials are unavailable. Reopen the provider settings and save them again." = "保存済みのプロバイダ認証情報を読み込めません。プロバイダ設定を開き直して、もう一度保存してください。";
+"Stored provider credentials are missing. Reopen the provider settings and save them again." = "保存済みのプロバイダ認証情報が見つかりません。プロバイダ設定を開き直して、もう一度保存してください。";
+"Stored provider credentials are invalid. Reopen the provider settings and save them again." = "保存済みのプロバイダ認証情報が無効です。プロバイダ設定を開き直して、もう一度保存してください。";
+"Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac." = "保存済みのプロバイダ認証情報を一時的に利用できません。Mac のロックを解除してからもう一度お試しください。";
 "Configuration could not be encoded. Please try again." = "設定をエンコードできませんでした。もう一度お試しください。";
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "このビルドには sherpa-onnx ランタイムが含まれていないため、このモデルは利用できません。";
 "Uninstalled %@." = "%@ をアンインストールしました。";

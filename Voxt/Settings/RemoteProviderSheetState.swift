@@ -56,6 +56,64 @@ extension RemoteProviderConfigurationSheet {
             : AppLocalization.localizedString("Paste API key")
     }
 
+    var apiKeyInput: Binding<String> {
+        credentialBinding(for: .apiKey)
+    }
+
+    var appIDInput: Binding<String> {
+        credentialBinding(for: .appID)
+    }
+
+    var accessTokenInput: Binding<String> {
+        credentialBinding(for: .accessToken)
+    }
+
+    func credentialBinding(
+        for field: RemoteProviderConfiguration.CredentialField
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                switch field {
+                case .apiKey:
+                    return apiKey
+                case .appID:
+                    return appID
+                case .accessToken:
+                    return accessToken
+                }
+            },
+            set: { value in
+                switch field {
+                case .apiKey:
+                    apiKey = value
+                case .appID:
+                    appID = value
+                case .accessToken:
+                    accessToken = value
+                }
+                editedCredentialFields.insert(field)
+            }
+        )
+    }
+
+    func shouldOfferStoredCredentialClear(
+        for field: RemoteProviderConfiguration.CredentialField
+    ) -> Bool {
+        !editedCredentialFields.contains(field) && configuration.hasStoredCredential(for: field)
+    }
+
+    func clearStoredCredential(_ field: RemoteProviderConfiguration.CredentialField) {
+        switch field {
+        case .apiKey:
+            apiKey = ""
+        case .appID:
+            appID = ""
+        case .accessToken:
+            accessToken = ""
+        }
+        editedCredentialFields.insert(field)
+    }
+
     var providerModelMenuOptions: [SettingsMenuOption<String>] {
         var options = providerModelOptions.map { SettingsMenuOption(value: $0.id, title: $0.title) }
         if supportsCustomProviderModelSelection {
@@ -261,7 +319,7 @@ extension RemoteProviderConfigurationSheet {
     }
 
     var currentConfigurationSnapshot: RemoteProviderConfiguration {
-        RemoteProviderConfiguration(
+        let snapshot = RemoteProviderConfiguration(
             providerID: configuration.providerID,
             model: resolvedModelValue(),
             endpoint: isDoubaoASRTest ? "" : endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -291,6 +349,10 @@ extension RemoteProviderConfigurationSheet {
             codexAuthFileBookmark: isCodexLLMProvider ? codexAuthFileBookmark : configuration.codexAuthFileBookmark,
             codexFastModeEnabled: isCodexLLMProvider ? codexFastModeEnabled : configuration.codexFastModeEnabled,
             generationSettings: currentGenerationSettingsSnapshot()
+        )
+        return snapshot.applyingCredentialEditIntent(
+            from: configuration,
+            editedFields: editedCredentialFields
         )
     }
 

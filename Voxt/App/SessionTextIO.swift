@@ -186,7 +186,7 @@ extension AppDelegate {
 
         deliverCommittedOutput(context) { [weak self] didInject, didTriggerAutoKeyPress in
             guard let self else { return }
-            self.finalizeCommittedOutputPostDeliveryAsync(
+            self.finalizeCommittedOutputPostDelivery(
                 deliveredContext: context,
                 outputMode: sessionOutputMode,
                 didInject: didInject,
@@ -249,7 +249,7 @@ extension AppDelegate {
             outputText: context.outputText,
             outputMode: sessionOutputMode
         )
-        finalizeCommittedOutputPostDeliveryAsync(
+        finalizeCommittedOutputPostDelivery(
             deliveredContext: context,
             outputMode: sessionOutputMode,
             didInject: didInject,
@@ -557,7 +557,7 @@ extension AppDelegate {
         }
     }
 
-    private func finalizeCommittedOutputPostDeliveryAsync(
+    private func finalizeCommittedOutputPostDelivery(
         deliveredContext: SessionFinalizeContext,
         outputMode: SessionOutputMode,
         didInject: Bool,
@@ -569,6 +569,9 @@ extension AppDelegate {
         let dictionaryCorrectedTerms = deliveredContext.dictionaryCorrectedTerms
         let dictionaryCorrectionSnapshots = deliveredContext.dictionaryCorrectionSnapshots
         let llmDurationSeconds = deliveredContext.llmDurationSeconds
+        let rewriteConversationTurns = outputMode == .rewrite
+            ? overlayState.rewriteConversationTurns
+            : []
         let asrSummary = sessionASRSummary(for: outputMode)
         let timingSnapshot = SessionTimingSummarySnapshot(
             transcriptionCapturePipeline: transcriptionCapturePipeline,
@@ -585,67 +588,58 @@ extension AppDelegate {
             llmExecutions: sessionLLMExecutionTimings
         )
 
-        Task.detached(priority: .utility) { [weak self] in
-            guard let self else { return }
-
-            let dictionarySuggestions = await MainActor.run {
-                self.previewDictionarySuggestions(
-                    for: deliveredText,
-                    candidates: dictionaryMatches,
-                    correctedTerms: dictionaryCorrectedTerms
-                )
-            }
-
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                let historyEntryID = self.appendHistoryIfNeeded(
-                    text: deliveredText,
-                    outputMode: outputMode,
-                    displayTitle: displayTitle,
-                    llmDurationSeconds: llmDurationSeconds,
-                    dictionaryHitTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryMatches.map(\.term)),
-                    dictionaryCorrectedTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryCorrectedTerms),
-                    dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
-                    dictionarySuggestedTerms: dictionarySuggestions.map(\.snapshot)
-                )
-                self.overlayState.latestHistoryEntryID = historyEntryID
-                if didInject {
-                    let dictionaryScope = self.currentDictionaryScope()
-                    let reinforcedTerms = self.dictionaryStore.incrementOccurrences(
-                        in: deliveredText,
-                        activeGroupID: dictionaryScope.groupID
-                    )
-                    if !reinforcedTerms.isEmpty {
-                        VoxtLog.input(
-                            "Dictionary occurrences reinforced from delivered text. terms=\(reinforcedTerms.joined(separator: ", "))",
-                            verbose: true
-                        )
-                    }
-                }
-                self.scheduleAutomaticDictionaryLearningIfNeeded(
-                    insertedText: deliveredText,
-                    outputMode: outputMode,
-                    didInject: didInject,
-                    didTriggerAutoKeyPress: didTriggerAutoKeyPress,
-                    historyEntryID: historyEntryID
-                )
-                self.persistDictionaryEvidence(
-                    candidates: dictionaryMatches,
-                    suggestions: dictionarySuggestions,
-                    historyEntryID: historyEntryID
-                )
+        let dictionarySuggestions = previewDictionarySuggestions(
+            for: deliveredText,
+            candidates: dictionaryMatches,
+            correctedTerms: dictionaryCorrectedTerms
+        )
+        let historyEntryID = appendHistoryIfNeeded(
+            text: deliveredText,
+            outputMode: outputMode,
+            displayTitle: displayTitle,
+            llmDurationSeconds: llmDurationSeconds,
+            dictionaryHitTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryMatches.map(\.term)),
+            dictionaryCorrectedTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryCorrectedTerms),
+            dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
+            dictionarySuggestedTerms: dictionarySuggestions.map(\.snapshot),
+            rewriteConversationTurns: rewriteConversationTurns
+        )
+        overlayState.latestHistoryEntryID = historyEntryID
+        if didInject {
+            let dictionaryScope = currentDictionaryScope()
+            let reinforcedTerms = dictionaryStore.incrementOccurrences(
+                in: deliveredText,
+                activeGroupID: dictionaryScope.groupID
+            )
+            if !reinforcedTerms.isEmpty {
                 VoxtLog.input(
-                    "Deliver committed output finalized. historyEntryID=\(historyEntryID?.uuidString ?? "nil"), characters=\(deliveredText.count)",
+                    "Dictionary occurrences reinforced from delivered text. terms=\(reinforcedTerms.joined(separator: ", "))",
                     verbose: true
-                )
-                self.logSessionTimingSummaryIfPossible(
-                    snapshot: timingSnapshot,
-                    deliveredText: deliveredText,
-                    outputMode: outputMode,
-                    didInject: didInject
                 )
             }
         }
+        scheduleAutomaticDictionaryLearningIfNeeded(
+            insertedText: deliveredText,
+            outputMode: outputMode,
+            didInject: didInject,
+            didTriggerAutoKeyPress: didTriggerAutoKeyPress,
+            historyEntryID: historyEntryID
+        )
+        persistDictionaryEvidence(
+            candidates: dictionaryMatches,
+            suggestions: dictionarySuggestions,
+            historyEntryID: historyEntryID
+        )
+        VoxtLog.input(
+            "Deliver committed output finalized. historyEntryID=\(historyEntryID?.uuidString ?? "nil"), characters=\(deliveredText.count)",
+            verbose: true
+        )
+        logSessionTimingSummaryIfPossible(
+            snapshot: timingSnapshot,
+            deliveredText: deliveredText,
+            outputMode: outputMode,
+            didInject: didInject
+        )
     }
 
     private func logSessionTimingSummaryIfPossible(
@@ -994,6 +988,9 @@ extension AppDelegate {
 
     func dismissAnswerOverlay() {
         guard overlayState.displayMode == .answer else { return }
+        if isSessionActive {
+            cancelActiveRecordingSession()
+        }
         cancelPendingSelectedTextTranslationRefresh()
         releaseResidualRecordingResources(reason: "dismiss-answer-overlay")
         overlayWindow.hide { [weak self] in

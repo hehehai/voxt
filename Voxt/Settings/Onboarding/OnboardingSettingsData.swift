@@ -499,6 +499,7 @@ extension OnboardingSettingsView {
         case .success(let raw):
             remoteLLMProviderConfigurationsRaw = raw
             NotificationCenter.default.post(name: .voxtRemoteProviderConfigurationsDidChange, object: nil)
+            NotificationCenter.default.post(name: .voxtRemoteLLMProviderConfigurationsDidChange, object: nil)
             return .success(())
         case .failure(let error):
             return .failure(error)

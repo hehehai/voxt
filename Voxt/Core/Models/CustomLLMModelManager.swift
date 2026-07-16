@@ -458,6 +458,7 @@ class CustomLLMModelManager: ObservableObject {
             let session = makeChatSession(
                 container: container,
                 instructions: request.instructions,
+                conversationHistory: request.conversationHistory,
                 repo: request.repo,
                 behavior: behavior,
                 settings: settings
@@ -1547,6 +1548,7 @@ class CustomLLMModelManager: ObservableObject {
     private func makeChatSession(
         container: ModelContainer,
         instructions: String,
+        conversationHistory: [RewriteConversationPromptTurn],
         repo: String,
         behavior: CustomLLMModelBehavior,
         settings: LLMGenerationSettings
@@ -1555,9 +1557,22 @@ class CustomLLMModelManager: ObservableObject {
             behavior: behavior,
             settings: settings
         )
+        let history = conversationHistory.flatMap { turn -> [Chat.Message] in
+            var messages: [Chat.Message] = []
+            let userMessage = turn.modelUserMessage
+            if !userMessage.isEmpty {
+                messages.append(.user(userMessage))
+            }
+            let assistantMessage = turn.resultContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !assistantMessage.isEmpty {
+                messages.append(.assistant(assistantMessage))
+            }
+            return messages
+        }
         let session = ChatSession(
             container,
             instructions: instructions,
+            history: history,
             additionalContext: additionalContext
         )
         if additionalContext?["enable_thinking"] as? Bool == false {

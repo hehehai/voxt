@@ -194,3 +194,35 @@ private func isHangul(_ scalar: UnicodeScalar) -> Bool {
         return false
     }
 }
+
+extension RemoteLLMRuntimeClient {
+    /// Test convenience that keeps request-builder fixtures concise while the
+    /// production API requires a credential-resolved runtime configuration.
+    func makeResponsesRequest(
+        provider: RemoteLLMProvider,
+        endpointValue: String,
+        model: String,
+        systemPrompt: String,
+        inputPayload: Any,
+        configuration: RemoteProviderConfiguration,
+        previousResponseID: String?,
+        tuning: GenerationTuning,
+        textFormat: [String: Any]?,
+        streamingEnabled: Bool,
+        additionalHeaders: [String: String] = [:]
+    ) throws -> URLRequest {
+        try makeResponsesRequest(
+            provider: provider,
+            endpointValue: endpointValue,
+            model: model,
+            systemPrompt: systemPrompt,
+            inputPayload: inputPayload,
+            runtimeConfiguration: RemoteModelConfigurationStore.runtimeConfiguration(for: configuration),
+            previousResponseID: previousResponseID,
+            tuning: tuning,
+            textFormat: textFormat,
+            streamingEnabled: streamingEnabled,
+            additionalHeaders: additionalHeaders
+        )
+    }
+}

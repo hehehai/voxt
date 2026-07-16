@@ -248,12 +248,19 @@ extension AppDelegate {
 
     func handleEscapeShortcut() -> Bool {
         guard shouldConsumeEscapeShortcut() else { return false }
+        if isSessionActive {
+            let shouldRestoreRewriteConversation = overlayState.isRewriteConversationActive
+            cancelActiveRecordingSession()
+            if shouldRestoreRewriteConversation {
+                overlayState.restoreLatestCompletedRewriteConversation()
+            }
+            return true
+        }
         if overlayState.displayMode == .answer {
             dismissAnswerOverlay()
             return true
         }
-        cancelActiveRecordingSession()
-        return true
+        return false
     }
 
     func shouldHandleAnswerOverlayContinueShortcut(_ event: NSEvent) -> Bool {

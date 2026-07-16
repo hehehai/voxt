@@ -4,6 +4,49 @@ import XCTest
 @testable import Voxt
 
 final class RemoteEndpointSecurityPolicyTests: XCTestCase {
+    func testCredentialDetectionIncludesStoredCredentialPresence() throws {
+        let provider = RemoteLLMProvider.openAI
+        let account = "remote-provider.\(provider.rawValue).credentials"
+        defer {
+            VoxtSecureStorage.removeProtectedValueForTesting(for: account)
+        }
+
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "gpt-5",
+            endpoint: "http://api.example.com/v1/responses",
+            apiKey: "stored-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([
+            provider.rawValue: stored
+        ])
+        let metadataOnly = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+
+        XCTAssertTrue(metadataOnly.apiKey.isEmpty)
+        XCTAssertTrue(RemoteEndpointSecurityPolicy.hasExplicitCredentials(metadataOnly))
+        XCTAssertTrue(
+            RemoteEndpointSecurityPolicy.hasLLMCredentials(
+                provider: provider,
+                configuration: metadataOnly
+            )
+        )
+        XCTAssertNotNil(
+            RemoteEndpointSecurityPolicy.validationMessage(
+                endpoint: metadataOnly.endpoint,
+                hasCredentials: RemoteEndpointSecurityPolicy.hasLLMCredentials(
+                    provider: provider,
+                    configuration: metadataOnly
+                )
+            )
+        )
+    }
+
     func testCredentialDetectionIncludesCodexOAuthSource() {
         let codex = RemoteProviderConfiguration(
             providerID: RemoteLLMProvider.codex.rawValue,
@@ -64,6 +107,45 @@ final class RemoteEndpointSecurityPolicyTests: XCTestCase {
         do {
             _ = try await RemoteProviderConnectivityTester(testTarget: .llm(.deepseek))
                 .run(configuration: configuration)
+            XCTFail("Expected insecure endpoint validation to fail")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                AppLocalization.localizedString(
+                    "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts."
+                )
+            )
+        }
+    }
+
+    @MainActor
+    func testConnectivityTesterRejectsRemoteHTTPWithMetadataOnlyStoredAPIKey() async throws {
+        let provider = RemoteLLMProvider.volcengine
+        let account = "remote-provider.\(provider.rawValue).credentials"
+        defer {
+            VoxtSecureStorage.removeProtectedValueForTesting(for: account)
+        }
+
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "doubao-seed-2-0-mini-260215",
+            endpoint: "http://api.example.com/v3/responses",
+            apiKey: "stored-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([
+            provider.rawValue: stored
+        ])
+        let metadataOnly = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+
+        do {
+            _ = try await RemoteProviderConnectivityTester(testTarget: .llm(provider))
+                .run(configuration: metadataOnly)
             XCTFail("Expected insecure endpoint validation to fail")
         } catch {
             XCTAssertEqual(

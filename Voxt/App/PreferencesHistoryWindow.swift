@@ -274,7 +274,8 @@ extension AppDelegate {
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
         dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot] = [],
-        dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
+        dictionarySuggestedTerms: [DictionarySuggestionSnapshot],
+        rewriteConversationTurns: [RewriteConversationTurn] = []
     ) -> UUID? {
         guard historyEnabled else {
             discardPendingCompletedHistoryAudio()
@@ -371,7 +372,8 @@ extension AppDelegate {
                 dictionaryHitTerms: dictionaryHitTerms,
                 dictionaryCorrectedTerms: dictionaryCorrectedTerms,
                 dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
-                dictionarySuggestedTerms: dictionarySuggestedTerms
+                dictionarySuggestedTerms: dictionarySuggestedTerms,
+                rewriteConversationTurns: rewriteConversationTurns
            ) {
             lastEnhancementPromptContext = nil
             transcriptionResultReceivedAt = nil
@@ -383,6 +385,8 @@ extension AppDelegate {
             pendingAudioArchiveURL,
             kind: historyKind
         )
+        let rewriteConversationMessages = TranscriptionHistoryConversationSupport
+            .rewriteConversationMessages(from: rewriteConversationTurns, createdAt: now)
 
         let entryID = historyStore.append(
             text: trimmed,
@@ -414,10 +418,12 @@ extension AppDelegate {
             senseVoiceMetadata: senseVoiceMetadata,
             displayTitle: trimmedDisplayTitle?.isEmpty == false ? trimmedDisplayTitle : nil,
             transcriptionChatMessages: historyKind == .rewrite
-                ? TranscriptionHistoryConversationSupport.initialChatMessages(
-                    forTranscript: trimmed,
-                    createdAt: now
-                )
+                ? (rewriteConversationMessages.isEmpty
+                    ? TranscriptionHistoryConversationSupport.initialChatMessages(
+                        forTranscript: trimmed,
+                        createdAt: now
+                    )
+                    : rewriteConversationMessages)
                 : nil,
             dictionaryHitTerms: dictionaryHitTerms,
             dictionaryCorrectedTerms: dictionaryCorrectedTerms,
@@ -463,7 +469,8 @@ extension AppDelegate {
         dictionaryHitTerms: [String],
         dictionaryCorrectedTerms: [String],
         dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot],
-        dictionarySuggestedTerms: [DictionarySuggestionSnapshot]
+        dictionarySuggestedTerms: [DictionarySuggestionSnapshot],
+        rewriteConversationTurns: [RewriteConversationTurn]
     ) -> UUID? {
         guard overlayState.isRewriteConversationActive,
               let activeEntryID = overlayState.latestHistoryEntryID,
@@ -479,7 +486,7 @@ extension AppDelegate {
 
         let rewriteConversationMessages = TranscriptionHistoryConversationSupport
             .rewriteConversationMessages(
-                from: overlayState.rewriteConversationTurns,
+                from: rewriteConversationTurns,
                 createdAt: createdAt
             )
 

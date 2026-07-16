@@ -28,11 +28,16 @@ extension OverlayState {
 
         if isRewriteConversationActive {
             appendConversationResult(payload)
+        } else if sessionIconMode == .rewrite,
+                  pendingConversationUserPrompt != nil || pendingConversationSourceText != nil {
+            answerInteractionMode = .singleResult
+            rewriteConversationTurns = [consumePendingConversationTurn(for: payload)]
         } else {
             answerInteractionMode = .singleResult
             rewriteConversationTurns = []
-            rewriteConversationRemoteResponseID = nil
+            invalidateRewriteConversationRemoteContext()
             pendingConversationUserPrompt = nil
+            pendingConversationSourceText = nil
         }
     }
 
@@ -58,11 +63,14 @@ extension OverlayState {
         compactLeadingIconImage = nil
         dismissSessionTranslationTargetPicker()
 
-        if !isRewriteConversationActive {
+        if !isRewriteConversationActive,
+           !(sessionIconMode == .rewrite &&
+               (pendingConversationUserPrompt != nil || pendingConversationSourceText != nil)) {
             answerInteractionMode = .singleResult
             rewriteConversationTurns = []
-            rewriteConversationRemoteResponseID = nil
+            invalidateRewriteConversationRemoteContext()
             pendingConversationUserPrompt = nil
+            pendingConversationSourceText = nil
         }
     }
 
@@ -92,9 +100,11 @@ extension OverlayState {
             appendConversationResult(payload)
         } else {
             answerInteractionMode = .conversation
-            rewriteConversationTurns = [RewriteConversationTurn.seed(from: payload)]
-            rewriteConversationRemoteResponseID = nil
-            pendingConversationUserPrompt = nil
+            if pendingConversationUserPrompt != nil || pendingConversationSourceText != nil {
+                rewriteConversationTurns = [consumePendingConversationTurn(for: payload)]
+            } else {
+                rewriteConversationTurns = [RewriteConversationTurn.seed(from: payload)]
+            }
         }
     }
 
@@ -216,19 +226,45 @@ extension OverlayState {
     func beginRewriteConversationIfNeeded() {
         guard canContinueRewriteAnswer, let payload = latestCompletedAnswerPayload else { return }
         answerInteractionMode = .conversation
-        rewriteConversationTurns = [RewriteConversationTurn.seed(from: payload)]
+        if rewriteConversationTurns.isEmpty {
+            rewriteConversationTurns = [RewriteConversationTurn.seed(from: payload)]
+        }
         latestRewriteResult = payload
-        rewriteConversationRemoteResponseID = nil
         pendingConversationUserPrompt = nil
+        pendingConversationSourceText = nil
     }
 
-    func stageConversationUserPrompt(_ text: String) {
+    func stageConversationUserPrompt(_ text: String, sourceText: String = "") {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSource = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
         pendingConversationUserPrompt = trimmed.isEmpty ? nil : trimmed
+        pendingConversationSourceText = trimmedSource.isEmpty ? nil : trimmedSource
     }
 
     func clearPendingConversationUserPrompt() {
         pendingConversationUserPrompt = nil
+        pendingConversationSourceText = nil
+    }
+
+    @discardableResult
+    func restoreLatestCompletedRewriteConversation(status message: String = "") -> Bool {
+        guard isRewriteConversationActive, let payload = latestRewriteResult else { return false }
+
+        answerTitle = payload.title
+        answerContent = payload.content
+        isStreamingAnswer = false
+        isRecording = false
+        isEnhancing = false
+        isRequesting = false
+        isFinalizingTranscription = false
+        isCompleting = false
+        isRewriteConversationTurnInProgress = false
+        audioLevel = 0
+        displayMode = .answer
+        statusMessage = message
+        pendingConversationUserPrompt = nil
+        pendingConversationSourceText = nil
+        return true
     }
 
     func configureSessionTranslationTargetLanguage(
@@ -284,20 +320,31 @@ extension OverlayState {
 
     private func appendConversationResult(_ payload: RewriteAnswerPayload) {
         latestRewriteResult = payload
-        let userPrompt = pendingConversationUserPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        pendingConversationUserPrompt = nil
 
         if rewriteConversationTurns.isEmpty {
-            rewriteConversationTurns = [RewriteConversationTurn.seed(from: payload)]
+            if pendingConversationUserPrompt != nil || pendingConversationSourceText != nil {
+                rewriteConversationTurns = [consumePendingConversationTurn(for: payload)]
+            } else {
+                rewriteConversationTurns = [RewriteConversationTurn.seed(from: payload)]
+            }
             return
         }
 
-        rewriteConversationTurns.append(
-            RewriteConversationTurn(
-                userPromptText: userPrompt,
-                resultTitle: payload.title,
-                resultContent: payload.content
-            )
+        rewriteConversationTurns.append(consumePendingConversationTurn(for: payload))
+    }
+
+    private func consumePendingConversationTurn(
+        for payload: RewriteAnswerPayload
+    ) -> RewriteConversationTurn {
+        let userPrompt = pendingConversationUserPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let sourceText = pendingConversationSourceText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        pendingConversationUserPrompt = nil
+        pendingConversationSourceText = nil
+        return RewriteConversationTurn(
+            userPromptText: userPrompt,
+            sourceText: sourceText,
+            resultTitle: payload.title,
+            resultContent: payload.content
         )
     }
 }

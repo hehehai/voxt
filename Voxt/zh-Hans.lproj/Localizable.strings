@@ -2214,6 +2214,10 @@
 "%@ (Modified)" = "%@（已修改）";
 "Configuration saved for %@." = "已保存 %@ 的配置。";
 "Configuration could not be saved securely. Check Keychain access and try again." = "无法安全保存配置。请检查钥匙串访问权限后重试。";
+"Stored provider credentials are unavailable. Reopen the provider settings and save them again." = "无法读取已保存的服务商凭据。请重新打开服务商设置并再次保存。";
+"Stored provider credentials are missing. Reopen the provider settings and save them again." = "已保存的服务商凭据已丢失。请重新打开服务商设置并再次保存。";
+"Stored provider credentials are invalid. Reopen the provider settings and save them again." = "已保存的服务商凭据无效。请重新打开服务商设置并再次保存。";
+"Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac." = "已保存的服务商凭据暂时不可用。请解锁 Mac 后重试。";
 "Configuration could not be encoded. Please try again." = "无法编码配置，请重试。";
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "此版本未包含 sherpa-onnx 运行时，因此该模型不可用。";
 "Uninstalled %@." = "已卸载 %@。";

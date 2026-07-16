@@ -185,9 +185,12 @@ extension AppDelegate {
         }
 
         let responseFormat: RemoteLLMRuntimeClient.OpenAICompatibleResponseFormat?
-        if case .remote(let provider, _) = provider,
+        if case .remote(let remoteProvider, _) = provider,
            structuredAnswerOutput,
-           provider == .deepseek {
+           remoteProvider == .deepseek || (
+               remoteProvider.usesResponsesAPI &&
+               LLMProviderCapabilityRegistry.capabilities(for: remoteProvider).supportsResponseFormat
+           ) {
             responseFormat = .jsonObject
         } else {
             responseFormat = nil
@@ -232,6 +235,16 @@ extension AppDelegate {
                         isStablePrefixCandidate: false
                     )
                 },
+                sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? LLMContextBlock(
+                        kind: .metadata,
+                        title: "Direct-answer runtime context",
+                        content: RewriteDirectAnswerRuntimeGuidance.content(
+                            liveInformationAccess: rewriteProviderHasLiveInformationAccess(provider)
+                        ),
+                        isStablePrefixCandidate: false
+                    )
+                    : nil,
                 appContextCapture.map {
                     LLMContextBlock(
                         kind: .app,
@@ -570,10 +583,9 @@ extension AppDelegate {
         guard !turns.isEmpty else { return nil }
 
         let segments = turns.compactMap { turn -> String? in
-            let userPrompt = turn.userPromptText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resultTitle = turn.resultTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            let userPrompt = turn.modelUserMessage
             let resultContent = turn.resultContent.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !userPrompt.isEmpty || !resultTitle.isEmpty || !resultContent.isEmpty else {
+            guard !userPrompt.isEmpty || !resultContent.isEmpty else {
                 return nil
             }
 
@@ -581,11 +593,8 @@ extension AppDelegate {
             if !userPrompt.isEmpty {
                 lines.append("User: \(userPrompt)")
             }
-            if !resultTitle.isEmpty {
-                lines.append("Assistant Title: \(resultTitle)")
-            }
             if !resultContent.isEmpty {
-                lines.append("Assistant Content: \(resultContent)")
+                lines.append("Assistant: \(resultContent)")
             }
             return lines.joined(separator: "\n")
         }
@@ -597,6 +606,11 @@ extension AppDelegate {
             content: segments.joined(separator: "\n\n"),
             isStablePrefixCandidate: false
         )
+    }
+
+    private func rewriteProviderHasLiveInformationAccess(_ provider: LLMExecutionProvider) -> Bool {
+        guard case .remote(let remoteProvider, let configuration) = provider else { return false }
+        return configuration.searchEnabled && remoteProvider.supportsHostedSearch
     }
     private func llmExecutionProviderLabel(_ provider: LLMExecutionProvider) -> String {
         switch provider {

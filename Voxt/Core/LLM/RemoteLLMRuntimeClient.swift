@@ -86,6 +86,8 @@ struct RemoteLLMRuntimeClient {
         provider: RemoteLLMProvider,
         configuration: RemoteProviderConfiguration
     ) async throws {
+        let runtimeConfiguration = try RemoteModelConfigurationStore.runtimeConfiguration(for: configuration)
+        let configuration = runtimeConfiguration.value
         try validateEndpointSecurity(provider: provider, configuration: configuration)
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? provider.suggestedModel
@@ -179,19 +181,49 @@ struct RemoteLLMRuntimeClient {
                 inputPayload = currentUserInputPayload
             }
 
-            let result = try await completeResponses(
-                systemPrompt: request.instructions,
-                debugInput: request.debugInput,
-                requestContentForLog: prompt,
-                inputPayload: inputPayload,
-                inputTextLength: request.inputCharacterCount,
-                intent: intent,
-                provider: provider,
-                configuration: configuration,
-                previousResponseID: usesResponsesConversation ? request.previousResponseID : nil,
-                onPartialText: onPartialText,
-                onResponseID: onResponseID
-            )
+            let textFormat = responsesTextFormat(for: request.responseFormat)
+            let result: ResponsesStreamingResult
+            do {
+                result = try await completeResponses(
+                    systemPrompt: request.instructions,
+                    debugInput: request.debugInput,
+                    requestContentForLog: prompt,
+                    inputPayload: inputPayload,
+                    inputTextLength: request.inputCharacterCount,
+                    intent: intent,
+                    provider: provider,
+                    configuration: configuration,
+                    previousResponseID: usesResponsesConversation ? request.previousResponseID : nil,
+                    textFormat: textFormat,
+                    onPartialText: onPartialText,
+                    onResponseID: onResponseID
+                )
+            } catch let error as NSError where
+                textFormat != nil &&
+                error.domain == "Voxt.RemoteLLM" &&
+                [-308, -309].contains(error.code) {
+                let retryConfiguration = structuredResponsesRetryConfiguration(
+                    configuration,
+                    provider: provider
+                )
+                VoxtLog.llmWarning(
+                    "Remote LLM structured Responses output was incomplete or invalid; retrying with a larger output budget and thinking disabled where supported. provider=\(provider.rawValue), detail=\(error.localizedDescription)"
+                )
+                result = try await completeResponses(
+                    systemPrompt: request.instructions,
+                    debugInput: request.debugInput,
+                    requestContentForLog: prompt,
+                    inputPayload: inputPayload,
+                    inputTextLength: request.inputCharacterCount,
+                    intent: intent,
+                    provider: provider,
+                    configuration: retryConfiguration,
+                    previousResponseID: usesResponsesConversation ? request.previousResponseID : nil,
+                    textFormat: textFormat,
+                    onPartialText: onPartialText,
+                    onResponseID: onResponseID
+                )
+            }
             let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? request.fallbackText : trimmed
         }
@@ -580,6 +612,8 @@ struct RemoteLLMRuntimeClient {
         onPartialText: (@Sendable (String) -> Void)? = nil,
         onResponseID: ((String) -> Void)? = nil
     ) async throws -> ResponsesStreamingResult {
+        let runtimeConfiguration = try RemoteModelConfigurationStore.runtimeConfiguration(for: configuration)
+        let configuration = runtimeConfiguration.value
         try validateEndpointSecurity(provider: provider, configuration: configuration)
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? provider.suggestedModel
@@ -604,7 +638,7 @@ struct RemoteLLMRuntimeClient {
                     model: model,
                     systemPrompt: systemPrompt,
                     inputPayload: inputPayload,
-                    configuration: configuration,
+                    runtimeConfiguration: runtimeConfiguration,
                     previousResponseID: previousResponseID,
                     tuning: tuning,
                     textFormat: textFormat,
@@ -652,7 +686,7 @@ struct RemoteLLMRuntimeClient {
             model: model,
             systemPrompt: systemPrompt,
             inputPayload: inputPayload,
-            configuration: configuration,
+            runtimeConfiguration: runtimeConfiguration,
             previousResponseID: previousResponseID,
             tuning: tuning,
             textFormat: textFormat,
@@ -704,15 +738,22 @@ struct RemoteLLMRuntimeClient {
         let decodeElapsedMs = Int(Date().timeIntervalSince(decodeStartedAt) * 1000)
         let totalElapsedMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
 
-        if let responseID = responsesResponseID(from: object) {
-            onResponseID?(responseID)
-        }
-
         if let errorMessage = extractStreamingErrorMessage(from: object) ?? responsesErrorMessage(from: object) {
             throw NSError(
                 domain: "Voxt.RemoteLLM",
                 code: -307,
                 userInfo: [NSLocalizedDescriptionKey: errorMessage]
+            )
+        }
+
+        if let completionIssue = responsesCompletionIssue(from: object) {
+            VoxtLog.llmWarning(
+                "Remote LLM Responses response incomplete. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), detail=\(completionIssue)"
+            )
+            throw NSError(
+                domain: "Voxt.RemoteLLM",
+                code: -308,
+                userInfo: [NSLocalizedDescriptionKey: completionIssue]
             )
         }
 
@@ -722,6 +763,20 @@ struct RemoteLLMRuntimeClient {
                 "Remote LLM Responses response has no usable text. provider=\(provider.rawValue), endpoint=\(endpointValue), status=\(http.statusCode), bytes=\(data.count), payloadChars=\(payloadPreview.count)"
             )
             throw NSError(domain: "Voxt.RemoteLLM", code: -306, userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned no text content."])
+        }
+        if textFormat != nil, !isValidStructuredJSONObject(content) {
+            VoxtLog.llmWarning(
+                "Remote LLM Responses structured output is not a complete JSON object. provider=\(provider.rawValue), endpoint=\(endpointValue), outputChars=\(content.count)"
+            )
+            throw NSError(
+                domain: "Voxt.RemoteLLM",
+                code: -309,
+                userInfo: [NSLocalizedDescriptionKey: "Remote LLM returned incomplete structured output."]
+            )
+        }
+
+        if let responseID = responsesResponseID(from: object) {
+            onResponseID?(responseID)
         }
 
         let guardedContent = guardRepeatedOutputIfNeeded(
@@ -745,6 +800,24 @@ struct RemoteLLMRuntimeClient {
             text: guardedContent,
             responseID: responsesResponseID(from: object)
         )
+    }
+
+    private func structuredResponsesRetryConfiguration(
+        _ configuration: RemoteProviderConfiguration,
+        provider: RemoteLLMProvider
+    ) -> RemoteProviderConfiguration {
+        var retryConfiguration = configuration
+        retryConfiguration.generationSettings.maxOutputTokens = max(
+            retryConfiguration.generationSettings.maxOutputTokens ?? 0,
+            1_536
+        )
+        switch provider {
+        case .volcengine, .aliyunBailian:
+            retryConfiguration.generationSettings.thinking = .off
+        default:
+            break
+        }
+        return retryConfiguration
     }
 
     private func completeResponsesStreaming(
@@ -909,6 +982,8 @@ struct RemoteLLMRuntimeClient {
         openAICompatibleResponseFormat: OpenAICompatibleResponseFormat? = nil,
         onPartialText: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
+        let runtimeConfiguration = try RemoteModelConfigurationStore.runtimeConfiguration(for: configuration)
+        let configuration = runtimeConfiguration.value
         try validateEndpointSecurity(provider: provider, configuration: configuration)
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? provider.suggestedModel
@@ -932,7 +1007,7 @@ struct RemoteLLMRuntimeClient {
                     do {
                         let streamingRequest = try makeCompletionRequest(
                             provider: provider,
-                            configuration: configuration,
+                            runtimeConfiguration: runtimeConfiguration,
                             endpointValue: endpointValue,
                             model: model,
                             systemPrompt: systemPrompt,
@@ -984,7 +1059,7 @@ struct RemoteLLMRuntimeClient {
 
                 let request = try makeCompletionRequest(
                     provider: provider,
-                    configuration: configuration,
+                    runtimeConfiguration: runtimeConfiguration,
                     endpointValue: endpointValue,
                     model: model,
                     systemPrompt: systemPrompt,
@@ -1097,7 +1172,7 @@ struct RemoteLLMRuntimeClient {
 
     private func makeCompletionRequest(
         provider: RemoteLLMProvider,
-        configuration: RemoteProviderConfiguration,
+        runtimeConfiguration: RemoteProviderRuntimeConfiguration,
         endpointValue: String,
         model: String,
         systemPrompt: String,
@@ -1107,6 +1182,7 @@ struct RemoteLLMRuntimeClient {
         tuning: GenerationTuning,
         streamingEnabled: Bool
     ) throws -> URLRequest {
+        let configuration = runtimeConfiguration.value
         let resolvedEndpoint: String
         if provider == .ollama {
             resolvedEndpoint = resolvedOllamaRequestEndpoint(

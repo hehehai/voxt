@@ -66,6 +66,7 @@ extension AppDelegate {
             }
             delegate.enhancementContextSnapshot = nil
             delegate.rewriteSessionHasSelectedSourceText = false
+            delegate.rewriteSessionSelectedSourceText = ""
             delegate.rewriteSessionHadWritableFocusedInput = false
             delegate.rewriteSessionFallbackInjectBundleID = nil
             delegate.sessionTranslationTargetLanguageOverride = nil

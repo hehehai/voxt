@@ -252,9 +252,242 @@ final class RemoteModelConfigurationTests: XCTestCase {
 
         XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.model, "gpt-5.2")
         XCTAssertEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.endpoint, "https://example.com/llm")
-        XCTAssertFalse(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey.isEmpty ?? true)
-        XCTAssertNotEqual(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey, "secret")
+        XCTAssertTrue(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.apiKey.isEmpty ?? false)
+        XCTAssertFalse(raw.contains("__stored__"))
         XCTAssertTrue(metadataOnly[RemoteLLMProvider.openAI.rawValue]?.isConfigured ?? false)
+    }
+
+    func testSavingMetadataOnlyConfigurationPreservesUneditedStoredCredential() throws {
+        let provider = RemoteLLMProvider.openAI
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "gpt-5.2",
+            apiKey: "stored-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([provider.rawValue: stored])
+        var metadata = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        metadata.model = "gpt-5.3"
+
+        let updatedRaw = try RemoteModelConfigurationStore.saveConfiguration(
+            metadata,
+            updating: raw
+        ).get()
+        let reloaded = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: updatedRaw
+            )
+        )
+
+        XCTAssertEqual(reloaded.model, "gpt-5.3")
+        XCTAssertEqual(reloaded.apiKey, "stored-secret")
+        XCTAssertFalse(updatedRaw.contains("stored-secret"))
+    }
+
+    func testCredentialEditIntentCanExplicitlyClearStoredCredential() throws {
+        let provider = RemoteLLMProvider.openAI
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "gpt-5.2",
+            apiKey: "stored-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([provider.rawValue: stored])
+        let metadata = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        let cleared = metadata.applyingCredentialEditIntent(
+            from: metadata,
+            editedFields: [.apiKey]
+        )
+
+        let updatedRaw = try RemoteModelConfigurationStore.saveConfiguration(
+            cleared,
+            updating: raw
+        ).get()
+        let reloaded = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: updatedRaw
+            )
+        )
+
+        XCTAssertTrue(reloaded.apiKey.isEmpty)
+        XCTAssertFalse(reloaded.isConfigured)
+        XCTAssertFalse(
+            VoxtSecureStorage.hasProtectedValueForTesting(
+                for: "remote-provider.\(provider.rawValue).credentials"
+            )
+        )
+    }
+
+    func testReplacingOneCredentialFieldPreservesOtherStoredFields() throws {
+        let providerID = RemoteASRProvider.doubaoASR.rawValue
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: providerID,
+            model: DoubaoASRConfiguration.modelV2,
+            appID: "stored-app-id",
+            accessToken: "old-token"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([providerID: stored])
+        let metadata = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: providerID,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        var draft = metadata
+        draft.accessToken = "new-token"
+        draft = draft.applyingCredentialEditIntent(
+            from: metadata,
+            editedFields: [.accessToken]
+        )
+
+        let runtimeDraft = try RemoteModelConfigurationStore.runtimeConfiguration(for: draft).value
+        XCTAssertEqual(runtimeDraft.appID, "stored-app-id")
+        XCTAssertEqual(runtimeDraft.accessToken, "new-token")
+
+        let updatedRaw = try RemoteModelConfigurationStore.saveConfiguration(
+            draft,
+            updating: raw
+        ).get()
+        let reloaded = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(providerID: providerID, from: updatedRaw)
+        )
+
+        XCTAssertEqual(reloaded.appID, "stored-app-id")
+        XCTAssertEqual(reloaded.accessToken, "new-token")
+    }
+
+    func testSavingPreservedCredentialFailsClosedWhenStoredValueIsMissing() throws {
+        let provider = RemoteLLMProvider.openAI
+        let account = "remote-provider.\(provider.rawValue).credentials"
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "gpt-5.2",
+            apiKey: "stored-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([provider.rawValue: stored])
+        var metadata = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        metadata.model = "gpt-5.3"
+        VoxtSecureStorage.removeProtectedValueForTesting(for: account)
+
+        let result = RemoteModelConfigurationStore.saveConfiguration(metadata, updating: raw)
+
+        XCTAssertEqual(result, .failure(.secureStorageUnavailable))
+        XCTAssertFalse(VoxtSecureStorage.hasProtectedValueForTesting(for: account))
+    }
+
+    func testResponsesRequestResolvesMetadataOnlyCredentialAtNetworkBoundary() throws {
+        let provider = RemoteLLMProvider.volcengine
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "doubao-seed-2-0-mini-260215",
+            endpoint: "https://ark.cn-beijing.volces.com/api/v3/responses",
+            apiKey: "runtime-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([provider.rawValue: stored])
+        let metadataOnly = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        XCTAssertTrue(metadataOnly.apiKey.isEmpty)
+
+        let request = try RemoteLLMRuntimeClient().makeResponsesRequest(
+            provider: provider,
+            endpointValue: stored.endpoint,
+            model: stored.model,
+            systemPrompt: "Answer the user.",
+            inputPayload: "Hello",
+            configuration: metadataOnly,
+            previousResponseID: nil,
+            tuning: .init(maxTokens: 128, temperature: 0.1, topP: 0.3),
+            textFormat: nil,
+            streamingEnabled: false
+        )
+
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer runtime-secret"
+        )
+    }
+
+    func testRuntimeRequestRejectsMetadataWhenStoredCredentialIsMissing() throws {
+        let provider = RemoteLLMProvider.volcengine
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "doubao-seed-2-0-mini-260215",
+            apiKey: "runtime-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([provider.rawValue: stored])
+        let metadataOnly = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        VoxtSecureStorage.removeProtectedValueForTesting(
+            for: "remote-provider.\(provider.rawValue).credentials"
+        )
+
+        XCTAssertThrowsError(
+            try RemoteModelConfigurationStore.runtimeConfiguration(for: metadataOnly)
+        ) { error in
+            XCTAssertEqual(
+                error as? RemoteModelConfigurationStore.RuntimeCredentialError,
+                .missing
+            )
+        }
+    }
+
+    func testRuntimeRequestRejectsCorruptedBundledCredential() throws {
+        let provider = RemoteLLMProvider.volcengine
+        let stored = TestFactories.makeRemoteConfiguration(
+            providerID: provider.rawValue,
+            model: "doubao-seed-2-0-mini-260215",
+            apiKey: "runtime-secret"
+        )
+        let raw = RemoteModelConfigurationStore.saveConfigurations([provider.rawValue: stored])
+        let metadataOnly = try XCTUnwrap(
+            RemoteModelConfigurationStore.loadConfiguration(
+                providerID: provider.rawValue,
+                from: raw,
+                sensitiveValueLoading: .metadataOnly
+            )
+        )
+        try VoxtSecureStorage.setProtectedString(
+            "not-json",
+            for: "remote-provider.\(provider.rawValue).credentials"
+        )
+
+        XCTAssertThrowsError(
+            try RemoteModelConfigurationStore.runtimeConfiguration(for: metadataOnly)
+        ) { error in
+            XCTAssertEqual(
+                error as? RemoteModelConfigurationStore.RuntimeCredentialError,
+                .corrupted
+            )
+        }
     }
 
     func testTargetedLoadResolvesOnlyRequestedProviderConfiguration() {
@@ -298,8 +531,8 @@ final class RemoteModelConfigurationTests: XCTestCase {
             sensitiveValueLoading: .metadataOnly
         )
 
-        XCTAssertNotEqual(metadata?.appID, "doubao-app")
-        XCTAssertNotEqual(metadata?.accessToken, "doubao-token")
+        XCTAssertTrue(metadata?.appID.isEmpty ?? false)
+        XCTAssertTrue(metadata?.accessToken.isEmpty ?? false)
         XCTAssertTrue(metadata?.isConfigured ?? false)
     }
 
@@ -319,7 +552,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
         )
 
         XCTAssertTrue(raw.contains("storedCredentialPresence"))
-        XCTAssertFalse(metadata?.appID.isEmpty ?? true)
+        XCTAssertTrue(metadata?.appID.isEmpty ?? false)
         XCTAssertTrue(metadata?.apiKey.isEmpty ?? false)
         XCTAssertTrue(metadata?.accessToken.isEmpty ?? false)
         XCTAssertFalse(metadata?.isConfigured ?? true)
@@ -357,7 +590,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
             )
         )
 
-        XCTAssertFalse(metadata.appID.isEmpty)
+        XCTAssertTrue(metadata.appID.isEmpty)
         XCTAssertTrue(metadata.apiKey.isEmpty)
         XCTAssertTrue(metadata.accessToken.isEmpty)
         XCTAssertFalse(metadata.isConfigured)
@@ -390,7 +623,7 @@ final class RemoteModelConfigurationTests: XCTestCase {
             sensitiveValueLoading: .metadataOnly
         )
         XCTAssertTrue(migratedRaw.contains("storedCredentialPresence"))
-        XCTAssertFalse(metadata?.appID.isEmpty ?? true)
+        XCTAssertTrue(metadata?.appID.isEmpty ?? false)
         XCTAssertTrue(metadata?.apiKey.isEmpty ?? false)
         XCTAssertTrue(metadata?.accessToken.isEmpty ?? false)
     }

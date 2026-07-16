@@ -6,6 +6,11 @@ import LocalAuthentication
 import Security
 
 enum VoxtSecureStorage {
+    enum StorageError: Error, Equatable {
+        case invalidUTF8
+        case unexpectedStatus(OSStatus)
+    }
+
     enum MigrationLookupResult: Equatable {
         case value(String)
         case missing
@@ -76,6 +81,100 @@ enum VoxtSecureStorage {
             VoxtLog.securityWarning("Data Protection Keychain read failed. account=\(account), status=\(status)")
             return nil
         }
+    }
+
+    /// Reads only from the authoritative Data Protection Keychain item.
+    /// Unlike `string(for:)`, this API never consults the process cache and
+    /// never performs legacy migration as a side effect.
+    nonisolated static func protectedString(for account: String) throws -> String? {
+        if isUsingInMemoryStoreForTesting {
+            return protectedValueForTesting(for: account)
+        }
+
+        var query = protectedQuery(for: account)
+        query[kSecReturnData as String] = kCFBooleanTrue
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess:
+            guard let data = item as? Data,
+                  let value = String(data: data, encoding: .utf8)
+            else {
+                throw StorageError.invalidUTF8
+            }
+            return value
+        case errSecItemNotFound:
+            return nil
+        default:
+            throw StorageError.unexpectedStatus(status)
+        }
+    }
+
+    /// Upserts an authoritative Data Protection Keychain item. The update
+    /// changes only the secret data; accessibility is fixed when adding.
+    nonisolated static func setProtectedString(_ value: String, for account: String) throws {
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            try removeProtectedString(for: account)
+            return
+        }
+
+        if isUsingInMemoryStoreForTesting {
+            guard setProtectedValueForTesting(value, for: account) else {
+                throw StorageError.unexpectedStatus(errSecNotAvailable)
+            }
+            return
+        }
+
+        let query = protectedQuery(for: account)
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(value.utf8)
+        ]
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        switch updateStatus {
+        case errSecSuccess:
+            cache(value, for: account)
+            return
+        case errSecItemNotFound:
+            var item = query
+            item[kSecValueData as String] = Data(value.utf8)
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            let addStatus = SecItemAdd(item as CFDictionary, nil)
+            if addStatus == errSecDuplicateItem {
+                let retryStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+                guard retryStatus == errSecSuccess else {
+                    throw StorageError.unexpectedStatus(retryStatus)
+                }
+                cache(value, for: account)
+                return
+            }
+            guard addStatus == errSecSuccess else {
+                throw StorageError.unexpectedStatus(addStatus)
+            }
+        default:
+            throw StorageError.unexpectedStatus(updateStatus)
+        }
+        cache(value, for: account)
+    }
+
+    nonisolated static func removeProtectedString(for account: String) throws {
+        if isUsingInMemoryStoreForTesting {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            guard !deletesFailForTesting else {
+                throw StorageError.unexpectedStatus(errSecNotAvailable)
+            }
+            protectedValuesForTesting.removeValue(forKey: account)
+            cachedValues.removeValue(forKey: account)
+            return
+        }
+
+        let status = SecItemDelete(protectedQuery(for: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw StorageError.unexpectedStatus(status)
+        }
+        removeCachedValue(for: account)
     }
 
     nonisolated static func hasString(for account: String) -> Bool {

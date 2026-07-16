@@ -128,6 +128,50 @@ final class LLMExecutionPlanCompilerTests: XCTestCase {
         XCTAssertContains(compiled.instructions, "quality")
     }
 
+    func testCompilationKeepsConversationAsExternalRoleMessages() {
+        let history = [
+            RewriteConversationPromptTurn(
+                userPromptText: "北京今天的天气情况",
+                resultTitle: "北京天气",
+                resultContent: "请问您需要查询哪一天的天气？"
+            )
+        ]
+        let plan = LLMExecutionPlan(
+            task: .rewrite(dictatedPrompt: "对", sourceText: "", structuredAnswerOutput: false),
+            provider: .customLLM(repo: "test/repo"),
+            delivery: .systemPrompt,
+            promptContent: "Answer the follow-up directly.",
+            fallbackText: "",
+            executionStrategy: TaskLLMStrategyResolver.resolve(
+                taskKind: .rewrite,
+                rawText: "对",
+                promptCharacterCount: 30,
+                baseGlossarySelectionPolicy: DictionaryGlossaryPurpose.rewrite.selectionPolicy,
+                capabilities: .unknown
+            ),
+            outputTokenBudgetHint: nil,
+            contextBlocks: [
+                LLMContextBlock(
+                    kind: .conversation,
+                    title: "Previous conversation",
+                    content: "User: 北京今天的天气情况\nAssistant: 请问您需要查询哪一天的天气？",
+                    isStablePrefixCandidate: false
+                )
+            ],
+            attachments: [],
+            conversationHistory: history,
+            previousResponseID: nil,
+            responseFormat: nil
+        )
+
+        let compiled = LLMExecutionPlanCompiler.compile(plan)
+
+        XCTAssertEqual(compiled.conversationHistory, history)
+        XCTAssertFalse(compiled.instructions.contains("Previous conversation"))
+        XCTAssertFalse(compiled.instructions.contains("请问您需要查询哪一天"))
+        XCTAssertEqual(compiled.prompt, "对")
+    }
+
     func testCompilationCarriesInputAttachmentsForward() {
         let plan = LLMExecutionPlan(
             task: .enhancement(rawText: "raw transcript"),

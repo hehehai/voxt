@@ -233,6 +233,7 @@ struct CustomLLMRequestPlan: Equatable {
     let inputCharacterCount: Int
     let maxTokensOverride: Int?
     let attachments: [LLMInputAttachment]
+    let conversationHistory: [RewriteConversationPromptTurn]
     let logMode: String?
     let contentLogSections: [CustomLLMLogSection]
     let resultFallback: String
@@ -284,6 +285,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: request.inputCharacterCount,
             maxTokensOverride: request.outputTokenBudgetHint,
             attachments: request.attachments,
+            conversationHistory: request.conversationHistory,
             logMode: usesUserMessageMode ? "userMessage" : nil,
             contentLogSections: sections,
             resultFallback: request.fallbackText,
@@ -310,6 +312,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: input.count,
             maxTokensOverride: nil,
             attachments: [],
+            conversationHistory: [],
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: systemPrompt),
@@ -333,6 +336,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
             attachments: [],
+            conversationHistory: [],
             logMode: "userMessage",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -361,6 +365,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: text.count,
             maxTokensOverride: nil,
             attachments: [],
+            conversationHistory: [],
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: instructions),
@@ -385,6 +390,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
             attachments: [],
+            conversationHistory: [],
             logMode: "userMessage",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -421,6 +427,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: combinedInput.count,
             maxTokensOverride: nil,
             attachments: [],
+            conversationHistory: [],
             logMode: nil,
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: instructions),
@@ -445,6 +452,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
             attachments: [],
+            conversationHistory: [],
             logMode: "userMessage",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
@@ -469,6 +477,7 @@ enum CustomLLMRequestPlanBuilder {
             inputCharacterCount: prompt.count,
             maxTokensOverride: nil,
             attachments: [],
+            conversationHistory: [],
             logMode: "dictionaryHistoryScan",
             contentLogSections: [
                 CustomLLMLogSection(label: "system_prompt", content: "<empty>"),

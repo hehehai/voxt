@@ -24,6 +24,7 @@ struct RemoteProviderConfigurationSheet: View {
     @State var apiKey = ""
     @State var appID = ""
     @State var accessToken = ""
+    @State var editedCredentialFields: Set<RemoteProviderConfiguration.CredentialField> = []
     @State var searchEnabled = false
     @State var openAIChunkPseudoRealtimeEnabled = false
     @State var openAIReasoningEffort = OpenAIReasoningEffort.automatic.rawValue
@@ -177,6 +178,7 @@ struct RemoteProviderConfigurationSheet: View {
             apiKey = configuration.apiKey
             appID = configuration.appID
             accessToken = configuration.accessToken
+            editedCredentialFields.removeAll()
             searchEnabled = configuration.searchEnabled
             openAIChunkPseudoRealtimeEnabled = configuration.openAIChunkPseudoRealtimeEnabled
             openAIReasoningEffort = configuration.openAIReasoningEffort

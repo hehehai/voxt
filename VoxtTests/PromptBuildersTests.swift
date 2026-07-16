@@ -60,6 +60,8 @@ final class PromptBuildersTests: XCTestCase {
 
         XCTAssertContains(prompt, "Base reply politely / ")
         XCTAssertTrue(prompt.contains("Direct-answer mode:"))
+        XCTAssertContains(prompt, "asking the user to confirm details they already supplied")
+        XCTAssertContains(prompt, "A place, subject, date, or other qualifier explicitly present")
         XCTAssertTrue(prompt.contains("Runtime output format rules:"))
         XCTAssertTrue(prompt.contains("Retry rule:"))
         XCTAssertLessThan(
@@ -92,7 +94,8 @@ final class PromptBuildersTests: XCTestCase {
             sourceText: "",
             conversationHistory: [
                 RewriteConversationPromptTurn(
-                    userPromptText: "",
+                    userPromptText: "write a reply",
+                    sourceText: "Thanks for reaching out.",
                     resultTitle: "Initial Draft",
                     resultContent: "Thanks for your note. Here is the full version."
                 ),
@@ -108,10 +111,11 @@ final class PromptBuildersTests: XCTestCase {
         )
 
         XCTAssertContains(prompt, "Previous conversation:")
-        XCTAssertContains(prompt, "Assistant Title: Initial Draft")
-        XCTAssertContains(prompt, "Assistant Content: Thanks for your note. Here is the full version.")
+        XCTAssertContains(prompt, "Spoken instruction:")
+        XCTAssertContains(prompt, "Selected source text:")
+        XCTAssertContains(prompt, "Assistant: Thanks for your note. Here is the full version.")
         XCTAssertContains(prompt, "User: make it warmer")
-        XCTAssertContains(prompt, "Assistant Title: Warmer Draft")
+        XCTAssertFalse(prompt.contains("Assistant Title:"))
         XCTAssertLessThan(
             prompt.range(of: "Previous conversation:")!.lowerBound,
             prompt.range(of: "Runtime output format rules:")!.lowerBound
@@ -136,9 +140,38 @@ final class PromptBuildersTests: XCTestCase {
         )
 
         XCTAssertContains(prompt, "Conversation mode:")
+        XCTAssertContains(prompt, "Treat a short confirmation or correction")
+        XCTAssertContains(prompt, "Do not repeat the latest assistant answer")
         XCTAssertContains(prompt, "Return the next assistant reply as plain text only.")
         XCTAssertContains(prompt, "Do not return JSON, markdown fences, labels, or quotes.")
         XCTAssertContains(prompt, "A previous answer was empty or unusable.")
+    }
+
+    func testRewriteDirectAnswerRuntimeGuidanceDeclaresDateTimeZoneAndLiveAccess() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
+        let date = try XCTUnwrap(
+            Calendar(identifier: .gregorian).date(
+                from: DateComponents(
+                    timeZone: timeZone,
+                    year: 2026,
+                    month: 7,
+                    day: 15,
+                    hour: 9,
+                    minute: 30
+                )
+            )
+        )
+
+        let guidance = RewriteDirectAnswerRuntimeGuidance.content(
+            now: date,
+            timeZone: timeZone,
+            liveInformationAccess: false
+        )
+
+        XCTAssertContains(guidance, "2026-07-15 09:30")
+        XCTAssertContains(guidance, "Asia/Shanghai")
+        XCTAssertContains(guidance, "Live information lookup: unavailable")
+        XCTAssertContains(guidance, "今天")
     }
 
     func testRewriteAppContextGuidancePrioritizesScreenshotsAndDirectAnswer() {

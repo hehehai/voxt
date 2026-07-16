@@ -477,6 +477,46 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(client.extractPrimaryText(from: payload), "北纬 40.076，东经 113.300")
     }
 
+    func testExtractPrimaryTextMergesAllResponsesMessageItems() {
+        let client = RemoteLLMRuntimeClient()
+        let payload: [String: Any] = [
+            "output": [
+                [
+                    "type": "message",
+                    "content": [["type": "output_text", "text": "第一段"]]
+                ],
+                [
+                    "type": "message",
+                    "content": [["type": "output_text", "text": "第二段"]]
+                ]
+            ]
+        ]
+
+        XCTAssertEqual(client.extractPrimaryText(from: payload), "第一段\n第二段")
+    }
+
+    func testResponsesCompletionIssueReportsIncompleteReason() {
+        let client = RemoteLLMRuntimeClient()
+        let payload: [String: Any] = [
+            "status": "incomplete",
+            "incomplete_details": ["reason": "max_output_tokens"]
+        ]
+
+        XCTAssertEqual(
+            client.responsesCompletionIssue(from: payload),
+            "Responses API returned status 'incomplete' (max_output_tokens)."
+        )
+        XCTAssertNil(client.responsesCompletionIssue(from: ["status": "completed"]))
+    }
+
+    func testStructuredJSONObjectValidationRejectsTruncatedPrefix() {
+        let client = RemoteLLMRuntimeClient()
+
+        XCTAssertFalse(client.isValidStructuredJSONObject(#"{"title"#))
+        XCTAssertTrue(client.isValidStructuredJSONObject(#"{"title":"天气","content":"晴"}"#))
+        XCTAssertFalse(client.isValidStructuredJSONObject(#"["not", "an", "object"]"#))
+    }
+
     func testExtractPrimaryTextParsesResponsesOutputArrayWithStringContent() {
         let client = RemoteLLMRuntimeClient()
         let payload: [String: Any] = [
@@ -616,20 +656,59 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
             currentAttachments: [],
             conversationHistory: [
                 RewriteConversationPromptTurn(
-                    userPromptText: "",
+                    userPromptText: "北京今天的天气怎么样？",
+                    sourceText: "北京行程安排",
                     resultTitle: "大同天气查询",
                     resultContent: "请查看最新天气预报应用或网站获取大同实时天气信息。"
                 )
             ]
         )
 
-        XCTAssertEqual(input.count, 2)
+        XCTAssertEqual(input.count, 3)
         let firstRole = input.first?["role"] as? String
         let lastRole = input.last?["role"] as? String
         let lastContent = input.last?["content"] as? String
-        XCTAssertEqual(firstRole, "assistant")
+        let firstContent = input.first?["content"] as? String
+        let assistantContent = input[1]["content"] as? String
+        XCTAssertEqual(firstRole, "user")
+        XCTAssertEqual(
+            firstContent,
+            """
+            Spoken instruction:
+            北京今天的天气怎么样？
+
+            Selected source text:
+            北京行程安排
+            """
+        )
+        XCTAssertEqual(assistantContent, "请查看最新天气预报应用或网站获取大同实时天气信息。")
+        XCTAssertFalse(assistantContent?.contains("大同天气查询") == true)
         XCTAssertEqual(lastRole, "user")
         XCTAssertEqual(lastContent, "看一下大同的经纬度。")
+        XCTAssertFalse(lastContent?.contains("北京行程安排") == true)
+    }
+
+    func testChatConversationMessagesCarrySelectedTextOnlyInInitialHistoricalTurn() {
+        let client = RemoteLLMRuntimeClient()
+        let messages = client.openAICompatibleConversationMessages(
+            systemPrompt: "Answer the follow-up directly.",
+            currentUserPrompt: "更简短一点",
+            conversationHistory: [
+                RewriteConversationPromptTurn(
+                    userPromptText: "帮我回复",
+                    sourceText: "明天下午三点可以吗？",
+                    resultTitle: "回复",
+                    resultContent: "可以，明天下午三点见。"
+                )
+            ]
+        )
+
+        XCTAssertEqual(messages.map { $0["role"] }, ["system", "user", "assistant", "user"])
+        XCTAssertContains(messages[1]["content"] ?? "", "Spoken instruction:\n帮我回复")
+        XCTAssertContains(messages[1]["content"] ?? "", "Selected source text:\n明天下午三点可以吗？")
+        XCTAssertEqual(messages[2]["content"], "可以，明天下午三点见。")
+        XCTAssertEqual(messages[3]["content"], "更简短一点")
+        XCTAssertFalse(messages[3]["content"]?.contains("明天下午三点可以吗？") == true)
     }
 
     func testResponsesUserInputPayloadEncodesImageAttachmentsAsInputBlocks() throws {
@@ -852,6 +931,71 @@ final class RemoteLLMRuntimeClientStreamingTests: XCTestCase {
         XCTAssertEqual(reasoning["effort"] as? String, "high")
         XCTAssertEqual(text["verbosity"] as? String, "low")
         XCTAssertEqual(format["type"] as? String, "json_object")
+    }
+
+    func testMakeVolcengineStructuredResponsesRequestDisablesDefaultThinking() throws {
+        let client = RemoteLLMRuntimeClient()
+        let request = try client.makeResponsesRequest(
+            provider: .volcengine,
+            endpointValue: "https://ark.cn-beijing.volces.com/api/v3/responses",
+            model: "doubao-seed-2-0-mini-260215",
+            systemPrompt: "Return JSON.",
+            inputPayload: "北京今天的天气",
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.volcengine.rawValue,
+                model: "doubao-seed-2-0-mini-260215",
+                endpoint: "https://ark.cn-beijing.volces.com/api/v3/responses",
+                apiKey: "test-key"
+            ),
+            previousResponseID: nil,
+            tuning: .init(maxTokens: 384, temperature: 0.1, topP: 0.3),
+            textFormat: client.responsesTextFormat(for: .jsonObject),
+            streamingEnabled: false
+        )
+
+        let body = try XCTUnwrap(request.httpBody)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let thinking = try XCTUnwrap(object["thinking"] as? [String: Any])
+        let text = try XCTUnwrap(object["text"] as? [String: Any])
+        let format = try XCTUnwrap(text["format"] as? [String: Any])
+
+        XCTAssertEqual(thinking["type"] as? String, "disabled")
+        XCTAssertEqual(format["type"] as? String, "json_object")
+    }
+
+    func testMakeVolcengineStructuredResponsesRequestPreservesExplicitThinkingChoice() throws {
+        let client = RemoteLLMRuntimeClient()
+        let request = try client.makeResponsesRequest(
+            provider: .volcengine,
+            endpointValue: "https://ark.cn-beijing.volces.com/api/v3/responses",
+            model: "doubao-seed-2-0-mini-260215",
+            systemPrompt: "Return JSON.",
+            inputPayload: "北京今天的天气",
+            configuration: RemoteProviderConfiguration(
+                providerID: RemoteLLMProvider.volcengine.rawValue,
+                model: "doubao-seed-2-0-mini-260215",
+                endpoint: "https://ark.cn-beijing.volces.com/api/v3/responses",
+                apiKey: "test-key",
+                generationSettings: LLMGenerationSettings(
+                    thinking: LLMThinkingSettings(
+                        mode: .on,
+                        effort: nil,
+                        budgetTokens: nil,
+                        exposeReasoning: false
+                    )
+                )
+            ),
+            previousResponseID: nil,
+            tuning: .init(maxTokens: 384, temperature: 0.1, topP: 0.3),
+            textFormat: client.responsesTextFormat(for: .jsonObject),
+            streamingEnabled: false
+        )
+
+        let body = try XCTUnwrap(request.httpBody)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let thinking = try XCTUnwrap(object["thinking"] as? [String: Any])
+
+        XCTAssertEqual(thinking["type"] as? String, "enabled")
     }
 
     func testMakeResponsesRequestAppliesCodexOAuthHeaders() throws {

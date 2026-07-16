@@ -176,9 +176,17 @@ extension RemoteProviderConfigurationSheet {
                     Text(apiKeyFieldTitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    SecureField(apiKeyFieldPlaceholder, text: $apiKey)
-                        .textFieldStyle(.plain)
-                        .settingsFieldSurface(minHeight: 34)
+                    HStack(spacing: 10) {
+                        SecureField(apiKeyFieldPlaceholder, text: apiKeyInput)
+                            .textFieldStyle(.plain)
+                            .settingsFieldSurface(minHeight: 34)
+                        if shouldOfferStoredCredentialClear(for: .apiKey) {
+                            Button(AppLocalization.localizedString("Clear")) {
+                                clearStoredCredential(.apiKey)
+                            }
+                            .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 30))
+                        }
+                    }
                 }
             }
 
@@ -196,18 +204,34 @@ extension RemoteProviderConfigurationSheet {
                 Text(AppLocalization.localizedString("App ID"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                TextField(AppLocalization.localizedString("App ID"), text: $appID)
-                    .textFieldStyle(.plain)
-                    .settingsFieldSurface(minHeight: 34)
+                HStack(spacing: 10) {
+                    TextField(AppLocalization.localizedString("App ID"), text: appIDInput)
+                        .textFieldStyle(.plain)
+                        .settingsFieldSurface(minHeight: 34)
+                    if shouldOfferStoredCredentialClear(for: .appID) {
+                        Button(AppLocalization.localizedString("Clear")) {
+                            clearStoredCredential(.appID)
+                        }
+                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 30))
+                    }
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(AppLocalization.localizedString("Access Token"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                SecureField(AppLocalization.localizedString("Paste access token"), text: $accessToken)
-                    .textFieldStyle(.plain)
-                    .settingsFieldSurface(minHeight: 34)
+                HStack(spacing: 10) {
+                    SecureField(AppLocalization.localizedString("Paste access token"), text: accessTokenInput)
+                        .textFieldStyle(.plain)
+                        .settingsFieldSurface(minHeight: 34)
+                    if shouldOfferStoredCredentialClear(for: .accessToken) {
+                        Button(AppLocalization.localizedString("Clear")) {
+                            clearStoredCredential(.accessToken)
+                        }
+                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 30))
+                    }
+                }
             }
         }
     }

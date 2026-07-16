@@ -97,6 +97,17 @@ extension AppDelegate {
         return (provider, configuration)
     }
 
+    var currentRewriteResponsesConversationContextKey: String? {
+        guard rewriteModelProvider == .remoteLLM else { return nil }
+        let context = resolvedRemoteLLMContext(forRewrite: true)
+        guard context.provider.usesResponsesAPI else { return nil }
+        return [
+            context.provider.rawValue,
+            context.configuration.endpoint,
+            context.configuration.model
+        ].joined(separator: "|")
+    }
+
     func translateText(
         _ text: String,
         targetLanguage: TranslationTargetLanguage,
@@ -208,17 +219,20 @@ extension AppDelegate {
         )
         let modelProvider = rewriteModelProvider
         let remoteContext = rewriteModelProvider == .remoteLLM ? resolvedRemoteLLMContext(forRewrite: true) : nil
+        let hasProviderConversationState =
+            !trimmedConversationHistory.isEmpty ||
+            !(previousConversationResponseID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
         let shouldUseProviderManagedConversation =
             (remoteContext?.provider.usesResponsesAPI ?? false) &&
             directAnswerMode &&
-            !structuredAnswerOutput
-        let shouldUseChatMessageConversation =
-            modelProvider == .remoteLLM &&
+            !structuredAnswerOutput &&
+            hasProviderConversationState
+        let shouldUseRoleMessageConversation =
             directAnswerMode &&
             !structuredAnswerOutput &&
             !trimmedConversationHistory.isEmpty &&
             !shouldUseProviderManagedConversation
-        if shouldUseChatMessageConversation {
+        if shouldUseRoleMessageConversation {
             let latestTurn = trimmedConversationHistory.last
             VoxtLog.translation(
                 """
@@ -226,7 +240,7 @@ extension AppDelegate {
                 """
             )
         }
-        let promptResolution = shouldUseChatMessageConversation
+        let promptResolution = shouldUseRoleMessageConversation
             ? VariablePromptResolution(
                 content: resolvedRewriteConversationPrompt(forceNonEmptyAnswer: forceNonEmptyAnswer),
                 dictionaryGlossary: nil,
@@ -276,11 +290,11 @@ extension AppDelegate {
         let conversationHistoryForPlan: [RewriteConversationPromptTurn]
         switch modelProvider {
         case .customLLM:
-            conversationHistoryForPlan = []
+            conversationHistoryForPlan = shouldUseRoleMessageConversation ? trimmedConversationHistory : []
         case .remoteLLM:
             switch promptResolution.delivery {
             case .systemPrompt:
-                conversationHistoryForPlan = (shouldUseProviderManagedConversation || shouldUseChatMessageConversation) ? trimmedConversationHistory : []
+                conversationHistoryForPlan = (shouldUseProviderManagedConversation || shouldUseRoleMessageConversation) ? trimmedConversationHistory : []
             case .userMessage:
                 conversationHistoryForPlan = shouldUseProviderManagedConversation ? trimmedConversationHistory : []
             }
@@ -752,9 +766,14 @@ extension AppDelegate {
         Rules:
         1. Treat the latest user message as a follow-up to the previous assistant reply.
         2. If the user omits context with a short follow-up like “那大同呢”, infer the missing subject from the conversation history.
-        3. Return plain text only.
-        4. Do not return JSON, field names, markdown, or surrounding quotes.
-        5. Do not return an empty string.
+        3. Treat short confirmations such as “对”, “是”, or “yes” as answers to the latest assistant question, incorporate them, and continue the original task.
+        4. Never repeat or paraphrase the latest assistant reply as the next answer, and never ask the same clarification twice.
+        5. Do not ask the user to confirm a place, date, subject, or qualifier that already appears in the conversation.
+        6. Ask a clarification question only when essential information is genuinely absent from the whole conversation.
+        7. If current information cannot be verified because live lookup is unavailable, state that limitation directly instead of treating the request as ambiguous.
+        8. Return plain text only.
+        9. Do not return JSON, field names, markdown, or surrounding quotes.
+        10. Do not return an empty string.
         """
 
         let prompt = [base, retryConstraint]
@@ -776,7 +795,7 @@ extension AppDelegate {
         var consumedCharacters = 0
 
         for turn in candidates {
-            let turnCharacters = turn.userPromptText.count + turn.resultTitle.count + turn.resultContent.count
+            let turnCharacters = turn.modelUserMessage.count + turn.resultContent.count
             let separatorCost = selectedReversed.isEmpty ? 0 : 4
             let nextCount = consumedCharacters + separatorCost + turnCharacters
 
@@ -792,27 +811,10 @@ extension AppDelegate {
     }
 
     func shouldRetryStructuredRewriteAnswer(for text: String, dictatedPrompt: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return true }
-        if let payload = extractRewriteAnswerPayload(from: trimmed) {
-            let normalizedContent = payload.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedPrompt = dictatedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            return normalizedContent.isEmpty || normalizedContent.caseInsensitiveCompare(normalizedPrompt) == .orderedSame
-        }
-
-        let normalizedPrompt = dictatedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.caseInsensitiveCompare(normalizedPrompt) == .orderedSame {
-            return true
-        }
-
-        let lowered = trimmed.lowercased()
-        let looksStructuredStub =
-            (trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) ||
-            lowered.contains("\"title\"") ||
-            lowered.contains("\"content\"") ||
-            lowered.contains("title:") ||
-            lowered.contains("content:")
-        return looksStructuredStub
+        RewriteAnswerContentNormalizer.isUnusableStructuredAnswer(
+            text,
+            dictatedPrompt: dictatedPrompt
+        )
     }
 
     func serializedRewriteAnswerPayload(_ payload: RewriteAnswerPayload) -> String? {

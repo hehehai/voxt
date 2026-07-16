@@ -2214,6 +2214,10 @@
 "%@ (Modified)" = "%@ (Modified)";
 "Configuration saved for %@." = "Configuration saved for %@.";
 "Configuration could not be saved securely. Check Keychain access and try again." = "Configuration could not be saved securely. Check Keychain access and try again.";
+"Stored provider credentials are unavailable. Reopen the provider settings and save them again." = "Stored provider credentials are unavailable. Reopen the provider settings and save them again.";
+"Stored provider credentials are missing. Reopen the provider settings and save them again." = "Stored provider credentials are missing. Reopen the provider settings and save them again.";
+"Stored provider credentials are invalid. Reopen the provider settings and save them again." = "Stored provider credentials are invalid. Reopen the provider settings and save them again.";
+"Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac." = "Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac.";
 "Configuration could not be encoded. Please try again." = "Configuration could not be encoded. Please try again.";
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "This model is unavailable because the sherpa-onnx runtime is not included in this build.";
 "Uninstalled %@." = "Uninstalled %@.";

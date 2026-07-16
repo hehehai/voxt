@@ -50,7 +50,9 @@ class OverlayState: ObservableObject {
     @Published var latestRewriteResult: RewriteAnswerPayload?
     @Published var latestHistoryEntryID: UUID?
     @Published var rewriteConversationRemoteResponseID: String?
+    @Published var rewriteConversationRemoteContextKey: String?
     @Published var pendingConversationUserPrompt: String?
+    @Published var pendingConversationSourceText: String?
     @Published var isRewriteConversationTurnInProgress = false
     @Published var isStreamingAnswer = false
     @Published var canInjectAnswer = false
@@ -62,16 +64,55 @@ class OverlayState: ObservableObject {
     @Published var allowsSessionTranslationLanguageSwitching = false
     @Published var compactLeadingIconImage: NSImage?
     var answerTranslationSourceText = ""
+    private(set) var rewriteConversationRemoteContextGeneration = UUID()
 
+    private let notificationCenter: NotificationCenter
+    private var remoteLLMProviderConfigurationsObserver: NSObjectProtocol?
     private var cancellables = Set<AnyCancellable>()
     private var latestSourceTranscribedText = ""
     private var transcribedTextTransformer: ((String) -> String)?
 
+    init(notificationCenter: NotificationCenter = .default) {
+        self.notificationCenter = notificationCenter
+        remoteLLMProviderConfigurationsObserver = notificationCenter.addObserver(
+            forName: .voxtRemoteLLMProviderConfigurationsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.invalidateRewriteConversationRemoteContext()
+            }
+        }
+    }
+
     deinit {
+        if let remoteLLMProviderConfigurationsObserver {
+            notificationCenter.removeObserver(remoteLLMProviderConfigurationsObserver)
+        }
         // Keep an explicit deinit here. On macOS 26 test hosts, the synthesized
         // teardown path intermittently trips a malloc crash while destroying this
         // ObservableObject's @Published storage. An explicit deinit stabilizes
         // the generated destruction path without changing runtime behavior.
+    }
+
+    func invalidateRewriteConversationRemoteContext() {
+        rewriteConversationRemoteResponseID = nil
+        rewriteConversationRemoteContextKey = nil
+        rewriteConversationRemoteContextGeneration = UUID()
+    }
+
+    @discardableResult
+    func storeRewriteConversationRemoteContext(
+        responseID: String,
+        contextKey: String?,
+        expectedGeneration: UUID
+    ) -> Bool {
+        guard rewriteConversationRemoteContextGeneration == expectedGeneration else {
+            return false
+        }
+        rewriteConversationRemoteResponseID = responseID
+        rewriteConversationRemoteContextKey = contextKey
+        return true
     }
 
     func bind(to transcriber: SpeechTranscriber) {
@@ -145,8 +186,9 @@ class OverlayState: ObservableObject {
         rewriteConversationTurns = []
         latestRewriteResult = nil
         latestHistoryEntryID = nil
-        rewriteConversationRemoteResponseID = nil
+        invalidateRewriteConversationRemoteContext()
         pendingConversationUserPrompt = nil
+        pendingConversationSourceText = nil
         isRewriteConversationTurnInProgress = false
         isStreamingAnswer = false
         canInjectAnswer = false

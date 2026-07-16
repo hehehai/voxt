@@ -96,7 +96,7 @@ enum TranscriptionHistoryConversationSupport {
 
     static func bootstrapChatMessages(for entry: TranscriptionHistoryEntry) -> [TranscriptSummaryChatMessage] {
         if let existingMessages = entry.transcriptionChatMessages, !existingMessages.isEmpty {
-            if existingMessages.first?.role == .assistant {
+            if isCompleteConversation(existingMessages) {
                 return existingMessages
             }
 
@@ -106,6 +106,14 @@ enum TranscriptionHistoryConversationSupport {
         }
 
         return [seedMessage(for: entry)]
+    }
+
+    static func isCompleteConversation(_ messages: [TranscriptSummaryChatMessage]) -> Bool {
+        guard let firstRole = messages.first?.role else { return false }
+        if firstRole == .assistant {
+            return true
+        }
+        return firstRole == .user && messages.dropFirst().contains { $0.role == .assistant }
     }
 
     static func seedMessage(for entry: TranscriptionHistoryEntry) -> TranscriptSummaryChatMessage {
@@ -124,7 +132,7 @@ enum TranscriptionHistoryConversationSupport {
         var messages: [TranscriptSummaryChatMessage] = []
 
         for turn in turns {
-            let userPrompt = turn.userPromptText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let userPrompt = turn.promptTurn.modelUserMessage
             if !userPrompt.isEmpty {
                 messages.append(
                     TranscriptSummaryChatMessage(

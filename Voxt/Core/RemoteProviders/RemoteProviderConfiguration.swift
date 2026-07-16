@@ -197,6 +197,12 @@ fileprivate nonisolated struct RemoteStoredCredentialPresence: Codable, Hashable
 }
 
 struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
+    nonisolated enum CredentialField: CaseIterable, Hashable {
+        case apiKey
+        case appID
+        case accessToken
+    }
+
     let providerID: String
     var model: String
     var endpoint: String
@@ -230,6 +236,67 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
 
     var id: String { providerID }
 
+    nonisolated func hasStoredCredential(for field: CredentialField) -> Bool {
+        guard sensitiveValue(for: field).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        return credentialPresence(for: field)
+    }
+
+    /// Carries credential intent from the metadata-only configuration shown by
+    /// the settings UI. An unedited empty field means "keep the stored value";
+    /// an edited empty field means "clear it".
+    nonisolated func applyingCredentialEditIntent(
+        from original: RemoteProviderConfiguration,
+        editedFields: Set<CredentialField>
+    ) -> RemoteProviderConfiguration {
+        var updated = self
+        var presence = RemoteStoredCredentialPresence(
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken
+        )
+
+        for field in CredentialField.allCases where !editedFields.contains(field) {
+            let shouldPreserve = original.credentialPresence(for: field)
+            switch field {
+            case .apiKey:
+                presence.apiKey = shouldPreserve
+            case .appID:
+                presence.appID = shouldPreserve
+            case .accessToken:
+                presence.accessToken = shouldPreserve
+            }
+        }
+        updated.storedCredentialPresence = presence
+        return updated
+    }
+
+    private nonisolated func credentialPresence(for field: CredentialField) -> Bool {
+        if !sensitiveValue(for: field).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        switch field {
+        case .apiKey:
+            return storedCredentialPresence?.apiKey == true
+        case .appID:
+            return storedCredentialPresence?.appID == true
+        case .accessToken:
+            return storedCredentialPresence?.accessToken == true
+        }
+    }
+
+    private nonisolated func sensitiveValue(for field: CredentialField) -> String {
+        switch field {
+        case .apiKey:
+            return apiKey
+        case .appID:
+            return appID
+        case .accessToken:
+            return accessToken
+        }
+    }
+
     var hasUsableModel: Bool {
         !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -238,15 +305,19 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         if RemoteLLMProvider(rawValue: providerID)?.apiKeyIsOptional == true {
             return hasUsableModel
         }
-        if providerID == RemoteASRProvider.doubaoASR.rawValue {
-            return hasUsableModel &&
-                !appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        return hasUsableModel && (
+        let hasAPIKey =
             !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        )
+            storedCredentialPresence?.apiKey == true
+        let hasAppID =
+            !appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            storedCredentialPresence?.appID == true
+        let hasAccessToken =
+            !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            storedCredentialPresence?.accessToken == true
+        if providerID == RemoteASRProvider.doubaoASR.rawValue {
+            return hasUsableModel && hasAppID && hasAccessToken
+        }
+        return hasUsableModel && (hasAPIKey || hasAccessToken)
     }
 
     var doubaoDictionaryModeValue: DoubaoDictionaryMode {
@@ -440,15 +511,29 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
 
     nonisolated var withoutSensitiveValues: RemoteProviderConfiguration {
         var sanitized = self
-        sanitized.storedCredentialPresence = RemoteStoredCredentialPresence(
+        let detectedPresence = RemoteStoredCredentialPresence(
             apiKey: apiKey,
             appID: appID,
             accessToken: accessToken
         )
+        sanitized.storedCredentialPresence = detectedPresence.isEmpty
+            ? storedCredentialPresence
+            : detectedPresence
         sanitized.apiKey = ""
         sanitized.appID = ""
         sanitized.accessToken = ""
         return sanitized
+    }
+}
+
+/// A provider configuration whose credentials have already been resolved for
+/// a network request. Request builders accept this type so metadata-only
+/// configurations cannot reach Authorization header construction directly.
+struct RemoteProviderRuntimeConfiguration {
+    let value: RemoteProviderConfiguration
+
+    fileprivate init(value: RemoteProviderConfiguration) {
+        self.value = value
     }
 }
 
@@ -478,7 +563,28 @@ enum RemoteModelConfigurationStore {
         case includeStoredValues
     }
 
-    nonisolated private static let redactedSensitiveValuePlaceholder = "__stored__"
+    enum RuntimeCredentialError: LocalizedError, Equatable {
+        case missing
+        case corrupted
+        case secureStorageUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .missing:
+                return AppLocalization.localizedString(
+                    "Stored provider credentials are missing. Reopen the provider settings and save them again."
+                )
+            case .corrupted:
+                return AppLocalization.localizedString(
+                    "Stored provider credentials are invalid. Reopen the provider settings and save them again."
+                )
+            case .secureStorageUnavailable:
+                return AppLocalization.localizedString(
+                    "Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac."
+                )
+            }
+        }
+    }
 
     private enum SensitiveField: String, CaseIterable {
         case apiKey
@@ -559,6 +665,88 @@ enum RemoteModelConfigurationStore {
         }
     }
 
+    /// Resolves a metadata-only configuration into a request-safe value.
+    /// Metadata never contains a credential-shaped placeholder.
+    private static func configurationForRuntimeRequest(
+        _ configuration: RemoteProviderConfiguration
+    ) throws -> RemoteProviderConfiguration {
+        try configurationByResolvingStoredCredentials(configuration)
+    }
+
+    /// Resolves only credential fields whose metadata says they are stored and
+    /// whose current value is empty. Inline replacements and explicit clears
+    /// therefore remain authoritative on a field-by-field basis.
+    private static func configurationByResolvingStoredCredentials(
+        _ configuration: RemoteProviderConfiguration
+    ) throws -> RemoteProviderConfiguration {
+        guard let expectedPresence = configuration.storedCredentialPresence else {
+            return configuration
+        }
+        let inlinePresence = RemoteStoredCredentialPresence(
+            apiKey: configuration.apiKey,
+            appID: configuration.appID,
+            accessToken: configuration.accessToken
+        )
+        let fieldsToResolve = SensitiveField.allCases.filter { field in
+            switch field {
+            case .apiKey:
+                return expectedPresence.apiKey && !inlinePresence.apiKey
+            case .appID:
+                return expectedPresence.appID && !inlinePresence.appID
+            case .accessToken:
+                return expectedPresence.accessToken && !inlinePresence.accessToken
+            }
+        }
+        guard !fieldsToResolve.isEmpty else {
+            return configuration
+        }
+
+        let bundledAccount = bundledKeychainAccount(providerID: configuration.providerID)
+        let stored: String
+        do {
+            guard let value = try VoxtSecureStorage.protectedString(for: bundledAccount) else {
+                throw RuntimeCredentialError.missing
+            }
+            stored = value
+        } catch let error as RuntimeCredentialError {
+            throw error
+        } catch {
+            throw RuntimeCredentialError.secureStorageUnavailable
+        }
+
+        guard let data = stored.data(using: .utf8),
+              let values = try? JSONDecoder().decode(StoredSensitiveValues.self, from: data)
+        else {
+            throw RuntimeCredentialError.corrupted
+        }
+
+        var resolved = configuration
+        for field in fieldsToResolve {
+            let value: String
+            switch field {
+            case .apiKey:
+                value = values.apiKey
+            case .appID:
+                value = values.appID
+            case .accessToken:
+                value = values.accessToken
+            }
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw RuntimeCredentialError.missing
+            }
+            setSensitiveValue(value, for: field, in: &resolved)
+        }
+        return resolved
+    }
+
+    static func runtimeConfiguration(
+        for configuration: RemoteProviderConfiguration
+    ) throws -> RemoteProviderRuntimeConfiguration {
+        RemoteProviderRuntimeConfiguration(
+            value: try configurationForRuntimeRequest(configuration)
+        )
+    }
+
     static func saveConfigurations(_ values: [String: RemoteProviderConfiguration]) -> String {
         let items = values.values.sorted(by: { $0.providerID < $1.providerID })
         for item in items {
@@ -571,8 +759,15 @@ enum RemoteModelConfigurationStore {
         _ configuration: RemoteProviderConfiguration,
         updating raw: String
     ) -> Result<String, SaveError> {
+        let resolvedConfiguration: RemoteProviderConfiguration
+        do {
+            resolvedConfiguration = try configurationByResolvingStoredCredentials(configuration)
+        } catch {
+            return .failure(.secureStorageUnavailable)
+        }
+
         var items = decodedConfigurations(from: raw).map(normalizedCompatibilityValues(for:))
-        let sanitized = configuration.withoutSensitiveValues
+        let sanitized = resolvedConfiguration.withoutSensitiveValues
 
         if let existingIndex = items.firstIndex(where: { $0.providerID == configuration.providerID }) {
             items[existingIndex] = sanitized
@@ -583,7 +778,7 @@ enum RemoteModelConfigurationStore {
         guard let encoded = encodedConfigurations(items.sorted(by: { $0.providerID < $1.providerID })) else {
             return .failure(.metadataEncodingFailed)
         }
-        guard persistSensitiveValues(for: configuration) else {
+        guard persistSensitiveValues(for: resolvedConfiguration) else {
             return .failure(.secureStorageUnavailable)
         }
         return .success(encoded)
@@ -748,7 +943,13 @@ enum RemoteModelConfigurationStore {
                 // A previous build may have left a positive mask after losing
                 // the Keychain item. Persist one definitive empty mask so the UI
                 // asks for the credential once and future launches do no work.
-                let resolved = configuration.withoutSensitiveValues
+                var configurationWithoutPresence = configuration
+                configurationWithoutPresence.storedCredentialPresence = RemoteStoredCredentialPresence(
+                    apiKey: "",
+                    appID: "",
+                    accessToken: ""
+                )
+                let resolved = configurationWithoutPresence.withoutSensitiveValues
                 if resolved != configuration {
                     changed = true
                 }
@@ -920,7 +1121,21 @@ enum RemoteModelConfigurationStore {
             )
             let currentValue = sensitiveValue(for: field, in: configuration)
             let hasValue = hasKeychainValue || !currentValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            setSensitiveValue(hasValue ? redactedSensitiveValuePlaceholder : "", for: field, in: &resolved)
+            guard hasValue else { continue }
+            var presence = resolved.storedCredentialPresence ?? RemoteStoredCredentialPresence(
+                apiKey: "",
+                appID: "",
+                accessToken: ""
+            )
+            switch field {
+            case .apiKey:
+                presence.apiKey = true
+            case .appID:
+                presence.appID = true
+            case .accessToken:
+                presence.accessToken = true
+            }
+            resolved.storedCredentialPresence = presence
         }
         return resolved
     }
@@ -929,9 +1144,9 @@ enum RemoteModelConfigurationStore {
         _ presence: RemoteStoredCredentialPresence,
         to configuration: inout RemoteProviderConfiguration
     ) {
-        configuration.apiKey = presence.apiKey ? redactedSensitiveValuePlaceholder : ""
-        configuration.appID = presence.appID ? redactedSensitiveValuePlaceholder : ""
-        configuration.accessToken = presence.accessToken ? redactedSensitiveValuePlaceholder : ""
+        configuration.apiKey = ""
+        configuration.appID = ""
+        configuration.accessToken = ""
         configuration.storedCredentialPresence = presence
     }
 
@@ -942,9 +1157,13 @@ enum RemoteModelConfigurationStore {
         let values = StoredSensitiveValues(configuration: configuration)
         let bundledAccount = bundledKeychainAccount(providerID: configuration.providerID)
         guard let data = try? JSONEncoder().encode(values),
-              let encoded = String(data: data, encoding: .utf8),
-              VoxtSecureStorage.set(encoded, for: bundledAccount)
+              let encoded = String(data: data, encoding: .utf8)
         else {
+            return false
+        }
+        do {
+            try VoxtSecureStorage.setProtectedString(encoded, for: bundledAccount)
+        } catch {
             return false
         }
 

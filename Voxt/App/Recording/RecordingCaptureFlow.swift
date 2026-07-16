@@ -236,6 +236,7 @@ extension AppDelegate {
         lastEnhancementPromptContext = nil
         selectedTextTranslationHadWritableFocusedInput = false
         rewriteSessionHasSelectedSourceText = false
+        rewriteSessionSelectedSourceText = ""
         rewriteSessionHadWritableFocusedInput = false
         resetVoiceEndCommandState()
         resetSessionTranslationState()

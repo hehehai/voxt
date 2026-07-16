@@ -8,6 +8,9 @@ enum RemoteEndpointSecurityPolicy {
         !configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !configuration.accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !configuration.appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || configuration.hasStoredCredential(for: .apiKey)
+            || configuration.hasStoredCredential(for: .accessToken)
+            || configuration.hasStoredCredential(for: .appID)
     }
 
     static func hasLLMCredentials(

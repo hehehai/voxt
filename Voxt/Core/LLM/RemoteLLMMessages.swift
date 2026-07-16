@@ -80,7 +80,7 @@ extension RemoteLLMRuntimeClient {
         }
 
         for turn in conversationHistory {
-            let userPrompt = turn.userPromptText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let userPrompt = turn.modelUserMessage
             if !userPrompt.isEmpty {
                 messages.append([
                     "role": "user",
@@ -88,10 +88,7 @@ extension RemoteLLMRuntimeClient {
                 ])
             }
 
-            let assistantMessage = composeConversationAssistantMessage(
-                title: turn.resultTitle,
-                content: turn.resultContent
-            )
+            let assistantMessage = turn.resultContent.trimmingCharacters(in: .whitespacesAndNewlines)
             if !assistantMessage.isEmpty {
                 messages.append([
                     "role": "assistant",
@@ -108,36 +105,20 @@ extension RemoteLLMRuntimeClient {
         return messages
     }
 
-    func composeConversationAssistantMessage(title: String, content: String) -> String {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if trimmedTitle.isEmpty {
-            return trimmedContent
-        }
-        if trimmedContent.isEmpty {
-            return "Topic: \(trimmedTitle)"
-        }
-
-        return """
-        Topic: \(trimmedTitle)
-        Answer: \(trimmedContent)
-        """
-    }
-
     func makeResponsesRequest(
         provider: RemoteLLMProvider,
         endpointValue: String,
         model: String,
         systemPrompt: String,
         inputPayload: Any,
-        configuration: RemoteProviderConfiguration,
+        runtimeConfiguration: RemoteProviderRuntimeConfiguration,
         previousResponseID: String?,
         tuning: RemoteLLMRuntimeClient.GenerationTuning,
         textFormat: [String: Any]?,
         streamingEnabled: Bool,
         additionalHeaders: [String: String] = [:]
     ) throws -> URLRequest {
+        let configuration = runtimeConfiguration.value
         guard let url = URL(string: endpointValue) else {
             throw NSError(
                 domain: "Voxt.RemoteLLM",
@@ -214,6 +195,12 @@ extension RemoteLLMRuntimeClient {
             provider: provider,
             settings: generationSettings
         )
+        applyStructuredResponsesThinkingPolicy(
+            to: &payload,
+            provider: provider,
+            settings: generationSettings,
+            textFormat: textFormat
+        )
 
         var textPayload = textFormat ?? responsesTextPayload(for: generationSettings.responseFormat)
         if provider == .openAI,
@@ -275,6 +262,37 @@ extension RemoteLLMRuntimeClient {
             ]
         case .jsonSchema:
             return [:]
+        }
+    }
+
+    func responsesTextFormat(
+        for responseFormat: RemoteLLMRuntimeClient.OpenAICompatibleResponseFormat?
+    ) -> [String: Any]? {
+        guard let responseFormat else { return nil }
+        switch responseFormat {
+        case .jsonObject:
+            return [
+                "format": [
+                    "type": "json_object"
+                ]
+            ]
+        }
+    }
+
+    func applyStructuredResponsesThinkingPolicy(
+        to payload: inout [String: Any],
+        provider: RemoteLLMProvider,
+        settings: LLMGenerationSettings,
+        textFormat: [String: Any]?
+    ) {
+        guard textFormat != nil, settings.thinking.mode == .providerDefault else { return }
+        switch provider {
+        case .volcengine:
+            payload["thinking"] = ["type": "disabled"]
+        case .aliyunBailian:
+            payload["enable_thinking"] = false
+        default:
+            break
         }
     }
 
@@ -397,7 +415,7 @@ extension RemoteLLMRuntimeClient {
         var messages: [[String: Any]] = []
 
         for turn in conversationHistory {
-            let userPrompt = turn.userPromptText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let userPrompt = turn.modelUserMessage
             if !userPrompt.isEmpty {
                 messages.append([
                     "role": "user",
@@ -405,10 +423,7 @@ extension RemoteLLMRuntimeClient {
                 ])
             }
 
-            let assistantMessage = composeConversationAssistantMessage(
-                title: turn.resultTitle,
-                content: turn.resultContent
-            )
+            let assistantMessage = turn.resultContent.trimmingCharacters(in: .whitespacesAndNewlines)
             if !assistantMessage.isEmpty {
                 messages.append([
                     "role": "assistant",

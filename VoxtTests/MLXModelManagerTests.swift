@@ -698,6 +698,38 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(plan.attachments, [attachment])
     }
 
+    func testCustomLLMCompiledPlanPreservesRoleBasedConversationHistory() {
+        let history = [
+            RewriteConversationPromptTurn(
+                userPromptText: "北京今天的天气情况",
+                resultTitle: "北京天气",
+                resultContent: "请问您需要查询哪一天的天气？"
+            )
+        ]
+        let compiled = LLMCompiledRequest(
+            taskLabel: "rewrite",
+            instructions: "Answer the latest user message.",
+            prompt: "对",
+            debugInput: "对",
+            fallbackText: "",
+            inputCharacterCount: 1,
+            outputTokenBudgetHint: nil,
+            attachments: [],
+            conversationHistory: history,
+            previousResponseID: nil,
+            responseFormat: nil
+        )
+
+        let plan = CustomLLMRequestPlanBuilder.compiled(
+            request: compiled,
+            repo: "mlx-community/Qwen3.5-4B-OptiQ-4bit"
+        )
+
+        XCTAssertEqual(plan.conversationHistory, history)
+        XCTAssertFalse(plan.instructions.contains("Previous conversation:"))
+        XCTAssertEqual(plan.prompt, "对")
+    }
+
     func testCustomLLMNormalizeResultTextStripsThinkBlocksAndMarkers() {
         let output = """
         <think>

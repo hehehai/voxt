@@ -154,6 +154,13 @@ extension AppDelegate {
         sessionTargetApplicationBundleID = sessionTargetBundleID
         sessionTargetApplicationPID = sessionTargetBundleID == nil ? nil : frontmostApplication?.processIdentifier
         let isContinuingRewriteConversation = outputMode == .rewrite && overlayState.isRewriteConversationActive
+        if outputMode == .rewrite, !isContinuingRewriteConversation {
+            rewriteSessionSelectedSourceText = selectedTextFromSystemSelection()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        } else {
+            rewriteSessionSelectedSourceText = ""
+        }
+        rewriteSessionHasSelectedSourceText = !rewriteSessionSelectedSourceText.isEmpty
         rewriteSessionHadWritableFocusedInput = isContinuingRewriteConversation
             ? false
             : (outputMode == .rewrite ? hasWritableFocusedTextInput() : false)

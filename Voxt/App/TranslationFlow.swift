@@ -38,6 +38,26 @@ extension AppDelegate {
         finishSession(after: delay)
     }
 
+    private func failCurrentRewriteConversationTurn(
+        _ message: String,
+        clearAfter delay: TimeInterval = 2.8
+    ) {
+        guard overlayState.restoreLatestCompletedRewriteConversation(status: message) else {
+            failCurrentTextTransformSession(message, finishAfter: delay)
+            return
+        }
+
+        finishSession(after: 0)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self,
+                  self.overlayState.isRewriteConversationActive,
+                  self.overlayState.statusMessage == message
+            else { return }
+            self.overlayState.statusMessage = ""
+        }
+    }
+
     func runTranslationPreview(_ text: String) async throws -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
@@ -185,23 +205,31 @@ extension AppDelegate {
         let conversationHistory: [RewriteConversationPromptTurn]
         let prefersStructuredAnswerOutput: Bool
         let previousConversationResponseID: String?
+        let conversationResponseContextKey = currentRewriteResponsesConversationContextKey
 
         if isConversationContinuation {
             selectedSourceText = ""
             conversationHistory = overlayState.rewriteConversationPromptHistory
             rewriteSessionHasSelectedSourceText = false
             prefersStructuredAnswerOutput = false
-            previousConversationResponseID = overlayState.rewriteConversationRemoteResponseID
+            if overlayState.rewriteConversationRemoteContextKey == conversationResponseContextKey {
+                previousConversationResponseID = overlayState.rewriteConversationRemoteResponseID
+            } else {
+                previousConversationResponseID = nil
+                overlayState.invalidateRewriteConversationRemoteContext()
+            }
             overlayState.stageConversationUserPrompt(text)
         } else {
-            selectedSourceText = selectedTextFromSystemSelection()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            selectedSourceText = rewriteSessionSelectedSourceText
             rewriteSessionHasSelectedSourceText = !selectedSourceText.isEmpty
             conversationHistory = []
             prefersStructuredAnswerOutput = shouldUseStructuredRewriteAnswerOutput(
                 hasSelectedSourceText: rewriteSessionHasSelectedSourceText
             )
             previousConversationResponseID = nil
+            overlayState.stageConversationUserPrompt(text, sourceText: selectedSourceText)
         }
+        let conversationResponseContextGeneration = overlayState.rewriteConversationRemoteContextGeneration
         VoxtLog.translation(
             "Rewrite flow started. promptChars=\(text.count), selectedSourceChars=\(selectedSourceText.count), rewriteModelProvider=\(rewriteModelProvider.rawValue), structuredAnswerOutput=\(prefersStructuredAnswerOutput), conversationHistoryTurns=\(conversationHistory.count)"
         )
@@ -250,7 +278,7 @@ extension AppDelegate {
                     VoxtLog.translationWarning("Rewrite structured answer was missing usable content; retrying in direct-answer mode.")
                     if let retried = try? await self.rewriteText(
                         dictatedPrompt: text,
-                        sourceText: "",
+                        sourceText: selectedSourceText,
                         conversationHistory: conversationHistory,
                         structuredAnswerOutput: true,
                         forceNonEmptyAnswer: true,
@@ -284,9 +312,16 @@ extension AppDelegate {
                     VoxtLog.translationWarning("Rewrite structured answer still unusable after retry; failing without committing fallback text.")
                     throw TextTransformFailure.rewriteRejectedByGuard(reason: "Structured rewrite answer was empty or unusable after retry.")
                 }
-                if !prefersStructuredAnswerOutput,
-                   RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) {
-                    VoxtLog.translationWarning("Rewrite plain-text answer was empty or unusable; retrying with stricter non-empty guidance.")
+                let shouldRetryPlainAnswer = !prefersStructuredAnswerOutput && (
+                    RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) ||
+                    RewriteAnswerContentNormalizer.repeatsLatestAssistantAnswer(
+                        rewritten,
+                        dictatedPrompt: text,
+                        conversationHistory: conversationHistory
+                    )
+                )
+                if shouldRetryPlainAnswer {
+                    VoxtLog.translationWarning("Rewrite plain-text answer was empty, unusable, or repeated the latest assistant reply; retrying with corrective guidance.")
                     if let retried = try? await self.rewriteText(
                         dictatedPrompt: text,
                         sourceText: selectedSourceText,
@@ -303,14 +338,30 @@ extension AppDelegate {
                         rewritten = RewriteAnswerContentNormalizer.normalizePlainTextAnswer(retried)
                     }
                 }
-                if !prefersStructuredAnswerOutput,
-                   RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) {
-                    VoxtLog.translationWarning("Rewrite plain-text answer remained unusable after retry; failing without committing fallback text.")
-                    throw TextTransformFailure.rewriteRejectedByGuard(reason: "Plain rewrite answer was empty or matched the prompt after retry.")
+                let plainAnswerStillRejected = !prefersStructuredAnswerOutput && (
+                    RewriteAnswerContentNormalizer.isUnusablePlainTextAnswer(rewritten, dictatedPrompt: text) ||
+                    RewriteAnswerContentNormalizer.repeatsLatestAssistantAnswer(
+                        rewritten,
+                        dictatedPrompt: text,
+                        conversationHistory: conversationHistory
+                    )
+                )
+                if plainAnswerStillRejected {
+                    VoxtLog.translationWarning("Rewrite plain-text answer remained unusable or repeated after retry; failing without committing fallback text.")
+                    throw TextTransformFailure.rewriteRejectedByGuard(reason: "Plain rewrite answer was empty, matched the prompt, or repeated the latest assistant reply after retry.")
                 }
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
-                if isConversationContinuation, let latestConversationResponseID {
-                    self.overlayState.rewriteConversationRemoteResponseID = latestConversationResponseID
+                if let latestConversationResponseID {
+                    let stored = self.overlayState.storeRewriteConversationRemoteContext(
+                        responseID: latestConversationResponseID,
+                        contextKey: conversationResponseContextKey,
+                        expectedGeneration: conversationResponseContextGeneration
+                    )
+                    if !stored {
+                        VoxtLog.translation(
+                            "Discarded stale rewrite response context after remote provider configuration changed."
+                        )
+                    }
                 }
                 if isConversationContinuation,
                    !self.overlayState.isStreamingAnswer,
@@ -332,12 +383,15 @@ extension AppDelegate {
             } catch {
                 guard self.shouldHandleCallbacks(for: sessionID), self.isCurrentLLMRequest(requestID) else { return }
                 VoxtLog.translationWarning("Rewrite flow failed without committing fallback text: \(error)")
-                self.failCurrentTextTransformSession(
-                    self.textTransformFailureMessage(
-                        for: error,
-                        fallbackMessage: AppLocalization.localizedString("Rewrite failed. Try again after checking the selected model.")
-                    )
+                let message = self.textTransformFailureMessage(
+                    for: error,
+                    fallbackMessage: AppLocalization.localizedString("Rewrite failed. Try again after checking the selected model.")
                 )
+                if isConversationContinuation {
+                    self.failCurrentRewriteConversationTurn(message)
+                } else {
+                    self.failCurrentTextTransformSession(message)
+                }
             }
         }
     }

@@ -16,6 +16,10 @@ struct RemoteProviderConnectivityTester {
     }
 
     private func performConnectivityTest(configuration: RemoteProviderConfiguration) async throws -> String {
+        let runtimeConfiguration = try RemoteModelConfigurationStore.runtimeConfiguration(
+            for: configuration
+        )
+        let configuration = runtimeConfiguration.value
         let securityContext = switch testTarget {
         case .asr:
             (
@@ -674,13 +678,16 @@ struct RemoteProviderConnectivityTester {
         let systemPrompt = provider == .codex
             ? "Reply with exactly pong."
             : ""
+        let runtimeConfiguration = try RemoteModelConfigurationStore.runtimeConfiguration(
+            for: configuration
+        )
         let request = try runtimeClient.makeResponsesRequest(
             provider: provider,
             endpointValue: endpoint,
             model: model,
             systemPrompt: systemPrompt,
             inputPayload: "ping",
-            configuration: configuration,
+            runtimeConfiguration: runtimeConfiguration,
             previousResponseID: nil,
             tuning: .init(maxTokens: 32, temperature: 0.2, topP: 0.9),
             textFormat: nil,

@@ -73,7 +73,7 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
         let messages = TranscriptionHistoryConversationSupport.rewriteConversationMessages(
             from: [
                 RewriteConversationTurn(
-                    userPromptText: "",
+                    userPromptText: "Initial request",
                     resultTitle: "A",
                     resultContent: "First answer"
                 ),
@@ -86,8 +86,8 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
             createdAt: Date(timeIntervalSinceReferenceDate: 300)
         )
 
-        XCTAssertEqual(messages.map(\.role), [.assistant, .user, .assistant])
-        XCTAssertEqual(messages.map(\.content), ["First answer", "Follow up", "Second answer"])
+        XCTAssertEqual(messages.map(\.role), [.user, .assistant, .user, .assistant])
+        XCTAssertEqual(messages.map(\.content), ["Initial request", "First answer", "Follow up", "Second answer"])
     }
 
     @MainActor
@@ -135,6 +135,29 @@ final class TranscriptionHistoryConversationSupportTests: XCTestCase {
         XCTAssertEqual(viewModel.displayMessages[0].role, .assistant)
         XCTAssertEqual(viewModel.displayMessages[0].content, "Seed transcript")
         XCTAssertEqual(viewModel.displayMessages[1].role, .user)
+    }
+
+    @MainActor
+    func testDisplayMessagesKeepsCompleteUserFirstRewriteConversation() {
+        let entry = makeEntry(
+            text: "First answer",
+            transcriptionChatMessages: [
+                TranscriptSummaryChatMessage(role: .user, content: "Initial request"),
+                TranscriptSummaryChatMessage(role: .assistant, content: "First answer")
+            ]
+        )
+        let viewModel = TranscriptionDetailViewModel(
+            entry: entry,
+            audioURL: nil,
+            followUpStatusProvider: { _ in
+                TranscriptionFollowUpProviderStatus(isAvailable: true, message: "")
+            },
+            followUpAnswerer: { _, _, _ in "" },
+            followUpPersistence: { _, _ in nil }
+        )
+
+        XCTAssertEqual(viewModel.displayMessages.map(\.role), [.user, .assistant])
+        XCTAssertEqual(viewModel.displayMessages.map(\.content), ["Initial request", "First answer"])
     }
 
     private func makeEntry(

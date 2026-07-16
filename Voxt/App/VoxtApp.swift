@@ -253,6 +253,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var lastEnhancementPromptContext: EnhancementPromptContext?
     var selectedTextTranslationHadWritableFocusedInput = false
     var rewriteSessionHasSelectedSourceText = false
+    var rewriteSessionSelectedSourceText = ""
     var rewriteSessionHadWritableFocusedInput = false
     var rewriteSessionFallbackInjectBundleID: String?
     var transcriptionCaptureSessionMode: TranscriptionCaptureSessionMode = .standard

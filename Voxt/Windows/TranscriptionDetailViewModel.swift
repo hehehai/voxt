@@ -115,7 +115,7 @@ final class TranscriptionDetailViewModel: ObservableObject {
     }
 
     var displayMessages: [TranscriptSummaryChatMessage] {
-        if chatMessages.first?.role == .assistant {
+        if TranscriptionHistoryConversationSupport.isCompleteConversation(chatMessages) {
             return chatMessages
         }
         return [seedAssistantMessage] + chatMessages

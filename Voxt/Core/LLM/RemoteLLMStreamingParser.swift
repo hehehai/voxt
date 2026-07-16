@@ -473,6 +473,7 @@ extension RemoteLLMRuntimeClient {
     }
 
     func extractTextFromResponsesOutput(_ output: [Any]) -> String? {
+        var texts: [String] = []
         for item in output {
             guard let dict = item as? [String: Any] else { continue }
             let type = (dict["type"] as? String)?.lowercased()
@@ -481,14 +482,37 @@ extension RemoteLLMRuntimeClient {
             }
 
             if let contentText = extractTextFromMessageContent(dict["content"]) {
-                return contentText
+                texts.append(contentText)
+                continue
             }
             if shouldTreatDirectTextFieldAsPrimary(in: dict),
                let text = extractTextValue(from: dict["text"]) {
-                return text
+                texts.append(text)
             }
         }
-        return nil
+        return mergeTextSegments(from: texts)
+    }
+
+    func responsesCompletionIssue(from object: [String: Any]) -> String? {
+        guard let rawStatus = object["status"] as? String else { return nil }
+        let status = rawStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard status != "completed" else { return nil }
+
+        let reason = (object["incomplete_details"] as? [String: Any])?["reason"] as? String
+        let normalizedReason = reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return normalizedReason.isEmpty
+            ? "Responses API returned status '\(rawStatus)'."
+            : "Responses API returned status '\(rawStatus)' (\(normalizedReason))."
+    }
+
+    func isValidStructuredJSONObject(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              object is [String: Any] else {
+            return false
+        }
+        return true
     }
 
     func extractTextFromMessageContent(_ value: Any?) -> String? {
