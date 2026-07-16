@@ -42,13 +42,17 @@ final class MeetingLocalInferenceCoordinatorTests: XCTestCase {
                 await order.append("summary")
             }
         }
-        await Task.yield()
+        let didQueueBackground = await waitForQueuedWork(1, coordinator: coordinator)
+        XCTAssertTrue(didQueueBackground, "Background work did not enter the inference queue")
+
         let live = Task {
             try await coordinator.withPermit(.liveASRFeed) {
                 await order.append("live")
             }
         }
-        await Task.yield()
+        let didQueueLiveWork = await waitForQueuedWork(2, coordinator: coordinator)
+        XCTAssertTrue(didQueueLiveWork, "Live work did not enter the inference queue")
+
         await gate.open()
 
         _ = try await (active.value, background.value, live.value)
@@ -75,6 +79,24 @@ final class MeetingLocalInferenceCoordinatorTests: XCTestCase {
         try await task.value
         let peakAfterRecording = await tracker.peakCount()
         XCTAssertEqual(peakAfterRecording, 1)
+    }
+
+    private func waitForQueuedWork(
+        _ expectedCount: Int,
+        coordinator: MeetingLocalInferenceCoordinator,
+        timeout: Duration = .seconds(5)
+    ) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while clock.now < deadline {
+            let statistics = await coordinator.currentStatistics()
+            if statistics.peakQueuedCount >= expectedCount {
+                return true
+            }
+            await Task.yield()
+        }
+        return false
     }
 }
 
