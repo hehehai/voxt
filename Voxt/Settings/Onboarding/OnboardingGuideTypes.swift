@@ -27,7 +27,6 @@ enum OnboardingGuidePhase: String, CaseIterable, Identifiable {
 
 enum OnboardingGuideStep: String, CaseIterable, Identifiable {
     case permissions
-    case microphone
     case models
     case transcriptionShortcut
     case transcriptionEnhancement
@@ -43,7 +42,7 @@ enum OnboardingGuideStep: String, CaseIterable, Identifiable {
 
     var phase: OnboardingGuidePhase {
         switch self {
-        case .permissions, .microphone, .models:
+        case .permissions, .models:
             return .basics
         case .transcriptionShortcut, .transcriptionEnhancement, .translationShortcut, .translationSelection, .rewriteShortcut, .rewriteSelection:
             return .workflows
@@ -58,8 +57,6 @@ enum OnboardingGuideStep: String, CaseIterable, Identifiable {
         switch self {
         case .permissions:
             return AppLocalization.localizedString("Get Permissions")
-        case .microphone:
-            return AppLocalization.localizedString("Test Microphone")
         case .models:
             return AppLocalization.localizedString("Choose Models")
         case .transcriptionShortcut:
@@ -87,8 +84,6 @@ enum OnboardingGuideStep: String, CaseIterable, Identifiable {
         switch self {
         case .permissions:
             return AppLocalization.localizedString("Allow Voxt to hear you, read shortcuts, and insert text into active apps.")
-        case .microphone:
-            return AppLocalization.localizedString("Speak for a moment and confirm the selected microphone produces a visible signal.")
         case .models:
             return AppLocalization.localizedString("Pick local models or configure remote providers before testing voice workflows.")
         case .transcriptionShortcut:
@@ -130,8 +125,6 @@ enum OnboardingGuideStep: String, CaseIterable, Identifiable {
         switch self {
         case .permissions:
             return .permissions
-        case .microphone:
-            return .settings
         case .models:
             return .model
         case .transcriptionShortcut, .transcriptionEnhancement:

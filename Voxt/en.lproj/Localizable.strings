@@ -1035,6 +1035,11 @@
 "No Microphone Available" = "No Microphone Available";
 "No available microphone devices" = "No available microphone devices";
 "No available microphone devices." = "No available microphone devices.";
+"No valid microphone" = "No valid microphone";
+"Your Main Language" = "Your Main Language";
+"Languages prioritized for recognition. You can select multiple." = "Languages prioritized for recognition. You can select multiple.";
+"Select Microphone" = "Select Microphone";
+"Choose the microphone Voxt should use." = "Choose the microphone Voxt should use.";
 "Auto Switch" = "Auto Switch";
 "Reorder microphones to control device priority. Auto Switch only applies when devices connect or disconnect." = "Reorder microphones to control device priority. Auto Switch only applies when devices connect or disconnect.";
 "Drag to reorder. Higher-priority microphones can take over when they reconnect." = "Drag to reorder. Higher-priority microphones can take over when they reconnect.";
@@ -1280,6 +1285,7 @@
 "System Audio Recording permission is required for Meeting Notes. Enable it in Settings > Permissions." = "System Audio Recording permission is required for Meeting Notes. Enable it in Settings > Permissions.";
 "Couldn't save Meeting Notes history." = "Couldn't save Meeting Notes history.";
 "No meeting transcripts yet" = "No meeting transcripts yet";
+"Press %@ to start Meeting Mode. Saved transcripts will appear here." = "Press %@ to start Meeting Mode. Saved transcripts will appear here.";
 "Meeting Details" = "Meeting Details";
 "Meeting Paused" = "Meeting Paused";
 "Meeting In Progress" = "Meeting In Progress";

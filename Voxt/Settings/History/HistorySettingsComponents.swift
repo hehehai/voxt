@@ -79,7 +79,7 @@ struct HistoryNoteStatusFilterSelect: View {
     private let statuses: [VoxtNoteStatus] = [.todo, .inProgress, .done, .backlog]
 
     var body: some View {
-        SettingsSelectionButton(width: 130, height: 32, allowsCompactWidth: true) {
+        SettingsSelectionButton(width: 130, height: 28, allowsCompactWidth: true) {
             isPresented = true
         } label: {
             Text(selectionSummary)

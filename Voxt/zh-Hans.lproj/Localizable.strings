@@ -1035,6 +1035,11 @@
 "No Microphone Available" = "无可用麦克风";
 "No available microphone devices" = "无可用麦克风设备";
 "No available microphone devices." = "无可用麦克风设备。";
+"No valid microphone" = "无有效麦克风";
+"Your Main Language" = "你的主语言";
+"Languages prioritized for recognition. You can select multiple." = "优先识别的语言，可以多选。";
+"Select Microphone" = "选择麦克风";
+"Choose the microphone Voxt should use." = "选择 Voxt 要使用的麦克风。";
 "Auto Switch" = "自动切换";
 "Reorder microphones to control device priority. Auto Switch only applies when devices connect or disconnect." = "拖动调整麦克风优先级。自动切换只会在设备插拔时生效。";
 "Drag to reorder. Higher-priority microphones can take over when they reconnect." = "拖动可调整顺序。更高优先级的麦克风在重新连接后会自动接管。";
@@ -1806,6 +1811,7 @@
 "System Audio Recording permission is required for Meeting Notes. Enable it in Settings > Permissions." = "会议记录需要系统音频录制权限。请在设置 > 权限中开启。";
 "Couldn't save Meeting Notes history." = "无法保存会议记录历史。";
 "No meeting transcripts yet" = "还没有会议记录";
+"Press %@ to start Meeting Mode. Saved transcripts will appear here." = "按 %@ 启动会议模式，保存的会议记录将显示在这里。";
 "Meeting Details" = "会议详情";
 "Meeting Paused" = "会议已暂停";
 "Meeting In Progress" = "会议进行中";

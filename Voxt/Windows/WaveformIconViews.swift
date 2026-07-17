@@ -20,6 +20,8 @@ struct AnswerIconView: View {
 }
 
 struct TranscriptionModeIconView: View {
+    var color: Color = .white
+
     private let viewport = CGSize(width: 392, height: 392)
 
     var body: some View {
@@ -28,13 +30,13 @@ struct TranscriptionModeIconView: View {
                 pathData: WaveformIconPathData.transcriptionStem,
                 viewport: viewport
             )
-            .fill(.white)
+            .fill(color)
 
             SVGPathShape(
                 pathData: WaveformIconPathData.transcriptionMicrophone,
                 viewport: viewport
             )
-            .fill(.white)
+            .fill(color)
         }
     }
 }

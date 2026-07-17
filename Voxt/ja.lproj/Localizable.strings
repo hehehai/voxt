@@ -999,6 +999,11 @@
 "No Microphone Available" = "利用可能なマイクがありません";
 "No available microphone devices" = "利用可能なマイクデバイスがありません";
 "No available microphone devices." = "利用可能なマイクデバイスがありません。";
+"No valid microphone" = "有効なマイクがありません";
+"Your Main Language" = "あなたの主言語";
+"Languages prioritized for recognition. You can select multiple." = "認識を優先する言語です。複数選択できます。";
+"Select Microphone" = "マイクを選択";
+"Choose the microphone Voxt should use." = "Voxt で使用するマイクを選択します。";
 "Auto Switch" = "自動切替";
 "Reorder microphones to control device priority. Auto Switch only applies when devices connect or disconnect." = "ドラッグしてマイクの優先順位を並べ替えます。自動切替はデバイスの接続や切断時にのみ適用されます。";
 "Drag to reorder. Higher-priority microphones can take over when they reconnect." = "ドラッグして並べ替えます。優先順位の高いマイクは再接続時に自動で切り替わります。";
@@ -1748,6 +1753,7 @@
 "System Audio Recording permission is required for Meeting Notes. Enable it in Settings > Permissions." = "会議記録にはシステム音声録音の権限が必要です。設定 > 権限で有効にしてください。";
 "Couldn't save Meeting Notes history." = "会議記録の履歴を保存できませんでした。";
 "No meeting transcripts yet" = "会議記録はまだありません";
+"Press %@ to start Meeting Mode. Saved transcripts will appear here." = "%@ を押して会議モードを開始します。保存した会議記録はここに表示されます。";
 "Meeting Details" = "会議の詳細";
 "Meeting Paused" = "会議は一時停止中";
 "Meeting In Progress" = "会議中";

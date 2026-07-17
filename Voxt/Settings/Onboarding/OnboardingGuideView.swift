@@ -20,6 +20,7 @@ struct OnboardingGuideView: View {
     let onFinish: () -> Void
 
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
+    @AppStorage(AppPreferenceKey.userMainLanguageCodes) private var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.modelStorageRootPath) private var modelStorageRootPath = ""
     @AppStorage(AppPreferenceKey.transcriptionEngine) private var engineRaw = TranscriptionEngine.mlxAudio.rawValue
     @AppStorage(AppPreferenceKey.mlxModelRepo) private var mlxModelRepo = MLXModelManager.defaultModelRepo
@@ -53,7 +54,8 @@ struct OnboardingGuideView: View {
     @State private var modelStorageDisplayPath = ""
     @State private var modelStorageSelectionError: String?
     @State private var featureSettings = FeatureSettingsStore.load(defaults: .standard)
-    @State private var isMicrophonePriorityDialogPresented = false
+    @State private var isMicrophoneDialogPresented = false
+    @State private var isUserMainLanguageDialogPresented = false
     @State private var isModelStorageDialogPresented = false
     @State private var editingASRProvider: RemoteASRProvider?
     @State private var editingLLMProvider: RemoteLLMProvider?
@@ -62,10 +64,12 @@ struct OnboardingGuideView: View {
     @State private var isAppPromptDialogPresented = false
     @State private var temporaryEnhancementPrompt = Self.defaultTranscriptionEnhancementPrompt
     @State private var temporaryAppEnhancementPrompt = Self.defaultAppEnhancementPrompt
+    @State private var microphoneHasDetectedAudio = false
     @State private var microphoneSignalFrameCount = 0
     @State private var microphoneReceivedInitialBuffer = false
     @State private var microphoneStartupRetryCount = 0
     @State private var microphoneStartupWatchdogTask: Task<Void, Never>?
+    @State private var microphoneRefreshTask: Task<Void, Never>?
     @State private var transcriptionInput = ""
     @State private var transcriptionEnhancementInput = ""
     @State private var translationInput = Self.defaultTranslationSample
@@ -76,12 +80,6 @@ struct OnboardingGuideView: View {
     @State private var appEnhancementInput = ""
     @State private var completedInteractionSteps = Set<OnboardingGuideStep>()
     @State private var microphoneCapture: MeetingMicrophoneCapture?
-    @StateObject private var waveformState = RecentAudioWaveformState(
-        barCount: 24,
-        historyDuration: 1.6,
-        framesPerSecond: 22,
-        silenceFloor: 0.015
-    )
 
     @FocusState private var focusedField: OnboardingGuideFocusField?
 
@@ -122,17 +120,28 @@ struct OnboardingGuideView: View {
     private static let shellHeaderHeight: CGFloat = 58
     private static let shellSideCutoutWidth: CGFloat = 58
     private static let contentBottomCompensation: CGFloat = 0
-    private static let microphoneRawSignalThreshold: Float = 0.006
-    private static let microphoneDisplaySignalThreshold: Float = 0.022
+    private static let microphoneSignalThreshold: Float = 0.006
     private static let microphoneRequiredSignalFrames = 2
     private static let microphoneStartupWatchdogDelay: Duration = .milliseconds(1200)
-    private static let defaultRemoteASRProviders: [RemoteASRProvider] = [
+    private static let collapsedModelListLimit = 6
+    private static let preferredLocalASRRepos = [
+        "mlx-community/SenseVoiceSmall",
+        "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
+        "mlx-community/Qwen3-ASR-1.7B-4bit",
+        "OpenMOSS-Team/MOSS-Transcribe-Diarize",
+        "mlx-community/whisper-large-v3-turbo"
+    ]
+    private static let preferredLocalLLMRepos = [
+        "mlx-community/gemma-4-e2b-it-4bit",
+        "mlx-community/Qwen3.5-4B-OptiQ-4bit"
+    ]
+    private static let preferredRemoteASRProviders: [RemoteASRProvider] = [
         .doubaoASR,
         .aliyunBailianASR,
         .stepFunASR,
         .xiaomiMiMoASR
     ]
-    private static let defaultRemoteLLMProviders: [RemoteLLMProvider] = [
+    private static let preferredRemoteLLMProviders: [RemoteLLMProvider] = [
         .volcengine,
         .aliyunBailian,
         .stepFun,
@@ -141,6 +150,17 @@ struct OnboardingGuideView: View {
 
     private var interfaceLanguage: AppInterfaceLanguage {
         AppInterfaceLanguage(rawValue: interfaceLanguageRaw) ?? .system
+    }
+
+    private var selectedUserMainLanguageCodes: [String] {
+        UserMainLanguageOption.storedSelection(from: userMainLanguageCodesRaw)
+    }
+
+    private var userMainLanguageSummary: String {
+        GeneralSettingsData.userMainLanguageSummary(
+            selectedCodes: selectedUserMainLanguageCodes,
+            locale: interfaceLanguage.locale
+        )
     }
 
     private var selectedRemoteASRProvider: RemoteASRProvider {
@@ -213,19 +233,19 @@ struct OnboardingGuideView: View {
     }
 
     private var defaultLocalASRRepos: [String] {
-        let qwen06Repo = localASRRepos.first { repo in
-            let text = "\(repo) \(mlxModelManager.displayTitle(for: repo))".lowercased()
-            return text.contains("qwen") && text.contains("0.6")
-        }
-        return qwen06Repo.map { [$0] } ?? Array(localASRRepos.prefix(1))
+        let selectedRepo = MLXModelManager.canonicalModelRepo(mlxModelRepo)
+        return collapsedModelOptions(
+            all: localASRRepos,
+            preferred: Self.preferredLocalASRRepos + [selectedRepo]
+        )
     }
 
     private var defaultLocalLLMRepos: [String] {
-        let gemma4E2BRepo = localLLMRepos.first { repo in
-            let text = "\(repo) \(customLLMManager.displayTitle(for: repo))".lowercased()
-            return text.contains("gemma") && text.contains("4") && text.contains("e2b")
-        }
-        return gemma4E2BRepo.map { [$0] } ?? Array(localLLMRepos.prefix(1))
+        let selectedRepo = CustomLLMModelManager.canonicalModelRepo(customLLMRepo)
+        return collapsedModelOptions(
+            all: localLLMRepos,
+            preferred: Self.preferredLocalLLMRepos + [selectedRepo]
+        )
     }
 
     private var displayedLocalASRRepos: [String] {
@@ -240,14 +260,42 @@ struct OnboardingGuideView: View {
         if showsMoreRemoteASRProviders {
             return RemoteASRProvider.allCases
         }
-        return Self.defaultRemoteASRProviders.filter { RemoteASRProvider.allCases.contains($0) }
+        return defaultRemoteASRProviders
     }
 
     private var displayedRemoteLLMProviders: [RemoteLLMProvider] {
         if showsMoreRemoteLLMProviders {
             return RemoteLLMProvider.allCases
         }
-        return Self.defaultRemoteLLMProviders.filter { RemoteLLMProvider.allCases.contains($0) }
+        return defaultRemoteLLMProviders
+    }
+
+    private var defaultRemoteASRProviders: [RemoteASRProvider] {
+        collapsedModelOptions(
+            all: RemoteASRProvider.allCases,
+            preferred: [selectedRemoteASRProvider] + Self.preferredRemoteASRProviders
+        )
+    }
+
+    private var defaultRemoteLLMProviders: [RemoteLLMProvider] {
+        collapsedModelOptions(
+            all: RemoteLLMProvider.allCases,
+            preferred: [selectedRemoteLLMProvider] + Self.preferredRemoteLLMProviders
+        )
+    }
+
+    private func collapsedModelOptions<Option: Equatable>(
+        all options: [Option],
+        preferred: [Option]
+    ) -> [Option] {
+        var result: [Option] = []
+        for option in preferred + options where options.contains(option) && !result.contains(option) {
+            result.append(option)
+            if result.count == Self.collapsedModelListLimit {
+                break
+            }
+        }
+        return result
     }
 
     private var modelStepReady: Bool {
@@ -263,8 +311,6 @@ struct OnboardingGuideView: View {
         switch currentStep {
         case .permissions:
             return areRequiredPermissionsGranted
-        case .microphone:
-            return completedInteractionSteps.contains(.microphone)
         case .models:
             return modelStepReady
         case .transcriptionShortcut, .translationShortcut, .rewriteShortcut, .appEnhancement:
@@ -380,6 +426,8 @@ struct OnboardingGuideView: View {
         }
         .onDisappear {
             stopMicrophoneMeter()
+            microphoneRefreshTask?.cancel()
+            microphoneRefreshTask = nil
             for task in permissionMonitorTasks.values {
                 task.cancel()
             }
@@ -421,12 +469,10 @@ struct OnboardingGuideView: View {
     private var guideWithNotifications: some View {
         guideWithStateLifecycle
         .onReceive(NotificationCenter.default.publisher(for: .voxtAudioInputDevicesDidChange)) { _ in
-            refreshInputDevices()
-            restartMicrophoneMeterIfNeeded()
+            scheduleMicrophoneRefresh()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtSelectedInputDeviceDidChange)) { _ in
-            refreshInputDevices()
-            restartMicrophoneMeterIfNeeded()
+            scheduleMicrophoneRefresh()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtRemoteProviderConfigurationsDidChange)) { _ in
             syncFeatureSelections()
@@ -439,6 +485,7 @@ struct OnboardingGuideView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissionRefreshRevision += 1
+            scheduleMicrophoneRefresh()
         }
     }
 
@@ -510,8 +557,6 @@ struct OnboardingGuideView: View {
     private var content: some View {
         if currentStep == .permissions {
             permissionsGuidePanel
-        } else if currentStep == .microphone {
-            microphoneGuidePanel
         } else if currentStep == .models {
             modelGuidePanel
         } else {
@@ -521,21 +566,33 @@ struct OnboardingGuideView: View {
 
     @ViewBuilder
     private var onboardingModalOverlay: some View {
-        if isMicrophonePriorityDialogPresented {
+        if isMicrophoneDialogPresented {
             onboardingModalScrim {
                 MicrophonePriorityDialog(
                     state: microphoneState,
+                    mode: .selectionOnly,
                     onUseNow: { uid in
                         focusMicrophone(uid: uid)
-                        restartMicrophoneMeterIfNeeded()
+                        isMicrophoneDialogPresented = false
                     },
-                    onAutoSwitchChanged: setMicrophoneAutoSwitchEnabled(_:),
-                    onReorderPriority: applyMicrophonePriorityOrder(_:),
                     cornerRadius: OnboardingGuideStyle.modalCornerRadius,
                     onClose: {
-                        isMicrophonePriorityDialogPresented = false
+                        isMicrophoneDialogPresented = false
                     }
                 )
+            }
+        } else if isUserMainLanguageDialogPresented {
+            onboardingModalScrim {
+                UserMainLanguageSelectionSheet(
+                    selectedCodes: selectedUserMainLanguageCodes,
+                    localeIdentifier: interfaceLanguage.localeIdentifier,
+                    cornerRadius: OnboardingGuideStyle.modalCornerRadius,
+                    onClose: {
+                        isUserMainLanguageDialogPresented = false
+                    }
+                ) { updatedCodes in
+                    userMainLanguageCodesRaw = UserMainLanguageOption.storageValue(for: updatedCodes)
+                }
             }
         } else if isModelStorageDialogPresented {
             onboardingModalScrim {
@@ -639,48 +696,6 @@ struct OnboardingGuideView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var microphoneGuidePanel: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-
-            VStack(spacing: 18) {
-                OnboardingMicrophoneWaveformView(waveformState: waveformState)
-                    .frame(maxWidth: 360)
-
-                VStack(spacing: 11) {
-                    Text(currentStep.subtitle)
-                        .font(.callout)
-                        .foregroundStyle(OnboardingGuideStyle.secondaryText)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 560)
-
-                    GuideInfoRow(
-                        title: guideLocalized("Current Microphone"),
-                        value: microphoneState.activeDevice?.name ?? guideLocalized("No available microphone devices")
-                    )
-                    .frame(maxWidth: 520)
-
-                    Text(completedInteractionSteps.contains(.microphone)
-                        ? guideLocalized("Signal detected")
-                        : guideLocalized("Speak normally for one or two seconds."))
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(completedInteractionSteps.contains(.microphone) ? Color.green : OnboardingGuideStyle.secondaryText)
-                }
-                .frame(maxWidth: 560)
-            }
-            .frame(maxWidth: 560)
-
-            Spacer(minLength: 0)
-
-            footer
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
-        }
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     private var regularGuidePanel: some View {
         HStack(spacing: 0) {
             actionPane
@@ -766,8 +781,6 @@ struct OnboardingGuideView: View {
     private var guideVisual: some View {
         switch currentStep {
         case .permissions:
-            EmptyView()
-        case .microphone:
             EmptyView()
         case .transcriptionShortcut:
             guideTextEditor(text: $transcriptionInput, prompt: guideLocalized("Focus here, then press the transcription shortcut."))
@@ -857,8 +870,6 @@ struct OnboardingGuideView: View {
         switch currentStep {
         case .permissions:
             permissionsActions
-        case .microphone:
-            microphoneActions
         case .transcriptionShortcut:
             shortcutActions(
                 kind: .transcription,
@@ -893,11 +904,45 @@ struct OnboardingGuideView: View {
             ForEach(allRequiredPermissions, id: \.self) { permission in
                 permissionRow(permission)
             }
+
+            userMainLanguageRow
         }
     }
 
-    private func permissionRow(_ permission: OnboardingContextualPermission) -> some View {
+    private var userMainLanguageRow: some View {
         HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(guideLocalized("Your Main Language"))
+                    .font(.subheadline.weight(.medium))
+                Text(guideLocalized("Languages prioritized for recognition. You can select multiple."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            Button {
+                isUserMainLanguageDialogPresented = true
+            } label: {
+                OnboardingLanguageSelectLabel(summary: userMainLanguageSummary)
+            }
+            .buttonStyle(.plain)
+            .help(guideLocalized("Select User Languages"))
+            .accessibilityLabel(guideLocalized("Your Main Language"))
+            .accessibilityValue(userMainLanguageSummary)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(SettingsUIStyle.controlFillColor)
+        )
+    }
+
+    private func permissionRow(_ permission: OnboardingContextualPermission) -> some View {
+        let isGranted = isPermissionGranted(permission)
+
+        return HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(permission.titleKey)
                     .font(.subheadline.weight(.medium))
@@ -914,9 +959,13 @@ struct OnboardingGuideView: View {
                     .controlSize(.small)
             }
 
-            OnboardingPermissionStatusBadge(isGranted: isPermissionGranted(permission))
+            if permission == .microphone, isGranted {
+                microphonePermissionControl
+            } else {
+                OnboardingPermissionStatusBadge(isGranted: isGranted)
+            }
 
-            if !isPermissionGranted(permission) {
+            if !isGranted {
                 Button(guideLocalized("Allow")) {
                     requestPermission(permission)
                 }
@@ -930,15 +979,30 @@ struct OnboardingGuideView: View {
         )
     }
 
-    private var microphoneActions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            GuideInfoRow(
-                title: guideLocalized("Current Microphone"),
-                value: microphoneState.activeDevice?.name ?? guideLocalized("No available microphone devices")
+    @ViewBuilder
+    private var microphonePermissionControl: some View {
+        if let activeDevice = microphoneState.activeDevice,
+           microphoneState.hasAvailableDevices {
+            Button {
+                isMicrophoneDialogPresented = true
+            } label: {
+                OnboardingMicrophoneSelectLabel(
+                    deviceName: activeDevice.name,
+                    hasDetectedAudio: microphoneHasDetectedAudio,
+                    showsMenuIndicator: true
+                )
+            }
+            .buttonStyle(.plain)
+            .help(guideLocalized("Switch Microphone"))
+            .accessibilityLabel(guideLocalized("Current Microphone"))
+            .accessibilityValue(activeDevice.name)
+        } else {
+            OnboardingMicrophoneSelectLabel(
+                deviceName: guideLocalized("No valid microphone"),
+                hasDetectedAudio: false,
+                showsMenuIndicator: false
             )
-            Text(guideLocalized("Speak normally for one or two seconds. The waveform on the right should move."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            .help(guideLocalized("No available microphone devices."))
         }
     }
 
@@ -1200,11 +1264,11 @@ struct OnboardingGuideView: View {
                         }
                     )
                 }
-                if RemoteASRProvider.allCases.count > Self.defaultRemoteASRProviders.count {
+                if RemoteASRProvider.allCases.count > defaultRemoteASRProviders.count {
                     moreListButton(
                         isExpanded: showsMoreRemoteASRProviders,
                         expandedCount: RemoteASRProvider.allCases.count,
-                        collapsedCount: Self.defaultRemoteASRProviders.count
+                        collapsedCount: defaultRemoteASRProviders.count
                     ) {
                         showsMoreRemoteASRProviders.toggle()
                     }
@@ -1240,11 +1304,11 @@ struct OnboardingGuideView: View {
                         }
                     )
                 }
-                if RemoteLLMProvider.allCases.count > Self.defaultRemoteLLMProviders.count {
+                if RemoteLLMProvider.allCases.count > defaultRemoteLLMProviders.count {
                     moreListButton(
                         isExpanded: showsMoreRemoteLLMProviders,
                         expandedCount: RemoteLLMProvider.allCases.count,
-                        collapsedCount: Self.defaultRemoteLLMProviders.count
+                        collapsedCount: defaultRemoteLLMProviders.count
                     ) {
                         showsMoreRemoteLLMProviders.toggle()
                     }
@@ -1339,11 +1403,6 @@ struct OnboardingGuideView: View {
     @ViewBuilder
     private var leadingFooterAction: some View {
         switch currentStep {
-        case .microphone:
-            Button(guideLocalized("Switch Microphone")) {
-                isMicrophonePriorityDialogPresented = true
-            }
-            .buttonStyle(OnboardingGuideSecondaryButtonStyle())
         case .models where modelFocus == .local:
             Button(guideLocalized("Model Location")) {
                 isModelStorageDialogPresented = true
@@ -1388,8 +1447,6 @@ struct OnboardingGuideView: View {
         switch currentStep {
         case .permissions:
             return guideLocalized("Grant all listed permissions to continue.")
-        case .microphone:
-            return guideLocalized("Speak into the selected microphone until a signal is detected.")
         case .models:
             return modelFocus == .local
                 ? guideLocalized("Install the selected ASR and LLM local models to continue.")
@@ -1764,29 +1821,79 @@ private struct OnboardingGuideNextLabelStyle: LabelStyle {
     }
 }
 
-private struct OnboardingMicrophoneWaveformView: View {
-    @ObservedObject var waveformState: RecentAudioWaveformState
+private struct OnboardingMicrophoneSelectLabel: View {
+    let deviceName: String
+    let hasDetectedAudio: Bool
+    let showsMenuIndicator: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 3) {
-            ForEach(0..<waveformState.barCount, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.88))
-                    .frame(width: 4, height: barHeight(for: index))
+        HStack(spacing: 8) {
+            TranscriptionModeIconView(
+                color: hasDetectedAudio ? Color.green : OnboardingGuideStyle.primaryText
+            )
+            .frame(width: 15, height: 15)
+            .accessibilityHidden(true)
+
+            Text(deviceName)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(OnboardingGuideStyle.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsMenuIndicator {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(OnboardingGuideStyle.secondaryText)
             }
         }
-        .frame(height: 62)
-        .frame(maxWidth: .infinity)
-        .accessibilityHidden(true)
-    }
-
-    private func barHeight(for index: Int) -> CGFloat {
-        let level = waveformState.barLevels.indices.contains(index) ? waveformState.barLevels[index] : 0
-        return WaveformBarVisuals.barHeight(
-            level: level,
-            minHeight: 7,
-            maxHeight: 52
+        .padding(.horizontal, 9)
+        .frame(width: 190, height: 30)
+        .background(
+            Capsule(style: .continuous)
+                .fill(OnboardingGuideStyle.panelFill)
         )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(OnboardingGuideStyle.subtleBorder, lineWidth: 1)
+        )
+        .contentShape(Capsule(style: .continuous))
+    }
+}
+
+private struct OnboardingLanguageSelectLabel: View {
+    let summary: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "globe")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(OnboardingGuideStyle.primaryText)
+                .frame(width: 15, height: 15)
+                .accessibilityHidden(true)
+
+            Text(summary)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(OnboardingGuideStyle.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(OnboardingGuideStyle.secondaryText)
+        }
+        .padding(.horizontal, 9)
+        .frame(width: 190, height: 30)
+        .background(
+            Capsule(style: .continuous)
+                .fill(OnboardingGuideStyle.panelFill)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(OnboardingGuideStyle.subtleBorder, lineWidth: 1)
+        )
+        .contentShape(Capsule(style: .continuous))
     }
 }
 
@@ -2118,40 +2225,29 @@ private extension OnboardingGuideView {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(guideLocalized("Current Location"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(modelStorageDisplayPath)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .lineLimit(3)
-            }
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(SettingsUIStyle.controlFillColor)
-            )
+            GeneralSettingsCard(titleText: guideLocalized("Model Storage")) {
+                SettingsPathSelectionRow(
+                    title: guideLocalized("Storage Path"),
+                    displayedPath: modelStorageDisplayPath,
+                    fallbackPath: ModelStorageDirectoryManager.defaultRootURL.path,
+                    openButtonHelp: guideLocalized("Open folder"),
+                    chooseButtonTitle: guideLocalized("Choose"),
+                    onOpen: openModelStorageInFinder,
+                    onChoose: chooseModelStorageDirectory
+                )
 
-            if let modelStorageSelectionError {
-                Text(modelStorageSelectionError)
+                if let modelStorageSelectionError, !modelStorageSelectionError.isEmpty {
+                    Text(modelStorageSelectionError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                Text(guideLocalized("New model downloads are stored here. Switching the path will not move existing model files."))
                     .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            HStack {
-                Button(guideLocalized("Reveal in Finder")) {
-                    openModelStorageInFinder()
-                }
-                .buttonStyle(SettingsPillButtonStyle())
-                Spacer()
-                Button(guideLocalized("Choose Folder")) {
-                    chooseModelStorageDirectory()
-                }
-                .buttonStyle(SettingsPrimaryButtonStyle())
+                    .foregroundStyle(.secondary)
             }
         }
-        .settingsDialogChrome(width: 420, cornerRadius: OnboardingGuideStyle.modalCornerRadius, onClose: {
+        .settingsDialogChrome(width: 560, cornerRadius: OnboardingGuideStyle.modalCornerRadius, onClose: {
             isModelStorageDialogPresented = false
         })
     }
@@ -2647,6 +2743,7 @@ private extension OnboardingGuideView {
                 Task { @MainActor in
                     permissionRefreshRevision += 1
                     startPermissionMonitoring(permission)
+                    restartMicrophoneMeterIfNeeded()
                 }
             }
         case .speechRecognition:
@@ -2688,6 +2785,9 @@ private extension OnboardingGuideView {
                 if isPermissionGranted(permission) {
                     permissionMonitoringKinds.remove(permission)
                     permissionMonitorTasks[permission] = nil
+                    if permission == .microphone, microphoneCapture == nil {
+                        restartMicrophoneMeterIfNeeded()
+                    }
                     return
                 }
             }
@@ -2697,63 +2797,55 @@ private extension OnboardingGuideView {
     }
 
     func refreshInputDevices() {
+        let previousActiveUID = microphoneState.activeUID
         inputDevices = AudioInputDeviceManager.availableInputDevices()
         microphoneState = MicrophonePreferenceManager.syncState(
             defaults: .standard,
             availableDevices: inputDevices
         )
-    }
-
-    func setMicrophoneAutoSwitchEnabled(_ isEnabled: Bool) {
-        microphoneState = MicrophonePreferenceManager.setAutoSwitchEnabled(
-            isEnabled,
-            defaults: .standard,
-            availableDevices: inputDevices
-        )
-        NotificationCenter.default.post(name: .voxtSelectedInputDeviceDidChange, object: nil)
-    }
-
-    func applyMicrophonePriorityOrder(_ orderedUIDs: [String]) {
-        microphoneState = MicrophonePreferenceManager.reorderPriority(
-            orderedUIDs: orderedUIDs,
-            defaults: .standard,
-            availableDevices: inputDevices
-        )
-        NotificationCenter.default.post(name: .voxtSelectedInputDeviceDidChange, object: nil)
+        if previousActiveUID != microphoneState.activeUID {
+            resetMicrophoneDetection()
+        }
     }
 
     func focusMicrophone(uid: String) {
+        let previousActiveUID = microphoneState.activeUID
         microphoneState = MicrophonePreferenceManager.setFocusedDevice(
             uid: uid,
             defaults: .standard,
             availableDevices: inputDevices
         )
+        if previousActiveUID != microphoneState.activeUID {
+            resetMicrophoneDetection()
+        }
         NotificationCenter.default.post(name: .voxtSelectedInputDeviceDidChange, object: nil)
     }
 
     func updateMicrophoneCapture() {
-        if currentStep == .microphone {
-            startMicrophoneMeter()
+        refreshInputDevices()
+        if shouldRunMicrophoneMeter {
+            startMicrophoneMeter(
+                preferredDeviceID: microphoneState.activeDevice?.id,
+                resetStartupRetry: true
+            )
         } else {
             stopMicrophoneMeter()
         }
     }
 
-    func startMicrophoneMeter() {
-        refreshInputDevices()
-        startMicrophoneMeter(preferredDeviceID: microphoneState.activeDevice?.id, resetStartupRetry: true)
-    }
-
     func startMicrophoneMeter(preferredDeviceID: AudioDeviceID?, resetStartupRetry: Bool) {
-        guard OnboardingPermissionGrantResolver.isGranted(.microphone) else { return }
+        guard currentStep == .permissions,
+              OnboardingPermissionGrantResolver.isGranted(.microphone),
+              microphoneState.activeDevice != nil
+        else {
+            stopMicrophoneMeter()
+            return
+        }
 
         stopMicrophoneMeter(resetStartupRetry: resetStartupRetry)
         if resetStartupRetry {
             microphoneStartupRetryCount = 0
         }
-        waveformState.reset()
-        waveformState.setActive(true)
-        microphoneSignalFrameCount = 0
         microphoneReceivedInitialBuffer = false
 
         let capture = MeetingMicrophoneCapture()
@@ -2763,19 +2855,20 @@ private extension OnboardingGuideView {
         do {
             try capture.start { _, level in
                 Task { @MainActor in
-                    guard currentStep == .microphone, microphoneCapture === capture else { return }
+                    guard currentStep == .permissions, microphoneCapture === capture else { return }
                     microphoneReceivedInitialBuffer = true
                     microphoneStartupWatchdogTask?.cancel()
                     microphoneStartupWatchdogTask = nil
-                    let displayLevel = guideMicrophoneDisplayLevel(level)
-                    waveformState.ingest(level: displayLevel)
-                    if level >= Self.microphoneRawSignalThreshold || displayLevel >= Self.microphoneDisplaySignalThreshold {
+                    guard !microphoneHasDetectedAudio else { return }
+                    if level >= Self.microphoneSignalThreshold {
                         microphoneSignalFrameCount += 1
                     } else {
                         microphoneSignalFrameCount = 0
                     }
                     if microphoneSignalFrameCount >= Self.microphoneRequiredSignalFrames {
-                        completedInteractionSteps.insert(.microphone)
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            microphoneHasDetectedAudio = true
+                        }
                     }
                 }
             }
@@ -2791,12 +2884,10 @@ private extension OnboardingGuideView {
         microphoneStartupWatchdogTask = nil
         microphoneCapture?.stop()
         microphoneCapture = nil
-        microphoneSignalFrameCount = 0
         microphoneReceivedInitialBuffer = false
         if resetStartupRetry {
             microphoneStartupRetryCount = 0
         }
-        waveformState.setActive(false)
     }
 
     func scheduleMicrophoneStartupWatchdog(preferredDeviceID: AudioDeviceID?) {
@@ -2809,7 +2900,7 @@ private extension OnboardingGuideView {
             }
 
             guard !Task.isCancelled,
-                  currentStep == .microphone,
+                  currentStep == .permissions,
                   !microphoneReceivedInitialBuffer,
                   microphoneStartupRetryCount < 1
             else {
@@ -2824,16 +2915,42 @@ private extension OnboardingGuideView {
 
     func restartMicrophoneMeterIfNeeded() {
         refreshInputDevices()
-        if currentStep == .microphone {
-            startMicrophoneMeter()
+        if shouldRunMicrophoneMeter {
+            startMicrophoneMeter(
+                preferredDeviceID: microphoneState.activeDevice?.id,
+                resetStartupRetry: true
+            )
+        } else {
+            stopMicrophoneMeter()
+            if currentStep == .permissions {
+                resetMicrophoneDetection()
+            }
         }
     }
 
-    func guideMicrophoneDisplayLevel(_ level: Float) -> Float {
-        let clamped = max(0, min(level, 1))
-        guard clamped > 0 else { return 0 }
-        let emphasized = Float(pow(Double(clamped), 0.72)) * 1.12
-        return min(1, max(clamped, emphasized))
+    func scheduleMicrophoneRefresh() {
+        microphoneRefreshTask?.cancel()
+        microphoneRefreshTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(80))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            restartMicrophoneMeterIfNeeded()
+            microphoneRefreshTask = nil
+        }
+    }
+
+    var shouldRunMicrophoneMeter: Bool {
+        currentStep == .permissions &&
+            OnboardingPermissionGrantResolver.isGranted(.microphone) &&
+            microphoneState.activeDevice != nil
+    }
+
+    func resetMicrophoneDetection() {
+        microphoneSignalFrameCount = 0
+        microphoneHasDetectedAudio = false
     }
 }
 

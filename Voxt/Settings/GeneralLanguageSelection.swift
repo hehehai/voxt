@@ -6,6 +6,8 @@ import SwiftUI
 struct UserMainLanguageSelectionSheet: View {
     let localeIdentifier: String
     let onSave: ([String]) -> Void
+    var cornerRadius: CGFloat
+    var onClose: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
@@ -14,10 +16,14 @@ struct UserMainLanguageSelectionSheet: View {
     init(
         selectedCodes: [String],
         localeIdentifier: String,
+        cornerRadius: CGFloat = SettingsUIStyle.dialogCornerRadius,
+        onClose: (() -> Void)? = nil,
         onSave: @escaping ([String]) -> Void
     ) {
         self.localeIdentifier = localeIdentifier
         self.onSave = onSave
+        self.cornerRadius = cornerRadius
+        self.onClose = onClose
         _draftCodes = State(initialValue: UserMainLanguageOption.sanitizedSelection(selectedCodes))
     }
 
@@ -77,21 +83,29 @@ struct UserMainLanguageSelectionSheet: View {
 
             SettingsDialogActionRow {
                 Button(AppLocalization.localizedString("Cancel")) {
-                    dismiss()
+                    close()
                 }
                 .buttonStyle(SettingsPillButtonStyle())
                 .keyboardShortcut(.cancelAction)
 
                 Button(AppLocalization.localizedString("Save")) {
                     onSave(draftCodes)
-                    dismiss()
+                    close()
                 }
                 .buttonStyle(SettingsPrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
                 .disabled(draftCodes.isEmpty)
             }
         }
-        .settingsDialogChrome(width: 460, height: 520, onClose: { dismiss() })
+        .settingsDialogChrome(width: 460, height: 520, cornerRadius: cornerRadius, onClose: close)
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
     }
 
     private func toggle(_ option: UserMainLanguageOption) {

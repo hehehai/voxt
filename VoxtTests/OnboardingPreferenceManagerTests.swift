@@ -78,6 +78,14 @@ final class OnboardingPreferenceManagerTests: XCTestCase {
         XCTAssertNil(OnboardingPreferenceManager.savedLastGuideStep(defaults: defaults))
     }
 
+    func testRemovedMicrophoneGuideStepResumesAtPermissions() {
+        let defaults = TestDoubles.makeUserDefaults()
+        defaults.set("microphone", forKey: AppPreferenceKey.onboardingLastStepID)
+
+        XCTAssertEqual(OnboardingPreferenceManager.savedLastGuideStep(defaults: defaults), .permissions)
+        XCTAssertEqual(OnboardingGuideStep.permissions.next, .models)
+    }
+
     private func makeIsolatedDefaults() -> (defaults: UserDefaults, suiteName: String) {
         let suiteName = "VoxtTests.Onboarding.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

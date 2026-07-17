@@ -7,6 +7,67 @@ private func localized(_ key: String) -> String {
     AppLocalization.localizedString(key)
 }
 
+struct MicrophoneSelectionListRow: View {
+    let entry: MicrophoneDisplayEntry
+    let onSelect: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 10) {
+                TranscriptionModeIconView(
+                    color: entry.isActive ? Color.accentColor : Color.primary
+                )
+                .frame(width: 16, height: 16)
+                .accessibilityHidden(true)
+
+                Text(entry.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                if entry.isActive {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(backgroundColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(borderColor, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(entry.name)
+        .accessibilityValue(entry.isActive ? localized("Current Microphone") : "")
+    }
+
+    private var backgroundColor: Color {
+        if entry.isActive {
+            return Color.accentColor.opacity(0.12)
+        }
+        if isHovered {
+            return Color.primary.opacity(0.07)
+        }
+        return Color(nsColor: .controlBackgroundColor)
+    }
+
+    private var borderColor: Color {
+        entry.isActive ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.08)
+    }
+}
+
 struct MicrophonePriorityListRow: View {
     let entry: MicrophoneDisplayEntry
     let index: Int
