@@ -159,13 +159,25 @@ class CustomLLMModelManager: ObservableObject {
     private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
     private var downloadStopActionsByRepo: [String: DownloadStopAction] = [:]
-    private var inferenceContainer: ModelContainer?
+    private var inferenceContainer: ModelContainer? {
+        didSet {
+            // Observe the state transition so every non-termination release path
+            // schedules the same delayed reclamation.
+            guard ModelUnloadReclamationNotificationPolicy.shouldNotify(
+                wasLoaded: oldValue != nil,
+                isLoaded: inferenceContainer != nil,
+                isApplicationTerminating: isShuttingDownForApplicationTermination
+            ) else { return }
+            onModelUnloaded?()
+        }
+    }
     private var inferenceModelRepo: String?
     private var lastLoggedModelPresence: (repo: String, downloaded: Bool)?
     private var lastInvalidRepoLogged: String?
     private var activeInferenceCount = 0
     private var activeInferenceWaiters: [CheckedContinuation<Void, Never>] = []
     private var isShuttingDownForApplicationTermination = false
+    var onModelUnloaded: (() -> Void)?
     private var resolvedIdleUnloadDelay: Duration {
         .seconds(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds())
     }
@@ -193,6 +205,8 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     var currentModelRepo: String { modelRepo }
+    var hasLoadedInferenceModel: Bool { inferenceContainer != nil }
+    var hasActiveInference: Bool { activeInferenceCount > 0 }
 
     func refreshMemoryOptimizationPolicy() {
         guard inferenceContainer != nil else {
@@ -1865,6 +1879,8 @@ class CustomLLMModelManager: ObservableObject {
         guard inferenceContainer != nil, inferenceModelRepo == expectedRepo else { return }
 
         releaseInferenceResources(resetActiveInferenceCount: false)
-        VoxtLog.modelInfo("Custom LLM model released. reason=\(reason)", verbose: true)
+        VoxtLog.modelInfo(
+            "Custom LLM model released. repo=\(expectedRepo ?? "unknown"), reason=\(reason)"
+        )
     }
 }

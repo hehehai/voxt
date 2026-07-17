@@ -67,6 +67,13 @@ actor MeetingVoiceActivityDetector {
         omniDegradedWarningLogged = false
     }
 
+    func releaseResources() async {
+        await sileroDetector.unload()
+        await omniDetector.releaseResources()
+        sileroFallbackWarningLogged = false
+        omniDegradedWarningLogged = false
+    }
+
     private nonisolated static func currentModeFromSettings() -> LocalVADMode {
         MainActorSync.run {
             LocalVADMode.stored()
@@ -284,6 +291,11 @@ actor ASRSileroStreamingVoiceActivityDetector {
         lastProbabilities.removeAll()
     }
 
+    func unload() {
+        reset()
+        model = nil
+    }
+
     func probability(
         samples: [Float],
         sampleRate inputSampleRate: Double,
@@ -360,6 +372,10 @@ actor ASRSileroOfflineVoiceActivityDetector: ASROfflineVoiceActivityBackend {
     private let sampleRate = 16_000
     private var model: SileroVAD?
 
+    func unload() {
+        model = nil
+    }
+
     func speechRanges(samples: [Float], sampleRate inputSampleRate: Double) async throws -> [ASROfflineSpeechRange] {
         guard !samples.isEmpty, inputSampleRate.isFinite, inputSampleRate > 0 else { return [] }
         let model = try await loadModelIfAvailable()
@@ -403,6 +419,15 @@ actor MeetingOfflineVoiceActivityDetector {
     private var omniDetector: OmniOfflineVoiceActivityBackend?
     private var sileroWarningLogged = false
     private var omniWarningLogged = false
+
+    func releaseResources() async {
+        await sileroDetector?.unload()
+        await omniDetector?.releaseResources()
+        sileroDetector = nil
+        omniDetector = nil
+        sileroWarningLogged = false
+        omniWarningLogged = false
+    }
 
     func speechRanges(
         samples: [Float],

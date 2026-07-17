@@ -166,7 +166,18 @@ class MLXModelManager: ObservableObject {
     private var localSizeTextByRepo: [String: String] = [:]
     private var modelRepo: String
     private var hubBaseURL: URL
-    private var loadedModel: (any STTGenerationModel)?
+    private var loadedModel: (any STTGenerationModel)? {
+        didSet {
+            // Observe the state transition so model switching/deletion cannot bypass
+            // the delayed cleanup that was originally wired only to idle timeout.
+            guard ModelUnloadReclamationNotificationPolicy.shouldNotify(
+                wasLoaded: oldValue != nil,
+                isLoaded: loadedModel != nil,
+                isApplicationTerminating: isShuttingDownForApplicationTermination
+            ) else { return }
+            onModelUnloaded?()
+        }
+    }
     private var loadedRepo: String?
     private var loadingTask: Task<Void, Error>?
     private var loadingRepo: String?
@@ -179,6 +190,7 @@ class MLXModelManager: ObservableObject {
     private var activeUseCount = 0
     private var activeUseWaiters: [CheckedContinuation<Void, Never>] = []
     private var isShuttingDownForApplicationTermination = false
+    var onModelUnloaded: (() -> Void)?
     private var resolvedIdleUnloadDelay: Duration {
         .seconds(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds())
     }
@@ -192,6 +204,8 @@ class MLXModelManager: ObservableObject {
 
     var currentModelRepo: String { modelRepo }
     var isCurrentModelLoaded: Bool { loadedModel != nil && loadedRepo == modelRepo }
+    var hasLoadedModel: Bool { loadedModel != nil }
+    var hasActiveUse: Bool { activeUseCount > 0 }
 
     func refreshMemoryOptimizationPolicy() {
         guard loadedModel != nil else {
@@ -1639,7 +1653,9 @@ class MLXModelManager: ObservableObject {
         idleUnloadTask = nil
         Memory.clearCache()
         checkExistingModel()
-        VoxtLog.modelInfo("MLX Audio model released. reason=\(reason)", verbose: true)
+        VoxtLog.modelInfo(
+            "MLX Audio model released. repo=\(expectedRepo ?? "unknown"), reason=\(reason)"
+        )
     }
 
     private func clearHubCache(for repo: String) {

@@ -94,6 +94,12 @@ final class MeetingSessionCoordinator {
         isStarting
     }
 
+    func releaseIdleVADResources() async {
+        guard !isActive else { return }
+        await voiceActivityDetector.releaseResources()
+        await offlineVoiceActivityDetector.releaseResources()
+    }
+
     func prepareForStart() {
         guard !isActive else { return }
         cleanupSessionState(shouldLogCaptureStop: false)

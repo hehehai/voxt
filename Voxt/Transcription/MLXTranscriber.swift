@@ -1424,6 +1424,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             }
             releaseNativeLiveSession(cancelSession: false)
             onTranscriptionFinished?("")
+            releaseCompletedSessionResources(revision: revision)
             return
         }
 
@@ -1468,6 +1469,33 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         isFinalizingTranscription = false
         onTranscriptionFinished = nil
         onPartialTranscription = nil
+    }
+
+    /// Releases the reusable capture runtime after the model-level idle timeout has elapsed.
+    /// The model manager remains responsible for model lifetime; this only tears down the
+    /// dictation transcriber and its lightweight VAD/audio state.
+    @discardableResult
+    func releaseIdleResources() -> Bool {
+        guard !isRecording, !isFinalizingTranscription else { return false }
+
+        sessionRevision += 1
+        stopAudioEngine()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.reset()
+        cancelActiveTasks()
+        sampleStore.clear()
+        voiceActivityFrameStore.clear()
+        voiceActivityFilteredSampleStore.clear()
+        removeCompletedAudioArchiveIfNeeded()
+        senseVoiceVADModel = nil
+        audioLevelDelivery.clear()
+        audioLevel = 0
+        isModelInitializing = false
+        isEnhancing = false
+        onTranscriptionFinished = nil
+        onPartialTranscription = nil
+        dictionaryEntryProvider = nil
+        return true
     }
 
     /// Triggers an intermediate transcription pass while recording.
@@ -1530,6 +1558,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         defer {
             if revision == sessionRevision {
                 isFinalizingTranscription = false
+                releaseCompletedSessionResources(revision: revision)
             }
         }
         pendingRuntimeFailureMessage = nil
@@ -1642,6 +1671,26 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         sampleStore.clear()
         voiceActivityFilteredSampleStore.clear()
         releaseNativeLiveSession(cancelSession: false)
+    }
+
+    /// Drops per-session buffers and completed task/callback references while keeping the
+    /// audio engine object and loaded model reusable for the next recording.
+    private func releaseCompletedSessionResources(revision: Int) {
+        guard revision == sessionRevision, !isRecording else { return }
+
+        sampleStore.clear()
+        voiceActivityFrameStore.clear()
+        voiceActivityFilteredSampleStore.clear()
+        preloadTask?.cancel()
+        preloadTask = nil
+        captureWatchdogTask?.cancel()
+        captureWatchdogTask = nil
+        finalizationTask = nil
+        audioLevelDelivery.clear()
+        audioLevel = 0
+        onTranscriptionFinished = nil
+        onPartialTranscription = nil
+        dictionaryEntryProvider = nil
     }
 
     private func runManagedCorrectionPass(
