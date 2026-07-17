@@ -6,6 +6,32 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.3-beta.1] - 2026-07-17
+
+### English
+
+#### Changed
+- Reduced idle memory after local ASR and LLM use by releasing voice-activity, transcription, MLX cache, and allocator resources after the model timeout.
+
+#### Fixed
+- Prevented delayed memory reclamation from being skipped after meetings, temporary background work, model changes or deletion, and remote VAD-only sessions.
+
+### 简体中文
+
+#### 改进
+- 本地 ASR 和 LLM 模型超时卸载后，继续释放语音活动检测、转写器、MLX 缓存和分配器资源，降低应用空闲内存占用。
+
+#### 修复
+- 修复会议、临时后台任务、模型切换或删除，以及仅使用远程模型和 VAD 的会话可能永久错过延迟内存回收的问题。
+
+### 日本語
+
+#### 変更
+- ローカル ASR と LLM のモデルがタイムアウトで解放された後、音声区間検出、文字起こし、MLX キャッシュ、アロケータのリソースも解放し、アイドル時のメモリ使用量を削減しました。
+
+#### 修正
+- 会議、一時的なバックグラウンド処理、モデルの変更や削除、リモートモデルと VAD のみを使用するセッションの後に、遅延メモリ回収が実行されない場合がある問題を修正しました。
+
 ## [1.13.2] - 2026-07-17
 
 ### English
