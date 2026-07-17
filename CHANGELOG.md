@@ -6,6 +6,38 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-07-17
+
+### English
+
+#### Changed
+- Streamlined onboarding with inline microphone validation, main-language selection, clearer model choices, and improved settings controls.
+- Redesigned the DMG installer with a branded drag-to-Applications layout.
+
+#### Fixed
+- Made quitting more reliable by canceling recordings, model tasks, permission callbacks, updates, and sync work before releasing native resources.
+- Updated MLX Swift LM to fix local language model weight loading.
+
+### 简体中文
+
+#### 改进
+- 简化首次引导，整合麦克风检测、主要语言选择、更清晰的模型选项和改进后的设置控件。
+- 重新设计 DMG 安装界面，提供品牌化的拖拽安装布局。
+
+#### 修复
+- 在释放原生资源前取消录音、模型任务、权限回调、更新和同步工作，提升应用退出的可靠性。
+- 更新 MLX Swift LM，修复本地语言模型权重加载问题。
+
+### 日本語
+
+#### 変更
+- マイクの動作確認、メイン言語の選択、分かりやすいモデル候補、改善された設定コントロールを統合し、初回ガイドを簡素化しました。
+- ブランドに合わせた、Applications フォルダへドラッグするレイアウトに DMG インストーラーを刷新しました。
+
+#### 修正
+- ネイティブリソースを解放する前に、録音、モデル処理、権限コールバック、更新、同期処理をキャンセルし、アプリ終了時の信頼性を改善しました。
+- MLX Swift LM を更新し、ローカル言語モデルの重みの読み込みを修正しました。
+
 ## [1.13.1] - 2026-07-16
 
 ### English
