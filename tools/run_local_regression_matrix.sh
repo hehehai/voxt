@@ -144,6 +144,11 @@ run_mlx() {
     -only-testing:VoxtTests/MLXPipelineMetricsIntegrationTests
 }
 
+run_gguf() {
+  run_tests_with_model_gate "GGUF native termination regression" \
+    -only-testing:VoxtTests/GGUFUTF8OutputAccumulatorTests/testInstalledGGUFModelIsExplicitlyReleasedDuringApplicationTermination
+}
+
 run_vad() {
   run_tests "local VAD planning regression" \
     -only-testing:VoxtTests/ASRVoiceActivityPlanningTests \
@@ -171,6 +176,9 @@ case "$GROUP" in
   mlx)
     run_mlx
     ;;
+  gguf)
+    run_gguf
+    ;;
   vad)
     run_vad
     ;;
@@ -189,11 +197,11 @@ case "$GROUP" in
     run_vad
     ;;
   full)
-    run_group_collecting_failures run_core run_mlx run_vad run_whisper run_installed_matrix
+    run_group_collecting_failures run_core run_mlx run_gguf run_vad run_whisper run_installed_matrix
     ;;
   *)
     echo "Unknown group: $GROUP" >&2
-    echo "Usage: $0 [core|mlx|vad|whisper|installed|diagnostic|all|full]" >&2
+    echo "Usage: $0 [core|mlx|gguf|vad|whisper|installed|diagnostic|all|full]" >&2
     exit 2
     ;;
 esac

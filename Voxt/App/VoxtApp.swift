@@ -8,6 +8,7 @@ import AVFoundation
 import Speech
 import Carbon
 import Combine
+import Darwin
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -210,6 +211,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingSelectedTextTranslationRefreshTask: Task<Void, Never>?
     var pendingMeetingStartupTask: Task<Void, Never>?
     var pendingApplicationTerminationTask: Task<Void, Never>?
+    var llmTasksByRequestID: [UUID: Task<Void, Never>] = [:]
+    var recordingCaptureStartTasksByToken: [UUID: Task<Void, Never>] = [:]
+    private(set) var isApplicationTerminating = false
+    private var didCompleteApplicationTermination = false
+    private var requestedApplicationExitStatus: Int32?
     var lastSignificantAudioAt = Date()
     var didTriggerPauseTranscription = false
     var didTriggerPauseLLM = false
@@ -644,33 +650,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    func requestApplicationTermination(exitStatus: Int32? = nil) {
+        if let exitStatus {
+            requestedApplicationExitStatus = exitStatus
+        }
+        NSApp.terminate(nil)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if didCompleteApplicationTermination {
+            return .terminateNow
+        }
         guard pendingApplicationTerminationTask == nil else {
             return .terminateLater
         }
 
-        guard meetingSessionCoordinator.isActive else {
-            performApplicationTerminationCleanup()
-            return .terminateNow
-        }
-
-        pendingMeetingStartupTask?.cancel()
-        pendingMeetingStartupTask = nil
-        meetingSessionCoordinator.overlayState.isCloseConfirmationPresented = false
-        meetingSessionCoordinator.overlayState.isCaptureModePickerPresented = false
-        meetingSessionCoordinator.overlayState.isRealtimeTranslationLanguagePickerPresented = false
-        meetingDetailWindowManager.closeLiveWindow()
-        meetingOverlayWindow.hide()
-
-        guard let stopTask = meetingSessionCoordinator.stop() else {
-            performApplicationTerminationCleanup()
-            return .terminateNow
-        }
-
         pendingApplicationTerminationTask = Task { @MainActor [weak self] in
-            await stopTask.value
-            self?.performApplicationTerminationCleanup()
-            self?.pendingApplicationTerminationTask = nil
+            guard let self else {
+                sender.reply(toApplicationShouldTerminate: true)
+                return
+            }
+            await self.shutdownForApplicationTermination()
+            self.didCompleteApplicationTermination = true
+            self.pendingApplicationTerminationTask = nil
+            if let exitStatus = self.requestedApplicationExitStatus {
+                fflush(stdout)
+                fflush(stderr)
+                Darwin.exit(exitStatus)
+            }
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
@@ -678,14 +685,179 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         performApplicationTerminationCleanup()
+        VoxtLogFileStore.shared.flush()
     }
 
     private func performApplicationTerminationCleanup() {
+        isApplicationTerminating = true
         pendingMeetingStartupTask?.cancel()
         pendingMeetingStartupTask = nil
+        statusItem?.button?.isEnabled = false
+        mainWindowController?.close()
+        onboardingWindowController?.close()
         meetingDetailWindowManager.closeLiveWindow()
+        overlayWindow.hide(animated: false)
+        toastWindow.hide()
+        meetingOverlayWindow.hide()
         noteWindowManager.stop()
+        noteObsidianSyncCoordinator.shutdownForApplicationTermination()
+        noteRemindersSyncCoordinator.shutdownForApplicationTermination()
+        interactionSoundPlayer.reset()
+        appUpdateManager.shutdownForApplicationTermination()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
+        audioInputDevicesObserver?.stop()
+        audioInputDevicesObserver = nil
+        removeApplicationObserversAndEventMonitors()
+    }
+
+    private func shutdownForApplicationTermination() async {
+        guard !isApplicationTerminating else { return }
+        isApplicationTerminating = true
+        VoxtLog.info("Application termination cleanup started.")
+
+        hotkeyManager.stop()
+        let activeLLMTasks = cancelActiveLLMRequest()
+        let recordingCaptureStartTasks = cancelRecordingCaptureStartTask()
+        let pendingTranscriptionStart = pendingTranscriptionStartTask
+        let pendingMeetingStartup = pendingMeetingStartupTask
+        pendingTranscriptionStart?.cancel()
+        pendingMeetingStartup?.cancel()
+        isSessionCancellationRequested = true
+        activeRecordingSessionID = UUID()
+
+        let tasksToCancel = applicationTasksForTermination()
+        for task in tasksToCancel {
+            task.cancel()
+        }
+        clearApplicationTaskReferencesForTermination()
+        performApplicationTerminationCleanup()
+
+        async let obsidianSyncCompleted = noteObsidianSyncCoordinator
+            .waitForPendingApplicationTerminationSync(timeout: 2)
+        async let remindersSyncCompleted = noteRemindersSyncCoordinator
+            .waitForPendingApplicationTerminationSync(timeout: 2)
+
+        // A meeting startup task can be awaiting MLXModelManager's shared, unstructured
+        // loading task. Cancel that inner task before awaiting the outer startup barrier.
+        mlxModelManager.cancelPendingModelLoadForApplicationTermination()
+
+        await pendingTranscriptionStart?.value
+        await pendingMeetingStartup?.value
+        for task in recordingCaptureStartTasks {
+            await task.value
+        }
+
+        let meetingStopTask = meetingSessionCoordinator.stop()
+        speechTranscriber.shutdownForApplicationTermination()
+        await remoteASRTranscriber.shutdownForApplicationTermination()
+        await mlxTranscriber?.shutdownForApplicationTermination()
+        await sherpaOnnxTranscriber?.shutdownForApplicationTermination()
+        await meetingStopTask?.value
+
+        for task in tasksToCancel {
+            await task.value
+        }
+        for task in activeLLMTasks {
+            await task.value
+        }
+
+        await ggufTranslationModelManager.shutdownForApplicationTermination()
+        await customLLMManager.shutdownForApplicationTermination()
+        await mlxModelManager.shutdownForApplicationTermination()
+        await sherpaOnnxModelManager.shutdownForApplicationTermination()
+        await SileroVADModelProvisioner.shared.shutdownForApplicationTermination()
+
+        let syncCompletion = await (obsidianSyncCompleted, remindersSyncCompleted)
+        if !syncCompletion.0 {
+            VoxtLog.warning("Obsidian sync did not finish before the application termination deadline.")
+        }
+        if !syncCompletion.1 {
+            VoxtLog.persistenceWarning("Reminders sync did not finish before the application termination deadline.")
+        }
+
+        VoxtLog.info("Application termination cleanup completed.")
+        VoxtLogFileStore.shared.flush()
+    }
+
+    private func applicationTasksForTermination() -> [Task<Void, Never>] {
+        var tasks = [
+            inputDevicesRefreshTask,
+            pendingSessionFinishTask,
+            silenceMonitorTask,
+            pauseLLMTask,
+            pendingDictionaryHistoryScanTask,
+            pendingAutomaticDictionaryLearningTask,
+            overlayReminderTask,
+            overlayStatusClearTask,
+            toastDismissTask,
+            pendingSystemAudioMuteTask,
+            pendingSelectedTextTranslationRefreshTask
+        ].compactMap { $0 }
+        tasks.append(contentsOf: llmWarmupTasksByRepo.values)
+        tasks.append(contentsOf: remoteLLMWarmupTasksByKey.values)
+        return tasks
+    }
+
+    private func clearApplicationTaskReferencesForTermination() {
+        inputDevicesRefreshTask = nil
+        pendingSessionFinishTask = nil
+        silenceMonitorTask = nil
+        pauseLLMTask = nil
+        pendingDictionaryHistoryScanTask = nil
+        pendingAutomaticDictionaryLearningTask = nil
+        overlayReminderTask = nil
+        overlayStatusClearTask = nil
+        toastDismissTask = nil
+        pendingSystemAudioMuteTask = nil
+        pendingSelectedTextTranslationRefreshTask = nil
+        pendingMeetingStartupTask = nil
+        pendingTranscriptionStartTask = nil
+        llmWarmupTasksByRepo.removeAll()
+        remoteLLMWarmupTasksByKey.removeAll()
+    }
+
+    private func removeApplicationObserversAndEventMonitors() {
+        if let interfaceLanguageObserver {
+            NotificationCenter.default.removeObserver(interfaceLanguageObserver)
+            self.interfaceLanguageObserver = nil
+        }
+        if let updateAvailabilityObserver {
+            NotificationCenter.default.removeObserver(updateAvailabilityObserver)
+            self.updateAvailabilityObserver = nil
+        }
+        if let selectedInputDeviceObserver {
+            NotificationCenter.default.removeObserver(selectedInputDeviceObserver)
+            self.selectedInputDeviceObserver = nil
+        }
+        if let featureSettingsObserver {
+            NotificationCenter.default.removeObserver(featureSettingsObserver)
+            self.featureSettingsObserver = nil
+        }
+        let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
+        if let workspaceWillSleepObserver {
+            workspaceNotificationCenter.removeObserver(workspaceWillSleepObserver)
+            self.workspaceWillSleepObserver = nil
+        }
+        if let workspaceDidWakeObserver {
+            workspaceNotificationCenter.removeObserver(workspaceDidWakeObserver)
+            self.workspaceDidWakeObserver = nil
+        }
+        if let workspaceSessionDidBecomeActiveObserver {
+            workspaceNotificationCenter.removeObserver(workspaceSessionDidBecomeActiveObserver)
+            self.workspaceSessionDidBecomeActiveObserver = nil
+        }
+        if let workspaceSessionDidResignActiveObserver {
+            workspaceNotificationCenter.removeObserver(workspaceSessionDidResignActiveObserver)
+            self.workspaceSessionDidResignActiveObserver = nil
+        }
+        if let globalEscapeKeyMonitor {
+            NSEvent.removeMonitor(globalEscapeKeyMonitor)
+            self.globalEscapeKeyMonitor = nil
+        }
+        if let localEscapeKeyMonitor {
+            NSEvent.removeMonitor(localEscapeKeyMonitor)
+            self.localEscapeKeyMonitor = nil
+        }
     }
 
     deinit {

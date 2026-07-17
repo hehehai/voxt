@@ -177,6 +177,8 @@ class MLXModelManager: ObservableObject {
     private var idleUnloadTask: Task<Void, Never>?
     private let downloadSizeTolerance: Double = 0.9
     private var activeUseCount = 0
+    private var activeUseWaiters: [CheckedContinuation<Void, Never>] = []
+    private var isShuttingDownForApplicationTermination = false
     private var resolvedIdleUnloadDelay: Duration {
         .seconds(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds())
     }
@@ -276,6 +278,7 @@ class MLXModelManager: ObservableObject {
     }
 
     func ensureModelDirectory(repo: String) async throws -> URL {
+        guard !isShuttingDownForApplicationTermination else { throw CancellationError() }
         let canonicalRepo = Self.canonicalModelRepo(repo)
         if let modelDir = readableCacheDirectory(for: canonicalRepo, requireValid: true) {
             return modelDir
@@ -316,6 +319,7 @@ class MLXModelManager: ObservableObject {
     }
 
     func downloadModel(repo: String) async {
+        guard !isShuttingDownForApplicationTermination else { return }
         let canonicalRepo = Self.canonicalModelRepo(repo)
         await performDownload(forRepo: canonicalRepo)
     }
@@ -653,7 +657,12 @@ class MLXModelManager: ObservableObject {
         cancelDownload(repo: modelRepo)
     }
 
+    func cancelPendingModelLoadForApplicationTermination() {
+        loadingTask?.cancel()
+    }
+
     func loadModel() async throws -> any STTGenerationModel {
+        guard !isShuttingDownForApplicationTermination else { throw CancellationError() }
         cancelIdleUnloadTask()
         if let model = loadedModel, loadedRepo == modelRepo {
             VoxtLog.modelInfo("MLX Audio model reuse existing instance. repo=\(modelRepo)", verbose: true)
@@ -746,7 +755,60 @@ class MLXModelManager: ObservableObject {
     func endActiveUse() {
         activeUseCount = max(0, activeUseCount - 1)
         guard activeUseCount == 0 else { return }
+        resumeActiveUseWaiters()
         scheduleIdleUnloadIfNeeded()
+    }
+
+    func shutdownForApplicationTermination() async {
+        guard !isShuttingDownForApplicationTermination else {
+            await waitForActiveUsesToFinish()
+            return
+        }
+        isShuttingDownForApplicationTermination = true
+
+        let downloadTasks = Array(downloadTasksByRepo.values)
+        for repo in Array(downloadTasksByRepo.keys) {
+            pauseDownload(repo: repo)
+        }
+        let loadTask = loadingTask
+        loadTask?.cancel()
+        let pendingSizeTask = sizeTask
+        sizeTask?.cancel()
+        sizeTask = nil
+        let pendingPrefetchTask = prefetchTask
+        prefetchTask?.cancel()
+        prefetchTask = nil
+        cancelIdleUnloadTask()
+
+        for task in downloadTasks {
+            await task.value
+        }
+        _ = try? await loadTask?.value
+        await pendingSizeTask?.value
+        await pendingPrefetchTask?.value
+        await waitForActiveUsesToFinish()
+
+        loadingTask = nil
+        loadingRepo = nil
+        loadedModel = nil
+        loadedRepo = nil
+        Memory.clearCache()
+        VoxtLog.modelInfo("MLX Audio model released for application termination.", verbose: true)
+    }
+
+    private func waitForActiveUsesToFinish() async {
+        guard activeUseCount > 0 else { return }
+        await withCheckedContinuation { continuation in
+            activeUseWaiters.append(continuation)
+        }
+    }
+
+    private func resumeActiveUseWaiters() {
+        let waiters = activeUseWaiters
+        activeUseWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     var modelSizeOnDisk: String {

@@ -229,11 +229,11 @@ extension AppDelegate {
                 print("[VOXT_SMOKE][output]")
                 print(finalResult?.output ?? "")
                 fflush(stdout)
-                exit(0)
+                self.requestApplicationTermination(exitStatus: 0)
             } catch {
                 print("[VOXT_SMOKE][error] \(error.localizedDescription)")
                 fflush(stdout)
-                exit(1)
+                self.requestApplicationTermination(exitStatus: 1)
             }
         }
 

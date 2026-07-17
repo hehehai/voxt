@@ -651,8 +651,7 @@ extension AppDelegate {
 
     @objc private func quit() {
         VoxtLog.info("Quit requested from menu.")
-        hotkeyManager.stop()
-        NSApp.terminate(nil)
+        requestApplicationTermination()
     }
 
     func prepareMainWindowForUpdatePresentation() {
@@ -676,7 +675,7 @@ extension AppDelegate {
         if alert.runModal() == .alertFirstButtonReturn {
             PermissionGuidance.openSettings(for: SettingsPermissionKind.speechRecognition)
         }
-        NSApp.terminate(nil)
+        requestApplicationTermination()
     }
 }
 

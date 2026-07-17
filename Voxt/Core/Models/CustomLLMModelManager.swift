@@ -164,6 +164,8 @@ class CustomLLMModelManager: ObservableObject {
     private var lastLoggedModelPresence: (repo: String, downloaded: Bool)?
     private var lastInvalidRepoLogged: String?
     private var activeInferenceCount = 0
+    private var activeInferenceWaiters: [CheckedContinuation<Void, Never>] = []
+    private var isShuttingDownForApplicationTermination = false
     private var resolvedIdleUnloadDelay: Duration {
         .seconds(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds())
     }
@@ -442,6 +444,7 @@ class CustomLLMModelManager: ObservableObject {
         onPartialText: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
         return try await withActiveInference {
+            try Task.checkCancellation()
             guard isModelDownloaded(repo: request.repo) else {
                 throw NSError(
                     domain: "Voxt.CustomLLM",
@@ -482,6 +485,7 @@ class CustomLLMModelManager: ObservableObject {
                 images: inputImages,
                 videos: []
             ) {
+                try Task.checkCancellation()
                 switch event {
                 case .chunk(let chunk):
                     if firstChunkLatencyMs == nil, !chunk.isEmpty {
@@ -946,6 +950,7 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func downloadModel() async {
+        guard !isShuttingDownForApplicationTermination else { return }
         await performDownload(forRepo: modelRepo)
     }
 
@@ -1024,6 +1029,7 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func downloadModel(repo: String) async {
+        guard !isShuttingDownForApplicationTermination else { return }
         await performDownload(forRepo: repo)
     }
 
@@ -1757,6 +1763,7 @@ class CustomLLMModelManager: ObservableObject {
     private func withActiveInference<T>(
         _ operation: () async throws -> T
     ) async throws -> T {
+        guard !isShuttingDownForApplicationTermination else { throw CancellationError() }
         beginActiveInference()
         defer { endActiveInference() }
         return try await operation()
@@ -1770,8 +1777,54 @@ class CustomLLMModelManager: ObservableObject {
     private func endActiveInference() {
         activeInferenceCount = max(0, activeInferenceCount - 1)
         guard activeInferenceCount == 0 else { return }
+        resumeActiveInferenceWaiters()
         Memory.clearCache()
         scheduleIdleUnloadIfNeeded()
+    }
+
+    func shutdownForApplicationTermination() async {
+        guard !isShuttingDownForApplicationTermination else {
+            await waitForActiveInferencesToFinish()
+            return
+        }
+        isShuttingDownForApplicationTermination = true
+
+        let downloadTasks = Array(downloadTasksByRepo.values)
+        for repo in Array(downloadTasksByRepo.keys) {
+            pauseDownload(repo: repo)
+        }
+        let pendingSizeTask = sizeTask
+        sizeTask?.cancel()
+        sizeTask = nil
+        let pendingPrefetchTask = prefetchTask
+        prefetchTask?.cancel()
+        prefetchTask = nil
+        cancelIdleUnloadTask()
+
+        for task in downloadTasks {
+            await task.value
+        }
+        await pendingSizeTask?.value
+        await pendingPrefetchTask?.value
+        await waitForActiveInferencesToFinish()
+
+        releaseInferenceResources(resetActiveInferenceCount: false)
+        VoxtLog.modelInfo("Custom LLM model released for application termination.", verbose: true)
+    }
+
+    private func waitForActiveInferencesToFinish() async {
+        guard activeInferenceCount > 0 else { return }
+        await withCheckedContinuation { continuation in
+            activeInferenceWaiters.append(continuation)
+        }
+    }
+
+    private func resumeActiveInferenceWaiters() {
+        let waiters = activeInferenceWaiters
+        activeInferenceWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     private func scheduleIdleUnloadIfNeeded() {

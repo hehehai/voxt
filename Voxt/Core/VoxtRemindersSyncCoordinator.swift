@@ -115,9 +115,11 @@ final class VoxtRemindersSyncCoordinator {
     private let backendFactory: () -> any VoxtRemindersSyncBackend
     private let notificationCenter: NotificationCenter
     private let queue = DispatchQueue(label: "com.voxt.reminders-sync", qos: .utility)
+    private let pendingReconciliationGroup = DispatchGroup()
     private var itemsCancellable: AnyCancellable?
     private var settingsObserver: NSObjectProtocol?
     private var latestNotesSnapshot: [VoxtNoteItem]
+    private var isShuttingDownForApplicationTermination = false
 
     @MainActor
     init(
@@ -171,16 +173,42 @@ final class VoxtRemindersSyncCoordinator {
     }
 
     @MainActor
+    func shutdownForApplicationTermination() {
+        guard !isShuttingDownForApplicationTermination else { return }
+        isShuttingDownForApplicationTermination = true
+        itemsCancellable?.cancel()
+        itemsCancellable = nil
+        if let settingsObserver {
+            notificationCenter.removeObserver(settingsObserver)
+            self.settingsObserver = nil
+        }
+    }
+
+    func waitForPendingApplicationTerminationSync(timeout: TimeInterval) async -> Bool {
+        let pendingReconciliationGroup = self.pendingReconciliationGroup
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(
+                    returning: pendingReconciliationGroup.wait(timeout: .now() + timeout) == .success
+                )
+            }
+        }
+    }
+
+    @MainActor
     private func scheduleSync(
         notes: [VoxtNoteItem],
         settings: RemindersNoteSyncSettings,
         reason: String
     ) {
+        guard !isShuttingDownForApplicationTermination else { return }
         guard noteStore.isAvailable else {
             VoxtLog.persistenceWarning("Reminders sync skipped because note storage is unavailable. reason=\(reason)")
             return
         }
-        queue.async { [backendFactory, exportStore] in
+        pendingReconciliationGroup.enter()
+        queue.async { [backendFactory, exportStore, pendingReconciliationGroup] in
+            defer { pendingReconciliationGroup.leave() }
             Self.reconcile(
                 notes: notes,
                 settings: settings,

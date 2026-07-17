@@ -35,6 +35,7 @@ extension AppDelegate {
         silenceMonitorTask = nil
         pauseLLMTask?.cancel()
         pauseLLMTask = nil
+        _ = cancelRecordingCaptureStartTask()
 
         speechTranscriber.stopRecording()
         mlxTranscriber?.stopRecording()
@@ -64,6 +65,7 @@ extension AppDelegate {
         outputMode: SessionOutputMode,
         transcriptionCaptureMode: TranscriptionCaptureSessionMode = .standard
     ) {
+        guard !isApplicationTerminating else { return }
         let transcriptionHotkeyStartBehavior = outputMode == .transcription
             ? pendingTranscriptionHotkeyStartBehavior
             : nil

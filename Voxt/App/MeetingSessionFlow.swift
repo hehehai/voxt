@@ -20,6 +20,7 @@ extension AppDelegate {
     }
 
     func handleMeetingHotkeyDown() {
+        guard !isApplicationTerminating else { return }
         VoxtLog.meeting(
             "Meeting hotkey invoked. isMeetingActive=\(meetingSessionCoordinator.isActive), isSessionActive=\(isSessionActive)"
         )

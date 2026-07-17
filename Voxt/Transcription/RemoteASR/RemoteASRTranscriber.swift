@@ -99,7 +99,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     func requestPermissions() async -> Bool {
-        await AVCaptureDevice.requestAccess(for: .audio)
+        await RecordingPermissionRequest.microphoneAccess()
     }
 
     func consumeCompletedAudioArchiveURL() -> URL? {
@@ -3160,6 +3160,25 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         activeConfiguration = nil
         stopRequested = false
         lastPresentedRuntimeErrorMessage = ""
+    }
+
+    func shutdownForApplicationTermination() async {
+        let tasks = [
+            transcribeTask,
+            openAIPreviewTask,
+            intermediateTranscriptionPublishTask,
+            doubaoCaptureStartupWatchdogTask
+        ].compactMap { $0 }
+        onTranscriptionFinished = nil
+        onStartFailure = nil
+        onRuntimeFailure = nil
+        discardPendingSessionOutput()
+        for task in tasks {
+            await task.value
+        }
+        isEnhancing = false
+        isRequesting = false
+        isFinalizingTranscription = false
     }
 
     private func startOpenAIPreviewLoop(configuration: RemoteProviderConfiguration) {

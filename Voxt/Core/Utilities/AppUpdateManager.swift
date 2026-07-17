@@ -103,6 +103,12 @@ final class AppUpdateManager: NSObject, ObservableObject, SPUStandardUserDriverD
         VoxtLog.update("Sparkle update state cleared because update channel preference changed.")
     }
 
+    func shutdownForApplicationTermination() {
+        cancelInteractiveUpdatePresentationWatchdog()
+        onUpdatePresentationWillBegin = nil
+        onUpdatePresentationDidEnd = nil
+    }
+
     #if DEBUG
     func setUpdateStateForTesting(hasUpdate: Bool, latestVersion: String?, issue: String?) {
         setUpdateState(hasUpdate: hasUpdate, latestVersion: latestVersion, issue: issue, downloadedURL: nil)

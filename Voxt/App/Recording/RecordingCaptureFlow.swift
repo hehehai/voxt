@@ -6,6 +6,31 @@ import AVFoundation
 import Speech
 
 extension AppDelegate {
+    func startTrackedRecordingCaptureTask(
+        _ operation: @escaping @MainActor () async -> Void
+    ) {
+        for task in recordingCaptureStartTasksByToken.values {
+            task.cancel()
+        }
+        let token = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.recordingCaptureStartTasksByToken[token] = nil }
+            await operation()
+        }
+        recordingCaptureStartTasksByToken[token] = task
+    }
+
+    @discardableResult
+    func cancelRecordingCaptureStartTask() -> [Task<Void, Never>] {
+        let tasks = Array(recordingCaptureStartTasksByToken.values)
+        recordingCaptureStartTasksByToken.removeAll()
+        for task in tasks {
+            task.cancel()
+        }
+        return tasks
+    }
+
     private var isMLXReady: Bool {
         switch mlxModelManager.state {
         case .downloaded, .ready, .loading:
@@ -16,8 +41,9 @@ extension AppDelegate {
     }
 
     func startSherpaOnnxRecordingSession() {
-        Task { [weak self] in
+        startTrackedRecordingCaptureTask { [weak self] in
             guard let self else { return }
+            let sessionID = self.activeRecordingSessionID
             let sherpa = self.sherpaOnnxTranscriber ?? SherpaOnnxTranscriber(modelManager: self.sherpaOnnxModelManager)
             self.sherpaOnnxTranscriber = sherpa
             sherpa.dictionaryEntryProvider = { [weak self] in
@@ -28,13 +54,17 @@ extension AppDelegate {
                 )
             }
             let granted = await sherpa.requestPermissions()
+            guard !Task.isCancelled,
+                  !self.isApplicationTerminating,
+                  self.shouldHandleCallbacks(for: sessionID),
+                  self.isSessionActive
+            else { return }
             guard granted else {
                 self.handleRecordingPermissionDenied()
                 return
             }
 
             self.overlayState.statusMessage = ""
-            let sessionID = self.activeRecordingSessionID
             sherpa.transcribedText = ""
             sherpa.setPreferredInputDevice(self.selectedInputDeviceID)
             sherpa.onTranscriptionFinished = { [weak self] text in
@@ -93,10 +123,14 @@ extension AppDelegate {
             state: overlayState,
             position: overlayPosition
         )
-        Task { [weak self] in
+        startTrackedRecordingCaptureTask { [weak self] in
             guard let self else { return }
             if let startFailureMessage = await mlx.startRecordingSession() {
-                guard self.shouldHandleCallbacks(for: sessionID), self.isSessionActive else { return }
+                guard !Task.isCancelled,
+                      !self.isApplicationTerminating,
+                      self.shouldHandleCallbacks(for: sessionID),
+                      self.isSessionActive
+                else { return }
                 VoxtLog.asrWarning("MLX recording session did not enter recording state. reason=\(startFailureMessage)")
                 self.handleRecordingStartFailure(startFailureMessage)
                 return
@@ -105,6 +139,8 @@ extension AppDelegate {
             // engine was starting. If the session is no longer current, stop the stray capture.
             guard self.shouldHandleCallbacks(for: sessionID),
                   self.isSessionActive,
+                  !self.isApplicationTerminating,
+                  !Task.isCancelled,
                   !self.isSessionCancellationRequested,
                   self.recordingStoppedAt == nil
             else {
@@ -115,16 +151,21 @@ extension AppDelegate {
     }
 
     func startSpeechRecordingSession() {
-        Task { [weak self] in
+        startTrackedRecordingCaptureTask { [weak self] in
             guard let self else { return }
+            let sessionID = self.activeRecordingSessionID
             let granted = await self.speechTranscriber.requestPermissions()
+            guard !Task.isCancelled,
+                  !self.isApplicationTerminating,
+                  self.shouldHandleCallbacks(for: sessionID),
+                  self.isSessionActive
+            else { return }
             guard granted else {
                 self.handleRecordingPermissionDenied()
                 return
             }
 
             self.overlayState.statusMessage = ""
-            let sessionID = self.activeRecordingSessionID
             self.speechTranscriber.transcribedText = ""
             self.speechTranscriber.sessionReportsPartialResultsOverride = self.transcriptionCapturePipeline.usesLiveDisplay
             self.speechTranscriber.onTranscriptionFinished = { [weak self] text in
@@ -149,16 +190,21 @@ extension AppDelegate {
     }
 
     func startRemoteRecordingSession() {
-        Task { [weak self] in
+        startTrackedRecordingCaptureTask { [weak self] in
             guard let self else { return }
+            let sessionID = self.activeRecordingSessionID
             let granted = await self.remoteASRTranscriber.requestPermissions()
+            guard !Task.isCancelled,
+                  !self.isApplicationTerminating,
+                  self.shouldHandleCallbacks(for: sessionID),
+                  self.isSessionActive
+            else { return }
             guard granted else {
                 self.handleRecordingPermissionDenied()
                 return
             }
 
             self.overlayState.statusMessage = ""
-            let sessionID = self.activeRecordingSessionID
             self.remoteASRTranscriber.dictionaryEntryProvider = { [weak self] in
                 guard let self else { return [] }
                 return self.dictionaryStore.activeEntriesForRemoteRequest(

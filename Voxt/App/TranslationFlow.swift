@@ -249,7 +249,7 @@ extension AppDelegate {
             nil
         }
 
-        Task {
+        runTrackedLLMRequest(requestID) {
             defer {
                 if self.isCurrentLLMRequest(requestID) {
                     self.setEnhancingState(false)
@@ -399,7 +399,7 @@ extension AppDelegate {
     private func processSelectedTextTranslation(_ text: String) {
         setEnhancingState(true)
         let requestID = beginLLMRequest()
-        Task {
+        runTrackedLLMRequest(requestID) {
             defer {
                 if self.isCurrentLLMRequest(requestID) {
                     self.setEnhancingState(false)

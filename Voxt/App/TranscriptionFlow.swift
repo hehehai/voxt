@@ -67,7 +67,7 @@ extension AppDelegate {
         setEnhancingState(true)
         overlayState.transcribedText = text
         let requestID = beginLLMRequest()
-        Task {
+        runTrackedLLMRequest(requestID) {
             defer {
                 if self.isCurrentLLMRequest(requestID) {
                     self.setEnhancingState(false)

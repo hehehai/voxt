@@ -429,6 +429,43 @@ final class VoxtObsidianSyncCoordinatorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: dailyFileURL.path))
     }
 
+    func testApplicationTerminationShutdownStopsFutureSyncScheduling() async throws {
+        let directory = try TemporaryDirectory()
+        let vaultURL = directory.url.appendingPathComponent("vault", isDirectory: true)
+        try FileManager.default.createDirectory(at: vaultURL, withIntermediateDirectories: true)
+        let noteStore = VoxtNoteStore(fileURL: directory.url.appendingPathComponent("notes.json"))
+        let exportStore = VoxtNoteObsidianExportStore(fileURL: directory.url.appendingPathComponent("exports.json"))
+        let notificationCenter = NotificationCenter()
+        var settings = ObsidianNoteSyncSettings(
+            enabled: false,
+            vaultPath: vaultURL.path,
+            relativeFolder: "Voxt",
+            groupingMode: .file
+        )
+        let coordinator = VoxtObsidianSyncCoordinator(
+            noteStore: noteStore,
+            settingsProvider: { settings },
+            exportStore: exportStore,
+            notificationCenter: notificationCenter
+        )
+
+        coordinator.shutdownForApplicationTermination()
+        settings.enabled = true
+        _ = noteStore.append(
+            sessionID: UUID(),
+            text: "Must not sync while terminating.",
+            title: "Termination",
+            titleGenerationState: .generated
+        )
+        notificationCenter.post(name: .voxtFeatureSettingsDidChange, object: nil)
+
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(exportStore.recordsByNoteID.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vaultURL.appendingPathComponent("Voxt").path))
+        let didFinishPendingSync = await coordinator.waitForPendingApplicationTerminationSync(timeout: 0.2)
+        XCTAssertTrue(didFinishPendingSync)
+    }
+
     private static let dayFolderFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)

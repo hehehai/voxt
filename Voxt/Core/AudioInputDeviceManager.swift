@@ -326,7 +326,12 @@ final class AudioInputDeviceObserver {
     }
 
     deinit {
+        stop()
+    }
+
+    func stop() {
         guard isRegistered else { return }
+        isRegistered = false
         let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &devicesAddress, queue, block)
         AudioObjectRemovePropertyListenerBlock(systemObjectID, &defaultInputAddress, queue, block)

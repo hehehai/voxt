@@ -63,15 +63,8 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func requestPermissions() async -> Bool {
-        let speechStatus = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status)
-            }
-        }
-        guard speechStatus == .authorized else { return false }
-
-        let micStatus = await AVCaptureDevice.requestAccess(for: .audio)
-        return micStatus
+        guard await RecordingPermissionRequest.speechRecognitionAccess() else { return false }
+        return await RecordingPermissionRequest.microphoneAccess()
     }
 
     func consumeCompletedAudioArchiveURL() -> URL? {
@@ -143,6 +136,16 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
                 self?.forceFinalizeIfNeeded()
             }
         }
+    }
+
+    func shutdownForApplicationTermination() {
+        stopAudioCapture()
+        cleanupSessionState()
+        removeCompletedAudioArchiveIfNeeded()
+        audioLevel = 0
+        isEnhancing = false
+        isFinalizingTranscription = false
+        onTranscriptionFinished = nil
     }
 
     func restartCaptureForPreferredInputDevice() throws {

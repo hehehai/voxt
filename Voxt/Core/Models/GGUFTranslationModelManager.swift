@@ -44,6 +44,7 @@ final class GGUFTranslationModelManager: ObservableObject {
     private var downloadTask: Task<Void, Never>?
     private var downloadProgressTask: Task<Void, Never>?
     private var downloadStopAction: DownloadStopAction?
+    private var isShuttingDownForApplicationTermination = false
 
     init(modelID: GGUFTranslationModelID) {
         self.currentModelID = modelID
@@ -146,6 +147,7 @@ final class GGUFTranslationModelManager: ObservableObject {
     }
 
     func downloadModel(id: GGUFTranslationModelID) {
+        guard !isShuttingDownForApplicationTermination else { return }
         guard downloadTask == nil else { return }
         guard activeDownloadModelID == nil || activeDownloadModelID == id else { return }
         guard !isModelDownloaded(id: id) else {
@@ -260,6 +262,30 @@ final class GGUFTranslationModelManager: ObservableObject {
         }
         downloadTask?.cancel()
         cancelDownloadProgressTask()
+    }
+
+    func shutdownForApplicationTermination() async {
+        guard !isShuttingDownForApplicationTermination else { return }
+        isShuttingDownForApplicationTermination = true
+        let task = downloadTask
+        if let activeDownloadModelID, task != nil {
+            downloadStopAction = .pause
+            if let snapshot = downloadingSnapshot(for: activeDownloadModelID) {
+                setPausedState(
+                    id: activeDownloadModelID,
+                    progress: snapshot.progress,
+                    completed: snapshot.completed,
+                    total: snapshot.total,
+                    currentFile: snapshot.currentFile,
+                    completedFiles: snapshot.completedFiles,
+                    totalFiles: snapshot.totalFiles
+                )
+            }
+            task?.cancel()
+            cancelDownloadProgressTask()
+        }
+        await task?.value
+        await runtime.shutdownForApplicationTermination()
     }
 
     func hasResumableDownload(id: GGUFTranslationModelID) -> Bool {
@@ -487,6 +513,7 @@ final class GGUFTranslationModelManager: ObservableObject {
         modelID: GGUFTranslationModelID,
         onPartialText: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
+        guard !isShuttingDownForApplicationTermination else { throw CancellationError() }
         let modelURL = modelFileURL(for: modelID)
         guard FileManager.default.fileExists(atPath: modelURL.path) else {
             throw NSError(
@@ -528,24 +555,63 @@ final class GGUFTranslationModelManager: ObservableObject {
     }
 }
 
-actor GGUFTranslationRuntime {
-    nonisolated private static let backendInitialized: Void = {
-        llama_log_set(llamaLogCallback, nil)
-        llama_backend_init()
-    }()
+nonisolated private final class GGUFLlamaBackendLifetime: @unchecked Sendable {
+    static let shared = GGUFLlamaBackendLifetime()
 
-    nonisolated private static let llamaLogCallback: ggml_log_callback = { level, text, _ in
+    private static let logCallback: ggml_log_callback = { level, text, _ in
         guard level == GGML_LOG_LEVEL_ERROR else { return }
         guard let text else { return }
         fputs(text, stderr)
     }
 
+    private let lock = NSLock()
+    private var leaseCount = 0
+
+    func acquire() {
+        lock.lock()
+        defer { lock.unlock() }
+        if leaseCount == 0 {
+            llama_log_set(Self.logCallback, nil)
+            llama_backend_init()
+        }
+        leaseCount += 1
+    }
+
+    func release() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard leaseCount > 0 else { return }
+        leaseCount -= 1
+        if leaseCount == 0 {
+            llama_backend_free()
+        }
+    }
+}
+
+actor GGUFTranslationRuntime {
+
     private var loadedModelPath: String?
     private var loadedModel: OpaquePointer?
+    private var hasBackendLease = false
 
     deinit {
         if let loadedModel {
             llama_model_free(loadedModel)
+        }
+        if hasBackendLease {
+            GGUFLlamaBackendLifetime.shared.release()
+        }
+    }
+
+    func shutdownForApplicationTermination() {
+        if let loadedModel {
+            llama_model_free(loadedModel)
+            self.loadedModel = nil
+            loadedModelPath = nil
+        }
+        if hasBackendLease {
+            GGUFLlamaBackendLifetime.shared.release()
+            hasBackendLease = false
         }
     }
 
@@ -556,8 +622,9 @@ actor GGUFTranslationRuntime {
         maxTokens: Int,
         onPartialText: (@Sendable (String) -> Void)?
     ) throws -> String {
+        try Task.checkCancellation()
         let startedAt = CFAbsoluteTimeGetCurrent()
-        _ = Self.backendInitialized
+        acquireBackendIfNeeded()
         let model = try loadModelIfNeeded(at: modelURL)
         let vocab = llama_model_get_vocab(model)
         let formattedPrompt = try formattedPrompt(
@@ -629,6 +696,7 @@ actor GGUFTranslationRuntime {
                 userInfo: [NSLocalizedDescriptionKey: "Prompt evaluation failed."]
             )
         }
+        try Task.checkCancellation()
         let prefillElapsedMs = millisecondsSince(prefillStartedAt)
 
         let sampler = try createSampler()
@@ -649,6 +717,7 @@ actor GGUFTranslationRuntime {
             stopReason = "noGenerationBudget"
         }
         for _ in 0..<generationLimit {
+            try Task.checkCancellation()
             if Int(tokenPosition) >= contextLimit - 1 {
                 stopReason = "contextLimit"
                 break
@@ -710,6 +779,12 @@ actor GGUFTranslationRuntime {
             "GGUF runtime finished. model=\(modelURL.lastPathComponent), outputChars=\(generated.count), outputTokens=\(generatedTokenCount), prefillMs=\(prefillElapsedMs), firstTokenMs=\(firstTokenLatencyMs.map(String.init) ?? "n/a"), totalMs=\(totalElapsedMs), stop=\(stopReason)"
         )
         return generated
+    }
+
+    private func acquireBackendIfNeeded() {
+        guard !hasBackendLease else { return }
+        GGUFLlamaBackendLifetime.shared.acquire()
+        hasBackendLease = true
     }
 
     private func millisecondsSince(_ start: CFAbsoluteTime) -> Int {

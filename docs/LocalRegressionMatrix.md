@@ -8,11 +8,12 @@ Use this document to choose focused local checks before a full release gate. CI 
 | --- | --- | --- |
 | core | Capture pipeline, session flow, prompt building, VAD planning, Feature Settings, MLX planning, model debug | `tools/run_local_regression_matrix.sh core` |
 | mlx | MLX public fixture and replay tests | `VOXT_RUN_MODEL_TESTS=1 tools/run_local_regression_matrix.sh mlx` |
+| gguf | Installed GGUF inference and native termination cleanup | `tools/run_local_regression_matrix.sh gguf` |
 | vad | Local VAD mode, runtime policy, storage, debug snapshot | `tools/run_local_regression_matrix.sh vad` |
 | whisper | Whisper diagnostic fixture/replay tests | `tools/run_local_regression_matrix.sh whisper` |
 | installed | Installed-model long-form matrix | `tools/run_local_regression_matrix.sh installed` |
 | all | core + mlx + vad | `tools/run_local_regression_matrix.sh all` |
-| full | core + mlx + vad + whisper + installed | `tools/run_local_regression_matrix.sh full` |
+| full | core + mlx + gguf + vad + whisper + installed | `tools/run_local_regression_matrix.sh full` |
 
 ## VAD / ASR Gate Safety
 

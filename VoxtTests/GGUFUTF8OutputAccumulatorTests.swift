@@ -24,4 +24,63 @@ final class GGUFUTF8OutputAccumulatorTests: XCTestCase {
         XCTAssertEqual(accumulator.finalizedText(), "\u{FFFD}")
         XCTAssertTrue(accumulator.finalizedWithReplacementCharacters)
     }
+
+    @MainActor
+    func testApplicationTerminationShutdownRejectsNewGGUFInference() async {
+        let manager = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
+        await manager.shutdownForApplicationTermination()
+        let request = LLMCompiledRequest(
+            taskLabel: "translation",
+            instructions: "Translate the text.",
+            prompt: "hello",
+            debugInput: "hello",
+            fallbackText: "hello",
+            inputCharacterCount: 5,
+            outputTokenBudgetHint: nil,
+            attachments: [],
+            conversationHistory: [],
+            previousResponseID: nil,
+            responseFormat: nil
+        )
+
+        do {
+            _ = try await manager.executeCompiledRequest(request, modelID: .hyMT2Q4KM)
+            XCTFail("GGUF inference should not start after application termination shutdown.")
+        } catch is CancellationError {
+            // Expected: shutdown closes the native backend and rejects new work.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error).")
+        }
+    }
+
+    @MainActor
+    func testInstalledGGUFModelIsExplicitlyReleasedDuringApplicationTermination() async throws {
+        try ModelTestGate.requireEnabled("GGUF native termination integration test")
+        let manager = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
+        guard manager.isModelDownloaded(id: .hyMT2Q4KM) else {
+            throw XCTSkip("Installed GGUF model is required for the native termination integration test.")
+        }
+        let request = LLMCompiledRequest(
+            taskLabel: "termination-integration",
+            instructions: "Translate the user text to Chinese. Return only the translation.",
+            prompt: "hello",
+            debugInput: "hello",
+            fallbackText: "你好",
+            inputCharacterCount: 5,
+            outputTokenBudgetHint: 48,
+            attachments: [],
+            conversationHistory: [],
+            previousResponseID: nil,
+            responseFormat: nil
+        )
+
+        _ = try await manager.executeCompiledRequest(request, modelID: .hyMT2Q4KM)
+        await manager.shutdownForApplicationTermination()
+
+        // The llama backend is process-scoped. Reacquiring it after a complete release verifies
+        // that one runtime cannot permanently poison later runtimes in the same process.
+        let restartedManager = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
+        _ = try await restartedManager.executeCompiledRequest(request, modelID: .hyMT2Q4KM)
+        await restartedManager.shutdownForApplicationTermination()
+    }
 }

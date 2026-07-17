@@ -7,6 +7,34 @@ import HuggingFace
 
 @MainActor
 final class MLXModelManagerTests: XCTestCase {
+    func testApplicationTerminationShutdownRejectsNewMLXModelLoads() async {
+        let manager = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
+        await manager.shutdownForApplicationTermination()
+
+        do {
+            _ = try await manager.loadModel()
+            XCTFail("MLX model loading should not start after application termination shutdown.")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error).")
+        }
+    }
+
+    func testApplicationTerminationShutdownRejectsNewCustomLLMInference() async {
+        let manager = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
+        await manager.shutdownForApplicationTermination()
+
+        do {
+            try await manager.prewarmModel(repo: manager.currentModelRepo)
+            XCTFail("Custom LLM inference should not start after application termination shutdown.")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error).")
+        }
+    }
+
     func testMLXAudioActiveHubCacheUsesConfiguredModelStorageRoot() throws {
         let defaults = UserDefaults.standard
         let previousPath = defaults.string(forKey: AppPreferenceKey.modelStorageRootPath)

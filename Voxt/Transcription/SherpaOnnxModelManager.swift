@@ -46,6 +46,7 @@ final class SherpaOnnxModelManager: ObservableObject {
     private var downloadStopActionsByID: [SherpaOnnxModelID: DownloadStopAction] = [:]
     private var downloadedStateByID: [SherpaOnnxModelID: Bool] = [:]
     private var localSizeTextByID: [SherpaOnnxModelID: String] = [:]
+    private var isShuttingDownForApplicationTermination = false
 
     init(modelID: SherpaOnnxModelID) {
         self.currentModelID = modelID
@@ -152,6 +153,7 @@ final class SherpaOnnxModelManager: ObservableObject {
     }
 
     func downloadModel(id: SherpaOnnxModelID) {
+        guard !isShuttingDownForApplicationTermination else { return }
         guard downloadTasksByID[id] == nil else { return }
         guard !isModelDownloaded(id: id) else {
             setState(.downloaded, for: id)
@@ -202,6 +204,18 @@ final class SherpaOnnxModelManager: ObservableObject {
             }
         }
         downloadTasksByID[id] = task
+    }
+
+    func shutdownForApplicationTermination() async {
+        guard !isShuttingDownForApplicationTermination else { return }
+        isShuttingDownForApplicationTermination = true
+        let tasks = Array(downloadTasksByID.values)
+        for id in Array(downloadTasksByID.keys) {
+            pauseDownload(id: id)
+        }
+        for task in tasks {
+            await task.value
+        }
     }
 
     func pauseDownload(id: SherpaOnnxModelID) {

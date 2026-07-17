@@ -34,6 +34,7 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
     private var activeAudioURL: URL?
     private var completedAudioArchiveURL: URL?
     private var pendingRuntimeFailureMessage: String?
+    private var offlineRecognitionTask: Task<Void, Never>?
     private var activeCaptureUsesPreferredInputDevice = false
     private let targetSampleRate = 16000
 
@@ -46,7 +47,7 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func requestPermissions() async -> Bool {
-        await AVCaptureDevice.requestAccess(for: .audio)
+        await RecordingPermissionRequest.microphoneAccess()
     }
 
     func startRecording() {
@@ -74,6 +75,29 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
         activeAudioURL = nil
         completedAudioArchiveURL = audioURL
         runOfflineRecognition(fileURL: audioURL)
+    }
+
+    func shutdownForApplicationTermination() async {
+        let recognitionTask = offlineRecognitionTask
+        recognitionTask?.cancel()
+        onTranscriptionFinished = nil
+        onStartFailure = nil
+
+        audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        activeAudioFile = nil
+        isRecording = false
+        audioLevel = 0
+        isEnhancing = false
+        isFinalizingTranscription = false
+
+        await recognitionTask?.value
+        offlineRecognitionTask = nil
+        if let activeAudioURL {
+            try? FileManager.default.removeItem(at: activeAudioURL)
+        }
+        activeAudioURL = nil
+        discardCompletedAudioArchive()
     }
 
     func restartCaptureForPreferredInputDevice() throws {
@@ -115,13 +139,20 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         let recognitionConfiguration = resolvedRecognitionConfiguration(for: modelID)
-        let resampledSamples = await Task.detached(priority: .userInitiated) {
-            Self.resampleMonoSamples(
+        let resampleTask = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            return try Self.resampleMonoSamples(
                 samples,
                 sourceSampleRate: sampleRate,
                 targetSampleRate: Double(self.targetSampleRate)
             )
-        }.value
+        }
+        let resampledSamples = try await withTaskCancellationHandler {
+            try await resampleTask.value
+        } onCancel: {
+            resampleTask.cancel()
+        }
+        try Task.checkCancellation()
         let text = try await Self.recognize(
             samples: resampledSamples,
             sampleRate: Int32(targetSampleRate),
@@ -134,9 +165,16 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func transcribeAudioFile(_ fileURL: URL) async throws -> String {
-        let loaded = try await Task.detached(priority: .userInitiated) {
-            try DebugAudioClipIO.loadMonoSamples(from: fileURL)
-        }.value
+        let loadTask = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            return try DebugAudioClipIO.loadMonoSamples(from: fileURL)
+        }
+        let loaded = try await withTaskCancellationHandler {
+            try await loadTask.value
+        } onCancel: {
+            loadTask.cancel()
+        }
+        try Task.checkCancellation()
         return try await transcribeBufferedChunk(
             samples: loaded.samples,
             sampleRate: loaded.sampleRate
@@ -199,17 +237,17 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
     private func runOfflineRecognition(fileURL: URL) {
         isFinalizingTranscription = true
 
-        Task { [weak self] in
+        offlineRecognitionTask?.cancel()
+        offlineRecognitionTask = Task { [weak self] in
             guard let self else { return }
+            defer { self.offlineRecognitionTask = nil }
             do {
                 let text = try await self.transcribeAudioFile(fileURL)
-                await MainActor.run {
-                    self.finishTranscription(text)
-                }
+                guard !Task.isCancelled else { return }
+                self.finishTranscription(text)
             } catch {
-                await MainActor.run {
-                    self.finishWithRuntimeFailure(error.localizedDescription)
-                }
+                guard !Task.isCancelled else { return }
+                self.finishWithRuntimeFailure(error.localizedDescription)
             }
         }
     }
@@ -290,7 +328,7 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
         _ samples: [Float],
         sourceSampleRate: Double,
         targetSampleRate: Double
-    ) -> [Float] {
+    ) throws -> [Float] {
         guard !samples.isEmpty else { return [] }
         guard sourceSampleRate > 0, targetSampleRate > 0 else { return samples }
         guard abs(sourceSampleRate - targetSampleRate) > 0.5 else { return samples }
@@ -301,6 +339,9 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
         output.reserveCapacity(outputCount)
 
         for outputIndex in 0..<outputCount {
+            if outputIndex.isMultiple(of: 4096) {
+                try Task.checkCancellation()
+            }
             let sourcePosition = Double(outputIndex) * ratio
             let lowerIndex = min(Int(sourcePosition), samples.count - 1)
             let upperIndex = min(lowerIndex + 1, samples.count - 1)
@@ -338,7 +379,8 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
         recognitionConfiguration: SherpaOnnxRecognitionConfiguration
     ) async throws -> String {
         #if SHERPA_ONNX_AVAILABLE
-        return try await Task.detached(priority: .userInitiated) {
+        let recognitionTask = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
             let option = SherpaOnnxModelCatalog.option(for: modelID)
             return try recognizeWithSherpa(
                 samples: samples,
@@ -347,7 +389,12 @@ final class SherpaOnnxTranscriber: ObservableObject, TranscriberProtocol {
                 modelDirectory: modelDirectory,
                 recognitionConfiguration: recognitionConfiguration
             )
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await recognitionTask.value
+        } onCancel: {
+            recognitionTask.cancel()
+        }
         #else
         throw NSError(
             domain: "SherpaOnnxTranscriber",
@@ -372,6 +419,7 @@ nonisolated private func recognizeWithSherpa(
     modelDirectory: URL,
     recognitionConfiguration: SherpaOnnxRecognitionConfiguration
 ) throws -> String {
+    try Task.checkCancellation()
     var config = SherpaOnnxOfflineRecognizerConfig()
     config.feat_config.sample_rate = sampleRate
     config.feat_config.feature_dim = 80
@@ -454,6 +502,7 @@ nonisolated private func recognizeWithSherpa(
     var texts: [String] = []
     texts.reserveCapacity(chunks.count)
     for chunk in chunks {
+        try Task.checkCancellation()
         let text = try decodeSherpaChunk(samples: chunk, sampleRate: sampleRate, recognizer: recognizer)
         if !text.isEmpty {
             texts.append(text)

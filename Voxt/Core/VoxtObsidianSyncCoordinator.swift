@@ -24,10 +24,13 @@ final class VoxtObsidianSyncCoordinator {
     private let settingsProvider: () -> ObsidianNoteSyncSettings
     private let exportStore: VoxtNoteObsidianExportStore
     private let fileManagerBox: FileManagerBox
+    private let notificationCenter: NotificationCenter
     private let queue = DispatchQueue(label: "com.voxt.obsidian-sync", qos: .utility)
+    private let pendingReconciliationGroup = DispatchGroup()
     private var itemsCancellable: AnyCancellable?
     private var settingsObserver: NSObjectProtocol?
     private var latestNotesSnapshot: [VoxtNoteItem]
+    private var isShuttingDownForApplicationTermination = false
 
     @MainActor
     init(
@@ -41,6 +44,7 @@ final class VoxtObsidianSyncCoordinator {
         self.settingsProvider = settingsProvider
         self.exportStore = exportStore ?? VoxtNoteObsidianExportStore()
         self.fileManagerBox = FileManagerBox(fileManager: fileManager)
+        self.notificationCenter = notificationCenter
         self.latestNotesSnapshot = noteStore.items
 
         itemsCancellable = noteStore.$items
@@ -75,7 +79,30 @@ final class VoxtObsidianSyncCoordinator {
 
     deinit {
         if let settingsObserver {
-            NotificationCenter.default.removeObserver(settingsObserver)
+            notificationCenter.removeObserver(settingsObserver)
+        }
+    }
+
+    @MainActor
+    func shutdownForApplicationTermination() {
+        guard !isShuttingDownForApplicationTermination else { return }
+        isShuttingDownForApplicationTermination = true
+        itemsCancellable?.cancel()
+        itemsCancellable = nil
+        if let settingsObserver {
+            notificationCenter.removeObserver(settingsObserver)
+            self.settingsObserver = nil
+        }
+    }
+
+    func waitForPendingApplicationTerminationSync(timeout: TimeInterval) async -> Bool {
+        let pendingReconciliationGroup = self.pendingReconciliationGroup
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(
+                    returning: pendingReconciliationGroup.wait(timeout: .now() + timeout) == .success
+                )
+            }
         }
     }
 
@@ -85,11 +112,14 @@ final class VoxtObsidianSyncCoordinator {
         settings: ObsidianNoteSyncSettings,
         reason: String
     ) {
+        guard !isShuttingDownForApplicationTermination else { return }
         guard noteStore.isAvailable else {
             VoxtLog.warning("Obsidian sync skipped because note storage is unavailable. reason=\(reason)")
             return
         }
-        queue.async { [exportStore, fileManagerBox] in
+        pendingReconciliationGroup.enter()
+        queue.async { [exportStore, fileManagerBox, pendingReconciliationGroup] in
+            defer { pendingReconciliationGroup.leave() }
             Self.reconcile(
                 notes: notes,
                 settings: settings,

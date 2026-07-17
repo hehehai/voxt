@@ -1286,8 +1286,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func requestPermissions() async -> Bool {
-        let micStatus = await AVCaptureDevice.requestAccess(for: .audio)
-        return micStatus
+        await RecordingPermissionRequest.microphoneAccess()
     }
 
     func consumeCompletedAudioArchiveURL() -> URL? {
@@ -1433,6 +1432,42 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         finalizationTask = Task { [weak self] in
             await self?.runFinalizationPipeline(revision: revision, sampleRate: sampleRate)
         }
+    }
+
+    func shutdownForApplicationTermination() async {
+        let correctionTask = correctionLoopTask
+        let finalizationTask = finalizationTask
+        let preloadTask = preloadTask
+        let watchdogTask = captureWatchdogTask
+        let setupTask = liveSessionSetupTask
+        let correctionPassTask = activeCorrectionPassTask
+        let streamingEventTask = qwenStreamingEventTask
+        let streamingFeedTask = qwenStreamingFeedTask
+
+        sessionRevision += 1
+        stopAudioEngine()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        isRecording = false
+        cancelActiveTasks()
+
+        await correctionTask?.value
+        await finalizationTask?.value
+        await preloadTask?.value
+        await watchdogTask?.value
+        await setupTask?.value
+        _ = await correctionPassTask?.value
+        await streamingEventTask?.value
+        await streamingFeedTask?.value
+
+        sampleStore.clear()
+        voiceActivityFrameStore.clear()
+        voiceActivityFilteredSampleStore.clear()
+        removeCompletedAudioArchiveIfNeeded()
+        audioLevel = 0
+        isEnhancing = false
+        isFinalizingTranscription = false
+        onTranscriptionFinished = nil
+        onPartialTranscription = nil
     }
 
     /// Triggers an intermediate transcription pass while recording.

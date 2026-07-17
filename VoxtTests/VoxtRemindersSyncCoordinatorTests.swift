@@ -208,6 +208,98 @@ final class VoxtRemindersSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(exportStore.recordsByNoteID.isEmpty)
         XCTAssertNotNil(noteStore.items.first(where: { $0.id == item.id }))
     }
+
+    func testApplicationTerminationShutdownStopsFutureSyncScheduling() async throws {
+        let directory = try TemporaryDirectory()
+        let noteStore = VoxtNoteStore(fileURL: directory.url.appendingPathComponent("notes.json"))
+        let exportStore = VoxtNoteRemindersExportStore(fileURL: directory.url.appendingPathComponent("exports.json"))
+        let backend = FakeVoxtRemindersSyncBackend()
+        let notificationCenter = NotificationCenter()
+        var settings = RemindersNoteSyncSettings(
+            enabled: false,
+            selectedListIdentifier: "list-1",
+            selectedListTitle: "Voxt"
+        )
+        let coordinator = VoxtRemindersSyncCoordinator(
+            noteStore: noteStore,
+            settingsProvider: { settings },
+            exportStore: exportStore,
+            notificationCenter: notificationCenter,
+            backendFactory: { backend }
+        )
+
+        coordinator.shutdownForApplicationTermination()
+        settings.enabled = true
+        _ = noteStore.append(
+            sessionID: UUID(),
+            text: "Must not sync while terminating.",
+            title: "Termination",
+            titleGenerationState: .generated
+        )
+        notificationCenter.post(name: .voxtFeatureSettingsDidChange, object: nil)
+
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(backend.reminders.isEmpty)
+        XCTAssertTrue(exportStore.recordsByNoteID.isEmpty)
+        let didFinishPendingSync = await coordinator.waitForPendingApplicationTerminationSync(timeout: 0.2)
+        XCTAssertTrue(didFinishPendingSync)
+    }
+
+    func testApplicationTerminationWaitUsesBoundedDeadlineForBlockedBackend() async throws {
+        let directory = try TemporaryDirectory()
+        let noteStore = VoxtNoteStore(fileURL: directory.url.appendingPathComponent("notes.json"))
+        let backend = BlockingVoxtRemindersSyncBackend()
+        let settings = RemindersNoteSyncSettings(
+            enabled: true,
+            selectedListIdentifier: "list-1",
+            selectedListTitle: "Voxt"
+        )
+        let coordinator = VoxtRemindersSyncCoordinator(
+            noteStore: noteStore,
+            settingsProvider: { settings },
+            notificationCenter: NotificationCenter(),
+            backendFactory: { backend }
+        )
+        let didStart = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: backend.started.wait(timeout: .now() + 1) == .success)
+            }
+        }
+        XCTAssertTrue(didStart)
+
+        coordinator.shutdownForApplicationTermination()
+        let didFinishBeforeDeadline = await coordinator.waitForPendingApplicationTerminationSync(timeout: 0.05)
+        XCTAssertFalse(didFinishBeforeDeadline)
+
+        backend.release.signal()
+        let didFinishAfterRelease = await coordinator.waitForPendingApplicationTerminationSync(timeout: 1)
+        XCTAssertTrue(didFinishAfterRelease)
+    }
+}
+
+private final class BlockingVoxtRemindersSyncBackend: VoxtRemindersSyncBackend, @unchecked Sendable {
+    let started = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+
+    func authorizationState() -> RemindersAuthorizationState {
+        started.signal()
+        release.wait()
+        return .authorized
+    }
+
+    func writableLists() throws -> [RemindersListDescriptor] {
+        [RemindersListDescriptor(identifier: "list-1", title: "Voxt", sourceTitle: "iCloud")]
+    }
+
+    func reminder(with identifier: String) throws -> RemindersReminderRecord? {
+        nil
+    }
+
+    func saveReminder(_ payload: RemindersReminderPayload, existingIdentifier: String?) throws -> String {
+        existingIdentifier ?? "unused"
+    }
+
+    func deleteReminder(with identifier: String) throws {}
 }
 
 private final class FakeVoxtRemindersSyncBackend: VoxtRemindersSyncBackend {
@@ -269,7 +361,7 @@ private final class FakeVoxtRemindersSyncBackend: VoxtRemindersSyncBackend {
 
     func dropReminder(identifier: String) {
         lock.withLock {
-            remindersByIdentifier.removeValue(forKey: identifier)
+            _ = remindersByIdentifier.removeValue(forKey: identifier)
         }
     }
 }
