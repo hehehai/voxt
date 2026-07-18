@@ -83,6 +83,10 @@ enum IdleMemoryReclamationSupport {
 
     @discardableResult
     static func releaseAllocatorCaches() -> Int {
+        // MLX evaluation is asynchronous. Ensure completion handlers have released their
+        // graph and Metal resources before asking MLX and malloc to return idle pages.
+        Stream.gpu.synchronize()
+        Stream.cpu.synchronize()
         Memory.clearCache()
         return malloc_zone_pressure_relief(nil, 0)
     }

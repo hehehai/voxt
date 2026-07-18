@@ -172,6 +172,7 @@ class CustomLLMModelManager: ObservableObject {
         }
     }
     private var inferenceModelRepo: String?
+    private let inferenceLoadCoordinator = SharedModelLoadCoordinator<ModelContainer>()
     private var lastLoggedModelPresence: (repo: String, downloaded: Bool)?
     private var lastInvalidRepoLogged: String?
     private var activeInferenceCount = 0
@@ -674,10 +675,13 @@ class CustomLLMModelManager: ObservableObject {
         if CustomLLMModelCatalog.supportsImageInput(repo: repo) {
             _ = MLXVLM.TrampolineModelFactory.modelFactory()
         }
-        let container = try await loadModelContainer(
-            from: directory,
-            using: LocalTokenizerLoader()
-        )
+        let container = try await inferenceLoadCoordinator.value(for: repo) {
+            try await loadModelContainer(
+                from: directory,
+                using: LocalTokenizerLoader()
+            )
+        }
+        try Task.checkCancellation()
         inferenceContainer = container
         inferenceModelRepo = repo
         return container
@@ -1813,6 +1817,7 @@ class CustomLLMModelManager: ObservableObject {
         let pendingPrefetchTask = prefetchTask
         prefetchTask?.cancel()
         prefetchTask = nil
+        let pendingInferenceLoadTasks = inferenceLoadCoordinator.cancelAll()
         cancelIdleUnloadTask()
 
         for task in downloadTasks {
@@ -1820,6 +1825,9 @@ class CustomLLMModelManager: ObservableObject {
         }
         await pendingSizeTask?.value
         await pendingPrefetchTask?.value
+        for task in pendingInferenceLoadTasks {
+            _ = try? await task.value
+        }
         await waitForActiveInferencesToFinish()
 
         releaseInferenceResources(resetActiveInferenceCount: false)
@@ -1866,6 +1874,7 @@ class CustomLLMModelManager: ObservableObject {
 
     private func releaseInferenceResources(resetActiveInferenceCount: Bool) {
         cancelIdleUnloadTask()
+        inferenceLoadCoordinator.cancelAll()
         inferenceContainer = nil
         inferenceModelRepo = nil
         if resetActiveInferenceCount {
