@@ -346,6 +346,7 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -derivedDataPath build/DerivedData \
+            -jobs 1 \
             build \
             CURRENT_PROJECT_VERSION="$RELEASE_BUILD_NUMBER" \
             CODE_SIGNING_ALLOWED=NO \
