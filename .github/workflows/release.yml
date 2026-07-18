@@ -180,6 +180,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve Sherpa ONNX cache key
+        id: sherpa_cache_key
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(xcodebuild -version | tr '\n' '-' | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/-+$//')"
+          SHERPA_SCRIPT_HASH="$(shasum -a 256 tools/build_sherpa_onnx_macos.sh | awk '{print $1}')"
+          echo "xcode_version=$XCODE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "key=sherpa-onnx-${RUNNER_OS}-${RUNNER_ARCH}-${XCODE_VERSION}-${SHERPA_ONNX_REF}-${SHERPA_SCRIPT_HASH}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Sherpa ONNX runtime cache
+        id: sherpa_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ThirdParty/sherpa-onnx/install
+            ThirdParty/sherpa-onnx/sherpa-onnx.xcframework
+          key: ${{ steps.sherpa_cache_key.outputs.key }}
+
+      - name: Resolve Xcode compilation cache key
+        id: compilation_cache_key
+        run: |
+          set -euo pipefail
+          PACKAGE_RESOLVED="Voxt.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+          PACKAGE_HASH="$(shasum -a 256 "$PACKAGE_RESOLVED" | awk '{print $1}')"
+          CACHE_PREFIX="xcode-compilation-${RUNNER_OS}-${RUNNER_ARCH}-${{ steps.sherpa_cache_key.outputs.xcode_version }}-release-universal-v1"
+          echo "key=${CACHE_PREFIX}-${PACKAGE_HASH}" >> "$GITHUB_OUTPUT"
+          echo "restore_prefix=${CACHE_PREFIX}-" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Xcode compilation cache
+        id: compilation_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.compilation_cache_key.outputs.key }}
+          restore-keys: |
+            ${{ steps.compilation_cache_key.outputs.restore_prefix }}
+
+      - name: Report Sherpa ONNX cache status
+        run: |
+          {
+            echo "### Release dependency cache"
+            echo "- Sherpa ONNX: ${{ steps.sherpa_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- Xcode compilation: ${{ steps.compilation_cache.outputs.cache-hit == 'true' && 'exact hit' || 'miss/partial restore' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -226,29 +271,44 @@ jobs:
       - name: Validate MARKETING_VERSION matches tag
         run: |
           set -euo pipefail
-          MARKETING_VERSION="$(xcodebuild -project Voxt.xcodeproj -scheme Voxt -configuration Release -showBuildSettings | awk -F' = ' '/ MARKETING_VERSION = / {print $2; exit}')"
-          if [ -z "$MARKETING_VERSION" ]; then
-            echo "::error::Unable to read MARKETING_VERSION from build settings"
+          MARKETING_VERSIONS="$(
+            awk -F' = ' '
+              /^[[:space:]]*"?MARKETING_VERSION(\[[^]]+\])?"? = / {
+                value=$2
+                sub(/;.*/, "", value)
+                gsub(/"/, "", value)
+                print value
+              }
+            ' Voxt.xcodeproj/project.pbxproj | sort -u
+          )"
+          if [ -z "$MARKETING_VERSIONS" ]; then
+            echo "::error::Unable to read MARKETING_VERSION from Voxt.xcodeproj"
             exit 1
           fi
           TAG_BASE_VERSION="$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
-          if [ "$MARKETING_VERSION" != "$TAG_BASE_VERSION" ]; then
-            echo "::error::MARKETING_VERSION($MARKETING_VERSION) does not match tag base version($TAG_BASE_VERSION)"
+          if [ "$MARKETING_VERSIONS" != "$TAG_BASE_VERSION" ]; then
+            echo "::error::MARKETING_VERSION values($MARKETING_VERSIONS) do not match tag base version($TAG_BASE_VERSION)"
             exit 1
           fi
 
       - name: Prepare Sherpa ONNX runtime
         run: |
           set -euo pipefail
-          tools/build_sherpa_onnx_macos.sh
-          cp Config/SherpaOnnx.local.xcconfig.example Config/SherpaOnnx.local.xcconfig
-
-          mkdir -p build
-          xcodebuild -project Voxt.xcodeproj -scheme Voxt -configuration Release -showBuildSettings > build/sherpa-build-settings.txt
-          if ! grep -E 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = .*SHERPA_ONNX_AVAILABLE' build/sherpa-build-settings.txt >/dev/null; then
-            echo "::error::Release build settings do not enable SHERPA_ONNX_AVAILABLE"
-            exit 1
+          if [ "${{ steps.sherpa_cache.outputs.cache-hit }}" != "true" ]; then
+            tools/build_sherpa_onnx_macos.sh
           fi
+
+          test -f ThirdParty/sherpa-onnx/install/include/sherpa-onnx/c-api/c-api.h
+          test -f ThirdParty/sherpa-onnx/install/lib/libsherpa-onnx.a
+          test -f ThirdParty/sherpa-onnx/install/lib/libonnxruntime.a
+          test -f ThirdParty/sherpa-onnx/sherpa-onnx.xcframework/Info.plist
+          test -f ThirdParty/sherpa-onnx/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a
+          lipo ThirdParty/sherpa-onnx/install/lib/libsherpa-onnx.a -verify_arch arm64 x86_64
+          lipo ThirdParty/sherpa-onnx/install/lib/libonnxruntime.a -verify_arch arm64 x86_64
+          lipo ThirdParty/sherpa-onnx/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a -verify_arch arm64 x86_64
+
+          cp Config/SherpaOnnx.local.xcconfig.example Config/SherpaOnnx.local.xcconfig
+          grep -F "SHERPA_ONNX_AVAILABLE" Config/SherpaOnnx.local.xcconfig >/dev/null
 
       - name: Setup keychain and import certificates
         run: |
@@ -346,11 +406,25 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -derivedDataPath build/DerivedData \
+            -showBuildTimingSummary \
             build \
             CURRENT_PROJECT_VERSION="$RELEASE_BUILD_NUMBER" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
+
+      - name: Validate Xcode compilation cache
+        run: |
+          set -euo pipefail
+          test -f build/DerivedData/CompilationCache.noindex/builtin/v1.validation
+          du -sh build/DerivedData/CompilationCache.noindex
+
+      - name: Save Xcode compilation cache
+        if: steps.compilation_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.compilation_cache_key.outputs.key }}
 
       - name: Validate Sherpa ONNX runtime symbols
         run: |
@@ -413,6 +487,12 @@ jobs:
           BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST_PATH" 2>/dev/null || true)"
           if [ "$BUNDLE_VERSION" != "$RELEASE_BUILD_NUMBER" ]; then
             echo "::error::CFBundleVersion($BUNDLE_VERSION) does not match release build number($RELEASE_BUILD_NUMBER)"
+            exit 1
+          fi
+          BUNDLE_SHORT_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST_PATH" 2>/dev/null || true)"
+          TAG_BASE_VERSION="$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          if [ "$BUNDLE_SHORT_VERSION" != "$TAG_BASE_VERSION" ]; then
+            echo "::error::CFBundleShortVersionString($BUNDLE_SHORT_VERSION) does not match tag base version($TAG_BASE_VERSION)"
             exit 1
           fi
 
