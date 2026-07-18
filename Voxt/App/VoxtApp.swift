@@ -210,6 +210,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var pendingSystemAudioMuteTask: Task<Void, Never>?
     var pendingSelectedTextTranslationRefreshTask: Task<Void, Never>?
     var pendingMeetingStartupTask: Task<Void, Never>?
+    var pendingDeepIdleMemoryReclamationTask: Task<Void, Never>?
+    var deepIdleMemoryReclamationID = UUID()
     var pendingApplicationTerminationTask: Task<Void, Never>?
     var llmTasksByRequestID: [UUID: Task<Void, Never>] = [:]
     var recordingCaptureStartTasksByToken: [UUID: Task<Void, Never>] = [:]
@@ -375,6 +377,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         super.init()
         AppDelegate.shared = self
+        mlxModelManager.onModelUnloaded = { [weak self] in
+            self?.scheduleDeepIdleMemoryReclamation()
+        }
+        customLLMManager.onModelUnloaded = { [weak self] in
+            self?.scheduleDeepIdleMemoryReclamation()
+        }
     }
 
     private static func migrateLegacyLocalModelMemoryPreferenceIfNeeded() {
@@ -791,7 +799,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             overlayStatusClearTask,
             toastDismissTask,
             pendingSystemAudioMuteTask,
-            pendingSelectedTextTranslationRefreshTask
+            pendingSelectedTextTranslationRefreshTask,
+            pendingDeepIdleMemoryReclamationTask
         ].compactMap { $0 }
         tasks.append(contentsOf: llmWarmupTasksByRepo.values)
         tasks.append(contentsOf: remoteLLMWarmupTasksByKey.values)
@@ -810,6 +819,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         toastDismissTask = nil
         pendingSystemAudioMuteTask = nil
         pendingSelectedTextTranslationRefreshTask = nil
+        pendingDeepIdleMemoryReclamationTask = nil
         pendingMeetingStartupTask = nil
         pendingTranscriptionStartTask = nil
         llmWarmupTasksByRepo.removeAll()

@@ -24,7 +24,6 @@ extension AppDelegate {
     @discardableResult
     func cancelRecordingCaptureStartTask() -> [Task<Void, Never>] {
         let tasks = Array(recordingCaptureStartTasksByToken.values)
-        recordingCaptureStartTasksByToken.removeAll()
         for task in tasks {
             task.cancel()
         }
@@ -289,6 +288,7 @@ extension AppDelegate {
         resetVoxtNoteSessionRuntimeState()
         overlayState.reset()
         overlayWindow.hide()
+        scheduleDeepIdleMemoryReclamation()
     }
 
     func preflightPermissionsForRecording(engine: TranscriptionEngine) -> Bool {
@@ -955,6 +955,13 @@ actor RecordingVoiceActivityFrameDecider {
     func reset() async {
         await sileroDetector.reset()
         await omniDetector.reset()
+        sileroFallbackWarningLogged = false
+        omniDegradedWarningLogged = false
+    }
+
+    func releaseResources() async {
+        await sileroDetector.unload()
+        await omniDetector.releaseResources()
         sileroFallbackWarningLogged = false
         omniDegradedWarningLogged = false
     }

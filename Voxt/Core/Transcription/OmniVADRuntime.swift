@@ -371,6 +371,23 @@ actor OmniStreamVoiceActivityBackend: ASRVoiceActivityBackend {
         lastDecisions.removeAll()
     }
 
+    func releaseResources() {
+        if let library {
+            for handle in handles.values {
+                library.destroy(handle.pointer)
+            }
+            if let baseHandle {
+                library.destroy(baseHandle.pointer)
+            }
+        }
+        handles.removeAll()
+        baseHandle = nil
+        library = nil
+        pendingSamples.removeAll()
+        pendingSampleOffsets.removeAll()
+        lastDecisions.removeAll()
+    }
+
     func decision(for frame: ASRVoiceActivityAudioFrame) async throws -> ASRVoiceActivityFrameDecision {
         try await decision(for: frame, streamID: "default") ?? ASRVoiceActivityFrameDecision(
             startSeconds: frame.startSeconds,
@@ -569,6 +586,14 @@ actor OmniOfflineVoiceActivityBackend: ASROfflineVoiceActivityBackend {
     deinit {
         guard let library, let handle else { return }
         library.batchDestroy(handle.pointer)
+    }
+
+    func releaseResources() {
+        if let library, let handle {
+            library.batchDestroy(handle.pointer)
+        }
+        handle = nil
+        library = nil
     }
 
     func speechRanges(samples: [Float], sampleRate: Double) async throws -> [ASROfflineSpeechRange] {

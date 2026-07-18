@@ -38,7 +38,6 @@ extension AppDelegate {
     @discardableResult
     func cancelActiveLLMRequest() -> [Task<Void, Never>] {
         let tasks = Array(llmTasksByRequestID.values)
-        llmTasksByRequestID.removeAll()
         activeLLMRequestID = UUID()
         for task in tasks {
             task.cancel()

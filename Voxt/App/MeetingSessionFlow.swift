@@ -255,7 +255,10 @@ extension AppDelegate {
         pendingMeetingSessionCompletionDisposition = .save
 
         meetingSessionCoordinator.onSessionFinished = { [weak self] result in
-            self?.handleMeetingSessionFinished(result) ?? false
+            guard let self else { return false }
+            let handled = self.handleMeetingSessionFinished(result)
+            self.scheduleDeepIdleMemoryReclamation()
+            return handled
         }
 
         meetingSessionCoordinator.prepareForStart()
@@ -283,6 +286,7 @@ extension AppDelegate {
                 VoxtLog.meetingWarning("Meeting start failed: \(failureMessage)")
                 self.meetingOverlayWindow.hide()
                 self.showOverlayReminder(failureMessage)
+                self.scheduleDeepIdleMemoryReclamation()
             } else {
                 self.hotkeyManager.setCommonStopKeyEnabled(true)
             }

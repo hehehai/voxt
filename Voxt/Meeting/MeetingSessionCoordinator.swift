@@ -5,6 +5,22 @@ import Foundation
 import AVFoundation
 
 @MainActor
+struct MeetingVADResources {
+    private(set) var streaming = MeetingVoiceActivityDetector()
+    private(set) var offline = MeetingOfflineVoiceActivityDetector()
+
+    mutating func replaceForIdleReclamation() -> (
+        streaming: MeetingVoiceActivityDetector,
+        offline: MeetingOfflineVoiceActivityDetector
+    ) {
+        let idleResources = (streaming: streaming, offline: offline)
+        streaming = MeetingVoiceActivityDetector()
+        offline = MeetingOfflineVoiceActivityDetector()
+        return idleResources
+    }
+}
+
+@MainActor
 final class MeetingSessionCoordinator {
     let overlayState = MeetingOverlayState()
 
@@ -23,8 +39,9 @@ final class MeetingSessionCoordinator {
     private static let waveformPublishIntervalSeconds: TimeInterval = 1.0 / 20.0
     private var micAccumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: micSpeechThreshold, profile: .quality)
     private var systemAccumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: systemSpeechThreshold, profile: .quality)
-    private let voiceActivityDetector = MeetingVoiceActivityDetector()
-    private let offlineVoiceActivityDetector = MeetingOfflineVoiceActivityDetector()
+    private var vadResources = MeetingVADResources()
+    private var voiceActivityDetector: MeetingVoiceActivityDetector { vadResources.streaming }
+    private var offlineVoiceActivityDetector: MeetingOfflineVoiceActivityDetector { vadResources.offline }
     private let audioAnalysisScheduler = MeetingAudioAnalysisScheduler()
     private let orderedLiveAudioScheduler = MeetingOrderedLiveAudioScheduler()
     private var transcriber: (any MeetingSegmentTranscribing)?
@@ -92,6 +109,13 @@ final class MeetingSessionCoordinator {
 
     var isStartingUp: Bool {
         isStarting
+    }
+
+    func releaseIdleVADResources() async {
+        guard !isActive else { return }
+        let idleResources = vadResources.replaceForIdleReclamation()
+        await idleResources.streaming.releaseResources()
+        await idleResources.offline.releaseResources()
     }
 
     func prepareForStart() {
@@ -791,6 +815,7 @@ final class MeetingSessionCoordinator {
         hasCapturedAudio = false
         completedPendingTaskIDs.removeAll()
         pendingChunks.removeAll()
+        let voiceActivityDetector = self.voiceActivityDetector
         Task {
             await voiceActivityDetector.reset()
             await audioAnalysisScheduler.cancel()
@@ -1401,6 +1426,7 @@ final class MeetingSessionCoordinator {
     private func reconfigureAccumulators(for profile: MeetingChunkingProfile) {
         micAccumulator = MeetingChunkAccumulator(speaker: .me, speechThreshold: Self.micSpeechThreshold, profile: profile)
         systemAccumulator = MeetingChunkAccumulator(speaker: .them, speechThreshold: Self.systemSpeechThreshold, profile: profile)
+        let voiceActivityDetector = self.voiceActivityDetector
         Task {
             await voiceActivityDetector.refreshFromPreferences()
             await voiceActivityDetector.reset()

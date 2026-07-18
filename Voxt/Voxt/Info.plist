@@ -20,6 +20,12 @@
     <string>Voxt</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <!-- Prevent released MLX weight pages from remaining in libmalloc's large-object cache. -->
+    <key>LSEnvironment</key>
+    <dict>
+        <key>MallocSpaceEfficient</key>
+        <string>1</string>
+    </dict>
     <key>NSAppleEventsUsageDescription</key>
     <string>Voxt needs automation access to read the active browser tab URL for app branch enhancement.</string>
     <key>NSAudioCaptureUsageDescription</key>

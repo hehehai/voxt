@@ -159,6 +159,7 @@ extension AppDelegate {
         for stage in stages {
             stage.run(delegate: self)
         }
+        scheduleDeepIdleMemoryReclamation()
         VoxtLog.asr(
             "Session end pipeline completed. sessionID=\(sessionID.uuidString), overlayVisible=\(overlayWindow.isVisible)",
             verbose: true

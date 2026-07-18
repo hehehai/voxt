@@ -6,6 +6,84 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.3-beta.3] - 2026-07-18
+
+### English
+
+#### Changed
+- Further reduced idle memory after local ASR and LLM use by loading prequantized model weights without temporary graphs and returning released allocator pages more aggressively.
+
+#### Fixed
+- Prevented delayed VAD resource reclamation from resetting a newly started meeting and losing its initial voice activity state.
+
+### 简体中文
+
+#### 改进
+- 直接加载预量化模型权重并更积极地归还已释放的内存页，进一步降低本地 ASR 和 LLM 使用后的空闲内存占用。
+
+#### 修复
+- 修复延迟回收 VAD 资源可能重置新开始的会议并丢失开头语音活动状态的问题。
+
+### 日本語
+
+#### 変更
+- 量子化済みモデルの重みを一時グラフなしで読み込み、解放済みメモリページをより積極的に返却することで、ローカル ASR と LLM 使用後のアイドルメモリをさらに削減しました。
+
+#### 修正
+- 遅延した VAD リソース回収が新しく開始した会議をリセットし、冒頭の音声活動状態を失う可能性がある問題を修正しました。
+
+## [1.13.3-beta.2] - 2026-07-18
+
+### English
+
+#### Changed
+- Reduced memory retained after repeated Qwen3 local transcription by loading quantized weights directly without temporary full-model quantization graphs.
+
+#### Fixed
+- Prevented concurrent local ASR and LLM preparation from loading duplicate model instances, and ensured app shutdown waits for canceled model loads to finish.
+
+### 简体中文
+
+#### 改进
+- 直接加载 Qwen3 量化权重，避免创建临时的全模型量化计算图，降低重复使用本地转写后的内存残留。
+
+#### 修复
+- 修复本地 ASR 和 LLM 并发准备时可能重复加载模型的问题，并确保应用退出时等待已取消的模型加载任务真正结束。
+
+### 日本語
+
+#### 変更
+- Qwen3 の量子化済み重みを直接読み込み、一時的なモデル全体の量子化グラフを作成しないことで、ローカル文字起こしを繰り返した後のメモリ残留を削減しました。
+
+#### 修正
+- ローカル ASR と LLM の同時準備でモデルが重複して読み込まれる問題を修正し、アプリ終了時にキャンセル済みのモデル読み込みが実際に終了するまで待機するようにしました。
+
+## [1.13.3-beta.1] - 2026-07-17
+
+### English
+
+#### Changed
+- Reduced idle memory after local ASR and LLM use by releasing voice-activity, transcription, MLX cache, and allocator resources after the model timeout.
+
+#### Fixed
+- Prevented delayed memory reclamation from being skipped after meetings, temporary background work, model changes or deletion, and remote VAD-only sessions.
+
+### 简体中文
+
+#### 改进
+- 本地 ASR 和 LLM 模型超时卸载后，继续释放语音活动检测、转写器、MLX 缓存和分配器资源，降低应用空闲内存占用。
+
+#### 修复
+- 修复会议、临时后台任务、模型切换或删除，以及仅使用远程模型和 VAD 的会话可能永久错过延迟内存回收的问题。
+
+### 日本語
+
+#### 変更
+- ローカル ASR と LLM のモデルがタイムアウトで解放された後、音声区間検出、文字起こし、MLX キャッシュ、アロケータのリソースも解放し、アイドル時のメモリ使用量を削減しました。
+
+#### 修正
+- 会議、一時的なバックグラウンド処理、モデルの変更や削除、リモートモデルと VAD のみを使用するセッションの後に、遅延メモリ回収が実行されない場合がある問題を修正しました。
+
 ## [1.13.2] - 2026-07-17
 
 ### English
