@@ -6,6 +6,35 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.3] - 2026-07-19
+
+### English
+
+#### Changed
+- Reduced idle memory after local ASR and LLM use by reclaiming voice-activity, transcription, MLX cache, and allocator resources after model timeout, and by loading prequantized weights directly.
+
+#### Fixed
+- Prevented concurrent local ASR and LLM preparation from loading duplicate model instances, and ensured app shutdown waits for canceled model loads to finish.
+- Ensured delayed resource reclamation still runs after meetings, temporary background work, model changes or deletion, and remote VAD-only sessions without resetting a newly started meeting's voice activity state.
+
+### 简体中文
+
+#### 改进
+- 本地 ASR 和 LLM 模型超时卸载后，继续回收语音活动检测、转写器、MLX 缓存和分配器资源，并直接加载预量化权重，降低应用空闲内存占用。
+
+#### 修复
+- 修复本地 ASR 和 LLM 并发准备时可能重复加载模型的问题，并确保应用退出时等待已取消的模型加载任务真正结束。
+- 确保会议、临时后台任务、模型切换或删除，以及仅使用远程模型和 VAD 的会话结束后仍会执行延迟资源回收，且不会重置新开始会议的语音活动状态。
+
+### 日本語
+
+#### 変更
+- ローカル ASR と LLM のモデルがタイムアウトで解放された後、音声区間検出、文字起こし、MLX キャッシュ、アロケータのリソースも回収し、量子化済みモデルの重みを直接読み込むことでアイドル時のメモリ使用量を削減しました。
+
+#### 修正
+- ローカル ASR と LLM の同時準備でモデルが重複して読み込まれる問題を修正し、アプリ終了時にキャンセル済みのモデル読み込みが実際に終了するまで待機するようにしました。
+- 会議、一時的なバックグラウンド処理、モデルの変更や削除、リモートモデルと VAD のみを使用するセッションの後も遅延リソース回収を実行し、新しく開始した会議の音声活動状態をリセットしないよう修正しました。
+
 ## [1.13.3-beta.3] - 2026-07-18
 
 ### English
