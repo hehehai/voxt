@@ -6,6 +6,32 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.3-beta.3] - 2026-07-18
+
+### English
+
+#### Changed
+- Further reduced idle memory after local ASR and LLM use by loading prequantized model weights without temporary graphs and returning released allocator pages more aggressively.
+
+#### Fixed
+- Prevented delayed VAD resource reclamation from resetting a newly started meeting and losing its initial voice activity state.
+
+### 简体中文
+
+#### 改进
+- 直接加载预量化模型权重并更积极地归还已释放的内存页，进一步降低本地 ASR 和 LLM 使用后的空闲内存占用。
+
+#### 修复
+- 修复延迟回收 VAD 资源可能重置新开始的会议并丢失开头语音活动状态的问题。
+
+### 日本語
+
+#### 変更
+- 量子化済みモデルの重みを一時グラフなしで読み込み、解放済みメモリページをより積極的に返却することで、ローカル ASR と LLM 使用後のアイドルメモリをさらに削減しました。
+
+#### 修正
+- 遅延した VAD リソース回収が新しく開始した会議をリセットし、冒頭の音声活動状態を失う可能性がある問題を修正しました。
+
 ## [1.13.3-beta.2] - 2026-07-18
 
 ### English
