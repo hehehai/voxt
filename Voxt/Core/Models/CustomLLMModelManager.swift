@@ -1826,7 +1826,7 @@ class CustomLLMModelManager: ObservableObject {
         await pendingSizeTask?.value
         await pendingPrefetchTask?.value
         for task in pendingInferenceLoadTasks {
-            _ = try? await task.value
+            await task.waitForCompletion()
         }
         await waitForActiveInferencesToFinish()
 

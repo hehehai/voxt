@@ -9,25 +9,37 @@ import MLXAudioCore
 import MLXAudioSTT
 import HuggingFace
 
-@MainActor
-final class SharedModelLoadCoordinator<Value: Sendable> {
-    private struct Entry {
-        let generation: UUID
-        let task: Task<Value, Error>
-        var waiterIDs: Set<UUID>
-    }
+private struct SharedModelLoadValue: @unchecked Sendable {
+    let value: Any
+}
 
-    private var entries: [String: Entry] = [:]
+private struct SharedModelLoadEntry {
+    let generation: UUID
+    let task: Task<SharedModelLoadValue, Error>
+    var waiterIDs: Set<UUID>
+}
+
+struct SharedModelLoadTask: Sendable {
+    fileprivate let task: Task<SharedModelLoadValue, Error>
+
+    func waitForCompletion() async {
+        _ = try? await task.value
+    }
+}
+
+@MainActor
+private final class SharedModelLoadStorage {
+    private var entries: [String: SharedModelLoadEntry] = [:]
 
     var hasPendingLoad: Bool { !entries.isEmpty }
 
-    func value(
+    func value<Value: Sendable>(
         for key: String,
         start: @escaping @Sendable () async throws -> Value
-    ) async throws -> Value {
+    ) async throws -> SharedModelLoadValue {
         let waiterID = UUID()
         let generation: UUID
-        let task: Task<Value, Error>
+        let task: Task<SharedModelLoadValue, Error>
         if var entry = entries[key] {
             entry.waiterIDs.insert(waiterID)
             entries[key] = entry
@@ -36,9 +48,9 @@ final class SharedModelLoadCoordinator<Value: Sendable> {
         } else {
             generation = UUID()
             task = Task {
-                try await start()
+                SharedModelLoadValue(value: try await start())
             }
-            entries[key] = Entry(
+            entries[key] = SharedModelLoadEntry(
                 generation: generation,
                 task: task,
                 waiterIDs: [waiterID]
@@ -62,11 +74,11 @@ final class SharedModelLoadCoordinator<Value: Sendable> {
     }
 
     @discardableResult
-    func cancelAll() -> [Task<Value, Error>] {
-        let tasks = entries.values.map(\.task)
+    func cancelAll() -> [SharedModelLoadTask] {
+        let tasks = entries.values.map { SharedModelLoadTask(task: $0.task) }
         entries.removeAll()
         for task in tasks {
-            task.cancel()
+            task.task.cancel()
         }
         return tasks
     }
@@ -92,6 +104,26 @@ final class SharedModelLoadCoordinator<Value: Sendable> {
         else { return }
 
         entries[key] = entry.waiterIDs.isEmpty ? nil : entry
+    }
+}
+
+@MainActor
+struct SharedModelLoadCoordinator<Value: Sendable> {
+    private let storage = SharedModelLoadStorage()
+
+    var hasPendingLoad: Bool { storage.hasPendingLoad }
+
+    func value(
+        for key: String,
+        start: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        let loadedValue = try await storage.value(for: key, start: start)
+        return loadedValue.value as! Value
+    }
+
+    @discardableResult
+    func cancelAll() -> [SharedModelLoadTask] {
+        storage.cancelAll()
     }
 }
 
@@ -272,7 +304,7 @@ class MLXModelManager: ObservableObject {
     private var sizeTask: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
-    private var applicationTerminationModelLoadTasks: [Task<MLXLoadedModelBox, Error>] = []
+    private var applicationTerminationModelLoadTasks: [SharedModelLoadTask] = []
     private let downloadSizeTolerance: Double = 0.9
     private var activeUseCount = 0
     private var activeUseWaiters: [CheckedContinuation<Void, Never>] = []
@@ -869,7 +901,7 @@ class MLXModelManager: ObservableObject {
         guard !isShuttingDownForApplicationTermination else {
             let loadTasks = applicationTerminationModelLoadTasks
             for task in loadTasks {
-                _ = try? await task.value
+                await task.waitForCompletion()
             }
             await waitForActiveUsesToFinish()
             return
@@ -896,7 +928,7 @@ class MLXModelManager: ObservableObject {
             await task.value
         }
         for task in loadTasks {
-            _ = try? await task.value
+            await task.waitForCompletion()
         }
         applicationTerminationModelLoadTasks.removeAll()
         await pendingSizeTask?.value
@@ -925,7 +957,7 @@ class MLXModelManager: ObservableObject {
     }
 
     @discardableResult
-    private func invalidatePendingModelLoad(reason: String) -> [Task<MLXLoadedModelBox, Error>] {
+    private func invalidatePendingModelLoad(reason: String) -> [SharedModelLoadTask] {
         let tasks = modelLoadCoordinator.cancelAll()
         guard !tasks.isEmpty else { return [] }
         VoxtLog.modelInfo("MLX Audio pending model load invalidated. reason=\(reason)", verbose: true)

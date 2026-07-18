@@ -32,10 +32,10 @@ private nonisolated final class LoadedQuantizedEmbedding: Embedding, Quantized {
         self.mode = mode
         self.scales = MLXArray.zeros(
             [embeddingCount, dimensions / groupSize],
-            type: Float16.self
+            dtype: .float16
         )
         self.biases = mode == .affine
-            ? MLXArray.zeros([embeddingCount, dimensions / groupSize], type: Float16.self)
+            ? MLXArray.zeros([embeddingCount, dimensions / groupSize], dtype: .float16)
             : nil
         super.init(
             weight: MLXArray.zeros(
@@ -153,9 +153,9 @@ nonisolated enum Qwen3ASRMemoryEfficientLoader {
                     type: UInt32.self
                 ),
                 bias: linear.bias,
-                scales: MLXArray.zeros(scalesShape, type: Float16.self),
+                scales: MLXArray.zeros(scalesShape, dtype: .float16),
                 biases: mode == .affine
-                    ? MLXArray.zeros(scalesShape, type: Float16.self)
+                    ? MLXArray.zeros(scalesShape, dtype: .float16)
                     : nil,
                 groupSize: groupSize,
                 bits: bits,
