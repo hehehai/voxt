@@ -8,72 +8,6 @@ import MLXLMCommon
 import MLXNN
 import Tokenizers
 
-private nonisolated final class LoadedQuantizedEmbedding: Embedding, Quantized {
-    let groupSize: Int
-    let bits: Int
-    let mode: QuantizationMode
-    let scales: MLXArray
-    let biases: MLXArray?
-
-    override var shape: (Int, Int) {
-        let packedShape = weight.shape2
-        return (packedShape.0, packedShape.1 * 32 / bits)
-    }
-
-    init(
-        embeddingCount: Int,
-        dimensions: Int,
-        groupSize: Int,
-        bits: Int,
-        mode: QuantizationMode
-    ) {
-        self.groupSize = groupSize
-        self.bits = bits
-        self.mode = mode
-        self.scales = MLXArray.zeros(
-            [embeddingCount, dimensions / groupSize],
-            dtype: .float16
-        )
-        self.biases = mode == .affine
-            ? MLXArray.zeros([embeddingCount, dimensions / groupSize], dtype: .float16)
-            : nil
-        super.init(
-            weight: MLXArray.zeros(
-                [embeddingCount, dimensions * bits / 32],
-                type: UInt32.self
-            )
-        )
-        freeze()
-    }
-
-    override func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let inputShape = x.shape
-        let flattened = x.flattened()
-        let output = dequantized(
-            weight[flattened],
-            scales: scales[flattened],
-            biases: biases?[flattened],
-            groupSize: groupSize,
-            bits: bits,
-            mode: mode
-        )
-        return output.reshaped(inputShape + [-1])
-    }
-
-    override func asLinear(_ x: MLXArray) -> MLXArray {
-        quantizedMM(
-            x,
-            weight,
-            scales: scales,
-            biases: biases,
-            transpose: true,
-            groupSize: groupSize,
-            bits: bits,
-            mode: mode
-        )
-    }
-}
-
 nonisolated enum Qwen3ASRMemoryEfficientLoader {
     static func load(from modelDirectory: URL) async throws -> Qwen3ASRModel {
         let configData = try Data(
@@ -100,16 +34,13 @@ nonisolated enum Qwen3ASRMemoryEfficientLoader {
             skipLmHead: config.textConfig.tieWordEmbeddings
         )
         if let perLayerQuantization = config.perLayerQuantization {
-            quantize(
-                model: model,
-                filter: { path, _ in
-                    guard !path.hasPrefix("audio_tower"),
-                          sanitizedWeights["\(path).scales"] != nil
-                    else { return nil }
-                    return perLayerQuantization.quantization(layer: path)?.asTuple
-                },
-                apply: makeLoadedQuantizedLayer
-            )
+            PrequantizedModelLoading.replaceLayers(
+                in: model,
+                weights: sanitizedWeights
+            ) { path in
+                guard !path.hasPrefix("audio_tower") else { return nil }
+                return perLayerQuantization.quantization(layer: path)?.asTuple
+            }
         }
 
         try model.update(
@@ -118,53 +49,6 @@ nonisolated enum Qwen3ASRMemoryEfficientLoader {
         )
         eval(model)
         return model
-    }
-
-    private static func makeLoadedQuantizedLayer(
-        _ module: Module,
-        groupSize: Int,
-        bits: Int,
-        mode: QuantizationMode
-    ) -> Module? {
-        guard mode == .affine else {
-            return quantizeSingle(
-                layer: module,
-                groupSize: groupSize,
-                bits: bits,
-                mode: mode
-            )
-        }
-        if let embedding = module as? Embedding {
-            let (embeddingCount, dimensions) = embedding.weight.shape2
-            return LoadedQuantizedEmbedding(
-                embeddingCount: embeddingCount,
-                dimensions: dimensions,
-                groupSize: groupSize,
-                bits: bits,
-                mode: mode
-            )
-        }
-        if let linear = module as? Linear {
-            let (outputDimensions, inputDimensions) = linear.weight.shape2
-            let scalesShape = [outputDimensions, inputDimensions / groupSize]
-            let quantized = QuantizedLinear(
-                weight: MLXArray.zeros(
-                    [outputDimensions, inputDimensions * bits / 32],
-                    type: UInt32.self
-                ),
-                bias: linear.bias,
-                scales: MLXArray.zeros(scalesShape, dtype: .float16),
-                biases: mode == .affine
-                    ? MLXArray.zeros(scalesShape, dtype: .float16)
-                    : nil,
-                groupSize: groupSize,
-                bits: bits,
-                mode: mode
-            )
-            quantized.freeze()
-            return quantized
-        }
-        return nil
     }
 
     /// Qwen checkpoints sometimes provide vocab/merges but omit tokenizer.json.

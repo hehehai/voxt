@@ -675,10 +675,12 @@ class CustomLLMModelManager: ObservableObject {
         if CustomLLMModelCatalog.supportsImageInput(repo: repo) {
             _ = MLXVLM.TrampolineModelFactory.modelFactory()
         }
+        let supportsVision = CustomLLMModelCatalog.supportsImageInput(repo: repo)
         let container = try await inferenceLoadCoordinator.value(for: repo) {
-            try await loadModelContainer(
+            try await MemoryEfficientModelContainerLoader.load(
                 from: directory,
-                using: LocalTokenizerLoader()
+                using: LocalTokenizerLoader(),
+                supportsVision: supportsVision
             )
         }
         try Task.checkCancellation()
