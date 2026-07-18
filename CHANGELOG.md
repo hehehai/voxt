@@ -6,6 +6,32 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.3-beta.2] - 2026-07-18
+
+### English
+
+#### Changed
+- Reduced memory retained after repeated Qwen3 local transcription by loading quantized weights directly without temporary full-model quantization graphs.
+
+#### Fixed
+- Prevented concurrent local ASR and LLM preparation from loading duplicate model instances, and ensured app shutdown waits for canceled model loads to finish.
+
+### 简体中文
+
+#### 改进
+- 直接加载 Qwen3 量化权重，避免创建临时的全模型量化计算图，降低重复使用本地转写后的内存残留。
+
+#### 修复
+- 修复本地 ASR 和 LLM 并发准备时可能重复加载模型的问题，并确保应用退出时等待已取消的模型加载任务真正结束。
+
+### 日本語
+
+#### 変更
+- Qwen3 の量子化済み重みを直接読み込み、一時的なモデル全体の量子化グラフを作成しないことで、ローカル文字起こしを繰り返した後のメモリ残留を削減しました。
+
+#### 修正
+- ローカル ASR と LLM の同時準備でモデルが重複して読み込まれる問題を修正し、アプリ終了時にキャンセル済みのモデル読み込みが実際に終了するまで待機するようにしました。
+
 ## [1.13.3-beta.1] - 2026-07-17
 
 ### English
