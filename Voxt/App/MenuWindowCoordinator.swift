@@ -536,8 +536,8 @@ extension AppDelegate {
         window.isOpaque = true
         window.backgroundColor = SettingsUIStyle.windowBackgroundNSColor
         window.isMovableByWindowBackground = false
-        // Keep the main settings window on standard AppKit behavior so Space
-        // switching preserves normal foreground window ordering and focus.
+        // Standard opens keep the window on its assigned Space. Status-menu
+        // opens opt into moving it to the active Space in bringWindowToFront.
         window.collectionBehavior = []
         window.contentViewController = hostingController
         window.setContentSize(mainWindowContentSize)
@@ -570,10 +570,16 @@ extension AppDelegate {
         _ window: NSWindow,
         activationMode: MainWindowActivationMode
     ) {
+        var collectionBehavior = window.collectionBehavior
+        collectionBehavior.remove(.moveToActiveSpace)
+
         switch activationMode {
         case .standard:
+            window.collectionBehavior = collectionBehavior
             AppBehaviorController.bringStandardWindowToFront(window)
         case .statusMenuSelection:
+            collectionBehavior.insert(.moveToActiveSpace)
+            window.collectionBehavior = collectionBehavior
             AppBehaviorController.bringUserInvokedWindowToFront(window)
         }
     }
