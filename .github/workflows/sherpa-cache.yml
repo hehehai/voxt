@@ -27,7 +27,7 @@ jobs:
     name: Warm release build caches
     runs-on: macos-26
     env:
-      SHERPA_ONNX_REF: 49ebd5baaa7d21b1edcf71ec800a63400f8397af
+      SHERPA_ONNX_REF: 142807252687d81b40d6315f23470a1512a00de3
     steps:
       - uses: actions/checkout@v4
 
@@ -105,6 +105,8 @@ jobs:
             -destination "generic/platform=macOS" \
             -derivedDataPath build/DerivedData \
             -showBuildTimingSummary \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -skipPackagePluginValidation \
             build \
             CURRENT_PROJECT_VERSION=1 \
             CODE_SIGNING_ALLOWED=NO \

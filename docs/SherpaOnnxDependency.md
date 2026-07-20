@@ -20,7 +20,7 @@ Voxt can use `sherpa-onnx` for local offline ASR through its C API. The default 
 
 3. Build Voxt with the shared scheme.
 
-The script clones `k2-fsa/sherpa-onnx`, runs upstream `build-swift-macos.sh`, and places the local artifacts under `ThirdParty/sherpa-onnx/`. That directory and `Config/SherpaOnnx.local.xcconfig` are gitignored.
+The script checks out `k2-fsa/sherpa-onnx` `v1.13.4` (commit `142807252687d81b40d6315f23470a1512a00de3`), runs upstream `build-swift-macos.sh`, and places the local artifacts under `ThirdParty/sherpa-onnx/`. The release and cache workflows use the same immutable commit. That directory and `Config/SherpaOnnx.local.xcconfig` are gitignored.
 
 ## Model Policy
 
