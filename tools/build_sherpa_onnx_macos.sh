@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 THIRD_PARTY_DIR="$ROOT_DIR/ThirdParty/sherpa-onnx"
 SOURCE_DIR="$THIRD_PARTY_DIR/src"
 REPO_URL="${SHERPA_ONNX_REPO_URL:-https://github.com/k2-fsa/sherpa-onnx.git}"
-REPO_REF="${SHERPA_ONNX_REF:-master}"
+REPO_REF="${SHERPA_ONNX_REF:-v1.13.4}"
 
 for tool in git cmake make xcodebuild libtool; do
   if ! command -v "$tool" >/dev/null 2>&1; then

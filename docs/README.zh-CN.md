@@ -113,7 +113,7 @@ Whisper 已迁移为 `MLX Audio` 本地模型家族；旧 Whisper 选择会自�
 - Voxt 会把 MLX Audio 下载内容存放在自己的 `mlx-audio` 模型目录下，并先做 canonical repo 归一化，再判断模型是否已经下载。
 - 老的模型 ID 会自动映射到当前 canonical ID，包括 `Parakeet`、`GLM-ASR Nano`、`Voxtral Realtime`、`FireRed ASR 2`，升级后一般不需要手工重选。
 - 对齐专用仓库会被明确拒绝，例如 `Qwen3-ForcedAligner` 不会被当成可转录模型。
-- 当前工程里的依赖源是 Voxt 维护的镜像 fork `hehehai/mlx-audio-swift`，目前固定在 commit `3639c34cd94f374539a42c816258e460250362ca`。这次同步包含了上游 OmniVoice、IndexTTS、MOSS-Transcribe-Diarize、新增 STT 模型、可配置的 MOSS / Cohere / Canary 推理、MMS Adapter 切换，以及相关 STT / TTS / VAD / codec 变更。依赖策略见 [docs/MLXAudioDependency.md](./MLXAudioDependency.md)。
+- 当前工程里的依赖源是 Voxt 维护的镜像 fork `hehehai/mlx-audio-swift`，固定在 `v0.1.3-voxt.7`（commit `7b440f768f5fc2a9c4b4c837084a9faeb4e62ba8`）。这次同步包含了上游 OmniVoice、IndexTTS、MOSS-Transcribe-Diarize、新增 STT 模型、可配置的 MOSS / Cohere / Canary 推理、MMS Adapter 切换、强类型 STT segments、语言来源语义，以及 Qwen attention cache 和 Voxtral realtime 性能修复。依赖策略见 [docs/MLXAudioDependency.md](./MLXAudioDependency.md)。
 
 #### Whisper（MLX Audio）
 

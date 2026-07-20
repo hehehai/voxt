@@ -3236,15 +3236,16 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     nonisolated static func mossStructuredSegments(
-        from rawSegments: [[String: Any]]?
+        from rawSegments: [STTTranscriptSegment]?
     ) -> [MLXStructuredTranscriptSegment] {
         (rawSegments ?? []).compactMap { segment in
-            guard let start = numericValue(segment["start"]),
-                  let end = numericValue(segment["end"]),
+            guard let start = segment.startTime,
+                  let end = segment.endTime,
+                  start.isFinite,
+                  end.isFinite,
                   end >= start,
-                  let speakerID = segment["speaker_id"] as? String,
-                  !speakerID.isEmpty,
-                  let rawText = segment["text"] as? String
+                  let speakerID = segment.speakerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !speakerID.isEmpty
             else {
                 return nil
             }
@@ -3253,7 +3254,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             // so their text should contain only user-visible speech. Reuse the MOSS
             // plain-text renderer to remove speaker protocol and acoustic annotations
             // such as `[sniff]` before the segment can reach meeting storage/export.
-            let text = MossASRTranscriptRendering.renderedText(rawText, outputMode: .plainText)
+            let text = MossASRTranscriptRendering.renderedText(segment.text, outputMode: .plainText)
             guard !text.isEmpty else { return nil }
             return MLXStructuredTranscriptSegment(
                 startSeconds: start,
@@ -3261,21 +3262,6 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 speakerID: speakerID,
                 text: text
             )
-        }
-    }
-
-    private nonisolated static func numericValue(_ value: Any?) -> Double? {
-        switch value {
-        case let number as NSNumber:
-            return number.doubleValue
-        case let number as Double:
-            return number
-        case let number as Float:
-            return Double(number)
-        case let text as String:
-            return Double(text.replacingOccurrences(of: ",", with: "."))
-        default:
-            return nil
         }
     }
 
@@ -3410,16 +3396,17 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let output = STTOutput(
             text: mergedText,
             segments: metadataSegments.map { segment in
-                [
-                    "text": segment.text,
-                    "language": segment.language as Any,
-                    "emotion": segment.emotion as Any,
-                    "event": segment.event as Any,
-                    "startSeconds": segment.startSeconds,
-                    "endSeconds": segment.endSeconds,
-                ]
+                STTTranscriptSegment(
+                    text: segment.text,
+                    startTime: segment.startSeconds,
+                    endTime: segment.endSeconds,
+                    language: segment.language,
+                    emotion: segment.emotion,
+                    event: segment.event
+                )
             },
-            language: metadata?.language
+            language: metadata?.language,
+            languageProvenance: .detected
         )
         return SenseVoiceInferenceResult(output: output, metadata: metadata)
     }

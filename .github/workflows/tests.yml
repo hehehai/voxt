@@ -10,9 +10,16 @@ on:
 jobs:
   macos-tests:
     runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
 
     steps:
       - uses: actions/checkout@v5
+
+      - name: Verify Xcode and Swift versions
+        run: |
+          xcodebuild -version
+          xcrun swift --version
 
       - name: Reset SwiftPM binary artifact cache
         run: |
@@ -30,7 +37,9 @@ jobs:
             -project Voxt.xcodeproj \
             -clonedSourcePackagesDirPath "$SPM_CLONE_PATH" \
             -packageCachePath "$SPM_CACHE_PATH" \
-            -disablePackageRepositoryCache
+            -disablePackageRepositoryCache \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -skipPackagePluginValidation
 
       - name: Run tests
         run: |
@@ -43,4 +52,6 @@ jobs:
             -clonedSourcePackagesDirPath "$SPM_CLONE_PATH" \
             -packageCachePath "$SPM_CACHE_PATH" \
             -disablePackageRepositoryCache \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO

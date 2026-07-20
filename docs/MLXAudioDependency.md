@@ -5,8 +5,8 @@ Voxt uses `mlx-audio-swift` through the mirror fork at `https://github.com/heheh
 The current Xcode package reference is:
 
 - URL: `https://github.com/hehehai/mlx-audio-swift.git`
-- Requirement: `revision`
-- Revision: `3639c34cd94f374539a42c816258e460250362ca`
+- Requirement: `exactVersion`
+- Version: `0.1.3-voxt.7`
 
 ## Version rules
 
@@ -41,6 +41,7 @@ If Voxt needs to consume a synced fork commit before a new tag exists, pin the p
 ## Current pin
 
 - Fork: `hehehai/mlx-audio-swift`
-- Requirement: `revision`
-- Commit: `3639c34cd94f374539a42c816258e460250362ca`
-- Notes: merged upstream `main` through OmniVoice, IndexTTS, MOSS-Transcribe-Diarize, and additional STT models; adds MOSS streaming prompts, Cohere/Canary task controls, and explicit MMS language adapter switching; replace with a new Voxt tag once one is cut
+- Requirement: `exactVersion`
+- Version: `0.1.3-voxt.7`
+- Commit: `7b440f768f5fc2a9c4b4c837084a9faeb4e62ba8`
+- Notes: adds typed STT segments and language provenance, preserves Qwen streaming segments, distinguishes translated output language, filters Qwen streaming protocol metadata, and includes the upstream Qwen attention and Voxtral realtime performance fixes through `542fffa`

@@ -159,22 +159,22 @@ extension SenseVoiceTranscriptMetadata {
             ]
         }
 
-        return rawSegments.enumerated().map { index, segmentObject in
+        return rawSegments.enumerated().map { index, segment in
             let fallbackRange = fallbackSegmentRange(
                 index: index,
                 totalCount: rawSegments.count,
                 startSeconds: startSeconds,
                 endSeconds: endSeconds
             )
-            let segmentStart = parsedTimeInterval(segmentObject["startSeconds"]) ?? fallbackRange.lowerBound
-            let segmentEnd = parsedTimeInterval(segmentObject["endSeconds"]) ?? fallbackRange.upperBound
+            let segmentStart = segment.startTime ?? fallbackRange.lowerBound
+            let segmentEnd = segment.endTime ?? fallbackRange.upperBound
             return SenseVoiceSegmentMetadata(
                 startSeconds: min(segmentStart, segmentEnd),
                 endSeconds: max(segmentStart, segmentEnd),
-                text: normalizedText((segmentObject["text"] as? String) ?? output.text),
-                language: normalizedMetadataValue((segmentObject["language"] as? String) ?? output.language),
-                emotion: normalizedMetadataValue(segmentObject["emotion"] as? String),
-                event: normalizedMetadataValue(segmentObject["event"] as? String)
+                text: normalizedText(segment.text),
+                language: normalizedMetadataValue(segment.language ?? output.language),
+                emotion: normalizedMetadataValue(segment.emotion),
+                event: normalizedMetadataValue(segment.event)
             )
         }
     }
@@ -246,20 +246,4 @@ extension SenseVoiceTranscriptMetadata {
         return mergeResult.overlapCount > 0
     }
 
-    private nonisolated static func parsedTimeInterval(_ value: Any?) -> TimeInterval? {
-        switch value {
-        case let number as NSNumber:
-            return number.doubleValue
-        case let double as Double:
-            return double
-        case let float as Float:
-            return Double(float)
-        case let int as Int:
-            return Double(int)
-        case let string as String:
-            return Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
-        default:
-            return nil
-        }
-    }
 }

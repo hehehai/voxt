@@ -10,24 +10,24 @@ final class SenseVoiceMetadataTests: XCTestCase {
         let output = STTOutput(
             text: "ignored top-level text",
             segments: [
-                [
-                    "text": " first segment ",
-                    "language": "en",
-                    "emotion": "happy",
-                    "event": "speech",
-                ],
-                [
-                    "text": "second segment",
-                    "language": "en",
-                    "emotion": " calm ",
-                    "event": "speech",
-                ],
-                [
-                    "text": " third segment ",
-                    "language": "ja",
-                    "emotion": "happy",
-                    "event": "music",
-                ],
+                STTTranscriptSegment(
+                    text: " first segment ",
+                    language: "en",
+                    emotion: "happy",
+                    event: "speech"
+                ),
+                STTTranscriptSegment(
+                    text: "second segment",
+                    language: "en",
+                    emotion: " calm ",
+                    event: "speech"
+                ),
+                STTTranscriptSegment(
+                    text: " third segment ",
+                    language: "ja",
+                    emotion: "happy",
+                    event: "music"
+                ),
             ],
             language: "en"
         )
@@ -53,17 +53,17 @@ final class SenseVoiceMetadataTests: XCTestCase {
         let output = STTOutput(
             text: "overall transcript",
             segments: [
-                [
-                    "text": "alpha",
-                    "startSeconds": 1.5,
-                    "endSeconds": 2.75,
-                ],
-                [
-                    "text": "beta",
-                    "startSeconds": "3.0",
-                    "endSeconds": "4.25",
-                    "emotion": "focused",
-                ],
+                STTTranscriptSegment(
+                    text: "alpha",
+                    startTime: 1.5,
+                    endTime: 2.75
+                ),
+                STTTranscriptSegment(
+                    text: "beta",
+                    startTime: 3.0,
+                    endTime: 4.25,
+                    emotion: "focused"
+                ),
             ],
             language: "zh"
         )

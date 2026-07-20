@@ -326,7 +326,7 @@ enum MeetingOfflineVBxModelStorage {
     #endif
 
     #if canImport(FluidAudio)
-    static func detailText(for progress: DownloadUtils.DownloadProgress) -> String {
+    static func detailText(for progress: DownloadProgress) -> String {
         switch progress.phase {
         case .listing:
             return AppLocalization.localizedString("Preparing download...")

@@ -1,6 +1,6 @@
 # MLX Audio Swift 全面升级、优化与重构方案
 
-更新时间：2026-07-10
+更新时间：2026-07-20
 
 ## 1. 文档目的
 
@@ -26,15 +26,15 @@
 | 项目 | 当前值 |
 |---|---|
 | Voxt package URL | `https://github.com/hehehai/mlx-audio-swift.git` |
-| Voxt pin | exact `0.1.3-voxt.2` (`6baf0a1d8a42de76ced1cc7cb0a4f525d4211029`) |
-| Voxt `mlx-swift-lm` pin | `124880582175726b709015a632c5ba9f3069a319` |
+| Voxt pin | exact version `0.1.3-voxt.7`（commit `7b440f768f5fc2a9c4b4c837084a9faeb4e62ba8`） |
+| Voxt `mlx-swift-lm` pin | `343cae3799054b2e138ebfb1ae8d7d0f6c6a4a5b` |
 | fork 分支 | `codex/moss-asr-configuration` |
-| fork 发布标签 | `v0.1.3-voxt.2` |
-| upstream 最新 release/main | `v0.1.3`, `d302a5c6080d2bb97bae38c7418f82abb76013b6` |
-| fork 额外提交 | MOSS streaming prompt/失败传播、严格 VAD 策略、Nemotron 增量 event session、Canary/Cohere task controls、MMS adapter 切换与脚本语言解析 |
-| 审查区间 | `v0.1.2..6baf0a1` |
+| fork 发布标签 | `v0.1.3-voxt.7` |
+| upstream 最新 release/main | `v0.1.3`, `542fffacb3be8de47024b3b54888f71d72d46d30` |
+| fork 额外提交 | MOSS streaming prompt/失败传播、Nemotron 增量 event session、强类型 segments、语言来源、Qwen streaming segments 与协议元数据过滤；已同步 upstream Qwen attention cache 与 Voxtral realtime 性能修复 |
+| 审查区间 | `v0.1.2..v0.1.3-voxt.7` |
 
-截至本文日期，Voxt 已经锁定当前可用的最新 fork revision，不存在新的 revision 需要继续更新。本轮工作的重点是消费已经存在但尚未完整接入的能力，以及修复包接口与产品语义之间的差距。
+截至本文日期，Voxt 锁定 fork 中已发布的最新 Voxt tag，并已迁移强类型 segments 与语言来源语义，同时纳入 upstream 的 Qwen attention cache 和 Voxtral realtime 性能修复。`mlx-swift 0.31.6` 要求 Swift 6.3，因此 CI 固定使用 Xcode 26.5；本地开发也必须使用包含 Swift 6.3 的 Xcode。
 
 ### 2.2 Voxt 实际链接范围
 
@@ -839,7 +839,7 @@ Voxt 当前可利用 Qwen、Whisper、Nemotron等模型自己的 auto language�
 - Nemotron 增加 80/160/320/560/1120ms streaming latency 表单，并按 checkpoint prompt dictionary 解析 locale。
 - Voxtral 增加 240/480/960/2400ms transcription delay 表单并传入 native session。
 - Silero 固定使用 v6 并提供下载入口；实时 gate 与长音频分段共享同一 checkpoint。
-- fork 已发布 `v0.1.3-voxt.2`，Voxt exact pin 已同步更新。
+- 该阶段发布为 `v0.1.3-voxt.2`；当前基线已继续推进到 `v0.1.3-voxt.7`。
 
 验证结果：fork 首批 7 项测试及第二批 Nemotron 定向测试、Voxt 125 项 ASR/VAD/设置定向测试和 Voxt 完整构建均通过。真实模型取消、静音语料及 30 分钟 session 仍需按上线门禁进行人工回归和性能采样。
 

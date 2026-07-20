@@ -2,6 +2,7 @@
 // Provides ASRHint Settings Tests for Voxt test coverage.
 
 import XCTest
+import MLXAudioSTT
 @testable import Voxt
 
 @MainActor
@@ -613,8 +614,18 @@ final class ASRHintSettingsTests: XCTestCase {
 
     func testMOSSStructuredSegmentsSanitizeTextWhilePreservingTimingAndSpeaker() {
         let segments = MLXTranscriber.mossStructuredSegments(from: [
-            ["start": 1.25, "end": 2.75, "speaker_id": "S02", "text": "[S02] Hello [sniff] world"],
-            ["start": 2.80, "end": 3.10, "speaker_id": "S02", "text": "[S02] [breath]"]
+            STTTranscriptSegment(
+                text: "[S02] Hello [sniff] world",
+                startTime: 1.25,
+                endTime: 2.75,
+                speakerID: "S02"
+            ),
+            STTTranscriptSegment(
+                text: "[S02] [breath]",
+                startTime: 2.80,
+                endTime: 3.10,
+                speakerID: "S02"
+            )
         ])
 
         XCTAssertEqual(
