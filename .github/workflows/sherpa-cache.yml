@@ -29,7 +29,7 @@ jobs:
     env:
       SHERPA_ONNX_REF: 142807252687d81b40d6315f23470a1512a00de3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Resolve Sherpa ONNX cache key
         id: sherpa_cache_key
@@ -42,7 +42,7 @@ jobs:
 
       - name: Restore Sherpa ONNX runtime cache
         id: sherpa_cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ThirdParty/sherpa-onnx/install
@@ -67,7 +67,7 @@ jobs:
 
       - name: Save Sherpa ONNX runtime cache
         if: steps.sherpa_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             ThirdParty/sherpa-onnx/install
@@ -86,7 +86,7 @@ jobs:
 
       - name: Restore Xcode compilation cache
         id: compilation_cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: build/DerivedData/CompilationCache.noindex
           key: ${{ steps.compilation_cache_key.outputs.key }}
@@ -125,7 +125,7 @@ jobs:
 
       - name: Save Xcode compilation cache
         if: steps.compilation_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: build/DerivedData/CompilationCache.noindex
           key: ${{ steps.compilation_cache_key.outputs.key }}
