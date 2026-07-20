@@ -25,6 +25,8 @@ struct FeatureSettingsView: View {
     @State var remindersListDescriptors: [RemindersListDescriptor] = []
     @State var isRemindersListSheetPresented = false
     @State var isMeetingAdvancedSettingsExpanded = false
+    @State var meetingFileUploadState = MeetingFileUploadState.idle
+    @State var meetingFileAnalysisTask: Task<Void, Never>?
     @State private var toastMessage = ""
     @State private var toastDismissTask: Task<Void, Never>?
     @State private var permissionRefreshRevision = 0

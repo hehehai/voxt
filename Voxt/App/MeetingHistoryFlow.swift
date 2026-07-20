@@ -5,6 +5,65 @@ import Foundation
 import AppKit
 
 extension AppDelegate {
+    func cancelImportedMeetingFileAnalysis() async {
+        await meetingSessionCoordinator.cancelImportedFileAnalysis()
+    }
+
+    func analyzeImportedMeetingFile(
+        at sourceURL: URL,
+        progress: @escaping @MainActor @Sendable (MeetingFileAnalysisProgress) -> Void
+    ) async throws -> TranscriptionHistoryEntry {
+        guard !isSessionActive, !meetingSessionCoordinator.isActive else {
+            throw MeetingFileAnalysisError.sessionAlreadyActive
+        }
+
+        prepareSettingsForMeetingRuntime()
+        synchronizeRuntimeASRStateForMeeting()
+
+        let didAccessSecurityScopedResource = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessSecurityScopedResource {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let result = try await meetingSessionCoordinator.analyzeImportedFile(
+            at: sourceURL,
+            progress: progress
+        )
+        let importedAudioURL = result.archivedAudioURL
+        if Task.isCancelled {
+            if let importedAudioURL {
+                try? FileManager.default.removeItem(at: importedAudioURL)
+            }
+            throw CancellationError()
+        }
+        let displayTitle = sourceURL.deletingPathExtension().lastPathComponent
+        guard let entry = persistMeetingHistory(
+            result,
+            forceSave: true,
+            displayTitle: displayTitle
+        ) else {
+            if let importedAudioURL {
+                try? FileManager.default.removeItem(at: importedAudioURL)
+            }
+            throw NSError(
+                domain: "Voxt.MeetingFileAnalysis",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: AppLocalization.localizedString(
+                        "The analyzed meeting could not be saved."
+                    )
+                ]
+            )
+        }
+        if let importedAudioURL, FileManager.default.fileExists(atPath: importedAudioURL.path) {
+            try? FileManager.default.removeItem(at: importedAudioURL)
+        }
+        progress(MeetingFileAnalysisProgress(stage: .saving, stageFraction: 1))
+        return entry
+    }
+
     func recoverInterruptedMeetingFinalizationIfNeeded() async {
         guard let checkpoint = await MeetingFinalizationCheckpointStore.shared.load() else { return }
 
@@ -128,7 +187,11 @@ extension AppDelegate {
         }
     }
 
-    func persistMeetingHistory(_ result: MeetingSessionResult, forceSave: Bool = false) -> TranscriptionHistoryEntry? {
+    func persistMeetingHistory(
+        _ result: MeetingSessionResult,
+        forceSave: Bool = false,
+        displayTitle: String? = nil
+    ) -> TranscriptionHistoryEntry? {
         guard forceSave || historyEnabled else {
             VoxtLog.meeting("Meeting history persistence skipped: history is disabled.")
             return nil
@@ -194,7 +257,7 @@ extension AppDelegate {
             transcriptSegments: persistedSegments,
             transcriptAudioRelativePath: audioRelativePath,
             meetingCaptureMode: result.captureMode,
-            displayTitle: hasMeaningfulText ? nil : result.captureMode.title,
+            displayTitle: displayTitle ?? (hasMeaningfulText ? nil : result.captureMode.title),
             dictionaryHitTerms: [],
             dictionaryCorrectedTerms: [],
             dictionarySuggestedTerms: [],

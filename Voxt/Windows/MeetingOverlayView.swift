@@ -175,7 +175,7 @@ private struct MeetingOverlayCard: View {
 
                 if !state.isCollapsed {
                     HStack(spacing: 8) {
-                        Text(AppLocalization.localizedString("Realtime Translation"))
+                        Text(AppLocalization.localizedString("Translate"))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.white.opacity(0.72))
 

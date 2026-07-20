@@ -46,7 +46,8 @@ enum MeetingFinalTranscriptionPass {
     static func transcribe(
         assets: [MeetingAudioAsset],
         transcriber: any MeetingSegmentTranscribing,
-        options: Options = Options()
+        options: Options = Options(),
+        requiresCompleteTranscription: Bool = false
     ) async throws -> [MeetingTranscriptSegment] {
         var segments: [MeetingTranscriptSegment] = []
         for asset in assets {
@@ -56,7 +57,11 @@ enum MeetingFinalTranscriptionPass {
             }
             let chunks = chunks(for: asset, options: options)
             for chunk in chunks {
-                let chunkSegments = await transcriber.transcribeSegments(chunk: chunk)
+                let chunkSegments = if requiresCompleteTranscription {
+                    try await transcriber.transcribeSegmentsStrict(chunk: chunk)
+                } else {
+                    await transcriber.transcribeSegments(chunk: chunk)
+                }
                 appendCleaned(chunkSegments, to: &segments)
             }
         }
@@ -67,23 +72,45 @@ enum MeetingFinalTranscriptionPass {
         descriptors: [MeetingAudioAssetDescriptor],
         loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
         transcriber: any MeetingSegmentTranscribing,
-        options: Options = Options()
+        options: Options = Options(),
+        requiresCompleteTranscription: Bool = false,
+        progress: (@Sendable (Double) async -> Void)? = nil
     ) async throws -> [MeetingTranscriptSegment] {
         var segments: [MeetingTranscriptSegment] = []
-        for descriptor in descriptors {
+        let descriptorCount = max(descriptors.count, 1)
+        await progress?(0)
+        for (descriptorIndex, descriptor) in descriptors.enumerated() {
+            try Task.checkCancellation()
             guard let asset = await loadAsset(descriptor) else {
                 throw Failure.assetUnavailable(descriptor.source)
             }
+            try Task.checkCancellation()
             if let wholeAssetSegments = try await transcriber.transcribeWholeAsset(asset) {
                 appendCleaned(wholeAssetSegments, to: &segments)
+                await progress?(Double(descriptorIndex + 1) / Double(descriptorCount))
                 continue
             }
             let chunks = chunks(for: asset, options: options)
-            for chunk in chunks {
-                let chunkSegments = await transcriber.transcribeSegments(chunk: chunk)
+            let chunkCount = max(chunks.count, 1)
+            for (chunkIndex, chunk) in chunks.enumerated() {
+                try Task.checkCancellation()
+                let chunkSegments = if requiresCompleteTranscription {
+                    try await transcriber.transcribeSegmentsStrict(chunk: chunk)
+                } else {
+                    await transcriber.transcribeSegments(chunk: chunk)
+                }
+                try Task.checkCancellation()
                 appendCleaned(chunkSegments, to: &segments)
+                let descriptorProgress = Double(chunkIndex + 1) / Double(chunkCount)
+                await progress?(
+                    (Double(descriptorIndex) + descriptorProgress) / Double(descriptorCount)
+                )
+            }
+            if chunks.isEmpty {
+                await progress?(Double(descriptorIndex + 1) / Double(descriptorCount))
             }
         }
+        try Task.checkCancellation()
         return MeetingTranscriptPostProcessor.process(segments)
     }
 

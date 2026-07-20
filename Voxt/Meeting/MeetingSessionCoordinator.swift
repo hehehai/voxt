@@ -80,6 +80,8 @@ final class MeetingSessionCoordinator {
     private let realtimeTranslationHandler: @MainActor (String, TranslationTargetLanguage) -> MeetingTranslationOperation
     private var isStarting = false
     private var isReconfiguringCaptureMode = false
+    private var isImportAnalyzing = false
+    private var importedFileAnalysisTask: Task<MeetingSessionResult, Error>?
 
     init(
         mlxModelManager: MLXModelManager,
@@ -104,11 +106,15 @@ final class MeetingSessionCoordinator {
     }
 
     var isActive: Bool {
-        isStarting || overlayState.isPresented || overlayState.isRecording || overlayState.isPaused || activeLocalEngine != nil || isStopping
+        isStarting || overlayState.isPresented || overlayState.isRecording || overlayState.isPaused || activeLocalEngine != nil || isStopping || isImportAnalyzing
     }
 
     var isStartingUp: Bool {
         isStarting
+    }
+
+    var isAnalyzingImportedFile: Bool {
+        isImportAnalyzing
     }
 
     func releaseIdleVADResources() async {
@@ -116,6 +122,157 @@ final class MeetingSessionCoordinator {
         let idleResources = vadResources.replaceForIdleReclamation()
         await idleResources.streaming.releaseResources()
         await idleResources.offline.releaseResources()
+    }
+
+    func analyzeImportedFile(
+        at sourceURL: URL,
+        progress: @escaping @MainActor @Sendable (MeetingFileAnalysisProgress) -> Void
+    ) async throws -> MeetingSessionResult {
+        guard !isActive else {
+            throw MeetingFileAnalysisError.sessionAlreadyActive
+        }
+        isImportAnalyzing = true
+        progress(MeetingFileAnalysisProgress(stage: .preparing))
+
+        let analysisTask = Task { @MainActor [weak self] () throws -> MeetingSessionResult in
+            guard let self else { throw CancellationError() }
+            do {
+                let result = try await self.performImportedFileAnalysis(
+                    at: sourceURL,
+                    progress: progress
+                )
+                await self.finishImportedFileAnalysis()
+                return result
+            } catch {
+                await self.finishImportedFileAnalysis()
+                throw error
+            }
+        }
+        importedFileAnalysisTask = analysisTask
+
+        return try await withTaskCancellationHandler {
+            try await analysisTask.value
+        } onCancel: {
+            analysisTask.cancel()
+        }
+    }
+
+    private func performImportedFileAnalysis(
+        at sourceURL: URL,
+        progress: @escaping @MainActor @Sendable (MeetingFileAnalysisProgress) -> Void
+    ) async throws -> MeetingSessionResult {
+        var preparedAudio: MeetingImportedAudioFile?
+        do {
+            let preparationTask = Task.detached(priority: .userInitiated) {
+                try await MeetingImportedAudioFile.prepare(from: sourceURL) { fraction in
+                    await progress(
+                        MeetingFileAnalysisProgress(
+                            stage: .preparing,
+                            stageFraction: fraction
+                        )
+                    )
+                }
+            }
+            let importedAudio = try await withTaskCancellationHandler {
+                try await preparationTask.value
+            } onCancel: {
+                preparationTask.cancel()
+            }
+            preparedAudio = importedAudio
+            try Task.checkCancellation()
+
+            let engineContext = resolvedEngineContext()
+            activeEngineContext = engineContext
+            progress(MeetingFileAnalysisProgress(stage: .transcribing))
+            let importedTranscriber = try await makeTranscriber(for: engineContext)
+            transcriber = importedTranscriber
+            try Task.checkCancellation()
+
+            let transcriptSegments = try await MeetingFinalTranscriptionPass.transcribe(
+                descriptors: importedAudio.assetDescriptors,
+                loadAsset: { descriptor in
+                    importedAudio.loadAsset(descriptor)
+                },
+                transcriber: importedTranscriber,
+                requiresCompleteTranscription: true,
+                progress: { fraction in
+                    await progress(
+                        MeetingFileAnalysisProgress(
+                            stage: .transcribing,
+                            stageFraction: fraction
+                        )
+                    )
+                }
+            )
+            try Task.checkCancellation()
+            guard !MeetingTranscriptFormatter.meaningfulSegments(for: transcriptSegments).isEmpty else {
+                throw MeetingFileAnalysisError.noTranscript
+            }
+
+            progress(MeetingFileAnalysisProgress(stage: .identifyingSpeakers))
+            let finalSegments: [MeetingTranscriptSegment]
+            do {
+                finalSegments = try await MeetingLocalInferenceCoordinator.shared.withPermit(.speakerAnalysis) {
+                    await MeetingSpeakerAnalysisPipeline.analyzedSegments(
+                        from: transcriptSegments,
+                        descriptors: importedAudio.assetDescriptors,
+                        loadAsset: { descriptor in
+                            importedAudio.loadAsset(descriptor)
+                        },
+                        continuousAudioURL: importedAudio.standardizedAudioURL,
+                        options: MeetingSpeakerDiarizationOptions.fromPreferences(),
+                        progress: { fraction in
+                            await progress(
+                                MeetingFileAnalysisProgress(
+                                    stage: .identifyingSpeakers,
+                                    stageFraction: fraction
+                                )
+                            )
+                        }
+                    )
+                }
+            } catch {
+                VoxtLog.meetingWarning(
+                    "Imported meeting speaker analysis skipped by device safety policy: \(error.localizedDescription)"
+                )
+                finalSegments = MeetingTranscriptPostProcessor.process(transcriptSegments)
+            }
+            try Task.checkCancellation()
+
+            progress(MeetingFileAnalysisProgress(stage: .saving))
+            let result = MeetingSessionResult(
+                captureMode: .meeting,
+                transcriptionEngine: engineContext.engine,
+                transcriptionModelDescription: engineContext.historyModelDescription,
+                segments: finalSegments,
+                visibleSnapshotSegments: finalSegments,
+                audioDurationSeconds: importedAudio.durationSeconds,
+                archivedAudioURL: importedAudio.standardizedAudioURL
+            )
+            return result
+        } catch {
+            if let preparedAudio {
+                try? FileManager.default.removeItem(at: preparedAudio.standardizedAudioURL)
+            }
+            throw error
+        }
+    }
+
+    func cancelImportedFileAnalysis() async {
+        guard isImportAnalyzing, let analysisTask = importedFileAnalysisTask else { return }
+        analysisTask.cancel()
+        await transcriber?.cancelPendingWork()
+        _ = await analysisTask.result
+    }
+
+    private func finishImportedFileAnalysis() async {
+        await transcriber?.cancelPendingWork()
+        transcriber = nil
+        liveSessionFactory = nil
+        activeEngineContext = nil
+        releaseActiveLocalEngine()
+        isImportAnalyzing = false
+        importedFileAnalysisTask = nil
     }
 
     func prepareForStart() {
@@ -225,6 +382,11 @@ final class MeetingSessionCoordinator {
 
     @discardableResult
     func stop(shouldFlushPendingAudio: Bool = true) -> Task<Void, Never>? {
+        if isImportAnalyzing {
+            return Task { @MainActor [weak self] in
+                await self?.cancelImportedFileAnalysis()
+            }
+        }
         guard isActive else { return nil }
         if isStopping {
             return stopFinalizationTask

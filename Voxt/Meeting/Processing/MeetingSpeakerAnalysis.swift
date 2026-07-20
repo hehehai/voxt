@@ -19,16 +19,20 @@ enum MeetingSpeakerAnalysisPipeline {
         from segments: [MeetingTranscriptSegment],
         descriptors: [MeetingAudioAssetDescriptor],
         loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
+        continuousAudioURL: URL? = nil,
         options: MeetingSpeakerDiarizationOptions = MeetingSpeakerDiarizationOptions(),
-        engine: (any MeetingSpeakerDiarizationEngine)? = MeetingSpeakerDiarizationEngineFactory.makeDefault()
+        engine: (any MeetingSpeakerDiarizationEngine)? = MeetingSpeakerDiarizationEngineFactory.makeDefault(),
+        progress: (@Sendable (Double) async -> Void)? = nil
     ) async -> [MeetingTranscriptSegment] {
         await analyzedSegmentsPreservingStructuredSpeakerData(from: segments) { candidates in
             await analyzedSegments(
                 from: candidates,
                 descriptors: descriptors,
                 loadAsset: loadAsset,
+                continuousAudioURL: continuousAudioURL,
                 options: options,
-                engine: engine
+                engine: engine,
+                progress: progress
             )
         }
     }
@@ -68,28 +72,39 @@ enum MeetingSpeakerAnalysisPipeline {
         from segments: [MeetingTranscriptSegment],
         descriptors: [MeetingAudioAssetDescriptor],
         loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
+        continuousAudioURL: URL? = nil,
         options: MeetingSpeakerDiarizationOptions = MeetingSpeakerDiarizationOptions(),
-        engine: (any MeetingSpeakerDiarizationEngine)? = MeetingSpeakerDiarizationEngineFactory.makeDefault()
+        engine: (any MeetingSpeakerDiarizationEngine)? = MeetingSpeakerDiarizationEngineFactory.makeDefault(),
+        progress: (@Sendable (Double) async -> Void)? = nil
     ) async -> [MeetingTranscriptSegment] {
         guard !segments.isEmpty, !descriptors.isEmpty, let engine else {
             return segments
         }
 
         do {
-            var turns: [MeetingSpeakerTurn] = []
+            let eligibleDescriptors = descriptors.filter {
+                $0.durationSeconds >= options.minimumAudioDurationSeconds
+            }
             logDebug(
                 "Meeting speaker analysis started. segments=\(segments.count), assets=\(descriptors.count), sensitivity=\(options.sensitivity.rawValue), speakerCountHint=\(options.speakerCountHint.rawValue)",
                 options: options
             )
-            for descriptor in descriptors where descriptor.durationSeconds >= options.minimumAudioDurationSeconds {
-                guard let asset = await loadAsset(descriptor) else { continue }
-                let assetTurns = try await engine.diarize(asset: asset, options: options)
-                logDebug(
-                    "Meeting speaker analysis asset raw turns. source=\(asset.source.rawValue), duration=\(String(format: "%.2f", asset.durationSeconds)), rawTurns=\(assetTurns.count), rawSpeakers=\(speakerCount(assetTurns))",
-                    options: options
-                )
-                turns.append(contentsOf: assetTurns)
+            if eligibleDescriptors.isEmpty {
+                await progress?(1)
+                return assembledSegments(from: segments, turns: [], options: options)
             }
+            let turns = try await engine.diarizeSession(
+                descriptors: eligibleDescriptors,
+                loadAsset: loadAsset,
+                continuousAudioURL: continuousAudioURL,
+                options: options,
+                progress: progress
+            )
+            guard !Task.isCancelled else { return segments }
+            logDebug(
+                "Meeting speaker analysis session raw turns. assets=\(eligibleDescriptors.count), rawTurns=\(turns.count), rawSpeakers=\(speakerCount(turns))",
+                options: options
+            )
             return assembledSegments(from: segments, turns: turns, options: options)
         } catch {
             VoxtLog.meetingWarning("Meeting speaker analysis failed: \(error.localizedDescription)")

@@ -9,6 +9,7 @@ import MLXAudioSTT
 protocol MeetingSegmentTranscribing {
     func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment?
     func transcribeSegments(chunk: BufferedMeetingChunk) async -> [MeetingTranscriptSegment]
+    func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment]
     func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]?
     func cancelPendingWork() async
 }
@@ -17,6 +18,10 @@ extension MeetingSegmentTranscribing {
     func transcribeSegments(chunk: BufferedMeetingChunk) async -> [MeetingTranscriptSegment] {
         guard let segment = await transcribe(chunk: chunk) else { return [] }
         return [segment]
+    }
+
+    func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment] {
+        await transcribeSegments(chunk: chunk)
     }
 
     func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
@@ -201,6 +206,26 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
         )
     }
 
+    func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment] {
+        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(.finalASR) { [mlxTranscriber] in
+            try await mlxTranscriber.transcribeBufferedResult(
+                samples: chunk.samples,
+                sampleRate: chunk.sampleRate
+            )
+        }
+        guard let result else { return [] }
+        return meetingSegments(
+            from: result,
+            segmentID: chunk.segmentID,
+            speaker: chunk.speaker,
+            audioSource: chunk.speaker == .me ? .microphone : .systemAudio,
+            startSeconds: chunk.startSeconds,
+            endSeconds: chunk.endSeconds,
+            usesStructuredOutput: chunk.isFinal,
+            preventsAdjacentMerge: chunk.preventsAdjacentMerge
+        )
+    }
+
     func transcribeWholeAsset(_ asset: MeetingAudioAsset) async throws -> [MeetingTranscriptSegment]? {
         guard MLXModelFamily.family(for: modelManager.currentModelRepo) == .mossTranscribeDiarize else {
             return nil
@@ -323,6 +348,22 @@ final class MeetingSherpaOnnxSegmentTranscriber: MeetingSegmentTranscribing {
     }
 
     func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment? {
+        do {
+            return try await transcribeStrict(chunk: chunk)
+        } catch {
+            if !(error is CancellationError) {
+                VoxtLog.meetingError("Meeting Sherpa ONNX transcription failed: \(error.localizedDescription)")
+            }
+            return nil
+        }
+    }
+
+    func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment] {
+        guard let segment = try await transcribeStrict(chunk: chunk) else { return [] }
+        return [segment]
+    }
+
+    private func transcribeStrict(chunk: BufferedMeetingChunk) async throws -> MeetingTranscriptSegment? {
         guard !isCancelled else { return nil }
         await transcriptionGate.acquire()
         defer {
@@ -332,33 +373,26 @@ final class MeetingSherpaOnnxSegmentTranscriber: MeetingSegmentTranscribing {
         }
         guard !isCancelled else { return nil }
 
-        do {
-            let text = try await sherpaTranscriber.transcribeBufferedChunk(
-                samples: chunk.samples,
-                sampleRate: chunk.sampleRate
-            ) ?? ""
-            let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
-                text,
-                dictionaryEntries: activeMeetingDictionaryEntries()
-            )
-            guard !sanitizedText.isEmpty else {
-                VoxtLog.meetingWarning("Meeting Sherpa ONNX transcription suppressed because it matched ASR hint guidance.")
-                return nil
-            }
-            return MeetingTranscriptSegment(
-                id: chunk.segmentID,
-                speaker: chunk.speaker,
-                startSeconds: chunk.startSeconds,
-                endSeconds: chunk.endSeconds,
-                text: sanitizedText,
-                preventsAdjacentMerge: chunk.preventsAdjacentMerge
-            )
-        } catch {
-            if !(error is CancellationError) {
-                VoxtLog.meetingError("Meeting Sherpa ONNX transcription failed: \(error.localizedDescription)")
-            }
+        let text = try await sherpaTranscriber.transcribeBufferedChunk(
+            samples: chunk.samples,
+            sampleRate: chunk.sampleRate
+        ) ?? ""
+        let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
+            text,
+            dictionaryEntries: activeMeetingDictionaryEntries()
+        )
+        guard !sanitizedText.isEmpty else {
+            VoxtLog.meetingWarning("Meeting Sherpa ONNX transcription suppressed because it matched ASR hint guidance.")
             return nil
         }
+        return MeetingTranscriptSegment(
+            id: chunk.segmentID,
+            speaker: chunk.speaker,
+            startSeconds: chunk.startSeconds,
+            endSeconds: chunk.endSeconds,
+            text: sanitizedText,
+            preventsAdjacentMerge: chunk.preventsAdjacentMerge
+        )
     }
 }
 
@@ -383,6 +417,22 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
     }
 
     func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment? {
+        do {
+            return try await transcribeStrict(chunk: chunk)
+        } catch {
+            if !(error is CancellationError) {
+                VoxtLog.meetingError("Meeting Remote ASR transcription failed: \(error)")
+            }
+            return nil
+        }
+    }
+
+    func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment] {
+        guard let segment = try await transcribeStrict(chunk: chunk) else { return [] }
+        return [segment]
+    }
+
+    private func transcribeStrict(chunk: BufferedMeetingChunk) async throws -> MeetingTranscriptSegment? {
         guard !isCancelled else { return nil }
         await transcriptionGate.acquire()
         defer {
@@ -395,39 +445,35 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("Voxt-Meeting-Chunk-\(UUID().uuidString)")
             .appendingPathExtension("wav")
-        do {
-            try MeetingAudioChunkWAVExporter.write(
-                samples: chunk.samples,
-                sampleRate: Int(chunk.sampleRate.rounded()),
-                to: tempURL
-            )
-            let text = try await transcribeWithRetry(tempURL)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        defer {
             try? FileManager.default.removeItem(at: tempURL)
-            let hintPayload = currentHintPayload()
-            let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
-                text,
-                prompt: hintPayload.prompt,
-                contextualPhrases: hintPayload.contextualPhrases,
-                dictionaryEntries: activeMeetingDictionaryEntries()
-            )
-            guard !sanitizedText.isEmpty else {
-                VoxtLog.meetingWarning("Meeting Remote ASR transcription suppressed because it matched ASR prompt or hint guidance.")
-                return nil
-            }
-            return MeetingTranscriptSegment(
-                id: chunk.segmentID,
-                speaker: chunk.speaker,
-                startSeconds: chunk.startSeconds,
-                endSeconds: chunk.endSeconds,
-                text: sanitizedText,
-                preventsAdjacentMerge: chunk.preventsAdjacentMerge
-            )
-        } catch {
-            try? FileManager.default.removeItem(at: tempURL)
-            VoxtLog.meetingError("Meeting Remote ASR transcription failed: \(error)")
+        }
+        try MeetingAudioChunkWAVExporter.write(
+            samples: chunk.samples,
+            sampleRate: Int(chunk.sampleRate.rounded()),
+            to: tempURL
+        )
+        let text = try await transcribeWithRetry(tempURL)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let hintPayload = currentHintPayload()
+        let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
+            text,
+            prompt: hintPayload.prompt,
+            contextualPhrases: hintPayload.contextualPhrases,
+            dictionaryEntries: activeMeetingDictionaryEntries()
+        )
+        guard !sanitizedText.isEmpty else {
+            VoxtLog.meetingWarning("Meeting Remote ASR transcription suppressed because it matched ASR prompt or hint guidance.")
             return nil
         }
+        return MeetingTranscriptSegment(
+            id: chunk.segmentID,
+            speaker: chunk.speaker,
+            startSeconds: chunk.startSeconds,
+            endSeconds: chunk.endSeconds,
+            text: sanitizedText,
+            preventsAdjacentMerge: chunk.preventsAdjacentMerge
+        )
     }
 
     private func transcribeWithRetry(_ fileURL: URL) async throws -> String {

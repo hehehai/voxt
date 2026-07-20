@@ -595,6 +595,73 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testFinalTranscriptionPassReportsDescriptorProgress() async throws {
+        let descriptors = [
+            MeetingAudioAssetDescriptor(
+                source: .mixed,
+                sampleRate: 10,
+                startSample: 0,
+                sampleCount: 20
+            ),
+            MeetingAudioAssetDescriptor(
+                source: .mixed,
+                sampleRate: 10,
+                startSample: 20,
+                sampleCount: 20
+            ),
+        ]
+        let recorder = MeetingAnalysisProgressRecorder()
+
+        _ = try await MeetingFinalTranscriptionPass.transcribe(
+            descriptors: descriptors,
+            loadAsset: { descriptor in
+                MeetingAudioAsset(
+                    source: descriptor.source,
+                    samples: [Float](repeating: 0.1, count: descriptor.sampleCount),
+                    sampleRate: descriptor.sampleRate,
+                    sessionStartOffset: descriptor.sessionStartOffset
+                )
+            },
+            transcriber: WholeAssetMeetingTranscriber(),
+            progress: { value in
+                await recorder.append(value)
+            }
+        )
+
+        let progressValues = await recorder.values
+        XCTAssertEqual(progressValues, [0, 0.5, 1])
+    }
+
+    @MainActor
+    func testFinalTranscriptionPassPropagatesStrictChunkFailure() async {
+        let descriptor = MeetingAudioAssetDescriptor(
+            source: .mixed,
+            sampleRate: 10,
+            startSample: 0,
+            sampleCount: 20
+        )
+
+        do {
+            _ = try await MeetingFinalTranscriptionPass.transcribe(
+                descriptors: [descriptor],
+                loadAsset: { descriptor in
+                    MeetingAudioAsset(
+                        source: descriptor.source,
+                        samples: [Float](repeating: 0.1, count: descriptor.sampleCount),
+                        sampleRate: descriptor.sampleRate,
+                        sessionStartOffset: descriptor.sessionStartOffset
+                    )
+                },
+                transcriber: StrictFailingMeetingTranscriber(),
+                requiresCompleteTranscription: true
+            )
+            XCTFail("Expected strict chunk transcription to fail atomically")
+        } catch {
+            XCTAssertEqual(error as? WholeAssetTranscriptionStubError, .inferenceFailed)
+        }
+    }
+
     func testBalancedSpeakerAssemblyKeepsContinuousSegmentTogetherAcrossShortSpeakerTurns() {
         let segment = MeetingTranscriptSegment(
             speaker: .them,
@@ -644,6 +711,18 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertEqual(result[0].text, segment.text)
         XCTAssertEqual(result[0].speakerID, "speaker_a")
         XCTAssertEqual(result[0].speakerDisplayName, "Speaker 1")
+    }
+}
+
+private actor MeetingAnalysisProgressRecorder {
+    private var recordedValues: [Double] = []
+
+    func append(_ value: Double) {
+        recordedValues.append(value)
+    }
+
+    var values: [Double] {
+        recordedValues
     }
 }
 
@@ -704,5 +783,16 @@ private final class FailingWholeAssetMeetingTranscriber: MeetingSegmentTranscrib
                 text: "whole asset"
             )
         ]
+    }
+}
+
+@MainActor
+private final class StrictFailingMeetingTranscriber: MeetingSegmentTranscribing {
+    func transcribe(chunk: BufferedMeetingChunk) async -> MeetingTranscriptSegment? {
+        nil
+    }
+
+    func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment] {
+        throw WholeAssetTranscriptionStubError.inferenceFailed
     }
 }

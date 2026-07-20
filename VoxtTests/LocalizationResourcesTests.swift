@@ -222,7 +222,7 @@ final class LocalizationResourcesTests: XCTestCase {
 
     func testMeetingOverlayEnglishLabelsStayCompact() {
         let expectedValues = [
-            "Realtime Translation": "Translate",
+            "Translate": "Translate",
             "Choose Translation Language": "Choose Language",
             "Realtime translation only translates Them segments.": "Translates Them only.",
             "Start Translation": "Start",
@@ -238,6 +238,9 @@ final class LocalizationResourcesTests: XCTestCase {
         for (key, expectedValue) in expectedValues {
             XCTAssertEqual(AppLocalization.localizedString(key, localeIdentifier: "en"), expectedValue)
         }
+
+        XCTAssertEqual(AppLocalization.localizedString("Translate", localeIdentifier: "zh-Hans"), "翻译")
+        XCTAssertEqual(AppLocalization.localizedString("Translate", localeIdentifier: "ja"), "翻訳")
     }
 
     func testDashboardEnglishLabelsStayCompact() {

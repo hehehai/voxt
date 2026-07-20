@@ -429,6 +429,63 @@ final class MeetingSpeakerTranscriptAssemblerTests: XCTestCase {
         XCTAssertEqual(result[1].text, "segment needing analysis")
     }
 
+    @MainActor
+    func testDescriptorAnalysisRelabelsStructuredSegmentsAcrossWindows() async {
+        let segment = MeetingTranscriptSegment(
+            speaker: .them,
+            speakerID: "moss:S01",
+            speakerDisplayName: "MOSS Speaker 1",
+            audioSource: .mixed,
+            startSeconds: 0,
+            endSeconds: 4,
+            text: "alpha beta gamma delta",
+            preventsAdjacentMerge: true
+        )
+        let descriptors = [
+            MeetingAudioAssetDescriptor(
+                source: .mixed,
+                sampleRate: 100,
+                startSample: 0,
+                sampleCount: 200
+            ),
+            MeetingAudioAssetDescriptor(
+                source: .mixed,
+                sampleRate: 100,
+                startSample: 200,
+                sampleCount: 200
+            ),
+        ]
+        let continuousAudioURL = URL(fileURLWithPath: "/tmp/continuous-meeting.wav")
+        let engine = StubMeetingSpeakerDiarizationEngine(
+            turns: [
+                MeetingSpeakerTurn(
+                    source: .mixed,
+                    speakerID: "session-speaker",
+                    displayName: "Speaker 1",
+                    startSeconds: 0,
+                    endSeconds: 4
+                )
+            ]
+        )
+
+        let result = await MeetingSpeakerAnalysisPipeline.analyzedSegments(
+            from: [segment],
+            descriptors: descriptors,
+            loadAsset: { descriptor in
+                MeetingAudioAsset(
+                    source: descriptor.source,
+                    samples: [Float](repeating: 0.1, count: descriptor.sampleCount),
+                    sampleRate: descriptor.sampleRate,
+                    sessionStartOffset: descriptor.sessionStartOffset
+                )
+            },
+            continuousAudioURL: continuousAudioURL,
+            engine: engine
+        )
+
+        XCTAssertEqual(result.map(\.speakerID), ["session-speaker"])
+    }
+
     func testSegmentsWithoutMatchingTurnsKeepOriginalSpeakerAndSource() {
         let segment = MeetingTranscriptSegment(
             speaker: .me,

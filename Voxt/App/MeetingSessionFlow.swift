@@ -30,6 +30,16 @@ extension AppDelegate {
 
         cancelPendingTranscriptionStart()
 
+        if meetingSessionCoordinator.isAnalyzingImportedFile {
+            showOverlayStatus(
+                AppLocalization.localizedString(
+                    "Wait for the meeting file analysis to finish before starting Meeting Notes."
+                ),
+                clearAfter: 2.2
+            )
+            return
+        }
+
         if meetingSessionCoordinator.isActive {
             if meetingSessionCoordinator.overlayState.isCloseConfirmationPresented {
                 dismissMeetingSessionCloseConfirmation()
