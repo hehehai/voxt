@@ -2956,7 +2956,9 @@ private extension OnboardingGuideView {
 
 private extension OnboardingGuideView {
     func refreshModelStorageDisplayPath() {
-        modelStorageDisplayPath = ModelStorageDirectoryManager.resolvedRootURL().path
+        let resolution = ModelStorageDirectoryManager.resolvedRootResolution()
+        modelStorageDisplayPath = resolution.writeRootURL.path
+        modelStorageSelectionError = resolution.accessIssue?.localizedDescription
     }
 
     func chooseModelStorageDirectory() {
@@ -2975,6 +2977,7 @@ private extension OnboardingGuideView {
             mlxModelManager.refreshStorageRoot()
             customLLMManager.refreshStorageRoot()
             refreshModelStorageDisplayPath()
+            SileroVADModelProvisioner.prefetchIfNeeded(for: LocalVADMode.stored())
         } catch {
             modelStorageSelectionError = AppLocalization.format("Failed to update model storage path: %@", error.localizedDescription)
         }

@@ -47,6 +47,7 @@ struct SettingsView: View {
     @State private var navigationRequest: SettingsNavigationRequest?
     @State private var hasMissingPermissions = false
     @State private var hasNoAvailableMicrophones = false
+    @State private var modelStorageAuthorizationIssue: String?
     @State private var missingModelConfigurationIssues: [ModelConfigurationIssue] = []
     @State private var languageRefreshToken = UUID()
     @State private var displayMode: SettingsDisplayMode
@@ -159,6 +160,7 @@ struct SettingsView: View {
         .onAppear {
             refreshPermissionBadge()
             refreshMicrophoneBadge()
+            refreshModelStorageAuthorizationBadge()
             refreshModelConfigurationBadge()
             refreshNotifications()
         }
@@ -172,6 +174,7 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissionBadge()
             refreshMicrophoneBadge()
+            refreshModelStorageAuthorizationBadge()
             refreshModelConfigurationBadge()
             refreshNotifications()
         }
@@ -201,6 +204,9 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
             refreshPermissionBadge()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .voxtModelStorageAuthorizationDidChange)) { _ in
+            refreshModelStorageAuthorizationBadge()
+        }
     }
 
     private var settingsWithStateObservers: some View {
@@ -209,6 +215,7 @@ struct SettingsView: View {
             guard isVisible else { return }
             refreshPermissionBadge()
             refreshMicrophoneBadge()
+            refreshModelStorageAuthorizationBadge()
             refreshModelConfigurationBadge()
         }
         .onChange(of: appEnhancementEnabled) { _, isEnabled in
@@ -270,6 +277,7 @@ struct SettingsView: View {
                 noteEnabled: noteEnabled,
                 hasMissingPermissions: hasMissingPermissions,
                 hasNoAvailableMicrophones: hasNoAvailableMicrophones,
+                modelStorageAuthorizationIssue: modelStorageAuthorizationIssue,
                 activeModelDownloadCount: activeModelDownloadCount,
                 hasMissingModelConfigurationIssues: !missingModelConfigurationIssues.isEmpty,
                 updateBadgeState: updateBadgeState,
@@ -284,6 +292,16 @@ struct SettingsView: View {
                     selectedTab = .general
                     navigationRequest = SettingsNavigationRequest(
                         target: SettingsNavigationTarget(tab: .general, section: .generalAudio)
+                    )
+                },
+                onTapModelStorageAuthorizationBadge: {
+                    sidebarMode = .settings
+                    selectedTab = .model
+                    navigationRequest = SettingsNavigationRequest(
+                        target: SettingsNavigationTarget(
+                            tab: .model,
+                            requestsModelStorageAuthorization: true
+                        )
                     )
                 },
                 onTapModelBadge: {
@@ -663,6 +681,13 @@ struct SettingsView: View {
         )
         guard issues != missingModelConfigurationIssues else { return }
         missingModelConfigurationIssues = issues
+    }
+
+    private func refreshModelStorageAuthorizationBadge() {
+        modelStorageAuthorizationIssue = ModelStorageDirectoryManager
+            .resolvedRootResolution()
+            .accessIssue?
+            .localizedDescription
     }
 
     private func refreshNotifications() {
@@ -1239,12 +1264,14 @@ private struct SettingsSidebar: View {
     let noteEnabled: Bool
     let hasMissingPermissions: Bool
     let hasNoAvailableMicrophones: Bool
+    let modelStorageAuthorizationIssue: String?
     let activeModelDownloadCount: Int
     let hasMissingModelConfigurationIssues: Bool
     let updateBadgeState: UpdateBadgeState
     let hasUnreadNotification: Bool
     let onTapPermissionBadge: () -> Void
     let onTapMicrophoneBadge: () -> Void
+    let onTapModelStorageAuthorizationBadge: () -> Void
     let onTapModelBadge: () -> Void
     let onTapUpdateBadge: () -> Void
     let onTapNotification: () -> Void
@@ -1276,6 +1303,34 @@ private struct SettingsSidebar: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             VStack(alignment: .leading, spacing: 8) {
+                if sidebarMode == .root, let modelStorageAuthorizationIssue {
+                    Button(action: onTapModelStorageAuthorizationBadge) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.orange)
+                            Text(settingsLocalized("Model Storage"))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Text(settingsLocalized("Authorize"))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                                .padding(.horizontal, 7)
+                                .frame(height: 19)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.orange.opacity(0.14))
+                                )
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(SettingsStatusButtonStyle(tint: .orange))
+                    .help(modelStorageAuthorizationIssue)
+                }
+
                 if sidebarMode == .root, hasMissingPermissions {
                     Button(action: onTapPermissionBadge) {
                         HStack(spacing: 8) {

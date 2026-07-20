@@ -69,6 +69,7 @@ final class MeetingDiarizationModelManager: ObservableObject {
             guard let self else { return }
             defer { self.downloadTask = nil }
             do {
+                _ = try ModelStorageDirectoryManager.requireWriteRootURL()
                 switch mode {
                 case .offlineVBx:
                     try await self.downloadOfflineVBx()

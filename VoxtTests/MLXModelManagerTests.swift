@@ -1250,6 +1250,7 @@ final class MLXModelManagerTests: XCTestCase {
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
             defaults.set(newRoot.path, forKey: AppPreferenceKey.modelStorageRootPath)
             defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+            ModelStorageDirectoryManager.setAuthorizedRootURLForTesting(newRoot)
             defer {
                 if let previousPath {
                     defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)
@@ -1280,6 +1281,7 @@ final class MLXModelManagerTests: XCTestCase {
         defaults.set(root.path, forKey: AppPreferenceKey.modelStorageRootPath)
         defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
         ModelStorageDirectoryManager.resetForTesting()
+        ModelStorageDirectoryManager.setAuthorizedRootURLForTesting(root)
         defer {
             if let previousPath {
                 defaults.set(previousPath, forKey: AppPreferenceKey.modelStorageRootPath)

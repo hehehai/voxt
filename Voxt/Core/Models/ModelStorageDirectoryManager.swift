@@ -5,10 +5,37 @@ import Foundation
 import AppKit
 
 enum ModelStorageDirectoryManager {
+    enum AccessIssue: LocalizedError, Equatable {
+        case authorizationRequired(path: String)
+        case invalidBookmark(path: String)
+        case securityScopeDenied(path: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .authorizationRequired(let path):
+                return AppLocalization.format(
+                    "Voxt needs permission to access the model storage folder at %@. Choose the folder again to reauthorize it.",
+                    path
+                )
+            case .invalidBookmark(let path):
+                return AppLocalization.format(
+                    "The saved permission for the model storage folder at %@ is no longer valid. Choose the folder again to reauthorize it.",
+                    path
+                )
+            case .securityScopeDenied(let path):
+                return AppLocalization.format(
+                    "macOS denied access to the model storage folder at %@. Choose the folder again to reauthorize it.",
+                    path
+                )
+            }
+        }
+    }
+
     struct RootResolution {
         let writeRootURL: URL
         let readableRootURLs: [URL]
         let derivedRootURL: URL
+        let accessIssue: AccessIssue?
     }
 
     private struct ResolvedRootCache {
@@ -20,6 +47,7 @@ enum ModelStorageDirectoryManager {
     private static let lock = NSLock()
     private static var securityScopedURL: URL?
     private static var resolvedRootCache: ResolvedRootCache?
+    private static var authorizedRootURLOverrideForTesting: URL?
     private static let fileManager = FileManager.default
 
     static var defaultRootURL: URL {
@@ -51,6 +79,19 @@ enum ModelStorageDirectoryManager {
     }
 
     static func resolvedRootResolution(defaults: UserDefaults = .standard) -> RootResolution {
+        lock.lock()
+        if let authorizedRootURLOverrideForTesting {
+            lock.unlock()
+            let rootURL = authorizedRootURLOverrideForTesting.standardizedFileURL
+            return RootResolution(
+                writeRootURL: rootURL,
+                readableRootURLs: [rootURL],
+                derivedRootURL: derivedRootURL(forWriteRoot: rootURL),
+                accessIssue: nil
+            )
+        }
+        lock.unlock()
+
         let bookmarkData = defaults.data(forKey: AppPreferenceKey.modelStorageRootBookmark)
         let storedPath = normalizedStoredPath(defaults.string(forKey: AppPreferenceKey.modelStorageRootPath))
         lock.lock()
@@ -64,27 +105,42 @@ enum ModelStorageDirectoryManager {
         lock.unlock()
 
         let resolution: RootResolution
+        var effectiveBookmarkData = bookmarkData
         if let bookmarkData,
-           let bookmarkedURL = resolveSecurityScopedURL(from: bookmarkData, defaults: defaults) {
+           let scopedAccess = prepareSecurityScopedURL(from: bookmarkData) {
+            commitSecurityScopedAccess(scopedAccess)
+            if scopedAccess.refreshedBookmarkData != nil {
+                effectiveBookmarkData = scopedAccess.refreshedBookmarkData
+                defaults.set(effectiveBookmarkData, forKey: AppPreferenceKey.modelStorageRootBookmark)
+            }
             resolution = RootResolution(
-                writeRootURL: bookmarkedURL,
-                readableRootURLs: [bookmarkedURL],
-                derivedRootURL: derivedRootURL(forWriteRoot: bookmarkedURL)
+                writeRootURL: scopedAccess.url,
+                readableRootURLs: [scopedAccess.url],
+                derivedRootURL: derivedRootURL(forWriteRoot: scopedAccess.url),
+                accessIssue: nil
             )
         } else if let storedPath {
             let rootURL = URL(fileURLWithPath: storedPath, isDirectory: true)
-            if rootURL.standardizedFileURL.path == legacyDefaultRootURL.standardizedFileURL.path {
+            let normalizedRootPath = rootURL.standardizedFileURL.path
+            let usesBuiltInRoot = normalizedRootPath == defaultRootURL.standardizedFileURL.path
+                || normalizedRootPath == legacyDefaultRootURL.standardizedFileURL.path
+            if usesBuiltInRoot {
                 let writeRootURL = defaultRootURL
                 resolution = RootResolution(
                     writeRootURL: writeRootURL,
                     readableRootURLs: uniqueRootURLs([writeRootURL, legacyDefaultRootURL]),
-                    derivedRootURL: derivedRootURL(forWriteRoot: writeRootURL)
+                    derivedRootURL: derivedRootURL(forWriteRoot: writeRootURL),
+                    accessIssue: nil
                 )
             } else {
+                let issue: AccessIssue = bookmarkData == nil
+                    ? .authorizationRequired(path: rootURL.path)
+                    : .invalidBookmark(path: rootURL.path)
                 resolution = RootResolution(
                     writeRootURL: rootURL,
-                    readableRootURLs: [rootURL],
-                    derivedRootURL: derivedRootURL(forWriteRoot: rootURL)
+                    readableRootURLs: [],
+                    derivedRootURL: derivedRootURL(forWriteRoot: rootURL),
+                    accessIssue: issue
                 )
             }
         } else {
@@ -92,16 +148,26 @@ enum ModelStorageDirectoryManager {
             resolution = RootResolution(
                 writeRootURL: writeRootURL,
                 readableRootURLs: uniqueRootURLs([writeRootURL, legacyDefaultRootURL]),
-                derivedRootURL: derivedRootURL(forWriteRoot: writeRootURL)
+                derivedRootURL: derivedRootURL(forWriteRoot: writeRootURL),
+                accessIssue: nil
             )
         }
 
         updateResolvedRootCache(
-            bookmarkData: bookmarkData,
+            bookmarkData: effectiveBookmarkData,
             path: storedPath,
             resolution: resolution
         )
         return resolution
+    }
+
+    static func requireWriteRootURL(defaults: UserDefaults = .standard) throws -> URL {
+        let resolution = resolvedRootResolution(defaults: defaults)
+        if let accessIssue = resolution.accessIssue {
+            throw accessIssue
+        }
+        try verifyWritableDirectory(resolution.writeRootURL)
+        return resolution.writeRootURL
     }
 
     static func saveUserSelectedRootURL(_ url: URL) throws {
@@ -112,20 +178,35 @@ enum ModelStorageDirectoryManager {
             relativeTo: nil
         )
 
+        guard let scopedAccess = prepareSecurityScopedURL(from: bookmark) else {
+            throw AccessIssue.securityScopeDenied(path: normalized.path)
+        }
+        do {
+            try verifyWritableDirectory(scopedAccess.url)
+        } catch {
+            if scopedAccess.startedNewAccess {
+                scopedAccess.url.stopAccessingSecurityScopedResource()
+            }
+            throw error
+        }
+        commitSecurityScopedAccess(scopedAccess)
+
+        let persistedBookmark = scopedAccess.refreshedBookmarkData ?? bookmark
+
         let defaults = UserDefaults.standard
         defaults.set(normalized.path, forKey: AppPreferenceKey.modelStorageRootPath)
-        defaults.set(bookmark, forKey: AppPreferenceKey.modelStorageRootBookmark)
+        defaults.set(persistedBookmark, forKey: AppPreferenceKey.modelStorageRootBookmark)
         updateResolvedRootCache(
-            bookmarkData: bookmark,
+            bookmarkData: persistedBookmark,
             path: normalized.path,
             resolution: RootResolution(
-                writeRootURL: normalized,
-                readableRootURLs: [normalized],
-                derivedRootURL: derivedRootURL(forWriteRoot: normalized)
+                writeRootURL: scopedAccess.url,
+                readableRootURLs: [scopedAccess.url],
+                derivedRootURL: derivedRootURL(forWriteRoot: scopedAccess.url),
+                accessIssue: nil
             )
         )
-
-        _ = resolveSecurityScopedURL(from: bookmark, defaults: defaults)
+        NotificationCenter.default.post(name: .voxtModelStorageAuthorizationDidChange, object: nil)
     }
 
     static func openRootInFinder() {
@@ -137,12 +218,26 @@ enum ModelStorageDirectoryManager {
     static func resetForTesting() {
         lock.lock()
         resolvedRootCache = nil
+        authorizedRootURLOverrideForTesting = nil
         lock.unlock()
         securityScopedURL?.stopAccessingSecurityScopedResource()
         securityScopedURL = nil
     }
 
-    private static func resolveSecurityScopedURL(from bookmarkData: Data, defaults: UserDefaults) -> URL? {
+    static func setAuthorizedRootURLForTesting(_ url: URL?) {
+        lock.lock()
+        authorizedRootURLOverrideForTesting = url?.standardizedFileURL
+        resolvedRootCache = nil
+        lock.unlock()
+    }
+
+    private struct ScopedAccessActivation {
+        let url: URL
+        let refreshedBookmarkData: Data?
+        let startedNewAccess: Bool
+    }
+
+    private static func prepareSecurityScopedURL(from bookmarkData: Data) -> ScopedAccessActivation? {
         var isStale = false
         guard let resolved = try? URL(
             resolvingBookmarkData: bookmarkData,
@@ -153,32 +248,57 @@ enum ModelStorageDirectoryManager {
             return nil
         }
 
-        if securityScopedURL?.path != resolved.path {
-            securityScopedURL?.stopAccessingSecurityScopedResource()
-            if resolved.startAccessingSecurityScopedResource() {
-                securityScopedURL = resolved
-            }
+        let normalized = resolved.standardizedFileURL
+        let alreadyActive = securityScopedURL?.standardizedFileURL.path == normalized.path
+        let startedNewAccess: Bool
+        if alreadyActive {
+            startedNewAccess = false
+        } else {
+            guard normalized.startAccessingSecurityScopedResource() else { return nil }
+            startedNewAccess = true
         }
 
-        if isStale,
-           let refreshed = try? resolved.bookmarkData(
+        let refreshedBookmarkData: Data?
+        if isStale {
+            refreshedBookmarkData = try? normalized.bookmarkData(
                 options: [.withSecurityScope],
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
-           ) {
-            defaults.set(refreshed, forKey: AppPreferenceKey.modelStorageRootBookmark)
-            updateResolvedRootCache(
-                bookmarkData: refreshed,
-                path: normalizedStoredPath(defaults.string(forKey: AppPreferenceKey.modelStorageRootPath)),
-                resolution: RootResolution(
-                    writeRootURL: resolved,
-                    readableRootURLs: [resolved],
-                    derivedRootURL: derivedRootURL(forWriteRoot: resolved)
-                )
             )
+            if refreshedBookmarkData == nil {
+                if startedNewAccess {
+                    normalized.stopAccessingSecurityScopedResource()
+                }
+                return nil
+            }
+        } else {
+            refreshedBookmarkData = nil
         }
 
-        return resolved
+        return ScopedAccessActivation(
+            url: normalized,
+            refreshedBookmarkData: refreshedBookmarkData,
+            startedNewAccess: startedNewAccess
+        )
+    }
+
+    private static func commitSecurityScopedAccess(_ access: ScopedAccessActivation) {
+        guard access.startedNewAccess else { return }
+        let previousURL = securityScopedURL
+        securityScopedURL = access.url
+        previousURL?.stopAccessingSecurityScopedResource()
+    }
+
+    private static func verifyWritableDirectory(_ url: URL) throws {
+        try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        let probeURL = url.appendingPathComponent(".voxt-write-probe-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: probeURL, withIntermediateDirectories: false)
+            try fileManager.removeItem(at: probeURL)
+        } catch {
+            try? fileManager.removeItem(at: probeURL)
+            throw error
+        }
     }
 
     private static func defaultRootURL(fileManager: FileManager) -> URL {

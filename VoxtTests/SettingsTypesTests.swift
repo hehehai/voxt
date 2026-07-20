@@ -442,6 +442,19 @@ final class SettingsTypesTests: XCTestCase {
         XCTAssertEqual(parsedTarget?.modelSelectionID, selectionID)
     }
 
+    func testModelNavigationTargetRoundTripsStorageAuthorizationRequest() {
+        let target = SettingsNavigationTarget(
+            tab: .model,
+            requestsModelStorageAuthorization: true
+        )
+        let notification = Notification(name: .voxtSettingsNavigate, object: nil, userInfo: target.userInfo)
+
+        let parsedTarget = SettingsNavigationTarget(notification: notification)
+
+        XCTAssertEqual(parsedTarget?.tab, .model)
+        XCTAssertEqual(parsedTarget?.requestsModelStorageAuthorization, true)
+    }
+
     func testPermissionRequirementResolverAggregatesFeatureSelections() {
         let context = SettingsPermissionRequirementContext(
             selectedEngine: .mlxAudio,

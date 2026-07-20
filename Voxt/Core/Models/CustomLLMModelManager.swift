@@ -1120,6 +1120,7 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     private func performDownloadWithFallback(for repo: String) async throws -> URL {
+        _ = try ModelStorageDirectoryManager.requireWriteRootURL()
         let canonicalRepo = Self.canonicalModelRepo(repo)
         let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
             ?? Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String

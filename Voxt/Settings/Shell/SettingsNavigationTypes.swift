@@ -108,19 +108,22 @@ struct SettingsNavigationTarget: Hashable {
     let featureTab: FeatureSettingsTab?
     let historyFilter: HistoryFilterTab?
     let modelSelectionID: FeatureModelSelectionID?
+    let requestsModelStorageAuthorization: Bool
 
     init(
         tab: SettingsTab,
         section: SettingsNavigationSection? = nil,
         featureTab: FeatureSettingsTab? = nil,
         historyFilter: HistoryFilterTab? = nil,
-        modelSelectionID: FeatureModelSelectionID? = nil
+        modelSelectionID: FeatureModelSelectionID? = nil,
+        requestsModelStorageAuthorization: Bool = false
     ) {
         self.tab = tab
         self.section = section
         self.featureTab = featureTab ?? Self.defaultFeatureTab(for: tab, section: section)
         self.historyFilter = historyFilter
         self.modelSelectionID = modelSelectionID
+        self.requestsModelStorageAuthorization = requestsModelStorageAuthorization
     }
 
     init?(notification: Notification) {
@@ -162,12 +165,16 @@ struct SettingsNavigationTarget: Hashable {
             modelSelectionID = nil
         }
 
+        let requestsModelStorageAuthorization =
+            notification.userInfo?["requestsModelStorageAuthorization"] as? String == "true"
+
         self.init(
             tab: tab == .appEnhancement ? .feature : tab,
             section: section,
             featureTab: featureTab,
             historyFilter: historyFilter,
-            modelSelectionID: modelSelectionID
+            modelSelectionID: modelSelectionID,
+            requestsModelStorageAuthorization: requestsModelStorageAuthorization
         )
     }
 
@@ -177,7 +184,8 @@ struct SettingsNavigationTarget: Hashable {
             "section": section?.rawValue ?? "",
             "featureTab": featureTab?.rawValue ?? "",
             "historyFilter": historyFilter?.rawValue ?? "",
-            "modelSelectionID": modelSelectionID?.rawValue ?? ""
+            "modelSelectionID": modelSelectionID?.rawValue ?? "",
+            "requestsModelStorageAuthorization": requestsModelStorageAuthorization ? "true" : "false"
         ]
     }
 

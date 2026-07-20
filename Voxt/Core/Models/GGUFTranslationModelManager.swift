@@ -319,6 +319,7 @@ final class GGUFTranslationModelManager: ObservableObject {
     }
 
     private func performDownload(id: GGUFTranslationModelID) async throws {
+        _ = try ModelStorageDirectoryManager.requireWriteRootURL()
         let modelOption = option(for: id)
         let destinationURL = modelFileURL(for: id)
         let directoryURL = destinationURL.deletingLastPathComponent()

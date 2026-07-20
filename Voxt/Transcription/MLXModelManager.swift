@@ -1378,6 +1378,7 @@ class MLXModelManager: ObservableObject {
     }
 
     private func performDownloadWithFallback(for repo: String) async throws -> URL {
+        _ = try ModelStorageDirectoryManager.requireWriteRootURL()
         let selection = try await ModelDownloadSourceSelector.select(
             candidates: downloadSourceCandidates(),
             targetKey: downloadSourceTargetKey(for: repo),

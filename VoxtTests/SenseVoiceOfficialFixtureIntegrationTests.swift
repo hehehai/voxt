@@ -41,12 +41,16 @@ final class SenseVoiceOfficialFixtureIntegrationTests: XCTestCase {
             } else {
                 defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
             }
+            ModelStorageDirectoryManager.resetForTesting()
         }
         if let modelRoot = ProcessInfo.processInfo.environment["VOXT_MODEL_STORAGE_ROOT"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !modelRoot.isEmpty {
             defaults.set(modelRoot, forKey: AppPreferenceKey.modelStorageRootPath)
             defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+            ModelStorageDirectoryManager.setAuthorizedRootURLForTesting(
+                URL(fileURLWithPath: modelRoot, isDirectory: true)
+            )
         }
         let hubURL = defaults.bool(forKey: AppPreferenceKey.useHfMirror)
             ? MLXModelManager.mirrorHubBaseURL

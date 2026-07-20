@@ -2230,3 +2230,7 @@
 "Endpoint must not contain a username or password." = "エンドポイントにユーザー名やパスワードを含めることはできません。";
 "Insecure endpoints can receive credentials only on this Mac. Use HTTPS or WSS for remote hosts." = "資格情報を送信できる安全でないエンドポイントはこの Mac 上のものだけです。リモートホストには HTTPS または WSS を使用してください。";
 "Dictionary data is temporarily unavailable. Please try again." = "辞書データを一時的に利用できません。もう一度お試しください。";
+"Voxt needs permission to access the model storage folder at %@. Choose the folder again to reauthorize it." = "Voxt がモデル保存フォルダ %@ にアクセスするには許可が必要です。フォルダを再選択して再認証してください。";
+"The saved permission for the model storage folder at %@ is no longer valid. Choose the folder again to reauthorize it." = "モデル保存フォルダ %@ の保存済みアクセス許可は無効です。フォルダを再選択して再認証してください。";
+"Authorize" = "許可";
+"macOS denied access to the model storage folder at %@. Choose the folder again to reauthorize it." = "macOS によりモデル保存フォルダ %@ へのアクセスが拒否されました。フォルダを再選択して再認証してください。";

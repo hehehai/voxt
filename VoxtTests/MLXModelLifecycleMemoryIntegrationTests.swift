@@ -387,6 +387,9 @@ final class MLXModelLifecycleMemoryIntegrationTests: XCTestCase {
         defaults.set(modelRoot, forKey: AppPreferenceKey.modelStorageRootPath)
         defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
         ModelStorageDirectoryManager.resetForTesting()
+        ModelStorageDirectoryManager.setAuthorizedRootURLForTesting(
+            URL(fileURLWithPath: modelRoot, isDirectory: true)
+        )
 
         addTeardownBlock {
             if let previousPath {

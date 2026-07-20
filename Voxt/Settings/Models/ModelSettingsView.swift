@@ -77,6 +77,8 @@ struct ModelSettingsView: View {
     @State var uninstallingModelTarget: LocalModelRemovalTarget?
     @State var cancellingInstallTargets = Set<LocalModelInstallTarget>()
     @State private var lastHandledConfigurationNavigationRequestID: UUID?
+    @State private var lastHandledStorageAuthorizationNavigationRequestID: UUID?
+    @State private var pendingStorageAuthorizationPickerRequestID: UUID?
     @State private var modelOperationToastMessage = ""
     @State private var modelOperationToastDismissTask: Task<Void, Never>?
     @State private var presentedModelErrorMessagesByTarget: [String: String] = [:]
@@ -369,6 +371,7 @@ struct ModelSettingsView: View {
         }
         .sheet(isPresented: $isModelDownloadSettingsPresented) {
             modelDownloadSettingsSheet
+                .onAppear(perform: presentPendingStorageAuthorizationPicker)
         }
         .alert(item: $pendingModelRemovalTarget) { target in
             Alert(
@@ -396,8 +399,14 @@ struct ModelSettingsView: View {
         .animation(.easeInOut(duration: 0.16), value: modelOperationToastMessage)
         .id(interfaceLanguageRaw)
         .onAppear(perform: handleConfigurationNavigationRequest)
+        .onAppear(perform: handleStorageAuthorizationNavigationRequest)
         .onChange(of: navigationRequest?.id) { _, _ in
             handleConfigurationNavigationRequest()
+            handleStorageAuthorizationNavigationRequest()
+        }
+        .onChange(of: isActive) { _, isActive in
+            guard isActive else { return }
+            handleStorageAuthorizationNavigationRequest()
         }
         .onReceive(sherpaOnnxModelManager.$stateByID) { states in
             presentSherpaErrors(states)
@@ -514,6 +523,31 @@ struct ModelSettingsView: View {
         }
     }
 
+    private func handleStorageAuthorizationNavigationRequest() {
+        guard let navigationRequest,
+              navigationRequest.id != lastHandledStorageAuthorizationNavigationRequestID,
+              navigationRequest.target.tab == .model,
+              navigationRequest.target.requestsModelStorageAuthorization,
+              isActive
+        else { return }
+
+        lastHandledStorageAuthorizationNavigationRequestID = navigationRequest.id
+        refreshModelStorageDisplayPath()
+        guard ModelStorageDirectoryManager.resolvedRootResolution().accessIssue != nil else { return }
+
+        pendingStorageAuthorizationPickerRequestID = navigationRequest.id
+        isModelDownloadSettingsPresented = true
+    }
+
+    private func presentPendingStorageAuthorizationPicker() {
+        guard pendingStorageAuthorizationPickerRequestID != nil else { return }
+        pendingStorageAuthorizationPickerRequestID = nil
+
+        DispatchQueue.main.async {
+            chooseModelStorageDirectory()
+        }
+    }
+
     func reloadCachedConfigurationState() {
         cachedFeatureSettings = FeatureSettingsStore.load(defaults: .standard)
         cachedRemoteASRConfigurations = RemoteModelConfigurationStore.loadConfigurations(
@@ -585,14 +619,14 @@ struct ModelSettingsView: View {
         guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
         let currentURL = ModelStorageDirectoryManager.resolvedRootURL().standardizedFileURL
         let proposedURL = selectedURL.standardizedFileURL
-        guard proposedURL != currentURL else { return }
-
-        let alert = NSAlert()
-        alert.messageText = localized("Change Model Storage Path?")
-        alert.informativeText = localized("After changing the model storage path, previously downloaded local models will need to be downloaded again.")
-        alert.addButton(withTitle: localized("Confirm"))
-        alert.addButton(withTitle: localized("Cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        if proposedURL != currentURL {
+            let alert = NSAlert()
+            alert.messageText = localized("Change Model Storage Path?")
+            alert.informativeText = localized("After changing the model storage path, previously downloaded local models will need to be downloaded again.")
+            alert.addButton(withTitle: localized("Confirm"))
+            alert.addButton(withTitle: localized("Cancel"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
 
         do {
             try ModelStorageDirectoryManager.saveUserSelectedRootURL(selectedURL)
@@ -600,6 +634,7 @@ struct ModelSettingsView: View {
             refreshAllModelStorageRoots()
             refreshModelStorageDisplayPath()
             refreshCatalogSnapshot()
+            SileroVADModelProvisioner.prefetchIfNeeded(for: LocalVADMode.stored())
         } catch {
             modelStorageSelectionError = AppLocalization.format(
                 "Failed to update model storage path: %@",
@@ -609,8 +644,9 @@ struct ModelSettingsView: View {
     }
 
     func refreshModelStorageDisplayPath() {
-        let resolved = ModelStorageDirectoryManager.resolvedRootURL().path
-        modelStorageDisplayPath = resolved
+        let resolution = ModelStorageDirectoryManager.resolvedRootResolution()
+        modelStorageDisplayPath = resolution.writeRootURL.path
+        modelStorageSelectionError = resolution.accessIssue?.localizedDescription
     }
 
     private func openModelStorageInFinder() {

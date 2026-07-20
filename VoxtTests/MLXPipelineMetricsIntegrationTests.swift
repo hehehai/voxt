@@ -44,6 +44,10 @@ final class MLXPipelineMetricsIntegrationTests: XCTestCase {
         let defaults = UserDefaults.standard
         defaults.set("/Users/guanwei/x/models", forKey: AppPreferenceKey.modelStorageRootPath)
         defaults.removeObject(forKey: AppPreferenceKey.modelStorageRootBookmark)
+        ModelStorageDirectoryManager.setAuthorizedRootURLForTesting(
+            URL(fileURLWithPath: "/Users/guanwei/x/models", isDirectory: true)
+        )
+        addTeardownBlock { ModelStorageDirectoryManager.resetForTesting() }
         let hubURL = defaults.bool(forKey: AppPreferenceKey.useHfMirror)
             ? MLXModelManager.mirrorHubBaseURL
             : MLXModelManager.defaultHubBaseURL

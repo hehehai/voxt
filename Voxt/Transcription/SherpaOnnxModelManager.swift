@@ -276,6 +276,7 @@ final class SherpaOnnxModelManager: ObservableObject {
     }
 
     private func performDownload(id: SherpaOnnxModelID) async throws {
+        _ = try ModelStorageDirectoryManager.requireWriteRootURL()
         let option = option(for: id)
         let shouldReuseDownload = shouldReuseSavedDownloadSource(for: id)
         let selection = try await ModelDownloadSourceSelector.select(
