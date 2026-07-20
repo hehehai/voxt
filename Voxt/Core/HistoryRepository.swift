@@ -255,14 +255,13 @@ final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
     }
 
     private func fetchBranchItems(db: Database, startDate: Date?) throws -> [HistoryBranchMetricItem] {
-        var arguments: StatementArguments = []
-        let dateFilter: String
+        var arguments: StatementArguments = [TranscriptionHistoryKind.transcript.rawValue]
+        var conditions = ["kind != ?"]
         if let startDate {
-            dateFilter = "WHERE createdAt >= ?"
+            conditions.append("createdAt >= ?")
             arguments += [startDate.timeIntervalSince1970]
-        } else {
-            dateFilter = ""
         }
+        let branchFilter = "WHERE " + conditions.joined(separator: " AND ")
 
         let appRows = try Row.fetchAll(
             db,
@@ -272,7 +271,8 @@ final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
                     NULLIF(focusedAppBundleID, '') AS bundleID,
                     COALESCE(SUM(LENGTH(text)), 0) AS characterCount
                 FROM history_entries
-                \(dateFilter)
+                \(branchFilter)
+                    AND (NULLIF(focusedAppName, '') IS NOT NULL OR NULLIF(focusedAppBundleID, '') IS NOT NULL)
                 GROUP BY COALESCE(NULLIF(focusedAppBundleID, ''), NULLIF(focusedAppName, ''), 'Unknown App')
                 HAVING characterCount > 0
                 """,
@@ -300,8 +300,8 @@ final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
                     MIN(browserURLOrigin) AS origin,
                     COALESCE(SUM(LENGTH(text)), 0) AS characterCount
                 FROM history_entries
-                \(dateFilter)
-                \(dateFilter.isEmpty ? "WHERE" : "AND") browserURLHost IS NOT NULL AND browserURLHost != ''
+                \(branchFilter)
+                    AND browserURLHost IS NOT NULL AND browserURLHost != ''
                 GROUP BY browserURLHost
                 HAVING characterCount > 0
                 """,

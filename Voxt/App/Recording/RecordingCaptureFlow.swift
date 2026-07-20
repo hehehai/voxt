@@ -279,6 +279,7 @@ extension AppDelegate {
         sessionTargetApplicationBundleID = nil
         enhancementContextSnapshot = nil
         lastEnhancementPromptContext = nil
+        sessionOutputDestinationContext = nil
         selectedTextTranslationHadWritableFocusedInput = false
         rewriteSessionHasSelectedSourceText = false
         rewriteSessionSelectedSourceText = ""

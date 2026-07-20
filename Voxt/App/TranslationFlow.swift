@@ -187,6 +187,7 @@ extension AppDelegate {
         sessionLLMExecutionTimings = []
         enhancementContextSnapshot = nil
         lastEnhancementPromptContext = nil
+        sessionOutputDestinationContext = nil
 
         if interactionSoundsEnabled {
             interactionSoundPlayer.playStart()

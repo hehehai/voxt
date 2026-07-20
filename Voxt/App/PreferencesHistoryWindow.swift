@@ -269,6 +269,7 @@ extension AppDelegate {
     func appendHistoryIfNeeded(
         text: String,
         outputMode: SessionOutputMode,
+        outputDestinationContext: OutputDestinationContext?,
         displayTitle: String? = nil,
         llmDurationSeconds: TimeInterval?,
         dictionaryHitTerms: [String],
@@ -333,11 +334,8 @@ extension AppDelegate {
         // Measure from recording stop to first ASR text callback when available.
         let processingEnd = transcriptionResultReceivedAt ?? now
         let processingDuration = resolvedDuration(from: transcriptionProcessingStartedAt, to: processingEnd)
-        let focusedAppName = lastEnhancementPromptContext?.focusedAppName ?? NSWorkspace.shared.frontmostApplication?.localizedName
-        let focusedAppBundleID = lastEnhancementPromptContext?.focusedAppBundleID
-            ?? enhancementContextSnapshot?.bundleID
-            ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let browserContext = historyBrowserContext(frontmostBundleID: focusedAppBundleID)
+        let focusedAppName = outputDestinationContext?.appName
+        let focusedAppBundleID = outputDestinationContext?.bundleID
 
         let remoteASRProviderInfo: String?
         let remoteASRModelInfo: String?
@@ -375,6 +373,15 @@ extension AppDelegate {
                 dictionarySuggestedTerms: dictionarySuggestedTerms,
                 rewriteConversationTurns: rewriteConversationTurns
            ) {
+            if let outputDestinationContext {
+                _ = historyStore.updateOutputDestination(
+                    for: continuedEntryID,
+                    focusedAppName: outputDestinationContext.appName,
+                    focusedAppBundleID: outputDestinationContext.bundleID,
+                    browserURLHost: outputDestinationContext.browserURLHost,
+                    browserURLOrigin: outputDestinationContext.browserURLOrigin
+                )
+            }
             lastEnhancementPromptContext = nil
             transcriptionResultReceivedAt = nil
             scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded()
@@ -401,8 +408,8 @@ extension AppDelegate {
             llmDurationSeconds: llmDurationSeconds,
             focusedAppName: focusedAppName,
             focusedAppBundleID: focusedAppBundleID,
-            browserURLHost: browserContext.host,
-            browserURLOrigin: browserContext.origin,
+            browserURLHost: outputDestinationContext?.browserURLHost,
+            browserURLOrigin: outputDestinationContext?.browserURLOrigin,
             matchedGroupID: lastEnhancementPromptContext?.matchedGroupID,
             matchedGroupName: lastEnhancementPromptContext?.matchedGroupName,
             matchedAppGroupName: lastEnhancementPromptContext?.matchedAppGroupName,
@@ -441,9 +448,24 @@ extension AppDelegate {
         return entryID
     }
 
-    private func historyBrowserContext(frontmostBundleID: String?) -> (host: String?, origin: String?) {
-        guard isBrowserBundleID(frontmostBundleID),
-              let activeURL = activeBrowserTabURL(frontmostBundleID: frontmostBundleID),
+    func captureCurrentOutputDestinationContext() -> OutputDestinationContext? {
+        guard let application = NSWorkspace.shared.frontmostApplication else { return nil }
+        let bundleID = application.bundleIdentifier
+        guard bundleID != Bundle.main.bundleIdentifier else { return nil }
+
+        let browserContext = outputDestinationBrowserContext(bundleID: bundleID)
+        return OutputDestinationContext(
+            appName: application.localizedName,
+            bundleID: bundleID,
+            pid: application.processIdentifier,
+            browserURLHost: browserContext.host,
+            browserURLOrigin: browserContext.origin
+        )
+    }
+
+    private func outputDestinationBrowserContext(bundleID: String?) -> (host: String?, origin: String?) {
+        guard isBrowserBundleID(bundleID),
+              let activeURL = activeBrowserTabURL(frontmostBundleID: bundleID),
               let url = URL(string: activeURL),
               let host = url.host?.lowercased(),
               !host.isEmpty

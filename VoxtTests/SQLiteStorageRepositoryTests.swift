@@ -390,7 +390,7 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
         XCTAssertEqual(metrics.totalTranslationCharacters, 11)
         XCTAssertEqual(metrics.dailyCharacters[today], 4)
         XCTAssertEqual(metrics.dailyCharacters[yesterday], 11)
-        XCTAssertEqual(metrics.branchItems.map(\.title), ["Unknown App"])
+        XCTAssertTrue(metrics.branchItems.isEmpty)
     }
 
     func testHistoryReportMetricsAggregateBranchItemsWithinDateRange() throws {
@@ -426,6 +426,15 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
                 focusedAppBundleID: "com.apple.Safari",
                 browserURLHost: "old.example",
                 browserURLOrigin: "https://old.example"
+            ),
+            makeHistoryEntry(
+                text: "meeting words",
+                createdAt: today.addingTimeInterval(180),
+                kind: .transcript,
+                focusedAppName: "Pages",
+                focusedAppBundleID: "com.apple.Pages",
+                browserURLHost: "meeting.example",
+                browserURLOrigin: "https://meeting.example"
             )
         ])
 
@@ -451,6 +460,7 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
                 $0.characterCount == "browser words".count
         })
         XCTAssertFalse(metrics.branchItems.contains { $0.title == "old.example" })
+        XCTAssertFalse(metrics.branchItems.contains { $0.title == "meeting.example" })
     }
 
     func testTranscriptionHistoryEntryDecodesLegacyJSONWithoutBrowserContext() throws {
@@ -468,6 +478,49 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
 
         XCTAssertNil(decoded.browserURLHost)
         XCTAssertNil(decoded.browserURLOrigin)
+    }
+
+    func testHistoryEntryOutputDestinationCanBeUpdatedAfterDelayedInjection() throws {
+        let database = try makeDatabase()
+        let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let entry = makeHistoryEntry(
+            text: "delayed answer",
+            createdAt: Date(),
+            kind: .rewrite
+        )
+        try repository.replaceAll([entry])
+        let store = retain(TranscriptionHistoryStore(repository: repository))
+
+        let updated = store.updateOutputDestination(
+            for: entry.id,
+            focusedAppName: "Safari",
+            focusedAppBundleID: "com.apple.Safari",
+            browserURLHost: "example.com",
+            browserURLOrigin: "https://example.com"
+        )
+
+        XCTAssertEqual(updated?.focusedAppName, "Safari")
+        XCTAssertEqual(updated?.focusedAppBundleID, "com.apple.Safari")
+        XCTAssertEqual(updated?.browserURLHost, "example.com")
+        XCTAssertEqual(updated?.browserURLOrigin, "https://example.com")
+        XCTAssertEqual(updated?.text, entry.text)
+        XCTAssertEqual(updated?.kind, entry.kind)
+
+        let persisted = try XCTUnwrap(repository.entry(id: entry.id))
+        XCTAssertEqual(persisted.focusedAppBundleID, "com.apple.Safari")
+        XCTAssertEqual(persisted.browserURLHost, "example.com")
+
+        let metrics = try repository.reportMetrics(dayStarts: [])
+        XCTAssertTrue(metrics.branchItems.contains {
+            $0.kind == .app &&
+                $0.bundleID == "com.apple.Safari" &&
+                $0.characterCount == entry.text.count
+        })
+        XCTAssertTrue(metrics.branchItems.contains {
+            $0.kind == .url &&
+                $0.urlHost == "example.com" &&
+                $0.characterCount == entry.text.count
+        })
     }
 
     func testRepositoryHandlesLargeBatchedDictionaryAndHistoryData() throws {

@@ -2,7 +2,6 @@
 // Provides Meeting History Flow for app lifecycle and routing.
 
 import Foundation
-import AppKit
 
 extension AppDelegate {
     func cancelImportedMeetingFileAnalysis() async {
@@ -240,8 +239,8 @@ extension AppDelegate {
             audioDurationSeconds: result.audioDurationSeconds,
             transcriptionProcessingDurationSeconds: nil,
             llmDurationSeconds: nil,
-            focusedAppName: NSWorkspace.shared.frontmostApplication?.localizedName,
-            focusedAppBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            focusedAppName: nil,
+            focusedAppBundleID: nil,
             matchedGroupID: nil,
             matchedGroupName: nil,
             matchedAppGroupName: nil,

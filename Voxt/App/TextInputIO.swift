@@ -1231,6 +1231,7 @@ extension AppDelegate {
 
         let didInject = await typeTextAsync(trimmedReplacement)
         if didInject {
+            sessionOutputDestinationContext = captureCurrentOutputDestinationContext()
             VoxtLog.input(
                 "Pending output replacement succeeded. previewChars=\(transaction.previewText.count), replacementChars=\(trimmedReplacement.count)"
             )

@@ -140,6 +140,7 @@ extension AppDelegate {
         lastCompletedSessionEndSessionID = nil
         sessionOutputMode = outputMode
         enhancementContextSnapshot = nil
+        sessionOutputDestinationContext = nil
         rewriteSessionHasSelectedSourceText = false
         resetSessionTranslationState()
         configureVoxtNoteSessionRuntimeStateForNewRecording(
@@ -261,6 +262,7 @@ extension AppDelegate {
         didCommitSessionOutput = true
         sessionTargetApplicationPID = nil
         sessionTargetApplicationBundleID = nil
+        sessionOutputDestinationContext = nil
 
         cancelSessionControlTasks()
         pendingSystemAudioMuteTask?.cancel()

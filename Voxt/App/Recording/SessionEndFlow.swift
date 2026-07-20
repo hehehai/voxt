@@ -65,6 +65,7 @@ extension AppDelegate {
                 delegate.selectedTextTranslationHadWritableFocusedInput = false
             }
             delegate.enhancementContextSnapshot = nil
+            delegate.sessionOutputDestinationContext = nil
             delegate.rewriteSessionHasSelectedSourceText = false
             delegate.rewriteSessionSelectedSourceText = ""
             delegate.rewriteSessionHadWritableFocusedInput = false

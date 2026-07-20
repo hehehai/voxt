@@ -98,12 +98,30 @@ extension TranscriptionHistoryEntry {
         copy(audioRelativePath: .set(audioRelativePath))
     }
 
+    func updatingOutputDestination(
+        focusedAppName: String?,
+        focusedAppBundleID: String?,
+        browserURLHost: String?,
+        browserURLOrigin: String?
+    ) -> TranscriptionHistoryEntry {
+        copy(
+            focusedAppName: .set(focusedAppName),
+            focusedAppBundleID: .set(focusedAppBundleID),
+            browserURLHost: .set(browserURLHost),
+            browserURLOrigin: .set(browserURLOrigin)
+        )
+    }
+
     private func copy(
         text: String? = nil,
         createdAt: Date? = nil,
         audioDurationSeconds: HistoryEntryUpdate<TimeInterval?> = .keep,
         transcriptionProcessingDurationSeconds: HistoryEntryUpdate<TimeInterval?> = .keep,
         llmDurationSeconds: HistoryEntryUpdate<TimeInterval?> = .keep,
+        focusedAppName: HistoryEntryUpdate<String?> = .keep,
+        focusedAppBundleID: HistoryEntryUpdate<String?> = .keep,
+        browserURLHost: HistoryEntryUpdate<String?> = .keep,
+        browserURLOrigin: HistoryEntryUpdate<String?> = .keep,
         audioRelativePath: HistoryEntryUpdate<String?> = .keep,
         whisperWordTimings: HistoryEntryUpdate<[WhisperHistoryWordTiming]?> = .keep,
         senseVoiceMetadata: HistoryEntryUpdate<SenseVoiceTranscriptMetadata?> = .keep,
@@ -131,10 +149,10 @@ extension TranscriptionHistoryEntry {
                 current: self.transcriptionProcessingDurationSeconds
             ),
             llmDurationSeconds: llmDurationSeconds.resolved(current: self.llmDurationSeconds),
-            focusedAppName: focusedAppName,
-            focusedAppBundleID: focusedAppBundleID,
-            browserURLHost: browserURLHost,
-            browserURLOrigin: browserURLOrigin,
+            focusedAppName: focusedAppName.resolved(current: self.focusedAppName),
+            focusedAppBundleID: focusedAppBundleID.resolved(current: self.focusedAppBundleID),
+            browserURLHost: browserURLHost.resolved(current: self.browserURLHost),
+            browserURLOrigin: browserURLOrigin.resolved(current: self.browserURLOrigin),
             matchedGroupID: matchedGroupID,
             matchedGroupName: matchedGroupName,
             matchedAppGroupName: matchedAppGroupName,

@@ -85,6 +85,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let overlayIconMatch: OverlayEnhancementIconMatch?
     }
 
+    struct OutputDestinationContext: Equatable {
+        let appName: String?
+        let bundleID: String?
+        let pid: pid_t?
+        let browserURLHost: String?
+        let browserURLOrigin: String?
+    }
+
     enum MeetingSessionCompletionDisposition {
         case discard
         case save
@@ -259,6 +267,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var isTranscriptionLongPressHotkeyDown = false
     var enhancementContextSnapshot: EnhancementContextSnapshot?
     var lastEnhancementPromptContext: EnhancementPromptContext?
+    var sessionOutputDestinationContext: OutputDestinationContext?
     var selectedTextTranslationHadWritableFocusedInput = false
     var rewriteSessionHasSelectedSourceText = false
     var rewriteSessionSelectedSourceText = ""

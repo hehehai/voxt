@@ -184,13 +184,14 @@ extension AppDelegate {
             verbose: true
         )
 
-        deliverCommittedOutput(context) { [weak self] didInject, didTriggerAutoKeyPress in
+        deliverCommittedOutput(context) { [weak self] didInject, didTriggerAutoKeyPress, outputDestinationContext in
             guard let self else { return }
             self.finalizeCommittedOutputPostDelivery(
                 deliveredContext: context,
                 outputMode: sessionOutputMode,
                 didInject: didInject,
-                didTriggerAutoKeyPress: didTriggerAutoKeyPress
+                didTriggerAutoKeyPress: didTriggerAutoKeyPress,
+                outputDestinationContext: outputDestinationContext
             )
             onDeliveryCompleted?()
         }
@@ -253,7 +254,8 @@ extension AppDelegate {
             deliveredContext: context,
             outputMode: sessionOutputMode,
             didInject: didInject,
-            didTriggerAutoKeyPress: false
+            didTriggerAutoKeyPress: false,
+            outputDestinationContext: didInject ? sessionOutputDestinationContext : nil
         )
         onDeliveryCompleted?()
     }
@@ -287,6 +289,7 @@ extension AppDelegate {
         endOverlayOutputDelivery()
 
         guard didInject else { return nil }
+        sessionOutputDestinationContext = captureCurrentOutputDestinationContext()
         guard shouldHandleCallbacks(for: sessionID),
               requestID.map(isCurrentLLMRequest) ?? true
         else {
@@ -510,7 +513,7 @@ extension AppDelegate {
 
     private func deliverCommittedOutput(
         _ context: SessionFinalizeContext,
-        completion: ((Bool, Bool) -> Void)? = nil
+        completion: ((Bool, Bool, OutputDestinationContext?) -> Void)? = nil
     ) {
         let delivery = resolvedOutputDelivery(for: context)
         let deliveryLabel: String
@@ -534,12 +537,21 @@ extension AppDelegate {
                 : nil
             beginOverlayOutputDelivery()
             typeText(context.outputText) { [weak self] didInject in
-                self?.sessionFinalOutputDeliveredAt = Date()
-                self?.endOverlayOutputDelivery()
+                guard let self else { return }
+                self.sessionFinalOutputDeliveredAt = Date()
+                self.endOverlayOutputDelivery()
+                let outputDestinationContext = didInject
+                    ? self.captureCurrentOutputDestinationContext()
+                    : nil
+                self.sessionOutputDestinationContext = outputDestinationContext
                 if didInject, let autoKeyPressHotkey {
-                    self?.pressAutoKeyAfterTextInjection(autoKeyPressHotkey)
+                    self.pressAutoKeyAfterTextInjection(autoKeyPressHotkey)
                 }
-                completion?(didInject, didInject && autoKeyPressHotkey != nil)
+                completion?(
+                    didInject,
+                    didInject && autoKeyPressHotkey != nil,
+                    outputDestinationContext
+                )
             }
         case .answerOverlay:
             if overlayState.isRewriteConversationActive, context.rewriteAnswerPayload == nil {
@@ -549,11 +561,11 @@ extension AppDelegate {
                 presentRewriteAnswerOverlay(title: payload.title, content: payload.content)
             }
             sessionFinalOutputDeliveredAt = Date()
-            completion?(false, false)
+            completion?(false, false, nil)
         case .selectedTextTranslationResultWindow:
             presentSelectedTextTranslationAnswerOverlay(content: context.outputText)
             sessionFinalOutputDeliveredAt = Date()
-            completion?(false, false)
+            completion?(false, false, nil)
         }
     }
 
@@ -561,7 +573,8 @@ extension AppDelegate {
         deliveredContext: SessionFinalizeContext,
         outputMode: SessionOutputMode,
         didInject: Bool,
-        didTriggerAutoKeyPress: Bool
+        didTriggerAutoKeyPress: Bool,
+        outputDestinationContext: OutputDestinationContext?
     ) {
         let deliveredText = deliveredContext.outputText
         let displayTitle = deliveredContext.rewriteAnswerPayload?.trimmedTitle
@@ -596,6 +609,7 @@ extension AppDelegate {
         let historyEntryID = appendHistoryIfNeeded(
             text: deliveredText,
             outputMode: outputMode,
+            outputDestinationContext: outputDestinationContext,
             displayTitle: displayTitle,
             llmDurationSeconds: llmDurationSeconds,
             dictionaryHitTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryMatches.map(\.term)),
@@ -1030,6 +1044,7 @@ extension AppDelegate {
                     guard let self else { return }
                     VoxtLog.input("Answer overlay inject completed. didInject=\(didInject)")
                     if didInject {
+                        self.updateLatestHistoryOutputDestinationAfterInjection()
                         self.overlayState.reset()
                         self.answerOverlayInjectionMode = .standard
                         self.sessionTargetApplicationPID = nil
@@ -1061,6 +1076,7 @@ extension AppDelegate {
                     guard let self else { return }
                     VoxtLog.input("Selected text translation overlay inject completed. didInject=\(didInject)")
                     if didInject {
+                        self.updateLatestHistoryOutputDestinationAfterInjection()
                         self.overlayState.reset()
                         self.answerOverlayInjectionMode = .standard
                         self.sessionTargetApplicationPID = nil
@@ -1116,6 +1132,21 @@ extension AppDelegate {
             return
         }
         showTranscriptionDetailWindow(for: historyEntryID)
+    }
+
+    private func updateLatestHistoryOutputDestinationAfterInjection() {
+        guard let historyEntryID = overlayState.latestHistoryEntryID,
+              let outputDestinationContext = captureCurrentOutputDestinationContext()
+        else {
+            return
+        }
+        _ = historyStore.updateOutputDestination(
+            for: historyEntryID,
+            focusedAppName: outputDestinationContext.appName,
+            focusedAppBundleID: outputDestinationContext.bundleID,
+            browserURLHost: outputDestinationContext.browserURLHost,
+            browserURLOrigin: outputDestinationContext.browserURLOrigin
+        )
     }
 
     private func configureAnswerOverlayInjectionHandler() {

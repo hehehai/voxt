@@ -971,6 +971,28 @@ final class TranscriptionHistoryStore: ObservableObject {
     }
 
     @discardableResult
+    func updateOutputDestination(
+        for entryID: UUID,
+        focusedAppName: String?,
+        focusedAppBundleID: String?,
+        browserURLHost: String?,
+        browserURLOrigin: String?
+    ) -> TranscriptionHistoryEntry? {
+        guard let existingEntry = entry(id: entryID) else { return nil }
+        let updatedEntry = existingEntry.updatingOutputDestination(
+            focusedAppName: focusedAppName,
+            focusedAppBundleID: focusedAppBundleID,
+            browserURLHost: browserURLHost,
+            browserURLOrigin: browserURLOrigin
+        )
+        cacheUpdatedEntry(updatedEntry)
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        persistEntry(updatedEntry)
+        return updatedEntry
+    }
+
+    @discardableResult
     func updateTranscriptionEntry(
         _ entryID: UUID,
         text: String,
