@@ -839,14 +839,13 @@ final class DictionaryStore: ObservableObject {
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws {
-        try createEntry(
+        _ = try createOrReinforceManualEntry(
             term: term,
             replacementTerms: replacementTerms,
             categoryID: categoryID,
             categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
-            groupNameSnapshot: groupNameSnapshot,
-            source: .manual
+            groupNameSnapshot: groupNameSnapshot
         )
     }
 

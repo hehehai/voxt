@@ -102,6 +102,32 @@ final class DictionaryStoreAsyncTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(10))
         }
     }
+
+    func testCreateManualEntryReinforcesExistingTermInsteadOfFailing() async throws {
+        let repository = try makeFixture()
+        try repository.upsert(makeEntry(term: "Hello"))
+        let store = DictionaryStore(
+            defaults: UserDefaults(suiteName: "DictionaryStoreAsyncTests.\(UUID().uuidString)")!,
+            fileManager: .default,
+            repository: repository
+        )
+        await drainMainQueue()
+
+        // A second manual entry whose normalized form already exists in the same scope
+        // must not raise SQLite error 19 (idx_dictionary_normalized_scope); it reinforces.
+        try store.createManualEntry(
+            term: "hello",
+            groupID: nil,
+            groupNameSnapshot: nil
+        )
+        await drainMainQueue()
+
+        let persisted = try repository.allEntries()
+        XCTAssertEqual(persisted.count, 1)
+        XCTAssertEqual(Set(store.entries.map(\.term)), Set(["Hello"]))
+        XCTAssertEqual(persisted.first?.matchCount, 1)
+        XCTAssertNotNil(persisted.first?.lastMatchedAt)
+    }
 }
 
 private final class BlockingDictionaryRepository: DictionaryRepositoryProtocol, @unchecked Sendable {
