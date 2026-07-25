@@ -6,6 +6,59 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.4] - 2026-07-25
+
+### English
+
+#### Added
+- Added Custom → Feature master toggles so translation, rewrite, notes, app enhancement, and meeting can be disabled from a two-column overview without affecting always-on transcription.
+- Added imported meeting file analysis with bounded audio windows, full transcription, continuous speaker diarization, progress and cancellation, and history audio preference handling.
+
+#### Changed
+- Upgraded MLX Audio and related model runtimes so live ASR sessions end with structured STT output, and unreliable chunk timing is no longer treated as final timestamps.
+
+#### Fixed
+- Fixed selected-text hotkeys so editors like VS Code no longer treat the current line as a selection when nothing is actually selected.
+- Fixed meeting microphone start when AVAudioEngine reports a sample rate that disagrees with the hardware input device.
+- Fixed Create Hot Word so adding a term that already exists in the same scope reinforces it instead of failing with a SQLite duplicate-scope error.
+- Fixed local model download authorization so security-scoped folder access is required and can be reauthorized from the main window sidebar.
+- Fixed status-menu activation so the main window moves to the active Space when opened from the menu bar.
+- Fixed app usage attribution so metrics track the final text injection destination and exclude meeting transcripts from branch counts.
+
+### 简体中文
+
+#### 新增
+- 在「自定义 → 功能」中增加总开关，可从双列概览关闭翻译、改写、笔记、应用增强和会议，且不影响始终可用的转写。
+- 支持导入会议音频文件分析：按窗口切分、完整转写、连续说话人分离，并提供进度、取消以及按历史音频偏好保存结果。
+
+#### 改进
+- 升级 MLX Audio 及相关模型运行时，使实时 ASR 会话以结构化 STT 输出结束，并不再将不可靠的分片时间戳当作最终时间戳。
+
+#### 修复
+- 修复选中文本快捷键：在未真正选中内容时，不再把 VS Code 等编辑器的当前行误当作选区。
+- 修复会议麦克风启动：当 AVAudioEngine 报告的采样率与硬件输入设备不一致时也能正常开麦。
+- 修复创建热词：同一作用域下已存在的词条会增强计数，而不再因 SQLite 唯一约束报错。
+- 修复本地模型下载授权：下载前校验安全作用域文件夹访问，并可在主窗口侧栏重新授权。
+- 修复状态栏菜单唤起主窗口时，窗口会切到当前桌面空间。
+- 修复应用使用统计：按最终注入目标统计，并将会议转写排除在分支计数之外。
+
+### 日本語
+
+#### 追加
+- 「カスタム → 機能」にマスタートグルを追加し、翻訳、リライト、ノート、アプリ強化、会議を二列の概要から無効化できるようにしました。常時利用の文字起こしには影響しません。
+- 会議音声ファイルのインポート分析を追加しました。音声を区間に分割して完全文字起こしと連続話者分離を実行し、進捗・キャンセル、履歴音声の設定に沿った保存に対応します。
+
+#### 変更
+- MLX Audio と関連モデルランタイムを更新し、ライブ ASR セッションが構造化 STT 出力で終了するようにし、信頼できないチャンク時刻を最終タイムスタンプとして扱わないようにしました。
+
+#### 修正
+- テキスト選択ショートカットを修正し、実際に選択がないときに VS Code などのエディタで現在行を選択扱いにしないようにしました。
+- AVAudioEngine のサンプルレートとハードウェア入力が一致しない場合でも、会議マイクを開始できるように修正しました。
+- ホットワード作成を修正し、同じスコープに既存の用語がある場合は SQLite の重複エラーではなく強化するようにしました。
+- ローカルモデルダウンロード前にセキュリティスコープ付きフォルダ認可を必須にし、メインウィンドウのサイドバーから再認可できるように修正しました。
+- メニューバーから開いたときにメインウィンドウがアクティブな Space へ移動するよう修正しました。
+- アプリ利用統計を修正し、最終的なテキスト注入先を追跡し、会議の文字起こしをブランチ集計から除外するようにしました。
+
 ## [1.13.3] - 2026-07-19
 
 ### English
