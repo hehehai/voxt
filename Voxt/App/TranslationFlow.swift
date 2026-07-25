@@ -135,12 +135,19 @@ extension AppDelegate {
     }
 
     func beginSelectedTextTranslationIfPossible() -> Bool {
-        guard !isSessionActive else { return false }
+        guard !isSessionActive else {
+            VoxtLog.hotkey("selectionProbe.translation: skipped sessionActive=true")
+            return false
+        }
         guard let selectedText = selectedTextFromSystemSelection(),
               !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
+            VoxtLog.hotkey("selectionProbe.translation: no usable selected text")
             return false
         }
+        VoxtLog.hotkey(
+            "selectionProbe.translation: accepted chars=\(selectedText.count) preview=\(String(selectedText.prefix(48)))"
+        )
 
         pendingSessionFinishTask?.cancel()
         pendingSessionFinishTask = nil

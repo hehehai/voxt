@@ -48,6 +48,9 @@ extension AppDelegate {
             selectedTextFromSystemSelection()?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        VoxtLog.hotkey(
+            "selectionProbe.note: sessionActive=\(isSessionActive) selectedChars=\(selectedText?.count ?? 0) preview=\(selectedText.map { String($0.prefix(48)) } ?? "nil") panelVisible=\(noteWindowManager.isVisible)"
+        )
 
         let action = NoteHotkeyActionResolver.resolve(
             state: .init(
@@ -58,6 +61,7 @@ extension AppDelegate {
                 hasSelectedText: selectedText?.isEmpty == false
             )
         )
+        VoxtLog.hotkey("selectionProbe.note.action=\(action)")
         switch action {
         case .captureSelectedText:
             guard let selectedText, !selectedText.isEmpty else { return }

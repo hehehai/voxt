@@ -37,6 +37,175 @@ final class SessionTextIOTests: XCTestCase {
         XCTAssertTrue(SelectedTextSystemSelectionSupport.hasNonEmptySelectedTextRange(length: 12))
     }
 
+    func testSimulatedCopyPolicyByAXEvidenceClass() {
+        // Caret-only range: deny.
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
+                focusedElementAvailable: true,
+                selectedTextRange: CFRange(location: 12, length: 0),
+                isBrowser: false,
+                copiesLineOnEmptySelection: false
+            )
+        )
+
+        // Non-empty range: allow recovery copy.
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
+                focusedElementAvailable: true,
+                selectedTextRange: CFRange(location: 0, length: 4),
+                isBrowser: false,
+                copiesLineOnEmptySelection: false
+            )
+        )
+
+        // AX focus dead, but app does not invent a line copy (e.g. WeChat).
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
+                focusedElementAvailable: false,
+                selectedTextRange: nil,
+                isBrowser: false,
+                copiesLineOnEmptySelection: false
+            )
+        )
+
+        // AX focus dead + line-copy editor (Cursor / VS Code): deny.
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
+                focusedElementAvailable: false,
+                selectedTextRange: nil,
+                isBrowser: false,
+                copiesLineOnEmptySelection: true
+            )
+        )
+
+        // Focused editor without range attribute: deny.
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
+                focusedElementAvailable: true,
+                selectedTextRange: nil,
+                isBrowser: false,
+                copiesLineOnEmptySelection: false
+            )
+        )
+
+        // Browser focused without range attribute: allow.
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
+                focusedElementAvailable: true,
+                selectedTextRange: nil,
+                isBrowser: true,
+                copiesLineOnEmptySelection: false
+            )
+        )
+    }
+
+    func testCopiesCurrentLineWhenSelectionEmptyRecognizesEditorFamilies() {
+        let lineCopyEditors = [
+            "com.microsoft.VSCode",
+            "com.microsoft.VSCodeInsiders",
+            "com.vscodium",
+            "com.todesktop.230313mzl4w4u92", // Cursor
+            "com.exafunction.windsurf",
+            "com.google.antigravity",
+            "com.jetbrains.intellij",
+            "com.jetbrains.WebStorm",
+            "com.sublimetext.4",
+            "dev.zed.Zed",
+            "com.trae.app",
+            "cn.trae.app",
+            "com.qoder.app",
+            "org.example.MyVSCodeFork"
+        ]
+        for bundleID in lineCopyEditors {
+            XCTAssertTrue(
+                SelectedTextSystemSelectionSupport.copiesCurrentLineWhenSelectionEmpty(bundleID: bundleID),
+                "Expected line-copy editor classification for \(bundleID)"
+            )
+        }
+
+        let safeApps = [
+            "com.tencent.xinWeChat",
+            "com.apple.Safari",
+            "com.google.Chrome",
+            "com.apple.TextEdit",
+            "com.apple.Notes",
+            "com.tinyspeck.slackmacgap"
+        ]
+        for bundleID in safeApps {
+            XCTAssertFalse(
+                SelectedTextSystemSelectionSupport.copiesCurrentLineWhenSelectionEmpty(bundleID: bundleID),
+                "Expected non-line-copy classification for \(bundleID)"
+            )
+        }
+    }
+
+    func testBrowserSelectionScriptsIncludeJavaScriptSelection() {
+        let safariScripts = BrowserAutomationScriptBuilder.selectionScripts(
+            bundleID: "com.apple.Safari",
+            displayName: "Safari"
+        )
+        XCTAssertFalse(safariScripts.isEmpty)
+        XCTAssertTrue(safariScripts.contains(where: { $0.contains("window.getSelection().toString()") }))
+        XCTAssertTrue(safariScripts.contains(where: { $0.contains("do JavaScript") }))
+
+        let chromeScripts = BrowserAutomationScriptBuilder.selectionScripts(
+            bundleID: "com.google.Chrome",
+            displayName: "Google Chrome"
+        )
+        XCTAssertFalse(chromeScripts.isEmpty)
+        XCTAssertTrue(chromeScripts.contains(where: { $0.contains("execute javascript") }))
+    }
+
+    func testConfirmedCaretOnlyShortCircuitsFurtherSelectionProbes() {
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.isConfirmedCaretOnly(
+                selectedTextRange: CFRange(location: 8, length: 0)
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.isConfirmedCaretOnly(
+                selectedTextRange: CFRange(location: 0, length: 3)
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.isConfirmedCaretOnly(selectedTextRange: nil)
+        )
+    }
+
+    func testDefinitiveEmptyBrowserSelectionStopsDialectRetries() {
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.isDefinitiveEmptyBrowserSelection(
+                output: "",
+                hadExecutionError: false
+            )
+        )
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.isDefinitiveEmptyBrowserSelection(
+                output: "  \n\t",
+                hadExecutionError: false
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.isDefinitiveEmptyBrowserSelection(
+                output: "hello",
+                hadExecutionError: false
+            )
+        )
+        // Script-form failures should keep trying other dialects.
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.isDefinitiveEmptyBrowserSelection(
+                output: nil,
+                hadExecutionError: true
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.isDefinitiveEmptyBrowserSelection(
+                output: "",
+                hadExecutionError: true
+            )
+        )
+    }
+
     func testRewriteAlwaysPresentsAnswerOverlay() {
         XCTAssertTrue(
             AppDelegate.shouldPresentRewriteAnswerOverlay(
