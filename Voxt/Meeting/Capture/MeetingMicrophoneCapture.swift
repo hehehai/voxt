@@ -35,42 +35,21 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
 
     func start(onBuffer: @escaping (AVAudioPCMBuffer, Float) -> Void) throws {
         stop()
-        let audioEngine = AVAudioEngine()
-        self.audioEngine = audioEngine
-        hasLoggedFirstCallback = false
-
-        let inputNode = audioEngine.inputNode
-        applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw CaptureError.inputUnavailable
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            guard let copiedBuffer = Self.copyPCMBuffer(buffer) else { return }
-            let level = Self.normalizedRMS(from: copiedBuffer)
-            if self?.hasLoggedFirstCallback == false {
-                self?.hasLoggedFirstCallback = true
-                VoxtLog.meeting(
-                    "Meeting microphone callback received. sampleRate=\(Int(copiedBuffer.format.sampleRate)), channels=\(copiedBuffer.format.channelCount), frames=\(copiedBuffer.frameLength)",
-                    verbose: true
-                )
-            }
-            onBuffer(copiedBuffer, level)
-        }
-        hasTapInstalled = true
-
-        audioEngine.prepare()
         do {
-            try audioEngine.start()
+            try startCaptureEngine(usePreferredInputDevice: true, onBuffer: onBuffer)
         } catch {
-            throw CaptureError.engineStartFailed(error)
-        }
+            let preferredDeviceID = preferredInputDeviceID
+            let shouldRetryWithSystemDefault =
+                preferredDeviceID != nil
+                && preferredDeviceID != AudioDeviceID(kAudioObjectUnknown)
+            guard shouldRetryWithSystemDefault else { throw error }
 
-        VoxtLog.meeting(
-            "Meeting microphone capture started. sampleRate=\(Int(format.sampleRate)), channels=\(format.channelCount), deviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default")",
-            verbose: true
-        )
+            VoxtLog.meetingWarning(
+                "Meeting microphone preferred-input start failed; retrying with system default. deviceID=\(preferredDeviceID.map(String.init(describing:)) ?? "nil"), error=\(error.localizedDescription)"
+            )
+            stop()
+            try startCaptureEngine(usePreferredInputDevice: false, onBuffer: onBuffer)
+        }
     }
 
     func stop() {
@@ -89,13 +68,78 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
         VoxtLog.meeting("Meeting microphone capture stopped.", verbose: true)
     }
 
-    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) {
+    private func startCaptureEngine(
+        usePreferredInputDevice: Bool,
+        onBuffer: @escaping (AVAudioPCMBuffer, Float) -> Void
+    ) throws {
+        let audioEngine = AVAudioEngine()
+        self.audioEngine = audioEngine
+        hasLoggedFirstCallback = false
+
+        do {
+            let inputNode = audioEngine.inputNode
+            let didApplyPreferredInputDevice = usePreferredInputDevice
+                ? applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
+                : false
+            let activeInputDeviceID = didApplyPreferredInputDevice
+                ? preferredInputDeviceID
+                : AudioInputDeviceManager.defaultInputDeviceID()
+            let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
+            guard nodeOutputFormat.sampleRate > 0, nodeOutputFormat.channelCount > 0 else {
+                throw CaptureError.inputUnavailable
+            }
+
+            let hardwareSampleRate = AudioInputDeviceManager.nominalSampleRate(for: activeInputDeviceID)
+            let tapFormat = AudioInputDeviceManager.captureTapFormat(
+                nodeOutputFormat: nodeOutputFormat,
+                hardwareSampleRate: hardwareSampleRate
+            )
+
+            if abs(tapFormat.sampleRate - nodeOutputFormat.sampleRate) > 1 {
+                VoxtLog.meetingWarning(
+                    "Meeting microphone adjusted input tap format. deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default"), hardwareSampleRate=\(hardwareSampleRate.map { String(Int($0.rounded())) } ?? "unknown"), nodeSampleRate=\(Int(nodeOutputFormat.sampleRate.rounded())), tapSampleRate=\(Int(tapFormat.sampleRate.rounded()))"
+                )
+            }
+
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
+                guard let copiedBuffer = Self.copyPCMBuffer(buffer) else { return }
+                let level = Self.normalizedRMS(from: copiedBuffer)
+                if self?.hasLoggedFirstCallback == false {
+                    self?.hasLoggedFirstCallback = true
+                    VoxtLog.meeting(
+                        "Meeting microphone callback received. sampleRate=\(Int(copiedBuffer.format.sampleRate)), channels=\(copiedBuffer.format.channelCount), frames=\(copiedBuffer.frameLength)",
+                        verbose: true
+                    )
+                }
+                onBuffer(copiedBuffer, level)
+            }
+            hasTapInstalled = true
+
+            audioEngine.prepare()
+            do {
+                try audioEngine.start()
+            } catch {
+                throw CaptureError.engineStartFailed(error)
+            }
+
+            VoxtLog.meeting(
+                "Meeting microphone capture started. sampleRate=\(Int(tapFormat.sampleRate)), channels=\(tapFormat.channelCount), routing=\(didApplyPreferredInputDevice ? "preferred" : "system-default"), deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default")",
+                verbose: true
+            )
+        } catch {
+            stop()
+            throw error
+        }
+    }
+
+    @discardableResult
+    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) -> Bool {
         guard let preferredInputDeviceID,
               preferredInputDeviceID != AudioDeviceID(kAudioObjectUnknown),
               AudioInputDeviceManager.isAvailableInputDevice(preferredInputDeviceID),
               let audioUnit = inputNode.audioUnit
         else {
-            return
+            return false
         }
 
         var deviceID = preferredInputDeviceID
@@ -108,8 +152,12 @@ final class MeetingMicrophoneCapture: @unchecked Sendable {
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
         if status != noErr {
-            VoxtLog.meetingWarning("Meeting microphone capture could not switch input device. status=\(status), deviceID=\(preferredInputDeviceID)")
+            VoxtLog.meetingWarning(
+                "Meeting microphone capture could not switch input device. status=\(status), deviceID=\(preferredInputDeviceID)"
+            )
+            return false
         }
+        return true
     }
 
     private static func normalizedRMS(from buffer: AVAudioPCMBuffer) -> Float {

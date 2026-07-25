@@ -117,6 +117,27 @@ final class AudioInputDeviceManagerTests: XCTestCase {
         XCTAssertEqual(tapFormat.isInterleaved, nodeFormat.isInterleaved)
     }
 
+    func testCaptureTapFormatUsesHardwareSampleRateWhenNodeReportsLowerRate() throws {
+        let nodeFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 44_100,
+                channels: 1,
+                interleaved: false
+            )
+        )
+
+        let tapFormat = AudioInputDeviceManager.captureTapFormat(
+            nodeOutputFormat: nodeFormat,
+            hardwareSampleRate: 48_000
+        )
+
+        XCTAssertEqual(tapFormat.sampleRate, 48_000, accuracy: 0.1)
+        XCTAssertEqual(tapFormat.channelCount, nodeFormat.channelCount)
+        XCTAssertEqual(tapFormat.commonFormat, nodeFormat.commonFormat)
+        XCTAssertEqual(tapFormat.isInterleaved, nodeFormat.isInterleaved)
+    }
+
     func testCaptureTapFormatKeepsNodeFormatWhenHardwareSampleRateIsUnavailable() throws {
         let nodeFormat = try XCTUnwrap(
             AVAudioFormat(
