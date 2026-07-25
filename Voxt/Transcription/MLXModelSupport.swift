@@ -32,6 +32,22 @@ nonisolated struct MLXASROutputCapability: OptionSet, Sendable {
     nonisolated static let audioEvents = Self(rawValue: 1 << 5)
 }
 
+nonisolated enum MLXASRTimingGranularity: Equatable, Sendable {
+    case none
+    case chunk
+    case sentence
+    case word
+
+    nonisolated var providesReliableSegments: Bool {
+        switch self {
+        case .sentence, .word:
+            return true
+        case .none, .chunk:
+            return false
+        }
+    }
+}
+
 nonisolated struct MLXASRConfigurationCapability: OptionSet, Sendable {
     let rawValue: UInt
 
@@ -60,6 +76,18 @@ nonisolated enum MLXVADPolicy: Equatable, Sendable {
     }
 }
 
+nonisolated struct MLXASRKVCachePolicy: Equatable, Sendable {
+    let bits: Int
+    let groupSize: Int
+    let quantizedStart: Int
+
+    nonisolated static let conservativeQwen = Self(
+        bits: 8,
+        groupSize: 64,
+        quantizedStart: 256
+    )
+}
+
 nonisolated struct MLXASRPurpose: OptionSet, Sendable {
     let rawValue: UInt
 
@@ -74,9 +102,11 @@ nonisolated struct MLXASRModelCapability: Equatable, Sendable {
     let liveMode: MLXLiveMode
     let isRealtimeCapable: Bool
     let outputCapabilities: MLXASROutputCapability
+    let timingGranularity: MLXASRTimingGranularity
     let configurationCapabilities: MLXASRConfigurationCapability
     let vadPolicy: MLXVADPolicy
     let supportedPurposes: MLXASRPurpose
+    let kvCachePolicy: MLXASRKVCachePolicy?
 
     nonisolated var isMultilingual: Bool { supportedLanguageCodes.count > 1 }
 
@@ -160,6 +190,26 @@ nonisolated struct MMSLanguageAdapterOption: Identifiable, Hashable, Sendable {
     }()
 
     nonisolated static let supportedAppLanguageCodes = Set(all.compactMap(\.appLanguageCode))
+
+    nonisolated static func isSupported(_ code: String) -> Bool {
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return all.contains(where: { $0.id == normalized })
+    }
+
+    nonisolated static func validatedAdapterCode(_ code: String) throws -> String {
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard isSupported(normalized) else {
+            throw NSError(
+                domain: "Voxt.MLX.MMS",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Unsupported MMS adapter language: \(code). Choose an adapter from the FL102 checkpoint list."
+                ]
+            )
+        }
+        return normalized
+    }
 }
 
 enum MLXWhisperMigrationSupport {
@@ -495,9 +545,11 @@ struct MLXModelCatalog {
             liveMode: MLXLiveMode = .batchPreview,
             realtime: Bool = false,
             outputs: MLXASROutputCapability = [.text],
+            timingGranularity: MLXASRTimingGranularity = .none,
             configuration: MLXASRConfigurationCapability = [],
             vadPolicy: MLXVADPolicy = .standard,
-            purposes: MLXASRPurpose = [.dictation, .meeting]
+            purposes: MLXASRPurpose = [.dictation, .meeting],
+            kvCachePolicy: MLXASRKVCachePolicy? = nil
         ) {
             let capability = MLXASRModelCapability(
                 family: family,
@@ -506,9 +558,11 @@ struct MLXModelCatalog {
                 liveMode: liveMode,
                 isRealtimeCapable: realtime,
                 outputCapabilities: outputs,
+                timingGranularity: timingGranularity,
                 configurationCapabilities: configuration,
                 vadPolicy: vadPolicy,
-                supportedPurposes: purposes
+                supportedPurposes: purposes,
+                kvCachePolicy: kvCachePolicy
             )
             repos.forEach { capabilities[$0] = capability }
         }
@@ -524,7 +578,9 @@ struct MLXModelCatalog {
             family: .whisper,
             languages: whisperLanguageCodes,
             routing: .iso6391(requiresExplicitPrimaryLanguage: false),
-            configuration: [.recognitionPreset, .languageRouting, .whisperTemperature]
+            outputs: [.text, .timestamps],
+            timingGranularity: .chunk,
+            configuration: [.languageRouting, .whisperTemperature]
         )
         register(
             repos: [
@@ -541,7 +597,10 @@ struct MLXModelCatalog {
             languages: qwenLanguageCodes,
             routing: .languageName,
             liveMode: .nativeQwenLive,
-            configuration: [.recognitionPreset, .languageRouting, .qwenContext]
+            outputs: [.text, .timestamps],
+            timingGranularity: .chunk,
+            configuration: [.recognitionPreset, .languageRouting, .qwenContext],
+            kvCachePolicy: .conservativeQwen
         )
         register(
             repos: [
@@ -575,6 +634,7 @@ struct MLXModelCatalog {
             liveMode: .nativeStreamingLive,
             realtime: true,
             outputs: [.text, .timestamps, .speakerLabels, .audioEvents],
+            timingGranularity: .sentence,
             configuration: [.mossPromptAndOutput],
             vadPolicy: .preserveTimeline
         )
@@ -583,7 +643,7 @@ struct MLXModelCatalog {
             family: .canary,
             languages: european25LanguageCodes,
             routing: .iso6391(requiresExplicitPrimaryLanguage: true),
-            outputs: [.text, .timestamps],
+            outputs: [.text],
             configuration: [.languageRouting, .canaryTask]
         )
         register(
@@ -619,13 +679,17 @@ struct MLXModelCatalog {
             ],
             family: .parakeet,
             languages: ["en"],
-            routing: .automatic
+            routing: .automatic,
+            outputs: [.text, .timestamps],
+            timingGranularity: .sentence
         )
         register(
             repos: ["mlx-community/parakeet-tdt-0.6b-v3"],
             family: .parakeet,
             languages: european25LanguageCodes,
-            routing: .automatic
+            routing: .automatic,
+            outputs: [.text, .timestamps],
+            timingGranularity: .sentence
         )
         register(
             repos: ["mlx-community/GLM-ASR-Nano-2512-4bit"],
@@ -648,7 +712,8 @@ struct MLXModelCatalog {
             routing: .localeOrISO6391,
             liveMode: .nativeNemotronLive,
             realtime: true,
-            outputs: [.text, .language],
+            outputs: [.text, .timestamps, .language],
+            timingGranularity: .sentence,
             configuration: [.languageRouting, .nemotronLatency],
             vadPolicy: .modelManaged
         )
@@ -768,97 +833,129 @@ struct MLXModelCatalog {
         let routing: MLXLanguageRouting
         let configuration: MLXASRConfigurationCapability
         let liveMode: MLXLiveMode
+        let outputCapabilities: MLXASROutputCapability
+        let timingGranularity: MLXASRTimingGranularity
 
         if lower.contains("whisper") {
             family = .whisper
             languages = whisperLanguageCodes
             routing = .iso6391(requiresExplicitPrimaryLanguage: false)
-            configuration = [.recognitionPreset, .languageRouting, .whisperTemperature]
+            configuration = [.languageRouting, .whisperTemperature]
             liveMode = .batchPreview
+            outputCapabilities = [.text, .timestamps]
+            timingGranularity = .chunk
         } else if lower.contains("qwen3-asr") {
             family = .qwen3ASR
             languages = qwenLanguageCodes
             routing = .languageName
             configuration = [.recognitionPreset, .languageRouting, .qwenContext]
             liveMode = .nativeQwenLive
+            outputCapabilities = [.text, .timestamps]
+            timingGranularity = .chunk
         } else if lower.contains("granite-4.0-1b-speech") {
             family = .graniteSpeech
             languages = ["en", "fr", "de", "es", "pt", "ja"]
             routing = .automatic
             configuration = [.recognitionPreset, .granitePrompt]
             liveMode = .batchPreview
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else if lower.contains("sensevoice") {
             family = .senseVoice
             languages = ["zh", "en", "yue", "ja", "ko"]
             routing = .iso6391(requiresExplicitPrimaryLanguage: false)
             configuration = [.languageRouting, .senseVoiceITN]
             liveMode = .batchPreview
+            outputCapabilities = [.text, .language, .emotion, .audioEvents]
+            timingGranularity = .none
         } else if lower.contains("cohere") {
             family = .cohereTranscribe
             languages = cohereLanguageCodes
             routing = .iso6391(requiresExplicitPrimaryLanguage: true)
             configuration = [.recognitionPreset, .languageRouting, .cohereLongForm]
             liveMode = .nativeStreamingLive
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else if lower.contains("nemotron") {
             family = .nemotronASR
             languages = nemotronReadyLanguageCodes
             routing = .localeOrISO6391
             configuration = [.languageRouting, .nemotronLatency]
             liveMode = .nativeNemotronLive
+            outputCapabilities = [.text, .timestamps, .language]
+            timingGranularity = .sentence
         } else if lower.contains("voxtral") {
             family = .voxtralRealtime
             languages = voxtralLanguageCodes
             routing = .automatic
             configuration = [.voxtralDelay]
             liveMode = .nativeVoxtralLive
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else if lower.contains("moss-transcribe-diarize") || lower.contains("moss_transcribe_diarize") {
             family = .mossTranscribeDiarize
             languages = ["zh", "en"]
             routing = .automatic
             configuration = [.mossPromptAndOutput]
             liveMode = .nativeStreamingLive
+            outputCapabilities = [.text, .timestamps, .speakerLabels, .audioEvents]
+            timingGranularity = .sentence
         } else if lower.contains("canary") {
             family = .canary
             languages = european25LanguageCodes
             routing = .iso6391(requiresExplicitPrimaryLanguage: true)
             configuration = [.languageRouting, .canaryTask]
             liveMode = .batchPreview
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else if lower.contains("moonshine") {
             family = .moonshine
             languages = ["en"]
             routing = .unavailable
             configuration = [.moonshineDecoding]
             liveMode = .batchPreview
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else if lower.contains("/mms-") || lower.contains("mms_") || lower.contains("mms-") {
             family = .mmsCTC
             languages = MMSLanguageAdapterOption.supportedAppLanguageCodes
             routing = .adapterISO6393
             configuration = [.mmsAdapter]
             liveMode = .batchPreview
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else if lower.contains("wav2vec") {
             family = .wav2vec2CTC
             languages = ["en"]
             routing = .unavailable
             configuration = []
             liveMode = .batchPreview
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else if lower.contains("parakeet") {
             family = .parakeet
             languages = lower.hasSuffix("v3") ? european25LanguageCodes : ["en"]
             routing = .automatic
             configuration = []
             liveMode = .batchPreview
+            outputCapabilities = [.text, .timestamps]
+            timingGranularity = .sentence
         } else if lower.contains("lasr") {
             family = .lasrCTC
             languages = []
             routing = .unavailable
             configuration = []
             liveMode = .batchPreview
+            outputCapabilities = [.text]
+            timingGranularity = .none
         } else {
             family = .generic
             languages = []
             routing = .unavailable
             configuration = []
             liveMode = .batchPreview
+            outputCapabilities = [.text]
+            timingGranularity = .none
         }
 
         return MLXASRModelCapability(
@@ -867,10 +964,12 @@ struct MLXModelCatalog {
             languageRouting: routing,
             liveMode: liveMode,
             isRealtimeCapable: [.nativeStreamingLive, .nativeNemotronLive, .nativeVoxtralLive].contains(liveMode),
-            outputCapabilities: [.text],
+            outputCapabilities: outputCapabilities,
+            timingGranularity: timingGranularity,
             configurationCapabilities: configuration,
             vadPolicy: .standard,
-            supportedPurposes: [.dictation, .meeting]
+            supportedPurposes: [.dictation, .meeting],
+            kvCachePolicy: family == .qwen3ASR ? .conservativeQwen : nil
         )
     }
 

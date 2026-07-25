@@ -2107,8 +2107,12 @@
 "Select or configure an available summary model before sending follow-up questions." = "フォローアップ質問を送信する前に、利用可能な要約モデルを選択または設定してください。";
 "Short" = "短め";
 "Silero VAD Sensitivity" = "Silero VAD の感度";
+"Silero Speech Detection" = "Silero 音声検出";
 "Silero VAD model is not downloaded." = "Silero VAD モデルがダウンロードされていません。";
 "Silero VAD model is ready." = "Silero VAD モデルを使用できます。";
+"Detect quieter speech sooner; may include more background sound." = "小さな声をより早く検出しますが、環境音も拾いやすくなります。";
+"Balance speech pickup with background-noise rejection." = "発話の拾い上げと背景ノイズ抑制のバランスを取ります。";
+"Prefer stronger speech signals in noisy environments." = "ノイズの多い環境では、より強い発話信号を優先します。";
 "Summary Length" = "要約の長さ";
 "Summary Provider" = "要約プロバイダー";
 "Summary Style" = "要約スタイル";
@@ -2175,6 +2179,9 @@
 "Review how app-aware prompt switching works across apps and pages." = "App やページに応じたプロンプト切り替えの動作を確認します。";
 "Review meeting capture, summary, segmentation, and speaker separation settings." = "会議の収録、要約、分割、話者分離の設定を確認します。";
 "Select one of the language adapters included in the FL102 checkpoint." = "FL102 チェックポイントに含まれる言語アダプターを選択してください。";
+"Unsupported MMS adapter language. Choose an adapter from the FL102 checkpoint list." = "未対応の MMS アダプター言語です。FL102 チェックポイントの一覧から選択してください。";
+"This model only accepts explicit language routing for the listed languages here. Any other primary language falls back to Automatic." = "このモデルはここに列挙した明示的な言語ルーティングのみ受け付けます。それ以外の主言語は Automatic にフォールバックします。";
+"Primary language %@ is not supported by this model. Recognition will fall back to Automatic." = "主言語 %@ はこのモデルでサポートされていません。認識は Automatic にフォールバックします。";
 "SenseVoice" = "SenseVoice";
 "SenseVoice Emotion" = "SenseVoice 感情";
 "SenseVoice Event" = "SenseVoice イベント";

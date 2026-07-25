@@ -122,9 +122,11 @@ enum MeetingFinalSpeechValidator {
         evidence: MeetingFinalSpeechEvidence?
     ) -> [MeetingTranscriptSegment] {
         switch policy {
-        case .modelManaged:
+        case .modelManaged, .preserveTimeline:
+            // Preserve the model timeline; do not drop silence ranges that would compress
+            // timestamped speaker segments.
             return segments
-        case .standard, .preserveTimeline:
+        case .standard:
             guard let evidence else { return segments }
             return segments.filter { evidence.verdict(for: $0) != .silence }
         }

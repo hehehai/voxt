@@ -168,6 +168,20 @@ extension FeatureSettingsView {
                 }
 
                 FeatureInlinePickerRow(
+                    title: featureSettingsLocalized("Silero Speech Detection"),
+                    detail: meetingSileroVADSensitivity.wrappedValue.detail
+                ) {
+                    SettingsMenuPicker(
+                        selection: meetingSileroVADSensitivity,
+                        options: MeetingSileroVADSensitivity.allCases.map {
+                            SettingsMenuOption(value: $0, title: $0.title)
+                        },
+                        selectedTitle: meetingSileroVADSensitivity.wrappedValue.title,
+                        width: 220
+                    )
+                }
+
+                FeatureInlinePickerRow(
                     title: featureSettingsLocalized("Speaker Separation Model"),
                     detail: meetingSpeakerDiarizationModelDetailText
                 ) {
@@ -281,6 +295,18 @@ extension FeatureSettingsView {
                 saveFeatureSettings()
                 meetingDiarizationModelManager.refresh()
                 meetingDiarizationModelManager.ensureSelectedModelInstalled()
+            }
+        )
+    }
+
+    var meetingSileroVADSensitivity: Binding<MeetingSileroVADSensitivity> {
+        Binding(
+            get: {
+                featureSettings.meeting.sileroVADSensitivity
+            },
+            set: { sensitivity in
+                featureSettings.meeting.sileroVADSensitivityRawValue = sensitivity.rawValue
+                saveFeatureSettings()
             }
         )
     }

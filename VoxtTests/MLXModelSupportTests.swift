@@ -79,6 +79,7 @@ final class MLXModelSupportTests: XCTestCase {
         XCTAssertTrue(qwen.supportsLanguage(code: "zh"))
         XCTAssertTrue(qwen.supportsLanguage(code: "yue"))
         XCTAssertFalse(qwen.supportsLanguage(code: "sw"))
+        XCTAssertEqual(qwen.kvCachePolicy, .conservativeQwen)
 
         let parakeetV3 = MLXModelCatalog.capability(for: "mlx-community/parakeet-tdt-0.6b-v3")
         XCTAssertEqual(parakeetV3.family, .parakeet)
@@ -112,12 +113,30 @@ final class MLXModelSupportTests: XCTestCase {
         let parakeet = MLXModelCatalog.capability(for: "mlx-community/parakeet-tdt-0.6b-v3")
         XCTAssertTrue(parakeet.configurationCapabilities.isEmpty)
         XCTAssertEqual(parakeet.languageRouting, .automatic)
+        XCTAssertEqual(parakeet.timingGranularity, .sentence)
+        XCTAssertTrue(parakeet.timingGranularity.providesReliableSegments)
+        XCTAssertTrue(parakeet.outputCapabilities.contains(.timestamps))
+
+        let nemotron = MLXModelCatalog.capability(for: "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit")
+        XCTAssertEqual(nemotron.timingGranularity, .sentence)
+        XCTAssertTrue(nemotron.outputCapabilities.contains(.timestamps))
 
         let moss = MLXModelCatalog.capability(for: "OpenMOSS-Team/MOSS-Transcribe-Diarize")
         XCTAssertTrue(moss.configurationCapabilities.contains(.mossPromptAndOutput))
         XCTAssertTrue(moss.outputCapabilities.contains(.timestamps))
         XCTAssertTrue(moss.outputCapabilities.contains(.speakerLabels))
+        XCTAssertEqual(moss.timingGranularity, .sentence)
         XCTAssertEqual(moss.vadPolicy, .preserveTimeline)
+
+        let whisper = MLXModelCatalog.capability(for: "mlx-community/whisper-large-v3-turbo")
+        XCTAssertEqual(whisper.timingGranularity, .chunk)
+        XCTAssertFalse(whisper.timingGranularity.providesReliableSegments)
+        XCTAssertFalse(whisper.configurationCapabilities.contains(.recognitionPreset))
+        XCTAssertNil(whisper.kvCachePolicy)
+
+        let canary = MLXModelCatalog.capability(for: "Mediform/canary-1b-v2-mlx-q8")
+        XCTAssertEqual(canary.timingGranularity, .none)
+        XCTAssertFalse(canary.outputCapabilities.contains(.timestamps))
 
         let senseVoice = MLXModelCatalog.capability(for: "mlx-community/SenseVoiceSmall")
         XCTAssertTrue(senseVoice.configurationCapabilities.contains(.senseVoiceITN))

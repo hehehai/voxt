@@ -502,6 +502,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
     var realtimeTargetLanguageRawValue: String
     var hideOverlayFromScreenSharing: Bool
     var chunkingModeRawValue: String
+    var sileroVADSensitivityRawValue: String
     var speakerDiarizationModelRawValue: String
     var finalTranscriptOptimizationEnabled: Bool
 
@@ -514,6 +515,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         realtimeTargetLanguageRawValue: String,
         hideOverlayFromScreenSharing: Bool,
         chunkingModeRawValue: String = MeetingChunkingMode.quality.rawValue,
+        sileroVADSensitivityRawValue: String = MeetingSileroVADSensitivity.balanced.rawValue,
         speakerDiarizationModelRawValue: String = MeetingDiarizationMode.offlineVBx.rawValue,
         finalTranscriptOptimizationEnabled: Bool = MeetingFeatureSettings.defaultFinalTranscriptOptimizationEnabled
     ) {
@@ -525,6 +527,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         self.realtimeTargetLanguageRawValue = realtimeTargetLanguageRawValue
         self.hideOverlayFromScreenSharing = hideOverlayFromScreenSharing
         self.chunkingModeRawValue = chunkingModeRawValue
+        self.sileroVADSensitivityRawValue = sileroVADSensitivityRawValue
         self.speakerDiarizationModelRawValue = speakerDiarizationModelRawValue
         self.finalTranscriptOptimizationEnabled = finalTranscriptOptimizationEnabled
     }
@@ -542,6 +545,10 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         MeetingDiarizationMode(rawValue: speakerDiarizationModelRawValue) ?? .offlineVBx
     }
 
+    var sileroVADSensitivity: MeetingSileroVADSensitivity {
+        MeetingSileroVADSensitivity.resolved(rawValue: sileroVADSensitivityRawValue)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case asrSelectionID
         case summaryModelSelectionID
@@ -551,6 +558,7 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
         case realtimeTargetLanguageRawValue
         case hideOverlayFromScreenSharing
         case chunkingModeRawValue
+        case sileroVADSensitivityRawValue
         case speakerDiarizationModelRawValue
         case finalTranscriptOptimizationEnabled
     }
@@ -567,6 +575,8 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
             hideOverlayFromScreenSharing: try container.decode(Bool.self, forKey: .hideOverlayFromScreenSharing),
             chunkingModeRawValue: try container.decodeIfPresent(String.self, forKey: .chunkingModeRawValue)
                 ?? MeetingChunkingMode.quality.rawValue,
+            sileroVADSensitivityRawValue: try container.decodeIfPresent(String.self, forKey: .sileroVADSensitivityRawValue)
+                ?? MeetingSileroVADSensitivity.balanced.rawValue,
             speakerDiarizationModelRawValue: try container.decodeIfPresent(String.self, forKey: .speakerDiarizationModelRawValue)
                 ?? MeetingDiarizationMode.offlineVBx.rawValue,
             finalTranscriptOptimizationEnabled: try container.decodeIfPresent(Bool.self, forKey: .finalTranscriptOptimizationEnabled)

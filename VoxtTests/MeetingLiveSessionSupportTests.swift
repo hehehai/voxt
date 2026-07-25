@@ -2,6 +2,7 @@
 // Provides Meeting Live Session Support Tests for Voxt test coverage.
 
 import XCTest
+import MLXAudioSTT
 @testable import Voxt
 
 final class MeetingLiveSessionSupportTests: XCTestCase {
@@ -142,6 +143,89 @@ final class MeetingLiveSessionSupportTests: XCTestCase {
                 maximumSegmentDuration: 8
             )
         )
+    }
+
+    func testReliableTimingDefersSilenceFinalizationUntilEnded() {
+        XCTAssertTrue(
+            MeetingNativeLiveSegmentationPolicy.shouldDeferSilenceFinalization(
+                timingGranularity: .sentence
+            )
+        )
+        XCTAssertTrue(
+            MeetingNativeLiveSegmentationPolicy.shouldDeferSilenceFinalization(
+                timingGranularity: .word
+            )
+        )
+        XCTAssertFalse(
+            MeetingNativeLiveSegmentationPolicy.shouldDeferSilenceFinalization(
+                timingGranularity: .chunk
+            )
+        )
+        XCTAssertFalse(
+            MeetingNativeLiveSegmentationPolicy.shouldDeferSilenceFinalization(
+                timingGranularity: .none
+            )
+        )
+    }
+
+    func testStructuredLiveFinalizationMapsReliableSegmentsOntoTimeline() {
+        let mapped = MeetingNativeLiveStructuredFinalization.meetingSegments(
+            from: [
+                STTTranscriptSegment(text: " Hello ", startTime: 0.2, endTime: 1.1),
+                STTTranscriptSegment(text: "world", startTime: 1.2, endTime: 2.0),
+                STTTranscriptSegment(text: "", startTime: 2.0, endTime: 2.5),
+            ],
+            timingGranularity: .sentence,
+            modelFamily: .nemotronASR,
+            timelineOffsetSeconds: 10,
+            speaker: .me,
+            audioSource: .microphone
+        )
+
+        XCTAssertEqual(mapped.count, 2)
+        XCTAssertEqual(mapped[0].text, "Hello")
+        XCTAssertEqual(mapped[0].startSeconds, 10.2, accuracy: 0.0001)
+        XCTAssertEqual(mapped[0].endSeconds ?? -1, 11.1, accuracy: 0.0001)
+        XCTAssertEqual(mapped[1].text, "world")
+        XCTAssertNil(mapped[0].speakerID)
+    }
+
+    func testStructuredLiveFinalizationRejectsUnreliableTiming() {
+        let mapped = MeetingNativeLiveStructuredFinalization.meetingSegments(
+            from: [
+                STTTranscriptSegment(text: "chunk", startTime: 0.0, endTime: 1.0)
+            ],
+            timingGranularity: .chunk,
+            modelFamily: .qwen3ASR,
+            timelineOffsetSeconds: 0,
+            speaker: .them,
+            audioSource: .systemAudio
+        )
+        XCTAssertTrue(mapped.isEmpty)
+    }
+
+    func testStructuredLiveFinalizationMapsMOSSSpeakerIDs() {
+        let mapped = MeetingNativeLiveStructuredFinalization.meetingSegments(
+            from: [
+                STTTranscriptSegment(
+                    text: "[S01] Hello",
+                    startTime: 0.5,
+                    endTime: 1.5,
+                    speakerID: "S01"
+                )
+            ],
+            timingGranularity: .sentence,
+            modelFamily: .mossTranscribeDiarize,
+            timelineOffsetSeconds: 0,
+            speaker: .them,
+            audioSource: .systemAudio
+        )
+
+        XCTAssertEqual(mapped.count, 1)
+        XCTAssertEqual(mapped[0].text, "Hello")
+        XCTAssertEqual(mapped[0].speakerID, "moss:S01")
+        XCTAssertEqual(mapped[0].startSeconds, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(mapped[0].endSeconds ?? -1, 1.5, accuracy: 0.0001)
     }
 
     func testTranscriptStateSubtractsAllPriorFrozenText() {

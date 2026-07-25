@@ -490,12 +490,14 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(settings.voxtralTranscriptionDelay, .accurate)
     }
 
-    func testMMSAdapterSanitizationRejectsUnknownCheckpointAdapter() {
+    func testMMSAdapterSanitizationPreservesUnknownCheckpointAdapterForExplicitFailure() {
         let sanitized = MLXLocalTuningSettingsStore.sanitized(
             MLXLocalTuningSettings(mmsLanguageCode: "not-a-real-adapter")
         )
 
-        XCTAssertEqual(sanitized.mmsLanguageCode, "eng")
+        XCTAssertEqual(sanitized.mmsLanguageCode, "not-a-real-adapter")
+        XCTAssertFalse(MMSLanguageAdapterOption.isSupported(sanitized.mmsLanguageCode))
+        XCTAssertThrowsError(try MMSLanguageAdapterOption.validatedAdapterCode(sanitized.mmsLanguageCode))
     }
 
     func testStreamingLatencySettingsUseBackwardCompatibleDefaults() {
@@ -636,6 +638,101 @@ final class ASRHintSettingsTests: XCTestCase {
                     endSeconds: 2.75,
                     speakerID: "S02",
                     text: "Hello world"
+                )
+            ]
+        )
+    }
+
+    func testReliableStructuredSegmentsAcceptSentenceTimingAndRejectCoarseChunks() {
+        let rawSegments = [
+            STTTranscriptSegment(text: " First sentence. ", startTime: 0.2, endTime: 1.4),
+            STTTranscriptSegment(text: "", startTime: 1.4, endTime: 2.0),
+            STTTranscriptSegment(text: "Invalid timing", startTime: 2.0, endTime: 2.0),
+        ]
+
+        XCTAssertEqual(
+            MLXTranscriber.reliableStructuredSegments(
+                from: rawSegments,
+                timingGranularity: .sentence
+            ),
+            [
+                MLXStructuredTranscriptSegment(
+                    startSeconds: 0.2,
+                    endSeconds: 1.4,
+                    text: "First sentence."
+                )
+            ]
+        )
+        XCTAssertEqual(
+            MLXTranscriber.reliableStructuredSegments(
+                from: rawSegments,
+                timingGranularity: .chunk
+            ),
+            []
+        )
+    }
+
+    func testLiveEndedStructuredSegmentsAlignWithBatchReliability() {
+        let qwenOutput = STTOutput(
+            text: "hello",
+            segments: [
+                STTTranscriptSegment(text: "hello", startTime: 0, endTime: 8, language: "English")
+            ],
+            language: "English",
+            languageProvenance: .detected
+        )
+        XCTAssertTrue(
+            MLXTranscriber.structuredSegmentsForLiveEnded(
+                output: qwenOutput,
+                modelFamily: .qwen3ASR,
+                timingGranularity: .chunk
+            ).isEmpty
+        )
+
+        let nemotronOutput = STTOutput(
+            text: "Hello world",
+            segments: [
+                STTTranscriptSegment(text: "Hello world", startTime: 0.1, endTime: 1.2)
+            ]
+        )
+        XCTAssertEqual(
+            MLXTranscriber.structuredSegmentsForLiveEnded(
+                output: nemotronOutput,
+                modelFamily: .nemotronASR,
+                timingGranularity: .sentence
+            ),
+            [
+                MLXStructuredTranscriptSegment(
+                    startSeconds: 0.1,
+                    endSeconds: 1.2,
+                    text: "Hello world"
+                )
+            ]
+        )
+
+        let mossOutput = STTOutput(
+            text: "[S01] Hi",
+            segments: [
+                STTTranscriptSegment(
+                    text: "[S01] Hi",
+                    startTime: 0.2,
+                    endTime: 0.9,
+                    speakerID: "S01"
+                )
+            ]
+        )
+        XCTAssertEqual(
+            MLXTranscriber.structuredSegmentsForLiveEnded(
+                output: mossOutput,
+                modelFamily: .mossTranscribeDiarize,
+                timingGranularity: .sentence
+            ),
+            [
+                MLXStructuredTranscriptSegment(
+                    startSeconds: 0.2,
+                    endSeconds: 0.9,
+                    speakerID: "S01",
+                    text: "Hi"
                 )
             ]
         )

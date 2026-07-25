@@ -739,7 +739,9 @@ enum MLXLocalTuningSettingsStore {
 
     private static func sanitizedMMSLanguageCode(_ value: String) -> String {
         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return MMSLanguageAdapterOption.all.contains(where: { $0.id == normalized }) ? normalized : "eng"
+        // Preserve unknown legacy free-text values so the settings UI can warn and inference
+        // can fail clearly instead of silently rewriting them to English.
+        return normalized.isEmpty ? "eng" : normalized
     }
 }
 

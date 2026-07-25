@@ -279,6 +279,69 @@ private struct MLXASRConfigurationSheetView: View {
         AppLocalization.localizedString("Automatic, zh, en, yue, ja, ko")
     }
 
+    private var showsExplicitLanguageMatrixSummary: Bool {
+        configurationCapabilities.contains(.senseVoiceITN)
+    }
+
+    private var explicitLanguageMatrixSummary: String {
+        let codes = capability.supportedLanguageCodes.sorted()
+        guard !codes.isEmpty else { return senseVoiceSupportedLanguageSummary }
+        let labels = ["Automatic"] + codes
+        return labels.joined(separator: ", ")
+    }
+
+    private var unsupportedPrimaryLanguageWarning: String? {
+        guard hintSettings.followsUserMainLanguage,
+              let primary = UserMainLanguageOption.option(for: userLanguageCodes.first ?? "")
+        else {
+            return nil
+        }
+        switch capability.languageRouting {
+        case .unavailable, .automatic, .adapterISO6393:
+            return nil
+        case .iso6391, .localeOrISO6391, .languageName:
+            guard !capability.supportsLanguage(code: primary.baseLanguageCode) else { return nil }
+            return AppLocalization.format(
+                "Primary language %@ is not supported by this model. Recognition will fall back to Automatic.",
+                primary.title()
+            )
+        }
+    }
+
+    private var showsAutomaticLanguageDetectionSummary: Bool {
+        configurationCapabilities.isEmpty
+            && (capability.languageRouting == .automatic || family == .generic)
+    }
+
+    private var showsCheckpointDefaultDecodingSummary: Bool {
+        switch family {
+        case .wav2vec2CTC, .lasrCTC:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var modelLanguageLabel: String? {
+        switch family {
+        case .wav2vec2CTC:
+            return localized("English")
+        default:
+            return nil
+        }
+    }
+
+    private var checkpointDefaultDecodingSummary: String {
+        switch family {
+        case .wav2vec2CTC:
+            return localized("This checkpoint uses greedy CTC decoding and does not expose sampling or prompt controls.")
+        case .lasrCTC:
+            return localized("LASR uses greedy CTC decoding. Language and vocabulary are defined by the checkpoint.")
+        default:
+            return localized("This model uses checkpoint-defined decoding and does not expose additional controls.")
+        }
+    }
+
     private var canaryTranslationLanguageOptions: [SettingsMenuOption<String>] {
         CanaryLanguageSupport.translationTargetCodes.map {
             SettingsMenuOption(value: $0, title: CanaryLanguageSupport.title(for: $0))
@@ -409,14 +472,20 @@ private struct MLXASRConfigurationSheetView: View {
                         }
 
                         localInfoRow(label: localized("Other languages"), value: secondaryLanguageSummary)
+
+                        if let unsupportedPrimaryLanguageWarning {
+                            Text(unsupportedPrimaryLanguageWarning)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                     }
 
-                    if family == .senseVoice {
+                    if showsExplicitLanguageMatrixSummary {
                         localInfoRow(
                             label: localized("Supported routes"),
-                            value: senseVoiceSupportedLanguageSummary
+                            value: explicitLanguageMatrixSummary
                         )
-                        Text(localized("SenseVoice only accepts explicit language routing for zh, en, yue, ja, and ko here. Any other primary language falls back to Automatic."))
+                        Text(localized("This model only accepts explicit language routing for the listed languages here. Any other primary language falls back to Automatic."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -643,21 +712,27 @@ private struct MLXASRConfigurationSheetView: View {
                                 selectedTitle: selectedMMSLanguageAdapterTitle,
                                 width: 280
                             )
-                            Text(localized("Select one of the language adapters included in the FL102 checkpoint."))
+                            if MMSLanguageAdapterOption.isSupported(tuningSettings.mmsLanguageCode) {
+                                Text(localized("Select one of the language adapters included in the FL102 checkpoint."))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text(
+                                    localized(
+                                        "Unsupported MMS adapter language. Choose an adapter from the FL102 checkpoint list."
+                                    )
+                                )
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.orange)
+                            }
                         }
                     }
 
-                    if family == .wav2vec2CTC {
-                        localInfoRow(label: localized("Model language"), value: localized("English"))
-                        Text(localized("This checkpoint uses greedy CTC decoding and does not expose sampling or prompt controls."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if family == .lasrCTC {
-                        Text(localized("LASR uses greedy CTC decoding. Language and vocabulary are defined by the checkpoint."))
+                    if showsCheckpointDefaultDecodingSummary {
+                        if let modelLanguageLabel {
+                            localInfoRow(label: localized("Model language"), value: modelLanguageLabel)
+                        }
+                        Text(checkpointDefaultDecodingSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -688,7 +763,7 @@ private struct MLXASRConfigurationSheetView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if configurationCapabilities.isEmpty && (family == .parakeet || family == .generic) {
+                    if showsAutomaticLanguageDetectionSummary {
                         localInfoRow(
                             label: localized("Language detection"),
                             value: capability.supportedLanguageCodes.count > 1
@@ -698,14 +773,6 @@ private struct MLXASRConfigurationSheetView: View {
                                 } ?? localized("Checkpoint default")
                         )
                         Text(localized("This model uses checkpoint-defined decoding and does not expose additional controls."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if family == .generic {
-                        Text(localized("This model family only exposes preset and language controls."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if family == .senseVoice {
-                        Text(localized("SenseVoice only exposes language routing and ITN here. Recognition presets are not used by this model path."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
