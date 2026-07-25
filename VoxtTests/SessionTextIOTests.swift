@@ -206,6 +206,49 @@ final class SessionTextIOTests: XCTestCase {
         )
     }
 
+    func testSelectionProbeDenialDetailMatchesCapabilityClasses() {
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.denialDetail(
+                allowCopy: true,
+                focusedElementAvailable: false,
+                selectedTextRange: nil,
+                isBrowser: false,
+                copiesLineOnEmptySelection: false
+            ),
+            "copy-missed"
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.denialDetail(
+                allowCopy: false,
+                focusedElementAvailable: false,
+                selectedTextRange: nil,
+                isBrowser: false,
+                copiesLineOnEmptySelection: true
+            ),
+            "ax-focus-unavailable-line-copy-editor"
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.denialDetail(
+                allowCopy: false,
+                focusedElementAvailable: true,
+                selectedTextRange: CFRange(location: 3, length: 0),
+                isBrowser: false,
+                copiesLineOnEmptySelection: false
+            ),
+            "confirmed-caret-only"
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.denialDetail(
+                allowCopy: false,
+                focusedElementAvailable: true,
+                selectedTextRange: nil,
+                isBrowser: false,
+                copiesLineOnEmptySelection: false
+            ),
+            "focused-without-range-non-browser"
+        )
+    }
+
     func testRewriteAlwaysPresentsAnswerOverlay() {
         XCTAssertTrue(
             AppDelegate.shouldPresentRewriteAnswerOverlay(

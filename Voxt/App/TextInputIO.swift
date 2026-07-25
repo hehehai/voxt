@@ -6,116 +6,8 @@ import AppKit
 import ApplicationServices
 import Carbon
 
-enum SelectedTextSystemSelectionSupport {
-    /// Hard gate: a caret-only range (`length == 0`) must not count as a selection.
-    static func hasNonEmptySelectedTextRange(length: CFIndex) -> Bool {
-        length > 0
-    }
-
-    /// Editors that implement "Cmd+C with no selection copies the current line"
-    /// (VS Code `editor.emptySelectionClipboard`, Sublime, Zed, JetBrains, etc.).
-    ///
-    /// This is a clipboard-semantics capability class. Many of these apps also
-    /// fail AX focus lookup with `kAXErrorCannotComplete` (-25204), so
-    /// "focused == nil" alone cannot mean "safe to Cmd+C" — that path remains
-    /// necessary for AX-dead apps such as WeChat, but must stay denied here.
-    static func copiesCurrentLineWhenSelectionEmpty(bundleID: String?) -> Bool {
-        guard let bundleID, !bundleID.isEmpty else { return false }
-
-        // Stable first-party / well-known IDs.
-        let exactIDs: Set<String> = [
-            // Microsoft / OSS VS Code
-            "com.microsoft.VSCode",
-            "com.microsoft.VSCodeInsiders",
-            "com.microsoft.VSCodeExploration",
-            "com.visualstudio.code.oss",
-            "com.visualstudio.code",
-            "com.vscodium",
-            // Google Antigravity (VS Code-based)
-            "com.google.antigravity",
-            // Sublime
-            "com.sublimetext.3",
-            "com.sublimetext.4",
-            // Zed
-            "dev.zed.Zed",
-            "dev.zed.Zed-Preview",
-            // Trae / Qoder (VS Code forks)
-            "com.trae.app",
-            "com.trae.solo.app",
-            "cn.trae.app",
-            "com.qoder.app"
-        ]
-        if exactIDs.contains(bundleID) {
-            return true
-        }
-
-        // Family prefixes: ToDesktop-packaged Electron IDEs (Cursor, etc.),
-        // JetBrains suite, Windsurf/Codeium, Trae/Qoder variants.
-        let prefixes = [
-            "com.todesktop.",
-            "com.jetbrains.",
-            "com.exafunction.",
-            "com.trae.",
-            "cn.trae.",
-            "com.qoder."
-        ]
-        if prefixes.contains(where: bundleID.hasPrefix) {
-            return true
-        }
-
-        // Catch less common VS Code forks that keep "VSCode" in the bundle ID.
-        let lowered = bundleID.lowercased()
-        if lowered.contains("vscode") || lowered.contains("vscodium") {
-            return true
-        }
-        return false
-    }
-
-    /// Whether Cmd+C may run after all non-destructive reads missed.
-    ///
-    /// - caret-only range (`length == 0`) → deny
-    /// - non-empty range → allow (recover text when attributes are empty)
-    /// - no focused element:
-    ///   - deny when app copies the current line on empty selection
-    ///   - allow otherwise (AX-dead apps such as WeChat)
-    /// - focused element but no range attribute:
-    ///   - browser → allow
-    ///   - otherwise → deny
-    static func shouldAttemptSimulatedCopy(
-        focusedElementAvailable: Bool,
-        selectedTextRange: CFRange?,
-        isBrowser: Bool,
-        copiesLineOnEmptySelection: Bool
-    ) -> Bool {
-        if focusedElementAvailable, let selectedTextRange {
-            return selectedTextRange.length > 0
-        }
-        if !focusedElementAvailable {
-            return !copiesLineOnEmptySelection
-        }
-        return isBrowser
-    }
-
-    /// Range attribute present with `length == 0` means caret-only; further probes cannot help.
-    static func isConfirmedCaretOnly(selectedTextRange: CFRange?) -> Bool {
-        guard let selectedTextRange else { return false }
-        return selectedTextRange.length == 0
-    }
-
-    /// AppleScript ran without an execution error and returned empty/whitespace selection text.
-    /// Dialect retries are only useful when the script form itself fails.
-    static func isDefinitiveEmptyBrowserSelection(output: String?, hadExecutionError: Bool) -> Bool {
-        guard !hadExecutionError, let output else { return false }
-        return output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-}
-
 extension AppDelegate {
     private static let axMessagingTimeout: Float = 0.05
-    /// Selection probe uses a modestly longer AX timeout than injection helpers.
-    /// Keep this well under 1s: AX-dead apps (WeChat/Cursor) often still return
-    /// `kAXErrorCannotComplete` (-25204), and each focus lookup pays the full timeout.
-    private static let selectionAXMessagingTimeout: Float = 0.2
     private static let automaticDictionaryLearningSnippetBeforeCursor = 4_000
     private static let automaticDictionaryLearningSnippetAfterCursor = 1_000
     private static let nativeWritableTextRoles: Set<String> = [
@@ -157,554 +49,6 @@ extension AppDelegate {
         let selectedRange: NSRange?
         let failureReason: String?
         let textSource: String?
-    }
-
-    func selectedTextFromSystemSelection() -> String? {
-        let appBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
-        let appName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown"
-        let isBrowser = isBrowserBundleID(appBundleID == "unknown" ? nil : appBundleID)
-        let axTrusted = AccessibilityPermissionManager.isTrusted()
-
-        VoxtLog.input(
-            "selectionProbe.begin: app=\(appBundleID) name=\(appName) browser=\(isBrowser) axTrusted=\(axTrusted)"
-        )
-
-        guard axTrusted else {
-            logSelectionProbe(
-                range: nil,
-                textSource: "nil",
-                app: appBundleID,
-                isBrowser: isBrowser,
-                detail: "accessibility-not-trusted"
-            )
-            return nil
-        }
-
-        // Phase 1: resolve focus and gather non-destructive evidence.
-        let focusedElement = focusedElementForSystemSelection()
-        if let focusedElement {
-            let role = axStringAttribute(
-                kAXRoleAttribute as CFString,
-                for: focusedElement,
-                timeout: Self.selectionAXMessagingTimeout
-            ) ?? "nil"
-            let subrole = axStringAttribute(
-                kAXSubroleAttribute as CFString,
-                for: focusedElement,
-                timeout: Self.selectionAXMessagingTimeout
-            ) ?? "nil"
-            VoxtLog.input("selectionProbe.focused: role=\(role) subrole=\(subrole)")
-        } else {
-            VoxtLog.input("selectionProbe.focused: element=nil")
-        }
-
-        let rawSelectedRange = focusedElement.flatMap {
-            axRangeAttribute(
-                kAXSelectedTextRangeAttribute as CFString,
-                for: $0,
-                timeout: Self.selectionAXMessagingTimeout
-            )
-        }
-        VoxtLog.input(
-            "selectionProbe.range: raw=\(selectionRangeDescription(rawSelectedRange)) nonEmpty=\(nonEmptySelectedTextRange(rawSelectedRange) != nil)"
-        )
-
-        // Confirmed caret-only: skip TextMarker / AppleScript / Cmd+C entirely.
-        if SelectedTextSystemSelectionSupport.isConfirmedCaretOnly(selectedTextRange: rawSelectedRange) {
-            logSelectionProbe(
-                range: rawSelectedRange,
-                textSource: "nil",
-                app: appBundleID,
-                isBrowser: isBrowser,
-                detail: "confirmed-caret-only"
-            )
-            return nil
-        }
-
-        // Phase 2: non-destructive text reads (never mutate pasteboard).
-        if let focusedElement {
-            let axSelectedResult = probeAXSelectedText(from: focusedElement)
-            VoxtLog.input(
-                "selectionProbe.read.axSelected: status=\(axSelectedResult.status) chars=\(axSelectedResult.characterCount) preview=\(selectionPreview(axSelectedResult.text))"
-            )
-            if let text = axSelectedResult.text {
-                logSelectionProbe(
-                    range: rawSelectedRange,
-                    textSource: "axSelected",
-                    app: appBundleID,
-                    isBrowser: isBrowser,
-                    detail: "chars=\(text.count)"
-                )
-                return text
-            }
-        } else {
-            VoxtLog.input("selectionProbe.read.axSelected: skipped focused=nil")
-        }
-
-        if let focusedElement,
-           let selectedRange = nonEmptySelectedTextRange(rawSelectedRange) {
-            let rangeText = axParameterizedString(
-                kAXStringForRangeParameterizedAttribute as CFString,
-                range: selectedRange,
-                for: focusedElement,
-                timeout: Self.selectionAXMessagingTimeout
-            )
-            let trimmedRangeText = rangeText?.trimmingCharacters(in: .whitespacesAndNewlines)
-            VoxtLog.input(
-                "selectionProbe.read.stringForRange: chars=\(trimmedRangeText?.count ?? 0) preview=\(selectionPreview(trimmedRangeText))"
-            )
-            if let trimmedRangeText, !trimmedRangeText.isEmpty {
-                logSelectionProbe(
-                    range: selectedRange,
-                    textSource: "stringForRange",
-                    app: appBundleID,
-                    isBrowser: isBrowser,
-                    detail: "chars=\(trimmedRangeText.count)"
-                )
-                return rangeText
-            }
-        } else {
-            VoxtLog.input("selectionProbe.read.stringForRange: skipped")
-        }
-
-        if let focusedElement {
-            let markerText = selectedTextFromAXTextMarker(startingAt: focusedElement)
-            VoxtLog.input(
-                "selectionProbe.read.textMarker: chars=\(markerText?.count ?? 0) preview=\(selectionPreview(markerText))"
-            )
-            if let text = markerText {
-                logSelectionProbe(
-                    range: rawSelectedRange,
-                    textSource: "textMarker",
-                    app: appBundleID,
-                    isBrowser: isBrowser,
-                    detail: "chars=\(text.count)"
-                )
-                return text
-            }
-        } else {
-            VoxtLog.input("selectionProbe.read.textMarker: skipped focused=nil")
-        }
-
-        // Browser AppleScript is still non-destructive and often better than Cmd+C on Safari.
-        if isBrowser {
-            let scriptText = selectedTextFromBrowserAppleScript(bundleID: appBundleID)
-            VoxtLog.input(
-                "selectionProbe.read.appleScript: chars=\(scriptText?.count ?? 0) preview=\(selectionPreview(scriptText))"
-            )
-            if let text = scriptText {
-                logSelectionProbe(
-                    range: rawSelectedRange,
-                    textSource: "appleScript",
-                    app: appBundleID,
-                    isBrowser: isBrowser,
-                    detail: "chars=\(text.count)"
-                )
-                return text
-            }
-        } else {
-            VoxtLog.input("selectionProbe.read.appleScript: skipped not-browser")
-        }
-
-        // Phase 3: Cmd+C only with evidence-based policy (see shouldAttemptSimulatedCopy).
-        let copiesLineOnEmptySelection = SelectedTextSystemSelectionSupport
-            .copiesCurrentLineWhenSelectionEmpty(bundleID: appBundleID)
-        let allowCopy = SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
-            focusedElementAvailable: focusedElement != nil,
-            selectedTextRange: rawSelectedRange,
-            isBrowser: isBrowser,
-            copiesLineOnEmptySelection: copiesLineOnEmptySelection
-        )
-        VoxtLog.input(
-            "selectionProbe.copy.policy: allow=\(allowCopy) focused=\(focusedElement != nil) range=\(selectionRangeDescription(rawSelectedRange)) browser=\(isBrowser) copiesLineOnEmpty=\(copiesLineOnEmptySelection)"
-        )
-        if allowCopy, let text = selectedTextBySimulatedCopy(reason: "policyAllowed") {
-            logSelectionProbe(
-                range: rawSelectedRange,
-                textSource: "copy",
-                app: appBundleID,
-                isBrowser: isBrowser,
-                detail: "chars=\(text.count)"
-            )
-            return text
-        }
-
-        let denyDetail: String
-        if allowCopy {
-            denyDetail = "copy-missed"
-        } else if focusedElement == nil, copiesLineOnEmptySelection {
-            denyDetail = "ax-focus-unavailable-line-copy-editor"
-        } else if focusedElement != nil, rawSelectedRange?.length == 0 {
-            denyDetail = "confirmed-caret-only"
-        } else if focusedElement != nil, rawSelectedRange == nil, !isBrowser {
-            denyDetail = "focused-without-range-non-browser"
-        } else {
-            denyDetail = "copy-denied"
-        }
-        logSelectionProbe(
-            range: rawSelectedRange,
-            textSource: "nil",
-            app: appBundleID,
-            isBrowser: isBrowser,
-            detail: denyDetail
-        )
-        return nil
-    }
-
-    private func focusedElementForSystemSelection() -> AXUIElement? {
-        // Selection must come from the actual focused element only.
-        // Do not reuse writable-input focus resolution (best-editable / window fallbacks),
-        // which can probe a different field with a leftover selection.
-        if let systemFocused = copyFocusedUIElement(
-            from: AXUIElementCreateSystemWide(),
-            source: "systemWide"
-        ) {
-            return systemFocused
-        }
-
-        if let processID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
-           let appFocused = copyFocusedUIElement(
-            from: AXUIElementCreateApplication(processID),
-            source: "frontmostApp"
-           ) {
-            return appFocused
-        }
-
-        VoxtLog.input("selectionProbe.focusedResolve: all focus lookups failed")
-        return nil
-    }
-
-    private func copyFocusedUIElement(from root: AXUIElement, source: String) -> AXUIElement? {
-        AXUIElementSetMessagingTimeout(root, Self.selectionAXMessagingTimeout)
-        var focusedElementRef: CFTypeRef?
-        let focusedStatus = AXUIElementCopyAttributeValue(
-            root,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedElementRef
-        )
-        guard focusedStatus == .success,
-              let focusedElementRef,
-              CFGetTypeID(focusedElementRef) == AXUIElementGetTypeID() else {
-            VoxtLog.input(
-                "selectionProbe.focusedResolve: source=\(source) failed status=\(focusedStatus.rawValue) timeoutSec=\(Self.selectionAXMessagingTimeout)"
-            )
-            return nil
-        }
-        VoxtLog.input("selectionProbe.focusedResolve: source=\(source) ok")
-        return unsafeBitCast(focusedElementRef, to: AXUIElement.self)
-    }
-
-    private struct AXSelectedTextProbeResult {
-        let text: String?
-        let status: String
-        let characterCount: Int
-    }
-
-    private func probeAXSelectedText(from element: AXUIElement) -> AXSelectedTextProbeResult {
-        AXUIElementSetMessagingTimeout(element, Self.selectionAXMessagingTimeout)
-        var selectedTextRef: CFTypeRef?
-        let selectedStatus = AXUIElementCopyAttributeValue(
-            element,
-            kAXSelectedTextAttribute as CFString,
-            &selectedTextRef
-        )
-        guard selectedStatus == .success, let selectedTextRef else {
-            return AXSelectedTextProbeResult(
-                text: nil,
-                status: "ax-error-\(selectedStatus.rawValue)",
-                characterCount: 0
-            )
-        }
-
-        let selectedText: String?
-        let typeName: String
-        if let text = selectedTextRef as? String {
-            selectedText = text
-            typeName = "String"
-        } else if let attributed = selectedTextRef as? NSAttributedString {
-            selectedText = attributed.string
-            typeName = "NSAttributedString"
-        } else {
-            selectedText = nil
-            typeName = "unsupported(\(CFGetTypeID(selectedTextRef)))"
-        }
-
-        let trimmed = selectedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if trimmed.isEmpty {
-            return AXSelectedTextProbeResult(
-                text: nil,
-                status: "empty-\(typeName)",
-                characterCount: selectedText?.count ?? 0
-            )
-        }
-        return AXSelectedTextProbeResult(
-            text: selectedText,
-            status: "ok-\(typeName)",
-            characterCount: selectedText?.count ?? 0
-        )
-    }
-
-    private func nonEmptyAXSelectedText(from element: AXUIElement) -> String? {
-        probeAXSelectedText(from: element).text
-    }
-
-    private func selectedTextFromAXTextMarker(startingAt element: AXUIElement) -> String? {
-        var current: AXUIElement? = element
-        for depth in 0..<6 {
-            guard let currentElement = current else { break }
-            let role = axStringAttribute(
-                kAXRoleAttribute as CFString,
-                for: currentElement,
-                timeout: Self.selectionAXMessagingTimeout
-            ) ?? "nil"
-            let result = selectedTextFromAXTextMarkerRange(on: currentElement)
-            VoxtLog.input(
-                "selectionProbe.textMarker.depth=\(depth) role=\(role) status=\(result.status) chars=\(result.text?.count ?? 0)"
-            )
-            if let text = result.text {
-                return text
-            }
-            current = axElementAttribute(
-                kAXParentAttribute as CFString,
-                for: currentElement,
-                timeout: Self.selectionAXMessagingTimeout
-            )
-        }
-        return nil
-    }
-
-    private struct TextMarkerProbeResult {
-        let text: String?
-        let status: String
-    }
-
-    private func selectedTextFromAXTextMarkerRange(on element: AXUIElement) -> TextMarkerProbeResult {
-        AXUIElementSetMessagingTimeout(element, Self.selectionAXMessagingTimeout)
-        var markerRangeRef: CFTypeRef?
-        let markerStatus = AXUIElementCopyAttributeValue(
-            element,
-            "AXSelectedTextMarkerRange" as CFString,
-            &markerRangeRef
-        )
-        guard markerStatus == .success, let markerRangeRef else {
-            return TextMarkerProbeResult(text: nil, status: "marker-error-\(markerStatus.rawValue)")
-        }
-
-        var stringRef: CFTypeRef?
-        let stringStatus = AXUIElementCopyParameterizedAttributeValue(
-            element,
-            "AXStringForTextMarkerRange" as CFString,
-            markerRangeRef,
-            &stringRef
-        )
-        if stringStatus == .success,
-           let text = stringRef as? String,
-           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return TextMarkerProbeResult(text: text, status: "string-ok")
-        }
-
-        var attributedRef: CFTypeRef?
-        let attributedStatus = AXUIElementCopyParameterizedAttributeValue(
-            element,
-            "AXAttributedStringForTextMarkerRange" as CFString,
-            markerRangeRef,
-            &attributedRef
-        )
-        if attributedStatus == .success {
-            if let attributed = attributedRef as? NSAttributedString,
-               !attributed.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return TextMarkerProbeResult(text: attributed.string, status: "attributed-ok")
-            }
-            if let text = attributedRef as? String,
-               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return TextMarkerProbeResult(text: text, status: "attributed-string-ok")
-            }
-            return TextMarkerProbeResult(
-                text: nil,
-                status: "marker-present-empty stringStatus=\(stringStatus.rawValue) attributedStatus=\(attributedStatus.rawValue)"
-            )
-        }
-        return TextMarkerProbeResult(
-            text: nil,
-            status: "resolve-failed stringStatus=\(stringStatus.rawValue) attributedStatus=\(attributedStatus.rawValue)"
-        )
-    }
-
-    private func selectedTextFromBrowserAppleScript(bundleID: String) -> String? {
-        if let deniedUntil = browserAutomationDeniedUntilByBundleID[bundleID],
-           deniedUntil > Date() {
-            let remaining = Int(deniedUntil.timeIntervalSinceNow)
-            VoxtLog.input(
-                "selectionProbe.appleScript: skipped denied-cache bundleID=\(bundleID) remainingSec=\(remaining)"
-            )
-            return nil
-        }
-
-        let displayName = browserScriptProvider(for: bundleID)?.name
-        let scripts = BrowserAutomationScriptBuilder.selectionScripts(
-            bundleID: bundleID,
-            displayName: displayName
-        )
-        VoxtLog.input(
-            "selectionProbe.appleScript: candidates=\(scripts.count) provider=\(displayName ?? "nil") bundleID=\(bundleID)"
-        )
-        for (index, source) in scripts.enumerated() {
-            var executionError: NSDictionary?
-            let startedAt = Date()
-            // `runAppleScript` ceilings fractional timeouts to whole seconds; pass 1 explicitly.
-            let rawOutput = runAppleScript(
-                source,
-                error: &executionError,
-                logFailure: false,
-                timeout: 1
-            )
-            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-
-            if SelectedTextSystemSelectionSupport.isDefinitiveEmptyBrowserSelection(
-                output: rawOutput,
-                hadExecutionError: executionError != nil
-            ) {
-                VoxtLog.input(
-                    "selectionProbe.appleScript.candidate=\(index + 1): empty-selection elapsedMs=\(elapsedMs)"
-                )
-                return nil
-            }
-
-            let trimmed = rawOutput?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let trimmed, !trimmed.isEmpty {
-                VoxtLog.input(
-                    "selectionProbe.appleScript.candidate=\(index + 1): ok chars=\(trimmed.count) elapsedMs=\(elapsedMs) preview=\(selectionPreview(trimmed))"
-                )
-                return trimmed
-            }
-
-            let errorNumber = executionError?["NSAppleScriptErrorNumber"] as? Int
-            let errorMessage = executionError?["NSAppleScriptErrorMessage"] as? String ?? "nil"
-            VoxtLog.input(
-                "selectionProbe.appleScript.candidate=\(index + 1): miss elapsedMs=\(elapsedMs) errorNumber=\(errorNumber.map(String.init) ?? "nil") message=\(errorMessage)"
-            )
-
-            if let errorNumber {
-                if errorNumber == -1743 || errorNumber == -10004 {
-                    browserAutomationDeniedUntilByBundleID[bundleID] = Date().addingTimeInterval(300)
-                    VoxtLog.input(
-                        "selectionProbe.appleScript: caching denial for 300s bundleID=\(bundleID) error=\(errorNumber)"
-                    )
-                    break
-                }
-                if errorNumber == -600 {
-                    VoxtLog.input("selectionProbe.appleScript: app not running error=-600")
-                    break
-                }
-            }
-        }
-        return nil
-    }
-
-    private func nonEmptySelectedTextRange(_ range: CFRange?) -> CFRange? {
-        guard let range,
-              SelectedTextSystemSelectionSupport.hasNonEmptySelectedTextRange(length: range.length) else {
-            return nil
-        }
-        return range
-    }
-
-    private func logSelectionProbe(
-        range: CFRange?,
-        textSource: String,
-        app: String,
-        isBrowser: Bool,
-        detail: String = ""
-    ) {
-        let rangeDescription = selectionRangeDescription(range)
-        let suffix = detail.isEmpty ? "" : " detail=\(detail)"
-        VoxtLog.input(
-            "selectionProbe.result: range=\(rangeDescription) textSource=\(textSource) browser=\(isBrowser) app=\(app)\(suffix)"
-        )
-    }
-
-    private func selectionRangeDescription(_ range: CFRange?) -> String {
-        range.map { "{\($0.location),\($0.length)}" } ?? "nil"
-    }
-
-    private func selectionPreview(_ text: String?) -> String {
-        guard let text else { return "nil" }
-        let collapsed = text
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\t", with: "\\t")
-        if collapsed.count <= 48 {
-            return "\"\(collapsed)\""
-        }
-        let prefix = collapsed.prefix(48)
-        return "\"\(prefix)…\"(+\(collapsed.count - 48))"
-    }
-
-    private func selectedTextBySimulatedCopy(reason: String = "unspecified") -> String? {
-        VoxtLog.input("selectionProbe.copy.begin: reason=\(reason)")
-        guard AccessibilityPermissionManager.isTrusted() else {
-            VoxtLog.input("selectionProbe.copy.miss: accessibility-not-trusted")
-            return nil
-        }
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
-            VoxtLog.input("selectionProbe.copy.miss: no-event-source")
-            return nil
-        }
-
-        let pasteboard = NSPasteboard.general
-        let previous = readStringFromPasteboard(pasteboard)
-        let originalChangeCount = pasteboard.changeCount
-        VoxtLog.input(
-            "selectionProbe.copy.pasteboard: changeCount=\(originalChangeCount) previousChars=\(previous?.count ?? 0)"
-        )
-
-        let cKeyCode: CGKeyCode = 0x08
-        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: true)
-        cmdDown?.flags = .maskCommand
-        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: false)
-        cmdUp?.flags = .maskCommand
-        guard cmdDown != nil, cmdUp != nil else {
-            VoxtLog.input("selectionProbe.copy.miss: failed-to-create-key-events")
-            return nil
-        }
-
-        HotkeyEventSupport.markAsVoxtInjected(cmdDown)
-        HotkeyEventSupport.markAsVoxtInjected(cmdUp)
-        cmdDown?.post(tap: .cgAnnotatedSessionEventTap)
-        cmdUp?.post(tap: .cgAnnotatedSessionEventTap)
-
-        // AX-poor apps (WeChat, some web views) can take longer to honor Cmd+C.
-        let waitSeconds: TimeInterval = 0.15
-        let deadline = Date().addingTimeInterval(waitSeconds)
-        while pasteboard.changeCount == originalChangeCount, Date() < deadline {
-            _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
-        }
-
-        let copiedChangeCount = pasteboard.changeCount
-        guard copiedChangeCount != originalChangeCount else {
-            VoxtLog.input(
-                "selectionProbe.copy.miss: pasteboard-unchanged changeCount=\(copiedChangeCount) waitedSec=\(waitSeconds) reason=\(reason)"
-            )
-            return nil
-        }
-
-        let copied = readStringFromPasteboard(pasteboard)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        pasteboard.clearContents()
-        if let previous, !previous.isEmpty {
-            pasteboard.setString(previous, forType: .string)
-        }
-
-        guard let copied, !copied.isEmpty else {
-            VoxtLog.input(
-                "selectionProbe.copy.miss: empty-after-change changeCount=\(copiedChangeCount)"
-            )
-            return nil
-        }
-        VoxtLog.input(
-            "selectionProbe.copy.ok: reason=\(reason) chars=\(copied.count) preview=\(selectionPreview(copied))"
-        )
-        return copied
     }
 
     func hasWritableFocusedTextInput() -> Bool {
@@ -1084,11 +428,11 @@ extension AppDelegate {
         return nil
     }
 
-    private func axStringAttribute(_ attribute: CFString, for element: AXUIElement) -> String? {
+    func axStringAttribute(_ attribute: CFString, for element: AXUIElement) -> String? {
         axStringAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
     }
 
-    private func axStringAttribute(
+    func axStringAttribute(
         _ attribute: CFString,
         for element: AXUIElement,
         timeout: Float
@@ -1117,11 +461,11 @@ extension AppDelegate {
         return nil
     }
 
-    private func axRangeAttribute(_ attribute: CFString, for element: AXUIElement) -> CFRange? {
+    func axRangeAttribute(_ attribute: CFString, for element: AXUIElement) -> CFRange? {
         axRangeAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
     }
 
-    private func axRangeAttribute(
+    func axRangeAttribute(
         _ attribute: CFString,
         for element: AXUIElement,
         timeout: Float
@@ -1159,7 +503,7 @@ extension AppDelegate {
         axRangeAttribute(kAXSelectedTextRangeAttribute as CFString, for: element) != nil
     }
 
-    private func axParameterizedString(
+    func axParameterizedString(
         _ attribute: CFString,
         range: CFRange,
         for element: AXUIElement
@@ -1167,7 +511,7 @@ extension AppDelegate {
         axParameterizedString(attribute, range: range, for: element, timeout: Self.axMessagingTimeout)
     }
 
-    private func axParameterizedString(
+    func axParameterizedString(
         _ attribute: CFString,
         range: CFRange,
         for element: AXUIElement,
@@ -1259,11 +603,11 @@ extension AppDelegate {
         return nil
     }
 
-    private func axElementAttribute(_ attribute: CFString, for element: AXUIElement) -> AXUIElement? {
+    func axElementAttribute(_ attribute: CFString, for element: AXUIElement) -> AXUIElement? {
         axElementAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
     }
 
-    private func axElementAttribute(
+    func axElementAttribute(
         _ attribute: CFString,
         for element: AXUIElement,
         timeout: Float
@@ -1280,8 +624,16 @@ extension AppDelegate {
         return unsafeBitCast(valueRef, to: AXUIElement.self)
     }
 
-    private func axElementArrayAttribute(_ attribute: CFString, for element: AXUIElement) -> [AXUIElement] {
-        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
+    func axElementArrayAttribute(_ attribute: CFString, for element: AXUIElement) -> [AXUIElement] {
+        axElementArrayAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
+    }
+
+    func axElementArrayAttribute(
+        _ attribute: CFString,
+        for element: AXUIElement,
+        timeout: Float
+    ) -> [AXUIElement] {
+        AXUIElementSetMessagingTimeout(element, timeout)
         var valueRef: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, attribute, &valueRef)
         guard status == .success,
@@ -1368,7 +720,7 @@ extension AppDelegate {
         return element
     }
 
-    private func findFocusedDescendant(in element: AXUIElement, depthRemaining: Int) -> AXUIElement? {
+    func findFocusedDescendant(in element: AXUIElement, depthRemaining: Int) -> AXUIElement? {
         guard depthRemaining >= 0 else { return nil }
 
         if axBoolAttribute(kAXFocusedAttribute as CFString, for: element) == true {
