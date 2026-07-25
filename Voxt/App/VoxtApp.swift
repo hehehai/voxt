@@ -155,14 +155,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var noteObsidianSyncCoordinator = VoxtObsidianSyncCoordinator(
         noteStore: noteStore,
         settingsProvider: { [weak self] in
-            self?.noteFeatureSettings.obsidianSync ?? .init()
+            guard let notes = self?.noteFeatureSettings, notes.enabled else {
+                return ObsidianNoteSyncSettings(enabled: false)
+            }
+            return notes.obsidianSync
         },
         exportStore: noteObsidianExportStore
     )
     lazy var noteRemindersSyncCoordinator = VoxtRemindersSyncCoordinator(
         noteStore: noteStore,
         settingsProvider: { [weak self] in
-            self?.noteFeatureSettings.remindersSync ?? .init()
+            guard let notes = self?.noteFeatureSettings, notes.enabled else {
+                return RemindersNoteSyncSettings(enabled: false)
+            }
+            return notes.remindersSync
         },
         exportStore: noteRemindersExportStore
     )
@@ -584,18 +590,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.refreshOverlayShortcutEventGate()
-                self?.noteWindowManager.updateLifecycle(
-                    isEnabled: true
-                )
-                self?.buildMenu()
-                self?.scheduleLLMIdleWarmupIfNeeded()
+                self?.applyFeatureAvailabilityLifecycle()
             }
         }
 
-        noteWindowManager.updateLifecycle(isEnabled: true)
-
         setupHotkey()
+        noteWindowManager.updateLifecycle(
+            isEnabled: FeatureSettingsStore.availability().notesEnabled
+        )
         setupLifecycleRecoveryObservers()
         setupEscapeKeyMonitoring()
         overlayWindow.onRequestClose = mainActorCallback { $0.dismissAnswerOverlay() }
@@ -639,6 +641,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         presentMainWindowOnLaunchIfNeeded()
         scheduleLLMIdleWarmupIfNeeded()
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
+    }
+
+    func applyFeatureAvailabilityLifecycle() {
+        let availability = FeatureSettingsStore.availability()
+        refreshOverlayShortcutEventGate()
+        noteWindowManager.updateLifecycle(isEnabled: availability.notesEnabled)
+        if !availability.meetingEnabled,
+           meetingSessionCoordinator.isActive || meetingSessionCoordinator.isStartingUp {
+            cancelMeetingSessionWithoutSaving()
+        }
+        buildMenu()
+        scheduleLLMIdleWarmupIfNeeded()
+        scheduleDeepIdleMemoryReclamation()
     }
 
     private func mainActorCallback(_ action: @escaping @MainActor (AppDelegate) -> Void) -> () -> Void {

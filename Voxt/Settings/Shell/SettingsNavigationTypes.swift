@@ -201,9 +201,9 @@ struct SettingsNavigationTarget: Hashable {
         case .appBranchSources, .appBranchGroups:
             return .appEnhancement
         case .none:
-            return .transcription
+            return .features
         default:
-            return .transcription
+            return .features
         }
     }
 }
@@ -313,17 +313,19 @@ enum SettingsSidebarMode: Equatable {
 }
 
 enum FeatureSettingsTab: String, CaseIterable, Identifiable {
+    case features
     case transcription
     case translation
     case rewrite
-    case appEnhancement
     case note
+    case appEnhancement
     case meeting
 
     var id: String { rawValue }
 
     var titleKey: LocalizedStringKey {
         switch self {
+        case .features: return "Feature"
         case .transcription: return "Transcription"
         case .meeting: return "Meeting"
         case .note: return "Notes"
@@ -339,6 +341,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
 
     private var rawTitleKey: String {
         switch self {
+        case .features: return "Feature"
         case .transcription: return "Transcription"
         case .meeting: return "Meeting"
         case .note: return "Notes"
@@ -350,6 +353,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
 
     var iconName: String {
         switch self {
+        case .features: return "switch.2"
         case .transcription: return "waveform.and.mic"
         case .meeting: return "person.2.wave.2"
         case .note: return "note.text"
@@ -359,17 +363,47 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
         }
     }
 
-    static func visibleTabs(appEnhancementEnabled: Bool, noteEnabled: Bool) -> [FeatureSettingsTab] {
-        allCases.filter { tab in
-            switch tab {
-            case .note:
-                return true
-            case .appEnhancement:
-                return appEnhancementEnabled
-            default:
-                return true
-            }
+    func isEnabled(in availability: FeatureAvailabilitySettings) -> Bool {
+        switch self {
+        case .features, .transcription:
+            return true
+        case .translation:
+            return availability.translationEnabled
+        case .rewrite:
+            return availability.rewriteEnabled
+        case .note:
+            return availability.notesEnabled
+        case .appEnhancement:
+            return availability.appEnhancementEnabled
+        case .meeting:
+            return availability.meetingEnabled
         }
+    }
+
+    static func visibleTabs(
+        availability: FeatureAvailabilitySettings,
+        appEnhancementEnabled: Bool? = nil,
+        noteEnabled: Bool? = nil,
+        translationEnabled: Bool? = nil,
+        rewriteEnabled: Bool? = nil,
+        meetingEnabled: Bool? = nil
+    ) -> [FeatureSettingsTab] {
+        let resolved = FeatureAvailabilitySettings(
+            translationEnabled: translationEnabled ?? availability.translationEnabled,
+            rewriteEnabled: rewriteEnabled ?? availability.rewriteEnabled,
+            notesEnabled: noteEnabled ?? availability.notesEnabled,
+            appEnhancementEnabled: appEnhancementEnabled ?? availability.appEnhancementEnabled,
+            meetingEnabled: meetingEnabled ?? availability.meetingEnabled
+        )
+        return allCases.filter { $0.isEnabled(in: resolved) }
+    }
+
+    static func visibleTabs(appEnhancementEnabled: Bool, noteEnabled: Bool) -> [FeatureSettingsTab] {
+        visibleTabs(
+            availability: .allEnabled,
+            appEnhancementEnabled: appEnhancementEnabled,
+            noteEnabled: noteEnabled
+        )
     }
 }
 

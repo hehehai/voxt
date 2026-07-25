@@ -94,7 +94,7 @@ struct SettingsView: View {
         self.appUpdateManager = appUpdateManager
         self.mainWindowState = mainWindowState
         _selectedTab = State(initialValue: initialNavigationTarget.tab)
-        _selectedFeatureTab = State(initialValue: initialNavigationTarget.featureTab ?? .transcription)
+        _selectedFeatureTab = State(initialValue: initialNavigationTarget.featureTab ?? .features)
         _selectedHistoryFilter = State(initialValue: initialNavigationTarget.historyFilter ?? .transcription)
         _sidebarMode = State(initialValue: Self.initialSidebarMode(for: initialNavigationTarget.tab))
         _navigationRequest = State(initialValue: SettingsNavigationRequest(target: initialNavigationTarget))
@@ -221,7 +221,7 @@ struct SettingsView: View {
         .onChange(of: appEnhancementEnabled) { _, isEnabled in
             if !isEnabled, selectedTab == .feature, selectedFeatureTab == .appEnhancement {
                 navigationRequest = nil
-                selectedFeatureTab = .rewrite
+                selectedFeatureTab = .features
             }
         }
         .onChange(of: muteSystemAudioWhileRecording) { _, _ in
@@ -231,6 +231,7 @@ struct SettingsView: View {
             refreshPermissionBadge()
         }
         .onChange(of: featureSettingsRaw) { _, _ in
+            redirectIfSelectedFeatureTabHidden()
             refreshPermissionBadge()
             refreshModelConfigurationBadge()
         }
@@ -273,8 +274,7 @@ struct SettingsView: View {
                         selectedTab = .report
                     }
                 },
-                appEnhancementEnabled: appEnhancementEnabled,
-                noteEnabled: noteEnabled,
+                featureAvailability: featureAvailability,
                 hasMissingPermissions: hasMissingPermissions,
                 hasNoAvailableMicrophones: hasNoAvailableMicrophones,
                 modelStorageAuthorizationIssue: modelStorageAuthorizationIssue,
@@ -434,8 +434,17 @@ struct SettingsView: View {
         .replacingOccurrences(of: "fn", with: "FN")
     }
 
-    private var noteEnabled: Bool {
-        true
+    private var featureAvailability: FeatureAvailabilitySettings {
+        _ = featureSettingsRaw
+        return FeatureSettingsStore.availability()
+    }
+
+    private func redirectIfSelectedFeatureTabHidden() {
+        guard selectedTab == .feature else { return }
+        let visible = FeatureSettingsTab.visibleTabs(availability: featureAvailability)
+        guard !visible.contains(selectedFeatureTab) else { return }
+        navigationRequest = nil
+        selectedFeatureTab = .features
     }
 
     private var onboardingStepBinding: Binding<OnboardingStep> {
@@ -751,13 +760,10 @@ struct SettingsView: View {
     private func applyNavigationTarget(_ target: SettingsNavigationTarget) {
         navigationRequest = SettingsNavigationRequest(target: target)
         if let featureTab = target.featureTab {
-            if FeatureSettingsTab.visibleTabs(
-                appEnhancementEnabled: appEnhancementEnabled,
-                noteEnabled: noteEnabled
-            ).contains(featureTab) {
+            if FeatureSettingsTab.visibleTabs(availability: featureAvailability).contains(featureTab) {
                 selectedFeatureTab = featureTab
             } else {
-                selectedFeatureTab = .transcription
+                selectedFeatureTab = .features
             }
         }
         if let historyFilter = target.historyFilter {
@@ -782,11 +788,8 @@ struct SettingsView: View {
         if tab == .feature {
             selectedTab = .feature
             sidebarMode = .feature
-            if !FeatureSettingsTab.visibleTabs(
-                appEnhancementEnabled: appEnhancementEnabled,
-                noteEnabled: noteEnabled
-            ).contains(selectedFeatureTab) {
-                selectedFeatureTab = .transcription
+            if !FeatureSettingsTab.visibleTabs(availability: featureAvailability).contains(selectedFeatureTab) {
+                selectedFeatureTab = .features
             }
             return
         }
@@ -1260,8 +1263,7 @@ private struct SettingsSidebar: View {
     let onSelectFeatureTab: (FeatureSettingsTab) -> Void
     let onSelectHistoryFilter: (HistoryFilterTab) -> Void
     let onReturnToRoot: () -> Void
-    let appEnhancementEnabled: Bool
-    let noteEnabled: Bool
+    let featureAvailability: FeatureAvailabilitySettings
     let hasMissingPermissions: Bool
     let hasNoAvailableMicrophones: Bool
     let modelStorageAuthorizationIssue: String?
@@ -1421,14 +1423,11 @@ private struct SettingsSidebar: View {
     }
 
     private var visibleRootTabs: [SettingsTab] {
-        SettingsTab.visibleTabs(appEnhancementEnabled: appEnhancementEnabled)
+        SettingsTab.visibleTabs(appEnhancementEnabled: featureAvailability.appEnhancementEnabled)
     }
 
     private var visibleFeatureTabs: [FeatureSettingsTab] {
-        FeatureSettingsTab.visibleTabs(
-            appEnhancementEnabled: appEnhancementEnabled,
-            noteEnabled: noteEnabled
-        )
+        FeatureSettingsTab.visibleTabs(availability: featureAvailability)
     }
 
     private var visibleSettingsTabs: [SettingsTab] {

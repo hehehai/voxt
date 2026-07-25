@@ -246,7 +246,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
         obsidianSync: ObsidianNoteSyncSettings = .init(),
         remindersSync: RemindersNoteSyncSettings = .init()
     ) {
-        self.enabled = true
+        self.enabled = enabled
         self.triggerShortcut = triggerShortcut
         self.titleModelSelectionID = titleModelSelectionID
         self.panel = panel
@@ -265,7 +265,7 @@ struct TranscriptionNoteFeatureSettings: Codable, Hashable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        enabled = true
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         triggerShortcut = try container.decodeIfPresent(TranscriptionNoteTriggerSettings.self, forKey: .triggerShortcut) ?? .defaultShortcut
         titleModelSelectionID = try container.decode(FeatureModelSelectionID.self, forKey: .titleModelSelectionID)
         panel = try container.decodeIfPresent(VoxtNotePanelSettings.self, forKey: .panel) ?? .init()
@@ -585,17 +585,69 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
     }
 }
 
+struct FeatureAvailabilitySettings: Codable, Hashable, Sendable {
+    var translationEnabled: Bool
+    var rewriteEnabled: Bool
+    var notesEnabled: Bool
+    var appEnhancementEnabled: Bool
+    var meetingEnabled: Bool
+
+    static let allEnabled = FeatureAvailabilitySettings(
+        translationEnabled: true,
+        rewriteEnabled: true,
+        notesEnabled: true,
+        appEnhancementEnabled: true,
+        meetingEnabled: true
+    )
+
+    init(
+        translationEnabled: Bool = true,
+        rewriteEnabled: Bool = true,
+        notesEnabled: Bool = true,
+        appEnhancementEnabled: Bool = true,
+        meetingEnabled: Bool = true
+    ) {
+        self.translationEnabled = translationEnabled
+        self.rewriteEnabled = rewriteEnabled
+        self.notesEnabled = notesEnabled
+        self.appEnhancementEnabled = appEnhancementEnabled
+        self.meetingEnabled = meetingEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case translationEnabled
+        case rewriteEnabled
+        case notesEnabled
+        case appEnhancementEnabled
+        case meetingEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            translationEnabled: try container.decodeIfPresent(Bool.self, forKey: .translationEnabled) ?? true,
+            rewriteEnabled: try container.decodeIfPresent(Bool.self, forKey: .rewriteEnabled) ?? true,
+            notesEnabled: try container.decodeIfPresent(Bool.self, forKey: .notesEnabled) ?? true,
+            appEnhancementEnabled: try container.decodeIfPresent(Bool.self, forKey: .appEnhancementEnabled) ?? true,
+            meetingEnabled: try container.decodeIfPresent(Bool.self, forKey: .meetingEnabled) ?? true
+        )
+    }
+
+}
+
 struct FeatureSettings: Codable, Hashable, Sendable {
     var transcription: TranscriptionFeatureSettings
     var translation: TranslationFeatureSettings
     var rewrite: RewriteFeatureSettings
     var meeting: MeetingFeatureSettings
+    var availability: FeatureAvailabilitySettings
 
     init(
         transcription: TranscriptionFeatureSettings,
         translation: TranslationFeatureSettings,
         rewrite: RewriteFeatureSettings,
-        meeting: MeetingFeatureSettings? = nil
+        meeting: MeetingFeatureSettings? = nil,
+        availability: FeatureAvailabilitySettings? = nil
     ) {
         self.transcription = transcription
         self.translation = translation
@@ -609,6 +661,13 @@ struct FeatureSettings: Codable, Hashable, Sendable {
             realtimeTargetLanguageRawValue: "",
             hideOverlayFromScreenSharing: false
         )
+        self.availability = availability ?? FeatureAvailabilitySettings(
+            translationEnabled: true,
+            rewriteEnabled: true,
+            notesEnabled: transcription.notes.enabled,
+            appEnhancementEnabled: rewrite.appEnhancementEnabled,
+            meetingEnabled: true
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -616,6 +675,7 @@ struct FeatureSettings: Codable, Hashable, Sendable {
         case translation
         case rewrite
         case meeting
+        case availability
     }
 
     init(from decoder: Decoder) throws {
@@ -633,11 +693,22 @@ struct FeatureSettings: Codable, Hashable, Sendable {
                 realtimeTargetLanguageRawValue: "",
                 hideOverlayFromScreenSharing: false
             )
+        let decodedAvailability = try container.decodeIfPresent(
+            FeatureAvailabilitySettings.self,
+            forKey: .availability
+        )
         self.init(
             transcription: transcription,
             translation: translation,
             rewrite: rewrite,
-            meeting: meeting
+            meeting: meeting,
+            availability: decodedAvailability ?? FeatureAvailabilitySettings(
+                translationEnabled: true,
+                rewriteEnabled: true,
+                notesEnabled: transcription.notes.enabled,
+                appEnhancementEnabled: rewrite.appEnhancementEnabled,
+                meetingEnabled: true
+            )
         )
     }
 

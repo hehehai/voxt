@@ -35,6 +35,8 @@ struct FeatureSettingsView: View {
     var body: some View {
         Group {
             switch selectedTab {
+            case .features:
+                featuresContent
             case .transcription:
                 transcriptionContent
             case .meeting:

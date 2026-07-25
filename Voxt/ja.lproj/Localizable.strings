@@ -1,5 +1,6 @@
 "General" = "一般";
 "Feature" = "機能";
+"Choose which features are available in Voxt." = "Voxt で利用する機能を選択します。";
 "History" = "履歴";
 "Model" = "モデル";
 "Hotkey" = "ホットキー";

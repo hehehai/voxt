@@ -30,6 +30,7 @@ extension AppDelegate {
     }
 
     func handleNoteHotkeyDown() {
+        guard FeatureSettingsStore.availability().notesEnabled else { return }
         cancelPendingTranscriptionStart()
         guard !blockNonMeetingRecordingWhileMeetingIsActive(source: "noteHotkey") else { return }
         guard noteStore.isAvailable else {

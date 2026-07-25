@@ -10,6 +10,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
         translationASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         rewriteASR: FeatureModelSelectionID = .mlx(MLXModelManager.defaultModelRepo),
         screenshotContextEnabled: Bool = false,
+        notesEnabled: Bool = true,
         remindersEnabled: Bool = false
     ) -> FeatureSettings {
         FeatureSettings(
@@ -19,7 +20,7 @@ final class SettingsPermissionSupportTests: XCTestCase {
                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                 prompt: AppPreferenceKey.defaultEnhancementPrompt,
                 notes: .init(
-                    enabled: false,
+                    enabled: notesEnabled,
                     titleModelSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
                     remindersSync: .init(enabled: remindersEnabled)
                 )
@@ -110,6 +111,21 @@ final class SettingsPermissionSupportTests: XCTestCase {
         XCTAssertEqual(
             permissions,
             [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring, .reminders]
+        )
+    }
+
+    func testSidebarPermissionsSkipRemindersWhenNotesFeatureDisabled() {
+        let context = SettingsPermissionRequirementResolver.sidebarRequirementContext(
+            selectedEngine: .remote,
+            muteSystemAudioWhileRecording: false,
+            featureSettings: makeFeatureSettings(notesEnabled: false, remindersEnabled: true)
+        )
+
+        let permissions = SettingsPermissionRequirementResolver.requiredPermissions(context: context)
+
+        XCTAssertEqual(
+            permissions,
+            [.microphone, .systemAudioCapture, .accessibility, .inputMonitoring]
         )
     }
 

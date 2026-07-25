@@ -69,15 +69,16 @@ extension AppDelegate {
     }
 
     private func customLLMWarmupReposForIdle() -> Set<String> {
+        let availability = FeatureSettingsStore.availability()
         var repos = Set<String>()
 
         if let enhancementRepo = resolvedTranscriptionEnhancementLocalRepo() {
             repos.insert(enhancementRepo)
         }
-        if translationModelProvider == .customLLM {
+        if availability.translationEnabled, translationModelProvider == .customLLM {
             repos.insert(translationCustomLLMRepo)
         }
-        if rewriteModelProvider == .customLLM {
+        if availability.rewriteEnabled, rewriteModelProvider == .customLLM {
             repos.insert(rewriteCustomLLMRepo)
         }
 
@@ -85,6 +86,7 @@ extension AppDelegate {
     }
 
     private func customLLMWarmupReposForSession(outputMode: SessionOutputMode) -> Set<String> {
+        let availability = FeatureSettingsStore.availability()
         var repos = Set<String>()
 
         switch outputMode {
@@ -93,6 +95,7 @@ extension AppDelegate {
                 repos.insert(enhancementRepo)
             }
         case .translation:
+            guard availability.translationEnabled else { break }
             let resolution = resolvedTranslationProviderResolution(
                 targetLanguage: effectiveSessionTranslationTargetLanguage,
                 isSelectedTextTranslation: false
@@ -101,6 +104,7 @@ extension AppDelegate {
                 repos.insert(translationCustomLLMRepo)
             }
         case .rewrite:
+            guard availability.rewriteEnabled else { break }
             if rewriteModelProvider == .customLLM {
                 repos.insert(rewriteCustomLLMRepo)
             }
@@ -121,6 +125,7 @@ extension AppDelegate {
     }
 
     private func remoteLLMWarmupContextsForIdle() -> [RemoteWarmupContext] {
+        let availability = FeatureSettingsStore.availability()
         var contexts: [RemoteWarmupContext] = []
 
         if enhancementMode == .remoteLLM {
@@ -129,13 +134,13 @@ extension AppDelegate {
                 contexts.append(RemoteWarmupContext(provider: context.provider, configuration: context.configuration))
             }
         }
-        if translationModelProvider == .remoteLLM {
+        if availability.translationEnabled, translationModelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forTranslation: true)
             if isStoredRemoteLLMConfigured(context.provider) {
                 contexts.append(RemoteWarmupContext(provider: context.provider, configuration: context.configuration))
             }
         }
-        if rewriteModelProvider == .remoteLLM {
+        if availability.rewriteEnabled, rewriteModelProvider == .remoteLLM {
             let context = resolvedRemoteLLMContext(forRewrite: true)
             if isStoredRemoteLLMConfigured(context.provider) {
                 contexts.append(RemoteWarmupContext(provider: context.provider, configuration: context.configuration))
@@ -146,6 +151,7 @@ extension AppDelegate {
     }
 
     private func remoteLLMWarmupContextsForSession(outputMode: SessionOutputMode) -> [RemoteWarmupContext] {
+        let availability = FeatureSettingsStore.availability()
         switch outputMode {
         case .transcription:
             guard enhancementMode == .remoteLLM else { return [] }
@@ -153,6 +159,7 @@ extension AppDelegate {
             guard isStoredRemoteLLMConfigured(context.provider) else { return [] }
             return [RemoteWarmupContext(provider: context.provider, configuration: context.configuration)]
         case .translation:
+            guard availability.translationEnabled else { return [] }
             let resolution = resolvedTranslationProviderResolution(
                 targetLanguage: effectiveSessionTranslationTargetLanguage,
                 isSelectedTextTranslation: false
@@ -162,6 +169,7 @@ extension AppDelegate {
             guard isStoredRemoteLLMConfigured(context.provider) else { return [] }
             return [RemoteWarmupContext(provider: context.provider, configuration: context.configuration)]
         case .rewrite:
+            guard availability.rewriteEnabled else { return [] }
             guard rewriteModelProvider == .remoteLLM else { return [] }
             let context = resolvedRemoteLLMContext(forRewrite: true)
             guard isStoredRemoteLLMConfigured(context.provider) else { return [] }

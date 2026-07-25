@@ -66,6 +66,17 @@ extension AppDelegate {
         transcriptionCaptureMode: TranscriptionCaptureSessionMode = .standard
     ) {
         guard !isApplicationTerminating else { return }
+        let availability = FeatureSettingsStore.availability()
+        switch outputMode {
+        case .transcription:
+            if transcriptionCaptureMode == .noteSession, !availability.notesEnabled {
+                return
+            }
+        case .translation:
+            guard availability.translationEnabled else { return }
+        case .rewrite:
+            guard availability.rewriteEnabled else { return }
+        }
         let transcriptionHotkeyStartBehavior = outputMode == .transcription
             ? pendingTranscriptionHotkeyStartBehavior
             : nil

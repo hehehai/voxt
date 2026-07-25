@@ -85,21 +85,72 @@ final class FeatureSettingsStoreTests: XCTestCase {
         }
     }
 
-    func testSaveKeepsAppEnhancementEnabledForMenuVisibility() throws {
+    func testSavePersistsFeatureAvailabilityAndSyncsLegacyFlags() throws {
         try withEphemeralDefaults { defaults in
             var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+            settings.availability.appEnhancementEnabled = true
             settings.rewrite.appEnhancementEnabled = true
 
             FeatureSettingsStore.save(settings, defaults: defaults)
 
             XCTAssertTrue(defaults.bool(forKey: AppPreferenceKey.appEnhancementEnabled))
+            XCTAssertTrue(FeatureSettingsStore.load(defaults: defaults).availability.appEnhancementEnabled)
 
+            settings.availability.appEnhancementEnabled = false
             settings.rewrite.appEnhancementEnabled = false
+            settings.availability.notesEnabled = false
+            settings.transcription.notes.enabled = false
+            settings.availability.meetingEnabled = false
             FeatureSettingsStore.save(settings, defaults: defaults)
             let reloaded = FeatureSettingsStore.load(defaults: defaults)
 
-            XCTAssertTrue(defaults.bool(forKey: AppPreferenceKey.appEnhancementEnabled))
+            XCTAssertFalse(defaults.bool(forKey: AppPreferenceKey.appEnhancementEnabled))
+            XCTAssertFalse(reloaded.rewrite.appEnhancementEnabled)
+            XCTAssertFalse(reloaded.availability.appEnhancementEnabled)
+            XCTAssertFalse(reloaded.availability.notesEnabled)
+            XCTAssertFalse(reloaded.transcription.notes.enabled)
+            XCTAssertFalse(reloaded.availability.meetingEnabled)
+        }
+    }
+
+    func testMissingAvailabilityDefaultsToAllEnabled() throws {
+        try withEphemeralDefaults { defaults in
+            var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+            FeatureSettingsStore.save(settings, defaults: defaults)
+
+            guard var json = try JSONSerialization.jsonObject(
+                with: Data((defaults.string(forKey: AppPreferenceKey.featureSettings) ?? "").utf8)
+            ) as? [String: Any] else {
+                XCTFail("Expected feature settings JSON object")
+                return
+            }
+            json.removeValue(forKey: "availability")
+            let data = try JSONSerialization.data(withJSONObject: json)
+            defaults.set(String(data: data, encoding: .utf8), forKey: AppPreferenceKey.featureSettings)
+
+            let reloaded = FeatureSettingsStore.load(defaults: defaults)
+            XCTAssertEqual(reloaded.availability, .allEnabled)
+            XCTAssertTrue(reloaded.transcription.notes.enabled)
             XCTAssertTrue(reloaded.rewrite.appEnhancementEnabled)
+        }
+    }
+
+    func testHotkeyRuntimeConfigurationSkipsDisabledFeatures() throws {
+        try withEphemeralDefaults { defaults in
+            var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+            settings.availability.translationEnabled = false
+            settings.availability.rewriteEnabled = false
+            settings.availability.notesEnabled = false
+            settings.availability.meetingEnabled = false
+            FeatureSettingsStore.save(settings, defaults: defaults)
+
+            let configuration = HotkeyRuntimeConfiguration.load(defaults: defaults)
+            XCTAssertFalse(configuration.transcriptionBindings.isEmpty)
+            XCTAssertTrue(configuration.translationBindings.isEmpty)
+            XCTAssertTrue(configuration.rewriteBindings.isEmpty)
+            XCTAssertTrue(configuration.noteBindings.isEmpty)
+            XCTAssertTrue(configuration.meetingBindings.isEmpty)
+            XCTAssertNil(configuration.meetingHotkey)
         }
     }
 

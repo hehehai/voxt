@@ -389,23 +389,64 @@ final class SettingsTypesTests: XCTestCase {
     func testFeatureVisibleTabsOnlyIncludeCurrentFeatureTabs() {
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, noteEnabled: false),
-            [.transcription, .translation, .rewrite, .note, .meeting]
+            [.features, .transcription, .translation, .rewrite, .meeting]
         )
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true),
-            [.transcription, .translation, .rewrite, .appEnhancement, .note, .meeting]
+            [.features, .transcription, .translation, .rewrite, .note, .appEnhancement, .meeting]
         )
     }
 
-    func testFeatureVisibleTabsAlwaysIncludeNotes() {
-        XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: false).contains(.note))
+    func testFeatureVisibleTabsRespectNotesAvailability() {
+        XCTAssertFalse(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: false).contains(.note))
         XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true).contains(.note))
     }
 
-    func testHotkeyShortcutVisibilityOnlyIncludesCurrentFeatureKinds() {
+    func testFeatureVisibleTabsAlwaysIncludeFeaturesAndTranscription() {
+        let availability = FeatureAvailabilitySettings(
+            translationEnabled: false,
+            rewriteEnabled: false,
+            notesEnabled: false,
+            appEnhancementEnabled: false,
+            meetingEnabled: false
+        )
         XCTAssertEqual(
-            HotkeyShortcutVisibility.visibleKinds(),
+            FeatureSettingsTab.visibleTabs(availability: availability),
+            [.features, .transcription]
+        )
+    }
+
+    func testDefaultFeatureTabIsFeaturesOverview() {
+        XCTAssertEqual(
+            SettingsNavigationTarget.defaultFeatureTab(for: .feature, section: nil),
+            .features
+        )
+    }
+
+    func testHotkeyShortcutVisibilityOnlyIncludesCurrentFeatureKinds() {
+        let suiteName = "SettingsTypesTests.hotkeyVisibility.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected ephemeral UserDefaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+        FeatureSettingsStore.save(settings, defaults: defaults)
+        XCTAssertEqual(
+            HotkeyShortcutVisibility.visibleKinds(defaults: defaults),
             [.transcription, .note, .translation, .rewrite, .meeting]
+        )
+
+        settings.availability.translationEnabled = false
+        settings.availability.rewriteEnabled = false
+        settings.availability.notesEnabled = false
+        settings.availability.meetingEnabled = false
+        FeatureSettingsStore.save(settings, defaults: defaults)
+        XCTAssertEqual(
+            HotkeyShortcutVisibility.visibleKinds(defaults: defaults),
+            [.transcription]
         )
     }
 

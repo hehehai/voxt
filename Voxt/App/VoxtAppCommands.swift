@@ -98,25 +98,38 @@ struct MainWindowNavigationCommands: Commands {
             }
 
             Menu(AppLocalization.localizedString("Feature")) {
+                let _ = featureSettingsRaw
+                let availability = FeatureSettingsStore.availability()
                 Button(AppLocalization.localizedString("Feature")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
+                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .features))
                 }
                 Divider()
                 Button(AppLocalization.localizedString("Transcription")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
                 }
-                Button(AppLocalization.localizedString("Notes")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
+                if availability.notesEnabled {
+                    Button(AppLocalization.localizedString("Notes")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
+                    }
                 }
-                Button(AppLocalization.localizedString("Translation")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .translation))
+                if availability.translationEnabled {
+                    Button(AppLocalization.localizedString("Translation")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .translation))
+                    }
                 }
-                Button(AppLocalization.localizedString("Rewrite")) {
-                    appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .rewrite))
+                if availability.rewriteEnabled {
+                    Button(AppLocalization.localizedString("Rewrite")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .rewrite))
+                    }
                 }
-                if appEnhancementEnabled {
+                if availability.appEnhancementEnabled {
                     Button(AppLocalization.localizedString("App Enhancement")) {
                         appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .appEnhancement))
+                    }
+                }
+                if availability.meetingEnabled {
+                    Button(AppLocalization.localizedString("Meeting")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .meeting))
                     }
                 }
             }

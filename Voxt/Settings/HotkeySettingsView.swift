@@ -83,8 +83,22 @@ enum HotkeyShortcutKind: String, CaseIterable, Hashable {
 }
 
 enum HotkeyShortcutVisibility {
-    static func visibleKinds() -> [HotkeyShortcutKind] {
-        [.transcription, .note, .translation, .rewrite, .meeting]
+    static func visibleKinds(defaults: UserDefaults = .standard) -> [HotkeyShortcutKind] {
+        let availability = FeatureSettingsStore.availability(defaults: defaults)
+        var kinds: [HotkeyShortcutKind] = [.transcription]
+        if availability.notesEnabled {
+            kinds.append(.note)
+        }
+        if availability.translationEnabled {
+            kinds.append(.translation)
+        }
+        if availability.rewriteEnabled {
+            kinds.append(.rewrite)
+        }
+        if availability.meetingEnabled {
+            kinds.append(.meeting)
+        }
+        return kinds
     }
 }
 
@@ -126,6 +140,7 @@ struct HotkeySettingsView: View {
     @AppStorage(AppPreferenceKey.hotkeyPreset) private var hotkeyPreset = HotkeyPreference.defaultPreset.rawValue
     @AppStorage(AppPreferenceKey.escapeKeyCancelsOverlaySession) private var escapeKeyCancelsOverlaySession = true
     @AppStorage(AppPreferenceKey.interfaceLanguage) private var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
+    @AppStorage(AppPreferenceKey.featureSettings) private var featureSettingsRaw = ""
     @State private var recordingField: RecordingField?
     @State private var pendingCapturedField: RecordingField?
     @State private var pendingCapturedHotkey: HotkeyPreference.Hotkey?
@@ -387,14 +402,15 @@ struct HotkeySettingsView: View {
     }
 
     private var validationMessages: [HotkeySettingsValidation.Message] {
-        HotkeySettingsValidation.messages(
+        let visibleKinds = Set(HotkeyShortcutVisibility.visibleKinds())
+        return HotkeySettingsValidation.messages(
             for: .init(
                 transcriptionBindings: transcriptionBindings,
-                translationBindings: translationBindings,
-                meetingBindings: meetingBindings,
-                rewriteBindings: rewriteBindings,
+                translationBindings: visibleKinds.contains(.translation) ? translationBindings : [],
+                meetingBindings: visibleKinds.contains(.meeting) ? meetingBindings : [],
+                rewriteBindings: visibleKinds.contains(.rewrite) ? rewriteBindings : [],
                 customPasteHotkey: customPasteHotkeyEnabled ? currentCustomPasteHotkey : nil,
-                noteBindings: noteBindings
+                noteBindings: visibleKinds.contains(.note) ? noteBindings : []
             )
         )
     }
@@ -436,11 +452,21 @@ struct HotkeySettingsView: View {
                         )
                     }
 
-                    hotkeyBindingGroup(.transcription, bindings: transcriptionBindings)
-                    hotkeyBindingGroup(.note, bindings: noteBindings)
-                    hotkeyBindingGroup(.translation, bindings: translationBindings)
-                    hotkeyBindingGroup(.rewrite, bindings: rewriteBindings)
-                    hotkeyBindingGroup(.meeting, bindings: meetingBindings)
+                    let _ = featureSettingsRaw
+                    ForEach(HotkeyShortcutVisibility.visibleKinds(), id: \.self) { kind in
+                        switch kind {
+                        case .transcription:
+                            hotkeyBindingGroup(.transcription, bindings: transcriptionBindings)
+                        case .note:
+                            hotkeyBindingGroup(.note, bindings: noteBindings)
+                        case .translation:
+                            hotkeyBindingGroup(.translation, bindings: translationBindings)
+                        case .rewrite:
+                            hotkeyBindingGroup(.rewrite, bindings: rewriteBindings)
+                        case .meeting:
+                            hotkeyBindingGroup(.meeting, bindings: meetingBindings)
+                        }
+                    }
 
                     ForEach(validationMessages) { message in
                         Text(message.text)

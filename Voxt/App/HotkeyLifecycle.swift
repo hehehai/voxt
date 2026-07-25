@@ -454,6 +454,7 @@ extension AppDelegate {
     }
 
     func handleTranslationHotkeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        guard FeatureSettingsStore.availability().translationEnabled else { return }
         handleTranslationTriggerDown(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 
@@ -529,6 +530,7 @@ extension AppDelegate {
     }
 
     func handleRewriteHotkeyDown(behavior: HotkeyPreference.TriggerBehavior = .tap) {
+        guard FeatureSettingsStore.availability().rewriteEnabled else { return }
         handleRewriteTriggerDown(triggerMode: behavior.legacyTriggerMode, source: "hotkey")
     }
 

@@ -327,7 +327,7 @@ extension AppDelegate {
 
     @objc private func openFeatureFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
+            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .feature, featureTab: .features))
         }
     }
 

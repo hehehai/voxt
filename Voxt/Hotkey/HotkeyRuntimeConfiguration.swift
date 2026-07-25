@@ -24,12 +24,23 @@ nonisolated struct HotkeyRuntimeConfiguration {
     static func load(defaults: UserDefaults = .standard) -> HotkeyRuntimeConfiguration {
         let customPasteEnabled = defaults.bool(forKey: AppPreferenceKey.customPasteHotkeyEnabled)
         HotkeyPreference.migrateHotkeyBindingsIfNeeded(defaults: defaults)
+        let availability = FeatureSettingsStore.availability(defaults: defaults)
         let transcriptionBindings = HotkeyPreference.loadTranscriptionBindings(defaults: defaults)
-        let translationBindings = HotkeyPreference.loadTranslationBindings(defaults: defaults)
-        let rewriteBindings = HotkeyPreference.loadRewriteBindings(defaults: defaults)
-        let meetingBindings = HotkeyPreference.loadMeetingBindings(defaults: defaults)
-        let noteBindings = HotkeyPreference.loadNoteBindings(defaults: defaults)
-        let rewriteActivationMode = HotkeyPreference.loadRewriteActivationMode(defaults: defaults)
+        let translationBindings = availability.translationEnabled
+            ? HotkeyPreference.loadTranslationBindings(defaults: defaults)
+            : []
+        let rewriteBindings = availability.rewriteEnabled
+            ? HotkeyPreference.loadRewriteBindings(defaults: defaults)
+            : []
+        let meetingBindings = availability.meetingEnabled
+            ? HotkeyPreference.loadMeetingBindings(defaults: defaults)
+            : []
+        let noteBindings = availability.notesEnabled
+            ? HotkeyPreference.loadNoteBindings(defaults: defaults)
+            : []
+        let rewriteActivationMode = availability.rewriteEnabled
+            ? HotkeyPreference.loadRewriteActivationMode(defaults: defaults)
+            : .dedicatedHotkey
 
         return HotkeyRuntimeConfiguration(
             transcriptionBindings: transcriptionBindings,
@@ -40,7 +51,7 @@ nonisolated struct HotkeyRuntimeConfiguration {
             transcriptionHotkey: transcriptionBindings.first?.hotkey ?? HotkeyPreference.load(),
             translationHotkey: translationBindings.first?.hotkey ?? HotkeyPreference.loadTranslation(),
             rewriteHotkey: rewriteBindings.first?.hotkey ?? HotkeyPreference.loadRewrite(),
-            meetingHotkey: meetingBindings.first?.hotkey ?? HotkeyPreference.loadMeeting(),
+            meetingHotkey: meetingBindings.first?.hotkey,
             noteHotkey: noteBindings.first?.hotkey ?? HotkeyPreference.Hotkey(
                 keyCode: HotkeyPreference.defaultNoteKeyCode,
                 modifiers: HotkeyPreference.defaultNoteModifiers,

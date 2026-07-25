@@ -134,7 +134,8 @@ enum SettingsPermissionRequirementResolver {
             permissions.append(.screenCapture)
         }
 
-        if context.featureSettings?.transcription.notes.remindersSync.enabled == true {
+        if context.featureSettings?.transcription.notes.enabled == true,
+           context.featureSettings?.transcription.notes.remindersSync.enabled == true {
             permissions.append(.reminders)
         }
 

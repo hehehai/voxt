@@ -91,7 +91,24 @@ enum FeatureSettingsStore {
 
     private static func enforceAlwaysOnLegacyFlags(defaults: UserDefaults) {
         defaults.set(true, forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
-        defaults.set(true, forKey: AppPreferenceKey.appEnhancementEnabled)
+    }
+
+    static func availability(defaults: UserDefaults = .standard) -> FeatureAvailabilitySettings {
+        // Prefer a side-effect-free peek so hotkey/runtime readers do not migrate/save
+        // (and post `.voxtFeatureSettingsDidChange`) during early app bootstrap.
+        if let raw = loadRaw(defaults: defaults),
+           let data = raw.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(FeatureSettings.self, from: data) {
+            return decoded.availability
+        }
+        let appEnhancementEnabled = defaults.object(forKey: AppPreferenceKey.appEnhancementEnabled) as? Bool ?? true
+        return FeatureAvailabilitySettings(
+            translationEnabled: true,
+            rewriteEnabled: true,
+            notesEnabled: true,
+            appEnhancementEnabled: appEnhancementEnabled,
+            meetingEnabled: true
+        )
     }
 
     static func deriveFromLegacy(defaults: UserDefaults = .standard) -> FeatureSettings {
@@ -116,6 +133,7 @@ enum FeatureSettingsStore {
             defaults: defaults
         )
 
+        let appEnhancementEnabled = defaults.object(forKey: AppPreferenceKey.appEnhancementEnabled) as? Bool ?? true
         return FeatureSettings(
             transcription: TranscriptionFeatureSettings(
                 asrSelectionID: transcriptionASR,
@@ -161,7 +179,7 @@ enum FeatureSettingsStore {
                     language: promptLanguage
                 ),
                 appContext: .init(),
-                appEnhancementEnabled: true,
+                appEnhancementEnabled: appEnhancementEnabled,
                 continueShortcut: .defaultShortcut
             ),
             meeting: MeetingFeatureSettings(
@@ -179,6 +197,13 @@ enum FeatureSettingsStore {
                 sileroVADSensitivityRawValue: MeetingSileroVADSensitivity.stored(defaults: defaults).rawValue,
                 speakerDiarizationModelRawValue: MeetingDiarizationMode.stored(in: defaults).rawValue,
                 finalTranscriptOptimizationEnabled: legacyFinalTranscriptOptimizationEnabled(defaults: defaults)
+            ),
+            availability: FeatureAvailabilitySettings(
+                translationEnabled: true,
+                rewriteEnabled: true,
+                notesEnabled: true,
+                appEnhancementEnabled: appEnhancementEnabled,
+                meetingEnabled: true
             )
         )
     }
@@ -365,6 +390,12 @@ enum FeatureSettingsStore {
             settings.rewrite.asrSelectionID,
             fallback: fallback.rewrite.asrSelectionID
         )
+        let availability = reconciledAvailability(from: settings)
+        var notes = sanitizedNotesSettings(
+            settings.transcription.notes,
+            fallbackSelectionID: fallback.transcription.notes.titleModelSelectionID
+        )
+        notes.enabled = availability.notesEnabled
         return FeatureSettings(
             transcription: TranscriptionFeatureSettings(
                 asrSelectionID: transcriptionASR,
@@ -378,10 +409,7 @@ enum FeatureSettingsStore {
                     language: promptLanguage
                 ),
                 appContext: settings.transcription.appContext,
-                notes: sanitizedNotesSettings(
-                    settings.transcription.notes,
-                    fallbackSelectionID: fallback.transcription.notes.titleModelSelectionID
-                )
+                notes: notes
             ),
             translation: TranslationFeatureSettings(
                 asrSelectionID: translationASR,
@@ -410,7 +438,7 @@ enum FeatureSettingsStore {
                     language: promptLanguage
                 ),
                 appContext: settings.rewrite.appContext,
-                appEnhancementEnabled: true,
+                appEnhancementEnabled: availability.appEnhancementEnabled,
                 continueShortcut: sanitizedContinueShortcutSettings(settings.rewrite.continueShortcut)
             ),
             meeting: MeetingFeatureSettings(
@@ -435,7 +463,19 @@ enum FeatureSettingsStore {
                 sileroVADSensitivityRawValue: settings.meeting.sileroVADSensitivity.rawValue,
                 speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
                 finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
-            )
+            ),
+            availability: availability
+        )
+    }
+
+    private static func reconciledAvailability(from settings: FeatureSettings) -> FeatureAvailabilitySettings {
+        // Availability is the source of truth for master toggles; keep nested flags aligned.
+        FeatureAvailabilitySettings(
+            translationEnabled: settings.availability.translationEnabled,
+            rewriteEnabled: settings.availability.rewriteEnabled,
+            notesEnabled: settings.availability.notesEnabled,
+            appEnhancementEnabled: settings.availability.appEnhancementEnabled,
+            meetingEnabled: settings.availability.meetingEnabled
         )
     }
 
@@ -464,7 +504,9 @@ enum FeatureSettingsStore {
     }
 
     private static func storageRepresentation(for settings: FeatureSettings) -> FeatureSettings {
-        FeatureSettings(
+        var notes = settings.transcription.notes
+        notes.enabled = settings.availability.notesEnabled
+        return FeatureSettings(
             transcription: TranscriptionFeatureSettings(
                 asrSelectionID: settings.transcription.asrSelectionID,
                 llmEnabled: settings.transcription.llmEnabled,
@@ -472,7 +514,7 @@ enum FeatureSettingsStore {
                 prompt: AppPromptDefaults.canonicalStoredText(settings.transcription.prompt, kind: .enhancement),
                 promptPresetID: settings.transcription.promptPresetID,
                 appContext: settings.transcription.appContext,
-                notes: settings.transcription.notes
+                notes: notes
             ),
             translation: TranslationFeatureSettings(
                 asrSelectionID: settings.translation.asrSelectionID,
@@ -488,7 +530,7 @@ enum FeatureSettingsStore {
                 prompt: AppPromptDefaults.canonicalStoredText(settings.rewrite.prompt, kind: .rewrite),
                 promptPresetID: settings.rewrite.promptPresetID,
                 appContext: settings.rewrite.appContext,
-                appEnhancementEnabled: true,
+                appEnhancementEnabled: settings.availability.appEnhancementEnabled,
                 continueShortcut: settings.rewrite.continueShortcut
             ),
             meeting: MeetingFeatureSettings(
@@ -503,7 +545,8 @@ enum FeatureSettingsStore {
                 sileroVADSensitivityRawValue: settings.meeting.sileroVADSensitivity.rawValue,
                 speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
                 finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
-            )
+            ),
+            availability: settings.availability
         )
     }
 
@@ -527,7 +570,7 @@ enum FeatureSettingsStore {
                 sidedModifiers: settings.triggerShortcut.sidedModifiers
             )
         return TranscriptionNoteFeatureSettings(
-            enabled: true,
+            enabled: settings.enabled,
             triggerShortcut: resolvedShortcut,
             titleModelSelectionID: resolvedSelectionID,
             panel: VoxtNotePanelSettings(
