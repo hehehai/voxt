@@ -32,7 +32,8 @@ extension AppDelegate {
             return nil
         }
 
-        let focusedElement = focusedElementForSystemSelection()
+        let focusResolve = resolveFocusForSystemSelection()
+        let focusedElement = focusResolve.focusedElement
         logSelectionFocusedElement(focusedElement)
 
         let rawSelectedRange = focusedElement.flatMap {
@@ -70,7 +71,8 @@ extension AppDelegate {
             focusedElement: focusedElement,
             rawSelectedRange: rawSelectedRange,
             isBrowser: isBrowser,
-            appBundleID: appBundleID
+            appBundleID: appBundleID,
+            axWindowCandidatesAvailable: focusResolve.candidateWindowCount > 0
         )
     }
 
@@ -172,7 +174,8 @@ extension AppDelegate {
         focusedElement: AXUIElement?,
         rawSelectedRange: CFRange?,
         isBrowser: Bool,
-        appBundleID: String
+        appBundleID: String,
+        axWindowCandidatesAvailable: Bool
     ) -> String? {
         let copiesLineOnEmptySelection = SelectedTextSystemSelectionSupport
             .copiesCurrentLineWhenSelectionEmpty(bundleID: appBundleID)
@@ -182,8 +185,13 @@ extension AppDelegate {
             isBrowser: isBrowser,
             copiesLineOnEmptySelection: copiesLineOnEmptySelection
         )
+        let allowBlackoutProbe = SelectedTextSystemSelectionSupport.shouldAttemptAXBlackoutClipboardProbe(
+            focusedElementAvailable: focusedElement != nil,
+            axWindowCandidatesAvailable: axWindowCandidatesAvailable,
+            copiesLineOnEmptySelection: copiesLineOnEmptySelection
+        )
         VoxtLog.input(
-            "selectionProbe.copy.policy: allow=\(allowCopy) focused=\(focusedElement != nil) range=\(selectionRangeDescription(rawSelectedRange)) browser=\(isBrowser) copiesLineOnEmpty=\(copiesLineOnEmptySelection)"
+            "selectionProbe.copy.policy: allow=\(allowCopy) blackoutProbe=\(allowBlackoutProbe) focused=\(focusedElement != nil) windows=\(axWindowCandidatesAvailable) range=\(selectionRangeDescription(rawSelectedRange)) browser=\(isBrowser) copiesLineOnEmpty=\(copiesLineOnEmptySelection)"
         )
 
         if allowCopy, let text = selectedTextBySimulatedCopy(reason: "policyAllowed") {
@@ -195,6 +203,36 @@ extension AppDelegate {
                 detail: "chars=\(text.count)"
             )
             return text
+        }
+
+        if allowBlackoutProbe {
+            VoxtLog.input("selectionProbe.copy.blackoutProbe: begin")
+            if let capture = captureTextBySimulatedCopy(reason: "axBlackoutLineCopyEditor") {
+                if SelectedTextSystemSelectionSupport.looksLikeEmptySelectionLineCopy(
+                    rawClipboardText: capture.raw
+                ) {
+                    VoxtLog.input(
+                        "selectionProbe.copy.blackoutProbe: rejected-likely-line-copy chars=\(capture.trimmed.count) preview=\(selectionPreview(capture.raw))"
+                    )
+                    logSelectionProbeResult(
+                        range: rawSelectedRange,
+                        textSource: "nil",
+                        app: appBundleID,
+                        isBrowser: isBrowser,
+                        detail: "ax-blackout-rejected-line-copy"
+                    )
+                    return nil
+                }
+                logSelectionProbeResult(
+                    range: rawSelectedRange,
+                    textSource: "copyBlackoutFiltered",
+                    app: appBundleID,
+                    isBrowser: isBrowser,
+                    detail: "chars=\(capture.trimmed.count)"
+                )
+                return capture.trimmed
+            }
+            VoxtLog.input("selectionProbe.copy.blackoutProbe: copy-missed")
         }
 
         let denyDetail = SelectedTextSystemSelectionSupport.denialDetail(
@@ -216,30 +254,35 @@ extension AppDelegate {
 
     // MARK: - Focus resolve
 
-    private func focusedElementForSystemSelection() -> AXUIElement? {
+    private struct SystemSelectionFocusResolve {
+        let focusedElement: AXUIElement?
+        let candidateWindowCount: Int
+    }
+
+    private func resolveFocusForSystemSelection() -> SystemSelectionFocusResolve {
         // Actual focused element only — never best-editable / leftover-field fallbacks.
         if let systemFocused = copyFocusedUIElement(
             from: AXUIElementCreateSystemWide(),
             source: "systemWide"
         ) {
-            return systemFocused
+            return SystemSelectionFocusResolve(focusedElement: systemFocused, candidateWindowCount: 0)
         }
 
         guard let processID = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
             VoxtLog.input("selectionProbe.focusedResolve: all focus lookups failed no-frontmost-app")
-            return nil
+            return SystemSelectionFocusResolve(focusedElement: nil, candidateWindowCount: 0)
         }
 
         let appElement = AXUIElementCreateApplication(processID)
         if let appFocused = copyFocusedUIElement(from: appElement, source: "frontmostApp") {
-            return appFocused
+            return SystemSelectionFocusResolve(focusedElement: appFocused, candidateWindowCount: 0)
         }
 
         let candidateWindows = selectionProbeCandidateWindows(from: appElement)
         if candidateWindows.isEmpty {
             VoxtLog.input("selectionProbe.focusedResolve: no candidate windows")
             VoxtLog.input("selectionProbe.focusedResolve: all focus lookups failed")
-            return nil
+            return SystemSelectionFocusResolve(focusedElement: nil, candidateWindowCount: 0)
         }
 
         for (index, window) in candidateWindows.enumerated() {
@@ -247,7 +290,10 @@ extension AppDelegate {
                 VoxtLog.input(
                     "selectionProbe.focusedResolve: source=candidateWindowDescendant[\(index)] ok"
                 )
-                return descendant
+                return SystemSelectionFocusResolve(
+                    focusedElement: descendant,
+                    candidateWindowCount: candidateWindows.count
+                )
             }
         }
 
@@ -255,7 +301,10 @@ extension AppDelegate {
             "selectionProbe.focusedResolve: candidate windows=\(candidateWindows.count) but no focused descendant"
         )
         VoxtLog.input("selectionProbe.focusedResolve: all focus lookups failed")
-        return nil
+        return SystemSelectionFocusResolve(
+            focusedElement: nil,
+            candidateWindowCount: candidateWindows.count
+        )
     }
 
     private func selectionProbeCandidateWindows(from appElement: AXUIElement) -> [AXUIElement] {
@@ -523,7 +572,19 @@ extension AppDelegate {
         return nil
     }
 
+    private struct SimulatedCopyCapture {
+        let raw: String
+
+        var trimmed: String {
+            raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
     private func selectedTextBySimulatedCopy(reason: String = "unspecified") -> String? {
+        captureTextBySimulatedCopy(reason: reason)?.trimmed
+    }
+
+    private func captureTextBySimulatedCopy(reason: String = "unspecified") -> SimulatedCopyCapture? {
         VoxtLog.input("selectionProbe.copy.begin: reason=\(reason)")
         guard AccessibilityPermissionManager.isTrusted() else {
             VoxtLog.input("selectionProbe.copy.miss: accessibility-not-trusted")
@@ -570,24 +631,24 @@ extension AppDelegate {
             return nil
         }
 
-        let copied = readStringFromPasteboard(pasteboard)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = readStringFromPasteboard(pasteboard) ?? ""
 
         pasteboard.clearContents()
         if let previous, !previous.isEmpty {
             pasteboard.setString(previous, forType: .string)
         }
 
-        guard let copied, !copied.isEmpty else {
+        let capture = SimulatedCopyCapture(raw: raw)
+        guard !capture.trimmed.isEmpty else {
             VoxtLog.input(
                 "selectionProbe.copy.miss: empty-after-change changeCount=\(copiedChangeCount)"
             )
             return nil
         }
         VoxtLog.input(
-            "selectionProbe.copy.ok: reason=\(reason) chars=\(copied.count) preview=\(selectionPreview(copied))"
+            "selectionProbe.copy.ok: reason=\(reason) chars=\(capture.trimmed.count) preview=\(selectionPreview(capture.raw))"
         )
-        return copied
+        return capture
     }
 
     // MARK: - Logging helpers

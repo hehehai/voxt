@@ -69,8 +69,8 @@ enum SelectedTextSystemSelectionSupport {
     ///   - browser → allow
     ///   - otherwise → deny
     ///
-    /// Clipboard-shape heuristics are intentionally not used: they both miss real
-    /// whole-line selections and fail to catch empty-selection line copies without EOL.
+    /// Line-copy editors with a total AX blackout use a separate filtered probe
+    /// (`shouldAttemptAXBlackoutClipboardProbe`); do not widen this gate for them.
     static func shouldAttemptSimulatedCopy(
         focusedElementAvailable: Bool,
         selectedTextRange: CFRange?,
@@ -84,6 +84,39 @@ enum SelectedTextSystemSelectionSupport {
             return !copiesLineOnEmptySelection
         }
         return isBrowser
+    }
+
+    /// Last-resort clipboard probe for the line-copy capability class when AX exposes
+    /// neither a focused element nor any window candidates.
+    ///
+    /// Without this path, Electron editors that fail FocusedUIElement (-25204) and
+    /// return an empty AX window list can never recover a real selection. Results must
+    /// still pass `looksLikeEmptySelectionLineCopy` filtering.
+    static func shouldAttemptAXBlackoutClipboardProbe(
+        focusedElementAvailable: Bool,
+        axWindowCandidatesAvailable: Bool,
+        copiesLineOnEmptySelection: Bool
+    ) -> Bool {
+        copiesLineOnEmptySelection
+            && !focusedElementAvailable
+            && !axWindowCandidatesAvailable
+    }
+
+    /// Best-effort filter for `emptySelectionClipboard`-style payloads:
+    /// exactly one line plus a trailing newline. Mid-line selections usually omit
+    /// that trailing newline; multi-line selections contain interior newlines.
+    ///
+    /// Residual risk: last lines without EOL may false-accept; intentional whole-line
+    /// selections that include EOL may false-reject.
+    static func looksLikeEmptySelectionLineCopy(rawClipboardText: String) -> Bool {
+        let normalized = rawClipboardText
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        guard normalized.hasSuffix("\n") else { return false }
+        let body = String(normalized.dropLast())
+        return !body.contains("\n")
     }
 
     /// Range attribute present with `length == 0` means caret-only; further probes cannot help.

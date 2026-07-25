@@ -99,6 +99,61 @@ final class SessionTextIOTests: XCTestCase {
         )
     }
 
+    func testAXBlackoutClipboardProbeOnlyWhenLineCopyEditorHasNoAXSurface() {
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.shouldAttemptAXBlackoutClipboardProbe(
+                focusedElementAvailable: false,
+                axWindowCandidatesAvailable: false,
+                copiesLineOnEmptySelection: true
+            )
+        )
+        // Still have window candidates: keep denying unfiltered Cmd+C.
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.shouldAttemptAXBlackoutClipboardProbe(
+                focusedElementAvailable: false,
+                axWindowCandidatesAvailable: true,
+                copiesLineOnEmptySelection: true
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.shouldAttemptAXBlackoutClipboardProbe(
+                focusedElementAvailable: false,
+                axWindowCandidatesAvailable: false,
+                copiesLineOnEmptySelection: false
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.shouldAttemptAXBlackoutClipboardProbe(
+                focusedElementAvailable: true,
+                axWindowCandidatesAvailable: false,
+                copiesLineOnEmptySelection: true
+            )
+        )
+    }
+
+    func testLooksLikeEmptySelectionLineCopyRecognizesClipboardCapabilityShape() {
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.looksLikeEmptySelectionLineCopy(
+                rawClipboardText: "    const foo = 1;\n"
+            )
+        )
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.looksLikeEmptySelectionLineCopy(
+                rawClipboardText: "single line\r\n"
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.looksLikeEmptySelectionLineCopy(
+                rawClipboardText: "selectedWord"
+            )
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.looksLikeEmptySelectionLineCopy(
+                rawClipboardText: "line one\nline two\n"
+            )
+        )
+    }
+
     func testCopiesCurrentLineWhenSelectionEmptyRecognizesEditorFamilies() {
         let lineCopyEditors = [
             "com.microsoft.VSCode",
