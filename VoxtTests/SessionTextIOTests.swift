@@ -28,6 +28,15 @@ final class SessionTextIOTests: XCTestCase {
         XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: nil))
     }
 
+    func testSelectedTextSystemSelectionRejectsCaretOnlyRange() {
+        XCTAssertFalse(SelectedTextSystemSelectionSupport.hasNonEmptySelectedTextRange(length: 0))
+    }
+
+    func testSelectedTextSystemSelectionAcceptsNonEmptyRange() {
+        XCTAssertTrue(SelectedTextSystemSelectionSupport.hasNonEmptySelectedTextRange(length: 1))
+        XCTAssertTrue(SelectedTextSystemSelectionSupport.hasNonEmptySelectedTextRange(length: 12))
+    }
+
     func testRewriteAlwaysPresentsAnswerOverlay() {
         XCTAssertTrue(
             AppDelegate.shouldPresentRewriteAnswerOverlay(
