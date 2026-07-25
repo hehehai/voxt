@@ -6,7 +6,7 @@ The current Xcode package reference is:
 
 - URL: `https://github.com/hehehai/mlx-audio-swift.git`
 - Requirement: `exactVersion`
-- Version: `0.1.3-voxt.7`
+- Version: `0.1.3-voxt.12`
 
 ## Version rules
 
@@ -42,6 +42,18 @@ If Voxt needs to consume a synced fork commit before a new tag exists, pin the p
 
 - Fork: `hehehai/mlx-audio-swift`
 - Requirement: `exactVersion`
-- Version: `0.1.3-voxt.7`
-- Commit: `7b440f768f5fc2a9c4b4c837084a9faeb4e62ba8`
-- Notes: adds typed STT segments and language provenance, preserves Qwen streaming segments, distinguishes translated output language, filters Qwen streaming protocol metadata, and includes the upstream Qwen attention and Voxtral realtime performance fixes through `542fffa`
+- Version: `0.1.3-voxt.12`
+- Commit: `95b4587`
+- Notes: `TranscriptionEvent.ended` carries full `STTOutput` (text / segments / language provenance) for Qwen, MOSS, Cohere, and Nemotron live stop, aligned with batch structured-output semantics; includes upstream through `c5d4054` and Voxt Qwen KV / language-parameter work
+
+## Resolved transitive pins
+
+`Package.resolved` currently selects:
+
+- `mlx-swift-lm` at revision `d2424294a6c3bbd0de37a0761d80efc05e6813dd` (direct Voxt pin)
+- `mlx-swift` `0.31.4` (transitive via the audio/lm graph)
+
+Toolchain ceiling on the current Voxt baseline (Swift 6.2 / Xcode 26.3):
+
+- `mlx-swift` 0.31.5+ requires `swift-tools-version: 6.3`, so SPM keeps `0.31.4` even though `0.31.6` exists.
+- `mlx-swift-lm` commits after `d242429` need APIs from `mlx-swift` ≥ 0.31.5 (`greatestFiniteMagnitudeArray`, later `maskFill` / TurboQuant). Keep `d242429` until the app can move to a Swift 6.3 toolchain, then bump `mlx-swift` to ≥ 0.31.6 and `mlx-swift-lm` to `main` tip together.

@@ -120,6 +120,23 @@ final class ASRVoiceActivityPlanningTests: XCTestCase {
         )
     }
 
+    func testMeetingSileroSensitivityAdjustsOnlyTheOnsetThreshold() {
+        let responsive = MeetingSileroVADSensitivity.responsive.configuration()
+        let balanced = MeetingSileroVADSensitivity.balanced.configuration()
+        let stable = MeetingSileroVADSensitivity.stable.configuration()
+
+        XCTAssertLessThan(responsive.onsetProbabilityThreshold, balanced.onsetProbabilityThreshold)
+        XCTAssertLessThan(balanced.onsetProbabilityThreshold, stable.onsetProbabilityThreshold)
+        XCTAssertEqual(responsive.offsetProbabilityThreshold, balanced.offsetProbabilityThreshold)
+        XCTAssertEqual(stable.minSilenceSeconds, balanced.minSilenceSeconds)
+        // Balanced keeps the historical streaming default (0.5), not the offline meeting
+        // profile onset (0.45), so upgrades do not silently increase noise pickup.
+        XCTAssertEqual(balanced.onsetProbabilityThreshold, 0.5)
+        XCTAssertEqual(MeetingSileroVADSensitivity.responsive.title, AppLocalization.localizedString("Sensitive"))
+        XCTAssertEqual(MeetingSileroVADSensitivity.balanced.title, AppLocalization.localizedString("Balanced"))
+        XCTAssertEqual(ASRVoiceActivityConfiguration.meeting.onsetProbabilityThreshold, 0.45)
+    }
+
     func testSampleRateConverterResamplesWithoutChangingEmptyOrSameRateInput() {
         XCTAssertEqual(
             ASRVoiceActivitySampleRateConverter.resample(samples: [], from: 48_000, to: 16_000),

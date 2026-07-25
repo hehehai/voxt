@@ -153,8 +153,20 @@ enum MLXTranscriptionPurpose: Sendable {
 struct MLXStructuredTranscriptSegment: Equatable, Sendable {
     let startSeconds: TimeInterval
     let endSeconds: TimeInterval
-    let speakerID: String
+    let speakerID: String?
     let text: String
+
+    nonisolated init(
+        startSeconds: TimeInterval,
+        endSeconds: TimeInterval,
+        speakerID: String? = nil,
+        text: String
+    ) {
+        self.startSeconds = startSeconds
+        self.endSeconds = endSeconds
+        self.speakerID = speakerID
+        self.text = text
+    }
 }
 
 struct MLXBufferedTranscriptionResult: Equatable, Sendable {
@@ -293,7 +305,7 @@ private final class MLXVoxtralNativeStreamingSession: MLXNativeStreamingSession,
         guard !isFinished else { return }
         emit(session.finish())
         isFinished = true
-        continuation.yield(.ended(fullText: session.text))
+        continuation.yield(.ended(STTOutput(text: session.text)))
         continuation.finish()
     }
 
@@ -1055,8 +1067,10 @@ enum MLXTranscriptionPlanning {
 @MainActor
 class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private struct ResolvedInferenceConfiguration: Sendable {
+        let family: MLXModelFamily
         let generationParameters: STTGenerateParameters
         let languageHint: String?
+        let timingGranularity: MLXASRTimingGranularity
         let qwenContextBias: String
         let granitePromptBias: String?
         let senseVoiceUseITN: Bool
@@ -1258,6 +1272,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var latestNativeLiveConfirmedText = ""
     private var latestNativeLivePreviewText = ""
     private var latestNativeLiveEndedText = ""
+    private var latestNativeLiveEndedSegments: [MLXStructuredTranscriptSegment] = []
     private var nativeQwenLiveUsesAutomaticLanguageProtocol = false
     var sessionAllowsRealtimeTextDisplay = true
     private var didRetryCaptureStartup = false
@@ -1646,7 +1661,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         guard revision == sessionRevision else { return }
         stageCompletedAudioArchive(samples: fullSnapshot, sampleRate: sampleRate)
         let fallbackText: String
-        if !latestNativeLiveEndedText.isEmpty {
+        if !latestNativeLiveEndedSegments.isEmpty {
+            // Prefer reliable timed segments captured at live `.ended` when post-stop
+            // correction is empty or unavailable (for example Nemotron sentence timing).
+            fallbackText = latestNativeLiveEndedSegments
+                .map(\.text)
+                .joined(separator: " ")
+        } else if !latestNativeLiveEndedText.isEmpty {
             fallbackText = latestNativeLiveEndedText
         } else if !latestNativeLivePreviewText.isEmpty {
             fallbackText = latestNativeLivePreviewText
@@ -1852,6 +1873,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         latestNativeLiveConfirmedText = ""
         latestNativeLivePreviewText = ""
         latestNativeLiveEndedText = ""
+        latestNativeLiveEndedSegments = []
         nativeQwenLiveUsesAutomaticLanguageProtocol = false
     }
 
@@ -2067,13 +2089,19 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 )
             }
             let language = resolvedNativeQwenLiveLanguage()
+            let kvCachePolicy = MLXModelCatalog.capability(
+                for: modelManager.currentModelRepo
+            ).kvCachePolicy
             return MLXMeetingNativeStreamingConfiguration(
                 session: StreamingInferenceSession(
                     model: model,
                     config: StreamingConfig(
                         language: language,
                         temperature: 0,
-                        maxTokensPerPass: 1024
+                        maxTokensPerPass: 1024,
+                        kvBits: kvCachePolicy?.bits,
+                        kvGroupSize: kvCachePolicy?.groupSize ?? 64,
+                        quantizedKVStart: kvCachePolicy?.quantizedStart ?? 0
                     )
                 ),
                 liveMode: liveMode,
@@ -2198,13 +2226,19 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private func installNativeQwenLiveSession(_ model: Qwen3ASRModel, revision: Int) {
         releaseNativeLiveSession(cancelSession: true)
         let language = resolvedNativeQwenLiveLanguage()
+        let kvCachePolicy = MLXModelCatalog.capability(
+            for: modelManager.currentModelRepo
+        ).kvCachePolicy
         nativeQwenLiveUsesAutomaticLanguageProtocol = language == nil
         let session = StreamingInferenceSession(
             model: model,
             config: StreamingConfig(
                 language: language,
                 temperature: 0.0,
-                maxTokensPerPass: 1024
+                maxTokensPerPass: 1024,
+                kvBits: kvCachePolicy?.bits,
+                kvGroupSize: kvCachePolicy?.groupSize ?? 64,
+                quantizedKVStart: kvCachePolicy?.quantizedStart ?? 0
             )
         )
         installNativeLiveSession(session, revision: revision, modelPinned: true)
@@ -2417,6 +2451,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         latestNativeLiveConfirmedText = ""
         latestNativeLivePreviewText = ""
         latestNativeLiveEndedText = ""
+        latestNativeLiveEndedSegments = []
         if activeLiveMode != .nativeQwenLive {
             nativeQwenLiveUsesAutomaticLanguageProtocol = false
         }
@@ -2561,16 +2596,28 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             internalTranscribedText = combined
             transcribedText = combined
             publishPartial(combined)
-        case .ended(let fullText):
+        case .ended(let output):
             let visibleText = nativeQwenLiveUsesAutomaticLanguageProtocol
                 ? MLXTranscriptionPlanning.qwenStreamingVisibleText(
-                    fullText,
+                    output.text,
                     suppressIncompleteWindowHeader: false
                 )
-                : renderedMossTextIfNeeded(fullText)
+                : renderedMossTextIfNeeded(output.text)
             let normalized = normalizeText(visibleText)
             latestNativeLiveConfirmedText = normalized
             latestNativeLiveEndedText = normalized
+            let capability = MLXModelCatalog.capability(for: modelManager.currentModelRepo)
+            latestNativeLiveEndedSegments = Self.structuredSegmentsForLiveEnded(
+                output: output,
+                modelFamily: capability.family,
+                timingGranularity: capability.timingGranularity
+            )
+            if !latestNativeLiveEndedSegments.isEmpty {
+                VoxtLog.asr(
+                    "MLX native live ended with structured segments. repo=\(modelManager.currentModelRepo), segmentCount=\(latestNativeLiveEndedSegments.count), timing=\(String(describing: capability.timingGranularity)), language=\(output.language ?? "nil")",
+                    verbose: true
+                )
+            }
             if !normalized.isEmpty {
                 latestNativeLivePreviewText = normalized
             }
@@ -2819,7 +2866,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let userLanguageCodes = UserMainLanguageOption.storedSelection(
             from: UserDefaults.standard.string(forKey: AppPreferenceKey.userMainLanguageCodes)
         )
-        let family = MLXModelFamily.family(for: modelManager.currentModelRepo)
+        let capability = MLXModelCatalog.capability(for: modelManager.currentModelRepo)
+        let family = capability.family
         let automaticBiases = MLXTranscriptionPlanning.automaticBiases(
             for: family,
             multilingualContext: hintPayload.multilingualContext
@@ -2827,13 +2875,20 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let dictionaryTerms = resolvedDictionaryTermsTemplateValue()
         let chunkDuration: Float
         let minChunkDuration: Float
-        switch tuningSettings.preset {
-        case .balanced:
+        if capability.configurationCapabilities.contains(.recognitionPreset) {
+            switch tuningSettings.preset {
+            case .balanced:
+                chunkDuration = 1200
+                minChunkDuration = 1
+            case .accuracyFirst:
+                chunkDuration = 90
+                minChunkDuration = 2.5
+            }
+        } else {
+            // Models without recognitionPreset (for example Whisper's fixed window) ignore
+            // leftover preset values so stale settings cannot change decoding windows.
             chunkDuration = 1200
             minChunkDuration = 1
-        case .accuracyFirst:
-            chunkDuration = 90
-            minChunkDuration = 2.5
         }
 
         var languageHint = hintPayload.language
@@ -2887,6 +2942,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
 
         return ResolvedInferenceConfiguration(
+            family: family,
             generationParameters: STTGenerateParameters(
                 maxTokens: maxTokens,
                 temperature: temperature,
@@ -2897,9 +2953,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 targetLanguage: targetLanguage,
                 usePunctuation: usePunctuation,
                 chunkDuration: chunkDuration,
-                minChunkDuration: minChunkDuration
+                minChunkDuration: minChunkDuration,
+                kvBits: capability.kvCachePolicy?.bits,
+                kvGroupSize: capability.kvCachePolicy?.groupSize ?? 64,
+                quantizedKVStart: capability.kvCachePolicy?.quantizedStart ?? 0
             ),
             languageHint: languageHint,
+            timingGranularity: capability.timingGranularity,
             qwenContextBias: mergedBiasText(
                 resolvedBiasTemplate(
                     tuningSettings.qwenContextBias,
@@ -3026,6 +3086,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         inferenceConfiguration: ResolvedInferenceConfiguration
     ) async throws -> MLXDetachedInferenceResult {
         try Task.checkCancellation()
+        if inferenceConfiguration.family == .mmsCTC {
+            _ = try MMSLanguageAdapterOption.validatedAdapterCode(
+                inferenceConfiguration.languageHint ?? ""
+            )
+        }
         if let wav2Vec2Model = model as? Wav2Vec2CTCModel,
            let language = inferenceConfiguration.languageHint {
             try wav2Vec2Model.selectLanguage(language)
@@ -3127,7 +3192,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 context: inferenceConfiguration.qwenContextBias,
                 language: inferenceConfiguration.languageHint,
                 chunkDuration: generationParameters.chunkDuration,
-                minChunkDuration: generationParameters.minChunkDuration
+                minChunkDuration: generationParameters.minChunkDuration,
+                kvBits: generationParameters.kvBits,
+                kvGroupSize: generationParameters.kvGroupSize,
+                quantizedKVStart: generationParameters.quantizedKVStart
             )
         } else if let graniteModel = model as? GraniteSpeechModel {
             stream = graniteModel.generateStream(
@@ -3231,8 +3299,52 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         return MLXDetachedInferenceResult(
             rawText: finalOutput?.text ?? streamedText,
             senseVoiceMetadata: nil,
-            structuredSegments: []
+            structuredSegments: reliableStructuredSegments(
+                from: finalOutput?.segments,
+                timingGranularity: inferenceConfiguration.timingGranularity
+            )
         )
+    }
+
+    /// Maps a live `.ended(STTOutput)` payload using the same reliability rules as batch.
+    nonisolated static func structuredSegmentsForLiveEnded(
+        output: STTOutput,
+        modelFamily: MLXModelFamily,
+        timingGranularity: MLXASRTimingGranularity
+    ) -> [MLXStructuredTranscriptSegment] {
+        if modelFamily == .mossTranscribeDiarize {
+            return mossStructuredSegments(from: output.segments)
+        }
+        return reliableStructuredSegments(
+            from: output.segments,
+            timingGranularity: timingGranularity
+        )
+    }
+
+    nonisolated static func reliableStructuredSegments(
+        from rawSegments: [STTTranscriptSegment]?,
+        timingGranularity: MLXASRTimingGranularity
+    ) -> [MLXStructuredTranscriptSegment] {
+        guard timingGranularity.providesReliableSegments else { return [] }
+
+        return (rawSegments ?? []).compactMap { segment in
+            guard let start = segment.startTime,
+                  let end = segment.endTime,
+                  start.isFinite,
+                  end.isFinite,
+                  end > start
+            else {
+                return nil
+            }
+
+            let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return MLXStructuredTranscriptSegment(
+                startSeconds: start,
+                endSeconds: end,
+                text: text
+            )
+        }
     }
 
     nonisolated static func mossStructuredSegments(

@@ -1889,9 +1889,13 @@
 "Download the model before meetings can use this VAD path." = "Download the model before meetings can use this VAD path.";
 "Silero VAD model is ready." = "Silero VAD model is ready.";
 "Silero VAD Sensitivity" = "Silero VAD Sensitivity";
+"Silero Speech Detection" = "Silero Speech Detection";
 "Detect quieter speech sooner, with a higher risk of noise triggers." = "Detect quieter speech sooner, with a higher risk of noise triggers.";
+"Detect quieter speech sooner; may include more background sound." = "Detect quieter speech sooner; may include more background sound.";
 "Use the Silero default threshold for general meeting audio." = "Use the Silero default threshold for general meeting audio.";
+"Balance speech pickup with background-noise rejection." = "Balance speech pickup with background-noise rejection.";
 "Require stronger speech evidence to reduce false triggers." = "Require stronger speech evidence to reduce false triggers.";
+"Prefer stronger speech signals in noisy environments." = "Prefer stronger speech signals in noisy environments.";
 "Silero VAD model is not downloaded." = "Silero VAD model is not downloaded.";
 "Speaker Separation Model" = "Speaker Separation Model";
 "Offline VBx" = "Offline VBx";
@@ -2180,6 +2184,9 @@
 "Review how app-aware prompt switching works across apps and pages." = "Review how app-aware prompt switching works across apps and pages.";
 "Review meeting capture, summary, segmentation, and speaker separation settings." = "Review meeting capture, summary, segmentation, and speaker separation settings.";
 "Select one of the language adapters included in the FL102 checkpoint." = "Select one of the language adapters included in the FL102 checkpoint.";
+"Unsupported MMS adapter language. Choose an adapter from the FL102 checkpoint list." = "Unsupported MMS adapter language. Choose an adapter from the FL102 checkpoint list.";
+"This model only accepts explicit language routing for the listed languages here. Any other primary language falls back to Automatic." = "This model only accepts explicit language routing for the listed languages here. Any other primary language falls back to Automatic.";
+"Primary language %@ is not supported by this model. Recognition will fall back to Automatic." = "Primary language %@ is not supported by this model. Recognition will fall back to Automatic.";
 "SenseVoice" = "SenseVoice";
 "SenseVoice Emotion" = "SenseVoice Emotion";
 "SenseVoice Event" = "SenseVoice Event";

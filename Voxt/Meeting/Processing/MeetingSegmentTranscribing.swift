@@ -154,6 +154,89 @@ actor MeetingRemoteTranscriptionGate {
     }
 }
 
+enum MeetingMLXSegmentMapping {
+    nonisolated static func shouldUseStructuredOutput(
+        isFinalChunk: Bool,
+        timingGranularity: MLXASRTimingGranularity
+    ) -> Bool {
+        isFinalChunk && timingGranularity.providesReliableSegments
+    }
+
+    nonisolated static func meetingSegments(
+        from result: MLXBufferedTranscriptionResult,
+        segmentID: UUID,
+        speaker: MeetingSpeaker,
+        audioSource: TranscriptAudioSource,
+        startSeconds: TimeInterval,
+        endSeconds: TimeInterval,
+        usesStructuredOutput: Bool,
+        modelFamily: MLXModelFamily,
+        preventsAdjacentMerge: Bool,
+        dictionaryEntries: [DictionaryEntry],
+        speakerDisplayName: (String) -> String?
+    ) -> [MeetingTranscriptSegment] {
+        if usesStructuredOutput, !result.structuredSegments.isEmpty {
+            return result.structuredSegments.enumerated().compactMap { index, segment in
+                let text = MeetingTranscriptSanitizer.sanitizedText(
+                    segment.text,
+                    dictionaryEntries: dictionaryEntries
+                )
+                guard !text.isEmpty else { return nil }
+                let boundedStart = min(max(startSeconds + segment.startSeconds, startSeconds), endSeconds)
+                let boundedEnd = min(max(startSeconds + segment.endSeconds, boundedStart), endSeconds)
+                // Only MOSS structured speaker IDs are diarization labels. Never promote
+                // Nemotron/Parakeet timing metadata into speaker identity.
+                let allowMossSpeaker = modelFamily == .mossTranscribeDiarize
+                let speakerID = allowMossSpeaker ? segment.speakerID.map { "moss:\($0)" } : nil
+                let displayName = allowMossSpeaker
+                    ? segment.speakerID.flatMap(speakerDisplayName)
+                    : nil
+                return MeetingTranscriptSegment(
+                    id: index == 0 ? segmentID : UUID(),
+                    speaker: speaker,
+                    speakerID: speakerID,
+                    speakerDisplayName: displayName,
+                    audioSource: audioSource,
+                    startSeconds: boundedStart,
+                    endSeconds: boundedEnd,
+                    text: text,
+                    preventsAdjacentMerge: true
+                )
+            }
+        }
+
+        if usesStructuredOutput, modelFamily == .mossTranscribeDiarize {
+            VoxtLog.meetingWarning(
+                "Meeting MOSS structured output was unavailable; raw protocol text was suppressed."
+            )
+            return []
+        }
+
+        let previewText = result.structuredSegments.isEmpty
+            ? result.text
+            : result.structuredSegments.map(\.text).joined(separator: " ")
+        let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
+            previewText,
+            dictionaryEntries: dictionaryEntries
+        )
+        guard !sanitizedText.isEmpty else {
+            VoxtLog.meetingWarning("Meeting MLX transcription suppressed because it matched ASR prompt or hint guidance.")
+            return []
+        }
+        return [
+            MeetingTranscriptSegment(
+                id: segmentID,
+                speaker: speaker,
+                audioSource: audioSource,
+                startSeconds: startSeconds,
+                endSeconds: endSeconds,
+                text: sanitizedText,
+                preventsAdjacentMerge: preventsAdjacentMerge
+            )
+        ]
+    }
+}
+
 @MainActor
 final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
     private let modelManager: MLXModelManager
@@ -194,6 +277,7 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             return []
         }
 
+        let capability = MLXModelCatalog.capability(for: modelManager.currentModelRepo)
         return meetingSegments(
             from: result,
             segmentID: chunk.segmentID,
@@ -201,7 +285,11 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             audioSource: chunk.speaker == .me ? .microphone : .systemAudio,
             startSeconds: chunk.startSeconds,
             endSeconds: chunk.endSeconds,
-            usesStructuredOutput: chunk.isFinal,
+            usesStructuredOutput: MeetingMLXSegmentMapping.shouldUseStructuredOutput(
+                isFinalChunk: chunk.isFinal,
+                timingGranularity: capability.timingGranularity
+            ),
+            modelFamily: capability.family,
             preventsAdjacentMerge: chunk.preventsAdjacentMerge
         )
     }
@@ -214,6 +302,7 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             )
         }
         guard let result else { return [] }
+        let capability = MLXModelCatalog.capability(for: modelManager.currentModelRepo)
         return meetingSegments(
             from: result,
             segmentID: chunk.segmentID,
@@ -221,7 +310,11 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             audioSource: chunk.speaker == .me ? .microphone : .systemAudio,
             startSeconds: chunk.startSeconds,
             endSeconds: chunk.endSeconds,
-            usesStructuredOutput: chunk.isFinal,
+            usesStructuredOutput: MeetingMLXSegmentMapping.shouldUseStructuredOutput(
+                isFinalChunk: chunk.isFinal,
+                timingGranularity: capability.timingGranularity
+            ),
+            modelFamily: capability.family,
             preventsAdjacentMerge: chunk.preventsAdjacentMerge
         )
     }
@@ -239,6 +332,7 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
         guard let result else {
             return []
         }
+        let capability = MLXModelCatalog.capability(for: modelManager.currentModelRepo)
         return meetingSegments(
             from: result,
             segmentID: UUID(),
@@ -246,7 +340,8 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             audioSource: asset.source,
             startSeconds: asset.sessionStartOffset,
             endSeconds: asset.sessionStartOffset + asset.durationSeconds,
-            usesStructuredOutput: true,
+            usesStructuredOutput: capability.timingGranularity.providesReliableSegments,
+            modelFamily: capability.family,
             preventsAdjacentMerge: true
         )
     }
@@ -259,63 +354,24 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
         startSeconds: TimeInterval,
         endSeconds: TimeInterval,
         usesStructuredOutput: Bool,
+        modelFamily: MLXModelFamily,
         preventsAdjacentMerge: Bool
     ) -> [MeetingTranscriptSegment] {
-        let dictionaryEntries = activeMeetingDictionaryEntries()
-        if usesStructuredOutput, !result.structuredSegments.isEmpty {
-            return result.structuredSegments.enumerated().compactMap { index, segment in
-                let text = MeetingTranscriptSanitizer.sanitizedText(
-                    segment.text,
-                    dictionaryEntries: dictionaryEntries
-                )
-                guard !text.isEmpty else { return nil }
-                let boundedStart = min(max(startSeconds + segment.startSeconds, startSeconds), endSeconds)
-                let boundedEnd = min(max(startSeconds + segment.endSeconds, boundedStart), endSeconds)
-                return MeetingTranscriptSegment(
-                    id: index == 0 ? segmentID : UUID(),
-                    speaker: speaker,
-                    speakerID: "moss:\(segment.speakerID)",
-                    speakerDisplayName: speakerDisplayName(for: segment.speakerID, source: audioSource),
-                    audioSource: audioSource,
-                    startSeconds: boundedStart,
-                    endSeconds: boundedEnd,
-                    text: text,
-                    preventsAdjacentMerge: true
-                )
+        MeetingMLXSegmentMapping.meetingSegments(
+            from: result,
+            segmentID: segmentID,
+            speaker: speaker,
+            audioSource: audioSource,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+            usesStructuredOutput: usesStructuredOutput,
+            modelFamily: modelFamily,
+            preventsAdjacentMerge: preventsAdjacentMerge,
+            dictionaryEntries: activeMeetingDictionaryEntries(),
+            speakerDisplayName: { speakerID in
+                self.speakerDisplayName(for: speakerID, source: audioSource)
             }
-        }
-
-        if usesStructuredOutput,
-           MLXModelFamily.family(for: modelManager.currentModelRepo) == .mossTranscribeDiarize
-        {
-            VoxtLog.meetingWarning(
-                "Meeting MOSS structured output was unavailable; raw protocol text was suppressed."
-            )
-            return []
-        }
-
-        let previewText = result.structuredSegments.isEmpty
-            ? result.text
-            : result.structuredSegments.map(\.text).joined(separator: " ")
-        let sanitizedText = MeetingTranscriptSanitizer.sanitizedText(
-            previewText,
-            dictionaryEntries: dictionaryEntries
         )
-        guard !sanitizedText.isEmpty else {
-            VoxtLog.meetingWarning("Meeting MLX transcription suppressed because it matched ASR prompt or hint guidance.")
-            return []
-        }
-        return [
-            MeetingTranscriptSegment(
-                id: segmentID,
-                speaker: speaker,
-                audioSource: audioSource,
-                startSeconds: startSeconds,
-                endSeconds: endSeconds,
-                text: sanitizedText,
-                preventsAdjacentMerge: preventsAdjacentMerge
-            )
-        ]
     }
 
     private func speakerDisplayName(

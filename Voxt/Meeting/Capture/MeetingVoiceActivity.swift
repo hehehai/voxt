@@ -41,11 +41,10 @@ private extension MeetingVoiceActivityDecision.Source {
 }
 
 actor MeetingVoiceActivityDetector {
-    private static let sileroBalancedThreshold: Float = 0.5
-
     private var sileroDetector = ASRSileroStreamingVoiceActivityDetector()
     private var omniDetector = OmniStreamVoiceActivityBackend(useCase: .meeting)
     private var mode = currentModeFromSettings()
+    private var sileroSensitivity = currentSileroSensitivityFromSettings()
     private var sileroFallbackWarningLogged = false
     private var omniDegradedWarningLogged = false
 
@@ -56,6 +55,7 @@ actor MeetingVoiceActivityDetector {
             await omniDetector.reset()
         }
         mode = nextMode
+        sileroSensitivity = Self.currentSileroSensitivityFromSettings()
         sileroFallbackWarningLogged = false
         omniDegradedWarningLogged = false
     }
@@ -78,6 +78,10 @@ actor MeetingVoiceActivityDetector {
         MainActorSync.run {
             LocalVADMode.stored()
         }
+    }
+
+    private nonisolated static func currentSileroSensitivityFromSettings() -> MeetingSileroVADSensitivity {
+        MeetingSileroVADSensitivity.stored()
     }
 
     func activity(
@@ -199,7 +203,7 @@ actor MeetingVoiceActivityDetector {
         let elapsedMilliseconds = max(0, (ProcessInfo.processInfo.systemUptime - startedAt) * 1000)
         let probabilityText = decision.probability.map { String(format: "%.3f", $0) } ?? "nil"
         VoxtLog.meeting(
-            "Meeting VAD decision. mode=\(mode.rawValue), frameBackend=\(frameBackend.rawValue), source=\(decision.source.telemetryName), speaker=\(speaker.rawValue), speech=\(decision.isSpeech), probability=\(probabilityText), sampleCount=\(sampleCount), elapsedMs=\(String(format: "%.2f", elapsedMilliseconds))",
+            "Meeting VAD decision. mode=\(mode.rawValue), sileroSensitivity=\(sileroSensitivity.rawValue), frameBackend=\(frameBackend.rawValue), source=\(decision.source.telemetryName), speaker=\(speaker.rawValue), speech=\(decision.isSpeech), probability=\(probabilityText), sampleCount=\(sampleCount), elapsedMs=\(String(format: "%.2f", elapsedMilliseconds))",
             verbose: true
         )
         return decision
@@ -217,7 +221,7 @@ actor MeetingVoiceActivityDetector {
                 streamID: speaker.rawValue
             ) {
                 return MeetingVoiceActivityDecision(
-                    isSpeech: probability >= Self.sileroBalancedThreshold,
+                    isSpeech: probability >= sileroSensitivity.onsetProbabilityThreshold,
                     probability: probability,
                     source: .silero
                 )
@@ -386,7 +390,7 @@ actor ASRSileroOfflineVoiceActivityDetector: ASROfflineVoiceActivityBackend {
         )
         guard !prepared.isEmpty else { return [] }
 
-        let profile = ASRVoiceActivityConfiguration.profile(for: .meeting)
+        let profile = MeetingSileroVADSensitivity.stored().configuration()
         let timestamps = try model.getSpeechTimestamps(
             MLXArray(prepared),
             sampleRate: sampleRate,

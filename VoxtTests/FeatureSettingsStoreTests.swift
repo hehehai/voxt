@@ -318,10 +318,12 @@ final class FeatureSettingsStoreTests: XCTestCase {
             var settings = FeatureSettingsStore.load(defaults: defaults)
 
             XCTAssertEqual(settings.meeting.chunkingMode, .quality)
+            XCTAssertEqual(settings.meeting.sileroVADSensitivity, .responsive)
             XCTAssertEqual(settings.meeting.speakerDiarizationModel, .offlineVBx)
             XCTAssertFalse(settings.meeting.finalTranscriptOptimizationEnabled)
 
             settings.meeting.chunkingModeRawValue = MeetingChunkingMode.realtime.rawValue
+            settings.meeting.sileroVADSensitivityRawValue = MeetingSileroVADSensitivity.stable.rawValue
             settings.meeting.speakerDiarizationModelRawValue = MeetingDiarizationMode.offlineVBx.rawValue
             settings.meeting.finalTranscriptOptimizationEnabled = false
             FeatureSettingsStore.save(settings, defaults: defaults)
@@ -329,13 +331,14 @@ final class FeatureSettingsStoreTests: XCTestCase {
 
             XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingChunkingMode), MeetingChunkingMode.realtime.rawValue)
             XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingSpeakerDiarizationModel), MeetingDiarizationMode.offlineVBx.rawValue)
-            XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingSileroVADSensitivity), "responsive")
+            XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingSileroVADSensitivity), "stable")
             XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.meetingServerVADMode), "stable")
             XCTAssertEqual(defaults.string(forKey: "meetingSpeakerDiarizationSensitivity"), "sensitive")
             XCTAssertEqual(defaults.string(forKey: "meetingSpeakerCountHint"), "maxThree")
             XCTAssertTrue(defaults.bool(forKey: "meetingSpeakerDiarizationDebugEnabled"))
             XCTAssertFalse(defaults.bool(forKey: AppPreferenceKey.meetingFinalTranscriptOptimizationEnabled))
             XCTAssertEqual(FeatureSettingsStore.load(defaults: defaults).meeting.chunkingMode, .realtime)
+            XCTAssertEqual(FeatureSettingsStore.load(defaults: defaults).meeting.sileroVADSensitivity, .stable)
             XCTAssertEqual(FeatureSettingsStore.load(defaults: defaults).meeting.speakerDiarizationModel, .offlineVBx)
             XCTAssertFalse(FeatureSettingsStore.load(defaults: defaults).meeting.finalTranscriptOptimizationEnabled)
         }
@@ -358,6 +361,7 @@ final class FeatureSettingsStoreTests: XCTestCase {
         let settings = try JSONDecoder().decode(MeetingFeatureSettings.self, from: data)
 
         XCTAssertEqual(settings.chunkingMode, .quality)
+        XCTAssertEqual(settings.sileroVADSensitivity, .balanced)
         XCTAssertEqual(settings.speakerDiarizationModel, .offlineVBx)
         XCTAssertTrue(settings.finalTranscriptOptimizationEnabled)
     }

@@ -2,6 +2,7 @@
 // Provides Meeting Live Session Support for meeting session behavior.
 
 import Foundation
+import MLXAudioSTT
 
 enum MeetingLiveSessionState: Equatable, Sendable {
     case connecting
@@ -57,6 +58,51 @@ nonisolated enum MeetingNativeLiveSegmentationPolicy {
     ) -> Bool {
         guard !streamCanReviseEarlierText else { return false }
         return silenceDuration >= silenceThreshold || segmentDuration >= maximumSegmentDuration
+    }
+
+    /// Models with reliable sentence/word timing should keep one live partial until
+    /// `.ended`, then emit timestamped segments instead of silence-splitting mid-stream.
+    static func shouldDeferSilenceFinalization(
+        timingGranularity: MLXASRTimingGranularity
+    ) -> Bool {
+        timingGranularity.providesReliableSegments
+    }
+}
+
+nonisolated enum MeetingNativeLiveStructuredFinalization {
+    static func meetingSegments(
+        from rawSegments: [STTTranscriptSegment],
+        timingGranularity: MLXASRTimingGranularity,
+        modelFamily: MLXModelFamily,
+        timelineOffsetSeconds: TimeInterval,
+        speaker: MeetingSpeaker,
+        audioSource: TranscriptAudioSource
+    ) -> [MeetingTranscriptSegment] {
+        let structured = MLXTranscriber.structuredSegmentsForLiveEnded(
+            output: STTOutput(text: "", segments: rawSegments),
+            modelFamily: modelFamily,
+            timingGranularity: timingGranularity
+        )
+        guard !structured.isEmpty else { return [] }
+
+        return structured.enumerated().compactMap { _, segment in
+            let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            let start = timelineOffsetSeconds + max(0, segment.startSeconds)
+            let end = timelineOffsetSeconds + max(segment.endSeconds, segment.startSeconds)
+            let allowMossSpeaker = modelFamily == .mossTranscribeDiarize
+            let speakerID = allowMossSpeaker ? segment.speakerID.map { "moss:\($0)" } : nil
+            return MeetingTranscriptSegment(
+                id: UUID(),
+                speaker: speaker,
+                speakerID: speakerID,
+                audioSource: audioSource,
+                startSeconds: start,
+                endSeconds: end,
+                text: text,
+                preventsAdjacentMerge: true
+            )
+        }
     }
 }
 

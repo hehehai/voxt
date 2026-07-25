@@ -139,6 +139,8 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
     private var silenceDurationSeconds: TimeInterval = 0
     private var hasLoggedFeedOverload = false
     private var isCancelled = false
+    private var defersSilenceFinalization = false
+    private var didEmitStructuredEndedSegments = false
 
     init(
         speaker: MeetingSpeaker,
@@ -173,6 +175,10 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
             )
         }
         self.configuration = configuration
+        defersSilenceFinalization = MeetingNativeLiveSegmentationPolicy.shouldDeferSilenceFinalization(
+            timingGranularity: MLXModelCatalog.capability(for: modelManager.currentModelRepo).timingGranularity
+        )
+        didEmitStructuredEndedSegments = false
         let feedScheduler = MeetingMLXNativeFeedScheduler(session: configuration.session)
         self.feedScheduler = feedScheduler
         state = .active
@@ -213,7 +219,11 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
         }
 
         let currentEnd = timelineOffsetSeconds + totalAudioSeconds
-        if MeetingNativeLiveSegmentationPolicy.shouldFinalizeBeforeStreamEnd(
+        // Keep one partial when the model can emit reliable timestamps on `.ended`
+        // (for example Nemotron sentence segments). Silence-splitting would otherwise
+        // publish text-only finals that duplicate or fight those timestamps.
+        if !defersSilenceFinalization,
+           MeetingNativeLiveSegmentationPolicy.shouldFinalizeBeforeStreamEnd(
             // MOSS provisional windows can rewrite already visible words when the
             // final window gains more context. Keep one partial segment until ended.
             streamCanReviseEarlierText: configuration?.mossVisibleOutputMode != nil,
@@ -221,7 +231,8 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
             segmentDuration: currentEnd - currentSegmentStartSeconds,
             silenceThreshold: Self.silenceFinalizeSeconds,
             maximumSegmentDuration: Self.maximumLiveSegmentSeconds
-        ) {
+           )
+        {
             finalizeVisibleSegment(at: currentEnd)
         }
     }
@@ -233,7 +244,9 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
         if let eventTask {
             await eventTask.value
         }
-        finalizeVisibleSegment(at: timelineOffsetSeconds + totalAudioSeconds)
+        if !didEmitStructuredEndedSegments {
+            finalizeVisibleSegment(at: timelineOffsetSeconds + totalAudioSeconds)
+        }
         eventHandler?(.finished(speaker: speaker))
         release()
     }
@@ -259,8 +272,11 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
         case .confirmed, .provisional:
             // displayUpdate carries the coherent cumulative confirmed + provisional view.
             break
-        case .ended(let fullText):
-            let cumulative = visibleFinalText(fullText)
+        case .ended(let output):
+            let cumulative = visibleFinalText(output.text)
+            if finalizeWithEndedOutputIfPossible(output, cumulativeText: cumulative) {
+                return
+            }
             publishPartial(cumulative: cumulative)
             finalizeVisibleSegment(at: timelineOffsetSeconds + totalAudioSeconds)
         case .failed(let failure):
@@ -331,6 +347,44 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
         currentSegmentID = UUID()
         currentSegmentStartSeconds = endSeconds
         silenceDurationSeconds = 0
+    }
+
+    @discardableResult
+    private func finalizeWithEndedOutputIfPossible(_ output: STTOutput, cumulativeText: String) -> Bool {
+        guard defersSilenceFinalization,
+              let segments = output.segments,
+              !segments.isEmpty
+        else {
+            return false
+        }
+
+        let capability = MLXModelCatalog.capability(for: modelManager.currentModelRepo)
+        let structured = MeetingNativeLiveStructuredFinalization.meetingSegments(
+            from: segments,
+            timingGranularity: capability.timingGranularity,
+            modelFamily: capability.family,
+            timelineOffsetSeconds: timelineOffsetSeconds,
+            speaker: speaker,
+            audioSource: speaker == .me ? .microphone : .systemAudio
+        )
+        guard !structured.isEmpty else { return false }
+
+        // Drop the in-flight text-only partial; model timestamps replace it.
+        latestVisibleSegmentText = ""
+        for item in structured {
+            eventHandler?(.final(item))
+        }
+        latestCumulativeText = cumulativeText
+        committedCumulativeText = cumulativeText
+        currentSegmentID = UUID()
+        currentSegmentStartSeconds = timelineOffsetSeconds + totalAudioSeconds
+        silenceDurationSeconds = 0
+        didEmitStructuredEndedSegments = true
+        VoxtLog.meeting(
+            "Meeting native MLX ended with structured segments. speaker=\(speaker.rawValue), segmentCount=\(structured.count), timing=\(String(describing: capability.timingGranularity)), language=\(output.language ?? "nil")",
+            verbose: true
+        )
+        return true
     }
 
     private func segment(text: String, endSeconds: TimeInterval) -> MeetingTranscriptSegment {

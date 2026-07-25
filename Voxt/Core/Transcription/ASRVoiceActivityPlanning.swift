@@ -75,6 +75,72 @@ enum LocalVADMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendab
     }
 }
 
+enum MeetingSileroVADSensitivity: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    case responsive
+    case balanced
+    case stable
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .responsive:
+            // Use "Sensitive" rather than "Responsive" so zh/ja are not confused with
+            // the dictation latency preset that already localizes "Responsive" as low-latency.
+            return AppLocalization.localizedString("Sensitive")
+        case .balanced:
+            return AppLocalization.localizedString("Balanced")
+        case .stable:
+            return AppLocalization.localizedString("Stable")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .responsive:
+            return AppLocalization.localizedString("Detect quieter speech sooner; may include more background sound.")
+        case .balanced:
+            return AppLocalization.localizedString("Balance speech pickup with background-noise rejection.")
+        case .stable:
+            return AppLocalization.localizedString("Prefer stronger speech signals in noisy environments.")
+        }
+    }
+
+    /// Streaming-path onset thresholds. Balanced keeps the historical live default of 0.5
+    /// (not the offline meeting profile 0.45) so upgrading does not silently increase noise pickup.
+    nonisolated var onsetProbabilityThreshold: Float {
+        switch self {
+        case .responsive:
+            return 0.38
+        case .balanced:
+            return 0.5
+        case .stable:
+            return 0.55
+        }
+    }
+
+    nonisolated static func resolved(rawValue: String?) -> MeetingSileroVADSensitivity {
+        MeetingSileroVADSensitivity(rawValue: rawValue ?? "") ?? .balanced
+    }
+
+    nonisolated static func stored(defaults: UserDefaults = .standard) -> MeetingSileroVADSensitivity {
+        resolved(rawValue: defaults.string(forKey: AppPreferenceKey.meetingSileroVADSensitivity))
+    }
+
+    nonisolated func configuration(
+        base: ASRVoiceActivityConfiguration = .meeting
+    ) -> ASRVoiceActivityConfiguration {
+        ASRVoiceActivityConfiguration(
+            onsetProbabilityThreshold: onsetProbabilityThreshold,
+            offsetProbabilityThreshold: base.offsetProbabilityThreshold,
+            minSpeechSeconds: base.minSpeechSeconds,
+            minSilenceSeconds: base.minSilenceSeconds,
+            speechPadSeconds: base.speechPadSeconds,
+            maxSegmentSeconds: base.maxSegmentSeconds
+        )
+    }
+}
+
 enum ASRVoiceActivityBackendKind: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case off
     case energy

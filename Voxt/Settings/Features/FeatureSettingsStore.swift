@@ -176,6 +176,7 @@ enum FeatureSettingsStore {
                 realtimeTargetLanguageRawValue: defaults.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage) ?? "",
                 hideOverlayFromScreenSharing: defaults.object(forKey: AppPreferenceKey.hideMeetingOverlayFromScreenSharing) as? Bool ?? false,
                 chunkingModeRawValue: MeetingChunkingMode.stored(in: defaults).rawValue,
+                sileroVADSensitivityRawValue: MeetingSileroVADSensitivity.stored(defaults: defaults).rawValue,
                 speakerDiarizationModelRawValue: MeetingDiarizationMode.stored(in: defaults).rawValue,
                 finalTranscriptOptimizationEnabled: legacyFinalTranscriptOptimizationEnabled(defaults: defaults)
             )
@@ -308,6 +309,7 @@ enum FeatureSettingsStore {
 
     private static func syncLegacyMeeting(_ settings: MeetingFeatureSettings, defaults: UserDefaults) {
         defaults.set(settings.chunkingMode.rawValue, forKey: AppPreferenceKey.meetingChunkingMode)
+        defaults.set(settings.sileroVADSensitivity.rawValue, forKey: AppPreferenceKey.meetingSileroVADSensitivity)
         defaults.set(settings.speakerDiarizationModel.rawValue, forKey: AppPreferenceKey.meetingSpeakerDiarizationModel)
         defaults.set(
             settings.finalTranscriptOptimizationEnabled,
@@ -430,6 +432,7 @@ enum FeatureSettingsStore {
                 realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguage?.rawValue ?? "",
                 hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing,
                 chunkingModeRawValue: settings.meeting.chunkingMode.rawValue,
+                sileroVADSensitivityRawValue: settings.meeting.sileroVADSensitivity.rawValue,
                 speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
                 finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
             )
@@ -497,6 +500,7 @@ enum FeatureSettingsStore {
                 realtimeTargetLanguageRawValue: settings.meeting.realtimeTargetLanguageRawValue,
                 hideOverlayFromScreenSharing: settings.meeting.hideOverlayFromScreenSharing,
                 chunkingModeRawValue: settings.meeting.chunkingMode.rawValue,
+                sileroVADSensitivityRawValue: settings.meeting.sileroVADSensitivity.rawValue,
                 speakerDiarizationModelRawValue: settings.meeting.speakerDiarizationModel.rawValue,
                 finalTranscriptOptimizationEnabled: settings.meeting.finalTranscriptOptimizationEnabled
             )
@@ -595,6 +599,7 @@ enum FeatureSettingsStore {
             realtimeTargetLanguageRawValue: settings.realtimeTargetLanguageRawValue,
             hideOverlayFromScreenSharing: settings.hideOverlayFromScreenSharing,
             chunkingModeRawValue: settings.chunkingMode.rawValue,
+            sileroVADSensitivityRawValue: settings.sileroVADSensitivity.rawValue,
             speakerDiarizationModelRawValue: settings.speakerDiarizationModel.rawValue,
             finalTranscriptOptimizationEnabled: settings.finalTranscriptOptimizationEnabled
         )

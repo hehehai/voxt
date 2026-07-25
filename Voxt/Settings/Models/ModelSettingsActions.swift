@@ -6,24 +6,28 @@ import SwiftUI
 
 enum MLXConfigurationSummarySupport {
     static func summary(for repo: String, tuning: MLXLocalTuningSettings) -> String {
-        let family = MLXModelFamily.family(for: repo)
+        let capability = MLXModelCatalog.capability(for: repo)
+        let family = capability.family
+        let usesRecognitionPreset = capability.configurationCapabilities.contains(.recognitionPreset)
         switch family {
         case .whisper:
-            return AppLocalization.format(
-                "%@ · Temp %.2f",
-                tuning.preset.title,
-                tuning.whisperTemperature
-            )
+            return AppLocalization.format("Temp %.2f", tuning.whisperTemperature)
         case .qwen3ASR:
             let hasContext = tuning.qwenContextBias.isEmpty
                 ? AppLocalization.localizedString("Context Off")
                 : AppLocalization.localizedString("Context On")
-            return AppLocalization.format("%@ · %@", tuning.preset.title, hasContext)
+            if usesRecognitionPreset {
+                return AppLocalization.format("%@ · %@", tuning.preset.title, hasContext)
+            }
+            return hasContext
         case .graniteSpeech:
             let hasPrompt = tuning.granitePromptBias.isEmpty
                 ? AppLocalization.localizedString("Prompt Off")
                 : AppLocalization.localizedString("Prompt On")
-            return AppLocalization.format("%@ · %@", tuning.preset.title, hasPrompt)
+            if usesRecognitionPreset {
+                return AppLocalization.format("%@ · %@", tuning.preset.title, hasPrompt)
+            }
+            return hasPrompt
         case .senseVoice:
             return AppLocalization.localizedString(tuning.senseVoiceUseITN ? "ITN On" : "ITN Off")
         case .mossTranscribeDiarize:
