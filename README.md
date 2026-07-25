@@ -23,14 +23,18 @@ A macOS voice input and translation app with context-aware text enhancement acro
 
 - Live transcription while you speak, with real-time text preview
 
-<video src="https://github.com/user-attachments/assets/75f08906-3e69-4ab5-9b29-f5c3745cebac">
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/75f08906-3e69-4ab5-9b29-f5c3745cebac" width="500px"></video>
+</p>
 
 **Translate — text translation**
 
 - AI translation after you finish speaking
 - Selected-text translation: highlight text and translate it with a shortcut
 
-<video src="https://github.com/user-attachments/assets/e69c2737-5d8c-4bd6-9f5b-1123947c7e39">
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/e69c2737-5d8c-4bd6-9f5b-1123947c7e39" width="500px"></video>
+</p>
 
 **Rewrite — voice prompts with enhanced results**
 
