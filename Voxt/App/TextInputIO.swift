@@ -6,13 +6,6 @@ import AppKit
 import ApplicationServices
 import Carbon
 
-enum SelectedTextSystemSelectionSupport {
-    /// Hard gate: a caret-only range (`length == 0`) must not count as a selection.
-    static func hasNonEmptySelectedTextRange(length: CFIndex) -> Bool {
-        length > 0
-    }
-}
-
 extension AppDelegate {
     private static let axMessagingTimeout: Float = 0.05
     private static let automaticDictionaryLearningSnippetBeforeCursor = 4_000
@@ -56,158 +49,6 @@ extension AppDelegate {
         let selectedRange: NSRange?
         let failureReason: String?
         let textSource: String?
-    }
-
-    func selectedTextFromSystemSelection() -> String? {
-        let appBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
-
-        guard AccessibilityPermissionManager.isTrusted() else {
-            logSelectionProbe(range: nil, textSource: "nil", app: appBundleID)
-            return nil
-        }
-
-        guard let focusedElement = focusedElementForSystemSelection() else {
-            logSelectionProbe(range: nil, textSource: "nil", app: appBundleID)
-            return nil
-        }
-
-        let rawSelectedRange = axRangeAttribute(
-            kAXSelectedTextRangeAttribute as CFString,
-            for: focusedElement
-        )
-        guard let selectedRange = nonEmptySelectedTextRange(rawSelectedRange) else {
-            logSelectionProbe(range: rawSelectedRange, textSource: "nil", app: appBundleID)
-            return nil
-        }
-
-        if let text = nonEmptyAXSelectedText(from: focusedElement) {
-            logSelectionProbe(range: selectedRange, textSource: "axSelected", app: appBundleID)
-            return text
-        }
-
-        if let text = axParameterizedString(
-            kAXStringForRangeParameterizedAttribute as CFString,
-            range: selectedRange,
-            for: focusedElement
-        ), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            logSelectionProbe(range: selectedRange, textSource: "stringForRange", app: appBundleID)
-            return text
-        }
-
-        // Only simulate Cmd+C after AX confirms a non-empty selection range.
-        // This avoids editors (e.g. VS Code) that copy the current line when nothing is selected.
-        if let text = selectedTextBySimulatedCopy() {
-            logSelectionProbe(range: selectedRange, textSource: "copy", app: appBundleID)
-            return text
-        }
-
-        logSelectionProbe(range: selectedRange, textSource: "nil", app: appBundleID)
-        return nil
-    }
-
-    private func focusedElementForSystemSelection() -> AXUIElement? {
-        // Selection must come from the actual focused element only.
-        // Do not reuse writable-input focus resolution (best-editable / window fallbacks),
-        // which can probe a different field with a leftover selection.
-        let systemWide = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(systemWide, Self.axMessagingTimeout)
-        var focusedElementRef: CFTypeRef?
-        let focusedStatus = AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedElementRef
-        )
-        guard focusedStatus == .success,
-              let focusedElementRef,
-              CFGetTypeID(focusedElementRef) == AXUIElementGetTypeID() else {
-            return nil
-        }
-        return unsafeBitCast(focusedElementRef, to: AXUIElement.self)
-    }
-
-    private func nonEmptyAXSelectedText(from element: AXUIElement) -> String? {
-        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
-        var selectedTextRef: CFTypeRef?
-        let selectedStatus = AXUIElementCopyAttributeValue(
-            element,
-            kAXSelectedTextAttribute as CFString,
-            &selectedTextRef
-        )
-        guard selectedStatus == .success, let selectedTextRef else {
-            return nil
-        }
-
-        let selectedText: String?
-        if let text = selectedTextRef as? String {
-            selectedText = text
-        } else if let attributed = selectedTextRef as? NSAttributedString {
-            selectedText = attributed.string
-        } else {
-            selectedText = nil
-        }
-
-        guard let selectedText,
-              !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return selectedText
-    }
-
-    private func nonEmptySelectedTextRange(_ range: CFRange?) -> CFRange? {
-        guard let range,
-              SelectedTextSystemSelectionSupport.hasNonEmptySelectedTextRange(length: range.length) else {
-            return nil
-        }
-        return range
-    }
-
-    private func logSelectionProbe(range: CFRange?, textSource: String, app: String) {
-        let rangeDescription = range.map { "{\($0.location),\($0.length)}" } ?? "nil"
-        VoxtLog.input(
-            "selectionProbe: range=\(rangeDescription) textSource=\(textSource) app=\(app)"
-        )
-    }
-
-    private func selectedTextBySimulatedCopy() -> String? {
-        guard AccessibilityPermissionManager.isTrusted() else { return nil }
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return nil }
-
-        let pasteboard = NSPasteboard.general
-        let previous = readStringFromPasteboard(pasteboard)
-        let originalChangeCount = pasteboard.changeCount
-
-        let cKeyCode: CGKeyCode = 0x08
-        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: true)
-        cmdDown?.flags = .maskCommand
-        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: false)
-        cmdUp?.flags = .maskCommand
-        guard cmdDown != nil, cmdUp != nil else { return nil }
-
-        HotkeyEventSupport.markAsVoxtInjected(cmdDown)
-        HotkeyEventSupport.markAsVoxtInjected(cmdUp)
-        cmdDown?.post(tap: .cgAnnotatedSessionEventTap)
-        cmdUp?.post(tap: .cgAnnotatedSessionEventTap)
-
-        let deadline = Date().addingTimeInterval(0.06)
-        while pasteboard.changeCount == originalChangeCount, Date() < deadline {
-            _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
-        }
-
-        let copiedChangeCount = pasteboard.changeCount
-        guard copiedChangeCount != originalChangeCount else {
-            return nil
-        }
-
-        let copied = readStringFromPasteboard(pasteboard)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        pasteboard.clearContents()
-        if let previous, !previous.isEmpty {
-            pasteboard.setString(previous, forType: .string)
-        }
-
-        guard let copied, !copied.isEmpty else { return nil }
-        return copied
     }
 
     func hasWritableFocusedTextInput() -> Bool {
@@ -587,8 +428,16 @@ extension AppDelegate {
         return nil
     }
 
-    private func axStringAttribute(_ attribute: CFString, for element: AXUIElement) -> String? {
-        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
+    func axStringAttribute(_ attribute: CFString, for element: AXUIElement) -> String? {
+        axStringAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
+    }
+
+    func axStringAttribute(
+        _ attribute: CFString,
+        for element: AXUIElement,
+        timeout: Float
+    ) -> String? {
+        AXUIElementSetMessagingTimeout(element, timeout)
         var valueRef: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, attribute, &valueRef)
         guard status == .success else { return nil }
@@ -612,8 +461,16 @@ extension AppDelegate {
         return nil
     }
 
-    private func axRangeAttribute(_ attribute: CFString, for element: AXUIElement) -> CFRange? {
-        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
+    func axRangeAttribute(_ attribute: CFString, for element: AXUIElement) -> CFRange? {
+        axRangeAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
+    }
+
+    func axRangeAttribute(
+        _ attribute: CFString,
+        for element: AXUIElement,
+        timeout: Float
+    ) -> CFRange? {
+        AXUIElementSetMessagingTimeout(element, timeout)
         var valueRef: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, attribute, &valueRef)
         guard status == .success,
@@ -646,16 +503,25 @@ extension AppDelegate {
         axRangeAttribute(kAXSelectedTextRangeAttribute as CFString, for: element) != nil
     }
 
-    private func axParameterizedString(
+    func axParameterizedString(
         _ attribute: CFString,
         range: CFRange,
         for element: AXUIElement
+    ) -> String? {
+        axParameterizedString(attribute, range: range, for: element, timeout: Self.axMessagingTimeout)
+    }
+
+    func axParameterizedString(
+        _ attribute: CFString,
+        range: CFRange,
+        for element: AXUIElement,
+        timeout: Float
     ) -> String? {
         var mutableRange = range
         guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else {
             return nil
         }
-        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
+        AXUIElementSetMessagingTimeout(element, timeout)
         var valueRef: CFTypeRef?
         let status = AXUIElementCopyParameterizedAttributeValue(
             element,
@@ -737,8 +603,16 @@ extension AppDelegate {
         return nil
     }
 
-    private func axElementAttribute(_ attribute: CFString, for element: AXUIElement) -> AXUIElement? {
-        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
+    func axElementAttribute(_ attribute: CFString, for element: AXUIElement) -> AXUIElement? {
+        axElementAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
+    }
+
+    func axElementAttribute(
+        _ attribute: CFString,
+        for element: AXUIElement,
+        timeout: Float
+    ) -> AXUIElement? {
+        AXUIElementSetMessagingTimeout(element, timeout)
         var valueRef: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, attribute, &valueRef)
         guard status == .success,
@@ -750,8 +624,16 @@ extension AppDelegate {
         return unsafeBitCast(valueRef, to: AXUIElement.self)
     }
 
-    private func axElementArrayAttribute(_ attribute: CFString, for element: AXUIElement) -> [AXUIElement] {
-        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeout)
+    func axElementArrayAttribute(_ attribute: CFString, for element: AXUIElement) -> [AXUIElement] {
+        axElementArrayAttribute(attribute, for: element, timeout: Self.axMessagingTimeout)
+    }
+
+    func axElementArrayAttribute(
+        _ attribute: CFString,
+        for element: AXUIElement,
+        timeout: Float
+    ) -> [AXUIElement] {
+        AXUIElementSetMessagingTimeout(element, timeout)
         var valueRef: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, attribute, &valueRef)
         guard status == .success,
@@ -838,7 +720,7 @@ extension AppDelegate {
         return element
     }
 
-    private func findFocusedDescendant(in element: AXUIElement, depthRemaining: Int) -> AXUIElement? {
+    func findFocusedDescendant(in element: AXUIElement, depthRemaining: Int) -> AXUIElement? {
         guard depthRemaining >= 0 else { return nil }
 
         if axBoolAttribute(kAXFocusedAttribute as CFString, for: element) == true {

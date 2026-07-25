@@ -4,6 +4,47 @@
 import Foundation
 
 enum BrowserAutomationScriptBuilder {
+    private static let selectionJavaScript = "window.getSelection().toString()"
+
+    /// AppleScript candidates that read the current page selection via JavaScript.
+    /// Requires "Allow JavaScript from Apple Events" in the target browser.
+    static func selectionScripts(bundleID: String, displayName: String?) -> [String] {
+        let js = selectionJavaScript
+        let name = displayName ?? bundleID
+        switch bundleID {
+        case "com.apple.Safari", "com.apple.SafariTechnologyPreview":
+            return [
+                "tell application id \"\(bundleID)\" to tell front window to do JavaScript \"\(js)\" in current tab",
+                "tell application id \"\(bundleID)\" to do JavaScript \"\(js)\" in front document",
+                "tell application \"\(name)\" to tell front window to do JavaScript \"\(js)\" in current tab"
+            ]
+        case "com.google.Chrome",
+             "com.microsoft.edgemac",
+             "com.brave.Browser",
+             "company.thebrowser.Browser":
+            return chromiumSelectionScripts(bundleID: bundleID, displayName: name, javaScript: js)
+        default:
+            // Custom browsers: try Chromium then Safari-style forms.
+            return chromiumSelectionScripts(bundleID: bundleID, displayName: name, javaScript: js) + [
+                "tell application id \"\(bundleID)\" to tell front window to do JavaScript \"\(js)\" in current tab",
+                "tell application id \"\(bundleID)\" to do JavaScript \"\(js)\" in front document",
+                "tell application \"\(name)\" to tell front window to do JavaScript \"\(js)\" in current tab"
+            ]
+        }
+    }
+
+    private static func chromiumSelectionScripts(
+        bundleID: String,
+        displayName: String,
+        javaScript: String
+    ) -> [String] {
+        [
+            "tell application id \"\(bundleID)\" to tell active tab of front window to execute javascript \"\(javaScript)\"",
+            "tell application id \"\(bundleID)\" to tell active tab of window 1 to execute javascript \"\(javaScript)\"",
+            "tell application \"\(displayName)\" to tell active tab of front window to execute javascript \"\(javaScript)\""
+        ]
+    }
+
     static func customBrowserPermissionProbeScripts(bundleID: String, displayName: String) -> [String] {
         // Permission probes run inside Settings, where avoiding UI freezes is
         // more important than preserving runtime ordering. Try the tab-based

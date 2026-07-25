@@ -23,14 +23,19 @@ MacOS 语音输入与翻译工具，支持不同应用和网址文本增强。�
 
 - 边说边转文字，实时查看文本内容
 
-<video src="https://github.com/user-attachments/assets/75f08906-3e69-4ab5-9b29-f5c3745cebac">
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/75f08906-3e69-4ab5-9b29-f5c3745cebac" width="500px"></video>
+</p>
 
 **翻译，文本翻译**
 
 - AI 翻译，说完自动翻译
 - 选中翻译，选择文本，快捷键直接翻译
 
-<video src="https://github.com/user-attachments/assets/e69c2737-5d8c-4bd6-9f5b-1123947c7e39">
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/e69c2737-5d8c-4bd6-9f5b-1123947c7e39" width="500px"></video>
+</p>
 
 **转写，语音对话，结果增强**
 

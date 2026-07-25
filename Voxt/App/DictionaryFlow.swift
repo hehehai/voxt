@@ -16,12 +16,23 @@ enum SelectedTextDictionaryHotkeySupport {
 extension AppDelegate {
     @discardableResult
     func addSelectedShortTextToDictionaryIfPossible() -> Bool {
-        guard !isSessionActive, pendingTranscriptionStartTask == nil else { return false }
-        guard let term = SelectedTextDictionaryHotkeySupport.candidateTerm(
-            from: selectedTextFromSystemSelection()
-        ) else {
+        guard !isSessionActive, pendingTranscriptionStartTask == nil else {
+            VoxtLog.dictionary(
+                "selectionProbe.dictionary: skipped sessionActive=\(isSessionActive) pendingStart=\(pendingTranscriptionStartTask != nil)"
+            )
             return false
         }
+        let selected = selectedTextFromSystemSelection()
+        let trimmed = selected?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard let term = SelectedTextDictionaryHotkeySupport.candidateTerm(from: selected) else {
+            VoxtLog.dictionary(
+                "selectionProbe.dictionary: rejected chars=\(trimmed.count) max=\(SelectedTextDictionaryHotkeySupport.maxCharacterCount) preview=\(trimmed.isEmpty ? "empty" : String(trimmed.prefix(48)))"
+            )
+            return false
+        }
+        VoxtLog.dictionary(
+            "selectionProbe.dictionary: accepted chars=\(term.count) preview=\(String(term.prefix(48)))"
+        )
 
         let scope = currentDictionaryScope()
         let category = dictionaryStore.ensureCategory(id: scope.groupID, name: scope.groupName)
