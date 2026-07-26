@@ -325,15 +325,16 @@ actor ASRSileroStreamingVoiceActivityDetector {
             let chunk = Array(pending[pendingOffset..<endOffset])
             pendingOffset = endOffset
             let state = states[streamID]
-            let (probabilityArray, nextState) = try model.feed(
-                chunk: MLXArray(chunk),
-                state: state,
-                sampleRate: sampleRate
-            )
-            try withError {
+            let (probability, nextState) = try withError {
+                let (probabilityArray, nextState) = try model.feed(
+                    chunk: MLXArray(chunk),
+                    state: state,
+                    sampleRate: sampleRate
+                )
                 eval(probabilityArray)
+                return (probabilityArray.asArray(Float.self).first, nextState)
             }
-            if let probability = probabilityArray.asArray(Float.self).first {
+            if let probability {
                 latestProbability = probability
             }
             states[streamID] = nextState
@@ -368,7 +369,7 @@ actor ASRSileroStreamingVoiceActivityDetector {
             return model
         }
         let directory = try await SileroVADModelProvisioner.shared.ensureModelDirectory()
-        let loaded = try SileroVAD.fromModelDirectory(directory)
+        let loaded = try SileroVADModelSupport.loadModel(from: directory)
         model = loaded
         return loaded
     }
@@ -393,14 +394,16 @@ actor ASRSileroOfflineVoiceActivityDetector: ASROfflineVoiceActivityBackend {
         guard !prepared.isEmpty else { return [] }
 
         let profile = MeetingSileroVADSensitivity.stored().configuration()
-        let timestamps = try model.getSpeechTimestamps(
-            MLXArray(prepared),
-            sampleRate: sampleRate,
-            threshold: profile.onsetProbabilityThreshold,
-            minSpeechDurationMs: Int((profile.minSpeechSeconds * 1_000).rounded(.up)),
-            minSilenceDurationMs: Int((profile.minSilenceSeconds * 1_000).rounded(.up)),
-            speechPadMs: Int((profile.speechPadSeconds * 1_000).rounded(.up))
-        )
+        let timestamps = try withError {
+            try model.getSpeechTimestamps(
+                MLXArray(prepared),
+                sampleRate: sampleRate,
+                threshold: profile.onsetProbabilityThreshold,
+                minSpeechDurationMs: Int((profile.minSpeechSeconds * 1_000).rounded(.up)),
+                minSilenceDurationMs: Int((profile.minSilenceSeconds * 1_000).rounded(.up)),
+                speechPadMs: Int((profile.speechPadSeconds * 1_000).rounded(.up))
+            )
+        }
         return timestamps.compactMap { timestamp in
             let start = Double(timestamp.start) / Double(sampleRate)
             let end = Double(timestamp.end) / Double(sampleRate)
@@ -414,7 +417,7 @@ actor ASRSileroOfflineVoiceActivityDetector: ASROfflineVoiceActivityBackend {
             return model
         }
         let directory = try await SileroVADModelProvisioner.shared.ensureModelDirectory()
-        let loaded = try SileroVAD.fromModelDirectory(directory)
+        let loaded = try SileroVADModelSupport.loadModel(from: directory)
         model = loaded
         return loaded
     }

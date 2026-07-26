@@ -3158,7 +3158,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         let modelDirectory = try await SileroVADModelProvisioner.shared.ensureModelDirectory()
         try Task.checkCancellation()
-        let loadedModel = try SileroVAD.fromModelDirectory(modelDirectory)
+        let loadedModel = try SileroVADModelSupport.loadModel(from: modelDirectory)
         senseVoiceVADModel = loadedModel
         return loadedModel
     }
