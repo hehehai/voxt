@@ -6,6 +6,26 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.5] - 2026-07-27
+
+### English
+
+#### Fixed
+- Fixed selected-text hotkeys for browsers and Accessibility-limited editors, including recovering real mid-line selections in line-copy editors without inventing empty selections.
+- Fixed Silero VAD MLX evaluation failures so local transcription startup throws a recoverable error instead of crashing.
+
+### 简体中文
+
+#### 修复
+- 修复选中文本快捷键：在浏览器和 Accessibility 受限编辑器中更可靠地读取真实选区，并在整行复制类编辑器中恢复行内选区，避免在无选区时误造选中文本。
+- 修复 Silero VAD 的 MLX 评估失败：本地转写启动时改为可恢复错误，而不再直接崩溃。
+
+### 日本語
+
+#### 修正
+- テキスト選択ショートカットを修正し、ブラウザや Accessibility が制限されたエディタでも実際の選択を読み取り、行コピー系エディタでは行内選択を回復しつつ、未選択時に選択を捏造しないようにしました。
+- Silero VAD の MLX 評価失敗を修正し、ローカル文字起こし開始時にクラッシュせず回復可能なエラーとして扱うようにしました。
+
 ## [1.13.4] - 2026-07-25
 
 ### English
