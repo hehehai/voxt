@@ -47,7 +47,9 @@ nonisolated enum Qwen3ASRMemoryEfficientLoader {
             parameters: ModuleParameters.unflattened(sanitizedWeights),
             verify: .all
         )
-        eval(model)
+        try withError {
+            eval(model)
+        }
         return model
     }
 

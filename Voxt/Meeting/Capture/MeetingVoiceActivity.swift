@@ -330,7 +330,9 @@ actor ASRSileroStreamingVoiceActivityDetector {
                 state: state,
                 sampleRate: sampleRate
             )
-            eval(probabilityArray)
+            try withError {
+                eval(probabilityArray)
+            }
             if let probability = probabilityArray.asArray(Float.self).first {
                 latestProbability = probability
             }

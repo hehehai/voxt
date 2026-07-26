@@ -288,7 +288,9 @@ nonisolated enum MemoryEfficientModelContainerLoader {
             parameters: ModuleParameters.unflattened(weights),
             verify: [.all]
         )
-        eval(model)
+        try withError {
+            eval(model)
+        }
     }
 
     private static func safetensorURLs(in modelDirectory: URL) throws -> [URL] {
