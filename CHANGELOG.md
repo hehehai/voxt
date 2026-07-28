@@ -6,6 +6,26 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.6] - 2026-07-28
+
+### English
+
+#### Changed
+- Redesigned the Feature overview cards with compact config badges, click-to-open feature pages, App Enhancement above Notes, and a non-scrolling overview layout.
+- App Enhancement cards can show recent configured app icons when available.
+
+### 简体中文
+
+#### 改进
+- 重做「功能」总览卡片：展示精简配置徽章、点击进入对应功能页，「应用增强」移到「笔记」上方，总览页不再滚动。
+- 「应用增强」卡片在可用时显示最近配置的应用图标。
+
+### 日本語
+
+#### 変更
+- 「機能」概要カードを刷新し、コンパクトな設定バッジ表示、クリックで各機能ページへ移動、「アプリ強化」を「ノート」より上に配置、概要ページのスクロールを停止しました。
+- 「アプリ強化」カードで、利用可能な場合は最近設定したアプリのアイコンを表示できます。
+
 ## [1.13.5] - 2026-07-27
 
 ### English
