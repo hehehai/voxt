@@ -53,6 +53,42 @@ struct FeatureModelCatalogBuilder {
         }
     }
 
+    func asrSelectionBadgeTitle(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.asrSelection {
+        case .dictation:
+            return localized("Direct Dictation")
+        case .mlx(let repo):
+            return Self.compactModelBadgeTitle(from: mlxModelManager.displayTitle(for: repo))
+        case .sherpaOnnx(let modelID):
+            return Self.compactModelBadgeTitle(from: sherpaOnnxModelManager.displayTitle(for: modelID))
+        case .remote(let provider):
+            return provider.title
+        case .none:
+            return localized("Not selected")
+        }
+    }
+
+    func asrSelectionLogoKey(_ selectionID: FeatureModelSelectionID) -> ModelLogoKey {
+        switch selectionID.asrSelection {
+        case .dictation:
+            return .apple
+        case .mlx(let repo):
+            return ModelLogoKey.resolve(title: mlxModelManager.displayTitle(for: repo), engine: "MLX")
+        case .sherpaOnnx(let modelID):
+            if modelID == SherpaOnnxModelCatalog.funASRNanoModelID {
+                return .qwen
+            }
+            return ModelLogoKey.resolve(
+                title: sherpaOnnxModelManager.displayTitle(for: modelID),
+                engine: "Sherpa ONNX"
+            )
+        case .remote(let provider):
+            return ModelLogoKey.resolve(title: provider.title, engine: "Remote ASR")
+        case .none:
+            return .generic
+        }
+    }
+
     func llmSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
         switch selectionID.textSelection {
         case .appleIntelligence:
@@ -77,6 +113,32 @@ struct FeatureModelCatalogBuilder {
         }
     }
 
+    func llmSelectionBadgeTitle(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.textSelection {
+        case .appleIntelligence:
+            return localized("Apple Intelligence")
+        case .localLLM(let repo):
+            return Self.compactModelBadgeTitle(from: customLLMManager.displayTitle(for: repo))
+        case .remoteLLM(let provider):
+            return provider.title
+        case .none:
+            return localized("Not selected")
+        }
+    }
+
+    func llmSelectionLogoKey(_ selectionID: FeatureModelSelectionID) -> ModelLogoKey {
+        switch selectionID.textSelection {
+        case .appleIntelligence:
+            return .apple
+        case .localLLM(let repo):
+            return ModelLogoKey.resolve(title: customLLMManager.displayTitle(for: repo), engine: "Local LLM")
+        case .remoteLLM(let provider):
+            return ModelLogoKey.resolve(title: provider.title, engine: "Remote LLM")
+        case .none:
+            return .generic
+        }
+    }
+
     func translationSelectionSummary(_ selectionID: FeatureModelSelectionID) -> String {
         switch selectionID.translationSelection {
         case .localGGUF(let modelID):
@@ -86,6 +148,95 @@ struct FeatureModelCatalogBuilder {
         case .none:
             return localized("Not selected")
         }
+    }
+
+    func translationSelectionBadgeTitle(_ selectionID: FeatureModelSelectionID) -> String {
+        switch selectionID.translationSelection {
+        case .localGGUF(let modelID):
+            return Self.compactModelBadgeTitle(from: ggufTranslationModelManager.displayTitle(for: modelID))
+        case .localLLM, .remoteLLM:
+            return llmSelectionBadgeTitle(selectionID)
+        case .none:
+            return localized("Not selected")
+        }
+    }
+
+    func translationSelectionLogoKey(_ selectionID: FeatureModelSelectionID) -> ModelLogoKey {
+        switch selectionID.translationSelection {
+        case .localGGUF(let modelID):
+            return ModelLogoKey.resolve(
+                title: ggufTranslationModelManager.displayTitle(for: modelID),
+                engine: "Local GGUF"
+            )
+        case .localLLM, .remoteLLM:
+            return llmSelectionLogoKey(selectionID)
+        case .none:
+            return .generic
+        }
+    }
+
+    /// Compact badge label: provider for remotes, family name for locals (no size / series / quant).
+    nonisolated static func compactModelBadgeTitle(from title: String) -> String {
+        var value = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let openParen = value.lastIndex(of: "("), value.hasSuffix(")") {
+            value = String(value[..<openParen]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !value.isEmpty else { return title }
+
+        let normalized = value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+
+        let families: [(match: String, display: String)] = [
+            ("meta llama", "Llama"),
+            ("llama", "Llama"),
+            ("whisper", "Whisper"),
+            ("qwen", "Qwen"),
+            ("gemma", "Gemma"),
+            ("mistral", "Mistral"),
+            ("voxtral", "Voxtral"),
+            ("parakeet", "Parakeet"),
+            ("firered", "FireRed"),
+            ("fire red", "FireRed"),
+            ("funasr", "FunASR"),
+            ("sensevoice", "SenseVoice"),
+            ("moonshine", "Moonshine"),
+            ("wav2vec2", "Wav2Vec2"),
+            ("canary", "Canary"),
+            ("nemotron", "Nemotron"),
+            ("granite", "Granite"),
+            ("moss", "MOSS"),
+            ("cohere", "Cohere"),
+            ("mms", "MMS"),
+            ("hy-mt2", "Hy-MT2"),
+            ("hunyuan", "Hunyuan"),
+            ("glm", "GLM"),
+            ("phi", "Phi"),
+            ("internlm", "InternLM"),
+            ("lfm", "LFM"),
+            ("deepseek", "DeepSeek")
+        ]
+
+        for family in families {
+            if matchesFamilyPrefix(normalized, family.match) {
+                return family.display
+            }
+        }
+
+        return value.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? value
+    }
+
+    nonisolated private static func matchesFamilyPrefix(_ normalizedTitle: String, _ family: String) -> Bool {
+        if normalizedTitle == family {
+            return true
+        }
+        if normalizedTitle.hasPrefix(family + " ") || normalizedTitle.hasPrefix(family + "-") {
+            return true
+        }
+        guard normalizedTitle.hasPrefix(family) else { return false }
+        let remainder = normalizedTitle.dropFirst(family.count)
+        guard let next = remainder.first else { return true }
+        return !next.isLetter
     }
 
     private func asrEntries(for sheet: FeatureModelSelectorSheet) -> [FeatureModelSelectorEntry] {

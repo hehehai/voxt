@@ -317,8 +317,8 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
     case transcription
     case translation
     case rewrite
-    case note
     case appEnhancement
+    case note
     case meeting
 
     var id: String { rawValue }

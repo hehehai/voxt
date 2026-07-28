@@ -460,6 +460,9 @@
 "Save" = "Save";
 "Groups" = "Groups";
 "Groups (%d)" = "Groups (%d)";
+"Apps (%d)" = "Apps (%d)";
+"Open %@" = "Open %@";
+"Enable %@" = "Enable %@";
 "%d items" = "%d items";
 "Create Group" = "Create Group";
 "Edit Group" = "Edit Group";

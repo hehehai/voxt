@@ -460,6 +460,9 @@
 "Save" = "保存";
 "Groups" = "分组";
 "Groups (%d)" = "分组（%d）";
+"Apps (%d)" = "应用（%d）";
+"Open %@" = "打开%@";
+"Enable %@" = "启用%@";
 "%d items" = "%d 项";
 "Create Group" = "创建分组";
 "Edit Group" = "编辑分组";

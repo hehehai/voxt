@@ -549,6 +549,9 @@ struct SettingsView: View {
                     FeatureSettingsView(
                         selectedTab: selectedFeatureTab,
                         navigationRequest: navigationRequest,
+                        onSelectFeatureTab: { tab in
+                            switchToFeatureTab(tab)
+                        },
                         mlxModelManager: mlxModelManager,
                         sherpaOnnxModelManager: sherpaOnnxModelManager,
                         customLLMManager: customLLMManager,

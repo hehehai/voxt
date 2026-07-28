@@ -103,38 +103,54 @@ extension FeatureSettingsView {
         systemImageName: String? = nil,
         pills: [FeatureSummaryPill],
         showsHeroHeader: Bool = true,
+        allowsScrolling: Bool = true,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if showsHeroHeader || !pills.isEmpty {
-                        FeatureHeroCard(
-                            title: showsHeroHeader ? title : "",
-                            titleBadge: showsHeroHeader ? titleBadge : nil,
-                            subtitle: showsHeroHeader ? subtitle : "",
-                            iconKind: showsHeroHeader ? iconKind : nil,
-                            systemImageName: showsHeroHeader ? systemImageName : nil,
-                            pills: pills
-                        )
-                    }
-
-                    content()
-
-                    Color.clear
-                        .frame(height: 1)
-                        .id(Self.scrollBottomAnchorID)
-                }
-                .padding(.top, 2)
-                .padding(.bottom, 12)
-                .padding(.trailing, SettingsUIStyle.contentScrollTrailingGutter)
+        let page = VStack(alignment: .leading, spacing: 18) {
+            if showsHeroHeader || !pills.isEmpty {
+                FeatureHeroCard(
+                    title: showsHeroHeader ? title : "",
+                    titleBadge: showsHeroHeader ? titleBadge : nil,
+                    subtitle: showsHeroHeader ? subtitle : "",
+                    iconKind: showsHeroHeader ? iconKind : nil,
+                    systemImageName: showsHeroHeader ? systemImageName : nil,
+                    pills: pills
+                )
             }
-            .onChange(of: scrollToBottomRequestRevision) { _, _ in
-                DispatchQueue.main.async {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        proxy.scrollTo(Self.scrollBottomAnchorID, anchor: .bottom)
+
+            content()
+
+            if allowsScrolling {
+                Color.clear
+                    .frame(height: 1)
+                    .id(Self.scrollBottomAnchorID)
+            }
+        }
+        .padding(.top, 2)
+        .padding(.bottom, 12)
+        .padding(.trailing, SettingsUIStyle.contentScrollTrailingGutter)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: allowsScrolling ? nil : .infinity,
+            alignment: .topLeading
+        )
+
+        Group {
+            if allowsScrolling {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        page
+                    }
+                    .onChange(of: scrollToBottomRequestRevision) { _, _ in
+                        DispatchQueue.main.async {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                proxy.scrollTo(Self.scrollBottomAnchorID, anchor: .bottom)
+                            }
+                        }
                     }
                 }
+            } else {
+                page
             }
         }
         .padding(.trailing, -SettingsUIStyle.contentScrollIndicatorOutset)

@@ -107,11 +107,6 @@ struct MainWindowNavigationCommands: Commands {
                 Button(AppLocalization.localizedString("Transcription")) {
                     appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .transcription))
                 }
-                if availability.notesEnabled {
-                    Button(AppLocalization.localizedString("Notes")) {
-                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
-                    }
-                }
                 if availability.translationEnabled {
                     Button(AppLocalization.localizedString("Translation")) {
                         appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .translation))
@@ -125,6 +120,11 @@ struct MainWindowNavigationCommands: Commands {
                 if availability.appEnhancementEnabled {
                     Button(AppLocalization.localizedString("App Enhancement")) {
                         appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .appEnhancement))
+                    }
+                }
+                if availability.notesEnabled {
+                    Button(AppLocalization.localizedString("Notes")) {
+                        appDelegate.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .note))
                     }
                 }
                 if availability.meetingEnabled {

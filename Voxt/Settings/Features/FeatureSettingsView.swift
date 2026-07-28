@@ -7,6 +7,7 @@ import AppKit
 struct FeatureSettingsView: View {
     let selectedTab: FeatureSettingsTab
     let navigationRequest: SettingsNavigationRequest?
+    var onSelectFeatureTab: ((FeatureSettingsTab) -> Void)? = nil
     @ObservedObject var mlxModelManager: MLXModelManager
     @ObservedObject var sherpaOnnxModelManager: SherpaOnnxModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
@@ -19,6 +20,7 @@ struct FeatureSettingsView: View {
     @AppStorage(AppPreferenceKey.remoteLLMProviderConfigurations) var remoteLLMProviderConfigurationsRaw = ""
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.interfaceLanguage) var interfaceLanguageRaw = AppInterfaceLanguage.system.rawValue
+    @AppStorage(AppPreferenceKey.appBranchGroups) var appBranchGroupsData = Data()
 
     @State var featureSettings = FeatureSettingsStore.load()
     @State var selectorSheet: FeatureModelSelectorSheet?
@@ -51,7 +53,7 @@ struct FeatureSettingsView: View {
                 AppEnhancementSettingsView(navigationRequest: navigationRequest)
             }
         }
-        .id(selectedTab)
+        .id("\(selectedTab.rawValue)-\(interfaceLanguageRaw)")
         .overlay(alignment: .top) {
             if !toastMessage.isEmpty {
                 ModelDebugToast(message: toastMessage) {

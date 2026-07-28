@@ -451,6 +451,9 @@
 "Save" = "保存";
 "Groups" = "グループ";
 "Groups (%d)" = "グループ（%d）";
+"Apps (%d)" = "アプリ（%d）";
+"Open %@" = "%@を開く";
+"Enable %@" = "%@を有効にする";
 "%d items" = "%d 件";
 "Create Group" = "グループを作成";
 "Edit Group" = "グループを編集";

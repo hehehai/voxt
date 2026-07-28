@@ -393,7 +393,7 @@ final class SettingsTypesTests: XCTestCase {
         )
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true),
-            [.features, .transcription, .translation, .rewrite, .note, .appEnhancement, .meeting]
+            [.features, .transcription, .translation, .rewrite, .appEnhancement, .note, .meeting]
         )
     }
 
