@@ -6,6 +6,23 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.7] - 2026-07-31
+
+### English
+
+#### Fixed
+- Fixed browser selection false positives for dictionary, note, and translation hotkeys so empty web inputs no longer claim those shortcuts, while real in-field and page selections still work on Accessibility-blind browsers like Arc.
+
+### 简体中文
+
+#### 修复
+- 修复浏览器中查词、笔记、翻译快捷键的选区误判：空网页输入框不再抢占这些快捷键，同时在 Arc 等 Accessibility 受限浏览器中仍能正确识别输入框内与页面上的真实选区。
+
+### 日本語
+
+#### 修正
+- ブラウザでの辞書・ノート・翻訳ショートカットの選択誤検知を修正し、空の Web 入力欄がホットキーを奪わないようにしつつ、Arc など Accessibility が制限されたブラウザでも入力欄内およびページ上の実際の選択を引き続き認識します。
+
 ## [1.13.6] - 2026-07-28
 
 ### English
