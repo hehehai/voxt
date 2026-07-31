@@ -45,8 +45,7 @@ extension AppDelegate {
         let selectedText: String? = if isSessionActive {
             nil
         } else {
-            selectedTextFromSystemSelection()?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            selectedContentTextFromSystemSelection()
         }
 
         let action = NoteHotkeyActionResolver.resolve(
@@ -55,7 +54,7 @@ extension AppDelegate {
                 sessionOutputMode: sessionOutputMode,
                 isPanelVisible: noteWindowManager.isVisible,
                 canStopSession: !isSessionStopInProgress && !shouldIgnoreTapStop(),
-                hasSelectedText: selectedText?.isEmpty == false
+                hasSelectedText: selectedText != nil
             )
         )
         switch action {

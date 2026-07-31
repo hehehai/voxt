@@ -3,23 +3,11 @@
 
 import Foundation
 
-enum SelectedTextDictionaryHotkeySupport {
-    static let maxCharacterCount = 30
-
-    static func candidateTerm(from selectedText: String?) -> String? {
-        let trimmed = selectedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty, trimmed.count <= maxCharacterCount else { return nil }
-        return trimmed
-    }
-}
-
 extension AppDelegate {
     @discardableResult
     func addSelectedShortTextToDictionaryIfPossible() -> Bool {
         guard !isSessionActive, pendingTranscriptionStartTask == nil else { return false }
-        guard let term = SelectedTextDictionaryHotkeySupport.candidateTerm(
-            from: selectedTextFromSystemSelection()
-        ) else {
+        guard let term = selectedDictionaryTermFromSystemSelection() else {
             return false
         }
 
@@ -41,15 +29,19 @@ extension AppDelegate {
             VoxtLog.dictionary(
                 "Selected text dictionary hotkey handled. added=\(result.added), termChars=\(term.count), groupID=\(scope.groupID?.uuidString ?? "nil")"
             )
+            return true
+        } catch DictionaryStoreError.emptyTerm {
+            // Defensive: invalid selection must fall through to transcription wake.
+            VoxtLog.dictionaryWarning("Selected text dictionary hotkey skipped: emptyTerm")
+            return false
         } catch {
             showFloatingToast(
                 AppLocalization.localizedString("Failed to add to Dictionary."),
                 kind: .warning
             )
             VoxtLog.dictionaryWarning("Selected text dictionary hotkey failed: \(error)")
+            return true
         }
-
-        return true
     }
 
     func dictionaryGlossaryText(

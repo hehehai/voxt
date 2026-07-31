@@ -65,9 +65,9 @@ enum SelectedTextSystemSelectionSupport {
     /// - no focused element:
     ///   - deny when the frontmost app's clipboard class invents a line on empty selection
     ///   - allow otherwise (AX-dead apps that do not invent clipboard content)
-    /// - focused element but no range attribute:
-    ///   - browser → allow
-    ///   - otherwise → deny
+    /// - focused element but no range attribute → deny
+    ///   (including browsers: Cmd+C can copy residual page selection while a
+    ///   focused input has only a caret; browser selection uses AppleScript JS)
     ///
     /// Line-copy editors with a total AX blackout use a separate filtered probe
     /// (`shouldAttemptAXBlackoutClipboardProbe`); do not widen this gate for them.
@@ -77,13 +77,14 @@ enum SelectedTextSystemSelectionSupport {
         isBrowser: Bool,
         copiesLineOnEmptySelection: Bool
     ) -> Bool {
+        _ = isBrowser
         if focusedElementAvailable, let selectedTextRange {
             return selectedTextRange.length > 0
         }
         if !focusedElementAvailable {
             return !copiesLineOnEmptySelection
         }
-        return isBrowser
+        return false
     }
 
     /// Last-resort clipboard probe for the line-copy capability class when AX exposes
@@ -130,6 +131,198 @@ enum SelectedTextSystemSelectionSupport {
     static func isDefinitiveEmptyBrowserSelection(output: String?, hadExecutionError: Bool) -> Bool {
         guard !hadExecutionError, let output else { return false }
         return output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Outcome of a browser AppleScript selection probe.
+    ///
+    /// `confirmedEmpty` means JS executed successfully and reported no selection
+    /// (including caret-only focused inputs). Callers must not fall through to
+    /// simulated Cmd+C, which can still copy residual page selection.
+    enum BrowserSelectionProbeOutcome: Equatable {
+        case selected(String)
+        case confirmedEmpty
+        case unavailable
+    }
+
+    enum BrowserSelectionSource: Equatable {
+        case form
+        case editor
+        case page
+        /// Untagged legacy/plain payload (treat like page for distrust rules).
+        case unknown
+    }
+
+    struct BrowserSelectionPayload: Equatable {
+        let source: BrowserSelectionSource
+        let text: String
+    }
+
+    /// Chromium/Safari Apple Events often return JS strings as a quoted AppleScript
+    /// string value, e.g. `"F::V::789"` (literal quote characters included).
+    /// Production logs showed `rawChars=11 prefix="F::V::789"` for selected `789`.
+    static func normalizeBrowserSelectionScriptOutput(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        var normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.count >= 2, normalized.first == "\"", normalized.last == "\"" {
+            normalized.removeFirst()
+            normalized.removeLast()
+            normalized = normalized
+                .replacingOccurrences(of: "\\\"", with: "\"")
+                .replacingOccurrences(of: "\\\\", with: "\\")
+        }
+        return normalized
+    }
+
+    /// Parses `<F|E|P>::V::<text>` from `BrowserAutomationScriptBuilder.selectionJavaScript`.
+    static func parseBrowserSelectionScriptOutput(_ raw: String?) -> BrowserSelectionPayload? {
+        guard let raw = normalizeBrowserSelectionScriptOutput(raw) else { return nil }
+        let separator = BrowserAutomationScriptBuilder.selectionSourceSeparator
+        let minimumTaggedLength = 1 + separator.count
+        guard raw.count >= minimumTaggedLength else {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return BrowserSelectionPayload(source: .unknown, text: "") }
+            return BrowserSelectionPayload(source: .unknown, text: trimmed)
+        }
+
+        let sourceToken = String(raw.prefix(1))
+        let remainder = raw.dropFirst()
+        guard remainder.hasPrefix(separator) else {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return BrowserSelectionPayload(source: .unknown, text: "") }
+            return BrowserSelectionPayload(source: .unknown, text: trimmed)
+        }
+
+        let text = String(remainder.dropFirst(separator.count))
+        let source: BrowserSelectionSource
+        switch sourceToken {
+        case BrowserAutomationScriptBuilder.selectionSourceForm:
+            source = .form
+        case BrowserAutomationScriptBuilder.selectionSourceEditor:
+            source = .editor
+        case BrowserAutomationScriptBuilder.selectionSourcePage:
+            source = .page
+        default:
+            source = .unknown
+        }
+        return BrowserSelectionPayload(source: source, text: text)
+    }
+
+    /// AX roles that mean "caret is in a text control", where a page-level
+    /// `getSelection()` hit is usually a residual false positive.
+    static func isBrowserTextControlRole(_ role: String?) -> Bool {
+        guard let role, !role.isEmpty else { return false }
+        let textControlRoles: Set<String> = [
+            kAXTextFieldRole as String,
+            kAXTextAreaRole as String,
+            "AXSearchField",
+            kAXComboBoxRole as String
+        ]
+        return textControlRoles.contains(role)
+    }
+
+    /// Definitive AppleScript decision plus a stable reason for logs/diagnostics.
+    /// `nil` means "script form failed — try the next dialect".
+    struct BrowserSelectionProbeDecision: Equatable {
+        let outcome: BrowserSelectionProbeOutcome
+        let reason: String
+        let payload: BrowserSelectionPayload?
+    }
+
+    static func browserSelectionProbeOutcome(
+        output: String?,
+        hadExecutionError: Bool,
+        axFocusedTextControl: Bool = false,
+        axFocusAvailable: Bool = true
+    ) -> BrowserSelectionProbeOutcome? {
+        browserSelectionProbeDecision(
+            output: output,
+            hadExecutionError: hadExecutionError,
+            axFocusedTextControl: axFocusedTextControl,
+            axFocusAvailable: axFocusAvailable
+        )?.outcome
+    }
+
+    static func browserSelectionProbeDecision(
+        output: String?,
+        hadExecutionError: Bool,
+        axFocusedTextControl: Bool = false,
+        axFocusAvailable: Bool = true
+    ) -> BrowserSelectionProbeDecision? {
+        if hadExecutionError {
+            return nil
+        }
+        guard let payload = parseBrowserSelectionScriptOutput(output) else {
+            return nil
+        }
+
+        let trimmed = payload.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceLabel = browserSelectionSourceLabel(payload.source)
+        if trimmed.isEmpty {
+            return BrowserSelectionProbeDecision(
+                outcome: .confirmedEmpty,
+                reason: "js-empty source=\(sourceLabel)",
+                payload: payload
+            )
+        }
+
+        let isPageLike = payload.source == .page || payload.source == .unknown
+
+        // AX says a text field/area is focused, but JS only found a page-level
+        // selection (common when Apple Events misses the real activeElement and
+        // falls through to residual page ranges). Do not treat that as selected text.
+        if axFocusedTextControl, isPageLike {
+            return BrowserSelectionProbeDecision(
+                outcome: .confirmedEmpty,
+                reason: "reject-page-like-while-ax-text-control source=\(sourceLabel) chars=\(trimmed.count)",
+                payload: payload
+            )
+        }
+
+        // Untagged payloads are ambiguous. When AX focus is unavailable (common in
+        // Chromium/Arc web content), only trust explicitly tagged F/E/P results from
+        // our JS. Tagged page selections (`P`) must still be accepted so article
+        // highlights work while the caret is not in an input — form-first JS already
+        // returns `F` empty instead of residual page text when an input is focused.
+        if !axFocusAvailable, payload.source == .unknown {
+            return BrowserSelectionProbeDecision(
+                outcome: .confirmedEmpty,
+                reason: "reject-untagged-while-ax-focus-unavailable chars=\(trimmed.count)",
+                payload: payload
+            )
+        }
+
+        return BrowserSelectionProbeDecision(
+            outcome: .selected(trimmed),
+            reason: "accept source=\(sourceLabel) chars=\(trimmed.count) axFocus=\(axFocusAvailable) textControl=\(axFocusedTextControl)",
+            payload: payload
+        )
+    }
+
+    static func browserSelectionSourceLabel(_ source: BrowserSelectionSource) -> String {
+        switch source {
+        case .form: return "F"
+        case .editor: return "E"
+        case .page: return "P"
+        case .unknown: return "U"
+        }
+    }
+
+    /// Compact, privacy-safe debug summary of the AppleScript JS return value.
+    /// Shows whether the printable tag survived the bridge, without dumping full text.
+    static func browserSelectionRawDebugSummary(_ raw: String?) -> String {
+        guard let raw else { return "raw=nil" }
+        let normalized = normalizeBrowserSelectionScriptOutput(raw) ?? ""
+        let separator = BrowserAutomationScriptBuilder.selectionSourceSeparator
+        let hasSeparator = raw.contains(separator) || normalized.contains(separator)
+        let quoted = raw.count >= 2 && raw.trimmingCharacters(in: .whitespacesAndNewlines).first == "\""
+        let prefix = String(raw.prefix(24))
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
+        let payload = parseBrowserSelectionScriptOutput(raw)
+        let source = payload.map { browserSelectionSourceLabel($0.source) } ?? "?"
+        let textChars = payload?.text.trimmingCharacters(in: .whitespacesAndNewlines).count ?? -1
+        return "rawChars=\(raw.count) normalizedChars=\(normalized.count) quoted=\(quoted) hasSep=\(hasSeparator) source=\(source) textChars=\(textChars) prefix=\(prefix)"
     }
 
     /// Stable deny reason for logs / diagnostics after copy policy rejects.

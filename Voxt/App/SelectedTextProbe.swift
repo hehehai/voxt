@@ -10,7 +10,24 @@ extension AppDelegate {
     /// After primary FocusedUIElement failed, keep secondary AX cheap.
     private static let selectionAXFallbackTimeout: Float = 0.05
 
+    /// Selected text for note / translation / rewrite hotkeys.
+    /// Applies shared meaningful-content policy (rejects punctuation-only false positives).
     func selectedTextFromSystemSelection() -> String? {
+        selectedContentTextFromSystemSelection()
+    }
+
+    /// Note / translation / rewrite: meaningful selected content only.
+    func selectedContentTextFromSystemSelection() -> String? {
+        SystemSelectionTextSupport.contentSelection(from: probeRawSelectedTextFromSystemSelection())
+    }
+
+    /// Dictionary hotkey: meaningful content + short-term caps.
+    func selectedDictionaryTermFromSystemSelection() -> String? {
+        SystemSelectionTextSupport.dictionaryCandidateTerm(from: probeRawSelectedTextFromSystemSelection())
+    }
+
+    /// Raw AX / AppleScript / clipboard probe result before hotkey content policies.
+    func probeRawSelectedTextFromSystemSelection() -> String? {
         let appBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
         let isBrowser = isBrowserBundleID(appBundleID == "unknown" ? nil : appBundleID)
 
@@ -47,13 +64,23 @@ extension AppDelegate {
             return nil
         }
 
-        if let text = readSelectedTextNonDestructively(
+        switch readSelectedTextNonDestructively(
             focusedElement: focusedElement,
             rawSelectedRange: rawSelectedRange,
             isBrowser: isBrowser,
             appBundleID: appBundleID
         ) {
+        case .text(let text):
             return text
+        case .confirmedEmpty:
+            logSelectionProbeResult(
+                textSource: "nil",
+                app: appBundleID,
+                detail: "browser-confirmed-empty"
+            )
+            return nil
+        case .miss:
+            break
         }
 
         return readSelectedTextBySimulatedCopyIfAllowed(
@@ -67,12 +94,18 @@ extension AppDelegate {
 
     // MARK: - Non-destructive reads
 
+    private enum NonDestructiveSelectionRead {
+        case text(String)
+        case confirmedEmpty
+        case miss
+    }
+
     private func readSelectedTextNonDestructively(
         focusedElement: AXUIElement?,
         rawSelectedRange: CFRange?,
         isBrowser: Bool,
         appBundleID: String
-    ) -> String? {
+    ) -> NonDestructiveSelectionRead {
         if let focusedElement,
            let text = probeAXSelectedText(from: focusedElement) {
             logSelectionProbeResult(
@@ -80,7 +113,7 @@ extension AppDelegate {
                 app: appBundleID,
                 detail: "chars=\(text.count)"
             )
-            return text
+            return .text(text)
         }
 
         if let focusedElement,
@@ -98,7 +131,7 @@ extension AppDelegate {
                     app: appBundleID,
                     detail: "chars=\(trimmedRangeText.count)"
                 )
-                return rangeText
+                return .text(rangeText ?? trimmedRangeText)
             }
         }
 
@@ -109,19 +142,40 @@ extension AppDelegate {
                 app: appBundleID,
                 detail: "chars=\(text.count)"
             )
-            return text
+            return .text(text)
         }
 
-        if isBrowser, let text = selectedTextFromBrowserAppleScript(bundleID: appBundleID) {
-            logSelectionProbeResult(
-                textSource: "appleScript",
-                app: appBundleID,
-                detail: "chars=\(text.count)"
-            )
-            return text
+        if isBrowser {
+            let axRole = focusedElement.flatMap {
+                axStringAttribute(
+                    kAXRoleAttribute as CFString,
+                    for: $0,
+                    timeout: Self.selectionAXFocusTimeout
+                )
+            }
+            let axFocusAvailable = focusedElement != nil
+            let axFocusedTextControl = SelectedTextSystemSelectionSupport
+                .isBrowserTextControlRole(axRole)
+            switch selectedTextFromBrowserAppleScript(
+                bundleID: appBundleID,
+                axFocusedTextControl: axFocusedTextControl,
+                axFocusAvailable: axFocusAvailable
+            ) {
+            case .selected(let text):
+                logSelectionProbeResult(
+                    textSource: "appleScript",
+                    app: appBundleID,
+                    detail: "chars=\(text.count)"
+                )
+                return .text(text)
+            case .confirmedEmpty:
+                return .confirmedEmpty
+            case .unavailable:
+                break
+            }
         }
 
-        return nil
+        return .miss
     }
 
     private func readSelectedTextBySimulatedCopyIfAllowed(
@@ -377,16 +431,25 @@ extension AppDelegate {
         return nil
     }
 
-    private func selectedTextFromBrowserAppleScript(bundleID: String) -> String? {
+    private func selectedTextFromBrowserAppleScript(
+        bundleID: String,
+        axFocusedTextControl: Bool,
+        axFocusAvailable: Bool
+    ) -> SelectedTextSystemSelectionSupport.BrowserSelectionProbeOutcome {
         if let deniedUntil = browserAutomationDeniedUntilByBundleID[bundleID],
            deniedUntil > Date() {
-            return nil
+            return .unavailable
         }
 
         let displayName = browserScriptProvider(for: bundleID)?.name
+        // Always allow tagged page selections. Form-first JS returns `F` empty for
+        // caret-only inputs, so residual page ranges do not leak while typing.
+        // AX focus is frequently unavailable in Arc/Chromium web content; gating
+        // page selection on AX would break article note/translate hotkeys there.
         let scripts = BrowserAutomationScriptBuilder.selectionScripts(
             bundleID: bundleID,
-            displayName: displayName
+            displayName: displayName,
+            allowPageSelection: true
         )
         for source in scripts {
             var executionError: NSDictionary?
@@ -398,16 +461,13 @@ extension AppDelegate {
                 timeout: 1
             )
 
-            if SelectedTextSystemSelectionSupport.isDefinitiveEmptyBrowserSelection(
+            if let outcome = SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
                 output: rawOutput,
-                hadExecutionError: executionError != nil
+                hadExecutionError: executionError != nil,
+                axFocusedTextControl: axFocusedTextControl,
+                axFocusAvailable: axFocusAvailable
             ) {
-                return nil
-            }
-
-            let trimmed = rawOutput?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let trimmed, !trimmed.isEmpty {
-                return trimmed
+                return outcome
             }
 
             if let errorNumber = executionError?["NSAppleScriptErrorNumber"] as? Int {
@@ -420,7 +480,7 @@ extension AppDelegate {
                 }
             }
         }
-        return nil
+        return .unavailable
     }
 
     private struct SimulatedCopyCapture {

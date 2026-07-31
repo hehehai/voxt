@@ -169,8 +169,7 @@ extension AppDelegate {
         sessionTargetApplicationPID = sessionTargetBundleID == nil ? nil : frontmostApplication?.processIdentifier
         let isContinuingRewriteConversation = outputMode == .rewrite && overlayState.isRewriteConversationActive
         if outputMode == .rewrite, !isContinuingRewriteConversation {
-            rewriteSessionSelectedSourceText = selectedTextFromSystemSelection()?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            rewriteSessionSelectedSourceText = selectedContentTextFromSystemSelection() ?? ""
         } else {
             rewriteSessionSelectedSourceText = ""
         }

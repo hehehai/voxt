@@ -136,9 +136,7 @@ extension AppDelegate {
 
     func beginSelectedTextTranslationIfPossible() -> Bool {
         guard !isSessionActive else { return false }
-        guard let selectedText = selectedTextFromSystemSelection(),
-              !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
+        guard let selectedText = selectedContentTextFromSystemSelection() else {
             return false
         }
 

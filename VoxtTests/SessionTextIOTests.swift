@@ -6,14 +6,28 @@ import XCTest
 
 @MainActor
 final class SessionTextIOTests: XCTestCase {
-    func testSelectedTextDictionaryHotkeyAcceptsThirtyCharacters() {
-        let candidate = String(repeating: "词", count: 30)
+    func testSelectedTextDictionaryHotkeyAcceptsUpToFiveWords() {
+        let candidate = "one two three four five"
         XCTAssertEqual(SelectedTextDictionaryHotkeySupport.candidateTerm(from: candidate), candidate)
     }
 
-    func testSelectedTextDictionaryHotkeyRejectsMoreThanThirtyCharacters() {
-        let candidate = String(repeating: "词", count: 31)
-        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: candidate))
+    func testSelectedTextDictionaryHotkeyRejectsMoreThanFiveWords() {
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: "one two three four five six"))
+    }
+
+    func testSelectedTextDictionaryHotkeyAcceptsUpToTenCJKCharacters() {
+        let chinese = String(repeating: "词", count: 10)
+        let japanese = String(repeating: "あ", count: 10)
+        let korean = String(repeating: "한", count: 10)
+        XCTAssertEqual(SelectedTextDictionaryHotkeySupport.candidateTerm(from: chinese), chinese)
+        XCTAssertEqual(SelectedTextDictionaryHotkeySupport.candidateTerm(from: japanese), japanese)
+        XCTAssertEqual(SelectedTextDictionaryHotkeySupport.candidateTerm(from: korean), korean)
+    }
+
+    func testSelectedTextDictionaryHotkeyRejectsMoreThanTenCJKCharacters() {
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: String(repeating: "词", count: 11)))
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: String(repeating: "あ", count: 11)))
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: String(repeating: "한", count: 11)))
     }
 
     func testSelectedTextDictionaryHotkeyTrimsWhitespace() {
@@ -26,6 +40,35 @@ final class SessionTextIOTests: XCTestCase {
     func testSelectedTextDictionaryHotkeyRejectsEmptySelection() {
         XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: " \n "))
         XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: nil))
+    }
+
+    func testSelectedTextDictionaryHotkeyRejectsPunctuationOnlySelection() {
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: "\"\""))
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: "——"))
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: "「」"))
+        XCTAssertNil(SelectedTextDictionaryHotkeySupport.candidateTerm(from: ".."))
+    }
+
+    func testSharedContentSelectionRejectsPunctuationOnlyLikeDictionary() {
+        // Same false-positive class that dictionary already rejected, but notes used to accept.
+        for payload in ["\"\"", "——", "「」", "..", "!!"] {
+            XCTAssertNil(
+                SystemSelectionTextSupport.contentSelection(from: payload),
+                "Expected content selection to reject punctuation-only payload \(payload)"
+            )
+            XCTAssertNil(SystemSelectionTextSupport.dictionaryCandidateTerm(from: payload))
+        }
+
+        XCTAssertEqual(SystemSelectionTextSupport.contentSelection(from: "  OpenAI\n"), "OpenAI")
+        XCTAssertEqual(
+            SystemSelectionTextSupport.contentSelection(from: String(repeating: "词", count: 20)),
+            String(repeating: "词", count: 20)
+        )
+        XCTAssertNil(
+            SystemSelectionTextSupport.dictionaryCandidateTerm(
+                from: String(repeating: "词", count: 20)
+            )
+        )
     }
 
     func testSelectedTextSystemSelectionRejectsCaretOnlyRange() {
@@ -88,8 +131,8 @@ final class SessionTextIOTests: XCTestCase {
             )
         )
 
-        // Browser focused without range attribute: allow.
-        XCTAssertTrue(
+        // Browser focused without range attribute: deny (avoid residual page copy).
+        XCTAssertFalse(
             SelectedTextSystemSelectionSupport.shouldAttemptSimulatedCopy(
                 focusedElementAvailable: true,
                 selectedTextRange: nil,
@@ -195,12 +238,27 @@ final class SessionTextIOTests: XCTestCase {
     }
 
     func testBrowserSelectionScriptsIncludeJavaScriptSelection() {
+        let js = BrowserAutomationScriptBuilder.selectionJavaScript
+        XCTAssertTrue(js.contains("selectionStart"))
+        XCTAssertTrue(js.contains("selectionEnd"))
+        XCTAssertTrue(js.contains("INPUT"))
+        XCTAssertTrue(js.contains("TEXTAREA"))
+        XCTAssertTrue(js.contains("isCollapsed"))
+        XCTAssertTrue(js.contains("getSelection()"))
+        XCTAssertTrue(js.contains(BrowserAutomationScriptBuilder.selectionSourceSeparator))
+        // Must stay AppleScript-string safe (no raw double quotes inside the JS payload).
+        XCTAssertFalse(js.contains("\""))
+
+        let formOnly = BrowserAutomationScriptBuilder.formOrEditorSelectionJavaScript
+        XCTAssertTrue(formOnly.contains("return 'P'+sep;"))
+        XCTAssertFalse(formOnly.contains("return 'P'+sep+String(sel.toString()||'');"))
+
         let safariScripts = BrowserAutomationScriptBuilder.selectionScripts(
             bundleID: "com.apple.Safari",
             displayName: "Safari"
         )
         XCTAssertFalse(safariScripts.isEmpty)
-        XCTAssertTrue(safariScripts.contains(where: { $0.contains("window.getSelection().toString()") }))
+        XCTAssertTrue(safariScripts.contains(where: { $0.contains("selectionStart") }))
         XCTAssertTrue(safariScripts.contains(where: { $0.contains("do JavaScript") }))
 
         let chromeScripts = BrowserAutomationScriptBuilder.selectionScripts(
@@ -209,6 +267,183 @@ final class SessionTextIOTests: XCTestCase {
         )
         XCTAssertFalse(chromeScripts.isEmpty)
         XCTAssertTrue(chromeScripts.contains(where: { $0.contains("execute javascript") }))
+        XCTAssertTrue(chromeScripts.contains(where: { $0.contains("isCollapsed") }))
+
+        let axBlindScripts = BrowserAutomationScriptBuilder.selectionScripts(
+            bundleID: "company.thebrowser.Browser",
+            displayName: "Arc",
+            allowPageSelection: false
+        )
+        XCTAssertTrue(axBlindScripts.contains(where: { $0.contains("return 'P'+sep;") }))
+        XCTAssertFalse(axBlindScripts.contains(where: {
+            $0.contains("return 'P'+sep+String(sel.toString()||'');")
+        }))
+    }
+
+    func testBrowserSelectionScriptOutputParsingAndTextControlDistrust() {
+        let separator = BrowserAutomationScriptBuilder.selectionSourceSeparator
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.parseBrowserSelectionScriptOutput("F\(separator)"),
+            .init(source: .form, text: "")
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.parseBrowserSelectionScriptOutput("P\(separator)ab"),
+            .init(source: .page, text: "ab")
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.parseBrowserSelectionScriptOutput("E\(separator)hello"),
+            .init(source: .editor, text: "hello")
+        )
+
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "F\(separator)",
+                hadExecutionError: false,
+                axFocusedTextControl: true
+            ),
+            .confirmedEmpty
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "P\(separator)ab",
+                hadExecutionError: false,
+                axFocusedTextControl: true
+            ),
+            .confirmedEmpty
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "P\(separator)ab",
+                hadExecutionError: false,
+                axFocusedTextControl: false
+            ),
+            .selected("ab")
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "F\(separator)ab",
+                hadExecutionError: false,
+                axFocusedTextControl: true
+            ),
+            .selected("ab")
+        )
+        XCTAssertTrue(SelectedTextSystemSelectionSupport.isBrowserTextControlRole("AXTextField"))
+        XCTAssertTrue(SelectedTextSystemSelectionSupport.isBrowserTextControlRole("AXTextArea"))
+        XCTAssertFalse(SelectedTextSystemSelectionSupport.isBrowserTextControlRole("AXWebArea"))
+
+        // Tagged page selections must work even when AX focus is unavailable (Arc).
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "P\(separator)article",
+                hadExecutionError: false,
+                axFocusedTextControl: false,
+                axFocusAvailable: false
+            ),
+            .selected("article")
+        )
+        // Untagged payloads stay rejected while AX is blind — ambiguous residual risk.
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "some word",
+                hadExecutionError: false,
+                axFocusedTextControl: false,
+                axFocusAvailable: false
+            ),
+            .confirmedEmpty
+        )
+        // Form/editor hits remain trusted even when AX focus is blind.
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "F\(separator)term",
+                hadExecutionError: false,
+                axFocusedTextControl: false,
+                axFocusAvailable: false
+            ),
+            .selected("term")
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "P\(separator)article",
+                hadExecutionError: false,
+                axFocusedTextControl: false,
+                axFocusAvailable: true
+            ),
+            .selected("article")
+        )
+
+        let rejectedUntagged = SelectedTextSystemSelectionSupport.browserSelectionProbeDecision(
+            output: "residual",
+            hadExecutionError: false,
+            axFocusedTextControl: false,
+            axFocusAvailable: false
+        )
+        XCTAssertEqual(rejectedUntagged?.outcome, .confirmedEmpty)
+        XCTAssertTrue(rejectedUntagged?.reason.contains("reject-untagged-while-ax-focus-unavailable") == true)
+
+        let acceptedPage = SelectedTextSystemSelectionSupport.browserSelectionProbeDecision(
+            output: "P\(separator)residual",
+            hadExecutionError: false,
+            axFocusedTextControl: false,
+            axFocusAvailable: false
+        )
+        XCTAssertEqual(acceptedPage?.outcome, .selected("residual"))
+        XCTAssertTrue(acceptedPage?.reason.contains("accept source=P") == true)
+
+        let accepted = SelectedTextSystemSelectionSupport.browserSelectionProbeDecision(
+            output: "F\(separator)selected",
+            hadExecutionError: false,
+            axFocusedTextControl: false,
+            axFocusAvailable: false
+        )
+        XCTAssertEqual(accepted?.outcome, .selected("selected"))
+        XCTAssertTrue(accepted?.reason.contains("accept source=F") == true)
+
+        let summary = SelectedTextSystemSelectionSupport.browserSelectionRawDebugSummary(
+            "F\(separator)hello"
+        )
+        XCTAssertTrue(summary.contains("hasSep=true"))
+        XCTAssertTrue(summary.contains("source=F"))
+        XCTAssertTrue(summary.contains("textChars=5"))
+
+        // Production Arc/Chromium AppleScript wraps the JS string in literal quotes.
+        // Exact shapes from user logs:
+        //   rawChars=8  prefix="F::V::"
+        //   rawChars=11 prefix="F::V::789"
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.parseBrowserSelectionScriptOutput("\"F\(separator)\""),
+            .init(source: .form, text: "")
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.parseBrowserSelectionScriptOutput("\"F\(separator)789\""),
+            .init(source: .form, text: "789")
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "\"F\(separator)789\"",
+                hadExecutionError: false,
+                axFocusedTextControl: false,
+                axFocusAvailable: false
+            ),
+            .selected("789")
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "\"F\(separator)\"",
+                hadExecutionError: false,
+                axFocusedTextControl: false,
+                axFocusAvailable: false
+            ),
+            .confirmedEmpty
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "\"P\(separator)\"",
+                hadExecutionError: false,
+                axFocusedTextControl: false,
+                axFocusAvailable: false
+            ),
+            .confirmedEmpty
+        )
     }
 
     func testConfirmedCaretOnlyShortCircuitsFurtherSelectionProbes() {
@@ -258,6 +493,49 @@ final class SessionTextIOTests: XCTestCase {
                 output: "",
                 hadExecutionError: true
             )
+        )
+
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "",
+                hadExecutionError: false
+            ),
+            .confirmedEmpty
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "  \n",
+                hadExecutionError: false
+            ),
+            .confirmedEmpty
+        )
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "hello",
+                hadExecutionError: false
+            ),
+            .selected("hello")
+        )
+        XCTAssertNil(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: nil,
+                hadExecutionError: true
+            )
+        )
+        XCTAssertNil(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "",
+                hadExecutionError: true
+            )
+        )
+        // Untagged page-like hits are rejected when AX already shows a text control focus.
+        XCTAssertEqual(
+            SelectedTextSystemSelectionSupport.browserSelectionProbeOutcome(
+                output: "ab",
+                hadExecutionError: false,
+                axFocusedTextControl: true
+            ),
+            .confirmedEmpty
         )
     }
 
