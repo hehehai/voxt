@@ -109,6 +109,10 @@ extension AppDelegate {
             mode: localVADMode
         )
         mlx.configureVoiceActivityFinalizationFiltering(enabled: localVADGatePolicy.isEnabled)
+        // Hotkey-time warm: ASR load + Silero provision overlap overlay/mic setup.
+        // No settings or interaction changes — same session path, earlier work.
+        SileroVADModelProvisioner.prefetchIfNeeded(for: localVADMode)
+        mlx.prewarmModelForUpcomingSession()
         mlx.setPreferredInputDevice(selectedInputDeviceID)
         mlx.onPartialTranscription = { [weak self] text in
             self?.handleLiveASRPartialTranscription(text, sessionID: sessionID)
@@ -125,6 +129,7 @@ extension AppDelegate {
         startTrackedRecordingCaptureTask { [weak self] in
             guard let self else { return }
             if let startFailureMessage = await mlx.startRecordingSession() {
+                mlx.discardPreparedSessionModelUse()
                 guard !Task.isCancelled,
                       !self.isApplicationTerminating,
                       self.shouldHandleCallbacks(for: sessionID),

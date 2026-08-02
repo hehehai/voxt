@@ -13,6 +13,8 @@ struct SessionTimingSummaryKey: Hashable {
 struct SessionTimingSummaryRecord {
     let key: SessionTimingSummaryKey
     let llmCalls: Int
+    let requestToStartMs: Int?
+    let startToFirstLiveASRMs: Int?
     let stopToDeliveredMs: Int?
     let stopToASRMs: Int?
     let captureGapMs: Int?
@@ -21,6 +23,10 @@ struct SessionTimingSummaryRecord {
 struct SessionTimingSummaryAggregate {
     let sampleCount: Int
     let meanLLMCalls: Double
+    let meanRequestToStartMs: Double?
+    let meanStartToFirstLiveASRMs: Double?
+    let p50StartToFirstLiveASRMs: Double?
+    let p95StartToFirstLiveASRMs: Double?
     let meanStopToDeliveredMs: Double?
     let meanStopToASRMs: Double?
     let meanCaptureGapMs: Double?
@@ -95,6 +101,8 @@ enum SessionTimingSummaryParser {
                 llmProvider: llmProvider
             ),
             llmCalls: llmCalls,
+            requestToStartMs: parseTiming(values["requestToStartMs"]),
+            startToFirstLiveASRMs: parseTiming(values["startToFirstLiveASRMs"]),
             stopToDeliveredMs: parseTiming(values["stopToDeliveredMs"]),
             stopToASRMs: parseTiming(values["stopToASRMs"]),
             captureGapMs: parseTiming(values["captureGapMs"])
@@ -106,22 +114,19 @@ enum SessionTimingSummaryParser {
         let meanLLMCalls = sampleCount > 0
             ? Double(records.map(\.llmCalls).reduce(0, +)) / Double(sampleCount)
             : 0
+        let firstLiveValues = records.compactMap(\.startToFirstLiveASRMs)
 
         return SessionTimingSummaryAggregate(
             sampleCount: sampleCount,
             meanLLMCalls: meanLLMCalls,
+            meanRequestToStartMs: mean(records.compactMap(\.requestToStartMs)),
+            meanStartToFirstLiveASRMs: mean(firstLiveValues),
+            p50StartToFirstLiveASRMs: percentile(firstLiveValues, percentile: 50),
+            p95StartToFirstLiveASRMs: percentile(firstLiveValues, percentile: 95),
             meanStopToDeliveredMs: mean(records.compactMap(\.stopToDeliveredMs)),
             meanStopToASRMs: mean(records.compactMap(\.stopToASRMs)),
             meanCaptureGapMs: mean(records.compactMap(\.captureGapMs))
         )
-    }
-
-    private static func parseBool(_ rawValue: String?) -> Bool? {
-        switch rawValue?.lowercased() {
-        case "true": return true
-        case "false": return false
-        default: return nil
-        }
     }
 
     private static func parseTiming(_ rawValue: String?) -> Int? {
@@ -143,6 +148,21 @@ enum SessionTimingSummaryParser {
     private static func mean(_ values: [Int]) -> Double? {
         guard !values.isEmpty else { return nil }
         return Double(values.reduce(0, +)) / Double(values.count)
+    }
+
+    private static func percentile(_ values: [Int], percentile: Double) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let clamped = min(max(percentile, 0), 100)
+        let sorted = values.sorted()
+        if sorted.count == 1 { return Double(sorted[0]) }
+        let rank = (Double(sorted.count - 1) * clamped) / 100.0
+        let lowerIndex = Int(rank.rounded(.down))
+        let upperIndex = Int(rank.rounded(.up))
+        if lowerIndex == upperIndex {
+            return Double(sorted[lowerIndex])
+        }
+        let weight = rank - Double(lowerIndex)
+        return Double(sorted[lowerIndex]) * (1 - weight) + Double(sorted[upperIndex]) * weight
     }
 }
 
@@ -192,7 +212,24 @@ guard !records.isEmpty else {
 }
 
 let rows = SessionTimingSummaryParser.aggregateRecent(records, limit: limit)
-print("output\tpipeline\tasrProvider\tasrModel\tllmProvider\tsamples\tmeanLLMCalls\tmeanStopToDeliveredMs\tmeanStopToASRMs\tmeanCaptureGapMs")
+print(
+    [
+        "output",
+        "pipeline",
+        "asrProvider",
+        "asrModel",
+        "llmProvider",
+        "samples",
+        "meanLLMCalls",
+        "meanRequestToStartMs",
+        "meanStartToFirstLiveASRMs",
+        "p50StartToFirstLiveASRMs",
+        "p95StartToFirstLiveASRMs",
+        "meanStopToDeliveredMs",
+        "meanStopToASRMs",
+        "meanCaptureGapMs"
+    ].joined(separator: "\t")
+)
 for row in rows {
     let aggregate = row.aggregate
     print(
@@ -204,6 +241,10 @@ for row in rows {
             row.key.llmProvider,
             String(aggregate.sampleCount),
             format(aggregate.meanLLMCalls),
+            format(aggregate.meanRequestToStartMs),
+            format(aggregate.meanStartToFirstLiveASRMs),
+            format(aggregate.p50StartToFirstLiveASRMs),
+            format(aggregate.p95StartToFirstLiveASRMs),
             format(aggregate.meanStopToDeliveredMs),
             format(aggregate.meanStopToASRMs),
             format(aggregate.meanCaptureGapMs)

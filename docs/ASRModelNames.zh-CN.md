@@ -22,6 +22,7 @@
 | GLM | MLX Audio | 隐藏支持 | 智谱 GLM-ASR Nano |
 | Granite | MLX Audio | 隐藏支持 | IBM Granite Speech |
 | Nemotron | MLX Audio | 可见 | NVIDIA Nemotron ASR Streaming |
+| MOSS | MLX Audio | 可见 | OpenMOSS Transcribe Diarize（窗口式实时 + 说话人/时间戳） |
 | FireRed | sherpa-onnx | 隐藏支持 | FireRed ASR 2 CTC int8；保留已有安装、旧配置和旧 MLX ID 迁移兼容 |
 | FunASR Nano | sherpa-onnx | 隐藏支持 | FunASR Nano int8；保留已有安装和旧配置兼容 |
 | SenseVoice | MLX Audio | 可见 | SenseVoice Small |
@@ -108,6 +109,12 @@
 | 系列名称 | 模型显示名称 | Repo ID | 可见性 | 当前描述 |
 | --- | --- | --- | --- | --- |
 | Nemotron | Nemotron 0.6B (8bit) | `mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit` | 可见 | Streaming ASR model with cache-aware NeMo-family decoding. |
+
+### MOSS
+
+| 系列名称 | 模型显示名称 | Repo ID | 可见性 | 当前描述 |
+| --- | --- | --- | --- | --- |
+| MOSS | MOSS | `OpenMOSS-Team/MOSS-Transcribe-Diarize` | 可见 | One-pass timestamped transcription and speaker-label model for meeting-style audio. |
 
 ### FireRed
 

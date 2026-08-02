@@ -68,11 +68,18 @@ nonisolated struct MLXASRConfigurationCapability: OptionSet, Sendable {
 
 nonisolated enum MLXVADPolicy: Equatable, Sendable {
     case standard
+    /// Keep full timeline audio for Final (e.g. MOSS). Local VAD may only gate no-speech.
     case preserveTimeline
+    /// Model owns segmentation / long-form VAD. External Final must not speech-trim.
     case modelManaged
 
     var usesExternalFinalSpeechValidation: Bool {
         self != .modelManaged
+    }
+
+    /// Whether `finalizationSamples` may replace full PCM with VAD-filtered speech.
+    var allowsExternalFinalSpeechTrim: Bool {
+        self == .standard
     }
 }
 
@@ -85,6 +92,14 @@ nonisolated struct MLXASRKVCachePolicy: Equatable, Sendable {
         bits: 8,
         groupSize: 64,
         quantizedStart: 256
+    )
+
+    /// Slightly earlier KV quantization for offline Final passes where prompt/prefill
+    /// dominates short-to-medium dictation more than long live sessions.
+    nonisolated static let finalQwen = Self(
+        bits: 8,
+        groupSize: 64,
+        quantizedStart: 64
     )
 }
 
@@ -730,6 +745,8 @@ struct MLXModelCatalog {
             languages: ["zh", "en", "yue", "ja", "ko"],
             routing: .iso6391(requiresExplicitPrimaryLanguage: false),
             outputs: [.text, .language, .emotion, .audioEvents],
+            // Keep default `.standard` so meeting external final-speech validation still runs.
+            // Dictation Final avoids PCM speech-trim via family-aware finalizationSamples.
             configuration: [.languageRouting, .senseVoiceITN]
         )
         return capabilities
