@@ -26,6 +26,10 @@ protocol HistoryRepositoryProtocol: AnyObject, Sendable {
         olderThan cutoff: Date,
         kinds: Set<TranscriptionHistoryKind>
     ) throws -> [TranscriptionHistoryEntry]
+    func deleteEntries(
+        keepingNewest count: Int,
+        kind: TranscriptionHistoryKind
+    ) throws -> [TranscriptionHistoryEntry]
 }
 
 final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
@@ -393,6 +397,25 @@ final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
         return try deleteEntries(
             whereSQL: "createdAt < ? AND kind IN (\(placeholders))",
             arguments: arguments
+        )
+    }
+
+    @discardableResult
+    func deleteEntries(
+        keepingNewest count: Int,
+        kind: TranscriptionHistoryKind
+    ) throws -> [TranscriptionHistoryEntry] {
+        guard count >= 0 else { return [] }
+        return try deleteEntries(
+            whereSQL: """
+                id IN (
+                    SELECT id FROM history_entries
+                    WHERE kind = ?
+                    ORDER BY createdAt DESC, id DESC
+                    LIMIT -1 OFFSET ?
+                )
+                """,
+            arguments: [kind.rawValue, count]
         )
     }
 

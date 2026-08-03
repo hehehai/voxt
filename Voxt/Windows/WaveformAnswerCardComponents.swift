@@ -802,8 +802,15 @@ struct RewriteConversationBubble: View {
             if !isUser && isHovered {
                 Button(action: copyToPasteboard) {
                     HStack(spacing: 4) {
-                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9, weight: .semibold))
+                        Group {
+                            if didCopy {
+                                CopySuccessIconView()
+                            } else {
+                                CopyIconView()
+                            }
+                        }
+                        .frame(width: 12, height: 12)
+
                         Text(didCopy ? AppLocalization.localizedString("Copied") : AppLocalization.localizedString("Copy"))
                             .font(.system(size: 10, weight: .semibold))
                     }

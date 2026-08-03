@@ -76,7 +76,8 @@ extension FeatureSettingsView {
             MeetingFileUploadCard(
                 state: meetingFileUploadState,
                 onChooseFile: chooseMeetingFileForAnalysis,
-                onCancel: cancelMeetingFileAnalysis
+                onCancel: cancelMeetingFileAnalysis,
+                onImportDroppedFile: importDroppedMeetingFileForAnalysis
             )
         }
     }
@@ -87,13 +88,54 @@ extension FeatureSettingsView {
         panel.title = featureSettingsLocalized("Analyze Meeting File")
         panel.prompt = featureSettingsLocalized("Choose File")
         panel.message = featureSettingsLocalized("Choose an audio or video recording to transcribe and analyze.")
-        panel.allowedContentTypes = [.audio, .movie]
+        panel.allowedContentTypes = MeetingFileImportSupport.allowedContentTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
 
         guard panel.runModal() == .OK, let fileURL = panel.url else { return }
         startMeetingFileAnalysis(fileURL)
+    }
+
+    func importDroppedMeetingFileForAnalysis(_ fileURL: URL?) {
+        guard let fileURL else {
+            showMeetingFileImportToast(
+                featureSettingsLocalized("Unsupported file type. Drop an audio or video recording instead.")
+            )
+            return
+        }
+
+        guard !meetingFileUploadState.isBusy else {
+            showMeetingFileImportToast(
+                featureSettingsLocalized("Meeting file analysis is already in progress.")
+            )
+            return
+        }
+
+        // Access the scoped drop URL before UTI/resource checks so sandboxed reads succeed.
+        let didAccessSecurityScopedResource = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessSecurityScopedResource {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard MeetingFileImportSupport.isSupportedImportFile(at: fileURL) else {
+            showMeetingFileImportToast(
+                featureSettingsLocalized("Unsupported file type. Drop an audio or video recording instead.")
+            )
+            return
+        }
+
+        startMeetingFileAnalysis(fileURL)
+    }
+
+    func showMeetingFileImportToast(_ message: String) {
+        NotificationCenter.default.post(
+            name: .voxtFeatureSettingsToastRequested,
+            object: nil,
+            userInfo: ["message": message]
+        )
     }
 
     func startMeetingFileAnalysis(_ fileURL: URL) {
@@ -103,13 +145,16 @@ extension FeatureSettingsView {
             fileName: fileName,
             progress: MeetingFileAnalysisProgress(stage: .preparing)
         )
+        SystemNotificationSupport.requestAuthorizationIfNeeded()
         meetingFileAnalysisTask = Task { @MainActor in
             defer { meetingFileAnalysisTask = nil }
             guard let appDelegate = AppDelegate.shared else {
+                let message = featureSettingsLocalized("Voxt is not ready to analyze this file yet.")
                 meetingFileUploadState = .failed(
                     fileName: fileName,
-                    message: featureSettingsLocalized("Voxt is not ready to analyze this file yet.")
+                    message: message
                 )
+                postMeetingFileConversionFailureNotification(fileName: fileName, message: message)
                 return
             }
 
@@ -129,6 +174,7 @@ extension FeatureSettingsView {
                     return
                 }
                 meetingFileUploadState = .completed(fileName: fileName)
+                postMeetingFileConversionSuccessNotification(fileName: fileName)
                 appDelegate.showMeetingDetailWindow(for: entry)
             } catch is CancellationError {
                 meetingFileUploadState = .idle
@@ -137,8 +183,28 @@ extension FeatureSettingsView {
                     fileName: fileName,
                     message: error.localizedDescription
                 )
+                postMeetingFileConversionFailureNotification(
+                    fileName: fileName,
+                    message: error.localizedDescription
+                )
             }
         }
+    }
+
+    func postMeetingFileConversionSuccessNotification(fileName: String) {
+        SystemNotificationSupport.post(
+            title: featureSettingsLocalized("File conversion succeeded"),
+            body: AppLocalization.format("%@ has been converted successfully.", fileName)
+        )
+    }
+
+    func postMeetingFileConversionFailureNotification(fileName: String, message: String) {
+        let detail = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = detail.isEmpty ? fileName : "\(fileName): \(detail)"
+        SystemNotificationSupport.post(
+            title: featureSettingsLocalized("File conversion failed"),
+            body: body
+        )
     }
 
     func cancelMeetingFileAnalysis() {
@@ -317,6 +383,9 @@ private struct MeetingFileUploadCard: View {
     let state: MeetingFileUploadState
     let onChooseFile: () -> Void
     let onCancel: () -> Void
+    let onImportDroppedFile: (URL?) -> Void
+
+    @State private var isDropTargeted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -354,6 +423,9 @@ private struct MeetingFileUploadCard: View {
         }
         .padding(16)
         .settingsPanelSurface()
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers)
+        }
     }
 
     @ViewBuilder
@@ -361,10 +433,16 @@ private struct MeetingFileUploadCard: View {
         VStack(spacing: 9) {
             switch state {
             case .idle:
-                Image(systemName: "arrow.up.doc")
+                Image(systemName: isDropTargeted ? "arrow.down.doc" : "arrow.up.doc")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(Color.accentColor)
-                Text(featureSettingsLocalized("Click to choose a meeting recording"))
+                Text(
+                    featureSettingsLocalized(
+                        isDropTargeted
+                            ? "Drop to analyze this recording"
+                            : "Click to choose or drag in a meeting recording"
+                    )
+                )
                     .font(.subheadline.weight(.medium))
                 supportedFormats
             case let .analyzing(fileName, progress):
@@ -437,16 +515,23 @@ private struct MeetingFileUploadCard: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
-                .fill(SettingsUIStyle.groupedFillColor.opacity(0.55))
+                .fill(
+                    isDropTargeted
+                        ? Color.accentColor.opacity(0.08)
+                        : SettingsUIStyle.groupedFillColor.opacity(0.55)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous)
                 .stroke(
-                    state.isAnalyzing ? Color.accentColor.opacity(0.42) : SettingsUIStyle.controlHoverBorderColor,
-                    style: StrokeStyle(lineWidth: 1, dash: [6, 5])
+                    (state.isAnalyzing || isDropTargeted)
+                        ? Color.accentColor.opacity(isDropTargeted ? 0.72 : 0.42)
+                        : SettingsUIStyle.controlHoverBorderColor,
+                    style: StrokeStyle(lineWidth: isDropTargeted ? 1.5 : 1, dash: [6, 5])
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: SettingsUIStyle.compactCornerRadius, style: .continuous))
+        .animation(.easeOut(duration: 0.12), value: isDropTargeted)
     }
 
     private var supportedFormats: some View {
@@ -455,6 +540,22 @@ private struct MeetingFileUploadCard: View {
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first(where: {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        }) else {
+            return false
+        }
+
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            let fileURL = MeetingFileImportSupport.fileURL(fromDropItem: item)
+            Task { @MainActor in
+                onImportDroppedFile(fileURL)
+            }
+        }
+        return true
     }
 }
 

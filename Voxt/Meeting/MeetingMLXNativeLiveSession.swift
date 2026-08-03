@@ -365,7 +365,10 @@ private final class MeetingMLXNativeLiveSession: MeetingLiveTranscribingSession 
             modelFamily: capability.family,
             timelineOffsetSeconds: timelineOffsetSeconds,
             speaker: speaker,
-            audioSource: speaker == .me ? .microphone : .systemAudio
+            audioSource: speaker == .me ? .microphone : .systemAudio,
+            // Reuse the in-flight partial ID so overlay upsert replaces it instead of
+            // appending a duplicate bubble with a fresh UUID.
+            replacingSegmentID: currentSegmentID
         )
         guard !structured.isEmpty else { return false }
 

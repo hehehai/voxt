@@ -533,6 +533,8 @@
 "Browser URL read test failed." = "ブラウザ URL 読み取りテストに失敗しました。";
 "History Cleanup" = "履歴の自動削除";
 "Retention" = "保持期間";
+"Retention Count" = "保持件数";
+"Unlimited" = "無制限";
 "1 Week" = "1週間";
 "1 Year" = "1年";
 "3 Months" = "3か月";
@@ -2236,6 +2238,9 @@
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "このビルドには sherpa-onnx ランタイムが含まれていないため、このモデルは利用できません。";
 "Uninstalled %@." = "%@ をアンインストールしました。";
 "Uninstall failed: %@" = "アンインストールに失敗しました: %@";
+"Model download succeeded" = "モデルのダウンロードが完了しました";
+"Model download failed" = "モデルのダウンロードに失敗しました";
+"%@ downloaded successfully." = "%@ のダウンロードが完了しました。";
 "Endpoint must be a valid HTTP or HTTPS URL." = "エンドポイントには有効な HTTP または HTTPS URL を指定してください。";
 "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "エンドポイントには有効な HTTP、HTTPS、WS、または WSS URL を指定してください。";
 "Endpoint must not contain a username or password." = "エンドポイントにユーザー名やパスワードを含めることはできません。";
@@ -2253,9 +2258,16 @@
 "Upload File" = "ファイルをアップロード";
 "Upload a meeting audio or video file" = "会議の音声または動画ファイルをアップロード";
 "Click to choose a meeting recording" = "クリックして会議録画を選択";
+"Click to choose or drag in a meeting recording" = "クリックして選択するか、会議録画をドラッグして追加";
+"Drop to analyze this recording" = "ドロップしてこの録画を分析";
+"Unsupported file type. Drop an audio or video recording instead." = "このファイル形式はサポートされていません。音声または動画の録画をドロップしてください。";
+"Meeting file analysis is already in progress." = "会議ファイルの分析はすでに進行中です。";
 "Supports MP3, MP4, M4A, WAV, AAC, MOV, and other common audio or video formats." = "MP3、MP4、M4A、WAV、AAC、MOV など、一般的な音声・動画形式に対応しています。";
 "Analysis complete. Opening Meeting Details…" = "分析が完了しました。会議の詳細を開いています…";
 "File analysis failed" = "ファイルの分析に失敗しました";
+"File conversion succeeded" = "ファイル変換が完了しました";
+"File conversion failed" = "ファイル変換に失敗しました";
+"%@ has been converted successfully." = "%@ の変換が完了しました。";
 "Preparing audio…" = "音声を準備しています…";
 "Transcribing meeting…" = "会議を文字起こししています…";
 "Identifying speakers…" = "話者を識別しています…";

@@ -360,6 +360,35 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
         XCTAssertNotNil(try repository.entry(id: newTranscription.id))
     }
 
+    func testHistoryCountCleanupKeepsNewestPerKindAndPreservesMeetings() throws {
+        let database = try makeDatabase()
+        let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let newest = makeHistoryEntry(text: "normal-2", createdAt: Date(timeIntervalSince1970: 3), kind: .normal)
+        let middle = makeHistoryEntry(text: "normal-1", createdAt: Date(timeIntervalSince1970: 2), kind: .normal)
+        let oldest = makeHistoryEntry(text: "normal-0", createdAt: Date(timeIntervalSince1970: 1), kind: .normal)
+        let translationNewest = makeHistoryEntry(text: "translation-1", createdAt: Date(timeIntervalSince1970: 5), kind: .translation)
+        let translationOldest = makeHistoryEntry(text: "translation-0", createdAt: Date(timeIntervalSince1970: 4), kind: .translation)
+        let meeting = makeHistoryEntry(text: "meeting", createdAt: Date(timeIntervalSince1970: 0), kind: .transcript)
+        try repository.replaceAll([
+            newest,
+            middle,
+            oldest,
+            translationNewest,
+            translationOldest,
+            meeting
+        ])
+
+        let removedNormal = try repository.deleteEntries(keepingNewest: 2, kind: .normal)
+        let removedTranslation = try repository.deleteEntries(keepingNewest: 1, kind: .translation)
+
+        XCTAssertEqual(Set(removedNormal.map(\.id)), Set([oldest.id]))
+        XCTAssertEqual(Set(removedTranslation.map(\.id)), Set([translationOldest.id]))
+        XCTAssertNotNil(try repository.entry(id: newest.id))
+        XCTAssertNotNil(try repository.entry(id: middle.id))
+        XCTAssertNotNil(try repository.entry(id: translationNewest.id))
+        XCTAssertNotNil(try repository.entry(id: meeting.id))
+    }
+
     func testHistoryReportMetricsUseDatabaseAggregates() throws {
         let database = try makeDatabase()
         let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))

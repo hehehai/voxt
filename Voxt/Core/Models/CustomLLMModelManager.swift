@@ -978,6 +978,7 @@ class CustomLLMModelManager: ObservableObject {
         let canonicalRepo = Self.canonicalModelRepo(repo)
         if downloadTasksByRepo[canonicalRepo] != nil { return }
 
+        SystemNotificationSupport.requestAuthorizationIfNeeded()
         let task = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -1014,11 +1015,19 @@ class CustomLLMModelManager: ObservableObject {
                 let modelDir = try await performDownloadWithFallback(for: canonicalRepo)
                 guard CustomLLMModelStorageSupport.isModelDirectoryValid(modelDir) else {
                     setPausedStatusMessage(nil, for: canonicalRepo)
-                    setState(.error("Downloaded files are incomplete."), for: canonicalRepo)
+                    let message = "Downloaded files are incomplete."
+                    setState(.error(message), for: canonicalRepo)
+                    SystemNotificationSupport.postModelDownloadFailed(
+                        modelName: displayTitle(for: canonicalRepo),
+                        message: message
+                    )
                     VoxtLog.modelError("Custom LLM download produced incomplete files: \(canonicalRepo)")
                     return
                 }
                 markDownloadCompleted(for: canonicalRepo)
+                SystemNotificationSupport.postModelDownloadSucceeded(
+                    modelName: displayTitle(for: canonicalRepo)
+                )
                 VoxtLog.modelInfo("Custom LLM download completed: \(canonicalRepo)")
             } catch is CancellationError {
                 cancelDownloadProgressTask(for: canonicalRepo)
@@ -1040,7 +1049,12 @@ class CustomLLMModelManager: ObservableObject {
                 }
                 setPausedStatusMessage(nil, for: canonicalRepo)
                 clearHubCache(for: canonicalRepo)
-                setState(.error("Download failed: \(error.localizedDescription)"), for: canonicalRepo)
+                let message = "Download failed: \(error.localizedDescription)"
+                setState(.error(message), for: canonicalRepo)
+                SystemNotificationSupport.postModelDownloadFailed(
+                    modelName: displayTitle(for: canonicalRepo),
+                    message: message
+                )
                 VoxtLog.modelError("Custom LLM download failed: \(canonicalRepo), error=\(error.localizedDescription)")
             }
         }

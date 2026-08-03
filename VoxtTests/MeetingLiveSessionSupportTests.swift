@@ -228,6 +228,29 @@ final class MeetingLiveSessionSupportTests: XCTestCase {
         XCTAssertEqual(mapped[0].endSeconds ?? -1, 1.5, accuracy: 0.0001)
     }
 
+    func testStructuredLiveFinalizationReusesInFlightSegmentIDForFirstItem() {
+        let inFlightID = UUID()
+        let mapped = MeetingNativeLiveStructuredFinalization.meetingSegments(
+            from: [
+                STTTranscriptSegment(text: "", startTime: 0.0, endTime: 0.1),
+                STTTranscriptSegment(text: "first", startTime: 12.0, endTime: 13.0),
+                STTTranscriptSegment(text: "second", startTime: 13.2, endTime: 14.0),
+            ],
+            timingGranularity: .sentence,
+            modelFamily: .nemotronASR,
+            timelineOffsetSeconds: 0,
+            speaker: .me,
+            audioSource: .microphone,
+            replacingSegmentID: inFlightID
+        )
+
+        XCTAssertEqual(mapped.count, 2)
+        XCTAssertEqual(mapped[0].id, inFlightID)
+        XCTAssertEqual(mapped[0].text, "first")
+        XCTAssertNotEqual(mapped[1].id, inFlightID)
+        XCTAssertEqual(mapped[1].text, "second")
+    }
+
     func testTranscriptStateSubtractsAllPriorFrozenText() {
         var state = MeetingLiveTranscriptState()
 

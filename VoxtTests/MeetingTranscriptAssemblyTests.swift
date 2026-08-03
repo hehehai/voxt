@@ -32,6 +32,82 @@ final class MeetingTranscriptAssemblyTests: XCTestCase {
         XCTAssertEqual(finalResult.finalizedSegmentID, id)
     }
 
+    func testStructuredEndedFinalsReplaceInFlightPartialWithoutDuplicatingText() {
+        let inFlightID = UUID()
+        let partial = MeetingTranscriptSegment(
+            id: inFlightID,
+            speaker: .me,
+            audioSource: .microphone,
+            startSeconds: 12.0,
+            endSeconds: 13.5,
+            text: "呃，现在看起来。",
+            preventsAdjacentMerge: true
+        )
+        // Mimic MeetingNativeLiveStructuredFinalization: first final reuses the
+        // in-flight partial ID; additional structured items get fresh IDs.
+        let structured = [
+            MeetingTranscriptSegment(
+                id: inFlightID,
+                speaker: .me,
+                audioSource: .microphone,
+                startSeconds: 12.1,
+                endSeconds: 13.4,
+                text: "呃，现在看起来。",
+                preventsAdjacentMerge: true
+            ),
+            MeetingTranscriptSegment(
+                id: UUID(),
+                speaker: .me,
+                audioSource: .microphone,
+                startSeconds: 15.0,
+                endSeconds: 16.2,
+                text: "会出现重复的问题",
+                preventsAdjacentMerge: true
+            ),
+        ]
+
+        var segments = MeetingTranscriptAssembler.apply(.partial(partial), to: []).segments
+        for item in structured {
+            segments = MeetingTranscriptAssembler.apply(.final(item), to: segments).segments
+        }
+
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments[0].id, inFlightID)
+        XCTAssertEqual(segments[0].text, "呃，现在看起来。")
+        XCTAssertEqual(segments[0].startSeconds, 12.1, accuracy: 0.0001)
+        XCTAssertEqual(segments[1].text, "会出现重复的问题")
+        XCTAssertEqual(
+            segments.filter { $0.text == "呃，现在看起来。" }.count,
+            1,
+            "In-flight partial must be replaced, not left beside structured finals"
+        )
+    }
+
+    func testFinalUpsertAdoptsIncomingStartSeconds() {
+        let id = UUID()
+        let partial = MeetingTranscriptSegment(
+            id: id,
+            speaker: .me,
+            startSeconds: 10.0,
+            endSeconds: 11.0,
+            text: "hello"
+        )
+        let final = MeetingTranscriptSegment(
+            id: id,
+            speaker: .me,
+            startSeconds: 10.4,
+            endSeconds: 11.2,
+            text: "hello world"
+        )
+
+        let afterPartial = MeetingTranscriptAssembler.apply(.partial(partial), to: [])
+        let afterFinal = MeetingTranscriptAssembler.apply(.final(final), to: afterPartial.segments)
+
+        XCTAssertEqual(afterFinal.segments.count, 1)
+        XCTAssertEqual(afterFinal.segments[0].startSeconds, 10.4, accuracy: 0.0001)
+        XCTAssertEqual(afterFinal.segments[0].endSeconds ?? -1, 11.2, accuracy: 0.0001)
+    }
+
     func testFinalSegmentsMergeWithinTwoSecondsForSameSpeaker() {
         let first = MeetingTranscriptSegment(
             id: UUID(),

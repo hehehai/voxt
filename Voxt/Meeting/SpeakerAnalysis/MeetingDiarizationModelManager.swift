@@ -65,6 +65,7 @@ final class MeetingDiarizationModelManager: ObservableObject {
         selectedMode = mode
         remoteSizeText = mode.fallbackRemoteSizeText
         state = .downloading(progress: 0, detail: nil)
+        SystemNotificationSupport.requestAuthorizationIfNeeded()
         downloadTask = Task { [weak self] in
             guard let self else { return }
             defer { self.downloadTask = nil }
@@ -77,11 +78,16 @@ final class MeetingDiarizationModelManager: ObservableObject {
                     _ = try await self.downloadSortformerWithFallback()
                 }
                 self.state = .downloaded
+                SystemNotificationSupport.postModelDownloadSucceeded(modelName: mode.title)
                 VoxtLog.meeting("Meeting diarization model ready. mode=\(mode.rawValue)")
             } catch is CancellationError {
                 self.state = .notDownloaded
             } catch {
                 self.state = .error(error.localizedDescription)
+                SystemNotificationSupport.postModelDownloadFailed(
+                    modelName: mode.title,
+                    message: error.localizedDescription
+                )
                 VoxtLog.meetingError("Meeting diarization model install failed. mode=\(mode.rawValue), error=\(error.localizedDescription)")
             }
         }

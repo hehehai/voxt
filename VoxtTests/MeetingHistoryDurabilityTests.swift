@@ -118,6 +118,13 @@ private final class FailingMeetingHistoryRepository: HistoryRepositoryProtocol, 
     ) throws -> [TranscriptionHistoryEntry] {
         try base.deleteEntries(olderThan: cutoff, kinds: kinds)
     }
+
+    func deleteEntries(
+        keepingNewest count: Int,
+        kind: TranscriptionHistoryKind
+    ) throws -> [TranscriptionHistoryEntry] {
+        try base.deleteEntries(keepingNewest: count, kind: kind)
+    }
 }
 
 private enum MeetingHistoryDurabilityTestError: Error {

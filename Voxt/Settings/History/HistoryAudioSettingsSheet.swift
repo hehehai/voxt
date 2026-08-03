@@ -10,6 +10,7 @@ private func localizedHistoryAudioSettings(_ key: String) -> String {
 struct HistoryAudioSettingsSheet: View {
     @Binding var historyCleanupEnabled: Bool
     @Binding var historyRetentionPeriodRaw: String
+    @Binding var historyRetentionCountRaw: String
     @Binding var historyAudioStorageEnabled: Bool
     @Binding var historyAudioStorageDisplayPath: String
     @Binding var historyAudioStorageSelectionError: String?
@@ -17,6 +18,7 @@ struct HistoryAudioSettingsSheet: View {
     @Binding var isPresented: Bool
 
     let historyRetentionPeriod: HistoryRetentionPeriod
+    let historyRetentionCount: HistoryRetentionCount
     let historyAudioStorageStatsSummary: String
     let onOpenHistoryAudioStorageInFinder: () -> Void
     let onChooseHistoryAudioStorageDirectory: () -> Void
@@ -44,6 +46,20 @@ struct HistoryAudioSettingsSheet: View {
                                 SettingsMenuOption(value: option.rawValue, title: option.title)
                             },
                             selectedTitle: historyRetentionPeriod.title,
+                            width: 160
+                        )
+                    }
+
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(localizedHistoryAudioSettings("Retention Count"))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        SettingsMenuPicker(
+                            selection: $historyRetentionCountRaw,
+                            options: HistoryRetentionCount.allCases.map { option in
+                                SettingsMenuOption(value: option.rawValue, title: option.title)
+                            },
+                            selectedTitle: historyRetentionCount.title,
                             width: 160
                         )
                     }

@@ -301,7 +301,9 @@ private struct MeetingDetailWindowView: View {
     @State private var speakerRenameGroupID: String?
     @State private var speakerRenameDraft = ""
     @State private var isScrubbing = false
-    @State private var speakerOrdinalByIdentityKey: [String: Int] = [:]
+    @State private var scrollRequest: MeetingTranscriptScrollRequest?
+    @State private var scrollGeneration: UInt64 = 0
+    @State private var displayedSegmentIDs: Set<UUID> = []
 
     init(viewModel: MeetingDetailViewModel) {
         self.viewModel = viewModel
@@ -330,7 +332,7 @@ private struct MeetingDetailWindowView: View {
             .ignoresSafeArea(.container, edges: .top)
             .onAppear {
                 viewModel.handleViewAppear()
-                refreshSpeakerOrdinalMap()
+                displayedSegmentIDs = Set(viewModel.displayedSegments.map(\.id))
                 updateActiveSegment(for: playbackController.currentTime)
             }
 
@@ -350,8 +352,23 @@ private struct MeetingDetailWindowView: View {
             MeetingDetailSummarySettingsDialog(viewModel: viewModel)
         }
         .onChange(of: viewModel.segmentStructureRevision) { _, _ in
-            refreshSpeakerOrdinalMap()
+            displayedSegmentIDs = Set(viewModel.displayedSegments.map(\.id))
             updateActiveSegment(for: playbackController.currentTime)
+            requestLiveScrollToNewestIfNeeded()
+        }
+        .onChange(of: viewModel.displayedSegments) { _, newValue in
+            displayedSegmentIDs = Set(newValue.map(\.id))
+        }
+        .onChange(of: playbackController.currentTime) { _, newValue in
+            guard viewModel.mode == .history else { return }
+            updateActiveSegment(for: newValue)
+        }
+        .onChange(of: activeSegmentID) { _, newValue in
+            requestHistoryScrollToActiveSegment(newValue)
+        }
+        .onChange(of: isScrubbing) { _, scrubbing in
+            guard !scrubbing else { return }
+            requestHistoryScrollToActiveSegment(activeSegmentID)
         }
     }
 
@@ -537,12 +554,18 @@ private struct MeetingDetailWindowView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            TextField(AppLocalization.localizedString("Search transcript"), text: $viewModel.searchQuery)
+            TextField(
+                AppLocalization.localizedString("Search transcript"),
+                text: Binding(
+                    get: { viewModel.searchQuery },
+                    set: { viewModel.setSearchQuery($0) }
+                )
+            )
                 .textFieldStyle(.plain)
 
             if !viewModel.searchQuery.isEmpty {
                 Button {
-                    viewModel.searchQuery = ""
+                    viewModel.setSearchQuery("")
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
@@ -557,63 +580,48 @@ private struct MeetingDetailWindowView: View {
     }
 
     private var transcriptPane: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    transcriptCaption
+        VStack(alignment: .leading, spacing: 16) {
+            transcriptCaption
 
-                    if viewModel.isFinalizing {
-                        meetingFinalizationBanner
-                    }
+            if viewModel.isFinalizing {
+                meetingFinalizationBanner
+            }
 
-                    if displayedSegments.isEmpty {
-                        transcriptEmptyState
-                    } else if viewModel.transcriptPresentationMode == .timeline {
-                        LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(displayedSegments) { segment in
-                                MeetingDetailSegmentRow(
-                                    segment: segment,
-                                    speakerTitle: timelineSpeakerTitle(for: segment),
-                                    isActive: activeSegmentID == segment.id,
-                                    showsTranslation: viewModel.translationEnabled,
-                                    isSearchMatch: segmentMatchesSearch(segment)
-                                )
-                                .id(segment.id)
-                            }
-                        }
-                    } else {
-                        speakerMarksPane
-                    }
-                }
-                .padding(16)
-            }
-            .meetingDetailPanelSurface(cornerRadius: 16)
-            .onChange(of: playbackController.currentTime) { _, newValue in
-                guard viewModel.mode == .history else { return }
-                updateActiveSegment(for: newValue)
-                guard !isScrubbing,
-                      viewModel.transcriptPresentationMode == .timeline,
-                      let activeSegmentID,
-                      displayedSegments.contains(where: { $0.id == activeSegmentID })
-                else {
-                    return
-                }
-                withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(activeSegmentID, anchor: .center)
-                }
-            }
-            .onChange(of: viewModel.segmentStructureRevision) { _, _ in
-                guard viewModel.mode == .live,
-                      viewModel.transcriptPresentationMode == .timeline,
-                      let newest = displayedNewestSegmentID(in: viewModel.segments)
-                else {
-                    return
-                }
-                withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(newest, anchor: .bottom)
-                }
+            if viewModel.displayedSegments.isEmpty {
+                transcriptEmptyState
+            } else if viewModel.transcriptPresentationMode == .timeline {
+                MeetingDetailTranscriptListPane(
+                    rows: timelineVirtualRows,
+                    showsTranslation: viewModel.translationEnabled,
+                    scrollRequest: scrollRequest
+                )
+                .equatable()
+            } else {
+                speakerMarksPane
             }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .meetingDetailPanelSurface(cornerRadius: 16)
+    }
+
+    private var timelineVirtualRows: [MeetingTranscriptVirtualRow] {
+        MeetingTranscriptListSupport.timelineRows(
+            from: viewModel.displayedSegments,
+            activeSegmentID: activeSegmentID,
+            showsTranslation: viewModel.translationEnabled,
+            searchQuery: viewModel.searchQuery,
+            speakerTitle: viewModel.timelineSpeakerTitle(for:)
+        )
+    }
+
+    private var speakerMarkVirtualRows: [MeetingTranscriptVirtualRow] {
+        MeetingTranscriptListSupport.speakerMarkRows(
+            from: viewModel.speakerGroups,
+            activeSegmentID: activeSegmentID,
+            showsTranslation: viewModel.translationEnabled,
+            searchQuery: viewModel.searchQuery
+        )
     }
 
     private var transcriptCaption: some View {
@@ -715,84 +723,25 @@ private struct MeetingDetailWindowView: View {
     private var speakerMarksPane: some View {
         VStack(alignment: .leading, spacing: 16) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
-                ForEach(speakerGroups, id: \.id) { group in
+                ForEach(viewModel.speakerGroups) { group in
                     speakerOverviewCard(for: group)
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
 
-            ForEach(speakerGroups, id: \.id) { group in
-                let segments = group.segments
-                if !segments.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 8) {
-                            Text(group.title)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.primary)
-
-                            Text(AppLocalization.format("%d", segments.count))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(MeetingDetailUIStyle.mutedFillColor)
-                                )
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(segments) { segment in
-                                MeetingDetailSegmentRow(
-                                    segment: segment,
-                                    speakerTitle: group.title,
-                                    isActive: activeSegmentID == segment.id,
-                                    showsTranslation: viewModel.translationEnabled,
-                                    isSearchMatch: segmentMatchesSearch(segment)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private struct SpeakerGroup {
-        let id: String
-        let title: String
-        let speaker: MeetingSpeaker
-        let segments: [MeetingTranscriptSegment]
-    }
-
-    private var speakerGroups: [SpeakerGroup] {
-        let grouped = Dictionary(grouping: displayedSegments, by: stableSpeakerIdentityKey)
-        return grouped.map { key, segments in
-            let sortedSegments = segments.sorted { $0.startSeconds < $1.startSeconds }
-            let representative = sortedSegments.first
-            return SpeakerGroup(
-                id: key,
-                title: representative.map(speakerTimelineTitle) ?? "",
-                speaker: representative?.speaker ?? .them,
-                segments: sortedSegments
+            MeetingDetailTranscriptListPane(
+                rows: speakerMarkVirtualRows,
+                showsTranslation: viewModel.translationEnabled,
+                scrollRequest: scrollRequest
             )
+            .equatable()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sorted { lhs, rhs in
-            guard let lhsStart = lhs.segments.first?.startSeconds,
-                  let rhsStart = rhs.segments.first?.startSeconds
-            else {
-                return lhs.title < rhs.title
-            }
-            return lhsStart < rhsStart
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func speakerOverviewCard(for group: SpeakerGroup) -> some View {
-        let segments = group.segments
-        let totalWords = segments.reduce(0) { partialResult, segment in
-            partialResult + segment.text.split(whereSeparator: \.isWhitespace).count
-        }
-
-        return VStack(alignment: .leading, spacing: 6) {
+    private func speakerOverviewCard(for group: MeetingDetailSpeakerGroup) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(group.title)
                     .font(.system(size: 12, weight: .semibold))
@@ -816,11 +765,11 @@ private struct MeetingDetailWindowView: View {
                 }
             }
 
-            Text(AppLocalization.format("%d", segments.count))
+            Text(AppLocalization.format("%d", group.segments.count))
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.primary)
 
-            Text(AppLocalization.format("%d words", totalWords))
+            Text(AppLocalization.format("%d words", group.wordCount))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -1000,29 +949,6 @@ private struct MeetingDetailWindowView: View {
         "\(MeetingTranscriptFormatter.timestampString(for: playbackController.currentTime)) / \(MeetingTranscriptFormatter.timestampString(for: playbackController.duration))"
     }
 
-    private var displayedSegments: [MeetingTranscriptSegment] {
-        let query = viewModel.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return viewModel.segments }
-        return viewModel.segments.filter(segmentMatchesSearch)
-    }
-
-    private func displayedNewestSegmentID(in segments: [MeetingTranscriptSegment]) -> UUID? {
-        let query = viewModel.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty {
-            return segments.last?.id
-        }
-        return segments.last(where: segmentMatchesSearch)?.id
-    }
-
-    private func segmentMatchesSearch(_ segment: MeetingTranscriptSegment) -> Bool {
-        let query = viewModel.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return true }
-        return segment.text.localizedCaseInsensitiveContains(query)
-            || (segment.translatedText?.localizedCaseInsensitiveContains(query) ?? false)
-            || timelineSpeakerTitle(for: segment).localizedCaseInsensitiveContains(query)
-            || MeetingTranscriptFormatter.timestampString(for: segment.startSeconds).localizedCaseInsensitiveContains(query)
-    }
-
     private func updateActiveSegment(for currentTime: TimeInterval) {
         guard viewModel.mode == .history else {
             activeSegmentID = nil
@@ -1054,7 +980,32 @@ private struct MeetingDetailWindowView: View {
         return low > 0 ? segments[low - 1] : segments.first
     }
 
-    private func presentSpeakerRename(for group: SpeakerGroup) {
+    private func requestHistoryScrollToActiveSegment(_ segmentID: UUID?) {
+        guard viewModel.mode == .history else { return }
+        guard !isScrubbing else { return }
+        guard viewModel.transcriptPresentationMode == .timeline else { return }
+        guard let segmentID, displayedSegmentIDs.contains(segmentID) else { return }
+        scrollGeneration &+= 1
+        scrollRequest = MeetingTranscriptScrollRequest(
+            rowID: segmentID.uuidString,
+            anchor: .center,
+            generation: scrollGeneration
+        )
+    }
+
+    private func requestLiveScrollToNewestIfNeeded() {
+        guard viewModel.mode == .live else { return }
+        guard viewModel.transcriptPresentationMode == .timeline else { return }
+        guard let newest = viewModel.displayedNewestSegmentID() else { return }
+        scrollGeneration &+= 1
+        scrollRequest = MeetingTranscriptScrollRequest(
+            rowID: newest.uuidString,
+            anchor: .bottom,
+            generation: scrollGeneration
+        )
+    }
+
+    private func presentSpeakerRename(for group: MeetingDetailSpeakerGroup) {
         speakerRenameGroupID = group.id
         speakerRenameDraft = group.title
     }
@@ -1069,150 +1020,28 @@ private struct MeetingDetailWindowView: View {
         viewModel.renameSpeaker(identityKey: speakerRenameGroupID, displayName: speakerRenameDraft)
         cancelSpeakerRename()
     }
-
-    private func timelineSpeakerTitle(for segment: MeetingTranscriptSegment) -> String {
-        switch viewModel.transcriptSpeakerDisplayMode {
-        case .source:
-            return segment.speaker.displayTitle
-        case .speaker:
-            return speakerTimelineTitle(for: segment)
-        }
-    }
-
-    private func speakerTimelineTitle(for segment: MeetingTranscriptSegment) -> String {
-        if let displayName = speakerDisplayNameIfUserFacing(for: segment) {
-            return displayName
-        }
-        let ordinal = speakerOrdinalByIdentityKey[speakerTimelineIdentityKey(for: segment)] ?? 1
-        return AppLocalization.format("Speaker %d", ordinal)
-    }
-
-    private func refreshSpeakerOrdinalMap() {
-        var ordinals: [String: Int] = [:]
-        let sortedSegments = viewModel.segments.sorted { lhs, rhs in
-            if lhs.startSeconds == rhs.startSeconds {
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            return lhs.startSeconds < rhs.startSeconds
-        }
-
-        for segment in sortedSegments {
-            let key = stableSpeakerIdentityKey(for: segment)
-            guard ordinals[key] == nil else { continue }
-            ordinals[key] = ordinals.count + 1
-        }
-        speakerOrdinalByIdentityKey = ordinals
-    }
-
-    private func speakerTimelineIdentityKey(for segment: MeetingTranscriptSegment) -> String {
-        stableSpeakerIdentityKey(for: segment)
-    }
-
-    private func stableSpeakerIdentityKey(for segment: MeetingTranscriptSegment) -> String {
-        segment.speakerIdentityKey
-    }
-
-    private func speakerDisplayNameIfUserFacing(for segment: MeetingTranscriptSegment) -> String? {
-        guard let displayName = segment.speakerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !displayName.isEmpty,
-              !isAudioSourceDisplayName(displayName)
-        else {
-            return nil
-        }
-        return displayName
-    }
-
-    private func isAudioSourceDisplayName(_ displayName: String) -> Bool {
-        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return false }
-        if normalized == TranscriptSpeaker.me.displayTitle.lowercased()
-            || normalized == TranscriptSpeaker.them.displayTitle.lowercased() {
-            return true
-        }
-        if normalized.range(of: #"^me\s+\d+$"#, options: .regularExpression) != nil {
-            return true
-        }
-        if normalized.range(of: #"^them\s+\d+$"#, options: .regularExpression) != nil {
-            return true
-        }
-        return false
-    }
-
 }
 
-private struct MeetingDetailSegmentRow: View {
-    let segment: MeetingTranscriptSegment
-    let speakerTitle: String
-    let isActive: Bool
+private struct MeetingDetailTranscriptListPane: View, Equatable {
+    let rows: [MeetingTranscriptVirtualRow]
     let showsTranslation: Bool
-    let isSearchMatch: Bool
+    let scrollRequest: MeetingTranscriptScrollRequest?
+
+    static func == (
+        lhs: MeetingDetailTranscriptListPane,
+        rhs: MeetingDetailTranscriptListPane
+    ) -> Bool {
+        lhs.rows == rhs.rows
+            && lhs.showsTranslation == rhs.showsTranslation
+            && lhs.scrollRequest == rhs.scrollRequest
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                Text(MeetingTranscriptFormatter.timestampString(for: segment.startSeconds))
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-
-                Text(speakerTitle)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(segment.speaker == .me ? Color(red: 0.16, green: 0.47, blue: 0.88) : Color(red: 0.12, green: 0.58, blue: 0.32))
-
-                Spacer(minLength: 8)
-            }
-
-            Text(segment.text)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.primary.opacity(0.94))
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if showsTranslation,
-               let translatedText = segment.translatedText?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !translatedText.isEmpty {
-                Text(translatedText)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if showsTranslation, segment.isTranslationPending {
-                Text(AppLocalization.localizedString("Translating…"))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary.opacity(0.75))
-            }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(backgroundColor)
+        MeetingTranscriptVirtualList(
+            rows: rows,
+            showsTranslation: showsTranslation,
+            scrollRequest: scrollRequest
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
-        )
-    }
-
-    private var backgroundColor: Color {
-        if isActive {
-            return speakerAccentColor.opacity(0.16)
-        }
-        if isSearchMatch {
-            return Color.orange.opacity(0.12)
-        }
-        return speakerAccentColor.opacity(0.06)
-    }
-
-    private var borderColor: Color {
-        if isActive {
-            return speakerAccentColor.opacity(0.32)
-        }
-        if isSearchMatch {
-            return Color.orange.opacity(0.28)
-        }
-        return speakerAccentColor.opacity(0.16)
-    }
-
-    private var speakerAccentColor: Color {
-        segment.speaker == .me
-            ? Color(red: 0.16, green: 0.47, blue: 0.88)
-            : Color(red: 0.12, green: 0.58, blue: 0.32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

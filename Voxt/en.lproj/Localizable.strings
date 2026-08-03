@@ -542,6 +542,8 @@
 "Browser URL read test failed." = "Browser URL read test failed.";
 "History Cleanup" = "History Cleanup";
 "Retention" = "Retention";
+"Retention Count" = "Retention Count";
+"Unlimited" = "Unlimited";
 "1 Week" = "1 Week";
 "1 Year" = "1 Year";
 "3 Months" = "3 Months";
@@ -2241,6 +2243,9 @@
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "This model is unavailable because the sherpa-onnx runtime is not included in this build.";
 "Uninstalled %@." = "Uninstalled %@.";
 "Uninstall failed: %@" = "Uninstall failed: %@";
+"Model download succeeded" = "Model download succeeded";
+"Model download failed" = "Model download failed";
+"%@ downloaded successfully." = "%@ downloaded successfully.";
 "Endpoint must be a valid HTTP or HTTPS URL." = "Endpoint must be a valid HTTP or HTTPS URL.";
 "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL.";
 "Endpoint must not contain a username or password." = "Endpoint must not contain a username or password.";
@@ -2258,9 +2263,16 @@
 "Upload File" = "Upload File";
 "Upload a meeting audio or video file" = "Upload a meeting audio or video file";
 "Click to choose a meeting recording" = "Click to choose a meeting recording";
+"Click to choose or drag in a meeting recording" = "Click to choose or drag in a meeting recording";
+"Drop to analyze this recording" = "Drop to analyze this recording";
+"Unsupported file type. Drop an audio or video recording instead." = "Unsupported file type. Drop an audio or video recording instead.";
+"Meeting file analysis is already in progress." = "Meeting file analysis is already in progress.";
 "Supports MP3, MP4, M4A, WAV, AAC, MOV, and other common audio or video formats." = "Supports MP3, MP4, M4A, WAV, AAC, MOV, and other common audio or video formats.";
 "Analysis complete. Opening Meeting Details…" = "Analysis complete. Opening Meeting Details…";
 "File analysis failed" = "File analysis failed";
+"File conversion succeeded" = "File conversion succeeded";
+"File conversion failed" = "File conversion failed";
+"%@ has been converted successfully." = "%@ has been converted successfully.";
 "Preparing audio…" = "Preparing audio…";
 "Transcribing meeting…" = "Transcribing meeting…";
 "Identifying speakers…" = "Identifying speakers…";

@@ -43,8 +43,10 @@ final class TranscriptionHistoryStoreAsyncTests: XCTestCase {
         let defaults = UserDefaults.standard
         let cleanupEnabledKey = AppPreferenceKey.historyCleanupEnabled
         let retentionPeriodKey = AppPreferenceKey.historyRetentionPeriod
+        let retentionCountKey = AppPreferenceKey.historyRetentionCount
         let previousCleanupEnabled = defaults.object(forKey: cleanupEnabledKey)
         let previousRetentionPeriod = defaults.object(forKey: retentionPeriodKey)
+        let previousRetentionCount = defaults.object(forKey: retentionCountKey)
         defer {
             if let previousCleanupEnabled {
                 defaults.set(previousCleanupEnabled, forKey: cleanupEnabledKey)
@@ -56,10 +58,16 @@ final class TranscriptionHistoryStoreAsyncTests: XCTestCase {
             } else {
                 defaults.removeObject(forKey: retentionPeriodKey)
             }
+            if let previousRetentionCount {
+                defaults.set(previousRetentionCount, forKey: retentionCountKey)
+            } else {
+                defaults.removeObject(forKey: retentionCountKey)
+            }
         }
 
         defaults.set(true, forKey: cleanupEnabledKey)
         defaults.set(HistoryRetentionPeriod.oneDay.rawValue, forKey: retentionPeriodKey)
+        defaults.set(HistoryRetentionCount.unlimited.rawValue, forKey: retentionCountKey)
         let oldDate = Date().addingTimeInterval(-2 * 24 * 60 * 60)
         let transcription = makeEntry(index: 0, kind: .normal, createdAt: oldDate)
         let translation = makeEntry(index: 1, kind: .translation, createdAt: oldDate)
@@ -72,6 +80,77 @@ final class TranscriptionHistoryStoreAsyncTests: XCTestCase {
         XCTAssertNil(store.entry(id: translation.id))
         XCTAssertNil(store.entry(id: rewrite.id))
         XCTAssertNotNil(store.entry(id: meeting.id))
+        await drainMainQueue()
+    }
+
+    func testRetentionCountCleanupKeepsNewestPerKindAndPreservesMeetings() async throws {
+        let defaults = UserDefaults.standard
+        let cleanupEnabledKey = AppPreferenceKey.historyCleanupEnabled
+        let retentionPeriodKey = AppPreferenceKey.historyRetentionPeriod
+        let retentionCountKey = AppPreferenceKey.historyRetentionCount
+        let previousCleanupEnabled = defaults.object(forKey: cleanupEnabledKey)
+        let previousRetentionPeriod = defaults.object(forKey: retentionPeriodKey)
+        let previousRetentionCount = defaults.object(forKey: retentionCountKey)
+        defer {
+            if let previousCleanupEnabled {
+                defaults.set(previousCleanupEnabled, forKey: cleanupEnabledKey)
+            } else {
+                defaults.removeObject(forKey: cleanupEnabledKey)
+            }
+            if let previousRetentionPeriod {
+                defaults.set(previousRetentionPeriod, forKey: retentionPeriodKey)
+            } else {
+                defaults.removeObject(forKey: retentionPeriodKey)
+            }
+            if let previousRetentionCount {
+                defaults.set(previousRetentionCount, forKey: retentionCountKey)
+            } else {
+                defaults.removeObject(forKey: retentionCountKey)
+            }
+        }
+
+        defaults.set(true, forKey: cleanupEnabledKey)
+        defaults.set(HistoryRetentionPeriod.forever.rawValue, forKey: retentionPeriodKey)
+        defaults.set(HistoryRetentionCount.fifty.rawValue, forKey: retentionCountKey)
+
+        let now = Date()
+        var entries: [TranscriptionHistoryEntry] = []
+        var newestNormalIDs: [UUID] = []
+        var newestTranslationIDs: [UUID] = []
+        var newestRewriteIDs: [UUID] = []
+
+        for index in 0..<55 {
+            let createdAt = now.addingTimeInterval(TimeInterval(-index))
+            let normal = makeEntry(index: index, kind: .normal, createdAt: createdAt)
+            let translation = makeEntry(index: 1000 + index, kind: .translation, createdAt: createdAt)
+            let rewrite = makeEntry(index: 2000 + index, kind: .rewrite, createdAt: createdAt)
+            entries.append(contentsOf: [normal, translation, rewrite])
+            if index < 50 {
+                newestNormalIDs.append(normal.id)
+                newestTranslationIDs.append(translation.id)
+                newestRewriteIDs.append(rewrite.id)
+            }
+        }
+
+        let meeting = makeEntry(index: 9999, kind: .transcript, createdAt: now.addingTimeInterval(-10_000))
+        entries.append(meeting)
+
+        let repository = try makeFixture(entries: entries)
+        let store = TranscriptionHistoryStore(repository: repository)
+
+        for id in newestNormalIDs {
+            XCTAssertNotNil(store.entry(id: id))
+        }
+        for id in newestTranslationIDs {
+            XCTAssertNotNil(store.entry(id: id))
+        }
+        for id in newestRewriteIDs {
+            XCTAssertNotNil(store.entry(id: id))
+        }
+        XCTAssertEqual(try repository.entryCount(kind: .normal, query: ""), 50)
+        XCTAssertEqual(try repository.entryCount(kind: .translation, query: ""), 50)
+        XCTAssertEqual(try repository.entryCount(kind: .rewrite, query: ""), 50)
+        XCTAssertNotNil(try repository.entry(id: meeting.id))
         await drainMainQueue()
     }
 
@@ -302,6 +381,13 @@ private final class BlockingHistoryRepository: HistoryRepositoryProtocol, @unche
         kinds: Set<TranscriptionHistoryKind>
     ) throws -> [TranscriptionHistoryEntry] {
         try base.deleteEntries(olderThan: cutoff, kinds: kinds)
+    }
+
+    func deleteEntries(
+        keepingNewest count: Int,
+        kind: TranscriptionHistoryKind
+    ) throws -> [TranscriptionHistoryEntry] {
+        try base.deleteEntries(keepingNewest: count, kind: kind)
     }
 }
 
