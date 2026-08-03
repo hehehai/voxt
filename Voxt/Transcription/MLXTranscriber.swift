@@ -94,12 +94,12 @@ struct MLXVoiceActivitySampleContextBuffer {
     }
 
     mutating func finish() -> [Float] {
-        guard observedSpeech else {
-            pendingFrames.removeAll(keepingCapacity: false)
-            pendingDurationSeconds = 0
-            return []
-        }
-        return flushPendingSamples()
+        // Drop trailing non-speech after the last speech burst. Pre-roll before
+        // speech onsets is already flushed in `append`; trailing pad only lengthens
+        // Final ASR input without helping offline recognition.
+        pendingFrames.removeAll(keepingCapacity: false)
+        pendingDurationSeconds = 0
+        return []
     }
 
     private mutating func appendPendingFrame(_ frame: ASRVoiceActivityAudioFrame) {
@@ -438,26 +438,102 @@ enum MLXTranscriptionPlanning {
             ?? defaultLanguage
     }
 
+    /// Whether dictation Final may replace full PCM with VAD-filtered speech.
+    /// SenseVoice keeps catalog `.standard` (meeting validation) but must not also
+    /// externally trim PCM before its own long-form Silero segmentation.
+    nonisolated static func allowsExternalFinalSpeechTrim(
+        vadPolicy: MLXVADPolicy,
+        family: MLXModelFamily
+    ) -> Bool {
+        if family == .senseVoice {
+            return false
+        }
+        return vadPolicy.allowsExternalFinalSpeechTrim
+    }
+
     nonisolated static func finalizationSamples(
         fullSamples: [Float],
         voiceActivityFilteredSamples: [Float],
         localVADGateActive: Bool,
         observedVoiceActivityFrames: Bool,
-        observedSpeech: Bool
+        observedSpeech: Bool,
+        vadPolicy: MLXVADPolicy = .standard,
+        family: MLXModelFamily? = nil
     ) -> MLXFinalizationSampleSelection {
+        let allowsTrim = family.map {
+            allowsExternalFinalSpeechTrim(vadPolicy: vadPolicy, family: $0)
+        } ?? vadPolicy.allowsExternalFinalSpeechTrim
+
+        // Timeline-sensitive / model-managed / SenseVoice dictation: VAD is only a no-speech gate.
+        guard allowsTrim else {
+            if localVADGateActive, observedVoiceActivityFrames, !observedSpeech {
+                return MLXFinalizationSampleSelection(samples: [], source: .noSpeech)
+            }
+            return MLXFinalizationSampleSelection(samples: fullSamples, source: .full)
+        }
+
         guard localVADGateActive, observedVoiceActivityFrames else {
             return MLXFinalizationSampleSelection(samples: fullSamples, source: .full)
         }
         guard observedSpeech else {
             return MLXFinalizationSampleSelection(samples: [], source: .noSpeech)
         }
-        guard !voiceActivityFilteredSamples.isEmpty else {
+        guard !voiceActivityFilteredSamples.isEmpty,
+              voiceActivityFilteredSamples.count < fullSamples.count
+        else {
             return MLXFinalizationSampleSelection(samples: fullSamples, source: .full)
         }
         return MLXFinalizationSampleSelection(
             samples: voiceActivityFilteredSamples,
             source: .voiceActivityFiltered
         )
+    }
+
+    /// Final maxTokens for families that otherwise pin a static tuning budget.
+    /// Intermediate / quick passes keep tuning values; only offline Final uses duration.
+    nonisolated static func postStopFinalMaxTokens(
+        family: MLXModelFamily,
+        audioDurationSeconds: Double?,
+        tuningMaxTokens: Int
+    ) -> Int {
+        switch family {
+        case .canary, .moonshine:
+            guard let audioDurationSeconds else { return max(tuningMaxTokens, 256) }
+            return max(postStopFinalMaxTokens(audioDurationSeconds: audioDurationSeconds), tuningMaxTokens)
+        case .cohereTranscribe:
+            // Native modelManaged path: keep user/tuning budget; do not auto-rewrite.
+            return tuningMaxTokens
+        default:
+            if let audioDurationSeconds {
+                return postStopFinalMaxTokens(audioDurationSeconds: audioDurationSeconds)
+            }
+            return 8192
+        }
+    }
+
+    /// Caps offline Final decode budget by audio length while keeping headroom for
+    /// dense Chinese/English mixed speech.
+    nonisolated static func postStopFinalMaxTokens(audioDurationSeconds: Double) -> Int {
+        let safeDuration = max(0, audioDurationSeconds)
+        // 28 tok/s covers dense CN/EN mixed speech better than 24; EOS still ends early.
+        let estimated = Int(ceil(safeDuration * 28.0)) + 64
+        return min(8192, max(256, estimated))
+    }
+
+    /// Offline Final prefers one decode window. Intermediate passes may still use the
+    /// recognition-preset slice (e.g. accuracyFirst=90); Final lifts to the balanced window.
+    nonisolated static func postStopFinalChunkDuration(presetChunkDuration: Float) -> Float {
+        max(presetChunkDuration, 1200)
+    }
+
+    nonisolated static func postStopFinalKVCachePolicy(
+        family: MLXModelFamily,
+        catalogPolicy: MLXASRKVCachePolicy?
+    ) -> MLXASRKVCachePolicy? {
+        if family == .qwen3ASR {
+            return .finalQwen
+        }
+        return catalogPolicy
     }
 
     nonisolated static func senseVoiceSegmentRanges(
@@ -698,14 +774,21 @@ enum MLXTranscriptionPlanning {
         provisionalText: String
     ) -> String? {
         let normalizedConfirmed = confirmedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasProvisionalContent = !provisionalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let normalizedProvisional = provisionalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasProvisionalContent = !normalizedProvisional.isEmpty
+        // Suppress tiny provisional-only flashes (common junk before the first confirm).
+        // Confirmed text still surfaces immediately; this does not change Final.
+        if normalizedConfirmed.isEmpty, normalizedProvisional.count < 2 {
+            return nil
+        }
         let combined = (confirmedText + provisionalText).trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !combined.isEmpty else { return nil }
         guard combined != previousPreview else { return nil }
 
+        // Suppress preview collapse/thrash when confirmed is unchanged and the visible
+        // string shrinks (empty provisional clear, or unstable provisional rewrite).
         if normalizedConfirmed == previousConfirmedText,
-           !hasProvisionalContent,
            !previousPreview.isEmpty,
            previousPreview.hasPrefix(normalizedConfirmed),
            previousPreview.count > combined.count {
@@ -1243,7 +1326,6 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private let correctionPollInterval: Duration = .milliseconds(600)
     private let quickPassMinimumDurationSeconds: Double = 14.0
     private let qwenLiveFeedPollInterval: Duration = .milliseconds(100)
-    private let qwenLiveEndedTimeoutSeconds: Double = 0.35
     private let senseVoiceDirectPassMaximumDurationSeconds: Double = 30.0
     private let senseVoiceChunkMaximumDurationSeconds: Double = 24.0
     private let senseVoiceChunkOverlapSeconds: Double = 0.35
@@ -1256,6 +1338,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var correctionLoopTask: Task<Void, Never>?
     private var finalizationTask: Task<Void, Never>?
     private var preloadTask: Task<Void, Never>?
+    /// Survive `cancelActiveTasks()` at session start so hotkey-time load is not aborted.
+    private var earlyPrewarmTask: Task<Void, Never>?
     private var captureWatchdogTask: Task<Void, Never>?
     private var liveSessionSetupTask: Task<Void, Never>?
     private var activeCorrectionPassID: UUID?
@@ -1266,6 +1350,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var qwenStreamingEventTask: Task<Void, Never>?
     private var qwenStreamingFeedTask: Task<Void, Never>?
     private var nativeLiveModelPinned = false
+    /// Keeps the ASR model resident for the whole recording + Final window so idle
+    /// unload cannot race live release → postStopFinal.
+    private var sessionModelPinned = false
     private var qwenFeedCursor = 0
     private var qwenVoiceActivityFeedCursor = 0
     private var voiceActivityFinalizationFilteringEnabled = false
@@ -1337,6 +1424,30 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         voiceActivityFilteredSampleStore.finishVoiceActivityFiltering()
     }
 
+    /// Starts ASR model load as early as possible (hotkey / session prepare), overlapping
+    /// mic startup. Does not change UI or session lifecycle — load is shared with later
+    /// `loadModel()` calls via the model manager coordinator.
+    func prewarmModelForUpcomingSession() {
+        guard modelManager.currentTranscriptionBehavior.preloadsOnRecordingStart else {
+            return
+        }
+        pinModelForSessionIfNeeded()
+        isModelInitializing = !modelManager.isCurrentModelLoaded
+        startEarlyModelPrewarmIfNeeded()
+    }
+
+    /// Drops a prepare-time model pin when capture never entered recording/finalization
+    /// (start failure or cancel-before-start). Idempotent with normal session teardown.
+    func discardPreparedSessionModelUse() {
+        guard !isRecording, !isFinalizingTranscription else { return }
+        preloadTask?.cancel()
+        preloadTask = nil
+        earlyPrewarmTask?.cancel()
+        earlyPrewarmTask = nil
+        unpinModelForSessionIfNeeded()
+        isModelInitializing = false
+    }
+
     func startRecording() {
         Task { [weak self] in
             _ = await self?.startRecordingSession()
@@ -1360,7 +1471,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         activeSessionBehavior = modelManager.currentTranscriptionBehavior
         activeLiveMode = resolvedSessionLiveMode()
         activeCaptureUsesPreferredInputDevice = preferredInputDeviceID != nil
-        isModelInitializing = modelManager.state != .ready
+        pinModelForSessionIfNeeded()
+        isModelInitializing = !modelManager.isCurrentModelLoaded
+        // Overlap model load with mic graph startup; do not wait for capture first.
+        startModelPreloadIfNeeded(revision: revision)
         VoxtLog.asr(
             "MLX transcription session started. repo=\(modelManager.currentModelRepo), correctionMode=\(activeSessionBehavior.correctionMode), realtimeDisplay=\(sessionAllowsRealtimeTextDisplay), liveMode=\(String(describing: activeLiveMode)), modelState=\(String(describing: modelManager.state))",
             verbose: true
@@ -1370,7 +1484,6 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             try await startAudioCaptureGraphWithTimeout()
             isRecording = true
             scheduleCaptureStartupWatchdog(revision: revision)
-            startModelPreloadIfNeeded(revision: revision)
 
             if activeLiveMode == .nativeQwenLive {
                 startNativeQwenLiveSession(revision: revision)
@@ -1395,12 +1508,16 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             VoxtLog.asrError("MLXTranscriber start recording failed: \(error)")
             stopAudioEngine()
             audioEngine.inputNode.removeTap(onBus: 0)
+            discardPreparedSessionModelUse()
             return AppLocalization.localizedString("Failed to start the microphone. Please try again.")
         }
     }
 
     func stopRecording() {
-        guard isRecording else { return }
+        guard isRecording else {
+            discardPreparedSessionModelUse()
+            return
+        }
 
         stopAudioEngine()
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -1454,6 +1571,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let correctionTask = correctionLoopTask
         let finalizationTask = finalizationTask
         let preloadTask = preloadTask
+        let earlyPrewarmTask = earlyPrewarmTask
         let watchdogTask = captureWatchdogTask
         let setupTask = liveSessionSetupTask
         let correctionPassTask = activeCorrectionPassTask
@@ -1464,11 +1582,16 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         stopAudioEngine()
         audioEngine.inputNode.removeTap(onBus: 0)
         isRecording = false
+        isFinalizingTranscription = false
         cancelActiveTasks()
+        earlyPrewarmTask?.cancel()
+        self.earlyPrewarmTask = nil
+        unpinModelForSessionIfNeeded()
 
         await correctionTask?.value
         await finalizationTask?.value
         await preloadTask?.value
+        await earlyPrewarmTask?.value
         await watchdogTask?.value
         await setupTask?.value
         _ = await correctionPassTask?.value
@@ -1498,6 +1621,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.reset()
         cancelActiveTasks()
+        earlyPrewarmTask?.cancel()
+        earlyPrewarmTask = nil
+        unpinModelForSessionIfNeeded()
         sampleStore.clear()
         voiceActivityFrameStore.clear()
         voiceActivityFilteredSampleStore.clear()
@@ -1588,17 +1714,21 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
         voiceActivityFilteredSampleStore.finishVoiceActivityFiltering()
         let voiceActivityState = voiceActivityFilteredSampleStore.voiceActivityState()
+        let capability = MLXModelCatalog.capability(for: modelManager.currentModelRepo)
+        let vadPolicy = capability.vadPolicy
         let selection = MLXTranscriptionPlanning.finalizationSamples(
             fullSamples: fullSnapshot,
             voiceActivityFilteredSamples: voiceActivityFilteredSampleStore.snapshot(),
             localVADGateActive: voiceActivityState.enabled,
             observedVoiceActivityFrames: voiceActivityState.observedFrames,
-            observedSpeech: voiceActivityState.observedSpeech
+            observedSpeech: voiceActivityState.observedSpeech,
+            vadPolicy: vadPolicy,
+            family: capability.family
         )
         let snapshot = selection.samples
         guard !snapshot.isEmpty else {
             VoxtLog.asr(
-                "MLX finalization skipped because local VAD observed no speech. repo=\(modelManager.currentModelRepo), fullAudioSec=\(String(format: "%.2f", Double(fullSnapshot.count) / safeSampleRate(sampleRate)))",
+                "MLX finalization skipped because local VAD observed no speech. repo=\(modelManager.currentModelRepo), family=\(capability.family), fullAudioSec=\(String(format: "%.2f", Double(fullSnapshot.count) / safeSampleRate(sampleRate)))",
                 verbose: true
             )
             stageCompletedAudioArchive(samples: fullSnapshot, sampleRate: sampleRate)
@@ -1618,9 +1748,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             quickPassMinimumDurationSeconds: quickPassMinimumDurationSeconds,
             quickPassContextWindowSeconds: currentQuickPassContextWindowSeconds
         )
+        // Offline Final is authoritative for quality. Do not wait on live `.ended` —
+        // that only delayed postStopFinal while canceling the streaming session anyway.
         if MLXTranscriptionPlanning.isNativeLiveMode(activeLiveMode) {
-            await waitForNativeLiveEndedPreviewIfNeeded(revision: revision)
-            guard revision == sessionRevision else { return }
             releaseNativeLiveSession(cancelSession: true)
         }
         let shouldRunQuickPass = MLXTranscriptionPlanning.shouldRunQuickStopPass(
@@ -1628,10 +1758,15 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             sessionAllowsRealtimeTextDisplay: sessionAllowsRealtimeTextDisplay,
             liveMode: activeLiveMode
         )
+        let finalizationStartedAt = Date()
         VoxtLog.asr(
-            "MLX finalization started. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), source=\(selection.source.telemetryName), fullAudioSec=\(String(format: "%.2f", Double(fullSnapshot.count) / safeSampleRate(sampleRate))), quickPass=\(shouldRunQuickPass)",
+            "MLX finalization started. repo=\(modelManager.currentModelRepo), family=\(capability.family), audioSec=\(String(format: "%.2f", plan.durationSeconds)), source=\(selection.source.telemetryName), vadPolicy=\(String(describing: vadPolicy)), externalTrim=\(MLXTranscriptionPlanning.allowsExternalFinalSpeechTrim(vadPolicy: vadPolicy, family: capability.family)), fullAudioSec=\(String(format: "%.2f", Double(fullSnapshot.count) / safeSampleRate(sampleRate))), quickPass=\(shouldRunQuickPass), recognitionPreset=\(capability.configurationCapabilities.contains(.recognitionPreset))",
             verbose: true
         )
+        // History WAV export is independent of Final inference — overlap I/O with ASR.
+        let archiveTask = Task.detached(priority: .utility) {
+            Self.exportCompletedAudioArchiveURL(samples: fullSnapshot, sampleRate: sampleRate)
+        }
         let quickSource: [Float]?
         if shouldRunQuickPass, let quickPassSampleCount = plan.quickPassSampleCount {
             quickSource = latestWindow(from: snapshot, maxCount: quickPassSampleCount)
@@ -1658,8 +1793,20 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             sampleRate: sampleRate
         )
 
-        guard revision == sessionRevision else { return }
-        stageCompletedAudioArchive(samples: fullSnapshot, sampleRate: sampleRate)
+        guard revision == sessionRevision else {
+            archiveTask.cancel()
+            if let archiveURL = await archiveTask.value {
+                try? FileManager.default.removeItem(at: archiveURL)
+            }
+            return
+        }
+        if let archiveURL = await archiveTask.value {
+            removeCompletedAudioArchiveIfNeeded()
+            completedAudioArchiveURL = archiveURL
+        } else {
+            // Fallback keeps history available if the overlapped export failed.
+            stageCompletedAudioArchive(samples: fullSnapshot, sampleRate: sampleRate)
+        }
         let fallbackText: String
         if !latestNativeLiveEndedSegments.isEmpty {
             // Prefer reliable timed segments captured at live `.ended` when post-stop
@@ -1685,8 +1832,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         transcribedText = resolved
         publishPartial(resolved)
         onTranscriptionFinished?(resolved)
+        let finalizationElapsedMs = Int(Date().timeIntervalSince(finalizationStartedAt) * 1000)
         VoxtLog.asr(
-            "MLX finalization completed. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), textChars=\(resolved.count)",
+            "MLX finalization completed. repo=\(modelManager.currentModelRepo), audioSec=\(String(format: "%.2f", plan.durationSeconds)), textChars=\(resolved.count), finalizationMs=\(finalizationElapsedMs), source=\(selection.source.telemetryName)",
             verbose: true
         )
         sampleStore.clear()
@@ -1704,6 +1852,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         voiceActivityFilteredSampleStore.clear()
         preloadTask?.cancel()
         preloadTask = nil
+        earlyPrewarmTask?.cancel()
+        earlyPrewarmTask = nil
         captureWatchdogTask?.cancel()
         captureWatchdogTask = nil
         finalizationTask = nil
@@ -1712,6 +1862,19 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         onTranscriptionFinished = nil
         onPartialTranscription = nil
         dictionaryEntryProvider = nil
+        unpinModelForSessionIfNeeded()
+    }
+
+    private func pinModelForSessionIfNeeded() {
+        guard !sessionModelPinned else { return }
+        modelManager.beginActiveUse()
+        sessionModelPinned = true
+    }
+
+    private func unpinModelForSessionIfNeeded() {
+        guard sessionModelPinned else { return }
+        sessionModelPinned = false
+        modelManager.endActiveUse()
     }
 
     private func runManagedCorrectionPass(
@@ -1793,6 +1956,16 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
         do {
             try Task.checkCancellation()
+            let prepareStartedAt = Date()
+            let targetRate = targetSampleRate
+            // Resample/copy off the main actor and overlap with model pin/load.
+            let prepareTask = Task.detached(priority: .userInitiated) {
+                try Self.prepareInputSamplesDetached(
+                    rawSamples,
+                    sampleRate: sampleRate,
+                    targetSampleRate: targetRate
+                )
+            }
             modelManager.beginActiveUse()
             defer { modelManager.endActiveUse() }
             let model = try await modelManager.loadModel()
@@ -1800,8 +1973,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             await MainActor.run {
                 self.isModelInitializing = false
             }
-            let audioSamples = try prepareInputSamples(rawSamples, sampleRate: sampleRate)
-            let inferenceConfiguration = resolvedInferenceConfiguration(for: stage)
+            let audioSamples = try await prepareTask.value
+            let inferenceConfiguration = resolvedInferenceConfiguration(
+                for: stage,
+                audioDurationSeconds: audioSeconds
+            )
+            let prepareElapsedMs = Int(Date().timeIntervalSince(prepareStartedAt) * 1000)
             let inferenceStartedAt = Date()
             let inferenceResult = try await runStreamingInference(
                 model: model,
@@ -1823,7 +2000,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             applyCandidate(candidate, stage: stage)
             let elapsedMs = Int(Date().timeIntervalSince(passStartedAt) * 1000)
             VoxtLog.asr(
-                "MLX correction pass completed. repo=\(repo), stage=\(stageLabel(for: stage)), audioSec=\(String(format: "%.2f", audioSeconds)), elapsedMs=\(elapsedMs), inferenceMs=\(inferenceElapsedMs), textChars=\(candidate.count)",
+                "MLX correction pass completed. repo=\(repo), stage=\(stageLabel(for: stage)), audioSec=\(String(format: "%.2f", audioSeconds)), elapsedMs=\(elapsedMs), prepareMs=\(prepareElapsedMs), inferenceMs=\(inferenceElapsedMs), maxTokens=\(inferenceConfiguration.generationParameters.maxTokens), textChars=\(candidate.count)",
                 verbose: true
             )
             return .success(candidate)
@@ -2038,16 +2215,27 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
 
     private func stageCompletedAudioArchive(samples: [Float], sampleRate: Double) {
         removeCompletedAudioArchiveIfNeeded()
-        guard !samples.isEmpty else { return }
+        guard let tempURL = Self.exportCompletedAudioArchiveURL(samples: samples, sampleRate: sampleRate) else {
+            return
+        }
+        completedAudioArchiveURL = tempURL
+    }
+
+    private nonisolated static func exportCompletedAudioArchiveURL(
+        samples: [Float],
+        sampleRate: Double
+    ) -> URL? {
+        guard !samples.isEmpty else { return nil }
         let tempURL = HistoryAudioArchiveSupport.temporaryArchiveURL(prefix: "voxt-mlx-history")
         do {
             if try HistoryAudioArchiveSupport.exportWAV(samples: samples, sampleRate: sampleRate, to: tempURL) {
-                completedAudioArchiveURL = tempURL
+                return tempURL
             }
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
             VoxtLog.asrWarning("MLX completed audio archive export failed: \(error.localizedDescription)")
         }
+        return nil
     }
 
     private func removeCompletedAudioArchiveIfNeeded() {
@@ -2637,19 +2825,37 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func waitForNativeLiveEndedPreviewIfNeeded(revision: Int) async {
-        guard MLXTranscriptionPlanning.isNativeLiveMode(activeLiveMode) else { return }
-        guard latestNativeLiveEndedText.isEmpty else { return }
+    private func startEarlyModelPrewarmIfNeeded() {
+        guard !modelManager.isCurrentModelLoaded else {
+            isModelInitializing = false
+            return
+        }
+        guard earlyPrewarmTask == nil else { return }
 
-        let startedAt = Date()
-        while revision == sessionRevision,
-              latestNativeLiveEndedText.isEmpty,
-              Date().timeIntervalSince(startedAt) < qwenLiveEndedTimeoutSeconds
-        {
+        earlyPrewarmTask = Task { [weak self] in
+            guard let self else { return }
+            let startedAt = Date()
             do {
-                try await Task.sleep(for: .milliseconds(25))
-            } catch {
+                // Session pin (if held) already blocks idle unload; avoid nested begin/end
+                // so a cancelled prepare path cannot briefly schedule unload.
+                _ = try await self.modelManager.loadModel()
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.isModelInitializing = false
+                }
+                let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                VoxtLog.asr(
+                    "MLX transcription early prewarm completed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs)",
+                    verbose: true
+                )
+            } catch is CancellationError {
                 return
+            } catch {
+                guard !Task.isCancelled else { return }
+                let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                VoxtLog.asrWarning(
+                    "MLX transcription early prewarm failed. repo=\(self.modelManager.currentModelRepo), elapsedMs=\(elapsedMs), error=\(error.localizedDescription)"
+                )
             }
         }
     }
@@ -2659,7 +2865,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             isModelInitializing = false
             return
         }
-        guard modelManager.state != .ready else {
+        guard !modelManager.isCurrentModelLoaded else {
             isModelInitializing = false
             return
         }
@@ -2669,8 +2875,16 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             guard let self else { return }
             let startedAt = Date()
             do {
-                self.modelManager.beginActiveUse()
-                defer { self.modelManager.endActiveUse() }
+                // Prefer session pin; only add a nested pin when session pin is absent.
+                let nestedPin = !self.sessionModelPinned
+                if nestedPin {
+                    self.modelManager.beginActiveUse()
+                }
+                defer {
+                    if nestedPin {
+                        self.modelManager.endActiveUse()
+                    }
+                }
                 _ = try await self.modelManager.loadModel()
                 guard !Task.isCancelled, revision == self.sessionRevision else { return }
                 await MainActor.run {
@@ -2855,7 +3069,10 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         return stableBase
     }
 
-    private func resolvedInferenceConfiguration(for stage: MLXCorrectionPassKind) -> ResolvedInferenceConfiguration {
+    private func resolvedInferenceConfiguration(
+        for stage: MLXCorrectionPassKind,
+        audioDurationSeconds: Double? = nil
+    ) -> ResolvedInferenceConfiguration {
         let hintPayload = resolvedHintPayload()
         let tuningSettings = resolvedLocalTuningSettings()
         let mossSettings = tuningSettings.mossSettings(for: transcriptionPurpose.mossUsageScope)
@@ -2873,8 +3090,8 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             multilingualContext: hintPayload.multilingualContext
         )
         let dictionaryTerms = resolvedDictionaryTermsTemplateValue()
-        let chunkDuration: Float
-        let minChunkDuration: Float
+        var chunkDuration: Float
+        var minChunkDuration: Float
         if capability.configurationCapabilities.contains(.recognitionPreset) {
             switch tuningSettings.preset {
             case .balanced:
@@ -2889,6 +3106,12 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             // leftover preset values so stale settings cannot change decoding windows.
             chunkDuration = 1200
             minChunkDuration = 1
+        }
+        if stage == .postStopFinal {
+            chunkDuration = MLXTranscriptionPlanning.postStopFinalChunkDuration(
+                presetChunkDuration: chunkDuration
+            )
+            minChunkDuration = min(minChunkDuration, 1)
         }
 
         var languageHint = hintPayload.language
@@ -2917,28 +3140,61 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         case .postStopQuick:
             stageMaxTokens = sessionAllowsRealtimeTextDisplay ? 1024 : 512
         case .postStopFinal:
-            stageMaxTokens = 8192
+            if let audioDurationSeconds {
+                stageMaxTokens = MLXTranscriptionPlanning.postStopFinalMaxTokens(
+                    audioDurationSeconds: audioDurationSeconds
+                )
+            } else {
+                stageMaxTokens = 8192
+            }
         }
         let maxTokens: Int
         let temperature: Float
         let usePunctuation: Bool?
         switch family {
         case .cohereTranscribe:
+            // P3: Cohere keeps tuning budget on all stages (including Final).
             maxTokens = tuningSettings.cohereMaxTokens
             temperature = Float(tuningSettings.cohereTemperature)
             usePunctuation = tuningSettings.cohereUsePunctuation
         case .canary:
-            maxTokens = tuningSettings.canaryMaxTokens
+            if stage == .postStopFinal {
+                maxTokens = MLXTranscriptionPlanning.postStopFinalMaxTokens(
+                    family: family,
+                    audioDurationSeconds: audioDurationSeconds,
+                    tuningMaxTokens: tuningSettings.canaryMaxTokens
+                )
+            } else {
+                maxTokens = tuningSettings.canaryMaxTokens
+            }
             temperature = Float(tuningSettings.canaryTemperature)
             usePunctuation = tuningSettings.canaryUsePunctuation
         case .moonshine:
-            maxTokens = tuningSettings.moonshineMaxTokens
+            if stage == .postStopFinal {
+                maxTokens = MLXTranscriptionPlanning.postStopFinalMaxTokens(
+                    family: family,
+                    audioDurationSeconds: audioDurationSeconds,
+                    tuningMaxTokens: tuningSettings.moonshineMaxTokens
+                )
+            } else {
+                maxTokens = tuningSettings.moonshineMaxTokens
+            }
             temperature = Float(tuningSettings.moonshineTemperature)
             usePunctuation = nil
         default:
             maxTokens = stageMaxTokens
             temperature = family == .whisper ? Float(tuningSettings.whisperTemperature) : 0.0
             usePunctuation = nil
+        }
+
+        let kvCachePolicy: MLXASRKVCachePolicy?
+        if stage == .postStopFinal {
+            kvCachePolicy = MLXTranscriptionPlanning.postStopFinalKVCachePolicy(
+                family: family,
+                catalogPolicy: capability.kvCachePolicy
+            )
+        } else {
+            kvCachePolicy = capability.kvCachePolicy
         }
 
         return ResolvedInferenceConfiguration(
@@ -2954,9 +3210,9 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                 usePunctuation: usePunctuation,
                 chunkDuration: chunkDuration,
                 minChunkDuration: minChunkDuration,
-                kvBits: capability.kvCachePolicy?.bits,
-                kvGroupSize: capability.kvCachePolicy?.groupSize ?? 64,
-                quantizedKVStart: capability.kvCachePolicy?.quantizedStart ?? 0
+                kvBits: kvCachePolicy?.bits,
+                kvGroupSize: kvCachePolicy?.groupSize ?? 64,
+                quantizedKVStart: kvCachePolicy?.quantizedStart ?? 0
             ),
             languageHint: languageHint,
             timingGranularity: capability.timingGranularity,
@@ -3073,10 +3329,22 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     private func prepareInputSamples(_ samples: [Float], sampleRate: Double) throws -> [Float] {
+        try Self.prepareInputSamplesDetached(
+            samples,
+            sampleRate: sampleRate,
+            targetSampleRate: targetSampleRate
+        )
+    }
+
+    private nonisolated static func prepareInputSamplesDetached(
+        _ samples: [Float],
+        sampleRate: Double,
+        targetSampleRate: Int
+    ) throws -> [Float] {
         if abs(sampleRate - Double(targetSampleRate)) > 1.0 {
+            // Keep MLXAudio AVAudioConverter resampling for Final/live quality.
             return try resampleAudio(samples, from: Int(sampleRate), to: targetSampleRate)
         }
-
         return samples
     }
 
@@ -3593,7 +3861,11 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         defer { isModelInitializing = false }
         let model = try await modelManager.loadModel()
         let audioSamples = try prepareInputSamples(samples, sampleRate: sampleRate)
-        let inferenceConfiguration = resolvedInferenceConfiguration(for: .postStopFinal)
+        let audioDurationSeconds = Double(samples.count) / safeSampleRate(sampleRate)
+        let inferenceConfiguration = resolvedInferenceConfiguration(
+            for: .postStopFinal,
+            audioDurationSeconds: audioDurationSeconds
+        )
         let inferenceResult = try await runStreamingInference(
             model: model,
             audioSamples: audioSamples,

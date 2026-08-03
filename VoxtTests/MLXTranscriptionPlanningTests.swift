@@ -92,7 +92,7 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         )
     }
 
-    func testVoiceActivityFilteredSamplesFinishFlushesTrailingContextAfterSpeech() {
+    func testVoiceActivityFilteredSamplesFinishDropsTrailingSilenceAfterSpeech() {
         var buffer = MLXVoiceActivitySampleContextBuffer()
 
         XCTAssertEqual(
@@ -117,7 +117,38 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
             []
         )
 
-        XCTAssertEqual(buffer.finish(), [2, 3])
+        // Trailing non-speech must not lengthen Final ASR input.
+        XCTAssertEqual(buffer.finish(), [])
+    }
+
+    func testFinalizationSamplesPreferFilteredOnlyWhenStrictlyShorter() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [1, 2, 3, 4],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: true
+        )
+
+        XCTAssertEqual(selection.samples, [1, 2, 3, 4])
+        XCTAssertEqual(selection.source, .full)
+    }
+
+    func testFinalizationSamplesUseFilteredForStandardQwenPolicyWhenShorter() {
+        let capability = MLXModelCatalog.capability(for: MLXModelManager.defaultModelRepo)
+        XCTAssertEqual(capability.vadPolicy, .standard)
+
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4, 5, 6],
+            voiceActivityFilteredSamples: [2, 3, 4],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: true,
+            vadPolicy: capability.vadPolicy
+        )
+
+        XCTAssertEqual(selection.samples, [2, 3, 4])
+        XCTAssertEqual(selection.source, .voiceActivityFiltered)
     }
 
     func testVoiceActivityFilteredSamplesFinishDropsContextWhenNoSpeechWasObserved() {
@@ -209,6 +240,148 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
 
         XCTAssertEqual(selection.samples, [])
         XCTAssertEqual(selection.source, .noSpeech)
+    }
+
+    func testFinalizationSamplesPreserveTimelineUsesFullAudioEvenWhenFilteredSpeechExists() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [2, 3],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: true,
+            vadPolicy: .preserveTimeline
+        )
+
+        XCTAssertEqual(selection.samples, [1, 2, 3, 4])
+        XCTAssertEqual(selection.source, .full)
+    }
+
+    func testFinalizationSamplesPreserveTimelineStillSkipsWhenNoSpeech() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: false,
+            vadPolicy: .preserveTimeline
+        )
+
+        XCTAssertEqual(selection.samples, [])
+        XCTAssertEqual(selection.source, .noSpeech)
+    }
+
+    func testPostStopFinalMaxTokensScalesWithAudioDuration() {
+        XCTAssertEqual(MLXTranscriptionPlanning.postStopFinalMaxTokens(audioDurationSeconds: 1), 256)
+        XCTAssertEqual(MLXTranscriptionPlanning.postStopFinalMaxTokens(audioDurationSeconds: 10), 344)
+        XCTAssertEqual(MLXTranscriptionPlanning.postStopFinalMaxTokens(audioDurationSeconds: 120), 3424)
+        XCTAssertEqual(MLXTranscriptionPlanning.postStopFinalMaxTokens(audioDurationSeconds: 600), 8192)
+    }
+
+    func testPostStopFinalMaxTokensForCanaryAndMoonshineUsesDurationBudget() {
+        let dynamic = MLXTranscriptionPlanning.postStopFinalMaxTokens(audioDurationSeconds: 60)
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.postStopFinalMaxTokens(
+                family: .canary,
+                audioDurationSeconds: 60,
+                tuningMaxTokens: 200
+            ),
+            dynamic
+        )
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.postStopFinalMaxTokens(
+                family: .moonshine,
+                audioDurationSeconds: 60,
+                tuningMaxTokens: 200
+            ),
+            dynamic
+        )
+        // User-raised tuning remains a floor.
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.postStopFinalMaxTokens(
+                family: .canary,
+                audioDurationSeconds: 1,
+                tuningMaxTokens: 512
+            ),
+            512
+        )
+    }
+
+    func testPostStopFinalMaxTokensKeepsCohereTuningBudget() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.postStopFinalMaxTokens(
+                family: .cohereTranscribe,
+                audioDurationSeconds: 60,
+                tuningMaxTokens: 1024
+            ),
+            1024
+        )
+    }
+
+    func testFinalizationSamplesModelManagedKeepsFullAudio() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [2, 3],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: true,
+            vadPolicy: .modelManaged
+        )
+
+        XCTAssertEqual(selection.samples, [1, 2, 3, 4])
+        XCTAssertEqual(selection.source, .full)
+        XCTAssertFalse(MLXVADPolicy.modelManaged.allowsExternalFinalSpeechTrim)
+    }
+
+    func testFinalizationSamplesSenseVoiceKeepsFullAudioDespiteStandardCatalogPolicy() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [2, 3],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: true,
+            vadPolicy: .standard,
+            family: .senseVoice
+        )
+
+        XCTAssertEqual(selection.samples, [1, 2, 3, 4])
+        XCTAssertEqual(selection.source, .full)
+    }
+
+    func testFinalizationSamplesSenseVoiceStillSkipsWhenNoSpeechObserved() {
+        let selection = MLXTranscriptionPlanning.finalizationSamples(
+            fullSamples: [1, 2, 3, 4],
+            voiceActivityFilteredSamples: [],
+            localVADGateActive: true,
+            observedVoiceActivityFrames: true,
+            observedSpeech: false,
+            vadPolicy: .standard,
+            family: .senseVoice
+        )
+
+        XCTAssertEqual(selection.samples, [])
+        XCTAssertEqual(selection.source, .noSpeech)
+    }
+
+    func testPostStopFinalChunkDurationLiftsAccuracyFirstSlicesToSingleOfflineWindow() {
+        XCTAssertEqual(MLXTranscriptionPlanning.postStopFinalChunkDuration(presetChunkDuration: 90), 1200)
+        XCTAssertEqual(MLXTranscriptionPlanning.postStopFinalChunkDuration(presetChunkDuration: 1200), 1200)
+    }
+
+    func testPostStopFinalKVCachePolicyUsesFinalQwenForQwenFamily() {
+        XCTAssertEqual(
+            MLXTranscriptionPlanning.postStopFinalKVCachePolicy(
+                family: .qwen3ASR,
+                catalogPolicy: .conservativeQwen
+            ),
+            .finalQwen
+        )
+        XCTAssertEqual(MLXASRKVCachePolicy.finalQwen.quantizedStart, 64)
+        XCTAssertNil(
+            MLXTranscriptionPlanning.postStopFinalKVCachePolicy(
+                family: .mossTranscribeDiarize,
+                catalogPolicy: nil
+            )
+        )
     }
 
     private func voiceActivityFrame(
@@ -468,6 +641,28 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
                 previousConfirmedText: "hello",
                 confirmedText: "hello",
                 provisionalText: ""
+            )
+        )
+    }
+
+    func testNativeLiveVisiblePreviewSuppressesProvisionalThrashWhenCombinedShrinks() {
+        XCTAssertNil(
+            MLXTranscriptionPlanning.resolvedNativeLiveVisiblePreview(
+                previousPreview: "hello world",
+                previousConfirmedText: "hello",
+                confirmedText: "hello",
+                provisionalText: " w"
+            )
+        )
+    }
+
+    func testNativeLiveVisiblePreviewSuppressesTinyProvisionalOnlyFlash() {
+        XCTAssertNil(
+            MLXTranscriptionPlanning.resolvedNativeLiveVisiblePreview(
+                previousPreview: "",
+                previousConfirmedText: "",
+                confirmedText: "",
+                provisionalText: "a"
             )
         )
     }

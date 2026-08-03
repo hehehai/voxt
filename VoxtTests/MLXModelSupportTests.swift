@@ -142,6 +142,76 @@ final class MLXModelSupportTests: XCTestCase {
         XCTAssertTrue(senseVoice.configurationCapabilities.contains(.senseVoiceITN))
         XCTAssertTrue(senseVoice.outputCapabilities.contains(.emotion))
         XCTAssertTrue(senseVoice.outputCapabilities.contains(.audioEvents))
+        // Catalog stays `.standard` so meeting external final-speech validation remains enabled.
+        XCTAssertEqual(senseVoice.vadPolicy, .standard)
+        XCTAssertTrue(senseVoice.vadPolicy.usesExternalFinalSpeechValidation)
+    }
+
+    func testBatchStandardFamiliesAllowExternalFinalSpeechTrim() {
+        let standardRepos = [
+            "mlx-community/whisper-large-v3-turbo",
+            "mlx-community/parakeet-tdt-0.6b-v3",
+            "mlx-community/granite-4.0-1b-speech-5bit",
+            "mlx-community/GLM-ASR-Nano-2512-4bit",
+            "mlx-community/FireRedASR2-AED-mlx",
+            "Mediform/canary-1b-v2-mlx-q8",
+            "UsefulSensors/moonshine-tiny",
+        ]
+        for repo in standardRepos {
+            let policy = MLXModelCatalog.capability(for: repo).vadPolicy
+            XCTAssertEqual(policy, .standard, repo)
+            XCTAssertTrue(policy.allowsExternalFinalSpeechTrim, repo)
+        }
+    }
+
+    func testRecognitionPresetFamiliesLiftFinalChunkDuration() {
+        let presetRepos = [
+            "mlx-community/granite-4.0-1b-speech-5bit",
+            "mlx-community/GLM-ASR-Nano-2512-4bit",
+            "mlx-community/FireRedASR2-AED-mlx",
+            "beshkenadze/cohere-transcribe-03-2026-mlx-fp16",
+        ]
+        for repo in presetRepos {
+            XCTAssertTrue(
+                MLXModelCatalog.capability(for: repo).configurationCapabilities.contains(.recognitionPreset),
+                repo
+            )
+        }
+        XCTAssertEqual(MLXTranscriptionPlanning.postStopFinalChunkDuration(presetChunkDuration: 90), 1200)
+    }
+
+    func testModelManagedNativeFamiliesForbidExternalFinalSpeechTrim() {
+        let managedRepos = [
+            "beshkenadze/cohere-transcribe-03-2026-mlx-fp16",
+            "mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit",
+            "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
+        ]
+        for repo in managedRepos {
+            let policy = MLXModelCatalog.capability(for: repo).vadPolicy
+            XCTAssertEqual(policy, .modelManaged, repo)
+            XCTAssertFalse(policy.allowsExternalFinalSpeechTrim, repo)
+            XCTAssertFalse(policy.usesExternalFinalSpeechValidation, repo)
+        }
+    }
+
+    func testSenseVoiceDictationDisablesPCMTrimWhileMeetingValidationStaysEnabled() {
+        let capability = MLXModelCatalog.capability(for: "mlx-community/SenseVoiceSmall")
+        XCTAssertEqual(capability.vadPolicy, .standard)
+        XCTAssertTrue(capability.vadPolicy.usesExternalFinalSpeechValidation)
+        XCTAssertTrue(capability.vadPolicy.allowsExternalFinalSpeechTrim)
+        XCTAssertFalse(
+            MLXTranscriptionPlanning.allowsExternalFinalSpeechTrim(
+                vadPolicy: capability.vadPolicy,
+                family: .senseVoice
+            )
+        )
+        XCTAssertEqual(
+            MeetingFinalSpeechValidator.vadPolicy(
+                transcriptionEngine: .mlxAudio,
+                mlxModelRepo: "mlx-community/SenseVoiceSmall"
+            ),
+            .standard
+        )
     }
 
     func testMMSAdapterCatalogMatchesFL102Checkpoint() {

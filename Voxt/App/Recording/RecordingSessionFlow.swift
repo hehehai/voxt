@@ -39,6 +39,7 @@ extension AppDelegate {
 
         speechTranscriber.stopRecording()
         mlxTranscriber?.stopRecording()
+        mlxTranscriber?.discardPreparedSessionModelUse()
         sherpaOnnxTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
         if preservePendingHistoryAudio {
