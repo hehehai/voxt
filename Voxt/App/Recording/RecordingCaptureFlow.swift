@@ -397,6 +397,8 @@ extension AppDelegate {
             let monitorTask = self.silenceMonitorTask
             self.silenceMonitorTask?.cancel()
             self.silenceMonitorTask = nil
+            self.recordingMaximumDurationTask?.cancel()
+            self.recordingMaximumDurationTask = nil
             self.pauseLLMTask?.cancel()
             self.pauseLLMTask = nil
             await monitorTask?.value
@@ -452,6 +454,8 @@ extension AppDelegate {
     func cancelActiveRecordingTasks() {
         silenceMonitorTask?.cancel()
         silenceMonitorTask = nil
+        recordingMaximumDurationTask?.cancel()
+        recordingMaximumDurationTask = nil
         pauseLLMTask?.cancel()
         pauseLLMTask = nil
     }

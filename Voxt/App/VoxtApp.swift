@@ -213,6 +213,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var isSessionActive = false
     var pendingSessionFinishTask: Task<Void, Never>?
     var silenceMonitorTask: Task<Void, Never>?
+    // Maximum-duration safety-net timer for recording sessions.
+    var recordingMaximumDurationTask: Task<Void, Never>?
     var pauseLLMTask: Task<Void, Never>?
     var pendingDictionaryHistoryScanTask: Task<Void, Never>?
     var pendingAutomaticDictionaryLearningTask: Task<Void, Never>?
@@ -245,6 +247,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var voiceEndCommandState = VoiceEndCommandState()
     let silenceAudioLevelThreshold: Float = 0.06
     let sessionFinishDelay: TimeInterval = 1.2
+    // Maximum duration of a single recording in seconds; the recording stops automatically when reached.
+    let recordingMaximumDuration: TimeInterval = 1800
     var recordingRequestedAt: Date?
     var recordingStartedAt: Date?
     var recordingStoppedAt: Date?
@@ -819,6 +823,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             inputDevicesRefreshTask,
             pendingSessionFinishTask,
             silenceMonitorTask,
+            recordingMaximumDurationTask,
             pauseLLMTask,
             pendingDictionaryHistoryScanTask,
             pendingAutomaticDictionaryLearningTask,
@@ -838,6 +843,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         inputDevicesRefreshTask = nil
         pendingSessionFinishTask = nil
         silenceMonitorTask = nil
+        recordingMaximumDurationTask = nil
         pauseLLMTask = nil
         pendingDictionaryHistoryScanTask = nil
         pendingAutomaticDictionaryLearningTask = nil

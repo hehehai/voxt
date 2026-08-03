@@ -33,6 +33,8 @@ extension AppDelegate {
 
         silenceMonitorTask?.cancel()
         silenceMonitorTask = nil
+        recordingMaximumDurationTask?.cancel()
+        recordingMaximumDurationTask = nil
         pauseLLMTask?.cancel()
         pauseLLMTask = nil
         _ = cancelRecordingCaptureStartTask()
@@ -219,6 +221,7 @@ extension AppDelegate {
         }
 
         isSessionActive = true
+        startRecordingMaximumDurationGuard(sessionID: activeRecordingSessionID)
         let shouldEnableCommonStopKey = outputMode == .translation ||
             outputMode == .rewrite ||
             transcriptionHotkeyStartBehavior == .tap ||
@@ -320,6 +323,27 @@ extension AppDelegate {
             }
             VoxtLog.asr("Finish session executing now. displayMode=\(self.overlayState.displayMode)", verbose: true)
             self.executeSessionEndPipeline(for: finishingSessionID, trigger: "finish")
+        }
+    }
+
+    // Start a maximum-duration safety net that stops an active session automatically.
+    private func startRecordingMaximumDurationGuard(sessionID: UUID) {
+        recordingMaximumDurationTask?.cancel()
+        let maximumDuration = recordingMaximumDuration
+        recordingMaximumDurationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: .seconds(maximumDuration))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            guard self.activeRecordingSessionID == sessionID else { return }
+            guard self.isSessionActive else { return }
+            VoxtLog.asrWarning(
+                "Recording reached the maximum duration (\(Int(maximumDuration))s) and was stopped automatically."
+            )
+            self.endRecording()
         }
     }
 }
