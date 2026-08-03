@@ -6,6 +6,44 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.8] - 2026-08-03
+
+### English
+
+#### Added
+- Added website and Sponsor links on the About page, and a Settings home Sponsor entry next to Changelog.
+- Added meeting completion notifications for model and file jobs, including sandboxed drag-and-drop import results.
+- Added an option to cap meeting history by count so older meetings can be cleaned up automatically.
+
+#### Changed
+- Made long meeting transcripts more responsive with a virtualized detail list.
+- Reduced Final ASR stop-to-result latency while keeping the offline Final quality path.
+- Kept MOSS dictionary Hotwords on Final only so short live windows no longer echo prompt terms mid-stream.
+
+### 简体中文
+
+#### 新增
+- 关于页增加官网与赞助链接，设置首页在更新日志旁增加赞助入口。
+- 会议模型与文件任务完成后支持系统通知，含沙盒拖放导入结果。
+- 新增按条数限制会议历史，可自动清理较早的会议记录。
+
+#### 改进
+- 会议详情使用虚拟列表，长转写更流畅。
+- 降低 Final ASR 从停止录音到出结果的等待，同时保留离线 Final 质量路径。
+- 直播流不再注入 MOSS 词典热词，仅在 Final 阶段使用，避免短窗口中途回显提示词。
+
+### 日本語
+
+#### 追加
+- About ページに公式サイトとスポンサーリンクを追加し、設定ホームの Changelog 横にもスポンサー入口を追加しました。
+- 会議のモデル／ファイル処理完了時にシステム通知を表示し、サンドボックスでのドラッグ＆ドロップ取り込み結果にも対応しました。
+- 会議履歴を件数で上限設定できるようにし、古い会議を自動整理できます。
+
+#### 変更
+- 会議詳細を仮想リスト化し、長い文字起こしでも応答性を改善しました。
+- オフライン Final の品質パスは維持しつつ、Final ASR の停止から結果表示までの待ち時間を短縮しました。
+- MOSS 辞書 Hotwords をライブストリームから外し Final のみに適用することで、短いライブ窓でのプロンプト語の途中エコーを防ぎます。
+
 ## [1.13.7] - 2026-07-31
 
 ### English
