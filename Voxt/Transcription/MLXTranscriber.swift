@@ -951,6 +951,17 @@ enum MLXTranscriptionPlanning {
         }
     }
 
+    /// MOSS Hotwords stay on Final only. Live/intermediate windows are short and prompt-biased,
+    /// so injecting the dictionary there commonly surfaces hotword hallucinations mid-stream.
+    nonisolated static func shouldIncludeMOSSHotwords(for stage: MLXCorrectionPassKind) -> Bool {
+        switch stage {
+        case .intermediate:
+            return false
+        case .postStopQuick, .postStopFinal:
+            return true
+        }
+    }
+
     nonisolated static func removingKnownASRContextLeakage(from text: String) -> String {
         let lines = text
             .components(separatedBy: .newlines)
@@ -3239,11 +3250,13 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
                         userLanguageCodes: userLanguageCodes,
                         dictionaryTerms: dictionaryTerms
                     ),
-                    hotwords: resolvedBiasTemplate(
-                        mossSettings.hotwords,
-                        userLanguageCodes: userLanguageCodes,
-                        dictionaryTerms: dictionaryTerms
-                    )
+                    hotwords: MLXTranscriptionPlanning.shouldIncludeMOSSHotwords(for: stage)
+                        ? resolvedBiasTemplate(
+                            mossSettings.hotwords,
+                            userLanguageCodes: userLanguageCodes,
+                            dictionaryTerms: dictionaryTerms
+                        )
+                        : ""
                 )
                 : nil,
             mossOutputMode: mossGenerationOutputMode

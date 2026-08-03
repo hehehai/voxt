@@ -384,6 +384,37 @@ final class MLXTranscriptionPlanningTests: XCTestCase {
         )
     }
 
+    func testMOSSHotwordsAreFinalOnly() {
+        XCTAssertFalse(MLXTranscriptionPlanning.shouldIncludeMOSSHotwords(for: .intermediate))
+        XCTAssertTrue(MLXTranscriptionPlanning.shouldIncludeMOSSHotwords(for: .postStopQuick))
+        XCTAssertTrue(MLXTranscriptionPlanning.shouldIncludeMOSSHotwords(for: .postStopFinal))
+
+        let livePrompt = MossASRPromptSupport.resolvedPrompt(
+            outputMode: .plainText,
+            customPrompt: "",
+            hotwords: MLXTranscriptionPlanning.shouldIncludeMOSSHotwords(for: .intermediate)
+                ? "Voxt, Codex"
+                : ""
+        )
+        let finalPrompt = MossASRPromptSupport.resolvedPrompt(
+            outputMode: .plainText,
+            customPrompt: "",
+            hotwords: MLXTranscriptionPlanning.shouldIncludeMOSSHotwords(for: .postStopFinal)
+                ? "Voxt, Codex"
+                : ""
+        )
+
+        XCTAssertEqual(
+            livePrompt,
+            "Transcribe the audio as plain text without timestamps or speaker labels."
+        )
+        XCTAssertFalse(livePrompt.contains("Hotwords:"))
+        XCTAssertEqual(
+            finalPrompt,
+            "Transcribe the audio as plain text without timestamps or speaker labels. Hotwords: Voxt, Codex"
+        )
+    }
+
     private func voiceActivityFrame(
         samples: [Float],
         startSeconds: TimeInterval,
