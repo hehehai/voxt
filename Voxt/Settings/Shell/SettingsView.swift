@@ -59,6 +59,7 @@ struct SettingsView: View {
 
     private static let officialWebsiteURL = URL(string: "https://voxt.actnow.dev")!
     private static let changelogURL = URL(string: "https://voxt.actnow.dev/changelog")!
+    private static let sponsorURL = URL(string: "https://voxt.actnow.dev/#pricing")!
     private static let feedbackURL = URL(string: "https://github.com/hehehai/voxt/issues/new/choose")!
     private static let feedbackWeChatQRCodeURL = URL(string: "https://storage.actnow.dev/common/voxt/gw-wx.png")!
     private static let scrollBottomAnchorID = "settings-scroll-bottom-anchor"
@@ -373,15 +374,19 @@ struct SettingsView: View {
                     .padding(.top, contentTopPadding)
 
                 if selectedTab == .report && sidebarMode == .root {
-                    HStack {
+                    HStack(spacing: 12) {
                         Spacer(minLength: 0)
 
-                        Button(settingsLocalized("Changelog")) {
-                            openChangelog()
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        HomeFooterLinkButton(
+                            title: settingsLocalized("Changelog"),
+                            action: openChangelog
+                        )
+
+                        HomeFooterLinkButton(
+                            title: settingsLocalized("Sponsor"),
+                            showsCoffeeIcon: true,
+                            action: openSponsorPage
+                        )
                     }
                     .padding(.top, 14)
                 }
@@ -828,6 +833,10 @@ struct SettingsView: View {
 
     private func openChangelog() {
         NSWorkspace.shared.open(Self.changelogURL)
+    }
+
+    private func openSponsorPage() {
+        NSWorkspace.shared.open(Self.sponsorURL)
     }
 
     private func openFeedbackPage() {
@@ -2004,5 +2013,60 @@ private enum UpdateBadgeState: Equatable {
         case .openingWindow:
             return settingsLocalized("Opening…")
         }
+    }
+}
+
+private struct HomeFooterLinkButton: View {
+    let title: String
+    var showsCoffeeIcon = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+    @State private var isBreathingExpanded = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(title)
+
+                if showsCoffeeIcon {
+                    SettingsCoffeeIconView(
+                        color: isHovered ? Color.primary.opacity(0.88) : .secondary,
+                        size: 12
+                    )
+                    .scaleEffect(coffeeIconScale)
+                    .opacity(coffeeIconOpacity)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(isHovered ? Color.primary.opacity(0.88) : Color.secondary)
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+            guard showsCoffeeIcon else { return }
+
+            if hovering {
+                isBreathingExpanded = false
+                withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
+                    isBreathingExpanded = true
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    isBreathingExpanded = false
+                }
+            }
+        }
+    }
+
+    private var coffeeIconScale: CGFloat {
+        guard isHovered else { return 1 }
+        return isBreathingExpanded ? 1.14 : 0.96
+    }
+
+    private var coffeeIconOpacity: Double {
+        guard isHovered else { return 1 }
+        return isBreathingExpanded ? 1 : 0.72
     }
 }
