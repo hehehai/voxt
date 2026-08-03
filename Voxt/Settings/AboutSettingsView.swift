@@ -59,7 +59,11 @@ struct AboutSettingsView: View {
         return (1...98).contains(releaseBuildSuffix)
     }
 
+    private let websiteURL = URL(string: "https://voxt.actnow.dev")!
+    private let githubURL = URL(string: "https://github.com/hehehai/voxt")!
     private let feedbackURL = URL(string: "https://github.com/hehehai/voxt/issues/new/choose")!
+    private let authorURL = URL(string: "https://www.hehehai.cn/")!
+    private let sponsorURL = URL(string: "https://voxt.actnow.dev/#pricing")!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -109,16 +113,15 @@ struct AboutSettingsView: View {
 
             HStack(alignment: .top, spacing: 14) {
                 AboutInfoCard(title: localizedKey("Project")) {
-                    AboutExternalLink(
-                        title: "github.com/hehehai/voxt",
-                        destination: URL(string: "https://github.com/hehehai/voxt")!
-                    )
+                    AboutExternalLink(title: localized("Website"), destination: websiteURL)
+                    AboutExternalLink(title: localized("GitHub"), destination: githubURL)
                     AboutExternalLink(title: localized("Feedback"), destination: feedbackURL)
                 }
                 .settingsNavigationAnchor(.aboutProject)
 
                 AboutInfoCard(title: localizedKey("Author")) {
-                    AboutExternalLink(title: "hehehai", destination: URL(string: "https://www.hehehai.cn/")!)
+                    AboutExternalLink(title: "hehehai", destination: authorURL)
+                    AboutExternalLink(title: localized("Sponsor"), destination: sponsorURL)
                 }
                 .settingsNavigationAnchor(.aboutAuthor)
             }
