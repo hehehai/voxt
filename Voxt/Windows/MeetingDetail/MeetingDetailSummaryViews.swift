@@ -87,25 +87,35 @@ struct MeetingDetailSummarySidebar: View {
                                     Text(summary.title)
                                         .font(.system(size: 16, weight: .semibold))
                                         .foregroundStyle(.primary)
+                                        .textSelection(.enabled)
 
                                     Text(summary.generatedAt.formatted(date: .abbreviated, time: .shortened))
                                         .font(.system(size: 11, weight: .medium))
                                         .foregroundStyle(.secondary)
+                                        .textSelection(.enabled)
                                 }
 
                                 if !summary.body.isEmpty {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text(AppLocalization.localizedString("Summary"))
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(.secondary)
+                                        HStack(spacing: 8) {
+                                            Text(AppLocalization.localizedString("Summary"))
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.secondary)
+
+                                            Spacer(minLength: 8)
+
+                                            MeetingDetailCopyButton(text: summary.body)
+                                        }
 
                                         ForEach(MeetingDetailFormatting.summaryParagraphs(summary.body), id: \.self) { paragraph in
                                             Text(paragraph)
                                                 .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.primary.opacity(0.92))
                                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                                .textSelection(.enabled)
                                         }
                                     }
+                                    .textSelection(.enabled)
                                 }
 
                                 if !summary.todoItems.isEmpty {
@@ -129,9 +139,11 @@ struct MeetingDetailSummarySidebar: View {
                                                     .font(.system(size: 13, weight: .medium))
                                                     .foregroundStyle(.primary.opacity(0.92))
                                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .textSelection(.enabled)
                                             }
                                         }
                                     }
+                                    .textSelection(.enabled)
                                 }
 
                                 if !viewModel.summaryChatMessages.isEmpty || viewModel.isSummaryChatLoading || viewModel.summaryChatErrorMessage != nil {
@@ -179,6 +191,7 @@ struct MeetingDetailSummarySidebar: View {
                             .id(summaryBottomAnchorID)
                         }
                         .padding(16)
+                        .textSelection(.enabled)
                     }
                     .coordinateSpace(name: "MeetingSummaryScroll")
                     .onPreferenceChange(MeetingSummaryBottomVisibilityPreferenceKey.self) { isVisible in
@@ -611,6 +624,12 @@ private enum MeetingSummaryModelSelectorAdapter {
 struct SummaryChatMessageRow: View {
     let message: MeetingSummaryChatMessage
 
+    @State private var isHovered = false
+
+    private var isAssistantMessage: Bool {
+        message.role == .assistant
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(message.role == .user ? AppLocalization.localizedString("You") : AppLocalization.localizedString("Assistant"))
@@ -621,6 +640,7 @@ struct SummaryChatMessageRow: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.primary.opacity(0.94))
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
         }
         .padding(12)
         .background(
@@ -634,5 +654,109 @@ struct SummaryChatMessageRow: View {
                     lineWidth: 1
                 )
         )
+        .overlay(alignment: .topTrailing) {
+            if isAssistantMessage && isHovered {
+                MeetingDetailHoverCopyCapsule(text: message.content)
+                    .padding(.top, 8)
+                    .padding(.trailing, 8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .topTrailing)))
+            }
+        }
+        .onHover { hovering in
+            guard isAssistantMessage else { return }
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+private struct MeetingDetailCopyButton: View {
+    let text: String
+
+    @State private var didCopy = false
+    @State private var copyFeedbackToken = UUID()
+
+    var body: some View {
+        Button(action: copyToPasteboard) {
+            Group {
+                if didCopy {
+                    CopySuccessIconView(color: Color.accentColor)
+                } else {
+                    CopyIconView(color: .secondary)
+                }
+            }
+            .frame(width: 13, height: 13)
+            .frame(width: 22, height: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(AppLocalization.localizedString("Copy"))
+        .accessibilityLabel(AppLocalization.localizedString("Copy"))
+    }
+
+    private func copyToPasteboard() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        copyStringToPasteboard(trimmed)
+        copyFeedbackToken = UUID()
+        let token = copyFeedbackToken
+        didCopy = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            guard token == copyFeedbackToken else { return }
+            didCopy = false
+        }
+    }
+}
+
+private struct MeetingDetailHoverCopyCapsule: View {
+    let text: String
+
+    @State private var didCopy = false
+    @State private var copyFeedbackToken = UUID()
+
+    var body: some View {
+        Button(action: copyToPasteboard) {
+            HStack(spacing: 4) {
+                Group {
+                    if didCopy {
+                        CopySuccessIconView()
+                    } else {
+                        CopyIconView()
+                    }
+                }
+                .frame(width: 12, height: 12)
+
+                Text(didCopy ? AppLocalization.localizedString("Copied") : AppLocalization.localizedString("Copy"))
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(.white.opacity(0.96))
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(.black.opacity(0.74))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(AppLocalization.localizedString("Copy"))
+        .accessibilityLabel(AppLocalization.localizedString("Copy"))
+    }
+
+    private func copyToPasteboard() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        copyStringToPasteboard(trimmed)
+        copyFeedbackToken = UUID()
+        let token = copyFeedbackToken
+        didCopy = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            guard token == copyFeedbackToken else { return }
+            didCopy = false
+        }
     }
 }

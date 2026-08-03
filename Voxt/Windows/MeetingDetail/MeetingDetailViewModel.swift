@@ -39,6 +39,8 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published private(set) var subtitle: String
     @Published private(set) var segments: [MeetingTranscriptSegment]
     @Published private(set) var segmentStructureRevision = 0
+    @Published private(set) var displayedSegments: [MeetingTranscriptSegment] = []
+    @Published private(set) var speakerGroups: [MeetingDetailSpeakerGroup] = []
     @Published private(set) var isPaused = false
     @Published private(set) var isFinalizing = false
     @Published var translationEnabled: Bool
@@ -58,8 +60,10 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published var transcriptPresentationModeRaw = TranscriptPresentationMode.timeline.rawValue
     @Published var transcriptSpeakerDisplayModeRaw = TranscriptSpeakerDisplayMode.source.rawValue
     @Published var isSearchPresented = false
-    @Published var searchQuery = ""
+    @Published private(set) var searchQuery = ""
     @Published var isSummaryCollapsed = false
+
+    private var speakerOrdinalByIdentityKey: [String: Int] = [:]
 
     let mode: Mode
     let audioURL: URL?
@@ -147,6 +151,7 @@ final class MeetingDetailViewModel: ObservableObject {
             summaryState = .idle
         }
         bindInterfaceLanguageChanges()
+        refreshTranscriptListCaches()
     }
 
     init(
@@ -213,6 +218,7 @@ final class MeetingDetailViewModel: ObservableObject {
             .store(in: &cancellables)
 
         bindInterfaceLanguageChanges()
+        refreshTranscriptListCaches()
 
         liveState.$realtimeTranslateEnabled
             .receive(on: RunLoop.main)
@@ -410,13 +416,33 @@ final class MeetingDetailViewModel: ObservableObject {
     func setTranscriptSpeakerDisplayMode(_ mode: TranscriptSpeakerDisplayMode) {
         guard captureMode.capabilities.allowsSpeakerFeatures else { return }
         transcriptSpeakerDisplayModeRaw = mode.rawValue
+        refreshTranscriptListCaches()
+    }
+
+    func timelineSpeakerTitle(for segment: MeetingTranscriptSegment) -> String {
+        switch transcriptSpeakerDisplayMode {
+        case .source:
+            return segment.speaker.displayTitle
+        case .speaker:
+            return speakerTimelineTitle(for: segment)
+        }
+    }
+
+    func displayedNewestSegmentID() -> UUID? {
+        displayedSegments.last?.id
     }
 
     func toggleSearchPresentation() {
         isSearchPresented.toggle()
         if !isSearchPresented {
-            searchQuery = ""
+            setSearchQuery("")
         }
+    }
+
+    func setSearchQuery(_ query: String) {
+        guard searchQuery != query else { return }
+        searchQuery = query
+        refreshTranscriptListCaches()
     }
 
     func toggleSummaryCollapsed() {
@@ -438,6 +464,7 @@ final class MeetingDetailViewModel: ObservableObject {
         segments = updatedSegments
         segmentStructureRevision &+= 1
         cachedSummaryTranscript = nil
+        refreshTranscriptListCaches()
         _ = transcriptSegmentsPersistence?(historyEntryID, updatedSegments)
     }
 
@@ -625,6 +652,7 @@ final class MeetingDetailViewModel: ObservableObject {
         guard updatedSegments != segments else { return }
         segments = updatedSegments
         segmentStructureRevision &+= 1
+        refreshTranscriptListCaches()
         if translationEnabled {
             translateEligibleSegmentsIfNeeded(targetLanguage: targetLanguage)
         }
@@ -807,6 +835,7 @@ final class MeetingDetailViewModel: ObservableObject {
     private func markSegment(_ id: UUID, update: (MeetingTranscriptSegment) -> MeetingTranscriptSegment) {
         guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
         segments[index] = update(segments[index])
+        refreshTranscriptListCaches()
     }
 
     private func cancelTranslationTasks() {
@@ -821,6 +850,58 @@ final class MeetingDetailViewModel: ObservableObject {
                 isTranslationPending: false
             )
         }
+        refreshTranscriptListCaches()
+    }
+
+    private func refreshTranscriptListCaches() {
+        speakerOrdinalByIdentityKey = MeetingTranscriptListSupport.speakerOrdinals(for: segments)
+        displayedSegments = MeetingTranscriptListSupport.displayedSegments(
+            from: segments,
+            searchQuery: searchQuery,
+            speakerTitle: { [weak self] segment in
+                self?.timelineSpeakerTitle(for: segment) ?? segment.speaker.displayTitle
+            }
+        )
+        speakerGroups = MeetingTranscriptListSupport.speakerGroups(
+            from: displayedSegments,
+            titleForSegment: { [weak self] segment in
+                self?.timelineSpeakerTitle(for: segment) ?? segment.speaker.displayTitle
+            }
+        )
+    }
+
+    private func speakerTimelineTitle(for segment: MeetingTranscriptSegment) -> String {
+        if let displayName = speakerDisplayNameIfUserFacing(for: segment) {
+            return displayName
+        }
+        let ordinal = speakerOrdinalByIdentityKey[segment.speakerIdentityKey] ?? 1
+        return AppLocalization.format("Speaker %d", ordinal)
+    }
+
+    private func speakerDisplayNameIfUserFacing(for segment: MeetingTranscriptSegment) -> String? {
+        guard let displayName = segment.speakerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !displayName.isEmpty,
+              !isAudioSourceDisplayName(displayName)
+        else {
+            return nil
+        }
+        return displayName
+    }
+
+    private func isAudioSourceDisplayName(_ displayName: String) -> Bool {
+        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        if normalized == TranscriptSpeaker.me.displayTitle.lowercased()
+            || normalized == TranscriptSpeaker.them.displayTitle.lowercased() {
+            return true
+        }
+        if normalized.range(of: #"^me\s+\d+$"#, options: .regularExpression) != nil {
+            return true
+        }
+        if normalized.range(of: #"^them\s+\d+$"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
     }
 
     private func resolvedStoredTranslationLanguage() -> TranslationTargetLanguage {

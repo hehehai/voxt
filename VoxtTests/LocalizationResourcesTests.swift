@@ -267,9 +267,27 @@ final class LocalizationResourcesTests: XCTestCase {
 
     func testHistorySettingsToggleLabelsAreLocalized() {
         XCTAssertEqual(AppLocalization.localizedString("History Cleanup", localeIdentifier: "zh-Hans"), "历史记录清理")
+        XCTAssertEqual(AppLocalization.localizedString("Retention Count", localeIdentifier: "zh-Hans"), "保留条数")
+        XCTAssertEqual(AppLocalization.localizedString("Unlimited", localeIdentifier: "zh-Hans"), "不限制")
         XCTAssertEqual(AppLocalization.localizedString("Save history audio", localeIdentifier: "zh-Hans"), "保存历史音频")
         XCTAssertEqual(AppLocalization.localizedString("History Cleanup", localeIdentifier: "ja"), "履歴の自動削除")
+        XCTAssertEqual(AppLocalization.localizedString("Retention Count", localeIdentifier: "ja"), "保持件数")
+        XCTAssertEqual(AppLocalization.localizedString("Unlimited", localeIdentifier: "ja"), "無制限")
         XCTAssertEqual(AppLocalization.localizedString("Save history audio", localeIdentifier: "ja"), "履歴音声を保存")
+    }
+
+    func testMeetingFileConversionNotificationLabelsAreLocalized() {
+        XCTAssertEqual(AppLocalization.localizedString("File conversion succeeded", localeIdentifier: "zh-Hans"), "文件转换成功")
+        XCTAssertEqual(AppLocalization.localizedString("File conversion failed", localeIdentifier: "zh-Hans"), "文件转换失败")
+        XCTAssertEqual(AppLocalization.localizedString("File conversion succeeded", localeIdentifier: "ja"), "ファイル変換が完了しました")
+        XCTAssertEqual(AppLocalization.localizedString("File conversion failed", localeIdentifier: "ja"), "ファイル変換に失敗しました")
+    }
+
+    func testModelDownloadNotificationLabelsAreLocalized() {
+        XCTAssertEqual(AppLocalization.localizedString("Model download succeeded", localeIdentifier: "zh-Hans"), "模型下载成功")
+        XCTAssertEqual(AppLocalization.localizedString("Model download failed", localeIdentifier: "zh-Hans"), "模型下载失败")
+        XCTAssertEqual(AppLocalization.localizedString("Model download succeeded", localeIdentifier: "ja"), "モデルのダウンロードが完了しました")
+        XCTAssertEqual(AppLocalization.localizedString("Model download failed", localeIdentifier: "ja"), "モデルのダウンロードに失敗しました")
     }
 
     func testCodexConfigurationTextIsLocalizedInSupportedLanguages() {

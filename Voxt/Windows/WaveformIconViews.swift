@@ -298,31 +298,35 @@ struct ModelInitializingIconView: View {
 }
 
 struct CopyIconView: View {
+    var color: Color = .white
+
     var body: some View {
         ZStack {
             SVGPathShape(pathData: WaveformIconPathData.copyFront)
-                .fill(.white.opacity(0.4))
+                .fill(color.opacity(0.4))
 
             SVGPathShape(pathData: WaveformIconPathData.copyBack)
-                .fill(.white)
+                .fill(color)
 
             SVGPathShape(pathData: WaveformIconPathData.copyFold)
-                .fill(.white)
+                .fill(color)
         }
     }
 }
 
 struct CopySuccessIconView: View {
+    var color: Color = .white
+
     var body: some View {
         ZStack {
             SVGPathShape(pathData: WaveformIconPathData.copyFront)
-                .fill(.white)
+                .fill(color)
 
             SVGPathShape(pathData: WaveformIconPathData.copySuccessBack)
-                .fill(.white)
+                .fill(color)
 
             SVGPathShape(pathData: WaveformIconPathData.copySuccessFold)
-                .fill(.white)
+                .fill(color)
         }
     }
 }

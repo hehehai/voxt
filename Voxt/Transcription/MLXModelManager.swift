@@ -698,6 +698,7 @@ class MLXModelManager: ObservableObject {
         if downloadTasksByRepo[canonicalRepo] != nil { return }
         if case .loading = state(for: canonicalRepo) { return }
 
+        SystemNotificationSupport.requestAuthorizationIfNeeded()
         resumableDownloadStateByRepo.removeValue(forKey: canonicalRepo)
         let task = Task { [weak self] in
             guard let self else { return }
@@ -740,6 +741,9 @@ class MLXModelManager: ObservableObject {
                     fileManager: .default
                 )
                 markDownloadCompleted(for: canonicalRepo)
+                SystemNotificationSupport.postModelDownloadSucceeded(
+                    modelName: displayTitle(for: canonicalRepo)
+                )
                 VoxtLog.modelInfo("Download complete. repo=\(canonicalRepo)")
             } catch is CancellationError {
                 switch downloadStopActionsByRepo[canonicalRepo] {
@@ -759,7 +763,12 @@ class MLXModelManager: ObservableObject {
                 }
                 setPausedStatusMessage(nil, for: canonicalRepo)
                 clearHubCache(for: canonicalRepo)
-                setState(.error(downloadErrorMessage(for: error, repo: canonicalRepo)), for: canonicalRepo)
+                let message = downloadErrorMessage(for: error, repo: canonicalRepo)
+                setState(.error(message), for: canonicalRepo)
+                SystemNotificationSupport.postModelDownloadFailed(
+                    modelName: displayTitle(for: canonicalRepo),
+                    message: message
+                )
                 VoxtLog.modelError("Download error. repo=\(canonicalRepo), error=\(error.localizedDescription)")
             }
         }

@@ -334,11 +334,18 @@ private struct TranscriptionDetailMessageBubble: View {
                 .strokeBorder(borderColor, lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
-            if isHovered {
+            if !isUserMessage && isHovered {
                 Button(action: copyToPasteboard) {
                     HStack(spacing: 4) {
-                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9, weight: .semibold))
+                        Group {
+                            if didCopy {
+                                CopySuccessIconView()
+                            } else {
+                                CopyIconView()
+                            }
+                        }
+                        .frame(width: 12, height: 12)
+
                         Text(didCopy ? AppLocalization.localizedString("Copied") : AppLocalization.localizedString("Copy"))
                             .font(.system(size: 10, weight: .semibold))
                     }
@@ -361,6 +368,7 @@ private struct TranscriptionDetailMessageBubble: View {
             }
         }
         .onHover { hovering in
+            guard !isUserMessage else { return }
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
             }

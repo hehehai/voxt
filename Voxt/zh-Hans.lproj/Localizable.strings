@@ -542,6 +542,8 @@
 "Browser URL read test failed." = "浏览器 URL 读取测试失败。";
 "History Cleanup" = "历史记录清理";
 "Retention" = "保留时长";
+"Retention Count" = "保留条数";
+"Unlimited" = "不限制";
 "1 Week" = "一周";
 "1 Year" = "一年";
 "3 Months" = "三个月";
@@ -2241,6 +2243,9 @@
 "This model is unavailable because the sherpa-onnx runtime is not included in this build." = "此版本未包含 sherpa-onnx 运行时，因此该模型不可用。";
 "Uninstalled %@." = "已卸载 %@。";
 "Uninstall failed: %@" = "卸载失败：%@";
+"Model download succeeded" = "模型下载成功";
+"Model download failed" = "模型下载失败";
+"%@ downloaded successfully." = "%@ 下载成功。";
 "Endpoint must be a valid HTTP or HTTPS URL." = "端点必须是有效的 HTTP 或 HTTPS URL。";
 "Endpoint must be a valid HTTP, HTTPS, WS, or WSS URL." = "端点必须是有效的 HTTP、HTTPS、WS 或 WSS URL。";
 "Endpoint must not contain a username or password." = "端点中不能包含用户名或密码。";
@@ -2258,9 +2263,16 @@
 "Upload File" = "上传文件";
 "Upload a meeting audio or video file" = "上传会议音频或视频文件";
 "Click to choose a meeting recording" = "点击选择会议录制";
+"Click to choose or drag in a meeting recording" = "点击选择或拖入会议录制";
+"Drop to analyze this recording" = "松开以分析此录制";
+"Unsupported file type. Drop an audio or video recording instead." = "不支持该文件类型，请拖入音频或视频录制文件。";
+"Meeting file analysis is already in progress." = "会议文件分析正在进行中。";
 "Supports MP3, MP4, M4A, WAV, AAC, MOV, and other common audio or video formats." = "支持 MP3、MP4、M4A、WAV、AAC、MOV 及其他常见音视频格式。";
 "Analysis complete. Opening Meeting Details…" = "分析完成，正在打开会议详情…";
 "File analysis failed" = "文件分析失败";
+"File conversion succeeded" = "文件转换成功";
+"File conversion failed" = "文件转换失败";
+"%@ has been converted successfully." = "%@ 已转换成功。";
 "Preparing audio…" = "正在准备音频…";
 "Transcribing meeting…" = "正在转写会议…";
 "Identifying speakers…" = "正在识别说话人…";

@@ -160,6 +160,7 @@ final class SherpaOnnxModelManager: ObservableObject {
             return
         }
 
+        SystemNotificationSupport.requestAuthorizationIfNeeded()
         let option = option(for: id)
         setPausedStatusMessage(nil, for: id)
         setDownloadingState(
@@ -185,6 +186,9 @@ final class SherpaOnnxModelManager: ObservableObject {
                 try await performDownload(id: id)
                 cancelDownloadProgressTask(for: id)
                 markModelDownloaded(id: id)
+                SystemNotificationSupport.postModelDownloadSucceeded(
+                    modelName: displayTitle(for: id)
+                )
             } catch is CancellationError {
                 cancelDownloadProgressTask(for: id)
                 switch downloadStopActionsByID[id] {
@@ -200,7 +204,12 @@ final class SherpaOnnxModelManager: ObservableObject {
                 cleanupDownload(id: id)
                 downloadedStateByID[id] = false
                 setPausedStatusMessage(nil, for: id)
-                setState(.error("Download failed: \(error.localizedDescription)"), for: id)
+                let message = "Download failed: \(error.localizedDescription)"
+                setState(.error(message), for: id)
+                SystemNotificationSupport.postModelDownloadFailed(
+                    modelName: displayTitle(for: id),
+                    message: message
+                )
             }
         }
         downloadTasksByID[id] = task

@@ -76,7 +76,8 @@ nonisolated enum MeetingNativeLiveStructuredFinalization {
         modelFamily: MLXModelFamily,
         timelineOffsetSeconds: TimeInterval,
         speaker: MeetingSpeaker,
-        audioSource: TranscriptAudioSource
+        audioSource: TranscriptAudioSource,
+        replacingSegmentID: UUID? = nil
     ) -> [MeetingTranscriptSegment] {
         let structured = MLXTranscriber.structuredSegmentsForLiveEnded(
             output: STTOutput(text: "", segments: rawSegments),
@@ -85,15 +86,23 @@ nonisolated enum MeetingNativeLiveStructuredFinalization {
         )
         guard !structured.isEmpty else { return [] }
 
-        return structured.enumerated().compactMap { _, segment in
+        var didAssignReplacementID = false
+        return structured.compactMap { segment in
             let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }
             let start = timelineOffsetSeconds + max(0, segment.startSeconds)
             let end = timelineOffsetSeconds + max(segment.endSeconds, segment.startSeconds)
             let allowMossSpeaker = modelFamily == .mossTranscribeDiarize
             let speakerID = allowMossSpeaker ? segment.speakerID.map { "moss:\($0)" } : nil
+            let id: UUID
+            if !didAssignReplacementID, let replacingSegmentID {
+                id = replacingSegmentID
+                didAssignReplacementID = true
+            } else {
+                id = UUID()
+            }
             return MeetingTranscriptSegment(
-                id: UUID(),
+                id: id,
                 speaker: speaker,
                 speakerID: speakerID,
                 audioSource: audioSource,

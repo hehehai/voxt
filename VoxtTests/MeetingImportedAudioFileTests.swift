@@ -6,6 +6,30 @@ import XCTest
 
 @MainActor
 final class MeetingImportedAudioFileTests: XCTestCase {
+    func testImportSupportAcceptsCommonAudioAndVideoExtensions() {
+        XCTAssertTrue(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/demo.mp3")))
+        XCTAssertTrue(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/demo.m4a")))
+        XCTAssertTrue(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/demo.wav")))
+        XCTAssertTrue(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/demo.mp4")))
+        XCTAssertTrue(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/demo.mov")))
+        XCTAssertFalse(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/notes.txt")))
+        XCTAssertFalse(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/slides.pdf")))
+        XCTAssertFalse(MeetingFileImportSupport.isSupportedImportFile(at: URL(fileURLWithPath: "/tmp/archive.zip")))
+    }
+
+    func testImportSupportParsesDroppedFileURLItems() {
+        let fileURL = URL(fileURLWithPath: "/tmp/meeting-demo.m4a")
+        // Keep the provider URL object intact (no standardizedFileURL) so sandbox
+        // security scope from Finder drops is not stripped.
+        let fromURL = MeetingFileImportSupport.fileURL(fromDropItem: fileURL as NSURL)
+        XCTAssertEqual(fromURL, fileURL)
+        XCTAssertEqual(fromURL?.path, fileURL.path)
+
+        let fromData = MeetingFileImportSupport.fileURL(fromDropItem: fileURL.dataRepresentation)
+        XCTAssertEqual(fromData?.path, fileURL.path)
+        XCTAssertNil(MeetingFileImportSupport.fileURL(fromDropItem: nil))
+    }
+
     func testAnalysisProgressMapsStageProgressToMonotonicOverallProgress() {
         let samples = [
             MeetingFileAnalysisProgress(stage: .preparing, stageFraction: 0),

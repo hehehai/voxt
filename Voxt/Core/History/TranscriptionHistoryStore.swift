@@ -1061,6 +1061,11 @@ final class TranscriptionHistoryStore: ObservableObject {
         return HistoryRetentionPeriod(rawValue: raw ?? "") ?? .ninetyDays
     }
 
+    private var historyRetentionCount: HistoryRetentionCount {
+        let raw = defaults.string(forKey: AppPreferenceKey.historyRetentionCount)
+        return HistoryRetentionCount(rawValue: raw ?? "") ?? .unlimited
+    }
+
     private func applyReloadedEntries(
         _ decodedEntries: [TranscriptionHistoryEntry],
         resetPagination: Bool
@@ -1105,21 +1110,38 @@ final class TranscriptionHistoryStore: ObservableObject {
 
     private func cleanupRetainedEntriesIfNeeded(referenceDate: Date = Date()) {
         guard historyCleanupEnabled else { return }
-        guard let days = historyRetentionPeriod.days else { return }
 
-        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate
-        let removedEntries = (
-            try? repository.deleteEntries(
-                olderThan: cutoff,
-                kinds: retentionCleanupKinds
-            )
-        ) ?? []
+        var removedEntries: [TranscriptionHistoryEntry] = []
+
+        if let days = historyRetentionPeriod.days {
+            let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: referenceDate) ?? referenceDate
+            let removedByAge = (
+                try? repository.deleteEntries(
+                    olderThan: cutoff,
+                    kinds: retentionCleanupKinds
+                )
+            ) ?? []
+            removedEntries.append(contentsOf: removedByAge)
+        }
+
+        if let keepCount = historyRetentionCount.count {
+            for kind in retentionCleanupKinds.sorted(by: { $0.rawValue < $1.rawValue }) {
+                let removedByCount = (
+                    try? repository.deleteEntries(
+                        keepingNewest: keepCount,
+                        kind: kind
+                    )
+                ) ?? []
+                removedEntries.append(contentsOf: removedByCount)
+            }
+        }
+
         guard !removedEntries.isEmpty else { return }
         let interruptedReload = invalidatePendingLoads()
         removedEntries.forEach(audioArchive.removeArchive(for:))
         let removedIDs = Set(removedEntries.map(\.id))
         allEntries.removeAll { removedIDs.contains($0.id) }
-        totalEntryCount = max(0, totalEntryCount - removedEntries.count)
+        totalEntryCount = max(0, totalEntryCount - removedIDs.count)
         loadedCount = min(loadedCount, allEntries.count)
         refreshEntryIndexes()
         publishVisibleEntries()

@@ -155,6 +155,7 @@ final class GGUFTranslationModelManager: ObservableObject {
             return
         }
 
+        SystemNotificationSupport.requestAuthorizationIfNeeded()
         activeDownloadModelID = id
         pausedStatusMessageByID[id] = nil
 
@@ -196,6 +197,9 @@ final class GGUFTranslationModelManager: ObservableObject {
                 try await performDownload(id: id)
                 pausedStatusMessageByID[id] = nil
                 stateByID[id] = .downloaded
+                SystemNotificationSupport.postModelDownloadSucceeded(
+                    modelName: displayTitle(for: id)
+                )
             } catch is CancellationError {
                 cancelDownloadProgressTask()
                 switch downloadStopAction {
@@ -223,7 +227,12 @@ final class GGUFTranslationModelManager: ObservableObject {
                     return
                 }
                 pausedStatusMessageByID[id] = nil
-                stateByID[id] = .error("Download failed: \(error.localizedDescription)")
+                let message = "Download failed: \(error.localizedDescription)"
+                stateByID[id] = .error(message)
+                SystemNotificationSupport.postModelDownloadFailed(
+                    modelName: displayTitle(for: id),
+                    message: message
+                )
             }
         }
     }

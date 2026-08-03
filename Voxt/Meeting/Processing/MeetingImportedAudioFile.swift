@@ -4,6 +4,61 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import UniformTypeIdentifiers
+
+enum MeetingFileImportSupport {
+    static let allowedContentTypes: [UTType] = [.audio, .movie]
+
+    static func isSupportedImportFile(at url: URL) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .contentTypeKey])
+        if values?.isDirectory == true {
+            return false
+        }
+        if let isRegularFile = values?.isRegularFile, !isRegularFile {
+            return false
+        }
+
+        if let contentType = values?.contentType {
+            return conformsToAllowedTypes(contentType)
+        }
+
+        let ext = url.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !ext.isEmpty, let inferred = UTType(filenameExtension: ext) else {
+            return false
+        }
+        return conformsToAllowedTypes(inferred)
+    }
+
+    /// Preserves the system-provided URL object. Do not standardize or rebuild from a
+    /// path string before `startAccessingSecurityScopedResource()` — that strips the
+    /// sandbox security scope carried by Finder / NSItemProvider drop URLs.
+    static func fileURL(fromDropItem item: Any?) -> URL? {
+        if let url = item as? URL {
+            return url
+        }
+        if let data = item as? Data {
+            return URL(dataRepresentation: data, relativeTo: nil)
+        }
+        if let path = item as? String {
+            return fileURL(fromPath: path)
+        }
+        if let path = item as? NSString {
+            return fileURL(fromPath: path as String)
+        }
+        return nil
+    }
+
+    private static func fileURL(fromPath path: String) -> URL? {
+        if path.hasPrefix("file:") {
+            return URL(string: path)
+        }
+        return URL(fileURLWithPath: path)
+    }
+
+    private static func conformsToAllowedTypes(_ type: UTType) -> Bool {
+        allowedContentTypes.contains { type.conforms(to: $0) }
+    }
+}
 
 enum MeetingFileAnalysisStage: Equatable, Sendable {
     case preparing

@@ -40,6 +40,7 @@ struct HistorySettingsView: View {
     @Environment(\.locale) private var locale
     @AppStorage(AppPreferenceKey.historyCleanupEnabled) private var historyCleanupEnabled = true
     @AppStorage(AppPreferenceKey.historyRetentionPeriod) private var historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
+    @AppStorage(AppPreferenceKey.historyRetentionCount) private var historyRetentionCountRaw = HistoryRetentionCount.unlimited.rawValue
     @AppStorage(AppPreferenceKey.historyAudioStorageEnabled) private var historyAudioStorageEnabled = false
 
     @ObservedObject var historyStore: TranscriptionHistoryStore
@@ -83,6 +84,10 @@ struct HistorySettingsView: View {
 
     private var historyRetentionPeriod: HistoryRetentionPeriod {
         HistoryRetentionPeriod(rawValue: historyRetentionPeriodRaw) ?? .ninetyDays
+    }
+
+    private var historyRetentionCount: HistoryRetentionCount {
+        HistoryRetentionCount(rawValue: historyRetentionCountRaw) ?? .unlimited
     }
 
     private var allNotes: [VoxtNoteItem] {
@@ -292,12 +297,14 @@ struct HistorySettingsView: View {
             HistoryAudioSettingsSheet(
                 historyCleanupEnabled: $historyCleanupEnabled,
                 historyRetentionPeriodRaw: $historyRetentionPeriodRaw,
+                historyRetentionCountRaw: $historyRetentionCountRaw,
                 historyAudioStorageEnabled: $historyAudioStorageEnabled,
                 historyAudioStorageDisplayPath: $historyAudioStorageDisplayPath,
                 historyAudioStorageSelectionError: $historyAudioStorageSelectionError,
                 historyAudioExportResultMessage: $historyAudioExportResultMessage,
                 isPresented: $isHistoryAudioSettingsPresented,
                 historyRetentionPeriod: historyRetentionPeriod,
+                historyRetentionCount: historyRetentionCount,
                 historyAudioStorageStatsSummary: historyAudioStorageStatsSummary,
                 onOpenHistoryAudioStorageInFinder: openHistoryAudioStorageInFinder,
                 onChooseHistoryAudioStorageDirectory: chooseHistoryAudioStorageDirectory,
@@ -339,6 +346,9 @@ struct HistorySettingsView: View {
             if !HistoryRetentionPeriod.allCases.contains(where: { $0.rawValue == historyRetentionPeriodRaw }) {
                 historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
             }
+            if !HistoryRetentionCount.allCases.contains(where: { $0.rawValue == historyRetentionCountRaw }) {
+                historyRetentionCountRaw = HistoryRetentionCount.unlimited.rawValue
+            }
             refreshHistoryAudioStorageDisplayPath()
             refreshHistoryAudioStorageStats()
             reloadHistoryEntries(reset: true)
@@ -365,6 +375,12 @@ struct HistorySettingsView: View {
         .onChange(of: historyRetentionPeriodRaw) { _, newValue in
             if !HistoryRetentionPeriod.allCases.contains(where: { $0.rawValue == newValue }) {
                 historyRetentionPeriodRaw = HistoryRetentionPeriod.ninetyDays.rawValue
+            }
+            applyRetentionPolicyAndReload()
+        }
+        .onChange(of: historyRetentionCountRaw) { _, newValue in
+            if !HistoryRetentionCount.allCases.contains(where: { $0.rawValue == newValue }) {
+                historyRetentionCountRaw = HistoryRetentionCount.unlimited.rawValue
             }
             applyRetentionPolicyAndReload()
         }

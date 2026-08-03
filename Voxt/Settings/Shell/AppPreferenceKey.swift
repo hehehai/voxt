@@ -126,6 +126,7 @@ enum AppPreferenceKey {
     static let historyEnabled = "historyEnabled"
     static let historyCleanupEnabled = "historyCleanupEnabled"
     static let historyRetentionPeriod = "historyRetentionPeriod"
+    static let historyRetentionCount = "historyRetentionCount"
     static let historyAudioStorageEnabled = "historyAudioStorageEnabled"
     static let historyAudioStorageRootPath = "historyAudioStorageRootPath"
     static let historyAudioStorageRootBookmark = "historyAudioStorageRootBookmark"

@@ -489,6 +489,62 @@ enum HistoryRetentionPeriod: String, Identifiable {
     }
 }
 
+enum HistoryRetentionCount: String, Identifiable {
+    case unlimited
+    case fifty
+    case oneHundred
+    case threeHundred
+    case fiveHundred
+    case oneThousand
+
+    static var allCases: [HistoryRetentionCount] {
+        [
+            .unlimited,
+            .fifty,
+            .oneHundred,
+            .threeHundred,
+            .fiveHundred,
+            .oneThousand
+        ]
+    }
+
+    var id: String { rawValue }
+
+    var count: Int? {
+        switch self {
+        case .unlimited:
+            return nil
+        case .fifty:
+            return 50
+        case .oneHundred:
+            return 100
+        case .threeHundred:
+            return 300
+        case .fiveHundred:
+            return 500
+        case .oneThousand:
+            return 1000
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .unlimited:
+            return AppLocalization.localizedString("Unlimited")
+        case .fifty:
+            return "50"
+        case .oneHundred:
+            return "100"
+        case .threeHundred:
+            return "300"
+        case .fiveHundred:
+            return "500"
+        case .oneThousand:
+            return "1000"
+        }
+    }
+}
+
 enum InteractionSoundPreset: String, CaseIterable, Identifiable, Codable, Sendable {
     case soft
     case glass

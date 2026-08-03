@@ -69,7 +69,8 @@ enum TranscriptAssembler {
                 speakerDisplayName: segment.speakerDisplayName ?? existing.speakerDisplayName,
                 audioSource: segment.audioSource ?? existing.audioSource,
                 speakerConfidence: segment.speakerConfidence ?? existing.speakerConfidence,
-                startSeconds: existing.startSeconds,
+                // Partials keep the original bubble start; finals may adopt model timing.
+                startSeconds: isFinal ? segment.startSeconds : existing.startSeconds,
                 endSeconds: segment.endSeconds,
                 text: segment.text,
                 translatedText: preservesTranslatedText ? existing.translatedText : nil,
