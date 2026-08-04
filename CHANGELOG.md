@@ -6,6 +6,23 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.13.9] - 2026-08-04
+
+### English
+
+#### Fixed
+- Fixed excessive CPU usage after recording by clearing stale model initialization state and stopping hidden overlay animations.
+
+### 简体中文
+
+#### 修复
+- 修复录音结束后 Voxt 空闲 CPU 占用过高：清理残留的模型初始化状态，并停止隐藏 Overlay 的动画刷新。
+
+### 日本語
+
+#### 修正
+- 録音終了後に Voxt がアイドル状態でも CPU 使用率が高くなる問題を修正し、残留したモデル初期化状態を解消して非表示 Overlay のアニメーション更新を停止しました。
+
 ## [1.13.8] - 2026-08-03
 
 ### English
