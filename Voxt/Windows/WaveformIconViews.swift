@@ -138,6 +138,7 @@ struct CompactModeIconView: View {
 struct WaveformCompactLeadingStatusIconView: View {
     let isCompleting: Bool
     let showsInitializationIcon: Bool
+    let shouldAnimate: Bool
     let compactLeadingIconImage: NSImage?
     let sessionIconMode: OverlaySessionIconMode
     let displayMode: OverlayDisplayMode
@@ -149,7 +150,7 @@ struct WaveformCompactLeadingStatusIconView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.95))
             } else if showsInitializationIcon {
-                ModelInitializingIconView()
+                ModelInitializingIconView(isAnimating: shouldAnimate)
             } else if let compactLeadingIconImage,
                       sessionIconMode == .transcription,
                       displayMode == .processing {
@@ -208,19 +209,29 @@ struct WaveformProcessingLoaderView: View {
     var color: Color = .white
 
     var body: some View {
-        TimelineView(.animation) { context in
-            HStack(alignment: .center, spacing: spacing) {
-                ForEach(0..<itemCount, id: \.self) { index in
-                    let progress = phaseProgress(for: index, at: context.date)
-                    Circle()
-                        .fill(color)
-                        .frame(width: itemSize.width, height: itemSize.height)
-                    .scaleEffect(loaderScale(for: progress))
-                    .opacity(loaderOpacity(for: progress))
+        Group {
+            if isAnimating {
+                TimelineView(.animation) { context in
+                    loaderContent(at: context.date)
                 }
+            } else {
+                loaderContent(at: Date(timeIntervalSinceReferenceDate: 0))
             }
         }
         .frame(height: max(itemSize.height * 2.1, itemSize.height))
+    }
+
+    private func loaderContent(at date: Date) -> some View {
+        HStack(alignment: .center, spacing: spacing) {
+            ForEach(0..<itemCount, id: \.self) { index in
+                let progress = phaseProgress(for: index, at: date)
+                Circle()
+                    .fill(color)
+                    .frame(width: itemSize.width, height: itemSize.height)
+                    .scaleEffect(loaderScale(for: progress))
+                    .opacity(loaderOpacity(for: progress))
+            }
+        }
     }
 
     private func phaseProgress(for index: Int, at date: Date) -> Double {
@@ -262,6 +273,7 @@ struct WaveformProcessingLoaderView: View {
 
 struct ModelInitializingIconView: View {
     private let viewport = CGSize(width: 24, height: 24)
+    var isAnimating = true
 
     @State private var animate = false
 
@@ -289,10 +301,26 @@ struct ModelInitializingIconView: View {
         .scaleEffect(animate ? 1.04 : 0.96)
         .opacity(animate ? 0.98 : 0.62)
         .onAppear {
-            animate = false
-            withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
-                animate = true
+            updateAnimationState()
+        }
+        .onChange(of: isAnimating) {
+            updateAnimationState()
+        }
+    }
+
+    private func updateAnimationState() {
+        guard isAnimating else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                animate = false
             }
+            return
+        }
+
+        animate = false
+        withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
+            animate = true
         }
     }
 }

@@ -1870,6 +1870,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         finalizationTask = nil
         audioLevelDelivery.clear()
         audioLevel = 0
+        isModelInitializing = false
         onTranscriptionFinished = nil
         onPartialTranscription = nil
         dictionaryEntryProvider = nil

@@ -277,6 +277,7 @@ private struct GeneralOverlayStylePreviewCard: View {
             WaveformCompactLeadingStatusIconView(
                 isCompleting: false,
                 showsInitializationIcon: false,
+                shouldAnimate: false,
                 compactLeadingIconImage: nil,
                 sessionIconMode: .transcription,
                 displayMode: .recording
