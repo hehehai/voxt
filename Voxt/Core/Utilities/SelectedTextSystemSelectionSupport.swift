@@ -5,6 +5,10 @@ import Foundation
 import ApplicationServices
 
 enum SelectedTextSystemSelectionSupport {
+    static func ignoresSelectedTextFlow(bundleID: String?) -> Bool {
+        bundleID == "md.obsidian"
+    }
+
     /// Hard gate: a caret-only range (`length == 0`) must not count as a selection.
     static func hasNonEmptySelectedTextRange(length: CFIndex) -> Bool {
         length > 0
@@ -35,7 +39,8 @@ enum SelectedTextSystemSelectionSupport {
             "com.trae.app",
             "com.trae.solo.app",
             "cn.trae.app",
-            "com.qoder.app"
+            "com.qoder.app",
+            "md.obsidian"
         ]
         if exactIDs.contains(bundleID) {
             return true
@@ -96,9 +101,11 @@ enum SelectedTextSystemSelectionSupport {
     static func shouldAttemptAXBlackoutClipboardProbe(
         focusedElementAvailable: Bool,
         axWindowCandidatesAvailable: Bool,
-        copiesLineOnEmptySelection: Bool
+        copiesLineOnEmptySelection: Bool,
+        supportsAXBlackoutSelectionRecovery: Bool = true
     ) -> Bool {
-        copiesLineOnEmptySelection
+        supportsAXBlackoutSelectionRecovery
+            && copiesLineOnEmptySelection
             && !focusedElementAvailable
             && !axWindowCandidatesAvailable
     }

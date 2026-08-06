@@ -6,6 +6,18 @@ import XCTest
 
 @MainActor
 final class SessionTextIOTests: XCTestCase {
+    func testObsidianBypassesSelectedTextFlowWithoutAffectingOtherApps() {
+        XCTAssertTrue(
+            SelectedTextSystemSelectionSupport.ignoresSelectedTextFlow(bundleID: "md.obsidian")
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.ignoresSelectedTextFlow(bundleID: "com.todesktop.230313mzl4w4u92")
+        )
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.ignoresSelectedTextFlow(bundleID: "com.apple.TextEdit")
+        )
+    }
+
     func testSelectedTextDictionaryHotkeyAcceptsUpToFiveWords() {
         let candidate = "one two three four five"
         XCTAssertEqual(SelectedTextDictionaryHotkeySupport.candidateTerm(from: candidate), candidate)
@@ -172,6 +184,17 @@ final class SessionTextIOTests: XCTestCase {
                 copiesLineOnEmptySelection: true
             )
         )
+        // Obsidian copies the current line when AX is completely unavailable;
+        // without a selection signal, clipboard content is not distinguishable
+        // from a real single-line selection.
+        XCTAssertFalse(
+            SelectedTextSystemSelectionSupport.shouldAttemptAXBlackoutClipboardProbe(
+                focusedElementAvailable: false,
+                axWindowCandidatesAvailable: false,
+                copiesLineOnEmptySelection: true,
+                supportsAXBlackoutSelectionRecovery: false
+            )
+        )
     }
 
     func testLooksLikeEmptySelectionLineCopyRecognizesClipboardCapabilityShape() {
@@ -212,6 +235,7 @@ final class SessionTextIOTests: XCTestCase {
             "com.trae.app",
             "cn.trae.app",
             "com.qoder.app",
+            "md.obsidian", // Obsidian
             "org.example.MyVSCodeFork"
         ]
         for bundleID in lineCopyEditors {

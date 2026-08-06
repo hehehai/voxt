@@ -196,7 +196,9 @@ extension AppDelegate {
         let allowBlackoutProbe = SelectedTextSystemSelectionSupport.shouldAttemptAXBlackoutClipboardProbe(
             focusedElementAvailable: focusedElement != nil,
             axWindowCandidatesAvailable: axWindowCandidatesAvailable,
-            copiesLineOnEmptySelection: copiesLineOnEmptySelection
+            copiesLineOnEmptySelection: copiesLineOnEmptySelection,
+            supportsAXBlackoutSelectionRecovery: !SelectedTextSystemSelectionSupport
+                .ignoresSelectedTextFlow(bundleID: appBundleID)
         )
         VoxtLog.input(
             "selectionProbe.copy.policy: allow=\(allowCopy) blackout=\(allowBlackoutProbe) focused=\(focusedElement != nil) windows=\(axWindowCandidatesAvailable) copiesLineOnEmpty=\(copiesLineOnEmptySelection)",

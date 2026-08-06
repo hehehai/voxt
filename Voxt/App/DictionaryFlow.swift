@@ -2,11 +2,17 @@
 // Provides Dictionary Flow for app lifecycle and routing.
 
 import Foundation
+import AppKit
 
 extension AppDelegate {
     @discardableResult
     func addSelectedShortTextToDictionaryIfPossible() -> Bool {
         guard !isSessionActive, pendingTranscriptionStartTask == nil else { return false }
+        let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard !SelectedTextSystemSelectionSupport.ignoresSelectedTextFlow(bundleID: frontmostBundleID) else {
+            VoxtLog.dictionary("Selected text dictionary flow skipped for Obsidian.")
+            return false
+        }
         guard let term = selectedDictionaryTermFromSystemSelection() else {
             return false
         }
