@@ -125,10 +125,7 @@ struct OnboardingSettingsView: View {
     }
 
     var appleIntelligenceAvailable: Bool {
-        if #available(macOS 26.0, *) {
-            return TextEnhancer.isAvailable
-        }
-        return false
+        AppleIntelligenceAvailability.current.isAvailable
     }
 
     var modelPathChoice: Binding<OnboardingModelPathChoice> {

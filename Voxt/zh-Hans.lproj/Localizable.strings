@@ -236,6 +236,9 @@
 "System Prompt" = "系统提示词";
 "Customise how Apple Intelligence enhances your transcriptions." = "自定义 Apple Intelligence 如何增强你的转录文本。";
 "Apple Intelligence is not available on this Mac, so system prompt enhancement cannot be used." = "当前 Mac 不支持 Apple Intelligence，无法使用系统提示词增强。";
+"Turn on Apple Intelligence in System Settings to use this model." = "请在系统设置中开启 Apple Intelligence 后使用此模型。";
+"Apple Intelligence is not available for this Mac or region." = "当前 Mac 或所在地区不支持 Apple Intelligence。";
+"Apple Intelligence is still preparing its on-device model. Try again shortly." = "Apple Intelligence 正在准备本地模型，请稍后重试。";
 "Custom LLM downloading: %d%% • %@" = "自定义 LLM 下载中：%d%% • %@";
 "oMLX Options" = "oMLX 选项";
 "Include Usage In Stream Events" = "在流式事件中包含用量";

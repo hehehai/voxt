@@ -16,7 +16,7 @@ struct FeatureModelCatalogBuilder {
     let featureSettings: FeatureSettings
     let remoteASRProviderConfigurationsRaw: String
     let remoteLLMProviderConfigurationsRaw: String
-    let appleIntelligenceAvailable: Bool
+    let appleIntelligenceAvailability: AppleIntelligenceAvailability
     let primaryUserLanguageCode: String?
 
     func entries(for sheet: FeatureModelSelectorSheet) -> [FeatureModelSelectorEntry] {
@@ -417,7 +417,8 @@ struct FeatureModelCatalogBuilder {
 
     private func llmEntries(includeAppleIntelligence: Bool) -> [FeatureModelSelectorEntry] {
         var entries = [FeatureModelSelectorEntry]()
-        if includeAppleIntelligence, appleIntelligenceAvailable {
+        if includeAppleIntelligence, appleIntelligenceAvailability != .unsupportedOS {
+            let isAvailable = appleIntelligenceAvailability.isAvailable
             entries.append(
                 FeatureModelSelectorEntry(
                     selectionID: .appleIntelligence,
@@ -432,11 +433,13 @@ struct FeatureModelCatalogBuilder {
                         configured: true,
                         selectionID: .appleIntelligence
                     ),
-                    statusText: localized("Available on this Mac"),
+                    statusText: isAvailable
+                        ? localized("Available on this Mac")
+                        : localized("Unavailable"),
                     usageLocations: usageLabels(for: .appleIntelligence),
                     badgeText: nil,
-                    isSelectable: true,
-                    disabledReason: nil
+                    isSelectable: isAvailable,
+                    disabledReason: appleIntelligenceAvailability.disabledReason
                 )
             )
         }

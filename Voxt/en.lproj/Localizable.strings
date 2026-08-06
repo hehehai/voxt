@@ -236,6 +236,9 @@
 "System Prompt" = "System Prompt";
 "Customise how Apple Intelligence enhances your transcriptions." = "Customise how Apple Intelligence enhances your transcriptions.";
 "Apple Intelligence is not available on this Mac, so system prompt enhancement cannot be used." = "Apple Intelligence is not available on this Mac, so system prompt enhancement cannot be used.";
+"Turn on Apple Intelligence in System Settings to use this model." = "Turn on Apple Intelligence in System Settings to use this model.";
+"Apple Intelligence is not available for this Mac or region." = "Apple Intelligence is not available for this Mac or region.";
+"Apple Intelligence is still preparing its on-device model. Try again shortly." = "Apple Intelligence is still preparing its on-device model. Try again shortly.";
 "Custom LLM downloading: %d%% • %@" = "Custom LLM downloading: %d%% • %@";
 "oMLX Options" = "oMLX Options";
 "Include Usage In Stream Events" = "Include Usage In Stream Events";

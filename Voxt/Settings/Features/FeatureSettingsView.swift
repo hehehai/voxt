@@ -32,6 +32,7 @@ struct FeatureSettingsView: View {
     @State private var toastMessage = ""
     @State private var toastDismissTask: Task<Void, Never>?
     @State private var permissionRefreshRevision = 0
+    @State private var appleIntelligenceRefreshRevision = 0
     @State var scrollToBottomRequestRevision = 0
 
     var body: some View {
@@ -83,6 +84,7 @@ struct FeatureSettingsView: View {
             )
         }
         .onAppear {
+            refreshAppleIntelligenceAvailability()
             reloadFeatureSettings()
             refreshRemindersLists()
             meetingDiarizationModelManager.refresh()
@@ -96,6 +98,9 @@ struct FeatureSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
             permissionRefreshRevision += 1
             refreshRemindersLists()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshAppleIntelligenceAvailability()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtFeatureSettingsToastRequested)) { notification in
             guard let message = notification.userInfo?["message"] as? String else { return }
@@ -271,9 +276,21 @@ struct FeatureSettingsView: View {
             featureSettings: featureSettings,
             remoteASRProviderConfigurationsRaw: remoteASRProviderConfigurationsRaw,
             remoteLLMProviderConfigurationsRaw: remoteLLMProviderConfigurationsRaw,
-            appleIntelligenceAvailable: appleIntelligenceAvailable,
+            appleIntelligenceAvailability: appleIntelligenceAvailability,
             primaryUserLanguageCode: selectedUserLanguageCodes.first
         )
+    }
+
+    var appleIntelligenceAvailability: AppleIntelligenceAvailability {
+        _ = appleIntelligenceRefreshRevision
+        return AppleIntelligenceAvailability.current
+    }
+
+    func refreshAppleIntelligenceAvailability() {
+        let availability = AppleIntelligenceAvailability.current
+        VoxtLog.info("Apple Intelligence availability: \(availability.logDescription)")
+        AppDelegate.shared?.refreshTextEnhancerAvailability()
+        appleIntelligenceRefreshRevision += 1
     }
 
     var selectedUserLanguageCodes: [String] {
@@ -346,9 +363,6 @@ struct FeatureSettingsView: View {
     }
 
     var appleIntelligenceAvailable: Bool {
-        if #available(macOS 26.0, *) {
-            return TextEnhancer.isAvailable
-        }
-        return false
+        appleIntelligenceAvailability.isAvailable
     }
 }

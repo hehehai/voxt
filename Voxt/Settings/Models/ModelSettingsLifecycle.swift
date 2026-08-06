@@ -4,6 +4,13 @@
 import Foundation
 
 extension ModelSettingsView {
+    func refreshAppleIntelligenceAvailability() {
+        let availability = AppleIntelligenceAvailability.current
+        VoxtLog.info("Apple Intelligence availability: \(availability.logDescription)")
+        AppDelegate.shared?.refreshTextEnhancerAvailability()
+        appleIntelligenceRefreshRevision += 1
+    }
+
     func refreshAllModelStorageRoots() {
         mlxModelManager.refreshStorageRoot()
         sherpaOnnxModelManager.refreshStorageRoot()
@@ -12,6 +19,7 @@ extension ModelSettingsView {
     }
 
     func handleOnAppear() {
+        refreshAppleIntelligenceAvailability()
         let canonicalRepo = MLXModelManager.canonicalModelRepo(modelRepo)
         if canonicalRepo != modelRepo {
             modelRepo = canonicalRepo

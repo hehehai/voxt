@@ -228,6 +228,9 @@
 "System Prompt" = "システムプロンプト";
 "Customise how Apple Intelligence enhances your transcriptions." = "Apple Intelligence による文字起こし強化の方法を設定します。";
 "Apple Intelligence is not available on this Mac, so system prompt enhancement cannot be used." = "この Mac では Apple Intelligence が利用できないため、システムプロンプト強化は使えません。";
+"Turn on Apple Intelligence in System Settings to use this model." = "このモデルを使用するには、システム設定で Apple Intelligence をオンにしてください。";
+"Apple Intelligence is not available for this Mac or region." = "この Mac または地域では Apple Intelligence を利用できません。";
+"Apple Intelligence is still preparing its on-device model. Try again shortly." = "Apple Intelligence はオンデバイスモデルを準備中です。しばらくしてから再試行してください。";
 "Custom LLM downloading: %d%% • %@" = "カスタム LLM ダウンロード中: %d%% • %@";
 "Custom LLM paused: %d%% • %@" = "カスタム LLM 一時停止中: %d%% • %@";
 "Models" = "モデル一覧";

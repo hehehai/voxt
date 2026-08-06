@@ -136,6 +136,9 @@ extension ModelSettingsView {
                 .onAppear(perform: reloadCachedConfigurationState)
                 .onAppear(perform: refreshModelStorageDisplayPath)
                 .onAppear(perform: refreshCatalogSnapshot)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    refreshAppleIntelligenceAvailability()
+                }
         )
 
         let selectionObserved = AnyView(
