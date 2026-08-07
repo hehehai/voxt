@@ -91,6 +91,15 @@ private final class FailingMeetingHistoryRepository: HistoryRepositoryProtocol, 
         try base.entries(kind: kind, query: query, limit: limit, offset: offset)
     }
 
+    func listEntries(
+        kind: TranscriptionHistoryKind?,
+        query: String,
+        limit: Int?,
+        offset: Int
+    ) throws -> [TranscriptionHistoryListEntry] {
+        try base.listEntries(kind: kind, query: query, limit: limit, offset: offset)
+    }
+
     func entry(id: UUID) throws -> TranscriptionHistoryEntry? { try base.entry(id: id) }
     func latestEntryText() throws -> String? { try base.latestEntryText() }
     func audioRelativePaths() throws -> [String] { try base.audioRelativePaths() }

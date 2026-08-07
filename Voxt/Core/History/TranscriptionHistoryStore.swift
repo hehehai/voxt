@@ -23,6 +23,21 @@ enum TranscriptionHistoryKind: Codable, Hashable, Sendable {
         }
     }
 
+    init?(rawValue: String) {
+        switch rawValue {
+        case "normal":
+            self = .normal
+        case "translation":
+            self = .translation
+        case "rewrite":
+            self = .rewrite
+        case "transcript":
+            self = .transcript
+        default:
+            return nil
+        }
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let rawValue = try container.decode(String.self)
@@ -547,6 +562,36 @@ final class TranscriptionHistoryStore: ObservableObject {
             let page = (try? repository.entries(kind: kind, query: query, limit: limit, offset: offset)) ?? []
             DispatchQueue.main.async {
                 completion(count, page)
+            }
+        }
+    }
+
+    func loadListEntries(
+        kind: TranscriptionHistoryKind?,
+        query: String = "",
+        limit: Int,
+        offset: Int,
+        completion: @escaping (Int, [TranscriptionHistoryListEntry]) -> Void
+    ) {
+        let repository = repository
+        DispatchQueue.global(qos: .userInitiated).async {
+            let count = (try? repository.entryCount(kind: kind, query: query)) ?? 0
+            let page = (try? repository.listEntries(kind: kind, query: query, limit: limit, offset: offset)) ?? []
+            DispatchQueue.main.async {
+                completion(count, page)
+            }
+        }
+    }
+
+    func loadEntry(
+        id: UUID,
+        completion: @escaping (TranscriptionHistoryEntry?) -> Void
+    ) {
+        let repository = repository
+        DispatchQueue.global(qos: .userInitiated).async {
+            let entry = try? repository.entry(id: id)
+            DispatchQueue.main.async {
+                completion(entry ?? nil)
             }
         }
     }

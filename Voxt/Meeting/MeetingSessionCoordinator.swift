@@ -82,6 +82,7 @@ final class MeetingSessionCoordinator {
     private var isReconfiguringCaptureMode = false
     private var isImportAnalyzing = false
     private var importedFileAnalysisTask: Task<MeetingSessionResult, Error>?
+    private var pendingCaptureFailureMessage: String?
 
     init(
         mlxModelManager: MLXModelManager,
@@ -312,6 +313,10 @@ final class MeetingSessionCoordinator {
         cleanupSessionState(shouldLogCaptureStop: false)
         resetSessionPresentationState()
         overlayState.reset()
+    }
+
+    func preflightMeetingCaptureStorage() async -> String? {
+        await audioArchive.preflightFailureMessage()
     }
 
     func start() async -> String? {
@@ -556,7 +561,8 @@ final class MeetingSessionCoordinator {
                     return lhs.startSeconds < rhs.startSeconds
                 },
                 audioDurationSeconds: duration,
-                archivedAudioURL: archivedAudioURL
+                archivedAudioURL: archivedAudioURL,
+                captureFailureMessage: self.pendingCaptureFailureMessage
             )
 
             if shouldFlushPendingAudio {
@@ -745,6 +751,7 @@ final class MeetingSessionCoordinator {
             )
             if let safetyMessage = await self.audioArchive.consumeSafetyFailureMessage() {
                 await MainActor.run {
+                    self.pendingCaptureFailureMessage = safetyMessage
                     self.overlayState.safetyMessage = safetyMessage
                     _ = self.stop(shouldFlushPendingAudio: true)
                 }
@@ -988,6 +995,7 @@ final class MeetingSessionCoordinator {
         recordingStartedAt = nil
         accumulatedRecordingDuration = 0
         hasCapturedAudio = false
+        pendingCaptureFailureMessage = nil
         completedPendingTaskIDs.removeAll()
         pendingChunks.removeAll()
         let voiceActivityDetector = self.voiceActivityDetector

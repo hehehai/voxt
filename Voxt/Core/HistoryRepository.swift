@@ -11,6 +11,12 @@ protocol HistoryRepositoryProtocol: AnyObject, Sendable {
         limit: Int?,
         offset: Int
     ) throws -> [TranscriptionHistoryEntry]
+    func listEntries(
+        kind: TranscriptionHistoryKind?,
+        query: String,
+        limit: Int?,
+        offset: Int
+    ) throws -> [TranscriptionHistoryListEntry]
     func entry(id: UUID) throws -> TranscriptionHistoryEntry?
     func latestEntryText() throws -> String?
     func audioRelativePaths() throws -> [String]
@@ -101,6 +107,79 @@ final class HistoryRepository: HistoryRepositoryProtocol, @unchecked Sendable {
             )
             return try jsonEntries.map {
                 try VoxtPersistenceCoding.decodeJSON(TranscriptionHistoryEntry.self, from: $0)
+            }
+        }
+    }
+
+    func listEntries(
+        kind: TranscriptionHistoryKind?,
+        query: String = "",
+        limit: Int?,
+        offset: Int
+    ) throws -> [TranscriptionHistoryListEntry] {
+        var whereClauses: [String] = []
+        var arguments: StatementArguments = []
+        var joinSQL = ""
+
+        if let kind {
+            whereClauses.append("h.kind = ?")
+            arguments += [kind.rawValue]
+        }
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let ftsQuery = VoxtFTSQueryBuilder.query(from: trimmedQuery) {
+            joinSQL = "JOIN history_search ON history_search.historyID = h.id"
+            whereClauses.append("history_search MATCH ?")
+            arguments += [ftsQuery]
+        }
+
+        let whereSQL = whereClauses.isEmpty ? "" : "WHERE \(whereClauses.joined(separator: " AND "))"
+        let limitSQL: String
+        if let limit {
+            limitSQL = "LIMIT ? OFFSET ?"
+            arguments += [limit, offset]
+        } else {
+            limitSQL = ""
+        }
+
+        return try database.dbQueue.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT
+                        h.id,
+                        substr(h.text, 1, ?) AS previewText,
+                        length(h.text) AS textLength,
+                        h.createdAt,
+                        h.kind,
+                        h.displayTitle
+                    FROM history_entries h
+                    \(joinSQL)
+                    \(whereSQL)
+                    ORDER BY h.createdAt DESC
+                    \(limitSQL)
+                    """,
+                arguments: StatementArguments([TranscriptionHistoryListEntry.previewCharacterLimit]) + arguments
+            )
+
+            return rows.compactMap { row -> TranscriptionHistoryListEntry? in
+                guard let idString: String = row["id"],
+                      let id = UUID(uuidString: idString),
+                      let kindRawValue: String = row["kind"],
+                      let kind = TranscriptionHistoryKind(rawValue: kindRawValue),
+                      let createdAt: Double = row["createdAt"]
+                else {
+                    return nil
+                }
+
+                return TranscriptionHistoryListEntry(
+                    id: id,
+                    previewText: row["previewText"] ?? "",
+                    textLength: row["textLength"] ?? 0,
+                    createdAt: Date(timeIntervalSince1970: createdAt),
+                    kind: kind,
+                    displayTitle: row["displayTitle"]
+                )
             }
         }
     }

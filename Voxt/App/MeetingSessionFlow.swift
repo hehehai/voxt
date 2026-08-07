@@ -267,6 +267,14 @@ extension AppDelegate {
     private func startMeetingSession() async {
         VoxtLog.meeting("Meeting session start requested.")
         guard preflightPermissionsForMeeting() else { return }
+
+        if let storageFailureMessage = await meetingSessionCoordinator.preflightMeetingCaptureStorage() {
+            VoxtLog.meetingWarning("Meeting start blocked by audio storage preflight: \(storageFailureMessage)")
+            showOverlayReminder(storageFailureMessage)
+            scheduleDeepIdleMemoryReclamation()
+            return
+        }
+
         pendingMeetingSessionCompletionDisposition = .save
 
         meetingSessionCoordinator.onSessionFinished = { [weak self] result in

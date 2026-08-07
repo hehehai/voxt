@@ -170,6 +170,17 @@ extension AppDelegate {
         )
     }
 
+    func showMeetingDetailWindow(for entryID: UUID) {
+        historyStore.loadEntry(id: entryID) { [weak self] entry in
+            guard let self else { return }
+            guard let entry else {
+                self.showOverlayReminder(AppLocalization.localizedString("The meeting details are unavailable."))
+                return
+            }
+            self.showMeetingDetailWindow(for: entry)
+        }
+    }
+
     func persistMeetingHistoryIfNeeded(_ result: MeetingSessionResult) -> TranscriptionHistoryEntry? {
         persistMeetingHistory(result)
     }
@@ -198,8 +209,14 @@ extension AppDelegate {
                 return true
             }
             guard persistMeetingHistoryIfNeeded(result) != nil else {
-                showOverlayReminder(AppLocalization.localizedString("Couldn't save Meeting Notes history."))
+                showOverlayReminder(
+                    result.captureFailureMessage
+                        ?? AppLocalization.localizedString("Couldn't save Meeting Notes history.")
+                )
                 return false
+            }
+            if let captureFailureMessage = result.captureFailureMessage {
+                showOverlayReminder(captureFailureMessage)
             }
             if let archivedAudioURL = result.archivedAudioURL {
                 try? FileManager.default.removeItem(at: archivedAudioURL)
@@ -210,7 +227,10 @@ extension AppDelegate {
                 VoxtLog.meetingWarning("Meeting save-and-open failed: no history entry could be created.")
                 meetingDetailWindowManager.closeLiveWindow()
                 meetingOverlayWindow.hide()
-                showOverlayReminder(AppLocalization.localizedString("Couldn't save Meeting Notes history."))
+                showOverlayReminder(
+                    result.captureFailureMessage
+                        ?? AppLocalization.localizedString("Couldn't save Meeting Notes history.")
+                )
                 return false
             }
             if let archivedAudioURL = result.archivedAudioURL {

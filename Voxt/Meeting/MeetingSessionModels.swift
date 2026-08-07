@@ -13,6 +13,7 @@ struct MeetingSessionResult {
     let visibleSnapshotSegments: [MeetingTranscriptSegment]
     let audioDurationSeconds: TimeInterval
     let archivedAudioURL: URL?
+    let captureFailureMessage: String?
 
     init(
         recoverySessionID: UUID? = nil,
@@ -22,7 +23,8 @@ struct MeetingSessionResult {
         segments: [MeetingTranscriptSegment],
         visibleSnapshotSegments: [MeetingTranscriptSegment],
         audioDurationSeconds: TimeInterval,
-        archivedAudioURL: URL?
+        archivedAudioURL: URL?,
+        captureFailureMessage: String? = nil
     ) {
         self.recoverySessionID = recoverySessionID
         self.captureMode = captureMode
@@ -32,6 +34,7 @@ struct MeetingSessionResult {
         self.visibleSnapshotSegments = visibleSnapshotSegments
         self.audioDurationSeconds = audioDurationSeconds
         self.archivedAudioURL = archivedAudioURL
+        self.captureFailureMessage = captureFailureMessage
     }
 
     var persistedSegments: [MeetingTranscriptSegment] {
