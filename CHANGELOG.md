@@ -6,6 +6,38 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-08-07
+
+### English
+
+#### Added
+- Added imported meeting audio processing with full transcription, speaker diarization, progress, cancellation, and completion notifications.
+- Added editable meeting transcripts with waveform timelines, audio playback, and more durable meeting history.
+
+#### Changed
+- Improved meeting capture and history browsing with smoother long-transcript handling and clearer task status.
+- Improved selected-text flows in Obsidian and Apple Intelligence model availability detection.
+
+### 简体中文
+
+#### 新增
+- 新增会议音频文件处理，支持完整转写、说话人分离、进度、取消和完成通知。
+- 新增可编辑会议转写，支持波形时间轴、音频播放，并提升会议历史持久性。
+
+#### 改进
+- 改进会议录制与历史浏览，长转写处理更流畅，任务状态更清晰。
+- 改进 Obsidian 中的选中文本流程和 Apple Intelligence 模型可用性检测。
+
+### 日本語
+
+#### 追加
+- 会議音声ファイルの処理に対応し、完全文字起こし、話者分離、進捗、キャンセル、完了通知を追加しました。
+- 編集可能な会議文字起こし、波形タイムライン、音声再生を追加し、会議履歴の永続性を向上しました。
+
+#### 変更
+- 会議のキャプチャと履歴閲覧を改善し、長い文字起こしをよりスムーズに扱えるようにし、タスク状態を分かりやすくしました。
+- Obsidian の選択テキストフローと Apple Intelligence モデルの利用可能性検出を改善しました。
+
 ## [1.13.9] - 2026-08-04
 
 ### English
