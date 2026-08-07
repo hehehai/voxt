@@ -13,6 +13,7 @@ struct FeatureSettingsView: View {
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var noteStore: VoxtNoteStore
+    @ObservedObject var meetingFileTaskQueue: MeetingFileTaskQueue
     @StateObject var meetingDiarizationModelManager = MeetingDiarizationModelManager()
 
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
@@ -27,11 +28,11 @@ struct FeatureSettingsView: View {
     @State var remindersListDescriptors: [RemindersListDescriptor] = []
     @State var isRemindersListSheetPresented = false
     @State var isMeetingAdvancedSettingsExpanded = false
-    @State var meetingFileUploadState = MeetingFileUploadState.idle
-    @State var meetingFileAnalysisTask: Task<Void, Never>?
     @State private var toastMessage = ""
     @State private var toastDismissTask: Task<Void, Never>?
+    @State var isFilesDisableBlockedAlertPresented = false
     @State private var permissionRefreshRevision = 0
+    @State private var appleIntelligenceRefreshRevision = 0
     @State var scrollToBottomRequestRevision = 0
 
     var body: some View {
@@ -43,6 +44,8 @@ struct FeatureSettingsView: View {
                 transcriptionContent
             case .meeting:
                 meetingContent
+            case .files:
+                filesContent
             case .note:
                 noteContent
             case .translation:
@@ -64,6 +67,14 @@ struct FeatureSettingsView: View {
             }
         }
         .animation(.easeInOut(duration: 0.16), value: toastMessage)
+        .alert(
+            featureSettingsLocalized("Cannot Disable Files"),
+            isPresented: $isFilesDisableBlockedAlertPresented
+        ) {
+            Button(featureSettingsLocalized("OK"), role: .cancel) {}
+        } message: {
+            Text(featureSettingsLocalized("Finish or cancel all file tasks before disabling Files."))
+        }
         .sheet(item: $selectorSheet) { sheet in
             FeatureModelSelectorDialog(
                 title: sheet.title,
@@ -83,6 +94,7 @@ struct FeatureSettingsView: View {
             )
         }
         .onAppear {
+            refreshAppleIntelligenceAvailability()
             reloadFeatureSettings()
             refreshRemindersLists()
             meetingDiarizationModelManager.refresh()
@@ -96,6 +108,9 @@ struct FeatureSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .voxtPermissionsDidChange)) { _ in
             permissionRefreshRevision += 1
             refreshRemindersLists()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshAppleIntelligenceAvailability()
         }
         .onReceive(NotificationCenter.default.publisher(for: .voxtFeatureSettingsToastRequested)) { notification in
             guard let message = notification.userInfo?["message"] as? String else { return }
@@ -271,9 +286,21 @@ struct FeatureSettingsView: View {
             featureSettings: featureSettings,
             remoteASRProviderConfigurationsRaw: remoteASRProviderConfigurationsRaw,
             remoteLLMProviderConfigurationsRaw: remoteLLMProviderConfigurationsRaw,
-            appleIntelligenceAvailable: appleIntelligenceAvailable,
+            appleIntelligenceAvailability: appleIntelligenceAvailability,
             primaryUserLanguageCode: selectedUserLanguageCodes.first
         )
+    }
+
+    var appleIntelligenceAvailability: AppleIntelligenceAvailability {
+        _ = appleIntelligenceRefreshRevision
+        return AppleIntelligenceAvailability.current
+    }
+
+    func refreshAppleIntelligenceAvailability() {
+        let availability = AppleIntelligenceAvailability.current
+        VoxtLog.info("Apple Intelligence availability: \(availability.logDescription)")
+        AppDelegate.shared?.refreshTextEnhancerAvailability()
+        appleIntelligenceRefreshRevision += 1
     }
 
     var selectedUserLanguageCodes: [String] {
@@ -346,9 +373,6 @@ struct FeatureSettingsView: View {
     }
 
     var appleIntelligenceAvailable: Bool {
-        if #available(macOS 26.0, *) {
-            return TextEnhancer.isAvailable
-        }
-        return false
+        appleIntelligenceAvailability.isAvailable
     }
 }

@@ -6,6 +6,34 @@ import XCTest
 
 @MainActor
 final class ModelCatalogBuilderTests: XCTestCase {
+    func testLLMCatalogIncludesUnavailableAppleIntelligenceEntry() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(),
+            appleIntelligenceAvailability: .unavailable(.deviceNotEligible)
+        )
+
+        let entry = try XCTUnwrap(
+            builder.llmEntries().first(where: { $0.id == "apple-intelligence" })
+        )
+
+        XCTAssertEqual(entry.title, AppLocalization.localizedString("Apple Intelligence"))
+        XCTAssertEqual(entry.engine, AppLocalization.localizedString("Apple"))
+        XCTAssertEqual(
+            entry.statusText,
+            AppLocalization.localizedString("Apple Intelligence is not available for this Mac or region.")
+        )
+        XCTAssertNil(entry.primaryAction)
+    }
+
+    func testLLMCatalogHidesAppleIntelligenceBeforeMacOS26() {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(),
+            appleIntelligenceAvailability: .unsupportedOS
+        )
+
+        XCTAssertFalse(builder.llmEntries().contains(where: { $0.id == "apple-intelligence" }))
+    }
+
     func testCancellingInstallActionKeepsCancelButtonWithProgress() throws {
         let snapshot = LocalModelInstallSnapshot(
             target: .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID),
@@ -608,6 +636,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         remoteASRConfigurations: [String: RemoteProviderConfiguration] = [:],
         remoteLLMConfigurations: [String: RemoteProviderConfiguration] = [:],
         primaryUserLanguageCode: String? = "en",
+        appleIntelligenceAvailability: AppleIntelligenceAvailability = .available,
         hasIssue: @escaping (ModelConfigurationIssue.Scope) -> Bool = { _ in false },
         isDownloadingModel: @escaping (String) -> Bool = { _ in false },
         isPausedModel: @escaping (String) -> Bool = { _ in false },
@@ -755,6 +784,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
             remoteASRStatusText: { _, _ in "" },
             remoteLLMBadgeText: { _ in nil },
             primaryUserLanguageCode: primaryUserLanguageCode,
+            appleIntelligenceAvailability: appleIntelligenceAvailability,
             mlxInstallSnapshot: mlxInstallSnapshot,
             sherpaInstallSnapshot: sherpaInstallSnapshot,
             customLLMInstallSnapshot: customLLMInstallSnapshot,

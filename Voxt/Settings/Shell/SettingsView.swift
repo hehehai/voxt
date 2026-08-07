@@ -21,6 +21,7 @@ struct SettingsView: View {
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
+    @ObservedObject var meetingFileTaskQueue: MeetingFileTaskQueue
     @ObservedObject var noteStore: VoxtNoteStore
     @ObservedObject var dictionaryStore: DictionaryStore
     @ObservedObject var dictionarySuggestionStore: DictionarySuggestionStore
@@ -73,6 +74,7 @@ struct SettingsView: View {
         customLLMManager: CustomLLMModelManager,
         ggufTranslationModelManager: GGUFTranslationModelManager,
         historyStore: TranscriptionHistoryStore,
+        meetingFileTaskQueue: MeetingFileTaskQueue,
         noteStore: VoxtNoteStore,
         dictionaryStore: DictionaryStore,
         dictionarySuggestionStore: DictionarySuggestionStore,
@@ -89,6 +91,7 @@ struct SettingsView: View {
         self.customLLMManager = customLLMManager
         self.ggufTranslationModelManager = ggufTranslationModelManager
         self.historyStore = historyStore
+        self.meetingFileTaskQueue = meetingFileTaskQueue
         self.noteStore = noteStore
         self.dictionaryStore = dictionaryStore
         self.dictionarySuggestionStore = dictionarySuggestionStore
@@ -361,6 +364,15 @@ struct SettingsView: View {
 
                         Spacer(minLength: 0)
 
+                        if sidebarMode == .feature,
+                           selectedFeatureTab == .files,
+                           meetingFileTaskQueue.hasFinishedTasks {
+                            Button(settingsLocalized("Clear Finished Tasks")) {
+                                meetingFileTaskQueue.clearFinishedTasks()
+                            }
+                            .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 11, height: 26))
+                        }
+
                         if sidebarMode == .root, selectedTab == .report {
                             Button(settingsLocalized("Guide")) {
                                 AppDelegate.shared?.openOnboardingWindow()
@@ -368,6 +380,10 @@ struct SettingsView: View {
                             .buttonStyle(SettingsPillButtonStyle())
                         }
                     }
+                    .frame(
+                        height: sidebarMode == .feature && selectedFeatureTab == .files ? 26 : nil,
+                        alignment: .center
+                    )
                 }
 
                 tabContent
@@ -561,7 +577,8 @@ struct SettingsView: View {
                         sherpaOnnxModelManager: sherpaOnnxModelManager,
                         customLLMManager: customLLMManager,
                         ggufTranslationModelManager: ggufTranslationModelManager,
-                        noteStore: noteStore
+                        noteStore: noteStore,
+                        meetingFileTaskQueue: meetingFileTaskQueue
                     )
                 }
             }
@@ -739,6 +756,9 @@ struct SettingsView: View {
     private var currentTitle: LocalizedStringKey {
         switch sidebarMode {
         case .feature:
+            if selectedFeatureTab == .files {
+                return "File Tasks"
+            }
             return selectedFeatureTab.titleKey
         case .history:
             return selectedHistoryFilter.titleKey

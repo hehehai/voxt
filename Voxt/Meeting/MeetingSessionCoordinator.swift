@@ -82,6 +82,7 @@ final class MeetingSessionCoordinator {
     private var isReconfiguringCaptureMode = false
     private var isImportAnalyzing = false
     private var importedFileAnalysisTask: Task<MeetingSessionResult, Error>?
+    private var pendingCaptureFailureMessage: String?
 
     init(
         mlxModelManager: MLXModelManager,
@@ -134,7 +135,7 @@ final class MeetingSessionCoordinator {
         isImportAnalyzing = true
         progress(MeetingFileAnalysisProgress(stage: .preparing))
 
-        let analysisTask = Task { @MainActor [weak self] () throws -> MeetingSessionResult in
+        let analysisTask = Task(priority: .utility) { @MainActor [weak self] () throws -> MeetingSessionResult in
             guard let self else { throw CancellationError() }
             do {
                 let result = try await self.performImportedFileAnalysis(
@@ -163,7 +164,7 @@ final class MeetingSessionCoordinator {
     ) async throws -> MeetingSessionResult {
         var preparedAudio: MeetingImportedAudioFile?
         do {
-            let preparationTask = Task.detached(priority: .userInitiated) {
+            let preparationTask = Task.detached(priority: .utility) {
                 try await MeetingImportedAudioFile.prepare(from: sourceURL) { fraction in
                     await progress(
                         MeetingFileAnalysisProgress(
@@ -181,10 +182,21 @@ final class MeetingSessionCoordinator {
             preparedAudio = importedAudio
             try Task.checkCancellation()
 
+            progress(
+                MeetingFileAnalysisProgress(
+                    stage: .preparing,
+                    stageFraction: 1,
+                    mediaDurationSeconds: importedAudio.durationSeconds
+                )
+            )
+
             let engineContext = resolvedEngineContext()
             activeEngineContext = engineContext
             progress(MeetingFileAnalysisProgress(stage: .transcribing))
-            let importedTranscriber = try await makeTranscriber(for: engineContext)
+            let importedTranscriber = try await makeTranscriber(
+                for: engineContext,
+                strictInferenceWorkClass: .fileASR
+            )
             transcriber = importedTranscriber
             try Task.checkCancellation()
 
@@ -195,11 +207,13 @@ final class MeetingSessionCoordinator {
                 },
                 transcriber: importedTranscriber,
                 requiresCompleteTranscription: true,
-                progress: { fraction in
+                processedDurationProgress: { fraction, processedDuration in
                     await progress(
                         MeetingFileAnalysisProgress(
                             stage: .transcribing,
-                            stageFraction: fraction
+                            stageFraction: fraction,
+                            mediaDurationSeconds: importedAudio.durationSeconds,
+                            processedMediaDurationSeconds: processedDuration
                         )
                     )
                 }
@@ -299,6 +313,10 @@ final class MeetingSessionCoordinator {
         cleanupSessionState(shouldLogCaptureStop: false)
         resetSessionPresentationState()
         overlayState.reset()
+    }
+
+    func preflightMeetingCaptureStorage() async -> String? {
+        await audioArchive.preflightFailureMessage()
     }
 
     func start() async -> String? {
@@ -543,7 +561,8 @@ final class MeetingSessionCoordinator {
                     return lhs.startSeconds < rhs.startSeconds
                 },
                 audioDurationSeconds: duration,
-                archivedAudioURL: archivedAudioURL
+                archivedAudioURL: archivedAudioURL,
+                captureFailureMessage: self.pendingCaptureFailureMessage
             )
 
             if shouldFlushPendingAudio {
@@ -732,6 +751,7 @@ final class MeetingSessionCoordinator {
             )
             if let safetyMessage = await self.audioArchive.consumeSafetyFailureMessage() {
                 await MainActor.run {
+                    self.pendingCaptureFailureMessage = safetyMessage
                     self.overlayState.safetyMessage = safetyMessage
                     _ = self.stop(shouldFlushPendingAudio: true)
                 }
@@ -975,6 +995,7 @@ final class MeetingSessionCoordinator {
         recordingStartedAt = nil
         accumulatedRecordingDuration = 0
         hasCapturedAudio = false
+        pendingCaptureFailureMessage = nil
         completedPendingTaskIDs.removeAll()
         pendingChunks.removeAll()
         let voiceActivityDetector = self.voiceActivityDetector
@@ -1707,7 +1728,10 @@ final class MeetingSessionCoordinator {
         return automaticContext.resolvingChunkingMode(chunkingMode)
     }
 
-    private func makeTranscriber(for context: MeetingASREngineContext) async throws -> any MeetingSegmentTranscribing {
+    private func makeTranscriber(
+        for context: MeetingASREngineContext,
+        strictInferenceWorkClass: MeetingLocalInferenceWorkClass = .finalASR
+    ) async throws -> any MeetingSegmentTranscribing {
         liveSessionFactory = nil
         switch context.engine {
         case .mlxAudio:
@@ -1716,7 +1740,10 @@ final class MeetingSessionCoordinator {
             if case .liveLocal = context.resolvedMode {
                 liveSessionFactory = MeetingMLXNativeLiveSessionFactory(modelManager: mlxModelManager)
             }
-            return MeetingMLXSegmentTranscriber(modelManager: mlxModelManager)
+            return MeetingMLXSegmentTranscriber(
+                modelManager: mlxModelManager,
+                strictInferenceWorkClass: strictInferenceWorkClass
+            )
         case .remote:
             if context.resolvedMode.usesLiveSessions {
                 let remoteSelection = resolvedRemoteASRSelection()

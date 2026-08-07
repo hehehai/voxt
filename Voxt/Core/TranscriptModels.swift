@@ -45,6 +45,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let translatedText: String?
     let isTranslationPending: Bool
     let preventsAdjacentMerge: Bool
+    let isHighlighted: Bool
 
     nonisolated init(
         id: UUID = UUID(),
@@ -58,7 +59,8 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         text: String,
         translatedText: String? = nil,
         isTranslationPending: Bool = false,
-        preventsAdjacentMerge: Bool = false
+        preventsAdjacentMerge: Bool = false,
+        isHighlighted: Bool = false
     ) {
         self.id = id
         self.speaker = speaker
@@ -72,6 +74,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         self.translatedText = translatedText
         self.isTranslationPending = isTranslationPending
         self.preventsAdjacentMerge = preventsAdjacentMerge
+        self.isHighlighted = isHighlighted
     }
 
     nonisolated func updatingTranslation(
@@ -90,7 +93,48 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
             text: text,
             translatedText: translatedText,
             isTranslationPending: isTranslationPending,
-            preventsAdjacentMerge: preventsAdjacentMerge
+            preventsAdjacentMerge: preventsAdjacentMerge,
+            isHighlighted: isHighlighted
+        )
+    }
+
+    nonisolated func updatingText(
+        _ text: String,
+        translatedText: String? = nil,
+        isTranslationPending: Bool = false
+    ) -> TranscriptSegment {
+        TranscriptSegment(
+            id: id,
+            speaker: speaker,
+            speakerID: speakerID,
+            speakerDisplayName: speakerDisplayName,
+            audioSource: audioSource,
+            speakerConfidence: speakerConfidence,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+            text: text,
+            translatedText: translatedText,
+            isTranslationPending: isTranslationPending,
+            preventsAdjacentMerge: preventsAdjacentMerge,
+            isHighlighted: isHighlighted
+        )
+    }
+
+    nonisolated func updatingHighlight(_ isHighlighted: Bool) -> TranscriptSegment {
+        TranscriptSegment(
+            id: id,
+            speaker: speaker,
+            speakerID: speakerID,
+            speakerDisplayName: speakerDisplayName,
+            audioSource: audioSource,
+            speakerConfidence: speakerConfidence,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+            text: text,
+            translatedText: translatedText,
+            isTranslationPending: isTranslationPending,
+            preventsAdjacentMerge: preventsAdjacentMerge,
+            isHighlighted: isHighlighted
         )
     }
 
@@ -113,7 +157,8 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
             text: text,
             translatedText: translatedText,
             isTranslationPending: isTranslationPending,
-            preventsAdjacentMerge: preventsAdjacentMerge
+            preventsAdjacentMerge: preventsAdjacentMerge,
+            isHighlighted: isHighlighted
         )
     }
 
@@ -130,7 +175,8 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
             text: text,
             translatedText: translatedText,
             isTranslationPending: isTranslationPending,
-            preventsAdjacentMerge: preventsAdjacentMerge
+            preventsAdjacentMerge: preventsAdjacentMerge,
+            isHighlighted: isHighlighted
         )
     }
 
@@ -161,6 +207,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         case text
         case translatedText
         case isTranslationPending
+        case isHighlighted
     }
 
     init(from decoder: Decoder) throws {
@@ -176,6 +223,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         text = try container.decode(String.self, forKey: .text)
         translatedText = try container.decodeIfPresent(String.self, forKey: .translatedText)
         isTranslationPending = try container.decodeIfPresent(Bool.self, forKey: .isTranslationPending) ?? false
+        isHighlighted = try container.decodeIfPresent(Bool.self, forKey: .isHighlighted) ?? false
         preventsAdjacentMerge = false
     }
 
@@ -192,6 +240,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         try container.encode(text, forKey: .text)
         try container.encodeIfPresent(translatedText, forKey: .translatedText)
         try container.encode(isTranslationPending, forKey: .isTranslationPending)
+        try container.encode(isHighlighted, forKey: .isHighlighted)
     }
 }
 
@@ -297,7 +346,8 @@ enum TranscriptFormatter {
             text: mergedText(previous.text, next.text),
             translatedText: nil,
             isTranslationPending: false,
-            preventsAdjacentMerge: false
+            preventsAdjacentMerge: false,
+            isHighlighted: previous.isHighlighted || next.isHighlighted
         )
     }
 
@@ -337,7 +387,8 @@ enum TranscriptFormatter {
             text: preferredText.isEmpty ? fallbackText : preferredText,
             translatedText: (translatedText?.isEmpty == false ? translatedText : fallbackTranslatedText),
             isTranslationPending: preferred.isTranslationPending && (translatedText?.isEmpty ?? true),
-            preventsAdjacentMerge: preferred.preventsAdjacentMerge || fallback.preventsAdjacentMerge
+            preventsAdjacentMerge: preferred.preventsAdjacentMerge || fallback.preventsAdjacentMerge,
+            isHighlighted: preferred.isHighlighted || fallback.isHighlighted
         )
     }
 

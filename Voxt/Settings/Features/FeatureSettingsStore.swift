@@ -93,12 +93,12 @@ enum FeatureSettingsStore {
         defaults.set(true, forKey: AppPreferenceKey.translateSelectedTextOnTranslationHotkey)
     }
 
-    static func availability(defaults: UserDefaults = .standard) -> FeatureAvailabilitySettings {
+    nonisolated static func availability(defaults: UserDefaults = .standard) -> FeatureAvailabilitySettings {
         // Prefer a side-effect-free peek so hotkey/runtime readers do not migrate/save
         // (and post `.voxtFeatureSettingsDidChange`) during early app bootstrap.
         if let raw = loadRaw(defaults: defaults),
            let data = raw.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode(FeatureSettings.self, from: data) {
+           let decoded = try? JSONDecoder().decode(StoredAvailability.self, from: data) {
             return decoded.availability
         }
         let appEnhancementEnabled = defaults.object(forKey: AppPreferenceKey.appEnhancementEnabled) as? Bool ?? true
@@ -107,7 +107,8 @@ enum FeatureSettingsStore {
             rewriteEnabled: true,
             notesEnabled: true,
             appEnhancementEnabled: appEnhancementEnabled,
-            meetingEnabled: true
+            meetingEnabled: true,
+            filesEnabled: true
         )
     }
 
@@ -203,7 +204,8 @@ enum FeatureSettingsStore {
                 rewriteEnabled: true,
                 notesEnabled: true,
                 appEnhancementEnabled: appEnhancementEnabled,
-                meetingEnabled: true
+                meetingEnabled: true,
+                filesEnabled: true
             )
         )
     }
@@ -237,9 +239,13 @@ enum FeatureSettingsStore {
         syncLegacyMeeting(sanitizedMeeting, defaults: defaults)
     }
 
-    private static func loadRaw(defaults: UserDefaults) -> String? {
+    private nonisolated static func loadRaw(defaults: UserDefaults) -> String? {
         defaults.string(forKey: AppPreferenceKey.featureSettings)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private nonisolated struct StoredAvailability: Decodable, Sendable {
+        let availability: FeatureAvailabilitySettings
     }
 
     private static func syncLegacyASRSelection(_ selectionID: FeatureModelSelectionID, defaults: UserDefaults) {
@@ -475,7 +481,8 @@ enum FeatureSettingsStore {
             rewriteEnabled: settings.availability.rewriteEnabled,
             notesEnabled: settings.availability.notesEnabled,
             appEnhancementEnabled: settings.availability.appEnhancementEnabled,
-            meetingEnabled: settings.availability.meetingEnabled
+            meetingEnabled: settings.availability.meetingEnabled,
+            filesEnabled: settings.availability.filesEnabled
         )
     }
 

@@ -6,6 +6,52 @@ import XCTest
 
 @MainActor
 final class FeatureModelCatalogBuilderTests: XCTestCase {
+    func testAppleIntelligenceEntryRemainsVisibleWhenUnavailable() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(),
+            appleIntelligenceAvailability: .unavailable(.modelNotReady)
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .transcriptionLLM)
+                .first(where: { $0.selectionID == .appleIntelligence })
+        )
+
+        XCTAssertFalse(entry.isSelectable)
+        XCTAssertEqual(entry.statusText, AppLocalization.localizedString("Unavailable"))
+        XCTAssertEqual(
+            entry.disabledReason,
+            AppLocalization.localizedString("Apple Intelligence is still preparing its on-device model. Try again shortly.")
+        )
+    }
+
+    func testAppleIntelligenceEntryIsSelectableWhenAvailable() throws {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(),
+            appleIntelligenceAvailability: .available
+        )
+
+        let entry = try XCTUnwrap(
+            builder.entries(for: .transcriptionLLM)
+                .first(where: { $0.selectionID == .appleIntelligence })
+        )
+
+        XCTAssertTrue(entry.isSelectable)
+        XCTAssertNil(entry.disabledReason)
+    }
+
+    func testAppleIntelligenceEntryRemainsHiddenBeforeMacOS26() {
+        let builder = makeBuilder(
+            featureSettings: makeFeatureSettings(),
+            appleIntelligenceAvailability: .unsupportedOS
+        )
+
+        XCTAssertFalse(
+            builder.entries(for: .transcriptionLLM)
+                .contains(where: { $0.selectionID == .appleIntelligence })
+        )
+    }
+
     func testTranslationEntriesDoNotExposeWhisperDirectTranslate() throws {
         let builder = makeBuilder(
             featureSettings: makeFeatureSettings(
@@ -554,7 +600,8 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         featureSettings: FeatureSettings,
         remoteASRConfigurationsRaw: String = "",
         remoteLLMConfigurationsRaw: String = "",
-        primaryUserLanguageCode: String? = "en"
+        primaryUserLanguageCode: String? = "en",
+        appleIntelligenceAvailability: AppleIntelligenceAvailability = .available
     ) -> FeatureModelCatalogBuilder {
         let mlxModelManager = mlxModelManager ?? TestModelManagers.mlx
         return FeatureModelCatalogBuilder(
@@ -565,7 +612,7 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
             featureSettings: featureSettings,
             remoteASRProviderConfigurationsRaw: remoteASRConfigurationsRaw,
             remoteLLMProviderConfigurationsRaw: remoteLLMConfigurationsRaw,
-            appleIntelligenceAvailable: true,
+            appleIntelligenceAvailability: appleIntelligenceAvailability,
             primaryUserLanguageCode: primaryUserLanguageCode
         )
     }

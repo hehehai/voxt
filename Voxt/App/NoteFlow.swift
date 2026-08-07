@@ -42,10 +42,17 @@ extension AppDelegate {
             return
         }
 
-        let selectedText: String? = if isSessionActive {
+        let ignoresSelectedText = SelectedTextSystemSelectionSupport.ignoresSelectedTextFlow(
+            bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        )
+        let selectedText: String? = if isSessionActive || ignoresSelectedText {
             nil
         } else {
             selectedContentTextFromSystemSelection()
+        }
+
+        if ignoresSelectedText {
+            VoxtLog.hotkey("Note hotkey bypassing selected-text flow for Obsidian.")
         }
 
         let action = NoteHotkeyActionResolver.resolve(

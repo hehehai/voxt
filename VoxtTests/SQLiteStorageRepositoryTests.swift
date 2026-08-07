@@ -314,6 +314,36 @@ final class SQLiteStorageRepositoryTests: XCTestCase {
         XCTAssertNil(try repository.entry(id: oldID))
     }
 
+    func testHistoryListEntriesBoundLargeMeetingPreviewButKeepFullDetailAndSearch() throws {
+        let database = try makeDatabase()
+        let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let text = String(repeating: "meeting transcript line\n", count: 5_000) + "unique-tail-token"
+        let meeting = makeHistoryEntry(
+            text: text,
+            createdAt: Date(),
+            kind: .transcript
+        )
+
+        try repository.upsert(meeting)
+
+        let listEntries = try repository.listEntries(
+            kind: .transcript,
+            query: "unique-tail-token",
+            limit: 10,
+            offset: 0
+        )
+
+        XCTAssertEqual(listEntries.count, 1)
+        XCTAssertEqual(listEntries[0].id, meeting.id)
+        XCTAssertLessThanOrEqual(
+            listEntries[0].previewText.count,
+            TranscriptionHistoryListEntry.previewCharacterLimit
+        )
+        XCTAssertEqual(listEntries[0].textLength, text.count)
+        XCTAssertNotEqual(listEntries[0].previewText, text)
+        XCTAssertEqual(try repository.entry(id: meeting.id)?.text, text)
+    }
+
     func testHistoryRepositoryDeletesOnlyRequestedKind() throws {
         let database = try makeDatabase()
         let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))

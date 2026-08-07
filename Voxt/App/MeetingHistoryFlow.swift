@@ -4,6 +4,39 @@
 import Foundation
 
 extension AppDelegate {
+    func handleMeetingFileTaskNotificationTap(taskID rawTaskID: String) {
+        guard let taskID = UUID(uuidString: rawTaskID),
+              let task = meetingFileTaskQueue.task(id: taskID)
+        else {
+            openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .files))
+            return
+        }
+
+        guard task.status == .completed,
+              let historyEntryID = task.historyEntryID,
+              let entry = historyStore.entry(id: historyEntryID)
+        else {
+            openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .files))
+            showOverlayReminder(AppLocalization.localizedString("The completed meeting details are unavailable."))
+            return
+        }
+
+        showMeetingDetailWindow(for: entry)
+    }
+
+    func showMeetingFileTaskDetail(taskID: UUID) {
+        guard let task = meetingFileTaskQueue.task(id: taskID),
+              task.status == .completed,
+              let historyEntryID = task.historyEntryID,
+              let entry = historyStore.entry(id: historyEntryID)
+        else {
+            showOverlayReminder(AppLocalization.localizedString("The completed meeting details are unavailable."))
+            return
+        }
+
+        showMeetingDetailWindow(for: entry)
+    }
+
     func cancelImportedMeetingFileAnalysis() async {
         await meetingSessionCoordinator.cancelImportedFileAnalysis()
     }
@@ -112,6 +145,9 @@ extension AppDelegate {
             summaryPersistence: { @MainActor entryID, summary in
                 self.persistMeetingSummary(summary, for: entryID)
             },
+            summaryStalePersistence: { @MainActor entryID, isStale in
+                self.historyStore.updateTranscriptSummaryStale(isStale, for: entryID)
+            },
             summaryChatAnswerer: { @MainActor transcript, summary, history, question, settings in
                 try await self.answerMeetingSummaryFollowUp(
                     transcript: transcript,
@@ -125,9 +161,24 @@ extension AppDelegate {
                 self.persistMeetingSummaryChatMessages(messages, for: entryID)
             },
             transcriptSegmentsPersistence: { @MainActor entryID, segments in
-                self.historyStore.updateTranscriptSegments(segments, for: entryID)
+                self.historyStore.updateTranscriptSegments(
+                    segments,
+                    for: entryID,
+                    allowsEmptyText: true
+                )
             }
         )
+    }
+
+    func showMeetingDetailWindow(for entryID: UUID) {
+        historyStore.loadEntry(id: entryID) { [weak self] entry in
+            guard let self else { return }
+            guard let entry else {
+                self.showOverlayReminder(AppLocalization.localizedString("The meeting details are unavailable."))
+                return
+            }
+            self.showMeetingDetailWindow(for: entry)
+        }
     }
 
     func persistMeetingHistoryIfNeeded(_ result: MeetingSessionResult) -> TranscriptionHistoryEntry? {
@@ -135,6 +186,7 @@ extension AppDelegate {
     }
 
     func handleMeetingSessionFinished(_ result: MeetingSessionResult) -> Bool {
+        defer { meetingFileTaskQueue.startIfNeeded() }
         hotkeyManager.setCommonStopKeyEnabled(false)
         let disposition = pendingMeetingSessionCompletionDisposition
         pendingMeetingSessionCompletionDisposition = .save
@@ -157,8 +209,14 @@ extension AppDelegate {
                 return true
             }
             guard persistMeetingHistoryIfNeeded(result) != nil else {
-                showOverlayReminder(AppLocalization.localizedString("Couldn't save Meeting Notes history."))
+                showOverlayReminder(
+                    result.captureFailureMessage
+                        ?? AppLocalization.localizedString("Couldn't save Meeting Notes history.")
+                )
                 return false
+            }
+            if let captureFailureMessage = result.captureFailureMessage {
+                showOverlayReminder(captureFailureMessage)
             }
             if let archivedAudioURL = result.archivedAudioURL {
                 try? FileManager.default.removeItem(at: archivedAudioURL)
@@ -169,7 +227,10 @@ extension AppDelegate {
                 VoxtLog.meetingWarning("Meeting save-and-open failed: no history entry could be created.")
                 meetingDetailWindowManager.closeLiveWindow()
                 meetingOverlayWindow.hide()
-                showOverlayReminder(AppLocalization.localizedString("Couldn't save Meeting Notes history."))
+                showOverlayReminder(
+                    result.captureFailureMessage
+                        ?? AppLocalization.localizedString("Couldn't save Meeting Notes history.")
+                )
                 return false
             }
             if let archivedAudioURL = result.archivedAudioURL {

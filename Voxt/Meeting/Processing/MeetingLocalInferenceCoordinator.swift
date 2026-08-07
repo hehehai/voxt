@@ -8,6 +8,7 @@ nonisolated enum MeetingLocalInferenceWorkClass: String, Sendable {
     case liveASRFinal
     case liveASRPartial
     case realtimeTranslation
+    case fileASR
     case finalASR
     case speakerAnalysis
     case detailTranslation
@@ -19,6 +20,7 @@ nonisolated enum MeetingLocalInferenceWorkClass: String, Sendable {
         case .liveASRFinal: return 95
         case .liveASRPartial: return 85
         case .realtimeTranslation: return 70
+        case .fileASR: return 10
         case .finalASR: return 60
         case .speakerAnalysis: return 50
         case .detailTranslation: return 40
@@ -28,7 +30,7 @@ nonisolated enum MeetingLocalInferenceWorkClass: String, Sendable {
 
     var waitsWhileRecording: Bool {
         switch self {
-        case .finalASR, .speakerAnalysis, .detailTranslation, .summary:
+        case .fileASR, .finalASR, .speakerAnalysis, .detailTranslation, .summary:
             return true
         case .liveASRFeed, .liveASRFinal, .liveASRPartial, .realtimeTranslation:
             return false
@@ -39,7 +41,7 @@ nonisolated enum MeetingLocalInferenceWorkClass: String, Sendable {
         switch self {
         case .liveASRFeed, .liveASRFinal, .finalASR:
             return false
-        case .liveASRPartial, .realtimeTranslation, .speakerAnalysis, .detailTranslation, .summary:
+        case .liveASRPartial, .realtimeTranslation, .fileASR, .speakerAnalysis, .detailTranslation, .summary:
             return true
         }
     }
@@ -48,7 +50,7 @@ nonisolated enum MeetingLocalInferenceWorkClass: String, Sendable {
         switch self {
         case .liveASRFeed, .liveASRFinal, .finalASR:
             return false
-        case .liveASRPartial, .realtimeTranslation, .speakerAnalysis, .detailTranslation, .summary:
+        case .liveASRPartial, .realtimeTranslation, .fileASR, .speakerAnalysis, .detailTranslation, .summary:
             return true
         }
     }

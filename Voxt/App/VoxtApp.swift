@@ -186,6 +186,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return self.makeMeetingTranslationOperation(text, targetLanguage: targetLanguage)
         }
     )
+    lazy var meetingFileTaskQueue = MeetingFileTaskQueue(
+        analyzer: { @MainActor [weak self] sourceURL, progress in
+            guard let self else { throw CancellationError() }
+            return try await self.analyzeImportedMeetingFile(at: sourceURL, progress: progress)
+        },
+        cancelActiveAnalysis: { @MainActor [weak self] in
+            await self?.cancelImportedMeetingFileAnalysis()
+        },
+        canStart: { @MainActor [weak self] in
+            guard let self else { return false }
+            return !self.isSessionActive && !self.meetingSessionCoordinator.isActive
+        },
+        rollbackAnalysis: { @MainActor [weak self] entry in
+            _ = self?.historyStore.delete(id: entry.id)
+        }
+    )
     var statusItem: NSStatusItem?
 
     var enhancer: (any TextEnhancing)?
@@ -198,6 +214,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateAvailabilityObserver: NSObjectProtocol?
     private var selectedInputDeviceObserver: NSObjectProtocol?
     private var featureSettingsObserver: NSObjectProtocol?
+    private var fileTaskNotificationObserver: NSObjectProtocol?
     var workspaceWillSleepObserver: NSObjectProtocol?
     var workspaceDidWakeObserver: NSObjectProtocol?
     var workspaceSessionDidBecomeActiveObserver: NSObjectProtocol?
@@ -460,10 +477,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var appleIntelligenceAvailableForCurrentEnvironment: Bool {
-        if #available(macOS 26.0, *) {
-            return TextEnhancer.isAvailable
-        }
-        return false
+        AppleIntelligenceAvailability.current.isAvailable
     }
 
     private var customEnhancementModelAvailable: Bool {
@@ -485,6 +499,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let buildString = ProcessInfo.processInfo.operatingSystemVersionString
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return "\(versionString) (\(buildString))"
+    }
+
+    func refreshTextEnhancerAvailability() {
+        guard #available(macOS 26.0, *) else {
+            enhancer = nil
+            return
+        }
+
+        if TextEnhancer.isAvailable {
+            if enhancer == nil {
+                enhancer = TextEnhancer()
+                VoxtLog.info("Apple Intelligence text enhancer initialized after availability refresh.")
+            }
+        } else {
+            enhancer = nil
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -515,14 +545,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         SystemNotificationSupport.configure()
 
+        fileTaskNotificationObserver = NotificationCenter.default.addObserver(
+            forName: .voxtFileTaskNotificationTapped,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let taskID = notification.userInfo?["fileTaskID"] as? String else { return }
+            Task { @MainActor [weak self] in
+                self?.handleMeetingFileTaskNotificationTap(taskID: taskID)
+            }
+        }
+        meetingFileTaskQueue.startIfNeeded()
+
         SileroVADModelProvisioner.prefetchIfNeeded(for: LocalVADMode.stored())
         RemoteModelConfigurationStore.migrateLegacyStoredSecrets()
 
         synchronizeAppActivationPolicy()
 
-        if #available(macOS 26.0, *), TextEnhancer.isAvailable {
-            enhancer = TextEnhancer()
-        }
+        refreshTextEnhancerAvailability()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -644,6 +684,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         presentMainWindowOnLaunchIfNeeded()
         scheduleLLMIdleWarmupIfNeeded()
         VoxtLog.info("Voxt launch completed. engine=\(transcriptionEngine.rawValue), enhancement=\(enhancementMode.rawValue)")
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        refreshTextEnhancerAvailability()
     }
 
     func applyFeatureAvailabilityLifecycle() {
@@ -782,6 +826,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await task.value
         }
 
+        await meetingFileTaskQueue.shutdown()
+
         let meetingStopTask = meetingSessionCoordinator.stop()
         speechTranscriber.shutdownForApplicationTermination()
         await remoteASRTranscriber.shutdownForApplicationTermination()
@@ -870,6 +916,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.removeObserver(featureSettingsObserver)
             self.featureSettingsObserver = nil
         }
+        if let fileTaskNotificationObserver {
+            NotificationCenter.default.removeObserver(fileTaskNotificationObserver)
+            self.fileTaskNotificationObserver = nil
+        }
         let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
         if let workspaceWillSleepObserver {
             workspaceNotificationCenter.removeObserver(workspaceWillSleepObserver)
@@ -909,6 +959,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let featureSettingsObserver {
             NotificationCenter.default.removeObserver(featureSettingsObserver)
+        }
+        if let fileTaskNotificationObserver {
+            NotificationCenter.default.removeObserver(fileTaskNotificationObserver)
         }
         let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
         if let workspaceWillSleepObserver {

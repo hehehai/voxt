@@ -75,7 +75,8 @@ enum TranscriptAssembler {
                 text: segment.text,
                 translatedText: preservesTranslatedText ? existing.translatedText : nil,
                 isTranslationPending: existing.isTranslationPending || (preservesTranslatedText && textChanged),
-                preventsAdjacentMerge: existing.preventsAdjacentMerge || segment.preventsAdjacentMerge
+                preventsAdjacentMerge: existing.preventsAdjacentMerge || segment.preventsAdjacentMerge,
+                isHighlighted: existing.isHighlighted || segment.isHighlighted
             )
             return finalizeIfNeeded(at: existingIndex, isFinal: isFinal, in: segments)
         }

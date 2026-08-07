@@ -614,7 +614,9 @@ class CustomLLMModelManager: ObservableObject {
         if let mode = request.logMode {
             suffix = ", mode=\(mode)"
         }
-        return "Custom LLM \(request.kind.logLabel) started. repo=\(request.repo), inputChars=\(request.inputCharacterCount), maxTokens=\(params.maxTokens ?? 0), temperature=\(params.temperature), topP=\(params.topP), prefillStep=\(params.prefillStepSize)\(suffix), family=\(behavior.family.logLabel), thinkingDisabled=\(behavior.disablesThinking)"
+        let maxTokens = params.maxTokens.map(String.init) ?? "0"
+        let prefillStepSize = params.prefillStepSize.map(String.init) ?? "0"
+        return "Custom LLM \(request.kind.logLabel) started. repo=\(request.repo), inputChars=\(request.inputCharacterCount), maxTokens=\(maxTokens), temperature=\(params.temperature), topP=\(params.topP), prefillStep=\(prefillStepSize)\(suffix), family=\(behavior.family.logLabel), thinkingDisabled=\(behavior.disablesThinking)"
     }
 
     private func contentLogMessage(for request: CustomLLMRequestPlan) -> String {

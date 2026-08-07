@@ -504,6 +504,7 @@ extension AppDelegate {
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             historyStore: historyStore,
+            meetingFileTaskQueue: meetingFileTaskQueue,
             noteStore: noteStore,
             dictionaryStore: dictionaryStore,
             dictionarySuggestionStore: dictionarySuggestionStore,

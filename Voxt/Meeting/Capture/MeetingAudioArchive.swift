@@ -22,6 +22,7 @@ actor MeetingAudioArchive {
     private static let silenceThreshold: Float = 0.0001
     private static let diskCapacityCheckInterval: TimeInterval = 60
     private static let minimumDiskReserveBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
+    private static let diskCapacityFailureMessage = "Recording stopped to protect this Mac because meeting audio could not be written safely. Free some disk space, then try again."
 
     private struct PendingWrite {
         let segmentIndex: Int
@@ -83,7 +84,7 @@ actor MeetingAudioArchive {
                 themWrittenRange = Self.union(themWrittenRange, with: startIndex..<(startIndex + preparedSamples.count))
             }
         } catch {
-            safetyFailureMessage = "Recording stopped to protect this Mac because meeting audio could not be written safely. Free some disk space, then try again."
+            safetyFailureMessage = Self.diskCapacityFailureMessage
             VoxtLog.meetingWarning("Meeting audio archive append failed: \(error.localizedDescription)")
         }
     }
@@ -232,6 +233,15 @@ actor MeetingAudioArchive {
         safetyFailureMessage = nil
     }
 
+    func preflightFailureMessage() -> String? {
+        do {
+            try validateDiskCapacityIfNeeded(additionalSampleCount: 0, force: true)
+            return nil
+        } catch {
+            return Self.diskCapacityFailureMessage
+        }
+    }
+
     func currentIOStatistics() -> MeetingAudioArchiveIOStatistics {
         ioStatistics
     }
@@ -241,9 +251,10 @@ actor MeetingAudioArchive {
         return safetyFailureMessage
     }
 
-    private func validateDiskCapacityIfNeeded(additionalSampleCount: Int) throws {
+    private func validateDiskCapacityIfNeeded(additionalSampleCount: Int, force: Bool = false) throws {
         let now = Date()
-        if let lastDiskCapacityCheckAt,
+        if !force,
+           let lastDiskCapacityCheckAt,
            now.timeIntervalSince(lastDiskCapacityCheckAt) < Self.diskCapacityCheckInterval {
             return
         }
@@ -251,14 +262,11 @@ actor MeetingAudioArchive {
 
         let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let values = try directory.resourceValues(forKeys: [
-            .volumeAvailableCapacityForImportantUsageKey,
-            .volumeTotalCapacityKey
+            .volumeAvailableCapacityForImportantUsageKey
         ])
         guard let available = values.volumeAvailableCapacityForImportantUsage else { return }
-        let total = Int64(values.volumeTotalCapacity ?? 0)
-        let reserve = max(Self.minimumDiskReserveBytes, total / 20)
         let pendingBytes = Int64(max(additionalSampleCount, 0) * MemoryLayout<Float>.size)
-        guard available - pendingBytes >= reserve else {
+        guard available - pendingBytes >= Self.minimumDiskReserveBytes else {
             throw NSError(
                 domain: "Voxt.MeetingAudioArchive",
                 code: -2,

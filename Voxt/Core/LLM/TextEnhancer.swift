@@ -4,6 +4,102 @@
 import Foundation
 import FoundationModels
 
+enum AppleIntelligenceUnavailableReason: Equatable {
+    case appleIntelligenceNotEnabled
+    case deviceNotEligible
+    case modelNotReady
+    case unknown(String)
+
+    var message: String {
+        switch self {
+        case .appleIntelligenceNotEnabled:
+            return AppLocalization.localizedString(
+                "Turn on Apple Intelligence in System Settings to use this model."
+            )
+        case .deviceNotEligible:
+            return AppLocalization.localizedString(
+                "Apple Intelligence is not available for this Mac or region."
+            )
+        case .modelNotReady:
+            return AppLocalization.localizedString(
+                "Apple Intelligence is still preparing its on-device model. Try again shortly."
+            )
+        case .unknown(let detail):
+            return detail.isEmpty
+                ? AppLocalization.localizedString("Apple Intelligence is currently unavailable.")
+                : AppLocalization.localizedString("Apple Intelligence is currently unavailable.") + " (\(detail))"
+        }
+    }
+
+    var logDescription: String {
+        switch self {
+        case .appleIntelligenceNotEnabled:
+            return "appleIntelligenceNotEnabled"
+        case .deviceNotEligible:
+            return "deviceNotEligible"
+        case .modelNotReady:
+            return "modelNotReady"
+        case .unknown(let detail):
+            return "unknown(\(detail))"
+        }
+    }
+}
+
+enum AppleIntelligenceAvailability: Equatable {
+    case unsupportedOS
+    case available
+    case unavailable(AppleIntelligenceUnavailableReason)
+
+    var isAvailable: Bool {
+        self == .available
+    }
+
+    var disabledReason: String? {
+        switch self {
+        case .unsupportedOS:
+            return AppLocalization.localizedString("Apple Intelligence requires macOS 26 or later.")
+        case .available:
+            return nil
+        case .unavailable(let reason):
+            return reason.message
+        }
+    }
+
+    var logDescription: String {
+        switch self {
+        case .unsupportedOS:
+            return "unsupportedOS"
+        case .available:
+            return "available"
+        case .unavailable(let reason):
+            return "unavailable(\(reason.logDescription))"
+        }
+    }
+
+    @MainActor
+    static var current: Self {
+        guard #available(macOS 26.0, *) else {
+            return .unsupportedOS
+        }
+
+        switch SystemLanguageModel.default.availability {
+        case .available:
+            return .available
+        case .unavailable(let reason):
+            switch reason {
+            case .appleIntelligenceNotEnabled:
+                return .unavailable(.appleIntelligenceNotEnabled)
+            case .deviceNotEligible:
+                return .unavailable(.deviceNotEligible)
+            case .modelNotReady:
+                return .unavailable(.modelNotReady)
+            @unknown default:
+                return .unavailable(.unknown(String(describing: reason)))
+            }
+        }
+    }
+}
+
 @MainActor
 protocol TextEnhancing: AnyObject {
     func enhance(_ rawText: String, systemPrompt: String) async throws -> String
@@ -39,7 +135,12 @@ class TextEnhancer: TextEnhancing {
 
     /// Whether Apple Intelligence is available on this device.
     static var isAvailable: Bool {
-        SystemLanguageModel.default.availability == .available
+        availability.isAvailable
+    }
+
+    /// Current Apple Intelligence runtime availability and its user-facing reason.
+    static var availability: AppleIntelligenceAvailability {
+        AppleIntelligenceAvailability.current
     }
 
     /// Enhances raw transcribed text by fixing grammar, punctuation,

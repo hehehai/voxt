@@ -25,6 +25,7 @@ private enum HistoryBulkDeletionTarget: Identifiable {
 private enum HistoryListItem: Identifiable {
     case dayHeader(Date)
     case entry(TranscriptionHistoryEntry)
+    case meetingEntry(TranscriptionHistoryListEntry)
 
     var id: String {
         switch self {
@@ -32,6 +33,19 @@ private enum HistoryListItem: Identifiable {
             return "day-\(date.timeIntervalSince1970)"
         case .entry(let entry):
             return "entry-\(entry.id.uuidString)"
+        case .meetingEntry(let entry):
+            return "entry-\(entry.id.uuidString)"
+        }
+    }
+
+    var createdAt: Date {
+        switch self {
+        case .dayHeader(let date):
+            return date
+        case .entry(let entry):
+            return entry.createdAt
+        case .meetingEntry(let entry):
+            return entry.createdAt
         }
     }
 }
@@ -63,6 +77,7 @@ struct HistorySettingsView: View {
     @State private var historySearchText = ""
     @State private var showHistorySearchDialog = false
     @State private var visibleHistoryEntries: [TranscriptionHistoryEntry] = []
+    @State private var visibleMeetingHistoryEntries: [TranscriptionHistoryListEntry] = []
     @State private var totalHistoryEntryCount = 0
     @State private var isLoadingHistoryEntries = false
     @State private var historyPageGeneration = 0
@@ -72,11 +87,13 @@ struct HistorySettingsView: View {
     @State private var noteVisibleLimit = 80
     @State private var noteViewMode: HistoryNoteViewMode = .linearCard
     @State private var linearCompletedVisibleLimit = 20
+    @State private var historyRowHeightCache = HistoryRowHeightCache()
 
     private let historyPageSize = 80
+    private let meetingHistoryPageSize = 40
     private let notePageSize = 80
     private let linearCompletedPageSize = 10
-    private let historyRowHeight: CGFloat = 74
+    private let historyRowFallbackHeight: CGFloat = 74
     private let noteHistoryRowHeight: CGFloat = 68
     private let historyRowSpacing: CGFloat = 2
     private let noteListRowSpacing: CGFloat = 6
@@ -114,25 +131,35 @@ struct HistorySettingsView: View {
         visibleHistoryEntries
     }
 
+    private var visibleHistoryEntryCount: Int {
+        selectedFilter == .transcript
+            ? visibleMeetingHistoryEntries.count
+            : visibleHistoryEntries.count
+    }
+
     private var historyListItems: [HistoryListItem] {
         var items: [HistoryListItem] = []
         var currentDay: Date?
         let calendar = Calendar.current
 
-        for entry in visibleEntries {
-            let day = calendar.startOfDay(for: entry.createdAt)
+        let dates: [(Date, HistoryListItem)] = selectedFilter == .transcript
+            ? visibleMeetingHistoryEntries.map { ($0.createdAt, .meetingEntry($0)) }
+            : visibleEntries.map { ($0.createdAt, .entry($0)) }
+
+        for (createdAt, item) in dates {
+            let day = calendar.startOfDay(for: createdAt)
             if currentDay != day {
                 items.append(.dayHeader(day))
                 currentDay = day
             }
-            items.append(.entry(entry))
+            items.append(item)
         }
 
         return items
     }
 
     private var historyListTotalCount: Int {
-        historyListItems.count + max(0, totalHistoryEntryCount - visibleEntries.count)
+        historyListItems.count + max(0, totalHistoryEntryCount - visibleHistoryEntryCount)
     }
 
     private var isNoteTabSelected: Bool {
@@ -586,9 +613,11 @@ struct HistorySettingsView: View {
         let list = PagedVerticalList(
             items: items,
             totalCount: historyListTotalCount,
-            rowHeight: historyRowHeight,
+            rowHeight: historyRowFallbackHeight,
             rowSpacing: historyRowSpacing,
-            rowHeightForItem: historyRowHeight(for:),
+            rowHeightForItemAtWidth: { item, width in
+                historyRowHeight(for: item, width: width)
+            },
             isLoading: isLoadingHistoryEntries,
             onLoadMore: { reloadHistoryEntries(reset: false) }
         ) { item in
@@ -622,27 +651,46 @@ struct HistorySettingsView: View {
                     onDelete: { deleteHistoryEntry(entry) }
                 )
                 .padding(.vertical, historyRowVerticalInset)
+            case .meetingEntry(let entry):
+                HistoryListRow(
+                    timeText: RelativeNoteTimestampFormatter.historyListTime(for: entry.createdAt),
+                    displayText: entry.displayText,
+                    onCopy: { copyHistoryEntry(id: entry.id) },
+                    onShowInfo: { showHistoryDetail(for: entry) },
+                    onDelete: { deleteHistoryEntry(id: entry.id) }
+                )
+                .padding(.vertical, historyRowVerticalInset)
             }
         }
 
         list.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private func historyRowHeight(for item: HistoryListItem) -> CGFloat {
+    private func historyRowHeight(for item: HistoryListItem, width: CGFloat) -> CGFloat {
         switch item {
         case .dayHeader:
             return 32
-        case .entry:
-            return historyRowHeight
+        case .entry(let entry):
+            return historyRowHeightCache.height(
+                for: entry,
+                width: width,
+                verticalInset: historyRowVerticalInset
+            )
+        case .meetingEntry(let entry):
+            return HistoryRowHeightCache.estimate(
+                text: entry.displayText,
+                width: width,
+                verticalInset: historyRowVerticalInset
+            )
         }
     }
 
     private var historySearchListHeight: CGFloat {
-        let visibleRowCount = max(1, min(visibleEntries.count, 5))
-        let rowsHeight = CGFloat(visibleRowCount) * historyRowHeight
+        let visibleRowCount = max(1, min(visibleHistoryEntryCount, 5))
+        let rowsHeight = CGFloat(visibleRowCount) * historyRowFallbackHeight
             + CGFloat(max(0, visibleRowCount - 1)) * historyRowSpacing
-        let footerHeight: CGFloat = (isLoadingHistoryEntries || visibleEntries.count < totalHistoryEntryCount) ? 40 : 0
-        return min(max(rowsHeight + footerHeight, historyRowHeight), 360)
+        let footerHeight: CGFloat = (isLoadingHistoryEntries || visibleHistoryEntryCount < totalHistoryEntryCount) ? 40 : 0
+        return min(max(rowsHeight + footerHeight, historyRowFallbackHeight), 360)
     }
 
     private func scrollToNavigationTargetIfNeeded(using proxy: ScrollViewProxy) {
@@ -686,16 +734,21 @@ struct HistorySettingsView: View {
     private func reloadHistoryEntries(reset: Bool) {
         guard !isNoteTabSelected else {
             visibleHistoryEntries = []
+            visibleMeetingHistoryEntries = []
             totalHistoryEntryCount = 0
             isLoadingHistoryEntries = false
             return
         }
 
-        let offset = reset ? 0 : visibleHistoryEntries.count
+        let loadedCount = selectedFilter == .transcript
+            ? visibleMeetingHistoryEntries.count
+            : visibleHistoryEntries.count
+        let offset = reset ? 0 : loadedCount
         guard reset || offset < totalHistoryEntryCount else { return }
         guard reset || !isLoadingHistoryEntries else { return }
 
-        loadHistoryEntries(offset: offset, limit: historyPageSize, reset: reset)
+        let pageSize = selectedFilter == .transcript ? meetingHistoryPageSize : historyPageSize
+        loadHistoryEntries(offset: offset, limit: pageSize, reset: reset)
     }
 
     private func loadHistoryEntries(offset: Int, limit: Int, reset: Bool) {
@@ -704,6 +757,22 @@ struct HistorySettingsView: View {
         let kind = selectedHistoryKind
         let query = historySearchText
         isLoadingHistoryEntries = true
+
+        if kind == .transcript {
+            historyStore.loadListEntries(
+                kind: kind,
+                query: query,
+                limit: limit,
+                offset: offset
+            ) { count, page in
+                guard generation == historyPageGeneration else { return }
+                totalHistoryEntryCount = count
+                visibleMeetingHistoryEntries = reset ? page : visibleMeetingHistoryEntries + page
+                visibleHistoryEntries = []
+                isLoadingHistoryEntries = false
+            }
+            return
+        }
 
         historyStore.loadEntries(
             kind: kind,
@@ -714,7 +783,35 @@ struct HistorySettingsView: View {
             guard generation == historyPageGeneration else { return }
             totalHistoryEntryCount = count
             visibleHistoryEntries = reset ? page : visibleHistoryEntries + page
+            visibleMeetingHistoryEntries = []
             isLoadingHistoryEntries = false
+        }
+    }
+
+    private func copyHistoryEntry(id: UUID) {
+        historyStore.loadEntry(id: id) { entry in
+            guard let entry else { return }
+            copyStringToPasteboard(
+                HistoryCorrectionPresentation.correctedText(
+                    for: entry.text,
+                    snapshots: entry.dictionaryCorrectionSnapshots
+                )
+            )
+            copiedEntryID = entry.id
+            showCopyToast()
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.2))
+                if copiedEntryID == entry.id {
+                    copiedEntryID = nil
+                }
+            }
+        }
+    }
+
+    private func deleteHistoryEntry(id: UUID) {
+        historyStore.loadEntry(id: id) { entry in
+            guard let entry else { return }
+            deleteHistoryEntry(entry)
         }
     }
 
@@ -732,6 +829,13 @@ struct HistorySettingsView: View {
         refreshHistoryAudioStorageStats()
 
         guard let removedIndex = visibleHistoryEntries.firstIndex(where: { $0.id == entry.id }) else {
+            if let removedIndex = visibleMeetingHistoryEntries.firstIndex(where: { $0.id == entry.id }) {
+                visibleMeetingHistoryEntries.remove(at: removedIndex)
+                totalHistoryEntryCount = max(0, totalHistoryEntryCount - 1)
+                guard visibleMeetingHistoryEntries.count < totalHistoryEntryCount else { return }
+                loadHistoryEntries(offset: visibleMeetingHistoryEntries.count, limit: 1, reset: false)
+                return
+            }
             reloadHistoryEntries(reset: true)
             return
         }
@@ -876,6 +980,11 @@ struct HistorySettingsView: View {
             return
         }
         appDelegate.showMeetingDetailWindow(for: entry)
+    }
+
+    private func showHistoryDetail(for entry: TranscriptionHistoryListEntry) {
+        guard let appDelegate = AppDelegate.shared else { return }
+        appDelegate.showMeetingDetailWindow(for: entry.id)
     }
 
     private func showCopyToast() {

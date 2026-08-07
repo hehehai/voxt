@@ -136,18 +136,26 @@ struct HistoryAudioUnavailableView: View {
     let compact: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: compact ? 8 : 10) {
-            Image(systemName: "speaker.slash.fill")
-                .font(.system(size: compact ? 12 : 14, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: compact ? 18 : 20, height: compact ? 18 : 20)
+        HStack {
+            Spacer(minLength: 0)
 
-            Text(message)
-                .font(.system(size: compact ? 11 : 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: compact ? 8 : 10) {
+                Image(systemName: "speaker.slash.fill")
+                    .font(.system(size: compact ? 12 : 14, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: compact ? 18 : 20, height: compact ? 18 : 20)
+
+                Text(message)
+                    .font(.system(size: compact ? 11 : 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: compact ? 360 : 980)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: compact ? 36 : 64, alignment: .center)
     }
 
     private var message: String {

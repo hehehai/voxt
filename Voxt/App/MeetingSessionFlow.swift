@@ -7,7 +7,11 @@ import AVFoundation
 
 extension AppDelegate {
     func blockNonMeetingRecordingWhileMeetingIsActive(source: String) -> Bool {
-        guard meetingSessionCoordinator.isActive else { return false }
+        guard meetingSessionCoordinator.isActive,
+              !meetingSessionCoordinator.isAnalyzingImportedFile
+        else {
+            return false
+        }
         VoxtLog.meeting("Non-meeting recording blocked because meeting is active. source=\(source)")
         VoxtLog.hotkey("Non-meeting recording blocked: meeting active. source=\(source)")
         if meetingSessionCoordinator.overlayState.isPresented {
@@ -263,6 +267,14 @@ extension AppDelegate {
     private func startMeetingSession() async {
         VoxtLog.meeting("Meeting session start requested.")
         guard preflightPermissionsForMeeting() else { return }
+
+        if let storageFailureMessage = await meetingSessionCoordinator.preflightMeetingCaptureStorage() {
+            VoxtLog.meetingWarning("Meeting start blocked by audio storage preflight: \(storageFailureMessage)")
+            showOverlayReminder(storageFailureMessage)
+            scheduleDeepIdleMemoryReclamation()
+            return
+        }
+
         pendingMeetingSessionCompletionDisposition = .save
 
         meetingSessionCoordinator.onSessionFinished = { [weak self] result in

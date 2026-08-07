@@ -16,6 +16,7 @@ final class MeetingDetailWindowManager {
     typealias SummaryStatusProvider = @MainActor (MeetingSummarySettingsSnapshot) -> MeetingSummaryProviderStatus
     typealias SummaryGenerator = @MainActor (String, MeetingSummarySettingsSnapshot) async throws -> MeetingSummarySnapshot
     typealias SummaryPersistence = @MainActor (UUID, MeetingSummarySnapshot?) -> TranscriptionHistoryEntry?
+    typealias SummaryStalePersistence = @MainActor (UUID, Bool) -> TranscriptionHistoryEntry?
     typealias SummaryChatAnswerer = @MainActor (String, MeetingSummarySnapshot?, [MeetingSummaryChatMessage], String, MeetingSummarySettingsSnapshot) async throws -> String
     typealias SummaryChatPersistence = @MainActor (UUID, [MeetingSummaryChatMessage]) -> TranscriptionHistoryEntry?
     typealias TranscriptSegmentsPersistence = @MainActor (UUID, [MeetingTranscriptSegment]) -> TranscriptionHistoryEntry?
@@ -33,6 +34,7 @@ final class MeetingDetailWindowManager {
         summaryStatusProvider: @escaping SummaryStatusProvider,
         summaryGenerator: @escaping SummaryGenerator,
         summaryPersistence: @escaping SummaryPersistence,
+        summaryStalePersistence: @escaping SummaryStalePersistence = { _, _ in nil },
         summaryChatAnswerer: @escaping SummaryChatAnswerer,
         summaryChatPersistence: @escaping SummaryChatPersistence,
         transcriptSegmentsPersistence: @escaping TranscriptSegmentsPersistence
@@ -54,6 +56,7 @@ final class MeetingDetailWindowManager {
             subtitle: entry.createdAt.formatted(date: .abbreviated, time: .shortened),
             historyEntryID: entry.id,
             initialSummary: entry.transcriptSummary,
+            initialSummaryStale: entry.transcriptSummaryStale,
             initialSummaryChatMessages: entry.transcriptSummaryChatMessages ?? [],
             initialSummarySettings: initialSummarySettings,
             summaryModelOptions: summaryModelOptions,
@@ -66,6 +69,7 @@ final class MeetingDetailWindowManager {
             summaryStatusProvider: summaryStatusProvider,
             summaryGenerator: summaryGenerator,
             summaryPersistence: summaryPersistence,
+            summaryStalePersistence: summaryStalePersistence,
             summaryChatAnswerer: summaryChatAnswerer,
             summaryChatPersistence: summaryChatPersistence,
             transcriptSegmentsPersistence: transcriptSegmentsPersistence
@@ -231,9 +235,13 @@ private final class MeetingDetailWindowController: NSWindowController, NSWindowD
 
 @MainActor
 private final class MeetingDetailPlaybackController: ObservableObject {
+    static let minimumPlaybackRate: Float = 1
+    static let maximumPlaybackRate: Float = 2.5
+
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var isPlaying = false
+    @Published private(set) var playbackRate: Float = 1
 
     private var player: AVAudioPlayer?
     private var timer: Timer?
@@ -241,6 +249,8 @@ private final class MeetingDetailPlaybackController: ObservableObject {
     init(audioURL: URL?) {
         guard let audioURL else { return }
         player = try? AVAudioPlayer(contentsOf: audioURL)
+        player?.enableRate = true
+        player?.rate = playbackRate
         player?.prepareToPlay()
         duration = player?.duration ?? 0
     }
@@ -256,9 +266,7 @@ private final class MeetingDetailPlaybackController: ObservableObject {
     func togglePlayPause() {
         guard let player else { return }
         if player.isPlaying {
-            player.pause()
-            isPlaying = false
-            stopTimer()
+            pause()
         } else {
             player.play()
             isPlaying = true
@@ -266,11 +274,29 @@ private final class MeetingDetailPlaybackController: ObservableObject {
         }
     }
 
+    func pause() {
+        guard let player else { return }
+        player.pause()
+        isPlaying = false
+        stopTimer()
+    }
+
     func seek(to time: TimeInterval) {
         guard let player else { return }
         let clamped = max(0, min(time, duration))
         player.currentTime = clamped
         currentTime = clamped
+    }
+
+    func seek(by offset: TimeInterval) {
+        seek(to: currentTime + offset)
+    }
+
+    func setPlaybackRate(_ rate: Float) {
+        let clampedRate = min(max(rate, Self.minimumPlaybackRate), Self.maximumPlaybackRate)
+        playbackRate = clampedRate
+        player?.enableRate = true
+        player?.rate = clampedRate
     }
 
     private func startTimer() {
@@ -304,6 +330,10 @@ private struct MeetingDetailWindowView: View {
     @State private var scrollRequest: MeetingTranscriptScrollRequest?
     @State private var scrollGeneration: UInt64 = 0
     @State private var displayedSegmentIDs: Set<UUID> = []
+    @State private var waveformData: MeetingWaveformData?
+    @State private var showsWaveformHighlights = true
+    @State private var waveformZoomScale: CGFloat = MeetingWaveformTimelineSupport.minimumZoomScale
+    @State private var isPlaybackRatePopoverPresented = false
 
     init(viewModel: MeetingDetailViewModel) {
         self.viewModel = viewModel
@@ -342,6 +372,13 @@ private struct MeetingDetailWindowView: View {
                 speakerRenameDialog
             }
 
+            if viewModel.isUndoDeleteAvailable {
+                undoDeleteBanner
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, 28)
+                    .padding(.bottom, 24)
+            }
+
         }
         .background(MeetingDetailUIStyle.windowFillColor)
         .ignoresSafeArea(.container, edges: .top)
@@ -366,10 +403,14 @@ private struct MeetingDetailWindowView: View {
         .onChange(of: activeSegmentID) { _, newValue in
             requestHistoryScrollToActiveSegment(newValue)
         }
-        .onChange(of: isScrubbing) { _, scrubbing in
-            guard !scrubbing else { return }
-            requestHistoryScrollToActiveSegment(activeSegmentID)
-        }
+            .onChange(of: isScrubbing) { _, scrubbing in
+                guard !scrubbing else { return }
+                requestHistoryScrollToActiveSegment(activeSegmentID)
+            }
+            .task(id: viewModel.audioURL?.standardizedFileURL.path) {
+                guard viewModel.mode == .history, let audioURL = viewModel.audioURL else { return }
+                waveformData = await MeetingWaveformBuilder.load(from: audioURL)
+            }
     }
 
     private func dialogDimmingMask(opacity: Double) -> some View {
@@ -408,35 +449,61 @@ private struct MeetingDetailWindowView: View {
 
             Spacer(minLength: 8)
 
-            HStack(spacing: 8) {
-                Button(AppLocalization.localizedString("Search")) {
-                    viewModel.toggleSearchPresentation()
+            HStack(spacing: 6) {
+                MeetingDetailSegmentActionButton(
+                    action: viewModel.toggleSearchPresentation,
+                    tint: Color.accentColor,
+                    isActive: viewModel.isSearchPresented,
+                    helpText: AppLocalization.localizedString("Search"),
+                    accessibilityText: AppLocalization.localizedString("Search")
+                ) {
+                    MeetingDetailSearchIcon(
+                        color: viewModel.isSearchPresented ? Color.accentColor : Color.secondary
+                    )
                 }
-                .buttonStyle(MeetingToolbarButtonStyle(isActive: viewModel.isSearchPresented))
 
-                Button(AppLocalization.localizedString("Translate")) {
-                    viewModel.toggleTranslation()
+                MeetingDetailSegmentActionButton(
+                    action: viewModel.toggleTranslation,
+                    tint: Color.accentColor,
+                    isActive: viewModel.translationEnabled,
+                    helpText: AppLocalization.localizedString("Translate"),
+                    accessibilityText: AppLocalization.localizedString("Translate")
+                ) {
+                    MeetingDetailTranslateIcon(
+                        color: viewModel.translationEnabled ? Color.accentColor : Color.secondary
+                    )
                 }
-                .buttonStyle(MeetingToolbarButtonStyle(isActive: viewModel.translationEnabled))
 
-                Button(AppLocalization.localizedString("Export")) {
-                    try? viewModel.export()
+                MeetingDetailSegmentActionButton(
+                    action: { try? viewModel.export() },
+                    tint: Color.secondary,
+                    isActive: false,
+                    helpText: AppLocalization.localizedString("Export"),
+                    accessibilityText: AppLocalization.localizedString("Export"),
+                    isDisabled: !viewModel.canExport
+                ) {
+                    MeetingDetailExportIcon(color: .secondary)
                 }
-                .buttonStyle(MeetingToolbarButtonStyle())
-                .disabled(!viewModel.canExport)
 
                 Rectangle()
                     .fill(MeetingDetailUIStyle.dividerColor)
                     .frame(width: 1, height: 18)
 
-                Button(
-                    viewModel.isSummaryCollapsed
-                        ? AppLocalization.localizedString("Expand Summary")
-                        : AppLocalization.localizedString("Collapse Summary")
+                MeetingDetailSegmentActionButton(
+                    action: viewModel.toggleSummaryCollapsed,
+                    tint: Color.accentColor,
+                    isActive: viewModel.isSummaryCollapsed,
+                    helpText: AppLocalization.localizedString(
+                        viewModel.isSummaryCollapsed ? "Expand Summary" : "Collapse Summary"
+                    ),
+                    accessibilityText: AppLocalization.localizedString(
+                        viewModel.isSummaryCollapsed ? "Expand Summary" : "Collapse Summary"
+                    )
                 ) {
-                    viewModel.toggleSummaryCollapsed()
+                    MeetingDetailSummaryCollapseIcon(
+                        color: viewModel.isSummaryCollapsed ? Color.accentColor : Color.secondary
+                    )
                 }
-                .buttonStyle(MeetingToolbarButtonStyle(isActive: viewModel.isSummaryCollapsed))
             }
         }
     }
@@ -593,7 +660,17 @@ private struct MeetingDetailWindowView: View {
                 MeetingDetailTranscriptListPane(
                     rows: timelineVirtualRows,
                     showsTranslation: viewModel.translationEnabled,
-                    scrollRequest: scrollRequest
+                    scrollRequest: scrollRequest,
+                    canEditTranscript: viewModel.canEditTranscript,
+                    editingSegmentID: viewModel.editingSegmentID,
+                    editingText: viewModel.editingText,
+                    onSelectSegment: seekToSegment,
+                    onBeginEditing: viewModel.beginEditingSegment,
+                    onEditingTextChanged: { viewModel.editingText = $0 },
+                    onSaveEditing: viewModel.saveEditingSegment,
+                    onCancelEditing: viewModel.cancelEditingSegment,
+                    onDeleteSegment: viewModel.deleteSegment,
+                    onToggleHighlight: viewModel.toggleHighlight
                 )
                 .equatable()
             } else {
@@ -732,7 +809,17 @@ private struct MeetingDetailWindowView: View {
             MeetingDetailTranscriptListPane(
                 rows: speakerMarkVirtualRows,
                 showsTranslation: viewModel.translationEnabled,
-                scrollRequest: scrollRequest
+                scrollRequest: scrollRequest,
+                canEditTranscript: viewModel.canEditTranscript,
+                editingSegmentID: viewModel.editingSegmentID,
+                editingText: viewModel.editingText,
+                onSelectSegment: seekToSegment,
+                onBeginEditing: viewModel.beginEditingSegment,
+                onEditingTextChanged: { viewModel.editingText = $0 },
+                onSaveEditing: viewModel.saveEditingSegment,
+                onCancelEditing: viewModel.cancelEditingSegment,
+                onDeleteSegment: viewModel.deleteSegment,
+                onToggleHighlight: viewModel.toggleHighlight
             )
             .equatable()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -840,39 +927,24 @@ private struct MeetingDetailWindowView: View {
 
     @ViewBuilder
     private var playbackPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             if viewModel.mode == .history {
                 if playbackController.isAvailable {
-                    HStack(spacing: 12) {
-                        Button {
-                            playbackController.togglePlayPause()
-                        } label: {
-                            Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 12, weight: .semibold))
-                                .frame(width: 34, height: 34)
-                                .background(
-                                    Circle()
-                                        .fill(Color.accentColor.opacity(0.16))
-                                )
+                    waveformToolbar
+
+                    MeetingWaveformTimeline(
+                        data: waveformData,
+                        currentTime: playbackController.currentTime,
+                        segments: viewModel.segments,
+                        showsHighlightedSegments: showsWaveformHighlights,
+                        zoomScale: $waveformZoomScale,
+                        onSeek: { time in
+                            playbackController.pause()
+                            isScrubbing = true
+                            playbackController.seek(to: time)
+                            isScrubbing = false
                         }
-                        .buttonStyle(.plain)
-
-                        Slider(
-                            value: Binding(
-                                get: { playbackController.currentTime },
-                                set: { playbackController.seek(to: $0) }
-                            ),
-                            in: 0...max(playbackController.duration, 0.1),
-                            onEditingChanged: { editing in
-                                isScrubbing = editing
-                            }
-                        )
-
-                        Text(timerLabel)
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 96, alignment: .trailing)
-                    }
+                    )
                 } else {
                     HistoryAudioUnavailableView(compact: false)
                 }
@@ -897,12 +969,279 @@ private struct MeetingDetailWindowView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(12)
         .meetingDetailPanelSurface(cornerRadius: 16)
+    }
+
+    private var waveformToolbar: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 3) {
+                MeetingDetailSegmentActionButton(
+                    action: { showsWaveformHighlights.toggle() },
+                    tint: .orange,
+                    isActive: showsWaveformHighlights,
+                    helpText: AppLocalization.localizedString(
+                        showsWaveformHighlights ? "Hide Highlighted Segments" : "Show Highlighted Segments"
+                    ),
+                    accessibilityText: AppLocalization.localizedString(
+                        showsWaveformHighlights ? "Hide Highlighted Segments" : "Show Highlighted Segments"
+                    )
+                ) {
+                    MeetingDetailMarkIcon(
+                        color: showsWaveformHighlights ? .orange : .secondary
+                    )
+                }
+
+                MeetingDetailSegmentActionButton(
+                    action: { adjustWaveformZoom(by: -1) },
+                    tint: .secondary,
+                    isActive: false,
+                    helpText: AppLocalization.localizedString("Zoom Out"),
+                    accessibilityText: AppLocalization.localizedString("Zoom Out"),
+                    isDisabled: waveformZoomScale <= MeetingWaveformTimelineSupport.minimumZoomScale
+                ) {
+                    Image(systemName: "minus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                MeetingDetailSegmentActionButton(
+                    action: { adjustWaveformZoom(by: 1) },
+                    tint: .secondary,
+                    isActive: false,
+                    helpText: AppLocalization.localizedString("Zoom In"),
+                    accessibilityText: AppLocalization.localizedString("Zoom In"),
+                    isDisabled: waveformZoomScale >= MeetingWaveformTimelineSupport.maximumZoomScale
+                ) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 3) {
+                playbackActionButton(
+                    systemName: "backward.end.fill",
+                    helpKey: "Jump to Start",
+                    action: { seekPlayback(to: 0) }
+                )
+                playbackActionButton(
+                    systemName: "gobackward.5",
+                    helpKey: "Skip Back",
+                    action: { seekPlayback(by: -5) }
+                )
+                MeetingDetailSegmentActionButton(
+                    action: { playbackController.togglePlayPause() },
+                    tint: .accentColor,
+                    isActive: playbackController.isPlaying,
+                    helpText: AppLocalization.localizedString(
+                        playbackController.isPlaying ? "Pause Audio" : "Play Audio"
+                    ),
+                    accessibilityText: AppLocalization.localizedString(
+                        playbackController.isPlaying ? "Pause Audio" : "Play Audio"
+                    )
+                ) {
+                    Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(playbackController.isPlaying ? Color.accentColor : .primary)
+                }
+                playbackActionButton(
+                    systemName: "goforward.5",
+                    helpKey: "Skip Forward",
+                    action: { seekPlayback(by: 5) }
+                )
+                playbackActionButton(
+                    systemName: "forward.end.fill",
+                    helpKey: "Jump to End",
+                    action: { seekPlayback(to: playbackController.duration) }
+                )
+            }
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 6) {
+                Text(timerLabel)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+
+                MeetingDetailSegmentActionButton(
+                    action: { isPlaybackRatePopoverPresented.toggle() },
+                    tint: .accentColor,
+                    isActive: isPlaybackRatePopoverPresented || playbackController.playbackRate != 1,
+                    helpText: AppLocalization.localizedString("Playback Speed"),
+                    accessibilityText: AppLocalization.localizedString("Playback Speed"),
+                    contentWidth: 28,
+                    buttonWidth: 40
+                ) {
+                    Text(playbackRateLabel)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(
+                            isPlaybackRatePopoverPresented || playbackController.playbackRate != 1
+                                ? Color.accentColor
+                                : .secondary
+                        )
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .popover(isPresented: $isPlaybackRatePopoverPresented, arrowEdge: .bottom) {
+                    playbackRatePopover
+                }
+            }
+        }
+        .frame(minHeight: 28)
+    }
+
+    private var playbackRatePopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(AppLocalization.localizedString("Playback Speed"))
+                    .font(.system(size: 12, weight: .semibold))
+
+                Spacer(minLength: 12)
+
+                Text(playbackRateLabel)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.accentColor)
+            }
+
+            playbackRateSlider
+        }
+        .padding(12)
+        .frame(width: 230)
+    }
+
+    private var playbackRateSlider: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                Slider(
+                    value: Binding(
+                        get: { Double(playbackController.playbackRate) },
+                        set: { playbackController.setPlaybackRate(Float($0)) }
+                    ),
+                    in: Double(MeetingDetailPlaybackController.minimumPlaybackRate)...Double(MeetingDetailPlaybackController.maximumPlaybackRate),
+                    step: 0.05
+                )
+                .controlSize(.small)
+                .padding(.horizontal, 8)
+                .frame(width: proxy.size.width, height: 18)
+                .accessibilityLabel(AppLocalization.localizedString("Playback Speed"))
+                .accessibilityValue(playbackRateLabel)
+
+                ForEach(playbackRateTicks, id: \.self) { rate in
+                    VStack(spacing: 2) {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.42))
+                            .frame(width: 1, height: 4)
+
+                        Text(playbackRateLabel(for: rate))
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
+                    .position(
+                        x: playbackRateX(for: rate, width: proxy.size.width),
+                        y: 29
+                    )
+                }
+            }
+        }
+        .frame(height: 43)
+    }
+
+    private let playbackRateTicks = [1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5]
+
+    private func playbackRateX(for rate: Double, width: CGFloat) -> CGFloat {
+        let horizontalInset: CGFloat = 8
+        let trackWidth = max(width - horizontalInset * 2, 1)
+        let progress = (rate - 1) / 1.5
+        return horizontalInset + CGFloat(progress) * trackWidth
+    }
+
+    private var playbackRateLabel: String {
+        playbackRateLabel(for: Double(playbackController.playbackRate))
+    }
+
+    private func playbackRateLabel(for rate: Double) -> String {
+        var value = String(format: "%.2f", rate)
+        while value.last == "0" {
+            value.removeLast()
+        }
+        if value.last == "." {
+            value.removeLast()
+        }
+        return "\(value)×"
+    }
+
+    private func playbackActionButton(
+        systemName: String,
+        helpKey: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        MeetingDetailSegmentActionButton(
+            action: action,
+            tint: .secondary,
+            isActive: false,
+            helpText: AppLocalization.localizedString(helpKey),
+            accessibilityText: AppLocalization.localizedString(helpKey)
+        ) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func adjustWaveformZoom(by step: Int) {
+        let factor: CGFloat = step > 0 ? 1.6 : 0.625
+        waveformZoomScale = MeetingWaveformTimelineSupport.clampedZoomScale(
+            waveformZoomScale * factor
+        )
+    }
+
+    private func seekPlayback(to time: TimeInterval) {
+        playbackController.seek(to: time)
+        isScrubbing = false
+    }
+
+    private func seekPlayback(by offset: TimeInterval) {
+        playbackController.seek(by: offset)
+        isScrubbing = false
     }
 
     private var rightSidebar: some View {
         MeetingDetailSummarySidebar(viewModel: viewModel)
+    }
+
+    private var undoDeleteBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "trash")
+                .font(.system(size: 11, weight: .semibold))
+
+            Text(AppLocalization.localizedString("Transcript segment deleted"))
+                .font(.system(size: 12, weight: .medium))
+
+            Button(AppLocalization.localizedString("Undo")) {
+                viewModel.undoDelete()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.accentColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(.regularMaterial, in: Capsule(style: .continuous))
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
+    }
+
+    private func seekToSegment(_ segment: MeetingTranscriptSegment) {
+        guard viewModel.mode == .history, playbackController.isAvailable else { return }
+        playbackController.seek(to: segment.startSeconds)
+        isScrubbing = false
     }
 
     private var translationLanguageDialog: some View {
@@ -1026,6 +1365,16 @@ private struct MeetingDetailTranscriptListPane: View, Equatable {
     let rows: [MeetingTranscriptVirtualRow]
     let showsTranslation: Bool
     let scrollRequest: MeetingTranscriptScrollRequest?
+    let canEditTranscript: Bool
+    let editingSegmentID: UUID?
+    let editingText: String
+    let onSelectSegment: (MeetingTranscriptSegment) -> Void
+    let onBeginEditing: (MeetingTranscriptSegment) -> Void
+    let onEditingTextChanged: (String) -> Void
+    let onSaveEditing: () -> Void
+    let onCancelEditing: () -> Void
+    let onDeleteSegment: (MeetingTranscriptSegment) -> Void
+    let onToggleHighlight: (MeetingTranscriptSegment) -> Void
 
     static func == (
         lhs: MeetingDetailTranscriptListPane,
@@ -1034,13 +1383,26 @@ private struct MeetingDetailTranscriptListPane: View, Equatable {
         lhs.rows == rhs.rows
             && lhs.showsTranslation == rhs.showsTranslation
             && lhs.scrollRequest == rhs.scrollRequest
+            && lhs.canEditTranscript == rhs.canEditTranscript
+            && lhs.editingSegmentID == rhs.editingSegmentID
+            && lhs.editingText == rhs.editingText
     }
 
     var body: some View {
         MeetingTranscriptVirtualList(
             rows: rows,
             showsTranslation: showsTranslation,
-            scrollRequest: scrollRequest
+            scrollRequest: scrollRequest,
+            canEditTranscript: canEditTranscript,
+            editingSegmentID: editingSegmentID,
+            editingText: editingText,
+            onSelectSegment: onSelectSegment,
+            onBeginEditing: onBeginEditing,
+            onEditingTextChanged: onEditingTextChanged,
+            onSaveEditing: onSaveEditing,
+            onCancelEditing: onCancelEditing,
+            onDeleteSegment: onDeleteSegment,
+            onToggleHighlight: onToggleHighlight
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

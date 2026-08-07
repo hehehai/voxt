@@ -82,6 +82,7 @@ struct ModelSettingsView: View {
     @State private var modelOperationToastMessage = ""
     @State private var modelOperationToastDismissTask: Task<Void, Never>?
     @State private var presentedModelErrorMessagesByTarget: [String: String] = [:]
+    @State var appleIntelligenceRefreshRevision = 0
 
     let modelStateRefreshTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
 
@@ -137,10 +138,12 @@ struct ModelSettingsView: View {
     }
 
     var appleIntelligenceAvailable: Bool {
-        if #available(macOS 26.0, *) {
-            return TextEnhancer.isAvailable
-        }
-        return false
+        appleIntelligenceAvailability.isAvailable
+    }
+
+    var appleIntelligenceAvailability: AppleIntelligenceAvailability {
+        _ = appleIntelligenceRefreshRevision
+        return AppleIntelligenceAvailability.current
     }
 
     var customEnhancementModelAvailable: Bool {
@@ -174,6 +177,7 @@ struct ModelSettingsView: View {
             },
             remoteLLMBadgeText: remoteLLMBadgeText(for:),
             primaryUserLanguageCode: selectedUserLanguageCodes.first,
+            appleIntelligenceAvailability: appleIntelligenceAvailability,
             mlxInstallSnapshot: mlxInstallSnapshot(for:),
             sherpaInstallSnapshot: sherpaOnnxInstallSnapshot(for:),
             customLLMInstallSnapshot: customLLMInstallSnapshot(for:),

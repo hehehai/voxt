@@ -27,6 +27,7 @@ struct ModelCatalogBuilder {
     let remoteASRStatusText: (RemoteASRProvider, RemoteProviderConfiguration) -> String
     let remoteLLMBadgeText: (RemoteLLMProvider) -> String?
     let primaryUserLanguageCode: String?
+    let appleIntelligenceAvailability: AppleIntelligenceAvailability
     let mlxInstallSnapshot: (String) -> LocalModelInstallSnapshot
     let sherpaInstallSnapshot: (SherpaOnnxModelID) -> LocalModelInstallSnapshot
     let customLLMInstallSnapshot: (String) -> LocalModelInstallSnapshot
@@ -85,6 +86,38 @@ struct ModelCatalogBuilder {
 
     func llmEntries() -> [ModelCatalogEntry] {
         var entries = [ModelCatalogEntry]()
+
+        if appleIntelligenceAvailability != .unsupportedOS {
+            let selectionID = FeatureModelSelectionID.appleIntelligence
+            let isAvailable = appleIntelligenceAvailability.isAvailable
+            let decoration = catalogDecoration(
+                base: [localizedModelCatalog("Local"), localizedModelCatalog("Multilingual")],
+                installed: true,
+                requiresConfiguration: false,
+                configured: true,
+                selectionID: selectionID
+            )
+
+            entries.append(
+                ModelCatalogEntry(
+                    id: "apple-intelligence",
+                    title: localizedModelCatalog("Apple Intelligence"),
+                    engine: localizedModelCatalog("Apple"),
+                    sizeText: localizedModelCatalog("Built-in"),
+                    ratingText: "4.2",
+                    filterTags: decoration.filterTags,
+                    displayTags: decoration.displayTags,
+                    statusText: isAvailable
+                        ? localizedModelCatalog("Available on this Mac")
+                        : (appleIntelligenceAvailability.disabledReason
+                            ?? localizedModelCatalog("Unavailable")),
+                    usageLocations: decoration.usageLocations,
+                    badgeText: nil,
+                    primaryAction: nil,
+                    secondaryActions: []
+                )
+            )
+        }
 
         entries.append(contentsOf: customLLMDisplayModelsIncludingInstalled().map { model in
             let repo = model.id

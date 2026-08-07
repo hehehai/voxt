@@ -290,6 +290,10 @@ struct HistoryRow: View {
     }
 
     private var displayText: String {
+        Self.displayText(for: entry)
+    }
+
+    static func displayText(for entry: TranscriptionHistoryEntry) -> String {
         let corrected = HistoryCorrectionPresentation.correctedText(
             for: entry.text,
             snapshots: entry.dictionaryCorrectionSnapshots
@@ -302,6 +306,76 @@ struct HistoryRow: View {
 
     private var timeText: String {
         RelativeNoteTimestampFormatter.historyListTime(for: entry.createdAt)
+    }
+}
+
+struct HistoryListRow: View {
+    @State private var isHovered = false
+
+    let timeText: String
+    let displayText: String
+    let onCopy: () -> Void
+    let onShowInfo: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(timeText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .leading)
+                    .padding(.top, 1)
+
+                Button(action: onCopy) {
+                    Text(displayText)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(2)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .help(localized("Copy"))
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            HStack(spacing: 6) {
+                Button(action: onShowInfo) {
+                    HistoryActionIcon(kind: .detail)
+                }
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
+
+                Button(role: .destructive, action: onDelete) {
+                    HistoryActionIcon(kind: .delete)
+                }
+                .buttonStyle(SettingsCompactIconButtonStyle(size: 26))
+            }
+            .opacity(isHovered ? 1 : 0)
+            .allowsHitTesting(isHovered)
+            .animation(.easeInOut(duration: 0.12), value: isHovered)
+            .frame(width: 58)
+            .frame(maxHeight: .infinity, alignment: .center)
+        }
+        .padding(.horizontal, 9.5)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: HistoryRowStyle.cornerRadius, style: .continuous)
+                .fill(HistoryRowStyle.fillColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: HistoryRowStyle.cornerRadius, style: .continuous)
+                .strokeBorder(isHovered ? HistoryRowStyle.hoverBorderColor : HistoryRowStyle.borderColor, lineWidth: 1)
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 

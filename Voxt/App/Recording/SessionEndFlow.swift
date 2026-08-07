@@ -165,5 +165,6 @@ extension AppDelegate {
             "Session end pipeline completed. sessionID=\(sessionID.uuidString), overlayVisible=\(overlayWindow.isVisible)",
             verbose: true
         )
+        meetingFileTaskQueue.startIfNeeded()
     }
 }
