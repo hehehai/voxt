@@ -13,6 +13,7 @@ struct FeatureSettingsView: View {
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var noteStore: VoxtNoteStore
+    @ObservedObject var meetingFileTaskQueue: MeetingFileTaskQueue
     @StateObject var meetingDiarizationModelManager = MeetingDiarizationModelManager()
 
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
@@ -27,10 +28,9 @@ struct FeatureSettingsView: View {
     @State var remindersListDescriptors: [RemindersListDescriptor] = []
     @State var isRemindersListSheetPresented = false
     @State var isMeetingAdvancedSettingsExpanded = false
-    @State var meetingFileUploadState = MeetingFileUploadState.idle
-    @State var meetingFileAnalysisTask: Task<Void, Never>?
     @State private var toastMessage = ""
     @State private var toastDismissTask: Task<Void, Never>?
+    @State var isFilesDisableBlockedAlertPresented = false
     @State private var permissionRefreshRevision = 0
     @State private var appleIntelligenceRefreshRevision = 0
     @State var scrollToBottomRequestRevision = 0
@@ -44,6 +44,8 @@ struct FeatureSettingsView: View {
                 transcriptionContent
             case .meeting:
                 meetingContent
+            case .files:
+                filesContent
             case .note:
                 noteContent
             case .translation:
@@ -65,6 +67,14 @@ struct FeatureSettingsView: View {
             }
         }
         .animation(.easeInOut(duration: 0.16), value: toastMessage)
+        .alert(
+            featureSettingsLocalized("Cannot Disable Files"),
+            isPresented: $isFilesDisableBlockedAlertPresented
+        ) {
+            Button(featureSettingsLocalized("OK"), role: .cancel) {}
+        } message: {
+            Text(featureSettingsLocalized("Finish or cancel all file tasks before disabling Files."))
+        }
         .sheet(item: $selectorSheet) { sheet in
             FeatureModelSelectorDialog(
                 title: sheet.title,

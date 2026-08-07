@@ -33,17 +33,9 @@ struct MeetingDetailSummarySidebar: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text(
-                    viewModel.isFinalizing
-                        ? AppLocalization.localizedString("Preparing saved meeting…")
-                        : viewModel.summaryState == .loading
-                        ? AppLocalization.localizedString("Generating meeting summary…")
-                        : viewModel.summary != nil
-                        ? AppLocalization.localizedString("Saved summary")
-                        : AppLocalization.localizedString("Generated after the detail view loads")
-                )
+                Text(summaryStatusTitle)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(viewModel.isSummaryStale ? Color.orange : Color.secondary)
             }
 
             Spacer(minLength: 8)
@@ -52,7 +44,30 @@ struct MeetingDetailSummarySidebar: View {
                 viewModel.presentSummarySettings()
             }
             .buttonStyle(MeetingToolbarButtonStyle())
+
+            if viewModel.isSummaryStale, viewModel.canRegenerateSummary {
+                Button(AppLocalization.localizedString("Regenerate")) {
+                    viewModel.regenerateSummary()
+                }
+                .buttonStyle(MeetingToolbarButtonStyle(isActive: true))
+            }
         }
+    }
+
+    private var summaryStatusTitle: String {
+        if viewModel.isSummaryStale {
+            return AppLocalization.localizedString("Transcript changed · summary needs regeneration")
+        }
+        if viewModel.isFinalizing {
+            return AppLocalization.localizedString("Preparing saved meeting…")
+        }
+        if viewModel.summaryState == .loading {
+            return AppLocalization.localizedString("Generating meeting summary…")
+        }
+        if viewModel.summary != nil {
+            return AppLocalization.localizedString("Saved summary")
+        }
+        return AppLocalization.localizedString("Generated after the detail view loads")
     }
 
     private var summaryBodyPane: some View {

@@ -389,11 +389,11 @@ final class SettingsTypesTests: XCTestCase {
     func testFeatureVisibleTabsOnlyIncludeCurrentFeatureTabs() {
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: false, noteEnabled: false),
-            [.features, .transcription, .translation, .rewrite, .meeting]
+            [.features, .transcription, .translation, .rewrite, .meeting, .files]
         )
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true),
-            [.features, .transcription, .translation, .rewrite, .appEnhancement, .note, .meeting]
+            [.features, .transcription, .translation, .rewrite, .appEnhancement, .note, .meeting, .files]
         )
     }
 
@@ -402,13 +402,34 @@ final class SettingsTypesTests: XCTestCase {
         XCTAssertTrue(FeatureSettingsTab.visibleTabs(appEnhancementEnabled: true, noteEnabled: true).contains(.note))
     }
 
+    func testFeatureVisibleTabsRespectFilesAvailability() {
+        var availability = FeatureAvailabilitySettings.allEnabled
+        availability.filesEnabled = false
+
+        XCTAssertFalse(FeatureSettingsTab.visibleTabs(availability: availability).contains(.files))
+        XCTAssertTrue(FeatureSettingsTab.visibleTabs(availability: .allEnabled).contains(.files))
+        XCTAssertTrue(FeatureAvailabilityCardKind.files.showsToggle)
+    }
+
+    func testFeatureMenuPlacesAppEnhancementNoteMeetingAndFilesLastInOrder() {
+        XCTAssertEqual(
+            Array(FeatureAvailabilityCardKind.allCases.suffix(4)),
+            [.appEnhancement, .note, .meeting, .files]
+        )
+        XCTAssertEqual(
+            Array(FeatureSettingsTab.allCases.suffix(4)),
+            [.appEnhancement, .note, .meeting, .files]
+        )
+    }
+
     func testFeatureVisibleTabsAlwaysIncludeFeaturesAndTranscription() {
         let availability = FeatureAvailabilitySettings(
             translationEnabled: false,
             rewriteEnabled: false,
             notesEnabled: false,
             appEnhancementEnabled: false,
-            meetingEnabled: false
+            meetingEnabled: false,
+            filesEnabled: false
         )
         XCTAssertEqual(
             FeatureSettingsTab.visibleTabs(availability: availability),

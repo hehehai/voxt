@@ -123,13 +123,13 @@ enum RecordingSessionSupport {
         return textAfterSuppressingPromptEcho(normalized)
     }
 
-    static func textAfterSuppressingPromptEcho(_ text: String, prompt: String? = nil) -> String {
+    nonisolated static func textAfterSuppressingPromptEcho(_ text: String, prompt: String? = nil) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         return isLikelyPromptEcho(trimmed, prompt: prompt) ? "" : trimmed
     }
 
-    static func isLikelyPromptEcho(_ text: String, prompt: String? = nil) -> Bool {
+    nonisolated static func isLikelyPromptEcho(_ text: String, prompt: String? = nil) -> Bool {
         let normalized = normalizedPromptEchoDetectionText(text)
         guard normalized.count >= 24 else { return false }
 
@@ -208,7 +208,7 @@ enum RecordingSessionSupport {
         return nil
     }
 
-    private static func normalizedPromptEchoDetectionText(_ text: String) -> String {
+    private nonisolated static func normalizedPromptEchoDetectionText(_ text: String) -> String {
         text
             .folding(options: [.diacriticInsensitive, .widthInsensitive], locale: nil)
             .lowercased()
@@ -216,7 +216,7 @@ enum RecordingSessionSupport {
             .joined(separator: " ")
     }
 
-    private static func normalizedPromptEchoComparisonKey(_ text: String) -> String {
+    private nonisolated static func normalizedPromptEchoComparisonKey(_ text: String) -> String {
         normalizedPromptEchoDetectionText(text)
             .filter { !$0.isWhitespace }
     }

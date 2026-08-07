@@ -5,6 +5,16 @@ import XCTest
 @testable import Voxt
 
 final class MeetingLocalInferenceCoordinatorTests: XCTestCase {
+    func testFileAnalysisUsesLowestPriorityAndYieldsWhileRecording() {
+        XCTAssertLessThan(
+            MeetingLocalInferenceWorkClass.fileASR.priority,
+            MeetingLocalInferenceWorkClass.finalASR.priority
+        )
+        XCTAssertTrue(MeetingLocalInferenceWorkClass.fileASR.waitsWhileRecording)
+        XCTAssertTrue(MeetingLocalInferenceWorkClass.fileASR.isThermallyDeferrable)
+        XCTAssertTrue(MeetingLocalInferenceWorkClass.fileASR.isMemoryDeferrable)
+    }
+
     func testHeavyInferenceRunsOneOperationAtATime() async throws {
         let coordinator = MeetingLocalInferenceCoordinator()
         let tracker = MeetingInferenceConcurrencyTracker()

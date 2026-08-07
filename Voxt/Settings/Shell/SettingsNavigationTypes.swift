@@ -320,6 +320,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
     case appEnhancement
     case note
     case meeting
+    case files
 
     var id: String { rawValue }
 
@@ -328,6 +329,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
         case .features: return "Feature"
         case .transcription: return "Transcription"
         case .meeting: return "Meeting"
+        case .files: return "Files"
         case .note: return "Notes"
         case .translation: return "Translation"
         case .rewrite: return "Rewrite"
@@ -344,6 +346,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
         case .features: return "Feature"
         case .transcription: return "Transcription"
         case .meeting: return "Meeting"
+        case .files: return "Files"
         case .note: return "Notes"
         case .translation: return "Translation"
         case .rewrite: return "Rewrite"
@@ -356,6 +359,7 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
         case .features: return "switch.2"
         case .transcription: return "waveform.and.mic"
         case .meeting: return "person.2.wave.2"
+        case .files: return "doc.on.doc"
         case .note: return "note.text"
         case .translation: return "globe"
         case .rewrite: return "text.badge.star"
@@ -377,6 +381,8 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
             return availability.appEnhancementEnabled
         case .meeting:
             return availability.meetingEnabled
+        case .files:
+            return availability.filesEnabled
         }
     }
 
@@ -386,14 +392,16 @@ enum FeatureSettingsTab: String, CaseIterable, Identifiable {
         noteEnabled: Bool? = nil,
         translationEnabled: Bool? = nil,
         rewriteEnabled: Bool? = nil,
-        meetingEnabled: Bool? = nil
+        meetingEnabled: Bool? = nil,
+        filesEnabled: Bool? = nil
     ) -> [FeatureSettingsTab] {
         let resolved = FeatureAvailabilitySettings(
             translationEnabled: translationEnabled ?? availability.translationEnabled,
             rewriteEnabled: rewriteEnabled ?? availability.rewriteEnabled,
             notesEnabled: noteEnabled ?? availability.notesEnabled,
             appEnhancementEnabled: appEnhancementEnabled ?? availability.appEnhancementEnabled,
-            meetingEnabled: meetingEnabled ?? availability.meetingEnabled
+            meetingEnabled: meetingEnabled ?? availability.meetingEnabled,
+            filesEnabled: filesEnabled ?? availability.filesEnabled
         )
         return allCases.filter { $0.isEnabled(in: resolved) }
     }

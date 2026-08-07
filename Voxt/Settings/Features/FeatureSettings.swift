@@ -585,19 +585,21 @@ struct MeetingFeatureSettings: Codable, Hashable, Sendable {
     }
 }
 
-struct FeatureAvailabilitySettings: Codable, Hashable, Sendable {
+nonisolated struct FeatureAvailabilitySettings: Codable, Hashable, Sendable {
     var translationEnabled: Bool
     var rewriteEnabled: Bool
     var notesEnabled: Bool
     var appEnhancementEnabled: Bool
     var meetingEnabled: Bool
+    var filesEnabled: Bool
 
     static let allEnabled = FeatureAvailabilitySettings(
         translationEnabled: true,
         rewriteEnabled: true,
         notesEnabled: true,
         appEnhancementEnabled: true,
-        meetingEnabled: true
+        meetingEnabled: true,
+        filesEnabled: true
     )
 
     init(
@@ -605,13 +607,15 @@ struct FeatureAvailabilitySettings: Codable, Hashable, Sendable {
         rewriteEnabled: Bool = true,
         notesEnabled: Bool = true,
         appEnhancementEnabled: Bool = true,
-        meetingEnabled: Bool = true
+        meetingEnabled: Bool = true,
+        filesEnabled: Bool = true
     ) {
         self.translationEnabled = translationEnabled
         self.rewriteEnabled = rewriteEnabled
         self.notesEnabled = notesEnabled
         self.appEnhancementEnabled = appEnhancementEnabled
         self.meetingEnabled = meetingEnabled
+        self.filesEnabled = filesEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -620,6 +624,7 @@ struct FeatureAvailabilitySettings: Codable, Hashable, Sendable {
         case notesEnabled
         case appEnhancementEnabled
         case meetingEnabled
+        case filesEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -629,7 +634,8 @@ struct FeatureAvailabilitySettings: Codable, Hashable, Sendable {
             rewriteEnabled: try container.decodeIfPresent(Bool.self, forKey: .rewriteEnabled) ?? true,
             notesEnabled: try container.decodeIfPresent(Bool.self, forKey: .notesEnabled) ?? true,
             appEnhancementEnabled: try container.decodeIfPresent(Bool.self, forKey: .appEnhancementEnabled) ?? true,
-            meetingEnabled: try container.decodeIfPresent(Bool.self, forKey: .meetingEnabled) ?? true
+            meetingEnabled: try container.decodeIfPresent(Bool.self, forKey: .meetingEnabled) ?? true,
+            filesEnabled: try container.decodeIfPresent(Bool.self, forKey: .filesEnabled) ?? true
         )
     }
 

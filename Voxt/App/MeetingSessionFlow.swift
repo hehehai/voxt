@@ -7,7 +7,11 @@ import AVFoundation
 
 extension AppDelegate {
     func blockNonMeetingRecordingWhileMeetingIsActive(source: String) -> Bool {
-        guard meetingSessionCoordinator.isActive else { return false }
+        guard meetingSessionCoordinator.isActive,
+              !meetingSessionCoordinator.isAnalyzingImportedFile
+        else {
+            return false
+        }
         VoxtLog.meeting("Non-meeting recording blocked because meeting is active. source=\(source)")
         VoxtLog.hotkey("Non-meeting recording blocked: meeting active. source=\(source)")
         if meetingSessionCoordinator.overlayState.isPresented {

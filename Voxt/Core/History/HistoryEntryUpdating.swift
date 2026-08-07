@@ -43,7 +43,14 @@ extension TranscriptionHistoryEntry {
     }
 
     func updatingTranscriptSummary(_ summary: TranscriptSummarySnapshot?) -> TranscriptionHistoryEntry {
-        copy(transcriptSummary: .set(summary))
+        copy(
+            transcriptSummary: .set(summary),
+            transcriptSummaryStale: .set(false)
+        )
+    }
+
+    func updatingTranscriptSummaryStale(_ isStale: Bool) -> TranscriptionHistoryEntry {
+        copy(transcriptSummaryStale: .set(isStale))
     }
 
     func updatingSummaryChatMessages(_ summaryChatMessages: [TranscriptSummaryChatMessage]) -> TranscriptionHistoryEntry {
@@ -127,6 +134,7 @@ extension TranscriptionHistoryEntry {
         senseVoiceMetadata: HistoryEntryUpdate<SenseVoiceTranscriptMetadata?> = .keep,
         transcriptSegments: HistoryEntryUpdate<[TranscriptSegment]?> = .keep,
         transcriptSummary: HistoryEntryUpdate<TranscriptSummarySnapshot?> = .keep,
+        transcriptSummaryStale: HistoryEntryUpdate<Bool> = .keep,
         transcriptSummaryChatMessages: HistoryEntryUpdate<[TranscriptSummaryChatMessage]?> = .keep,
         transcriptionChatMessages: HistoryEntryUpdate<[TranscriptSummaryChatMessage]?> = .keep,
         dictionaryHitTerms: [String]? = nil,
@@ -170,6 +178,7 @@ extension TranscriptionHistoryEntry {
             transcriptAudioRelativePath: transcriptAudioRelativePath,
             meetingCaptureMode: meetingCaptureMode,
             transcriptSummary: transcriptSummary.resolved(current: self.transcriptSummary),
+            transcriptSummaryStale: transcriptSummaryStale.resolved(current: self.transcriptSummaryStale),
             transcriptSummaryChatMessages: transcriptSummaryChatMessages.resolved(
                 current: self.transcriptSummaryChatMessages
             ),

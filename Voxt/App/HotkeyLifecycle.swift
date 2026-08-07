@@ -312,7 +312,12 @@ extension AppDelegate {
     func handleCommonStopHotkeyDown() {
         cancelPendingTranscriptionStart()
 
-        if meetingSessionCoordinator.isActive {
+        // Imported file analysis also uses the meeting coordinator, but it must
+        // not take ownership of the common stop shortcut. Core live recording
+        // and translation must always be able to stop while a file task yields
+        // in the background.
+        if meetingSessionCoordinator.isActive,
+           !meetingSessionCoordinator.isAnalyzingImportedFile {
             hotkeyManager.cancelPendingDoubleTapCandidate(reason: "commonStopMeeting")
             handleMeetingHotkeyDown()
             return

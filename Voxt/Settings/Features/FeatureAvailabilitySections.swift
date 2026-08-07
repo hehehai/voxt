@@ -73,6 +73,18 @@ extension FeatureSettingsView {
                 get: { featureSettings.availability.meetingEnabled },
                 set: { featureSettings.availability.meetingEnabled = $0 }
             )
+        case .files:
+            return Binding(
+                get: { featureSettings.availability.filesEnabled },
+                set: { enabled in
+                    guard enabled || !meetingFileTaskQueue.hasActiveTasks else {
+                        isFilesDisableBlockedAlertPresented = true
+                        return
+                    }
+                    featureSettings.availability.filesEnabled = enabled
+                    saveFeatureSettings()
+                }
+            )
         }
     }
 
@@ -164,6 +176,14 @@ extension FeatureSettingsView {
                     id: "meeting-speakers",
                     title: featureSettings.meeting.speakerDiarizationModel.title,
                     systemImageName: "person.2.wave.2"
+                )
+            ]
+        case .files:
+            return [
+                FeatureAvailabilityConfigBadge(
+                    id: "files-task-count",
+                    title: AppLocalization.format("File Tasks (%d)", meetingFileTaskQueue.tasks.count),
+                    systemImageName: "list.bullet"
                 )
             ]
         }
@@ -265,6 +285,7 @@ enum FeatureAvailabilityCardKind: String, CaseIterable, Identifiable {
     case appEnhancement
     case note
     case meeting
+    case files
 
     var id: String { rawValue }
 
@@ -276,6 +297,7 @@ enum FeatureAvailabilityCardKind: String, CaseIterable, Identifiable {
         case .note: return "Notes"
         case .appEnhancement: return "App Enhancement"
         case .meeting: return "Meeting"
+        case .files: return "Files"
         }
     }
 
@@ -283,7 +305,7 @@ enum FeatureAvailabilityCardKind: String, CaseIterable, Identifiable {
         AppLocalization.localizedString(titleKey)
     }
 
-    var iconKind: SettingsSidebarIconKind {
+    var iconKind: SettingsSidebarIconKind? {
         switch self {
         case .transcription: return .transcription
         case .translation: return .translation
@@ -291,6 +313,16 @@ enum FeatureAvailabilityCardKind: String, CaseIterable, Identifiable {
         case .note: return .note
         case .appEnhancement: return .appEnhancement
         case .meeting: return .meeting
+        case .files: return .files
+        }
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .files:
+            return "doc.on.doc"
+        default:
+            return ""
         }
     }
 
@@ -302,6 +334,7 @@ enum FeatureAvailabilityCardKind: String, CaseIterable, Identifiable {
         case .note: return .note
         case .appEnhancement: return .appEnhancement
         case .meeting: return .meeting
+        case .files: return .files
         }
     }
 
@@ -334,8 +367,15 @@ struct FeatureAvailabilityCard: View {
             HStack(alignment: .center, spacing: 8) {
                 Button(action: onSelect) {
                     HStack(alignment: .center, spacing: 8) {
-                        SettingsSidebarIconView(kind: kind.iconKind)
-                            .frame(width: 18, height: 18)
+                        if let iconKind = kind.iconKind {
+                            SettingsSidebarIconView(kind: iconKind)
+                                .frame(width: 18, height: 18)
+                        } else {
+                            Image(systemName: kind.systemImageName)
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .frame(width: 18, height: 18)
+                        }
 
                         Text(kind.title)
                             .font(.headline.weight(.semibold))

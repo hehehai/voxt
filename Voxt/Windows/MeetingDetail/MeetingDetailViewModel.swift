@@ -50,6 +50,7 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published private(set) var summary: MeetingSummarySnapshot?
     @Published private(set) var summaryChatMessages: [MeetingSummaryChatMessage]
     @Published private(set) var summaryState: MeetingSummaryLoadState = .idle
+    @Published private(set) var isSummaryStale = false
     @Published private(set) var isSummaryChatLoading = false
     @Published private(set) var summaryChatErrorMessage: String?
     @Published var isSummarySettingsPresented = false
@@ -62,6 +63,9 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published var isSearchPresented = false
     @Published private(set) var searchQuery = ""
     @Published var isSummaryCollapsed = false
+    @Published private(set) var editingSegmentID: UUID?
+    @Published var editingText = ""
+    @Published private(set) var isUndoDeleteAvailable = false
 
     private var speakerOrdinalByIdentityKey: [String: Int] = [:]
 
@@ -77,6 +81,7 @@ final class MeetingDetailViewModel: ObservableObject {
     private let summaryStatusProvider: MeetingDetailWindowManager.SummaryStatusProvider?
     private let summaryGenerator: MeetingDetailWindowManager.SummaryGenerator?
     private let summaryPersistence: MeetingDetailWindowManager.SummaryPersistence?
+    private let summaryStalePersistence: MeetingDetailWindowManager.SummaryStalePersistence?
     private let summaryChatAnswerer: MeetingDetailWindowManager.SummaryChatAnswerer?
     private let summaryChatPersistence: MeetingDetailWindowManager.SummaryChatPersistence?
     private let transcriptSegmentsPersistence: MeetingDetailWindowManager.TranscriptSegmentsPersistence?
@@ -88,14 +93,18 @@ final class MeetingDetailViewModel: ObservableObject {
     private var failedTranslationRevisions: [UUID: String] = [:]
     private var summaryTask: Task<Void, Never>?
     private var summaryChatTask: Task<Void, Never>?
+    private var summaryGeneration = 0
     private var cachedSummaryTranscript: String?
     private var hasHandledInitialAppearance = false
+    private var deletedSegmentForUndo: (segment: MeetingTranscriptSegment, index: Int)?
+    private var undoDeleteTask: Task<Void, Never>?
 
     init(
         title: String,
         subtitle: String,
         historyEntryID: UUID,
         initialSummary: MeetingSummarySnapshot?,
+        initialSummaryStale: Bool = false,
         initialSummaryChatMessages: [MeetingSummaryChatMessage],
         initialSummarySettings: MeetingSummarySettingsSnapshot,
         summaryModelOptions: [MeetingSummaryModelOption],
@@ -108,6 +117,7 @@ final class MeetingDetailViewModel: ObservableObject {
         summaryStatusProvider: @escaping MeetingDetailWindowManager.SummaryStatusProvider,
         summaryGenerator: @escaping MeetingDetailWindowManager.SummaryGenerator,
         summaryPersistence: @escaping MeetingDetailWindowManager.SummaryPersistence,
+        summaryStalePersistence: @escaping MeetingDetailWindowManager.SummaryStalePersistence = { _, _ in nil },
         summaryChatAnswerer: @escaping MeetingDetailWindowManager.SummaryChatAnswerer,
         summaryChatPersistence: @escaping MeetingDetailWindowManager.SummaryChatPersistence,
         transcriptSegmentsPersistence: @escaping MeetingDetailWindowManager.TranscriptSegmentsPersistence
@@ -118,6 +128,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.subtitle = AppLocalization.format("%@ · %@", self.captureMode.title, subtitle)
         self.historyEntryID = historyEntryID
         self.summary = initialSummary
+        self.isSummaryStale = initialSummaryStale
         self.summaryChatMessages = initialSummaryChatMessages
         self.summaryModelOptions = summaryModelOptions
         self.segments = segments
@@ -130,6 +141,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.summaryStatusProvider = summaryStatusProvider
         self.summaryGenerator = summaryGenerator
         self.summaryPersistence = summaryPersistence
+        self.summaryStalePersistence = summaryStalePersistence
         self.summaryChatAnswerer = summaryChatAnswerer
         self.summaryChatPersistence = summaryChatPersistence
         self.transcriptSegmentsPersistence = transcriptSegmentsPersistence
@@ -183,6 +195,7 @@ final class MeetingDetailViewModel: ObservableObject {
         self.summaryStatusProvider = nil
         self.summaryGenerator = nil
         self.summaryPersistence = nil
+        self.summaryStalePersistence = nil
         self.summaryChatAnswerer = nil
         self.summaryChatPersistence = nil
         self.transcriptSegmentsPersistence = nil
@@ -243,6 +256,7 @@ final class MeetingDetailViewModel: ObservableObject {
     deinit {
         summaryTask?.cancel()
         summaryChatTask?.cancel()
+        undoDeleteTask?.cancel()
     }
 
     var canExport: Bool {
@@ -259,6 +273,10 @@ final class MeetingDetailViewModel: ObservableObject {
             && mode == .history
             && historyEntryID != nil
             && transcriptSegmentsPersistence != nil
+    }
+
+    var canEditTranscript: Bool {
+        mode == .history && historyEntryID != nil && transcriptSegmentsPersistence != nil
     }
 
     var canRegenerateSummary: Bool {
@@ -450,7 +468,7 @@ final class MeetingDetailViewModel: ObservableObject {
     }
 
     func renameSpeaker(identityKey: String, displayName: String) {
-        guard canEditSpeakers, let historyEntryID else { return }
+        guard canEditSpeakers, historyEntryID != nil else { return }
 
         let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedDisplayName = trimmedDisplayName.isEmpty ? nil : trimmedDisplayName
@@ -461,11 +479,143 @@ final class MeetingDetailViewModel: ObservableObject {
         }
 
         guard updatedSegments != segments else { return }
+        guard persistTranscriptSegments(updatedSegments) else { return }
+        applyTranscriptMutation(updatedSegments, shouldRestartTranslation: false)
+    }
+
+    func beginEditingSegment(_ segment: MeetingTranscriptSegment) {
+        guard canEditTranscript else { return }
+        guard segments.contains(where: { $0.id == segment.id }) else { return }
+        editingSegmentID = segment.id
+        editingText = segment.text
+    }
+
+    func cancelEditingSegment() {
+        editingSegmentID = nil
+        editingText = ""
+    }
+
+    func saveEditingSegment() {
+        guard canEditTranscript,
+              let editingSegmentID,
+              let currentSegment = segments.first(where: { $0.id == editingSegmentID })
+        else {
+            return
+        }
+
+        let trimmedText = editingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
+        let updatedSegment = currentSegment.updatingText(trimmedText)
+        var updatedSegments = segments
+        guard let index = updatedSegments.firstIndex(where: { $0.id == editingSegmentID }) else { return }
+        updatedSegments[index] = updatedSegment
+
+        guard persistTranscriptSegments(updatedSegments) else { return }
+        cancelEditingSegment()
+        applyTranscriptMutation(updatedSegments, shouldRestartTranslation: true)
+    }
+
+    func deleteSegment(_ segment: MeetingTranscriptSegment) {
+        guard canEditTranscript,
+              let index = segments.firstIndex(where: { $0.id == segment.id })
+        else {
+            return
+        }
+
+        var updatedSegments = segments
+        updatedSegments.remove(at: index)
+        guard persistTranscriptSegments(updatedSegments) else { return }
+
+        if editingSegmentID == segment.id {
+            cancelEditingSegment()
+        }
+        deletedSegmentForUndo = (segment: segment, index: index)
+        isUndoDeleteAvailable = true
+        undoDeleteTask?.cancel()
+        undoDeleteTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.clearUndoDelete()
+            }
+        }
+        applyTranscriptMutation(updatedSegments, shouldRestartTranslation: true)
+    }
+
+    func undoDelete() {
+        guard canEditTranscript,
+              let deletedSegmentForUndo
+        else {
+            return
+        }
+
+        var restoredSegments = segments
+        let insertionIndex = min(max(deletedSegmentForUndo.index, 0), restoredSegments.count)
+        restoredSegments.insert(deletedSegmentForUndo.segment, at: insertionIndex)
+        guard persistTranscriptSegments(restoredSegments) else { return }
+
+        clearUndoDelete()
+        applyTranscriptMutation(restoredSegments, shouldRestartTranslation: true)
+    }
+
+    func toggleHighlight(for segment: MeetingTranscriptSegment) {
+        guard canEditTranscript,
+              let index = segments.firstIndex(where: { $0.id == segment.id })
+        else {
+            return
+        }
+
+        var updatedSegments = segments
+        updatedSegments[index] = segment.updatingHighlight(!segment.isHighlighted)
+        guard persistTranscriptSegments(updatedSegments) else { return }
+        applyTranscriptMutation(
+            updatedSegments,
+            shouldRestartTranslation: false,
+            marksSummaryStale: false
+        )
+    }
+
+    private func persistTranscriptSegments(_ updatedSegments: [MeetingTranscriptSegment]) -> Bool {
+        guard let historyEntryID, let transcriptSegmentsPersistence else { return false }
+        _ = transcriptSegmentsPersistence(historyEntryID, updatedSegments)
+        return true
+    }
+
+    private func applyTranscriptMutation(
+        _ updatedSegments: [MeetingTranscriptSegment],
+        shouldRestartTranslation: Bool,
+        marksSummaryStale: Bool = true
+    ) {
+        if shouldRestartTranslation {
+            cancelTranslationTasks()
+        }
+        if marksSummaryStale {
+            summaryTask?.cancel()
+            summaryTask = nil
+            summaryGeneration &+= 1
+            summaryState = .idle
+        }
         segments = updatedSegments
         segmentStructureRevision &+= 1
         cachedSummaryTranscript = nil
+        if marksSummaryStale {
+            isSummaryStale = true
+            if let historyEntryID {
+                _ = summaryStalePersistence?(historyEntryID, true)
+            }
+        }
         refreshTranscriptListCaches()
-        _ = transcriptSegmentsPersistence?(historyEntryID, updatedSegments)
+        if shouldRestartTranslation, translationEnabled {
+            translateEligibleSegmentsIfNeeded(targetLanguage: resolvedStoredTranslationLanguage())
+        }
+    }
+
+    private func clearUndoDelete() {
+        undoDeleteTask?.cancel()
+        undoDeleteTask = nil
+        deletedSegmentForUndo = nil
+        isUndoDeleteAvailable = false
     }
 
     private func speakerRenameIdentityMatches(_ segment: MeetingTranscriptSegment, identityKey: String) -> Bool {
@@ -535,6 +685,8 @@ final class MeetingDetailViewModel: ObservableObject {
         }
         let settings = summarySettingsSnapshot
         let segmentsSnapshot = segments
+        summaryGeneration &+= 1
+        let generation = summaryGeneration
 
         if !isAutomatic || summary == nil {
             summaryState = .loading
@@ -557,8 +709,10 @@ final class MeetingDetailViewModel: ObservableObject {
                 let generated = try await summaryGenerator(transcript, settings)
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    guard self.summaryGeneration == generation, !Task.isCancelled else { return }
                     self.summary = generated
                     self.summaryState = .idle
+                    self.isSummaryStale = false
                     _ = self.summaryPersistence?(historyEntryID, generated)
                 }
             } catch is CancellationError {
@@ -758,7 +912,8 @@ final class MeetingDetailViewModel: ObservableObject {
                 text: incoming.text,
                 translatedText: resolvedTranslatedText,
                 isTranslationPending: incoming.isTranslationPending || existing.isTranslationPending || shouldRefreshTranslation,
-                preventsAdjacentMerge: incoming.preventsAdjacentMerge
+                preventsAdjacentMerge: incoming.preventsAdjacentMerge,
+                isHighlighted: existing.isHighlighted || incoming.isHighlighted
             )
         }
     }

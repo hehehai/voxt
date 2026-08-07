@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 
 enum MeetingFileImportSupport {
     static let allowedContentTypes: [UTType] = [.audio, .movie]
+    static let maximumAnalysisDurationSeconds: TimeInterval = 12 * 60 * 60
 
     static func isSupportedImportFile(at url: URL) -> Bool {
         let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .contentTypeKey])
@@ -18,8 +19,9 @@ enum MeetingFileImportSupport {
             return false
         }
 
-        if let contentType = values?.contentType {
-            return conformsToAllowedTypes(contentType)
+        if let contentType = values?.contentType,
+           conformsToAllowedTypes(contentType) {
+            return true
         }
 
         let ext = url.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -27,6 +29,17 @@ enum MeetingFileImportSupport {
             return false
         }
         return conformsToAllowedTypes(inferred)
+    }
+
+    static func mediaDurationSeconds(at url: URL) async -> TimeInterval? {
+        let asset = AVURLAsset(url: url)
+        guard let duration = try? await asset.load(.duration),
+              duration.seconds.isFinite,
+              duration.seconds > 0
+        else {
+            return nil
+        }
+        return duration.seconds
     }
 
     /// Preserves the system-provided URL object. Do not standardize or rebuild from a
@@ -60,7 +73,33 @@ enum MeetingFileImportSupport {
     }
 }
 
-enum MeetingFileAnalysisStage: Equatable, Sendable {
+enum MeetingFileTaskStagingError: LocalizedError {
+    case sourceUnavailable
+    case sourceTooLarge
+    case stagingLimitExceeded
+    case mediaDurationUnavailable
+    case mediaTooLong
+    case insufficientDiskSpace
+
+    var errorDescription: String? {
+        switch self {
+        case .sourceUnavailable:
+            return AppLocalization.localizedString("The selected meeting file is no longer available.")
+        case .sourceTooLarge:
+            return AppLocalization.localizedString("The selected meeting file is too large to stage safely.")
+        case .stagingLimitExceeded:
+            return AppLocalization.localizedString("The meeting file queue has reached its storage limit.")
+        case .mediaDurationUnavailable:
+            return AppLocalization.localizedString("The selected meeting file duration could not be read.")
+        case .mediaTooLong:
+            return AppLocalization.localizedString("The selected meeting file is longer than the supported 12-hour limit.")
+        case .insufficientDiskSpace:
+            return AppLocalization.localizedString("There is not enough free disk space to safely stage this meeting file.")
+        }
+    }
+}
+
+enum MeetingFileAnalysisStage: Codable, Equatable, Sendable {
     case preparing
     case transcribing
     case identifyingSpeakers
@@ -70,10 +109,19 @@ enum MeetingFileAnalysisStage: Equatable, Sendable {
 struct MeetingFileAnalysisProgress: Equatable, Sendable {
     let stage: MeetingFileAnalysisStage
     let fractionCompleted: Double
+    let mediaDurationSeconds: TimeInterval?
+    let processedMediaDurationSeconds: TimeInterval?
 
-    init(stage: MeetingFileAnalysisStage, stageFraction: Double = 0) {
+    init(
+        stage: MeetingFileAnalysisStage,
+        stageFraction: Double = 0,
+        mediaDurationSeconds: TimeInterval? = nil,
+        processedMediaDurationSeconds: TimeInterval? = nil
+    ) {
         let clampedStageFraction = min(max(stageFraction, 0), 1)
         self.stage = stage
+        self.mediaDurationSeconds = Self.validDuration(mediaDurationSeconds)
+        self.processedMediaDurationSeconds = Self.validDuration(processedMediaDurationSeconds)
         switch stage {
         case .preparing:
             fractionCompleted = clampedStageFraction * 0.15
@@ -84,6 +132,11 @@ struct MeetingFileAnalysisProgress: Equatable, Sendable {
         case .saving:
             fractionCompleted = 0.96 + clampedStageFraction * 0.04
         }
+    }
+
+    private static func validDuration(_ value: TimeInterval?) -> TimeInterval? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return value
     }
 }
 

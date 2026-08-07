@@ -4,6 +4,10 @@
 import Foundation
 import UserNotifications
 
+extension Notification.Name {
+    static let voxtFileTaskNotificationTapped = Notification.Name("voxt.file-task.notification-tapped")
+}
+
 enum SystemNotificationSupport {
     private static let center = UNUserNotificationCenter.current()
     private static let presentationDelegate = PresentationDelegate()
@@ -21,11 +25,17 @@ enum SystemNotificationSupport {
         }
     }
 
-    static func post(title: String, body: String, identifier: String = UUID().uuidString) {
+    static func post(
+        title: String,
+        body: String,
+        identifier: String = UUID().uuidString,
+        userInfo: [String: String] = [:]
+    ) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        content.userInfo = userInfo
 
         let request = UNNotificationRequest(
             identifier: identifier,
@@ -75,6 +85,22 @@ enum SystemNotificationSupport {
             willPresent notification: UNNotification
         ) async -> UNNotificationPresentationOptions {
             [.banner, .sound]
+        }
+
+        func userNotificationCenter(
+            _ center: UNUserNotificationCenter,
+            didReceive response: UNNotificationResponse
+        ) async {
+            guard let taskID = response.notification.request.content.userInfo["fileTaskID"] as? String else {
+                return
+            }
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: .voxtFileTaskNotificationTapped,
+                    object: nil,
+                    userInfo: ["fileTaskID": taskID]
+                )
+            }
         }
     }
 }

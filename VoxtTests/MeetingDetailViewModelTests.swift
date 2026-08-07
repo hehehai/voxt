@@ -74,6 +74,91 @@ final class MeetingDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.summary?.title, "Release Check")
     }
 
+    func testSummaryGenerationCannotReplaceSummaryAfterTranscriptMutation() async {
+        let generationStarted = expectation(description: "summary generation started")
+        var releaseGeneration: CheckedContinuation<MeetingSummarySnapshot, Never>?
+        let existingSummary = MeetingSummarySnapshot(
+            title: "Existing",
+            body: "Saved summary",
+            todoItems: [],
+            generatedAt: Date(),
+            settingsSnapshot: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Prompt",
+                modelSelectionID: "custom-llm:test"
+            )
+        )
+        let segment = MeetingTranscriptSegment(
+            speaker: .me,
+            startSeconds: 0,
+            endSeconds: 2,
+            text: "Original text"
+        )
+
+        let viewModel = MeetingDetailViewModel(
+            title: "Meeting Details",
+            subtitle: "Today",
+            historyEntryID: UUID(),
+            initialSummary: existingSummary,
+            initialSummaryChatMessages: [],
+            initialSummarySettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            summaryModelOptions: [
+                MeetingSummaryModelOption(id: "custom-llm:test", title: "Test", subtitle: "Local")
+            ],
+            summarySettingsProvider: {
+                MeetingSummarySettingsSnapshot(
+                    autoGenerate: false,
+                    promptTemplate: "Prompt",
+                    modelSelectionID: "custom-llm:test"
+                )
+            },
+            summaryModelOptionsProvider: {
+                [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test", subtitle: "Local")]
+            },
+            segments: [segment],
+            audioURL: nil,
+            translationHandler: { text, _ in
+                MeetingTranslationOperation(executionScope: .externalRequest) { text }
+            },
+            summaryStatusProvider: { _ in
+                MeetingSummaryProviderStatus(isAvailable: true, message: "Ready")
+            },
+            summaryGenerator: { _, settings in
+                await withCheckedContinuation { continuation in
+                    releaseGeneration = continuation
+                    generationStarted.fulfill()
+                }
+                return MeetingSummarySnapshot(
+                    title: "Generated",
+                    body: "Generated from the old transcript",
+                    todoItems: [],
+                    generatedAt: Date(),
+                    settingsSnapshot: settings
+                )
+            },
+            summaryPersistence: { _, _ in nil },
+            summaryChatAnswerer: { _, _, _, _, _ in "" },
+            summaryChatPersistence: { _, _ in nil },
+            transcriptSegmentsPersistence: { _, _ in nil }
+        )
+
+        viewModel.regenerateSummary()
+        await fulfillment(of: [generationStarted], timeout: 1.0)
+
+        viewModel.beginEditingSegment(segment)
+        viewModel.editingText = "Updated text"
+        viewModel.saveEditingSegment()
+        releaseGeneration?.resume(returning: existingSummary)
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(viewModel.summary?.title, "Existing")
+        XCTAssertTrue(viewModel.isSummaryStale)
+    }
+
     func testHistoryViewModelDoesNotAutoGenerateWhenSummaryAlreadyExists() async {
         var generateCount = 0
 
@@ -477,6 +562,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.segments[0].speakerDisplayName, "Alice")
         XCTAssertEqual(viewModel.segments[1].speakerDisplayName, "Speaker 2")
         XCTAssertEqual(persistedSegments?.first?.speakerDisplayName, "Alice")
+        XCTAssertTrue(viewModel.isSummaryStale)
     }
 
     func testRenameSpeakerAcceptsLegacyDisplayIdentityKey() {
@@ -822,6 +908,92 @@ final class MeetingDetailViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.segments.first?.isTranslationPending ?? true)
     }
 
+    func testManualTranscriptEditClearsTranslationAndMarksSummaryStale() {
+        let segment = MeetingTranscriptSegment(
+            speaker: .me,
+            startSeconds: 0,
+            endSeconds: 2,
+            text: "old text",
+            translatedText: "old translation"
+        )
+        var persisted: [MeetingTranscriptSegment] = []
+        let viewModel = makeHistoryViewModel(
+            initialSettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            modelOptions: [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test", subtitle: "Local")],
+            segments: [segment],
+            transcriptSegmentsPersistence: { _, segments in
+                persisted = segments
+                return nil
+            }
+        )
+
+        viewModel.beginEditingSegment(segment)
+        viewModel.editingText = "  updated text  "
+        viewModel.saveEditingSegment()
+
+        XCTAssertEqual(viewModel.segments.first?.text, "updated text")
+        XCTAssertNil(viewModel.segments.first?.translatedText)
+        XCTAssertTrue(viewModel.isSummaryStale)
+        XCTAssertEqual(persisted.first?.text, "updated text")
+        XCTAssertNil(persisted.first?.translatedText)
+        XCTAssertNil(viewModel.editingSegmentID)
+    }
+
+    func testDeleteAndUndoRestoresSegmentAtOriginalPosition() {
+        let first = MeetingTranscriptSegment(speaker: .me, startSeconds: 0, endSeconds: 1, text: "first")
+        let second = MeetingTranscriptSegment(speaker: .them, startSeconds: 1, endSeconds: 2, text: "second")
+        var persisted: [[MeetingTranscriptSegment]] = []
+        let viewModel = makeHistoryViewModel(
+            initialSettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            modelOptions: [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test", subtitle: "Local")],
+            segments: [first, second],
+            transcriptSegmentsPersistence: { _, segments in
+                persisted.append(segments)
+                return nil
+            }
+        )
+
+        viewModel.deleteSegment(first)
+        XCTAssertEqual(viewModel.segments.map(\.id), [second.id])
+        XCTAssertTrue(viewModel.isUndoDeleteAvailable)
+
+        viewModel.undoDelete()
+        XCTAssertEqual(viewModel.segments.map(\.id), [first.id, second.id])
+        XCTAssertFalse(viewModel.isUndoDeleteAvailable)
+        XCTAssertEqual(persisted.count, 2)
+    }
+
+    func testHighlightTogglePersistsOnTranscriptSegment() {
+        let segment = MeetingTranscriptSegment(speaker: .them, startSeconds: 2, endSeconds: 4, text: "important")
+        var persisted: MeetingTranscriptSegment?
+        let viewModel = makeHistoryViewModel(
+            initialSettings: MeetingSummarySettingsSnapshot(
+                autoGenerate: false,
+                promptTemplate: "Prompt",
+                modelSelectionID: "custom-llm:test"
+            ),
+            modelOptions: [MeetingSummaryModelOption(id: "custom-llm:test", title: "Test", subtitle: "Local")],
+            segments: [segment],
+            transcriptSegmentsPersistence: { _, segments in
+                persisted = segments.first
+                return nil
+            }
+        )
+
+        viewModel.toggleHighlight(for: segment)
+
+        XCTAssertTrue(viewModel.segments.first?.isHighlighted == true)
+        XCTAssertTrue(persisted?.isHighlighted == true)
+    }
+
     private func makeHistoryViewModel(
         initialSettings: MeetingSummarySettingsSnapshot,
         modelOptions: [MeetingSummaryModelOption],
@@ -829,7 +1001,8 @@ final class MeetingDetailViewModelTests: XCTestCase {
         segments: [MeetingTranscriptSegment] = [],
         translationHandler: @escaping MeetingDetailWindowManager.TranslationHandler = { text, _ in
             MeetingTranslationOperation(executionScope: .externalRequest) { text }
-        }
+        },
+        transcriptSegmentsPersistence: @escaping MeetingDetailWindowManager.TranscriptSegmentsPersistence = { _, _ in nil }
     ) -> MeetingDetailViewModel {
         MeetingDetailViewModel(
             title: "Meeting Details",
@@ -860,7 +1033,7 @@ final class MeetingDetailViewModelTests: XCTestCase {
             summaryPersistence: { _, _ in nil },
             summaryChatAnswerer: { _, _, _, _, _ in "" },
             summaryChatPersistence: { _, _ in nil },
-            transcriptSegmentsPersistence: { _, _ in nil }
+            transcriptSegmentsPersistence: transcriptSegmentsPersistence
         )
     }
 

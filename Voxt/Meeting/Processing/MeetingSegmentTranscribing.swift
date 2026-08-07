@@ -32,7 +32,7 @@ extension MeetingSegmentTranscribing {
 }
 
 enum MeetingTranscriptSanitizer {
-    static func sanitizedText(
+    nonisolated static func sanitizedText(
         _ rawText: String,
         prompt: String? = nil,
         contextualPhrases: [String] = [],
@@ -54,7 +54,7 @@ enum MeetingTranscriptSanitizer {
         return withoutPromptEcho
     }
 
-    private static func isLikelyHintOnlyEcho(
+    private nonisolated static func isLikelyHintOnlyEcho(
         _ text: String,
         contextualPhrases: [String],
         dictionaryEntries: [DictionaryEntry]
@@ -89,7 +89,7 @@ enum MeetingTranscriptSanitizer {
         return coverage >= 0.72 && remaining.count <= max(6, textKey.count / 4)
     }
 
-    private static func hintPhraseKeys(
+    private nonisolated static func hintPhraseKeys(
         contextualPhrases: [String],
         dictionaryEntries: [DictionaryEntry]
     ) -> Set<String> {
@@ -110,7 +110,7 @@ enum MeetingTranscriptSanitizer {
         return keys
     }
 
-    private static func normalizedHintEchoKey(_ text: String) -> String {
+    private nonisolated static func normalizedHintEchoKey(_ text: String) -> String {
         let normalized = text
             .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
             .lowercased()
@@ -241,10 +241,19 @@ enum MeetingMLXSegmentMapping {
 final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
     private let modelManager: MLXModelManager
     private let mlxTranscriber: MLXTranscriber
+    private let strictInferenceWorkClass: MeetingLocalInferenceWorkClass
 
-    init(modelManager: MLXModelManager) {
+    init(
+        modelManager: MLXModelManager,
+        strictInferenceWorkClass: MeetingLocalInferenceWorkClass = .finalASR
+    ) {
         self.modelManager = modelManager
-        self.mlxTranscriber = MLXTranscriber(modelManager: modelManager, transcriptionPurpose: .meeting)
+        self.strictInferenceWorkClass = strictInferenceWorkClass
+        self.mlxTranscriber = MLXTranscriber(
+            modelManager: modelManager,
+            transcriptionPurpose: .meeting,
+            inferenceTaskPriority: strictInferenceWorkClass == .fileASR ? .utility : .userInitiated
+        )
         self.mlxTranscriber.dictionaryEntryProvider = {
             guard let appDelegate = AppDelegate.shared else { return [] }
             return appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
@@ -295,7 +304,7 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
     }
 
     func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment] {
-        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(.finalASR) { [mlxTranscriber] in
+        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(strictInferenceWorkClass) { [mlxTranscriber] in
             try await mlxTranscriber.transcribeBufferedResult(
                 samples: chunk.samples,
                 sampleRate: chunk.sampleRate

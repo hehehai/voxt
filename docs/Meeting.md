@@ -112,9 +112,15 @@ When a meeting finishes normally:
 The detail window supports:
 
 - transcript review
-- timestamp-based navigation
+- click a transcript segment to seek to its audio position
+- click or drag the waveform timeline
+- speaker ranges and speech-start markers on the waveform
+- per-segment editing, deletion, and undo for the latest deletion
+- persistent highlights for important segments
 - translation on existing meeting segments
 - export when the current mode allows it
+
+Editing a segment clears its previous translation so it can be recalculated using the current translation settings. Existing summaries remain available but are marked as stale until regenerated. Deleting transcript text never deletes the meeting audio.
 
 ## Notes And Limitations
 

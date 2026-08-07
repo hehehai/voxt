@@ -74,20 +74,30 @@ enum MeetingFinalTranscriptionPass {
         transcriber: any MeetingSegmentTranscribing,
         options: Options = Options(),
         requiresCompleteTranscription: Bool = false,
-        progress: (@Sendable (Double) async -> Void)? = nil
+        progress: (@Sendable (Double) async -> Void)? = nil,
+        processedDurationProgress: (@Sendable (Double, TimeInterval) async -> Void)? = nil
     ) async throws -> [MeetingTranscriptSegment] {
         var segments: [MeetingTranscriptSegment] = []
         let descriptorCount = max(descriptors.count, 1)
+        var completedDurationBeforeDescriptor: TimeInterval = 0
         await progress?(0)
+        await processedDurationProgress?(0, 0)
         for (descriptorIndex, descriptor) in descriptors.enumerated() {
             try Task.checkCancellation()
+            let descriptorDuration = max(descriptor.durationSeconds, 0)
+            defer { completedDurationBeforeDescriptor += descriptorDuration }
             guard let asset = await loadAsset(descriptor) else {
                 throw Failure.assetUnavailable(descriptor.source)
             }
             try Task.checkCancellation()
             if let wholeAssetSegments = try await transcriber.transcribeWholeAsset(asset) {
                 appendCleaned(wholeAssetSegments, to: &segments)
-                await progress?(Double(descriptorIndex + 1) / Double(descriptorCount))
+                let descriptorProgress = Double(descriptorIndex + 1) / Double(descriptorCount)
+                await progress?(descriptorProgress)
+                await processedDurationProgress?(
+                    descriptorProgress,
+                    completedDurationBeforeDescriptor + descriptorDuration
+                )
                 continue
             }
             let chunks = chunks(for: asset, options: options)
@@ -102,12 +112,20 @@ enum MeetingFinalTranscriptionPass {
                 try Task.checkCancellation()
                 appendCleaned(chunkSegments, to: &segments)
                 let descriptorProgress = Double(chunkIndex + 1) / Double(chunkCount)
-                await progress?(
-                    (Double(descriptorIndex) + descriptorProgress) / Double(descriptorCount)
+                let overallProgress = (Double(descriptorIndex) + descriptorProgress) / Double(descriptorCount)
+                await progress?(overallProgress)
+                await processedDurationProgress?(
+                    overallProgress,
+                    completedDurationBeforeDescriptor + descriptorDuration * descriptorProgress
                 )
             }
             if chunks.isEmpty {
-                await progress?(Double(descriptorIndex + 1) / Double(descriptorCount))
+                let descriptorProgress = Double(descriptorIndex + 1) / Double(descriptorCount)
+                await progress?(descriptorProgress)
+                await processedDurationProgress?(
+                    descriptorProgress,
+                    completedDurationBeforeDescriptor + descriptorDuration
+                )
             }
         }
         try Task.checkCancellation()

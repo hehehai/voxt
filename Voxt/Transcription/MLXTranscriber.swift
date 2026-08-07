@@ -775,7 +775,6 @@ enum MLXTranscriptionPlanning {
     ) -> String? {
         let normalizedConfirmed = confirmedText.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedProvisional = provisionalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasProvisionalContent = !normalizedProvisional.isEmpty
         // Suppress tiny provisional-only flashes (common junk before the first confirm).
         // Confirmed text still surfaces immediately; this does not change Final.
         if normalizedConfirmed.isEmpty, normalizedProvisional.count < 2 {
@@ -1319,6 +1318,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     var dictionaryEntryProvider: (() -> [DictionaryEntry])?
 
     private let audioEngine = AVAudioEngine()
+    private let inferenceTaskPriority: TaskPriority
     private let audioLevelDelivery = MLXAudioLevelDelivery()
     private let sampleStore = AudioSampleStore()
     private let voiceActivityFrameStore = VoiceActivityFrameStore()
@@ -1389,9 +1389,14 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
     private var senseVoiceVADModel: SileroVAD?
     private var pendingRuntimeFailureMessage: String?
 
-    init(modelManager: MLXModelManager, transcriptionPurpose: MLXTranscriptionPurpose = .dictation) {
+    init(
+        modelManager: MLXModelManager,
+        transcriptionPurpose: MLXTranscriptionPurpose = .dictation,
+        inferenceTaskPriority: TaskPriority = .userInitiated
+    ) {
         self.modelManager = modelManager
         self.transcriptionPurpose = transcriptionPurpose
+        self.inferenceTaskPriority = inferenceTaskPriority
     }
 
     func setPreferredInputDevice(_ deviceID: AudioDeviceID?) {
@@ -3393,7 +3398,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
         let vadMinSilenceDurationMs = senseVoiceVADMinSilenceDurationMs
         let vadSpeechPadMs = senseVoiceVADSpeechPadMs
 
-        let inferenceTask = Task.detached(priority: .userInitiated) {
+        let inferenceTask = Task.detached(priority: inferenceTaskPriority) {
             try Task.checkCancellation()
             return try await Self.runStreamingInferenceDetached(
                 model: modelBox.value,
