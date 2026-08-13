@@ -102,15 +102,24 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertNil(payload.prompt)
     }
 
-    func testResolveAliyunDeduplicatesAndLimitsLanguageHints() {
+    func testResolveAliyunSupportsModelSpecificMultilingualHints() {
         let payload = ASRHintResolver.resolve(
             target: .aliyunBailianASR,
             settings: ASRHintSettings(),
-            userLanguageCodes: ["zh-Hans", "en", "zh-Hant", "ja", "ko"]
+            userLanguageCodes: ["zh-Hans", "en", "zh-Hant", "ja", "ko"],
+            mlxModelRepo: "qwen-audio-3.0-asr-flash-streaming"
         )
 
-        XCTAssertEqual(payload.languageHints, ["zh", "en", "ja"])
+        XCTAssertEqual(payload.languageHints, ["zh", "en", "ja", "ko"])
         XCTAssertEqual(payload.language, "zh")
+
+        let funPayload = ASRHintResolver.resolve(
+            target: .aliyunBailianASR,
+            settings: ASRHintSettings(),
+            userLanguageCodes: ["zh-Hans", "en", "ja"],
+            mlxModelRepo: "fun-asr-realtime-2026-02-28"
+        )
+        XCTAssertEqual(funPayload.languageHints, ["zh"])
     }
 
     func testResolveAliyunBuildsHotwordsFromContextAndDictionaryTerms() {

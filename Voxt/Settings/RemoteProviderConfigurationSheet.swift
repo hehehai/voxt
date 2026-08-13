@@ -53,6 +53,14 @@ struct RemoteProviderConfigurationSheet: View {
     @State var doubaoDictionaryMode = DoubaoDictionaryMode.requestScoped.rawValue
     @State var doubaoEnableRequestHotwords = true
     @State var doubaoEnableRequestCorrections = true
+    @State var aliyunMaxSentenceSilenceMillisecondsText = "1300"
+    @State var aliyunServerVADThresholdText = "0.35"
+    @State var aliyunServerVADSilenceDurationMillisecondsText = "800"
+    @State var aliyunUseManualCommit = false
+    @State var aliyunSemanticPunctuationEnabled = true
+    @State var aliyunPunctuationPredictionEnabled = true
+    @State var aliyunInverseTextNormalizationEnabled = true
+    @State var aliyunDisfluencyRemovalEnabled = false
     @State var ollamaResponseFormat = OllamaResponseFormat.plain.rawValue
     @State var ollamaJSONSchema = ""
     @State var ollamaThinkMode = OllamaThinkMode.off.rawValue
@@ -129,6 +137,14 @@ struct RemoteProviderConfigurationSheet: View {
                         doubaoDictionarySection
                     }
 
+                    if isAliyunASRProvider {
+                        aliyunASRConfigurationSection
+                    }
+
+                    if isStepFunASRProvider {
+                        stepFunASRConfigurationSection
+                    }
+
                     if isOpenAIASRTest {
                         openAIChunkSection
                     }
@@ -188,6 +204,14 @@ struct RemoteProviderConfigurationSheet: View {
             doubaoDictionaryMode = configuration.doubaoDictionaryMode
             doubaoEnableRequestHotwords = configuration.doubaoEnableRequestHotwords
             doubaoEnableRequestCorrections = configuration.doubaoEnableRequestCorrections
+            aliyunMaxSentenceSilenceMillisecondsText = String(configuration.aliyunASRSettings.maxSentenceSilenceMilliseconds)
+            aliyunServerVADThresholdText = Self.formatOptionalDouble(configuration.aliyunASRSettings.serverVADThreshold)
+            aliyunServerVADSilenceDurationMillisecondsText = String(configuration.aliyunASRSettings.serverVADSilenceDurationMilliseconds)
+            aliyunUseManualCommit = configuration.aliyunASRSettings.useManualCommit
+            aliyunSemanticPunctuationEnabled = configuration.aliyunASRSettings.semanticPunctuationEnabled
+            aliyunPunctuationPredictionEnabled = configuration.aliyunASRSettings.punctuationPredictionEnabled
+            aliyunInverseTextNormalizationEnabled = configuration.aliyunASRSettings.inverseTextNormalizationEnabled
+            aliyunDisfluencyRemovalEnabled = configuration.aliyunASRSettings.disfluencyRemovalEnabled
             ollamaResponseFormat = configuration.ollamaResponseFormat
             ollamaJSONSchema = configuration.ollamaJSONSchema
             ollamaThinkMode = configuration.ollamaThinkMode
@@ -214,4 +238,5 @@ struct RemoteProviderConfigurationSheet: View {
             dismiss()
         }
     }
+
 }

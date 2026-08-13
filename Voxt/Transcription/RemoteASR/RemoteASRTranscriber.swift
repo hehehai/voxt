@@ -541,17 +541,38 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
 
     private func sendAliyunQwenFinishEvent(_ context: AliyunQwenStreamingContext) {
         VoxtLog.model("Aliyun qwen sending session.finish. kind=\(context.kind)")
-        sendAliyunQwenEvent(
-            type: "session.finish",
-            through: context.ws
-        ) { error in
-            Task { [responseState = context.responseState] in
-                if let error {
-                    await responseState.markCompletedWithError(error)
-                } else {
-                    await responseState.markFinishRequested()
+        let sendFinish: () -> Void = { [weak self] in
+            guard let self else { return }
+            self.sendAliyunQwenEvent(
+                type: "session.finish",
+                through: context.ws
+            ) { error in
+                Task { [responseState = context.responseState] in
+                    if let error {
+                        await responseState.markCompletedWithError(error)
+                    } else {
+                        await responseState.markFinishRequested()
+                    }
                 }
             }
+        }
+
+        if activeConfiguration?.aliyunASRSettings.useManualCommit == true,
+           context.kind == .qwenASR {
+            sendAliyunQwenEvent(
+                type: "input_audio_buffer.commit",
+                through: context.ws
+            ) { error in
+                if let error {
+                    Task { [responseState = context.responseState] in
+                        await responseState.markCompletedWithError(error)
+                    }
+                } else {
+                    sendFinish()
+                }
+            }
+        } else {
+            sendFinish()
         }
     }
 
@@ -1211,7 +1232,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
                 token: token,
                 model: model,
                 endpoint: configuration.endpoint,
-                hintPayload: resolvedHintPayload(for: .aliyunBailianASR, configuration: configuration)
+                hintPayload: resolvedHintPayload(for: .aliyunBailianASR, configuration: configuration),
+                settings: configuration.aliyunASRSettings
             )
         }
         if let validationError = AliyunRemoteASRConfiguration.validationError(model: model, endpoint: configuration.endpoint) {
@@ -1325,7 +1347,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             through: ws,
             taskID: taskID,
             model: model,
-            parameters: AliyunFunRealtimePayloadSupport.parameters(hintPayload: hintPayload)
+            parameters: AliyunFunRealtimePayloadSupport.parameters(
+                model: model,
+                hintPayload: hintPayload,
+                settings: configuration.aliyunASRSettings
+            ),
+            context: AliyunFunRealtimePayloadSupport.context(
+                model: model,
+                phrases: hintPayload.contextualPhrases
+            )
         ) { error in
             Task { [responseState] in
                 if let error {
@@ -1481,13 +1511,15 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         taskID: String,
         model: String? = nil,
         parameters: [String: Any]? = nil,
+        context: [[String: Any]] = [],
         onError: @escaping (Error?) -> Void
     ) {
         let payload = AliyunRemoteASRConfiguration.funRealtimeControlPayload(
             action: action,
             taskID: taskID,
             model: model,
-            parameters: parameters
+            parameters: parameters,
+            context: context
         )
         do {
             let data = try JSONSerialization.data(withJSONObject: payload)
@@ -1722,7 +1754,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     ) {
         let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
             kind: kind,
-            hintPayload: hintPayload
+            hintPayload: hintPayload,
+            settings: activeConfiguration?.aliyunASRSettings ?? AliyunASRModelSettings()
         )
         sendAliyunQwenEvent(payload: payload, through: ws, onError: onError)
     }

@@ -196,6 +196,60 @@ fileprivate nonisolated struct RemoteStoredCredentialPresence: Codable, Hashable
     }
 }
 
+struct AliyunASRModelSettings: Codable, Hashable {
+    var maxSentenceSilenceMilliseconds: Int = 1300
+    var serverVADThreshold: Double = 0.35
+    var serverVADSilenceDurationMilliseconds: Int = 800
+    var useManualCommit: Bool = false
+    var semanticPunctuationEnabled: Bool = false
+    var punctuationPredictionEnabled: Bool = true
+    var inverseTextNormalizationEnabled: Bool = true
+    var disfluencyRemovalEnabled: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case maxSentenceSilenceMilliseconds
+        case serverVADThreshold
+        case serverVADSilenceDurationMilliseconds
+        case useManualCommit
+        case semanticPunctuationEnabled
+        case punctuationPredictionEnabled
+        case inverseTextNormalizationEnabled
+        case disfluencyRemovalEnabled
+    }
+
+    init(
+        maxSentenceSilenceMilliseconds: Int = 1300,
+        serverVADThreshold: Double = 0.35,
+        serverVADSilenceDurationMilliseconds: Int = 800,
+        useManualCommit: Bool = false,
+        semanticPunctuationEnabled: Bool = false,
+        punctuationPredictionEnabled: Bool = true,
+        inverseTextNormalizationEnabled: Bool = true,
+        disfluencyRemovalEnabled: Bool = false
+    ) {
+        self.maxSentenceSilenceMilliseconds = maxSentenceSilenceMilliseconds
+        self.serverVADThreshold = serverVADThreshold
+        self.serverVADSilenceDurationMilliseconds = serverVADSilenceDurationMilliseconds
+        self.useManualCommit = useManualCommit
+        self.semanticPunctuationEnabled = semanticPunctuationEnabled
+        self.punctuationPredictionEnabled = punctuationPredictionEnabled
+        self.inverseTextNormalizationEnabled = inverseTextNormalizationEnabled
+        self.disfluencyRemovalEnabled = disfluencyRemovalEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        maxSentenceSilenceMilliseconds = try container.decodeIfPresent(Int.self, forKey: .maxSentenceSilenceMilliseconds) ?? 1300
+        serverVADThreshold = try container.decodeIfPresent(Double.self, forKey: .serverVADThreshold) ?? 0.35
+        serverVADSilenceDurationMilliseconds = try container.decodeIfPresent(Int.self, forKey: .serverVADSilenceDurationMilliseconds) ?? 800
+        useManualCommit = try container.decodeIfPresent(Bool.self, forKey: .useManualCommit) ?? false
+        semanticPunctuationEnabled = try container.decodeIfPresent(Bool.self, forKey: .semanticPunctuationEnabled) ?? false
+        punctuationPredictionEnabled = try container.decodeIfPresent(Bool.self, forKey: .punctuationPredictionEnabled) ?? true
+        inverseTextNormalizationEnabled = try container.decodeIfPresent(Bool.self, forKey: .inverseTextNormalizationEnabled) ?? true
+        disfluencyRemovalEnabled = try container.decodeIfPresent(Bool.self, forKey: .disfluencyRemovalEnabled) ?? false
+    }
+}
+
 struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     nonisolated enum CredentialField: CaseIterable, Hashable {
         case apiKey
@@ -232,6 +286,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
     var codexAuthFilePath: String
     var codexAuthFileBookmark: Data?
     var codexFastModeEnabled: Bool
+    var aliyunASRSettings: AliyunASRModelSettings
     var generationSettings: LLMGenerationSettings
 
     var id: String { providerID }
@@ -377,6 +432,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         codexAuthFilePath: String = "",
         codexAuthFileBookmark: Data? = nil,
         codexFastModeEnabled: Bool = false,
+        aliyunASRSettings: AliyunASRModelSettings = AliyunASRModelSettings(),
         generationSettings: LLMGenerationSettings? = nil
     ) {
         self.providerID = providerID
@@ -412,6 +468,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         self.codexAuthFilePath = codexAuthFilePath
         self.codexAuthFileBookmark = codexAuthFileBookmark
         self.codexFastModeEnabled = codexFastModeEnabled
+        self.aliyunASRSettings = aliyunASRSettings
         self.generationSettings = generationSettings ?? LLMGenerationSettings.legacy(
             providerID: providerID,
             openAIReasoningEffort: openAIReasoningEffort,
@@ -456,6 +513,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         case codexAuthFilePath
         case codexAuthFileBookmark
         case codexFastModeEnabled
+        case aliyunASRSettings
         case generationSettings
     }
 
@@ -494,6 +552,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
         codexAuthFilePath = try container.decodeIfPresent(String.self, forKey: .codexAuthFilePath) ?? ""
         codexAuthFileBookmark = try container.decodeIfPresent(Data.self, forKey: .codexAuthFileBookmark)
         codexFastModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .codexFastModeEnabled) ?? false
+        aliyunASRSettings = try container.decodeIfPresent(AliyunASRModelSettings.self, forKey: .aliyunASRSettings) ?? AliyunASRModelSettings()
         generationSettings = try container.decodeIfPresent(LLMGenerationSettings.self, forKey: .generationSettings)
             ?? LLMGenerationSettings.legacy(
                 providerID: providerID,

@@ -121,9 +121,46 @@ final class RemoteModelConfigurationTests: XCTestCase {
 
     func testAliyunASRModelOptionsIncludeOmniRealtimeModels() {
         let ids = Set(RemoteASRProvider.aliyunBailianASR.modelOptions.map(\.id))
+        XCTAssertTrue(ids.contains("qwen-audio-3.0-asr-flash-streaming"))
         XCTAssertTrue(ids.contains("qwen3.5-omni-flash-realtime"))
         XCTAssertTrue(ids.contains("qwen3.5-omni-plus-realtime"))
         XCTAssertTrue(ids.contains("qwen-omni-turbo-realtime"))
+    }
+
+    func testStepFunASRModelCapabilitiesMatchDocumentedTransportFeatures() {
+        let standard = StepFunASRModelCapabilities.forModel("stepaudio-2.5-asr")
+        XCTAssertTrue(standard.supportsHotwords)
+        XCTAssertFalse(standard.supportsPrompt)
+        XCTAssertFalse(standard.usesRealtimeWebSocket)
+
+        let pro = StepFunASRModelCapabilities.forModel("stepaudio-2-asr-pro")
+        XCTAssertTrue(pro.supportsHotwords)
+        XCTAssertTrue(pro.supportsPrompt)
+        XCTAssertFalse(pro.usesRealtimeWebSocket)
+
+        let realtime = StepFunASRModelCapabilities.forModel("step-asr-1.1-stream")
+        XCTAssertFalse(realtime.supportsHotwords)
+        XCTAssertTrue(realtime.supportsPrompt)
+        XCTAssertTrue(realtime.usesRealtimeWebSocket)
+    }
+
+    func testAliyunASRModelCapabilitiesSeparateVocabularyAndLanguageSupport() {
+        let qwenAudio = AliyunASRModelCapabilities.forModel("qwen-audio-3.0-asr-flash-streaming")
+        XCTAssertEqual(qwenAudio.family, .qwenAudio3)
+        XCTAssertTrue(qwenAudio.supportsInlineVocabulary)
+        XCTAssertEqual(qwenAudio.maximumLanguageHints, 4)
+        XCTAssertTrue(qwenAudio.supportedLanguageCodes.contains("vi"))
+        XCTAssertTrue(qwenAudio.supportedLanguageCodes.contains("tl"))
+
+        let qwen3 = AliyunASRModelCapabilities.forModel("qwen3-asr-flash-realtime")
+        XCTAssertEqual(qwen3.family, .qwen3ASR)
+        XCTAssertFalse(qwen3.supportsLanguageHints)
+        XCTAssertTrue(qwen3.supportedLanguageCodes.contains("fil"))
+        XCTAssertTrue(qwen3.supportsManualCommit)
+
+        let paraformer = AliyunASRModelCapabilities.forModel("paraformer-realtime-v2")
+        XCTAssertTrue(paraformer.supportsInverseTextNormalization)
+        XCTAssertTrue(paraformer.supportsDisfluencyRemoval)
     }
 
     func testAliyunRealtimeModelFamilyDetectionSeparatesQwenAndOmni() {

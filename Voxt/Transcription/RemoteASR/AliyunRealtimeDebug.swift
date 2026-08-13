@@ -9,7 +9,8 @@ extension RemoteASRTranscriber {
         token: String,
         model: String,
         endpoint: String,
-        hintPayload: ResolvedASRHintPayload
+        hintPayload: ResolvedASRHintPayload,
+        settings: AliyunASRModelSettings
     ) async throws -> String {
         guard let wsURL = URL(string: RemoteASREndpointSupport.resolvedAliyunFunRealtimeEndpoint(endpoint)) else {
             throw NSError(domain: "Voxt.RemoteASR", code: -41, userInfo: [NSLocalizedDescriptionKey: "Invalid Aliyun realtime WebSocket endpoint URL."])
@@ -70,7 +71,15 @@ extension RemoteASRTranscriber {
             through: ws,
             taskID: taskID,
             model: model,
-            parameters: AliyunFunRealtimePayloadSupport.parameters(hintPayload: hintPayload)
+            parameters: AliyunFunRealtimePayloadSupport.parameters(
+                model: model,
+                hintPayload: hintPayload,
+                settings: settings
+            ),
+            context: AliyunFunRealtimePayloadSupport.context(
+                model: model,
+                phrases: hintPayload.contextualPhrases
+            )
         ) { error in
             Task {
                 if let error {

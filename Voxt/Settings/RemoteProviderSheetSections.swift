@@ -244,6 +244,136 @@ extension RemoteProviderConfigurationSheet {
         )
     }
 
+    @ViewBuilder
+    var aliyunASRConfigurationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(AppLocalization.localizedString("Aliyun ASR Model Settings"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if aliyunASRModelCapabilities.supportsInlineVocabulary {
+                Text(AppLocalization.localizedString("High-priority terms from the current Voxt dictionary and contextual phrases will be sent as instant hotwords for this model."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if aliyunASRModelCapabilities.supportsLanguageHints {
+                Text(AppLocalization.format("Language hints follow the languages selected in Speech Recognition Language settings. This model accepts up to %d hint(s).", aliyunASRModelCapabilities.maximumLanguageHints))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if aliyunASRModelCapabilities.family == .qwen3ASR {
+                Text(AppLocalization.localizedString("This model uses the main language hint only and does not expose hotwords in the realtime API."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if aliyunASRModelCapabilities.supportsMaxSentenceSilence {
+                aliyunNumericField(
+                    title: AppLocalization.localizedString("Sentence Silence (ms)"),
+                    placeholder: "1300",
+                    text: $aliyunMaxSentenceSilenceMillisecondsText
+                )
+            }
+
+            if aliyunASRModelCapabilities.supportsServerVAD {
+                RemoteProviderConfigurationDisclosureSection(
+                    title: AppLocalization.localizedString("Voice Activity Detection"),
+                    isExpanded: $generationAdvancedExpanded,
+                    content: {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if aliyunASRModelCapabilities.supportsManualCommit {
+                                Toggle(AppLocalization.localizedString("Manual Commit"), isOn: $aliyunUseManualCommit)
+                                    .toggleStyle(.switch)
+                            }
+
+                            if !aliyunUseManualCommit || !aliyunASRModelCapabilities.supportsManualCommit {
+                                HStack(alignment: .top, spacing: 12) {
+                                    aliyunNumericField(
+                                        title: AppLocalization.localizedString("Threshold"),
+                                        placeholder: "0.35",
+                                        text: $aliyunServerVADThresholdText
+                                    )
+                                    aliyunNumericField(
+                                        title: AppLocalization.localizedString("Silence (ms)"),
+                                        placeholder: "800",
+                                        text: $aliyunServerVADSilenceDurationMillisecondsText
+                                    )
+                                }
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
+                )
+            }
+
+            if aliyunASRModelCapabilities.supportsSemanticPunctuation {
+                Toggle(AppLocalization.localizedString("Semantic Punctuation"), isOn: $aliyunSemanticPunctuationEnabled)
+                    .toggleStyle(.switch)
+            }
+            if aliyunASRModelCapabilities.supportsPunctuationPrediction {
+                Toggle(AppLocalization.localizedString("Punctuation Prediction"), isOn: $aliyunPunctuationPredictionEnabled)
+                    .toggleStyle(.switch)
+            }
+            if aliyunASRModelCapabilities.supportsInverseTextNormalization {
+                Toggle(AppLocalization.localizedString("Inverse Text Normalization"), isOn: $aliyunInverseTextNormalizationEnabled)
+                    .toggleStyle(.switch)
+            }
+            if aliyunASRModelCapabilities.supportsDisfluencyRemoval {
+                Toggle(AppLocalization.localizedString("Remove Disfluencies"), isOn: $aliyunDisfluencyRemovalEnabled)
+                    .toggleStyle(.switch)
+            }
+        }
+    }
+
+    private func aliyunNumericField(title: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            TextField(placeholder, text: text)
+                .textFieldStyle(.plain)
+                .settingsFieldSurface(width: 160, minHeight: 34)
+        }
+    }
+
+    @ViewBuilder
+    var stepFunASRConfigurationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(AppLocalization.localizedString("StepFun ASR Model Settings"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if stepFunASRModelCapabilities.supportsHotwords {
+                Text(AppLocalization.localizedString("High-priority terms from the current Voxt dictionary and contextual phrases will be sent as StepFun hotwords for this model."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(AppLocalization.localizedString("This StepFun model does not expose hotwords. Dictionary terms are not sent as a hotword list."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if stepFunASRModelCapabilities.supportsPrompt {
+                Text(AppLocalization.localizedString("This model also accepts a recognition context prompt generated from the current dictionary and contextual phrases."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text(AppLocalization.localizedString("Language follows the languages selected in Speech Recognition Language settings."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     var openAIChunkSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(AppLocalization.localizedString("Chunk Pseudo Realtime Preview"), isOn: $openAIChunkPseudoRealtimeEnabled)

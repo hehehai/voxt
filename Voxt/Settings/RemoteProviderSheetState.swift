@@ -17,6 +17,22 @@ extension RemoteProviderConfigurationSheet {
         llmProviderForPicker == .openAI
     }
 
+    var isAliyunASRProvider: Bool {
+        asrProviderForSheet == .aliyunBailianASR
+    }
+
+    var isStepFunASRProvider: Bool {
+        asrProviderForSheet == .stepFunASR
+    }
+
+    var aliyunASRModelCapabilities: AliyunASRModelCapabilities {
+        AliyunASRModelCapabilities.forModel(resolvedModelValue())
+    }
+
+    var stepFunASRModelCapabilities: StepFunASRModelCapabilities {
+        StepFunASRModelCapabilities.forModel(resolvedModelValue())
+    }
+
     var isCodexLLMProvider: Bool {
         llmProviderForPicker == .codex
     }
@@ -348,12 +364,37 @@ extension RemoteProviderConfigurationSheet {
             codexAuthFilePath: isCodexLLMProvider ? codexAuthFilePath.trimmingCharacters(in: .whitespacesAndNewlines) : configuration.codexAuthFilePath,
             codexAuthFileBookmark: isCodexLLMProvider ? codexAuthFileBookmark : configuration.codexAuthFileBookmark,
             codexFastModeEnabled: isCodexLLMProvider ? codexFastModeEnabled : configuration.codexFastModeEnabled,
+            aliyunASRSettings: currentAliyunASRSettingsSnapshot(),
             generationSettings: currentGenerationSettingsSnapshot()
         )
         return snapshot.applyingCredentialEditIntent(
             from: configuration,
             editedFields: editedCredentialFields
         )
+    }
+
+    func currentAliyunASRSettingsSnapshot() -> AliyunASRModelSettings {
+        guard isAliyunASRProvider else {
+            return configuration.aliyunASRSettings
+        }
+        return AliyunASRModelSettings(
+            maxSentenceSilenceMilliseconds: clampedInt(aliyunMaxSentenceSilenceMillisecondsText, defaultValue: 1300, lowerBound: 200, upperBound: 6000),
+            serverVADThreshold: clampedDouble(aliyunServerVADThresholdText, defaultValue: 0.35, lowerBound: -1, upperBound: 1),
+            serverVADSilenceDurationMilliseconds: clampedInt(aliyunServerVADSilenceDurationMillisecondsText, defaultValue: 800, lowerBound: 200, upperBound: 6000),
+            useManualCommit: aliyunUseManualCommit,
+            semanticPunctuationEnabled: aliyunSemanticPunctuationEnabled,
+            punctuationPredictionEnabled: aliyunPunctuationPredictionEnabled,
+            inverseTextNormalizationEnabled: aliyunInverseTextNormalizationEnabled,
+            disfluencyRemovalEnabled: aliyunDisfluencyRemovalEnabled
+        )
+    }
+
+    private func clampedInt(_ text: String, defaultValue: Int, lowerBound: Int, upperBound: Int) -> Int {
+        min(max(Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) ?? defaultValue, lowerBound), upperBound)
+    }
+
+    private func clampedDouble(_ text: String, defaultValue: Double, lowerBound: Double, upperBound: Double) -> Double {
+        min(max(Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) ?? defaultValue, lowerBound), upperBound)
     }
 
     func currentGenerationSettingsSnapshot() -> LLMGenerationSettings {

@@ -212,6 +212,7 @@ struct RemoteProviderConnectivityTester {
             taskID: taskID,
             model: model,
             parameters: AliyunFunRealtimePayloadSupport.parameters(
+                model: model,
                 hintPayload: ResolvedASRHintPayload(languageHints: ["zh", "en"])
             )
         )

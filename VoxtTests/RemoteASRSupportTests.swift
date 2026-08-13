@@ -191,8 +191,23 @@ final class RemoteASRSupportTests: XCTestCase {
         XCTAssertFalse(StepFunPayloadSupport.supportsSSEPrompt(model: "stepaudio-2.5-asr"))
     }
 
-    func testAliyunFunRealtimeParametersIncludeLanguageHintsAndHotwords() {
+    func testStepFunRealtimeModelDoesNotReceiveHotwords() {
+        let payload = StepFunPayloadSupport.transcriptionPayload(
+            model: "step-asr-1.1-stream",
+            hintPayload: ResolvedASRHintPayload(
+                language: "zh",
+                contextualPhrases: ["Voxt"]
+            )
+        )
+
+        XCTAssertNil(payload["hotwords"])
+        XCTAssertTrue(StepFunASRModelCapabilities.forModel("step-asr-1.1-stream").usesRealtimeWebSocket)
+        XCTAssertTrue(StepFunASRModelCapabilities.forModel("step-asr-1.1-stream").supportsPrompt)
+    }
+
+    func testAliyunFunRealtimeParametersDoNotUseAnAliyunVocabularyID() {
         let parameters = AliyunFunRealtimePayloadSupport.parameters(
+            model: "fun-asr-realtime",
             hintPayload: ResolvedASRHintPayload(
                 languageHints: ["zh", "en"],
                 contextualPhrases: ["Voxt", "FireRed"]
@@ -201,17 +216,49 @@ final class RemoteASRSupportTests: XCTestCase {
 
         XCTAssertEqual(parameters["sample_rate"] as? Int, 16000)
         XCTAssertEqual(parameters["format"] as? String, "pcm")
-        XCTAssertEqual(parameters["language_hints"] as? [String], ["zh", "en"])
-        XCTAssertEqual(parameters["hotwords"] as? [String], ["Voxt", "FireRed"])
-    }
-
-    func testAliyunFunRealtimeParametersOmitEmptyHotwords() {
-        let parameters = AliyunFunRealtimePayloadSupport.parameters(
-            hintPayload: ResolvedASRHintPayload(languageHints: ["zh"])
-        )
-
         XCTAssertEqual(parameters["language_hints"] as? [String], ["zh"])
         XCTAssertNil(parameters["hotwords"])
+        XCTAssertNil(parameters["vocabulary"])
+        XCTAssertNil(parameters["vocabulary_id"])
+        XCTAssertEqual(parameters["semantic_punctuation_enabled"] as? Bool, false)
+    }
+
+    func testAliyunQwenAudioRealtimeParametersUseInlineVocabulary() {
+        let parameters = AliyunFunRealtimePayloadSupport.parameters(
+            model: "qwen-audio-3.0-asr-flash-streaming",
+            hintPayload: ResolvedASRHintPayload(
+                languageHints: ["zh", "en", "ja", "de", "ko"],
+                contextualPhrases: ["Voxt", "FireRed"]
+            )
+        )
+
+        XCTAssertEqual(parameters["language_hints"] as? [String], ["zh", "en", "ja", "de"])
+        XCTAssertEqual(parameters["vocabulary"] as? [String: Int], ["Voxt": 4, "FireRed": 4])
+        XCTAssertEqual(parameters["max_sentence_silence"] as? Int, 1300)
+        XCTAssertEqual(parameters["speech_noise_threshold"] as? Double, 0.35)
+        XCTAssertEqual(parameters["semantic_punctuation_enabled"] as? Bool, false)
+        XCTAssertNil(parameters["vocabulary_id"])
+    }
+
+    func testAliyunFunRealtimeContextIsLimitedToSupportedModelsAnd400Characters() {
+        let context = AliyunFunRealtimePayloadSupport.context(
+            model: "fun-asr-realtime",
+            phrases: [String(repeating: "a", count: 500)]
+        )
+        XCTAssertEqual(context.count, 1)
+        let content = context.first?["content"] as? [[String: Any]]
+        XCTAssertEqual((content?.first?["text"] as? String)?.count, 400)
+        XCTAssertTrue(AliyunFunRealtimePayloadSupport.context(model: "paraformer-realtime-v2", phrases: ["Voxt"]).isEmpty)
+    }
+
+    func testAliyunQwenRealtimeSettingsCanDisableServerVAD() throws {
+        let payload = AliyunQwenRealtimePayloadSupport.sessionUpdatePayload(
+            kind: .qwenASR,
+            hintPayload: ResolvedASRHintPayload(language: "zh"),
+            settings: AliyunASRModelSettings(useManualCommit: true)
+        )
+        let session = try XCTUnwrap(payload["session"] as? [String: Any])
+        XCTAssertNil(session["turn_detection"])
     }
 
     func testStepFunProTranscriptionPayloadCanIncludePrompt() {

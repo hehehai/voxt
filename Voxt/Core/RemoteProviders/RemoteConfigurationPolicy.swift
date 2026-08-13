@@ -13,13 +13,14 @@ enum RemoteASRRealtimeSupport {
     static func isAliyunRealtimeModel(_ model: String) -> Bool {
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return false }
-        return normalized.hasPrefix("qwen3-asr-flash-realtime")
+        return normalized.hasPrefix("qwen-audio-3.0-asr-flash-streaming")
+            || normalized.hasPrefix("qwen3-asr-flash-realtime")
             || normalized.hasPrefix("fun-asr")
             || normalized.hasPrefix("paraformer-realtime")
     }
 
     static func isStepFunRealtimeModel(_ model: String) -> Bool {
-        model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "step-asr-1.1-stream"
+        StepFunASRModelCapabilities.forModel(model).usesRealtimeWebSocket
     }
 }
 

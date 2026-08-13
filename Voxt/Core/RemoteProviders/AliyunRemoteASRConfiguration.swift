@@ -71,7 +71,8 @@ enum AliyunRemoteASRConfiguration {
         action: String,
         taskID: String,
         model: String? = nil,
-        parameters: [String: Any]? = nil
+        parameters: [String: Any]? = nil,
+        context: [[String: Any]] = []
     ) -> [String: Any] {
         var object: [String: Any] = [
             "header": [
@@ -81,13 +82,17 @@ enum AliyunRemoteASRConfiguration {
             ]
         ]
         if let model {
+            var input: [String: Any] = [:]
+            if !context.isEmpty {
+                input["context"] = context
+            }
             object["payload"] = [
                 "task_group": "audio",
                 "task": "asr",
                 "function": "recognition",
                 "model": model,
                 "parameters": parameters ?? [:],
-                "input": [:]
+                "input": input
             ]
         } else {
             object["payload"] = [

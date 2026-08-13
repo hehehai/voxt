@@ -8,6 +8,229 @@ struct RemoteModelOption: Hashable, Identifiable {
     let title: String
 }
 
+enum StepFunASRModelFamily: String, Hashable {
+    case stepAudio25ASR
+    case stepAudio2ASRPro
+    case stepASR11Stream
+    case unknown
+}
+
+struct StepFunASRModelCapabilities: Hashable {
+    let family: StepFunASRModelFamily
+    let supportsHotwords: Bool
+    let supportsPrompt: Bool
+    let usesRealtimeWebSocket: Bool
+
+    static func forModel(_ model: String) -> StepFunASRModelCapabilities {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if normalized == "stepaudio-2.5-asr" || normalized == "step-asr-1.1-stream" {
+            return StepFunASRModelCapabilities(
+                family: normalized == "stepaudio-2.5-asr" ? .stepAudio25ASR : .stepASR11Stream,
+                supportsHotwords: normalized == "stepaudio-2.5-asr",
+                supportsPrompt: normalized == "step-asr-1.1-stream",
+                usesRealtimeWebSocket: normalized == "step-asr-1.1-stream"
+            )
+        }
+
+        if normalized == "stepaudio-2-asr-pro" {
+            return StepFunASRModelCapabilities(
+                family: .stepAudio2ASRPro,
+                supportsHotwords: true,
+                supportsPrompt: true,
+                usesRealtimeWebSocket: false
+            )
+        }
+
+        return StepFunASRModelCapabilities(
+            family: .unknown,
+            supportsHotwords: false,
+            supportsPrompt: false,
+            usesRealtimeWebSocket: false
+        )
+    }
+}
+
+enum AliyunASRModelFamily: String, Hashable {
+    case qwenAudio3
+    case qwen3ASR
+    case omni
+    case funASR
+    case paraformer
+    case unknown
+}
+
+enum AliyunASRLanguageCatalog {
+    static let qwenAudioAndFunRealtime = [
+        "zh", "en", "ja", "ko", "vi", "th", "id", "ms", "tl", "hi",
+        "ar", "fr", "de", "es", "pt", "ru", "it", "nl", "sv", "da",
+        "fi", "no", "el", "pl", "cs", "hu", "ro", "bg", "hr", "sk"
+    ]
+
+    static let qwenASRRealtime = [
+        "zh", "yue", "en", "ja", "de", "ko", "ru", "fr", "pt", "ar",
+        "it", "es", "hi", "id", "th", "tr", "uk", "vi", "cs", "da",
+        "fil", "fi", "is", "ms", "no", "pl", "sv"
+    ]
+
+    static let funRealtime2026 = ["zh", "en", "ja"]
+    static let funRealtime2025 = ["zh", "en"]
+    static let funFlash8K = ["zh"]
+
+    static func funRealtime(for model: String) -> [String] {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.hasPrefix("fun-asr-realtime-2026-") {
+            return funRealtime2026
+        }
+        if normalized.hasPrefix("fun-asr-realtime-2025-09-") {
+            return funRealtime2025
+        }
+        if normalized.hasPrefix("fun-asr-flash-8k-realtime") {
+            return funFlash8K
+        }
+        return qwenAudioAndFunRealtime
+    }
+}
+
+struct AliyunASRModelCapabilities: Hashable {
+    let family: AliyunASRModelFamily
+    let supportsInlineVocabulary: Bool
+    let supportsLanguageHints: Bool
+    let maximumLanguageHints: Int
+    let supportedLanguageCodes: [String]
+    let supportsMaxSentenceSilence: Bool
+    let supportsServerVAD: Bool
+    let supportsManualCommit: Bool
+    let supportsSemanticPunctuation: Bool
+    let supportsPunctuationPrediction: Bool
+    let supportsInverseTextNormalization: Bool
+    let supportsDisfluencyRemoval: Bool
+
+    var isFunStyleRealtime: Bool {
+        family == .qwenAudio3 || family == .funASR || family == .paraformer
+    }
+
+    var supportsAnyModelSettings: Bool {
+        supportsInlineVocabulary ||
+            supportsLanguageHints ||
+            supportsMaxSentenceSilence ||
+            supportsServerVAD ||
+            supportsManualCommit ||
+            supportsSemanticPunctuation ||
+            supportsPunctuationPrediction ||
+            supportsInverseTextNormalization ||
+            supportsDisfluencyRemoval
+    }
+
+    static func forModel(_ model: String) -> AliyunASRModelCapabilities {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if normalized.hasPrefix("qwen-audio-3.0-asr-flash-streaming") {
+            return AliyunASRModelCapabilities(
+                family: .qwenAudio3,
+                supportsInlineVocabulary: true,
+                supportsLanguageHints: true,
+                maximumLanguageHints: 4,
+                supportedLanguageCodes: AliyunASRLanguageCatalog.qwenAudioAndFunRealtime,
+                supportsMaxSentenceSilence: true,
+                supportsServerVAD: true,
+                supportsManualCommit: false,
+                supportsSemanticPunctuation: true,
+                supportsPunctuationPrediction: false,
+                supportsInverseTextNormalization: false,
+                supportsDisfluencyRemoval: false,
+            )
+        }
+
+        if normalized.hasPrefix("qwen3-asr-flash-realtime") {
+            return AliyunASRModelCapabilities(
+                family: .qwen3ASR,
+                supportsInlineVocabulary: false,
+                supportsLanguageHints: false,
+                maximumLanguageHints: 1,
+                supportedLanguageCodes: AliyunASRLanguageCatalog.qwenASRRealtime,
+                supportsMaxSentenceSilence: false,
+                supportsServerVAD: true,
+                supportsManualCommit: true,
+                supportsSemanticPunctuation: false,
+                supportsPunctuationPrediction: false,
+                supportsInverseTextNormalization: false,
+                supportsDisfluencyRemoval: false,
+            )
+        }
+
+        if normalized.hasPrefix("qwen3.5-omni-") || normalized.hasPrefix("qwen-omni-") {
+            return AliyunASRModelCapabilities(
+                family: .omni,
+                supportsInlineVocabulary: false,
+                supportsLanguageHints: false,
+                maximumLanguageHints: 1,
+                supportedLanguageCodes: [],
+                supportsMaxSentenceSilence: false,
+                supportsServerVAD: true,
+                supportsManualCommit: false,
+                supportsSemanticPunctuation: false,
+                supportsPunctuationPrediction: false,
+                supportsInverseTextNormalization: false,
+                supportsDisfluencyRemoval: false,
+            )
+        }
+
+        if normalized.hasPrefix("paraformer-realtime") {
+            let isV2 = normalized.contains("v2")
+            let supportedLanguages = normalized.contains("-8k-")
+                ? ["zh"]
+                : ["zh", "en", "ja", "ko", "de", "fr", "ru"]
+            return AliyunASRModelCapabilities(
+                family: .paraformer,
+                supportsInlineVocabulary: false,
+                supportsLanguageHints: true,
+                maximumLanguageHints: 1,
+                supportedLanguageCodes: supportedLanguages,
+                supportsMaxSentenceSilence: isV2,
+                supportsServerVAD: true,
+                supportsManualCommit: false,
+                supportsSemanticPunctuation: isV2,
+                supportsPunctuationPrediction: isV2,
+                supportsInverseTextNormalization: isV2,
+                supportsDisfluencyRemoval: true,
+            )
+        }
+
+        if normalized.hasPrefix("fun-asr") {
+            return AliyunASRModelCapabilities(
+                family: .funASR,
+                supportsInlineVocabulary: false,
+                supportsLanguageHints: true,
+                maximumLanguageHints: 1,
+                supportedLanguageCodes: AliyunASRLanguageCatalog.funRealtime(for: normalized),
+                supportsMaxSentenceSilence: true,
+                supportsServerVAD: true,
+                supportsManualCommit: false,
+                supportsSemanticPunctuation: true,
+                supportsPunctuationPrediction: false,
+                supportsInverseTextNormalization: false,
+                supportsDisfluencyRemoval: false,
+            )
+        }
+
+        return AliyunASRModelCapabilities(
+            family: .unknown,
+            supportsInlineVocabulary: false,
+            supportsLanguageHints: false,
+            maximumLanguageHints: 0,
+            supportedLanguageCodes: [],
+            supportsMaxSentenceSilence: false,
+            supportsServerVAD: false,
+            supportsManualCommit: false,
+            supportsSemanticPunctuation: false,
+            supportsPunctuationPrediction: false,
+            supportsInverseTextNormalization: false,
+            supportsDisfluencyRemoval: false,
+        )
+    }
+}
+
 enum RemoteASRProvider: String, CaseIterable, Identifiable {
     case openAIWhisper
     case doubaoASR
@@ -73,6 +296,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             ]
         case .aliyunBailianASR:
             return [
+                RemoteModelOption(id: "qwen-audio-3.0-asr-flash-streaming", title: "Qwen-Audio 3.0 ASR Flash Streaming"),
                 RemoteModelOption(id: "qwen3-asr-flash-realtime", title: "Qwen3 ASR Flash Realtime"),
                 RemoteModelOption(id: "qwen3-asr-flash-realtime-2026-02-10", title: "Qwen3 ASR Flash Realtime (2026-02-10)"),
                 RemoteModelOption(id: "qwen3-asr-flash-realtime-2025-10-27", title: "Qwen3 ASR Flash Realtime (2025-10-27)"),

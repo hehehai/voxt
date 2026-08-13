@@ -96,7 +96,9 @@ enum ASRHintResolver {
                 otherLanguages: otherLanguages
             )
         case .aliyunBailianASR:
-            let hints = settings.followsUserMainLanguage ? resolvedAliyunLanguageHints(options: selectedOptions) : []
+            let hints = settings.followsUserMainLanguage
+                ? resolvedAliyunLanguageHints(options: selectedOptions, model: mlxModelRepo)
+                : []
             let terms = resolvedAliyunFunTerms(
                 contextualPhrases: contextualPhrases,
                 dictionaryTerms: dictionaryTerms
@@ -351,25 +353,24 @@ enum ASRHintResolver {
         return language.isTraditionalChinese ? "zh-Hant" : "zh-Hans"
     }
 
-    private static func resolvedAliyunLanguageHints(options: [UserMainLanguageOption]) -> [String] {
+    private static func resolvedAliyunLanguageHints(
+        options: [UserMainLanguageOption],
+        model: String?
+    ) -> [String] {
+        let modelID = model?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? model!
+            : RemoteASRProvider.aliyunBailianASR.suggestedModel
+        let capabilities = AliyunASRModelCapabilities.forModel(modelID)
+        let supportedCodes = Set(capabilities.supportedLanguageCodes)
         var seen = Set<String>()
         let mapped = options.compactMap { option -> String? in
-            switch option.baseLanguageCode {
-            case "zh":
-                return "zh"
-            case "en":
-                return "en"
-            case "ja":
-                return "ja"
-            case "ko":
-                return "ko"
-            default:
-                return nil
-            }
+            let code = option.baseLanguageCode
+            let aliyunCode = code == "tl" && supportedCodes.contains("fil") ? "fil" : code
+            return supportedCodes.contains(aliyunCode) ? aliyunCode : nil
         }
 
         let deduped = mapped.filter { seen.insert($0).inserted }
-        return Array(deduped.prefix(3))
+        return Array(deduped.prefix(capabilities.maximumLanguageHints))
     }
 
     private static func resolvedStepFunLanguage(_ language: UserMainLanguageOption) -> String {
