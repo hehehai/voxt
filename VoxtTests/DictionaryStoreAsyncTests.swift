@@ -75,6 +75,74 @@ final class DictionaryStoreAsyncTests: XCTestCase {
         XCTAssertEqual(try repository.allEntries().map(\.term), ["Persisted"])
     }
 
+    func testNewReplacementEntryIsReturnedByPagedQueryImmediatelyAfterCreation() async throws {
+        let repository = try makeFixture()
+        let store = DictionaryStore(
+            defaults: UserDefaults(suiteName: "DictionaryStoreAsyncTests.\(UUID().uuidString)")!,
+            fileManager: .default,
+            repository: repository
+        )
+
+        try store.createManualEntry(
+            term: "Voxt Target",
+            replacementTerms: ["vox target"],
+            groupID: nil,
+            groupNameSnapshot: nil
+        )
+
+        let queryExpectation = expectation(description: "replacement entry query completes")
+        var queriedEntries: [DictionaryEntry] = []
+        store.loadEntries(
+            requiringReplacementTerms: true,
+            limit: 80,
+            offset: 0
+        ) { _, entries in
+            queriedEntries = entries
+            queryExpectation.fulfill()
+        }
+
+        await fulfillment(of: [queryExpectation], timeout: 2)
+        XCTAssertEqual(queriedEntries.map(\.term), ["Voxt Target"])
+        XCTAssertEqual(queriedEntries.first?.replacementTerms.map(\.text), ["vox target"])
+    }
+
+    func testReplacementTermsAreAddedWhenTargetEntryAlreadyExists() async throws {
+        let repository = try makeFixture()
+        let store = DictionaryStore(
+            defaults: UserDefaults(suiteName: "DictionaryStoreAsyncTests.\(UUID().uuidString)")!,
+            fileManager: .default,
+            repository: repository
+        )
+
+        try store.createManualEntry(
+            term: "Voxt Target",
+            groupID: nil,
+            groupNameSnapshot: nil
+        )
+        try store.createManualEntry(
+            term: "voxt target",
+            replacementTerms: ["vox target"],
+            groupID: nil,
+            groupNameSnapshot: nil
+        )
+
+        let queryExpectation = expectation(description: "replacement entry query completes")
+        var queriedEntries: [DictionaryEntry] = []
+        store.loadEntries(
+            requiringReplacementTerms: true,
+            limit: 80,
+            offset: 0
+        ) { _, entries in
+            queriedEntries = entries
+            queryExpectation.fulfill()
+        }
+
+        await fulfillment(of: [queryExpectation], timeout: 2)
+        XCTAssertEqual(try repository.allEntries().count, 1)
+        XCTAssertEqual(queriedEntries.map(\.term), ["Voxt Target"])
+        XCTAssertEqual(queriedEntries.first?.replacementTerms.map(\.text), ["vox target"])
+    }
+
     private func makeFixture() throws -> BlockingDictionaryRepository {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("voxt-dictionary-async-tests-\(UUID().uuidString)", isDirectory: true)

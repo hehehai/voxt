@@ -839,6 +839,18 @@ final class DictionaryStore: ObservableObject {
         groupID: UUID?,
         groupNameSnapshot: String?
     ) throws {
+        if !replacementTerms.isEmpty {
+            try createManualReplacementEntry(
+                term: term,
+                replacementTerms: replacementTerms,
+                categoryID: categoryID,
+                categoryNameSnapshot: categoryNameSnapshot,
+                groupID: groupID,
+                groupNameSnapshot: groupNameSnapshot
+            )
+            return
+        }
+
         _ = try createOrReinforceManualEntry(
             term: term,
             replacementTerms: replacementTerms,
@@ -846,6 +858,55 @@ final class DictionaryStore: ObservableObject {
             categoryNameSnapshot: categoryNameSnapshot,
             groupID: groupID,
             groupNameSnapshot: groupNameSnapshot
+        )
+    }
+
+    func createManualReplacementEntry(
+        term: String,
+        replacementTerms: [String],
+        categoryID: UUID = DictionaryCategory.defaultID,
+        categoryNameSnapshot: String? = DictionaryCategory.defaultName,
+        groupID: UUID?,
+        groupNameSnapshot: String?
+    ) throws {
+        guard completePendingReloadIfNeeded() else { throw DictionaryStoreError.dataUnavailable }
+        let trimmedTerm = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = Self.normalizeTerm(trimmedTerm)
+        guard !trimmedTerm.isEmpty, !normalized.isEmpty else {
+            throw DictionaryStoreError.emptyTerm
+        }
+
+        if let existingIndex = existingTermIndex(normalizedTerm: normalized, groupID: groupID) {
+            let existingEntry = entries[existingIndex]
+            let combinedReplacementTerms = existingEntry.replacementTerms.map(\.text) + replacementTerms
+            let prepared = try prepareEntryInput(
+                term: existingEntry.term,
+                replacementTerms: combinedReplacementTerms,
+                groupID: existingEntry.groupID,
+                excluding: existingEntry.id
+            )
+            var updatedEntry = existingEntry
+            updatedEntry.replacementTerms = prepared.replacementTerms
+            updatedEntry.updatedAt = Date()
+
+            let reservedKeys = Set([existingEntry.normalizedTerm] + prepared.replacementTerms.map(\.normalizedText))
+            updatedEntry.observedVariants.removeAll { reservedKeys.contains($0.normalizedText) }
+            try upsertPersistedEntry(updatedEntry)
+
+            var updatedEntries = entries
+            updatedEntries[existingIndex] = updatedEntry
+            replaceEntries(updatedEntries)
+            return
+        }
+
+        try createEntry(
+            term: term,
+            replacementTerms: replacementTerms,
+            categoryID: categoryID,
+            categoryNameSnapshot: categoryNameSnapshot,
+            groupID: groupID,
+            groupNameSnapshot: groupNameSnapshot,
+            source: .manual
         )
     }
 

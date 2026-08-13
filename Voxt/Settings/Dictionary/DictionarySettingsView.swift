@@ -44,9 +44,7 @@ struct DictionarySettingsView: View {
     @State private var visibleReplacementEntries: [DictionaryEntry] = []
     @State private var totalReplacementEntryCount = 0
     @State private var isLoadingReplacementEntries = false
-    @State private var loadingReplacementEntriesQuery: String?
     @State private var replacementEntryPageGeneration = 0
-    @State private var suppressedStoreEntryReloadCount = 0
 
     private let entryPageSize = 80
 
@@ -145,8 +143,7 @@ struct DictionarySettingsView: View {
             reloadReplacementEntries(reset: true)
         }
         .onReceive(dictionaryStore.$entries) { _ in
-            if suppressedStoreEntryReloadCount > 0 {
-                suppressedStoreEntryReloadCount -= 1
+            guard selectedTab == .replacements else {
                 return
             }
             reloadReplacementEntries(reset: true)
@@ -272,43 +269,36 @@ struct DictionarySettingsView: View {
         selectedCategoryID: UUID,
         selectedGroupID: UUID?
     ) throws {
-        let mutationCount = max(terms.count, 1)
-        suppressedStoreEntryReloadCount += mutationCount
         let selectedGroupName = groupNameSnapshot(
             for: selectedGroupID,
             in: dialog
         )
-        do {
-            switch dialog {
-            case .create:
-                for term in terms {
-                    try dictionaryStore.createManualEntry(
-                        term: term,
-                        replacementTerms: dialog.mode == .replacement ? replacementTerms : [],
-                        categoryID: selectedCategoryID,
-                        categoryNameSnapshot: dictionaryStore.categoryName(for: selectedCategoryID),
-                        groupID: dialog.mode == .replacement ? selectedGroupID : nil,
-                        groupNameSnapshot: dialog.mode == .replacement ? selectedGroupName : nil
-                    )
-                }
-            case .edit(let entry):
-                guard let term = terms.first else {
-                    throw DictionaryStoreError.emptyTerm
-                }
-                let dialogMode = entry.replacementTerms.isEmpty ? DictionaryTermDialogMode.hotword : .replacement
-                try dictionaryStore.updateEntry(
-                    id: entry.id,
+        switch dialog {
+        case .create:
+            for term in terms {
+                try dictionaryStore.createManualEntry(
                     term: term,
-                    replacementTerms: dialogMode == .replacement ? replacementTerms : [],
+                    replacementTerms: dialog.mode == .replacement ? replacementTerms : [],
                     categoryID: selectedCategoryID,
                     categoryNameSnapshot: dictionaryStore.categoryName(for: selectedCategoryID),
-                    groupID: dialogMode == .replacement ? selectedGroupID : nil,
-                    groupNameSnapshot: dialogMode == .replacement ? selectedGroupName : nil
+                    groupID: dialog.mode == .replacement ? selectedGroupID : nil,
+                    groupNameSnapshot: dialog.mode == .replacement ? selectedGroupName : nil
                 )
             }
-        } catch {
-            suppressedStoreEntryReloadCount = max(0, suppressedStoreEntryReloadCount - mutationCount)
-            throw error
+        case .edit(let entry):
+            guard let term = terms.first else {
+                throw DictionaryStoreError.emptyTerm
+            }
+            let dialogMode = entry.replacementTerms.isEmpty ? DictionaryTermDialogMode.hotword : .replacement
+            try dictionaryStore.updateEntry(
+                id: entry.id,
+                term: term,
+                replacementTerms: dialogMode == .replacement ? replacementTerms : [],
+                categoryID: selectedCategoryID,
+                categoryNameSnapshot: dictionaryStore.categoryName(for: selectedCategoryID),
+                groupID: dialogMode == .replacement ? selectedGroupID : nil,
+                groupNameSnapshot: dialogMode == .replacement ? selectedGroupName : nil
+            )
         }
         refreshDictionaryEntriesAfterMutation()
     }
@@ -323,11 +313,6 @@ struct DictionarySettingsView: View {
         let offset = reset ? 0 : visibleReplacementEntries.count
         guard reset || offset < totalReplacementEntryCount else { return }
         guard reset || !isLoadingReplacementEntries else { return }
-        if reset,
-           isLoadingReplacementEntries,
-           loadingReplacementEntriesQuery == dictionarySearchText {
-            return
-        }
 
         loadReplacementEntries(offset: offset, limit: entryPageSize, reset: reset)
     }
@@ -337,7 +322,6 @@ struct DictionarySettingsView: View {
         let generation = replacementEntryPageGeneration
         let query = dictionarySearchText
         isLoadingReplacementEntries = true
-        loadingReplacementEntriesQuery = query
 
         dictionaryStore.loadEntries(
             requiringReplacementTerms: true,
@@ -349,7 +333,6 @@ struct DictionarySettingsView: View {
             totalReplacementEntryCount = count
             visibleReplacementEntries = reset ? page : visibleReplacementEntries + page
             isLoadingReplacementEntries = false
-            loadingReplacementEntriesQuery = nil
         }
     }
 
@@ -363,9 +346,7 @@ struct DictionarySettingsView: View {
     }
 
     private func deleteDictionaryEntry(_ entry: DictionaryEntry) {
-        suppressedStoreEntryReloadCount += 1
         guard dictionaryStore.delete(id: entry.id) else {
-            suppressedStoreEntryReloadCount = max(0, suppressedStoreEntryReloadCount - 1)
             return
         }
 
@@ -384,6 +365,7 @@ struct DictionarySettingsView: View {
     }
 
     private func refreshDictionaryEntriesAfterMutation() {
+        guard selectedTab == .replacements else { return }
         let retainedVisibleCount = max(entryPageSize, visibleReplacementEntries.count)
         loadReplacementEntries(offset: 0, limit: retainedVisibleCount, reset: true)
     }
