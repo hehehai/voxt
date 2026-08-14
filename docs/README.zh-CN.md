@@ -45,6 +45,8 @@ MacOS 语音输入与翻译工具，支持不同应用和网址文本增强。�
 
 ## 下载/安装
 
+- [官网](https://voxt.actnow.dev)
+- [官网下载](https://voxt.actnow.dev/api/app/download)
 - [安装包](https://github.com/hehehai/voxt/releases/latest)
 
 - 使用 Homebrew:

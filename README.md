@@ -44,6 +44,8 @@ A macOS voice input and translation app with context-aware text enhancement acro
 
 ## Download / Install
 
+- [Official website](https://voxt.actnow.dev)
+- [Download from the official website](https://voxt.actnow.dev/api/app/download)
 - [Latest release](https://github.com/hehehai/voxt/releases/latest)
 
 - Install via Homebrew:
