@@ -6,11 +6,6 @@ import AppKit
 import CoreAudio
 
 extension AppDelegate {
-    private enum MainWindowActivationMode {
-        case standard
-        case statusMenuSelection
-    }
-
     private var mainWindowContentSize: NSSize {
         NSSize(width: 820, height: 560)
     }
@@ -309,31 +304,31 @@ extension AppDelegate {
 
     @objc private func openDashboardFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .report))
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .report))
         }
     }
 
     @objc private func openGeneralFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .general))
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .general))
         }
     }
 
     @objc private func openDictionarySettings() {
         performAfterStatusMenuDismissal {
-            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .dictionary))
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .dictionary))
         }
     }
 
     @objc private func openFeatureFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindowFromStatusMenu(target: SettingsNavigationTarget(tab: .feature, featureTab: .features))
+            self.openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .features))
         }
     }
 
     @objc private func openNotesHistoryFromMenu() {
         performAfterStatusMenuDismissal {
-            self.openMainWindowFromStatusMenu(
+            self.openMainWindow(
                 target: SettingsNavigationTarget(
                     tab: .history,
                     section: .historyEntries,
@@ -459,17 +454,6 @@ extension AppDelegate {
     }
 
     func openMainWindow(target: SettingsNavigationTarget) {
-        openMainWindow(target: target, activationMode: .standard)
-    }
-
-    private func openMainWindowFromStatusMenu(target: SettingsNavigationTarget) {
-        openMainWindow(target: target, activationMode: .statusMenuSelection)
-    }
-
-    private func openMainWindow(
-        target: SettingsNavigationTarget,
-        activationMode: MainWindowActivationMode
-    ) {
         let navigationRequest = SettingsNavigationRequest(target: target)
 
         if let window = mainWindowController?.window {
@@ -482,7 +466,7 @@ extension AppDelegate {
                 recenterMainWindowIfNeeded(window)
             }
             setMainWindowVisibility(true)
-            bringWindowToFront(window, activationMode: activationMode)
+            bringWindowToFront(window)
             return
         }
 
@@ -537,8 +521,8 @@ extension AppDelegate {
         window.isOpaque = true
         window.backgroundColor = SettingsUIStyle.windowBackgroundNSColor
         window.isMovableByWindowBackground = false
-        // Standard opens keep the window on its assigned Space. Status-menu
-        // opens opt into moving it to the active Space in bringWindowToFront.
+        // Keep the main window on its assigned Space, matching normal AppKit
+        // application behavior when switching between Spaces.
         window.collectionBehavior = []
         window.contentViewController = hostingController
         window.setContentSize(mainWindowContentSize)
@@ -554,7 +538,7 @@ extension AppDelegate {
         repairMainWindowFrameIfNeeded(window)
         centerMainWindow(window, on: NSScreen.main)
         setMainWindowVisibility(true)
-        bringWindowToFront(window, activationMode: activationMode)
+        bringWindowToFront(window)
         scheduleTrafficLightButtonPositionUpdate(for: window)
     }
 
@@ -567,22 +551,11 @@ extension AppDelegate {
         return .normal
     }
 
-    private func bringWindowToFront(
-        _ window: NSWindow,
-        activationMode: MainWindowActivationMode
-    ) {
+    private func bringWindowToFront(_ window: NSWindow) {
         var collectionBehavior = window.collectionBehavior
         collectionBehavior.remove(.moveToActiveSpace)
-
-        switch activationMode {
-        case .standard:
-            window.collectionBehavior = collectionBehavior
-            AppBehaviorController.bringStandardWindowToFront(window)
-        case .statusMenuSelection:
-            collectionBehavior.insert(.moveToActiveSpace)
-            window.collectionBehavior = collectionBehavior
-            AppBehaviorController.bringUserInvokedWindowToFront(window)
-        }
+        window.collectionBehavior = collectionBehavior
+        AppBehaviorController.bringStandardWindowToFront(window)
     }
 
     private func centerMainWindow(_ window: NSWindow, on screen: NSScreen?) {
