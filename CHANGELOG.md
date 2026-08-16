@@ -6,6 +6,41 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-08-17
+
+### English
+
+#### Added
+- Added model-aware remote ASR configuration for StepFun and Aliyun, including model-specific prompt, hotword, and realtime options.
+
+#### Changed
+- Kept the main window on its assigned macOS Space when opened from the status menu.
+
+#### Fixed
+- Fixed replacement dictionary entries not refreshing correctly after creation or update.
+
+### 简体中文
+
+#### 新增
+- 新增 StepFun 和阿里云远程 ASR 的模型感知配置，支持按模型设置提示词、热词和实时识别选项。
+
+#### 改进
+- 从状态栏菜单打开主窗口时，保持窗口位于其分配的 macOS 工作区（Space）。
+
+#### 修复
+- 修复创建或更新替换词典条目后，条目未正确刷新的问题。
+
+### 日本語
+
+#### 追加
+- StepFun と Aliyun のリモート ASR でモデルに応じた設定に対応し、モデル別のプロンプト、ホットワード、リアルタイム認識オプションを追加しました。
+
+#### 変更
+- ステータスメニューからメインウィンドウを開いたとき、割り当てられた macOS の Space にウィンドウを保持するようにしました。
+
+#### 修正
+- 置換辞書エントリの作成または更新後に、エントリが正しく更新されない問題を修正しました。
+
 ## [1.14.0] - 2026-08-07
 
 ### English
