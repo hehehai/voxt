@@ -42,6 +42,7 @@ extension AppDelegate {
         mlxTranscriber?.discardPreparedSessionModelUse()
         sherpaOnnxTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
+        systemAudioMuteController.restoreSystemAudioIfNeeded()
         if preservePendingHistoryAudio {
             VoxtLog.asr("Preserving pending history audio during residual resource release. reason=\(reason)", verbose: true)
         } else {
@@ -283,7 +284,7 @@ extension AppDelegate {
         overlayState.statusMessage = ""
         setEnhancingState(false)
         resetVoiceEndCommandState()
-        stopActiveRecordingTranscriber()
+        stopActiveRecordingTranscriberAndRestoreSystemAudio()
 
         VoxtLog.asr("Cancelled session invalidated. sessionID=\(cancelledSessionID.uuidString)", verbose: true)
         executeSessionEndPipeline(for: cancelledSessionID, trigger: "cancel")

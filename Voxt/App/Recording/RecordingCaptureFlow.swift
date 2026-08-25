@@ -149,6 +149,7 @@ extension AppDelegate {
                   self.recordingStoppedAt == nil
             else {
                 mlx.stopRecording()
+                self.systemAudioMuteController.restoreSystemAudioIfNeeded()
                 return
             }
         }
@@ -389,6 +390,15 @@ extension AppDelegate {
         }
     }
 
+    /// Stops microphone capture and immediately releases the system-audio mute.
+    ///
+    /// Final ASR and enhancement continue asynchronously after the transcriber
+    /// stops capturing, so system audio no longer needs to remain muted here.
+    func stopActiveRecordingTranscriberAndRestoreSystemAudio() {
+        stopActiveRecordingTranscriber()
+        systemAudioMuteController.restoreSystemAudioIfNeeded()
+    }
+
     func stopActiveRecordingTranscriberAfterPendingVADFlush(sessionID: UUID) {
         Task { [weak self] in
             guard let self else { return }
@@ -403,7 +413,7 @@ extension AppDelegate {
 
             guard self.activeRecordingSessionID == sessionID else { return }
             await self.flushPendingRecordingVoiceActivityFramesBeforeStop()
-            self.stopActiveRecordingTranscriber()
+            self.stopActiveRecordingTranscriberAndRestoreSystemAudio()
         }
     }
 
