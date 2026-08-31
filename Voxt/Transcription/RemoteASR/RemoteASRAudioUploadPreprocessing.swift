@@ -64,6 +64,8 @@ enum RemoteASRAudioUploadVADPolicyResolver {
             return .disabled(reason: "unsupported-aliyun-route")
         case .doubaoASR:
             return .realtimeUnchanged(reason: "doubao-streaming")
+        case .googleGeminiASR:
+            return .realtimeServerVAD
         }
     }
 }

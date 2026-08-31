@@ -53,6 +53,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private var aliyunStreamingContext: AliyunFunStreamingContext?
     private var aliyunQwenStreamingContext: AliyunQwenStreamingContext?
     var stepFunStreamingContext: StepFunStreamingContext?
+    var geminiLiveStreamingContext: GeminiLiveStreamingContext?
     private var meterTimer: Timer?
     private var openAIPreviewTask: Task<Void, Never>?
     private var openAIPreviewInFlight = false
@@ -76,7 +77,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private var doubaoCaptureUsesPreferredInputDevice = false
     private let doubaoCaptureStartupWatchdogDelay: Duration = .seconds(1.2)
     let aliyunRealtimeStopDrainDelay: Duration = .milliseconds(180)
-    let stepFunPendingAudioByteLimit = 1_024_000
+    let realtimePendingAudioByteLimit = 1_024_000
 
     func setPreferredInputDevice(_ deviceID: AudioDeviceID?) {
         preferredInputDeviceID = deviceID
@@ -94,6 +95,9 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
         if stepFunStreamingContext != nil {
             return "stepfun{active=true}"
+        }
+        if geminiLiveStreamingContext != nil {
+            return "gemini-live{active=true}"
         }
         return nil
     }
@@ -120,6 +124,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
         cleanupStepFunStreamingState()
+        cleanupGeminiLiveStreamingState()
         sampleStore.clear()
         streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         transcribedText = ""
@@ -167,6 +172,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         } else if provider == .stepFunASR,
                   RemoteASRRealtimeSupport.isStepFunRealtimeModel(resolvedModel) {
             routeSummary = "stepfun-realtime"
+        } else if provider == .googleGeminiASR {
+            routeSummary = "gemini-live"
         } else {
             routeSummary = provider.rawValue
         }
@@ -225,6 +232,20 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return
         }
 
+        if provider == .googleGeminiASR {
+            do {
+                try startGeminiLiveStreaming(configuration: configuration, hintPayload: hintPayload)
+            } catch {
+                VoxtLog.asrError("Gemini live streaming setup failed: \(error.localizedDescription)")
+                cleanupRecorderState()
+                cleanupGeminiLiveStreamingState()
+                activeProvider = nil
+                activeConfiguration = nil
+                notifyStartFailure(error)
+            }
+            return
+        }
+
         do {
             try startFileRecordingMode()
             if provider == .openAIWhisper,
@@ -246,7 +267,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             doubaoStreamingContext != nil ||
             aliyunStreamingContext != nil ||
             aliyunQwenStreamingContext != nil ||
-            stepFunStreamingContext != nil
+            stepFunStreamingContext != nil ||
+            geminiLiveStreamingContext != nil
         guard isRecording || hasPendingRealtimeSession || recorder != nil else { return }
         stopRequested = true
         let generationID = recordingGenerationID
@@ -304,6 +326,21 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             scheduleStreamingCompletion(generationID: generationID) {
                 await self.resolveStreamingResult(
                     warningMessage: "StepFun realtime final result wait failed"
+                ) {
+                    try await context.responseState.waitForFinalResult(timeoutSeconds: self.streamingFinalWaitTimeout)
+                } fallback: {
+                    await context.responseState.currentText()
+                }
+            }
+            return
+        }
+
+        if activeProvider == .googleGeminiASR, let context = geminiLiveStreamingContext {
+            isRequesting = true
+            stopGeminiLiveStreaming(context)
+            scheduleStreamingCompletion(generationID: generationID) {
+                await self.resolveStreamingResult(
+                    warningMessage: "Gemini live final result wait failed"
                 ) {
                     try await context.responseState.waitForFinalResult(timeoutSeconds: self.streamingFinalWaitTimeout)
                 } fallback: {
@@ -447,6 +484,13 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             guard context.didStartAudioStream else { return }
             stopStepFunAudioCapture()
             try startStepFunAudioCapture(context: context)
+            return
+        }
+
+        if let context = geminiLiveStreamingContext {
+            guard context.didStartAudioStream else { return }
+            stopGeminiLiveAudioCapture()
+            try startGeminiLiveAudioCapture(context: context)
             return
         }
 
@@ -652,6 +696,12 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return try await transcribeStepFun(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
         case .xiaomiMiMoASR:
             return try await transcribeXiaomiMiMo(fileURL: fileURL, configuration: configuration, hintPayload: hintPayload)
+        case .googleGeminiASR:
+            throw NSError(
+                domain: "Voxt.RemoteASR",
+                code: -64,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Gemini live transcribe supports voice input only. File transcription and meeting mode are not available for this provider.")]
+            )
         }
     }
 
@@ -3174,6 +3224,16 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         stopStepFunAudioCapture()
     }
 
+    private func cleanupGeminiLiveStreamingState() {
+        if let context = geminiLiveStreamingContext {
+            context.isClosed = true
+            context.ws.cancel(with: .normalClosure, reason: nil)
+            context.session.invalidateAndCancel()
+        }
+        geminiLiveStreamingContext = nil
+        stopGeminiLiveAudioCapture()
+    }
+
     private func cleanupActiveUploadTask() {
         transcribeTask?.cancel()
         transcribeTask = nil
@@ -3189,6 +3249,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
         cleanupStepFunStreamingState()
+        cleanupGeminiLiveStreamingState()
         activeProvider = nil
         activeConfiguration = nil
         stopRequested = false
@@ -3387,6 +3448,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         cleanupDoubaoStreamingState()
         cleanupAliyunStreamingState()
         cleanupStepFunStreamingState()
+        cleanupGeminiLiveStreamingState()
         activeProvider = nil
         activeConfiguration = nil
         lastPresentedRuntimeErrorMessage = ""

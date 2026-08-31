@@ -3121,6 +3121,8 @@ private extension OnboardingGuideView {
             return guideLocalized("Aliyun ASR in Voxt uses realtime WebSocket only: Qwen models use /api-ws/v1/realtime, Fun/Paraformer models use /api-ws/v1/inference.")
         case .xiaomiMiMoASR:
             return guideLocalized("Xiaomi MiMo ASR uses a MiMo API Key and the OpenAI-compatible chat completions audio endpoint.")
+        case .googleGeminiASR:
+            return guideLocalized("Gemini live transcribe uses a Google AI Studio API key over the Live WebSocket API. Voice input only: file transcription and meeting mode are not supported.")
         case .openAIWhisper, .glmASR, .stepFunASR:
             return nil
         }

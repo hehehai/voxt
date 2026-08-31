@@ -94,6 +94,28 @@ Key: `xxxx`
 
 <img width="915" height="681" alt="image" src="https://github.com/user-attachments/assets/1da2f293-df35-4d6a-aa3a-6bc50cab571a" />
 
+### Google Gemini
+
+- Suggested default: `gemini-3.5-transcribe-live`
+- Built-in models: `gemini-3.5-transcribe-live`
+- Overview: Google's live speech-to-text model, reached over the Gemini Live API WebSocket. It auto-detects language across 85+ languages, keeps mid-sentence code-mixing intact, and its SMART mode removes filler words and formats punctuation before the text reaches your cursor.
+
+- [Website](https://ai.google.dev/)
+- [API Docs](https://ai.google.dev/gemini-api/docs/live-api/live-transcribe)
+- [Key Management](https://aistudio.google.com/apikey)
+
+Endpoint: `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`
+Key: `xxxx`
+
+Important notes:
+
+- Voxt uses this provider for voice input only. File transcription and Meeting mode are not supported, because only the streaming model is wired.
+- The API key is appended to the WebSocket URL at connect time. Leave it out of the endpoint field; a pasted `key` query parameter is stripped.
+- Contextual phrases and dictionary terms are sent as `customVocabulary`, capped at 1000 terms. Google suggests around 100 terms for best results.
+- Language hints follow your selected user languages. Turning off "follow main language" sends an empty list, which is what enables full auto-detection.
+- A live session is capped at 10 minutes. Voxt does not reconnect mid-session, so a single dictation longer than that will be cut short.
+- The endpoint field accepts any `wss://` host, so a relay can be used where `generativelanguage.googleapis.com` is not directly reachable.
+
 ## LLM Models
 
 In Voxt, the remote LLM configuration sheet supports both preset models and custom model IDs. The sections below list the main model ranges that are already built into the app for each provider.

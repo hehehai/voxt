@@ -216,6 +216,8 @@ enum RemoteProviderConfigurationPolicy {
                 return "https://api.stepfun.com/v1/audio/asr/sse"
             case .xiaomiMiMoASR:
                 return "https://api.xiaomimimo.com/v1/chat/completions"
+            case .googleGeminiASR:
+                return RemoteASREndpointSupport.geminiLiveDefaultEndpoint
             }
         case .llm(let provider):
             return RemoteLLMRuntimeClient().resolvedLLMEndpoint(

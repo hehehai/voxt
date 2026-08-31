@@ -72,4 +72,15 @@ final class ModelLogoKeyTests: XCTestCase {
         XCTAssertEqual(FeatureModelCatalogBuilder.compactModelBadgeTitle(from: "SenseVoice"), "SenseVoice")
         XCTAssertEqual(FeatureModelCatalogBuilder.compactModelBadgeTitle(from: "GLM Nano (4bit)"), "GLM")
     }
+
+    func testGoogleGeminiASRUsesGoogleLogo() {
+        XCTAssertEqual(
+            ModelLogoKey.resolve(title: RemoteASRProvider.googleGeminiASR.title, engine: "Remote ASR"),
+            .google
+        )
+        XCTAssertEqual(
+            ModelLogoKey.resolve(title: "Google", engine: "Remote LLM"),
+            .google
+        )
+    }
 }

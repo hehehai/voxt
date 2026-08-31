@@ -127,6 +127,21 @@ enum ASRHintResolver {
                 prompt: nil,
                 otherLanguages: otherLanguages
             )
+        case .googleGeminiASR:
+            let hints = settings.followsUserMainLanguage
+                ? resolvedGeminiLanguageHints(options: selectedOptions)
+                : []
+            let terms = resolvedGeminiTerms(
+                contextualPhrases: contextualPhrases,
+                dictionaryTerms: dictionaryTerms
+            )
+            return ResolvedASRHintPayload(
+                language: hints.first,
+                languageHints: hints,
+                prompt: nil,
+                otherLanguages: otherLanguages,
+                contextualPhrases: terms
+            )
         }
     }
 
@@ -375,6 +390,26 @@ enum ASRHintResolver {
 
     private static func resolvedStepFunLanguage(_ language: UserMainLanguageOption) -> String {
         language.baseLanguageCode
+    }
+
+    /// Gemini takes BCP-47 tags; an empty list is what enables auto-detection
+    /// and mid-sentence code-mixing.
+    private static func resolvedGeminiLanguageHints(options: [UserMainLanguageOption]) -> [String] {
+        var seen = Set<String>()
+        return options.compactMap { option in
+            let code = option.baseLanguageCode
+            guard !code.isEmpty, seen.insert(code).inserted else { return nil }
+            return code
+        }
+    }
+
+    private static func resolvedGeminiTerms(
+        contextualPhrases: [String],
+        dictionaryTerms: String
+    ) -> [String] {
+        mergedTermLines(
+            contextualPhrases + dictionaryTerms.components(separatedBy: .newlines)
+        )
     }
 
     private static func resolvedXiaomiMiMoLanguage(_ language: UserMainLanguageOption) -> String {

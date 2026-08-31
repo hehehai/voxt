@@ -690,6 +690,8 @@ struct FeatureModelCatalogBuilder {
             tags.append(contentsOf: [localized("Accurate"), localized("Multilingual")])
         case .xiaomiMiMoASR:
             tags.append(contentsOf: [localized("Accurate"), localized("Multilingual")])
+        case .googleGeminiASR:
+            tags.append(contentsOf: [localized("Realtime"), localized("Accurate"), localized("Multilingual")])
         }
         return deduplicatedFeatureTags(tags)
     }

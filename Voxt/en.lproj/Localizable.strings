@@ -2362,3 +2362,10 @@
 "Punctuation Prediction" = "Punctuation Prediction";
 "Inverse Text Normalization" = "Inverse Text Normalization";
 "Remove Disfluencies" = "Remove Disfluencies";
+"Google Gemini" = "Google Gemini";
+"Gemini live transcribe auto-detects language and mid-sentence code-mixing. Contextual phrases and dictionary terms are sent as custom vocabulary." = "Gemini live transcribe auto-detects language and mid-sentence code-mixing. Contextual phrases and dictionary terms are sent as custom vocabulary.";
+"Gemini live transcribe uses a Google AI Studio API key over the Live WebSocket API. Voice input only: file transcription and meeting mode are not supported." = "Gemini live transcribe uses a Google AI Studio API key over the Live WebSocket API. Voice input only: file transcription and meeting mode are not supported.";
+"Gemini live transcribe supports voice input only. File transcription and meeting mode are not available for this provider." = "Gemini live transcribe supports voice input only. File transcription and meeting mode are not available for this provider.";
+"Google Gemini API Key is required for testing." = "Google Gemini API Key is required for testing.";
+"Connection test succeeded (Gemini live transcribe reachable)." = "Connection test succeeded (Gemini live transcribe reachable).";
+"Failed to encode Gemini live payload." = "Failed to encode Gemini live payload.";
