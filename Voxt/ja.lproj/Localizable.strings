@@ -2357,3 +2357,10 @@
 "Punctuation Prediction" = "句読点予測";
 "Inverse Text Normalization" = "逆テキスト正規化";
 "Remove Disfluencies" = "フィラーを除去";
+"Google Gemini" = "Google Gemini";
+"Gemini live transcribe auto-detects language and mid-sentence code-mixing. Contextual phrases and dictionary terms are sent as custom vocabulary." = "Gemini ライブ文字起こしは言語を自動検出し、文中の言語切り替えにも対応します。コンテキストフレーズと辞書の用語はカスタム語彙として送信されます。";
+"Gemini live transcribe uses a Google AI Studio API key over the Live WebSocket API. Voice input only: file transcription and meeting mode are not supported." = "Gemini ライブ文字起こしは Google AI Studio の API キーを使用し、Live WebSocket API 経由で動作します。音声入力のみ対応で、ファイル文字起こしと会議モードには対応していません。";
+"Gemini live transcribe supports voice input only. File transcription and meeting mode are not available for this provider." = "Gemini ライブ文字起こしは音声入力のみ対応です。このプロバイダーではファイル文字起こしと会議モードを利用できません。";
+"Google Gemini API Key is required for testing." = "テストには Google Gemini API Key が必要です。";
+"Connection test succeeded (Gemini live transcribe reachable)." = "接続テストに成功しました（Gemini ライブ文字起こしに到達できます）。";
+"Failed to encode Gemini live payload." = "Gemini ライブのペイロードのエンコードに失敗しました。";

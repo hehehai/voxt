@@ -94,6 +94,28 @@ key：`xxxx`
 
 <img width="915" height="681" alt="image" src="https://github.com/user-attachments/assets/1da2f293-df35-4d6a-aa3a-6bc50cab571a" />
 
+### Google Gemini
+
+- 默认推荐：`gemini-3.5-transcribe-live`
+- 内置模型：`gemini-3.5-transcribe-live`
+- 简介：Google 的实时语音转写模型，通过 Gemini Live API 的 WebSocket 接入。支持 85+ 语言自动检测，保留句中中英混说，SMART 模式会在文本落到光标前去掉口水词并补好标点。
+
+- [官网](https://ai.google.dev/)
+- [api 文档](https://ai.google.dev/gemini-api/docs/live-api/live-transcribe)
+- [key 管理](https://aistudio.google.com/apikey)
+
+端点：`wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`
+key: `xxxx`
+
+重要说明：
+
+- Voxt 中这一档只用于语音输入，不支持文件转写和会议模式，因为只接了流式模型。
+- API Key 在建立连接时追加到 WebSocket URL 上，不要填进 endpoint；粘贴进来的 `key` 查询参数会被去掉。
+- 上下文短语和词典条目会作为 `customVocabulary` 发送，上限 1000 条，Google 建议 100 条左右效果最好。
+- 语言提示来自你选择的用户语言。关掉“跟随主语言”会发送空列表，那才是完全自动检测。
+- 单次实时会话上限 10 分钟，Voxt 不会中途重连，超过这个长度的一次听写会被截断。
+- endpoint 支持任意 `wss://` 地址，`generativelanguage.googleapis.com` 直连不通时可以填中转地址。
+
 ## LLM 模型
 
 Voxt 的远程 LLM 配置页除了内置预置模型外，也支持手动填写自定义模型 ID；下面先列出每个服务商在 app 中已经预置好的主流模型范围。

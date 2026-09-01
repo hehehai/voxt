@@ -151,7 +151,7 @@ enum MeetingASRSupport {
             return .chunk(profile: .quality)
         case .openAIWhisper:
             return .chunk(profile: configuration.openAIChunkPseudoRealtimeEnabled ? .realtime : .quality)
-        case .glmASR, .stepFunASR, .xiaomiMiMoASR:
+        case .glmASR, .stepFunASR, .xiaomiMiMoASR, .googleGeminiASR:
             return .chunk(profile: .quality)
         }
     }
@@ -183,6 +183,8 @@ extension RemoteASRRealtimeSupport {
         case .stepFunASR:
             return false
         case .xiaomiMiMoASR:
+            return false
+        case .googleGeminiASR:
             return false
         }
     }

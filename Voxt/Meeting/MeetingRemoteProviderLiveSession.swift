@@ -44,7 +44,7 @@ struct MeetingRemoteLiveSessionFactory: MeetingLiveSessionFactory {
                 timelineOffsetSeconds: timelineOffsetSeconds,
                 policy: policy
             )
-        case .openAIWhisper, .glmASR, .stepFunASR, .xiaomiMiMoASR:
+        case .openAIWhisper, .glmASR, .stepFunASR, .xiaomiMiMoASR, .googleGeminiASR:
             throw NSError(
                 domain: "Voxt.Meeting",
                 code: -1,

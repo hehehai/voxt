@@ -260,6 +260,7 @@ enum ModelLogoKey: String {
             return .gemma
         }
         if value == "google"
+            || value.hasPrefix("google gemini")
             || value == "google remote llm"
             || value.hasPrefix("google remote llm ")
             || value == "google 远程 llm"

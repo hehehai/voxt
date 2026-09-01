@@ -238,6 +238,7 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
     case aliyunBailianASR
     case stepFunASR
     case xiaomiMiMoASR
+    case googleGeminiASR
 
     nonisolated var id: String { rawValue }
 
@@ -255,6 +256,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("StepFun")
         case .xiaomiMiMoASR:
             return AppLocalization.localizedString("Xiaomi MiMo")
+        case .googleGeminiASR:
+            return AppLocalization.localizedString("Google Gemini")
         }
     }
 
@@ -272,6 +275,8 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
             return "stepaudio-2.5-asr"
         case .xiaomiMiMoASR:
             return "mimo-v2.5-asr"
+        case .googleGeminiASR:
+            return GeminiLivePayloadSupport.defaultModel
         }
     }
 
@@ -323,6 +328,13 @@ enum RemoteASRProvider: String, CaseIterable, Identifiable {
         case .xiaomiMiMoASR:
             return [
                 RemoteModelOption(id: "mimo-v2.5-asr", title: "MiMo V2.5 ASR")
+            ]
+        case .googleGeminiASR:
+            return [
+                RemoteModelOption(
+                    id: GeminiLivePayloadSupport.defaultModel,
+                    title: "Gemini 3.5 Transcribe Live"
+                )
             ]
         }
     }

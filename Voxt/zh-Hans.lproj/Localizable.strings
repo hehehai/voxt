@@ -2362,3 +2362,10 @@
 "Punctuation Prediction" = "标点预测";
 "Inverse Text Normalization" = "逆文本规范化";
 "Remove Disfluencies" = "去除语气词";
+"Google Gemini" = "Google Gemini";
+"Gemini live transcribe auto-detects language and mid-sentence code-mixing. Contextual phrases and dictionary terms are sent as custom vocabulary." = "Gemini 实时转写会自动检测语言，也支持句中中英混说。上下文短语和词典条目会作为自定义词表发送。";
+"Gemini live transcribe uses a Google AI Studio API key over the Live WebSocket API. Voice input only: file transcription and meeting mode are not supported." = "Gemini 实时转写使用 Google AI Studio 的 API Key，通过 Live WebSocket 接口调用。仅支持语音输入，不支持文件转写和会议模式。";
+"Gemini live transcribe supports voice input only. File transcription and meeting mode are not available for this provider." = "Gemini 实时转写仅支持语音输入，该服务商不支持文件转写和会议模式。";
+"Google Gemini API Key is required for testing." = "测试需要填写 Google Gemini API Key。";
+"Connection test succeeded (Gemini live transcribe reachable)." = "连接测试成功（Gemini 实时转写可访问）。";
+"Failed to encode Gemini live payload." = "Gemini 实时转写请求编码失败。";

@@ -345,3 +345,111 @@ func remoteASRUInt32(fromBigEndian data: Data) -> UInt32 {
 func remoteASRInt32(fromBigEndian data: Data) -> Int32 {
     Int32(bitPattern: remoteASRUInt32(fromBigEndian: data))
 }
+
+@MainActor
+final class GeminiLiveStreamingContext {
+    let session: URLSession
+    let ws: URLSessionWebSocketTask
+    let responseState: GeminiLiveResponseState
+    let generationID: UUID
+    var isClosed = false
+    var isSetupComplete = false
+    var didStartAudioStream = false
+    var shouldEndAudioStreamAfterSetup = false
+    var didSendAudioStreamEnd = false
+    var pendingAudioChunks: [Data] = []
+    var pendingAudioByteCount = 0
+
+    init(
+        session: URLSession,
+        ws: URLSessionWebSocketTask,
+        responseState: GeminiLiveResponseState,
+        generationID: UUID
+    ) {
+        self.session = session
+        self.ws = ws
+        self.responseState = responseState
+        self.generationID = generationID
+    }
+}
+
+actor GeminiLiveResponseState {
+    private var committed: [String] = []
+    private var interim = ""
+    private var finishRequested = false
+    private var finishRequestedAt: Date?
+    private var sessionFinished = false
+    private var completionError: Error?
+    private let onError: @Sendable (Error) -> Void
+
+    init(onError: @escaping @Sendable (Error) -> Void = { _ in }) {
+        self.onError = onError
+    }
+
+    func markFinishRequested() {
+        finishRequested = true
+        finishRequestedAt = Date()
+    }
+
+    func markSessionFinished() {
+        sessionFinished = true
+    }
+
+    func markCompletedWithError(_ error: Error) {
+        if sessionFinished {
+            return
+        }
+        if completionError == nil {
+            completionError = error
+            onError(error)
+        }
+    }
+
+    func setInterim(_ value: String) -> String {
+        interim = value
+        return mergedText()
+    }
+
+    func commit(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, committed.last != trimmed {
+            committed.append(trimmed)
+        }
+        interim = ""
+        return mergedText()
+    }
+
+    func waitForFinalResult(timeoutSeconds: TimeInterval) async throws -> String {
+        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
+        while !sessionFinished, completionError == nil, Date() < deadline {
+            // The live transcribe API documents no session-end event, so a short
+            // grace window after audioStreamEnd is what actually ends the wait.
+            if let finishRequestedAt, Date().timeIntervalSince(finishRequestedAt) >= 2.5 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(120))
+        }
+        if let completionError {
+            throw completionError
+        }
+        if finishRequested, !interim.isEmpty {
+            if committed.last != interim {
+                committed.append(interim)
+            }
+            interim = ""
+        }
+        return mergedText()
+    }
+
+    func currentText() -> String {
+        mergedText()
+    }
+
+    private func mergedText() -> String {
+        var values = committed
+        if !interim.isEmpty {
+            values.append(interim)
+        }
+        return GeminiLiveTranscriptJoining.join(values)
+    }
+}

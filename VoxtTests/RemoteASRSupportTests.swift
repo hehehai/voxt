@@ -374,4 +374,115 @@ final class RemoteASRSupportTests: XCTestCase {
             "https://api.xiaomimimo.com/v1/chat/completions"
         )
     }
+
+    func testGeminiLiveEndpointResolutionNormalizesSchemeAndStripsKey() {
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedGeminiLiveEndpoint(""),
+            RemoteASREndpointSupport.geminiLiveDefaultEndpoint
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedGeminiLiveEndpoint("https://generativelanguage.googleapis.com"),
+            RemoteASREndpointSupport.geminiLiveDefaultEndpoint
+        )
+        XCTAssertEqual(
+            RemoteASREndpointSupport.resolvedGeminiLiveEndpoint("https://relay.example.com/ws/bidi?key=secret"),
+            "wss://relay.example.com/ws/bidi"
+        )
+    }
+
+    func testGeminiLiveURLAppendsAPIKeyExactlyOnce() throws {
+        let url = try XCTUnwrap(
+            RemoteASREndpointSupport.geminiLiveURL(
+                endpoint: "wss://relay.example.com/ws/bidi?key=stale",
+                apiKey: "fresh-key"
+            )
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let keys = (components.queryItems ?? []).filter { $0.name == "key" }
+        XCTAssertEqual(keys.count, 1)
+        XCTAssertEqual(keys.first?.value, "fresh-key")
+    }
+
+    func testGeminiLiveSetupPayloadQualifiesModelAndCarriesHints() throws {
+        let payload = GeminiLivePayloadSupport.setupPayload(
+            model: "",
+            hintPayload: ResolvedASRHintPayload(
+                language: "zh",
+                languageHints: ["zh", "zh", "en"],
+                contextualPhrases: ["Voxt", "Voxt", "mihomo"]
+            )
+        )
+
+        let setup = try XCTUnwrap(payload["setup"] as? [String: Any])
+        XCTAssertEqual(setup["model"] as? String, "models/\(GeminiLivePayloadSupport.defaultModel)")
+
+        let generation = try XCTUnwrap(setup["generationConfig"] as? [String: Any])
+        XCTAssertEqual(generation["responseModalities"] as? [String], ["TEXT"])
+
+        let transcription = try XCTUnwrap(setup["inputAudioTranscription"] as? [String: Any])
+        XCTAssertEqual(transcription["mode"] as? String, "SMART")
+        XCTAssertEqual(transcription["languageCodes"] as? [String], ["zh", "en"])
+        XCTAssertEqual(transcription["customVocabulary"] as? [String], ["Voxt", "mihomo"])
+    }
+
+    func testGeminiLiveSetupPayloadOmitsEmptyVocabularyAndKeepsAutoDetect() throws {
+        let payload = GeminiLivePayloadSupport.setupPayload(
+            model: "models/gemini-3.5-transcribe-live",
+            hintPayload: ResolvedASRHintPayload(language: nil)
+        )
+
+        let setup = try XCTUnwrap(payload["setup"] as? [String: Any])
+        XCTAssertEqual(setup["model"] as? String, "models/gemini-3.5-transcribe-live")
+
+        let transcription = try XCTUnwrap(setup["inputAudioTranscription"] as? [String: Any])
+        XCTAssertEqual(transcription["languageCodes"] as? [String], [])
+        XCTAssertNil(transcription["customVocabulary"])
+    }
+
+    func testGeminiLiveAudioPayloadUsesPCM16MimeType() throws {
+        let payload = GeminiLivePayloadSupport.audioPayload(Data([0x01, 0x02, 0x03]))
+        let realtime = try XCTUnwrap(payload["realtimeInput"] as? [String: Any])
+        let audio = try XCTUnwrap(realtime["audio"] as? [String: Any])
+        XCTAssertEqual(audio["mimeType"] as? String, "audio/pcm;rate=16000")
+        XCTAssertEqual(audio["data"] as? String, "AQID")
+        XCTAssertEqual(
+            (GeminiLivePayloadSupport.audioStreamEndPayload["realtimeInput"] as? [String: Any])?["audioStreamEnd"] as? Bool,
+            true
+        )
+    }
+
+    func testGeminiLiveTranscriptUpdateReadsBothProtoCasings() {
+        let camel = GeminiLivePayloadSupport.transcriptUpdate(from: [
+            "serverContent": [
+                "interimInputTranscription": ["text": "你好 "],
+                "inputTranscription": ["text": "你好，板爷。"]
+            ]
+        ])
+        XCTAssertEqual(camel.interim, "你好")
+        XCTAssertEqual(camel.final, "你好，板爷。")
+
+        let snake = GeminiLivePayloadSupport.transcriptUpdate(from: [
+            "server_content": ["input_transcription": ["text": "hello"]]
+        ])
+        XCTAssertEqual(snake.final, "hello")
+        XCTAssertNil(snake.interim)
+    }
+
+    func testGeminiLiveSetupCompleteAndErrorDetection() {
+        XCTAssertTrue(GeminiLivePayloadSupport.isSetupComplete(["setupComplete": [:]]))
+        XCTAssertTrue(GeminiLivePayloadSupport.isSetupComplete(["setup_complete": [:]]))
+        XCTAssertFalse(GeminiLivePayloadSupport.isSetupComplete(["serverContent": [:]]))
+        XCTAssertEqual(
+            GeminiLivePayloadSupport.errorMessage(from: ["error": ["message": "API key not valid"]]),
+            "API key not valid"
+        )
+        XCTAssertNil(GeminiLivePayloadSupport.errorMessage(from: ["serverContent": [:]]))
+    }
+
+    func testGeminiLiveTranscriptJoiningSkipsSpacesAroundCJK() {
+        XCTAssertEqual(GeminiLiveTranscriptJoining.join(["今天开会", "讨论了配置。"]), "今天开会讨论了配置。")
+        XCTAssertEqual(GeminiLiveTranscriptJoining.join(["hello there", "how are you"]), "hello there how are you")
+        XCTAssertEqual(GeminiLiveTranscriptJoining.join(["我们用", "mihomo"]), "我们用mihomo")
+        XCTAssertEqual(GeminiLiveTranscriptJoining.join(["", "  ", "only"]), "only")
+    }
 }

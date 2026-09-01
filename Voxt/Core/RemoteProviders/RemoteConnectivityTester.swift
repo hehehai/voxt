@@ -149,6 +149,19 @@ struct RemoteProviderConnectivityTester {
                 apiKey: configuration.apiKey,
                 model: configuration.model.isEmpty ? RemoteASRProvider.xiaomiMiMoASR.suggestedModel : configuration.model
             )
+        case .googleGeminiASR:
+            guard !configuration.apiKey.isEmpty else {
+                throw NSError(
+                    domain: "Voxt.Settings",
+                    code: -9,
+                    userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Google Gemini API Key is required for testing.")]
+                )
+            }
+            return try await testGeminiLiveReachability(
+                endpoint: configuration.endpoint,
+                apiKey: configuration.apiKey,
+                model: configuration.model.isEmpty ? RemoteASRProvider.googleGeminiASR.suggestedModel : configuration.model
+            )
         }
     }
 
@@ -452,6 +465,93 @@ struct RemoteProviderConnectivityTester {
             "Accept": "text/event-stream",
             "Authorization": "Bearer \(token)"
         ]
+    }
+
+    private func testGeminiLiveReachability(
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async throws -> String {
+        guard let url = RemoteASREndpointSupport.geminiLiveURL(endpoint: endpoint, apiKey: apiKey) else {
+            throw NSError(domain: "Voxt.Settings", code: -58, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Invalid WebSocket endpoint URL.")])
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        // The key rides in the query string, so only the sanitized endpoint is logged.
+        RemoteProviderConnectivityTestLogging.logHTTPRequest(
+            context: "Gemini live transcribe WebSocket test",
+            request: URLRequest(url: URL(string: RemoteASREndpointSupport.resolvedGeminiLiveEndpoint(endpoint)) ?? url),
+            bodyPreview: "setup"
+        )
+
+        let managedSocket = VoxtNetworkSession.makeWebSocketTask(with: request)
+        let ws = managedSocket.task
+        ws.resume()
+        defer {
+            ws.cancel(with: .goingAway, reason: nil)
+        }
+
+        let setupPayload = GeminiLivePayloadSupport.setupPayload(
+            model: model,
+            hintPayload: ResolvedASRHintPayload(language: nil)
+        )
+        let setupData = try JSONSerialization.data(withJSONObject: setupPayload)
+        guard let setupText = String(data: setupData, encoding: .utf8) else {
+            throw NSError(domain: "Voxt.Settings", code: -59, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Failed to encode Gemini live payload.")])
+        }
+
+        do {
+            try await ws.send(.string(setupText))
+        } catch {
+            throw NSError(
+                domain: "Voxt.Settings",
+                code: -60,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.format("Network connection failed before realtime handshake. %@ (Check proxy/VPN and endpoint reachability.)", error.localizedDescription)]
+            )
+        }
+
+        do {
+            for _ in 0..<6 {
+                let message = try await receiveWebSocketMessage(task: ws, timeoutSeconds: 3)
+                let text: String?
+                switch message {
+                case .string(let value):
+                    text = value
+                case .data(let data):
+                    text = String(data: data, encoding: .utf8)
+                @unknown default:
+                    text = nil
+                }
+                guard let text,
+                      let data = text.data(using: .utf8),
+                      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else { continue }
+
+                if let detail = GeminiLivePayloadSupport.errorMessage(from: object) {
+                    throw NSError(
+                        domain: "Voxt.Settings",
+                        code: 403,
+                        userInfo: [NSLocalizedDescriptionKey: AppLocalization.format("Connection failed (HTTP %d). %@", 403, detail)]
+                    )
+                }
+                if GeminiLivePayloadSupport.isSetupComplete(object) {
+                    return AppLocalization.localizedString("Connection test succeeded (Gemini live transcribe reachable).")
+                }
+            }
+        } catch {
+            throw NSError(
+                domain: "Voxt.Settings",
+                code: -61,
+                userInfo: [NSLocalizedDescriptionKey: AppLocalization.format("Realtime WebSocket receive failed. %@ (Check proxy/VPN or region endpoint.)", error.localizedDescription)]
+            )
+        }
+
+        throw NSError(
+            domain: "Voxt.Settings",
+            code: -62,
+            userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Connection failed (HTTP %d). %@").replacingOccurrences(of: "%d", with: "0").replacingOccurrences(of: "%@", with: "No valid ASR response packet.")]
+        )
     }
 
     private func testXiaomiMiMoASRReachability(

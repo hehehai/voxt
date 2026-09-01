@@ -242,7 +242,7 @@ extension RemoteASRTranscriber {
 
         var droppedBytes = 0
         var droppedChunks = 0
-        while context.pendingAudioByteCount > stepFunPendingAudioByteLimit,
+        while context.pendingAudioByteCount > realtimePendingAudioByteLimit,
               !context.pendingAudioChunks.isEmpty {
             let dropped = context.pendingAudioChunks.removeFirst()
             context.pendingAudioByteCount -= dropped.count

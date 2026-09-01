@@ -387,6 +387,12 @@ struct ModelCatalogBuilder {
             tags.append(contentsOf: [localizedModelCatalog("Accurate"), localizedModelCatalog("Multilingual")])
         case .xiaomiMiMoASR:
             tags.append(contentsOf: [localizedModelCatalog("Accurate"), localizedModelCatalog("Multilingual")])
+        case .googleGeminiASR:
+            tags.append(contentsOf: [
+                localizedModelCatalog("Realtime"),
+                localizedModelCatalog("Accurate"),
+                localizedModelCatalog("Multilingual")
+            ])
         }
         return deduplicatedTags(tags)
     }

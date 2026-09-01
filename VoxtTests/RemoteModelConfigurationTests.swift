@@ -1704,4 +1704,12 @@ final class RemoteModelConfigurationTests: XCTestCase {
         XCTAssertFalse(RemoteASRTextSanitizer.isLikelyIdentifierText("hello world 2026"))
     }
 
+    func testGoogleGeminiASROffersLiveTranscribeModelOnly() {
+        XCTAssertEqual(RemoteASRProvider.googleGeminiASR.suggestedModel, "gemini-3.5-transcribe-live")
+        XCTAssertEqual(
+            RemoteASRProvider.googleGeminiASR.modelOptions.map(\.id),
+            ["gemini-3.5-transcribe-live"]
+        )
+        XCTAssertTrue(RemoteASRProvider.allCases.contains(.googleGeminiASR))
+    }
 }
