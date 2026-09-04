@@ -32,7 +32,6 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.remoteASRProviderConfigurations) var remoteASRProviderConfigurationsRaw = ""
     @AppStorage(AppPreferenceKey.asrHintSettings) var asrHintSettingsRaw = ASRHintSettingsStore.defaultStoredValue()
     @AppStorage(AppPreferenceKey.mlxLocalASRTuningSettings) var mlxLocalASRTuningSettingsRaw = "{}"
-    @AppStorage(AppPreferenceKey.sherpaOnnxLocalASRTuningSettings) var sherpaOnnxLocalASRTuningSettingsRaw = "{}"
     @AppStorage(AppPreferenceKey.userMainLanguageCodes) var userMainLanguageCodesRaw = UserMainLanguageOption.defaultStoredSelectionValue
     @AppStorage(AppPreferenceKey.remoteLLMSelectedProvider) var remoteLLMSelectedProviderRaw = RemoteLLMProvider.openAI.rawValue
     @AppStorage(AppPreferenceKey.remoteLLMProviderConfigurations) var remoteLLMProviderConfigurationsRaw = ""
@@ -43,7 +42,6 @@ struct ModelSettingsView: View {
     @AppStorage(AppPreferenceKey.featureSettings) var featureSettingsRaw = ""
 
     let mlxModelManager: MLXModelManager
-    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var mainWindowState: MainWindowVisibilityState
@@ -164,7 +162,6 @@ struct ModelSettingsView: View {
     private var catalogBuilder: ModelCatalogBuilder {
         ModelCatalogBuilder(
             mlxModelManager: mlxModelManager,
-            sherpaOnnxModelManager: sherpaOnnxModelManager,
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             remoteASRConfigurations: remoteASRConfigurations,
@@ -179,7 +176,6 @@ struct ModelSettingsView: View {
             primaryUserLanguageCode: selectedUserLanguageCodes.first,
             appleIntelligenceAvailability: appleIntelligenceAvailability,
             mlxInstallSnapshot: mlxInstallSnapshot(for:),
-            sherpaInstallSnapshot: sherpaOnnxInstallSnapshot(for:),
             customLLMInstallSnapshot: customLLMInstallSnapshot(for:),
             ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot(for:),
             catalogPrimaryAction: {
@@ -412,9 +408,6 @@ struct ModelSettingsView: View {
             guard isActive else { return }
             handleStorageAuthorizationNavigationRequest()
         }
-        .onReceive(sherpaOnnxModelManager.$stateByID) { states in
-            presentSherpaErrors(states)
-        }
         .onReceive(ggufTranslationModelManager.$stateByID) { states in
             presentGGUFErrors(states)
         }
@@ -435,21 +428,6 @@ struct ModelSettingsView: View {
     private func dismissModelOperationToast() {
         modelOperationToastDismissTask?.cancel()
         modelOperationToastMessage = ""
-    }
-
-    private func presentSherpaErrors(_ states: [SherpaOnnxModelID: MLXModelManager.ModelState]) {
-        for (modelID, state) in states {
-            let targetID = "sherpa:\(modelID.rawValue)"
-            if case .error(let message) = state {
-                presentModelError(
-                    targetID: targetID,
-                    modelName: sherpaOnnxModelManager.displayTitle(for: modelID),
-                    message: message
-                )
-            } else {
-                clearPresentedModelError(targetID: targetID)
-            }
-        }
     }
 
     private func presentGGUFErrors(_ states: [GGUFTranslationModelID: GGUFTranslationModelManager.ModelState]) {
@@ -505,8 +483,6 @@ struct ModelSettingsView: View {
                 break
             case .mlx(let repo):
                 activeLocalASRConfigurationTarget = .mlx(repo: repo)
-            case .sherpaOnnx(let modelID):
-                activeLocalASRConfigurationTarget = .sherpaOnnx(modelID: modelID)
             case .remote(let provider):
                 editingASRProvider = provider
             }
@@ -748,9 +724,6 @@ struct ModelSettingsView: View {
                 }
                 return false
             },
-            sherpaOnnxState: sherpaOnnxModelManager.state,
-            sherpaOnnxStateByID: sherpaOnnxModelManager.stateByID,
-            sherpaOnnxHasActiveDownloads: !sherpaOnnxModelManager.activeDownloadModelIDs.isEmpty,
             customLLMState: customLLMManager.state,
             customLLMStateByRepo: customLLMManager.stateByRepo,
             customLLMHasActiveDownloadingRepos: !customLLMManager.activeDownloadRepos.isEmpty,
@@ -791,8 +764,6 @@ struct ModelSettingsView: View {
             return AppLocalization.format("%@ %@: %@", provider.title, localized("LLM"), issue.message)
         case .mlxModel(let repo):
             return AppLocalization.format("%@ %@: %@", mlxModelManager.displayTitle(for: repo), localized("ASR"), issue.message)
-        case .sherpaOnnxModel(let modelID):
-            return AppLocalization.format("%@ %@: %@", sherpaOnnxModelManager.displayTitle(for: modelID), localized("ASR"), issue.message)
         case .customLLMModel(let repo):
             return AppLocalization.format("%@ %@: %@", customLLMManager.displayTitle(for: repo), localized("LLM"), issue.message)
         case .translationRemoteLLM(let provider):

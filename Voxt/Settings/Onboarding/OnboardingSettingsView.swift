@@ -132,7 +132,7 @@ struct OnboardingSettingsView: View {
         Binding(
             get: {
                 switch selectedEngine {
-                case .mlxAudio, .sherpaOnnx:
+                case .mlxAudio:
                     return .local
                 case .remote:
                     return .remote
@@ -187,7 +187,7 @@ struct OnboardingSettingsView: View {
         Binding(
             get: {
                 switch selectedEngine {
-                case .mlxAudio, .sherpaOnnx, .remote, .dictation:
+                case .mlxAudio, .remote, .dictation:
                     return .mlxAudio
                 }
             },
@@ -254,9 +254,6 @@ struct OnboardingSettingsView: View {
     private var onboardingObservedContent: AnyView {
         let localized = AnyView(onboardingBodyContent.environment(\.locale, interfaceLanguage.locale))
         let appeared = AnyView(localized.onAppear {
-                if selectedEngine == .sherpaOnnx {
-                    engineRaw = TranscriptionEngine.mlxAudio.rawValue
-                }
                 refreshInputDevices()
                 refreshModelStorageDisplayPath()
                 syncOnboardingModelManagers()

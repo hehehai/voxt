@@ -20,10 +20,6 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
         Self(rawValue: "mlx:\(MLXModelManager.canonicalModelRepo(repo))")
     }
 
-    static func sherpaOnnx(_ modelID: SherpaOnnxModelID) -> Self {
-        Self(rawValue: "sherpa:\(modelID.rawValue)")
-    }
-
     static func whisper(_ modelID: String) -> Self {
         .mlx(MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID))
     }
@@ -47,7 +43,6 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
     enum ASRSelection: Hashable, Sendable {
         case dictation
         case mlx(repo: String)
-        case sherpaOnnx(modelID: SherpaOnnxModelID)
         case remote(provider: RemoteASRProvider)
     }
 
@@ -68,14 +63,11 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
             return .dictation
         }
         if let repo = payload(after: "mlx:") {
-            if SherpaOnnxRuntimeSupport.isAvailable,
-               SherpaOnnxModelCatalog.isLegacyFireRedMLXRepo(repo) {
-                return .sherpaOnnx(modelID: SherpaOnnxModelCatalog.fireRedModelID)
-            }
             return .mlx(repo: MLXModelManager.canonicalModelRepo(repo))
         }
-        if let modelID = payload(after: "sherpa:") {
-            return .sherpaOnnx(modelID: SherpaOnnxModelID(rawValue: modelID))
+        if payload(after: "sherpa:") != nil {
+            // Migrate removed sherpa-onnx selections to the default local ASR.
+            return .mlx(repo: MLXModelManager.defaultModelRepo)
         }
         if let modelID = payload(after: "whisper:") {
             return .mlx(repo: MLXWhisperMigrationSupport.repo(forLegacyWhisperModelID: modelID))
@@ -108,9 +100,10 @@ struct FeatureModelSelectionID: RawRepresentable, Codable, Hashable, Sendable, I
         if let repo = payload(after: "local-llm:") {
             return .localLLM(repo: repo)
         }
-        if let value = payload(after: "local-gguf-translation:"),
-           let modelID = GGUFTranslationModelID(rawValue: value) {
-            return .localGGUF(modelID: modelID)
+        if let value = payload(after: "local-gguf-translation:") {
+            // Resolve removed/unknown GGUF variants to the supported default instead of
+            // leaving a persisted selection unusable.
+            return .localGGUF(modelID: GGUFTranslationModelCatalog.resolvedModelID(value))
         }
         if let value = payload(after: "remote-llm:"),
            let provider = RemoteLLMProvider(rawValue: value) {

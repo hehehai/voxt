@@ -340,10 +340,6 @@ extension AppDelegate {
             activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
             mlxModelState: localASRStartContext.mlxModelState,
-            selectedSherpaModelID: localASRStartContext.selectedSherpaModelID,
-            activeSherpaDownloadModelID: localASRStartContext.activeSherpaDownloadModelID,
-            isSelectedSherpaModelDownloaded: localASRStartContext.isSelectedSherpaModelDownloaded,
-            sherpaModelState: localASRStartContext.sherpaModelState,
             remoteASRProvider: remoteASRSelectedProvider,
             remoteASRConfiguration: remoteConfiguration
         )

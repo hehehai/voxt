@@ -264,56 +264,12 @@ final class ASRHintSettingsTests: XCTestCase {
         XCTAssertEqual(settings.qwenContextBias, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
     }
 
-    func testSherpaFunASRTuningDefaultsToDictionaryTermsOnlyContext() {
-        let settings = SherpaOnnxLocalTuningSettingsStore.resolvedSettings(
-            for: SherpaOnnxModelCatalog.funASRNanoModelID,
-            kind: .funASRNano,
-            rawValue: nil
-        )
 
-        XCTAssertEqual(settings.contextBias, AppPreferenceKey.asrDictionaryTermsTemplateVariable)
-        XCTAssertEqual(settings.numThreads, 2)
-        XCTAssertEqual(settings.funASRMaxNewTokens, 512)
-        XCTAssertTrue(settings.funASRUseITN)
-    }
 
-    func testSherpaTuningSanitizesModelParameters() {
-        let stored = SherpaOnnxLocalTuningSettingsStore.save(
-            SherpaOnnxLocalTuningSettings(
-                numThreads: 99,
-                contextBias: "  Voxt\nCodex  ",
-                funASRMaxNewTokens: 8,
-                funASRTopP: 2,
-                funASRUseITN: false
-            ),
-            for: SherpaOnnxModelCatalog.funASRNanoModelID,
-            rawValue: nil
-        )
 
-        let settings = SherpaOnnxLocalTuningSettingsStore.resolvedSettings(
-            for: SherpaOnnxModelCatalog.funASRNanoModelID,
-            kind: .funASRNano,
-            rawValue: stored
-        )
 
-        XCTAssertEqual(settings.numThreads, 8)
-        XCTAssertEqual(settings.contextBias, "Voxt\nCodex")
-        XCTAssertEqual(settings.funASRMaxNewTokens, 64)
-        XCTAssertEqual(settings.funASRTopP, 1.0)
-        XCTAssertFalse(settings.funASRUseITN)
-    }
 
-    func testResolveSherpaOnnxUsesLanguageAndMergedTerms() {
-        let payload = ASRHintResolver.resolve(
-            target: .sherpaOnnx,
-            settings: ASRHintSettings(contextualPhrasesText: "Voxt\nFireRed\nVoxt"),
-            userLanguageCodes: ["zh-Hans"],
-            dictionaryTerms: "Codex\nFireRed"
-        )
 
-        XCTAssertEqual(payload.language, "zh")
-        XCTAssertEqual(payload.contextualPhrases, ["Voxt", "FireRed", "Codex"])
-    }
 
     func testMLXLocalTuningLoadsStoredSettingsWithoutWhisperTemperature() throws {
         let raw = """

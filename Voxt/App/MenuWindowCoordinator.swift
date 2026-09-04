@@ -484,7 +484,6 @@ extension AppDelegate {
                 self.cancelDictionaryHistorySuggestionScan()
             },
             mlxModelManager: mlxModelManager,
-            sherpaOnnxModelManager: sherpaOnnxModelManager,
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             historyStore: historyStore,

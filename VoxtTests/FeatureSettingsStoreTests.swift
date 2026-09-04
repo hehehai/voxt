@@ -52,14 +52,41 @@ final class FeatureSettingsStoreTests: XCTestCase {
         }
     }
 
-    func testLegacyFireRedSelectionOnlyMigratesToSherpaWhenRuntimeIsAvailable() {
-        let selection = FeatureModelSelectionID.mlx("mlx-community/FireRedASR2").asrSelection
+    func testRemovedModelSelectionsMigrateToSupportedDefaults() {
+        let legacySherpaSelection = FeatureModelSelectionID(rawValue: "sherpa:funasr-nano-int8")
+        XCTAssertEqual(
+            legacySherpaSelection.asrSelection,
+            .mlx(repo: MLXModelManager.defaultModelRepo)
+        )
 
-        #if SHERPA_ONNX_AVAILABLE
-        XCTAssertEqual(selection, .sherpaOnnx(modelID: SherpaOnnxModelCatalog.fireRedModelID))
-        #else
-        XCTAssertEqual(selection, .mlx(repo: "mlx-community/FireRedASR2-AED-mlx"))
-        #endif
+        let removedGGUFSelection = FeatureModelSelectionID(
+            rawValue: "local-gguf-translation:tencent/Hy-MT2-1.8B-GGUF#Hy-MT2-1.8B-Q6_K.gguf"
+        )
+        XCTAssertEqual(
+            removedGGUFSelection.translationSelection,
+            .localGGUF(modelID: .hyMT2Q4KM)
+        )
+    }
+
+    func testLoadPersistsCanonicalIDsForRemovedModelSelections() throws {
+        try withEphemeralDefaults { defaults in
+            var settings = FeatureSettingsStore.deriveFromLegacy(defaults: defaults)
+            settings.transcription.asrSelectionID = FeatureModelSelectionID(rawValue: "sherpa:funasr-nano-int8")
+            settings.translation.modelSelectionID = FeatureModelSelectionID(
+                rawValue: "local-gguf-translation:tencent/Hy-MT2-1.8B-GGUF#Hy-MT2-1.8B-Q6_K.gguf"
+            )
+            let data = try JSONEncoder().encode(settings)
+            defaults.set(try XCTUnwrap(String(data: data, encoding: .utf8)), forKey: AppPreferenceKey.featureSettings)
+
+            let loaded = FeatureSettingsStore.load(defaults: defaults)
+            let storedRaw = try XCTUnwrap(defaults.string(forKey: AppPreferenceKey.featureSettings))
+            let stored = try JSONDecoder().decode(FeatureSettings.self, from: XCTUnwrap(storedRaw.data(using: .utf8)))
+
+            XCTAssertEqual(loaded.transcription.asrSelectionID, .mlx(MLXModelManager.defaultModelRepo))
+            XCTAssertEqual(loaded.translation.modelSelectionID, .localGGUFTranslation(.hyMT2Q4KM))
+            XCTAssertEqual(stored.transcription.asrSelectionID, .mlx(MLXModelManager.defaultModelRepo))
+            XCTAssertEqual(stored.translation.modelSelectionID, .localGGUFTranslation(.hyMT2Q4KM))
+        }
     }
 
     func testSaveRemovesObsoleteLatencyProfileKeysWithoutAffectingStoredSettings() throws {

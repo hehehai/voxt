@@ -15,8 +15,6 @@ enum ModelSettingsManagerActivityPhase: Equatable {
 struct ModelSettingsDownloadLifecycleToken: Equatable {
     let mlxPhase: ModelSettingsManagerActivityPhase
     let mlxActiveDownloadRepos: [String]
-    let sherpaPhase: ModelSettingsManagerActivityPhase
-    let sherpaActiveDownloadModelIDs: [String]
     let customLLMPhase: ModelSettingsManagerActivityPhase
     let customLLMActiveDownloadRepos: [String]
     let ggufPhase: ModelSettingsManagerActivityPhase
@@ -134,8 +132,6 @@ enum ModelSettingsManagerRefreshSupport {
     static func downloadLifecycleToken(
         mlxState: MLXModelManager.ModelState,
         mlxActiveDownloadRepos: Set<String>,
-        sherpaState: SherpaOnnxModelManager.ModelState,
-        sherpaActiveDownloadModelIDs: Set<SherpaOnnxModelID>,
         customLLMState: CustomLLMModelManager.ModelState,
         customLLMStateByRepo: [String: CustomLLMModelManager.ModelState],
         customLLMActiveDownloadRepos: Set<String>,
@@ -148,8 +144,6 @@ enum ModelSettingsManagerRefreshSupport {
         return ModelSettingsDownloadLifecycleToken(
             mlxPhase: phase(for: mlxState),
             mlxActiveDownloadRepos: mlxActiveDownloadRepos.sorted(),
-            sherpaPhase: phase(for: sherpaState),
-            sherpaActiveDownloadModelIDs: sherpaActiveDownloadModelIDs.map(\.rawValue).sorted(),
             customLLMPhase: customLLMPhase == .idle ? phase(for: customLLMState) : customLLMPhase,
             customLLMActiveDownloadRepos: customLLMActiveDownloadRepos.sorted(),
             ggufPhase: phase(for: ggufStateByID),

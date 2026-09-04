@@ -36,17 +36,6 @@ extension AppDelegate {
             mlxModelManager.updateModel(repo: canonicalRepo)
             mlxTranscriber = nil
 
-        case .sherpaOnnx(let modelID):
-            let previousModelID = sherpaOnnxModelManager.selectedModelID
-            guard modelID != previousModelID else { return }
-
-            VoxtLog.asr(
-                "Synchronizing sherpa-onnx runtime model. previous=\(previousModelID.rawValue), current=\(modelID.rawValue)"
-            )
-            sherpaOnnxModelManager.updateModel(id: modelID)
-            UserDefaults.standard.set(modelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
-            sherpaOnnxTranscriber = nil
-
         case .dictation, .remote, .none:
             return
         }

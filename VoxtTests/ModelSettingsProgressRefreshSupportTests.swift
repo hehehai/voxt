@@ -67,16 +67,7 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
         XCTAssertTrue(shouldPoll)
     }
 
-    func testShouldPollModelStateWhenSherpaDownloadIsActive() {
-        let shouldPoll = shouldPollModelState(
-            mlxState: .notDownloaded,
-            mlxHasActiveDownloadingRepos: false,
-            sherpaOnnxHasActiveDownloads: true,
-            customLLMState: .notDownloaded
-        )
 
-        XCTAssertTrue(shouldPoll)
-    }
 
     func testShouldNotPollModelStateWithoutActiveDownloads() {
         let shouldPoll = shouldPollModelState(
@@ -129,9 +120,6 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
     private func shouldPollModelState(
         mlxState: MLXModelManager.ModelState,
         mlxHasActiveDownloadingRepos: Bool,
-        sherpaOnnxState: MLXModelManager.ModelState = .notDownloaded,
-        sherpaOnnxStateByID: [SherpaOnnxModelID: MLXModelManager.ModelState] = [:],
-        sherpaOnnxHasActiveDownloads: Bool = false,
         customLLMState: CustomLLMModelManager.ModelState,
         customLLMStateByRepo: [String: CustomLLMModelManager.ModelState] = [:],
         customLLMHasActiveDownloadingRepos: Bool = false,
@@ -141,9 +129,6 @@ final class ModelSettingsProgressRefreshSupportTests: XCTestCase {
         ModelSettingsProgressRefreshSupport.shouldPollModelState(
             mlxState: mlxState,
             mlxHasActiveDownloadingRepos: mlxHasActiveDownloadingRepos,
-            sherpaOnnxState: sherpaOnnxState,
-            sherpaOnnxStateByID: sherpaOnnxStateByID,
-            sherpaOnnxHasActiveDownloads: sherpaOnnxHasActiveDownloads,
             customLLMState: customLLMState,
             customLLMStateByRepo: customLLMStateByRepo,
             customLLMHasActiveDownloadingRepos: customLLMHasActiveDownloadingRepos,

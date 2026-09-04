@@ -59,7 +59,7 @@ extension ASRDebugModelOption {
         switch selection {
         case .remote:
             locationTag = modelDebugLocalized("Remote")
-        case .mlx, .sherpaOnnx:
+        case .mlx:
             locationTag = modelDebugLocalized("Local")
         }
         return FeatureModelSelectorEntry(
@@ -200,11 +200,9 @@ final class ASRDebugViewModel: ObservableObject {
     @Published private(set) var toastMessage = ""
 
     private let mlxModelManager: MLXModelManager
-    private let sherpaOnnxModelManager: SherpaOnnxModelManager
     private var remoteConfigurations: [String: RemoteProviderConfiguration]
     private let recorder = DebugAudioRecorder()
     private let mlxTranscriber: MLXTranscriber
-    private let sherpaOnnxTranscriber: SherpaOnnxTranscriber
     private let remoteTranscriber = RemoteASRTranscriber()
     private var toastDismissTask: Task<Void, Never>?
 
@@ -215,16 +213,8 @@ final class ASRDebugViewModel: ObservableObject {
             modelRepo: appDelegate.mlxModelManager.currentModelRepo,
             hubBaseURL: hubURL
         )
-        sherpaOnnxModelManager = SherpaOnnxModelManager(modelID: appDelegate.sherpaOnnxModelManager.selectedModelID)
         mlxTranscriber = MLXTranscriber(modelManager: mlxModelManager)
-        sherpaOnnxTranscriber = SherpaOnnxTranscriber(modelManager: sherpaOnnxModelManager)
         mlxTranscriber.dictionaryEntryProvider = {
-            appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
-                activeGroupID: appDelegate.activeDictionaryGroupID(),
-                limit: DictionaryEntryCollection.asrPromptTermLimit
-            )
-        }
-        sherpaOnnxTranscriber.dictionaryEntryProvider = {
             appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
                 activeGroupID: appDelegate.activeDictionaryGroupID(),
                 limit: DictionaryEntryCollection.asrPromptTermLimit
@@ -249,7 +239,6 @@ final class ASRDebugViewModel: ObservableObject {
         )
         options = ModelDebugCatalog.availableASRModels(
             mlxModelManager: mlxModelManager,
-            sherpaOnnxModelManager: sherpaOnnxModelManager,
             remoteASRConfigurations: remoteConfigurations
         )
         if !options.contains(where: { $0.id == selectedModelID }) {
@@ -283,9 +272,6 @@ final class ASRDebugViewModel: ObservableObject {
             )
         case .mlx:
             engine = .mlxAudio
-            providerUsesServerVAD = false
-        case .sherpaOnnx:
-            engine = .sherpaOnnx
             providerUsesServerVAD = false
         case .none:
             engine = TranscriptionEngine(rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.transcriptionEngine) ?? "")
@@ -358,8 +344,6 @@ final class ASRDebugViewModel: ObservableObject {
         switch engine {
         case .mlxAudio:
             return "mlx:\(MLXModelManager.canonicalModelRepo(defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo))"
-        case .sherpaOnnx:
-            return "sherpa:\(SherpaOnnxModelID(rawValue: defaults.string(forKey: AppPreferenceKey.sherpaOnnxASRModelID) ?? SherpaOnnxModelCatalog.defaultModelID.rawValue).rawValue)"
         case .remote:
             let provider = RemoteASRProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? "")
                 ?? .openAIWhisper
@@ -466,8 +450,6 @@ final class ASRDebugViewModel: ObservableObject {
         case .mlx(let repo):
             let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
             return mlxModelManager.currentModelRepo != canonicalRepo || !mlxModelManager.isCurrentModelLoaded
-        case .sherpaOnnx:
-            return false
         case .remote:
             return false
         }
@@ -483,9 +465,6 @@ final class ASRDebugViewModel: ObservableObject {
                 return metadata.formattedDebugSummary(appendingTranscript: transcript)
             }
             return transcript
-        case .sherpaOnnx(let modelID):
-            sherpaOnnxModelManager.updateModel(id: modelID)
-            return try await sherpaOnnxTranscriber.transcribeAudioFile(clip.fileURL)
         case .remote(let provider, let configuration):
             return try await remoteTranscriber.transcribeDebugAudioFile(
                 clip.fileURL,

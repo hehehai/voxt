@@ -2,6 +2,8 @@
 
 更新时间：2026-06-06
 
+> 历史评估说明：本文保留当时的上游调研和精简建议。当前 Voxt 实现已进一步移除旧版隐藏本地 LLM（包括 Llama 3.x、Mistral 7B/Nemo、Phi 3.5、InternLM2.5、MiniCPM4、Granite 3.3、MiMo、AceReason，以及 GLM Chat 1M / GLM-Z1 / GLM-4.7 Flash）和 sherpa-onnx ASR；当前可用清单以代码为准。
+
 ## 统计口径
 
 - 只统计当前上游 MLX 明确支持的模型，不使用 Voxt 本地 App 的清单作为来源边界。

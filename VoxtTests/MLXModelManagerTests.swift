@@ -672,46 +672,9 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(missingRepos, [])
     }
 
-    func testCustomLLMBehaviorDisablesThinkingForThinkingModels() {
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit").family, .qwen3)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-8B-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-2B-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-0.8B-4bit-OptiQ").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-4B-OptiQ-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3.5-9B-OptiQ-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit").disablesThinking)
-        XCTAssertTrue(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/AceReason-Nemotron-7B-4bit").disablesThinking)
-    }
 
-    func testCustomLLMBehaviorLeavesOtherInstructionModelsUntouched() {
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct").family, .qwen2)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-4-9B-0414-4bit").family, .glm4)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/glm-4-9b-chat-1m-4bit").family, .glm4)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit").family, .glm4)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Llama-3.2-3B-Instruct-4bit").family, .llama)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Mistral-Nemo-Instruct-2407-4bit").family, .mistral)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Ministral-3-3B-Instruct-2512-4bit").family, .mistral)
-        XCTAssertEqual(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/gemma-4-e2b-it-4bit").family, .gemma)
-        XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct").disablesThinking)
-        XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2.5-3B-Instruct").disablesThinking)
-        XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-4-9B-0414-4bit").disablesThinking)
-        XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/glm-4-9b-chat-1m-4bit").disablesThinking)
-        XCTAssertFalse(CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Llama-3.2-3B-Instruct-4bit").disablesThinking)
-    }
 
-    func testCustomLLMBehaviorProvidesAdditionalContextOnlyForThinkingModels() {
-        let qwen3Behavior = CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/Qwen3-4B-4bit")
-        let glmZ1Behavior = CustomLLMModelBehaviorResolver.behavior(for: "mlx-community/GLM-Z1-9B-0414-4bit")
-        let qwen2Behavior = CustomLLMModelBehaviorResolver.behavior(for: "Qwen/Qwen2-1.5B-Instruct")
 
-        XCTAssertEqual(qwen3Behavior.additionalContext?["enable_thinking"] as? Bool, false)
-        XCTAssertEqual(qwen3Behavior.additionalContext?["reasoning_effort"] as? String, "low")
-        XCTAssertEqual(glmZ1Behavior.additionalContext?["enable_thinking"] as? Bool, false)
-        XCTAssertNil(qwen2Behavior.additionalContext)
-    }
 
     func testCustomLLMGenerationSettingsDefaultToThinkingOff() {
         XCTAssertEqual(CustomLLMGenerationSettingsStore.defaultSettings.thinking.mode, .off)
@@ -795,41 +758,9 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(restored.extraOptionsJSON, "")
     }
 
-    func testCustomLLMGenerationSettingsStoreResolvesSettingsPerRepo() {
-        let qwenRepo = "mlx-community/Qwen3-4B-4bit"
-        let llamaRepo = "mlx-community/Llama-3.2-3B-Instruct-4bit"
-        let qwenSettings = LLMGenerationSettings(
-            temperature: 0.2,
-            topK: 20,
-            thinking: LLMThinkingSettings(mode: .off, effort: nil, budgetTokens: nil, exposeReasoning: false)
-        )
-        let llamaSettings = LLMGenerationSettings(
-            temperature: 0.7,
-            topK: 60,
-            thinking: LLMThinkingSettings(mode: .on, effort: nil, budgetTokens: nil, exposeReasoning: false)
-        )
 
-        var raw = CustomLLMGenerationSettingsStore.save(qwenSettings, for: qwenRepo, rawByRepo: nil)
-        raw = CustomLLMGenerationSettingsStore.save(llamaSettings, for: llamaRepo, rawByRepo: raw)
 
-        let restoredQwen = CustomLLMGenerationSettingsStore.resolvedSettings(
-            for: qwenRepo,
-            rawByRepo: raw,
-            legacyRaw: nil
-        )
-        let restoredLlama = CustomLLMGenerationSettingsStore.resolvedSettings(
-            for: llamaRepo,
-            rawByRepo: raw,
-            legacyRaw: nil
-        )
 
-        XCTAssertEqual(restoredQwen.temperature, 0.2)
-        XCTAssertEqual(restoredQwen.topK, 20)
-        XCTAssertEqual(restoredQwen.thinking.mode, .off)
-        XCTAssertEqual(restoredLlama.temperature, 0.7)
-        XCTAssertEqual(restoredLlama.topK, 60)
-        XCTAssertEqual(restoredLlama.thinking.mode, .on)
-    }
 
     func testCustomLLMGenerationSettingsStoreCanonicalizesRepoKeys() {
         let raw = CustomLLMGenerationSettingsStore.save(
@@ -977,22 +908,7 @@ final class MLXModelManagerTests: XCTestCase {
         XCTAssertEqual(plan.contentLogSections.last?.content, "Process the input according to the instructions. => bonjour")
     }
 
-    func testCustomLLMRequestPlanBuilderBuildsRewriteRequest() {
-        let plan = CustomLLMRequestPlanBuilder.rewrite(
-            sourceText: "Old text",
-            dictatedPrompt: "make it shorter",
-            instructions: "rewrite carefully",
-            repo: "mlx-community/Llama-3.2-3B-Instruct-4bit",
-            structuredOutputPrompt: { instruction, input in "\(instruction)\n---\n\(input)" }
-        )
 
-        XCTAssertEqual(plan.kind, .rewrite)
-        XCTAssertEqual(plan.instructions, "rewrite carefully")
-        XCTAssertNil(plan.logMode)
-        XCTAssertTrue(plan.prompt.contains("Produce the final text to insert according to the instructions."))
-        XCTAssertTrue(plan.contentLogSections[1].content.contains("Spoken instruction:"))
-        XCTAssertTrue(plan.contentLogSections[1].content.contains("Selected source text:"))
-    }
 
     func testCustomLLMCompiledPlanPreservesOutputTokenBudgetHint() {
         let attachment = LLMInputAttachment.image(

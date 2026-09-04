@@ -7,9 +7,6 @@ enum RecordingStartBlockReason: Equatable {
     case mlxModelNotInstalled
     case mlxModelDownloading
     case mlxModelUnavailable(detail: String?)
-    case sherpaModelNotInstalled
-    case sherpaModelDownloading
-    case sherpaModelUnavailable(detail: String?)
 
     var userMessage: String {
         switch self {
@@ -21,16 +18,6 @@ enum RecordingStartBlockReason: Equatable {
             return detailedUnavailableMessage(
                 base: AppLocalization.localizedString("MLX model is unavailable. Open Settings > Model to fix it."),
                 detailedFormat: AppLocalization.localizedString("MLX model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
-                detail: detail
-            )
-        case .sherpaModelNotInstalled:
-            return AppLocalization.localizedString("Sherpa ONNX model is not downloaded. Open Settings > Model to install it.")
-        case .sherpaModelDownloading:
-            return AppLocalization.localizedString("Sherpa ONNX model is still downloading. Wait for installation to finish and try again.")
-        case .sherpaModelUnavailable(let detail):
-            return detailedUnavailableMessage(
-                base: AppLocalization.localizedString("Sherpa ONNX model is unavailable. Open Settings > Model to fix it."),
-                detailedFormat: AppLocalization.localizedString("Sherpa ONNX model is unavailable. Open Settings > Model to fix it.\nReason: %@"),
                 detail: detail
             )
         }
@@ -47,21 +34,12 @@ enum RecordingStartBlockReason: Equatable {
                 base: "MLX Audio model is unavailable.",
                 detail: detail
             )
-        case .sherpaModelNotInstalled:
-            return "Sherpa ONNX model is not downloaded."
-        case .sherpaModelDownloading:
-            return "Sherpa ONNX model download is still in progress."
-        case .sherpaModelUnavailable(let detail):
-            return detailedLogDescription(
-                base: "Sherpa ONNX model is unavailable.",
-                detail: detail
-            )
         }
     }
 
     var reminderDuration: TimeInterval {
         switch self {
-        case .mlxModelUnavailable(let detail), .sherpaModelUnavailable(let detail):
+        case .mlxModelUnavailable(let detail):
             return normalizedDetail(detail) == nil ? 2.4 : 4.2
         default:
             return 2.4
@@ -115,10 +93,6 @@ enum RecordingStartPlanner {
         activeMLXDownloadRepo: String? = nil,
         isSelectedMLXModelDownloaded: Bool = false,
         mlxModelState: MLXModelManager.ModelState,
-        selectedSherpaModelID: SherpaOnnxModelID? = nil,
-        activeSherpaDownloadModelID: SherpaOnnxModelID? = nil,
-        isSelectedSherpaModelDownloaded: Bool = false,
-        sherpaModelState: SherpaOnnxModelManager.ModelState = .notDownloaded
     ) -> RecordingStartDecision {
         switch selectedEngine {
         case .dictation:
@@ -137,22 +111,6 @@ enum RecordingStartPlanner {
                 notInstalledReason: .mlxModelNotInstalled,
                 downloadingReason: .mlxModelDownloading,
                 unavailableReason: { .mlxModelUnavailable(detail: $0) }
-            )
-        case .sherpaOnnx:
-            guard SherpaOnnxRuntimeSupport.isAvailable else {
-                return .blocked(.sherpaModelUnavailable(detail: SherpaOnnxRuntimeSupport.unavailableDetail))
-            }
-            return decision(
-                engine: .sherpaOnnx,
-                availability: sherpaAvailability(
-                    selectedModelID: selectedSherpaModelID,
-                    activeDownloadModelID: activeSherpaDownloadModelID,
-                    isSelectedModelDownloaded: isSelectedSherpaModelDownloaded,
-                    state: sherpaModelState
-                ),
-                notInstalledReason: .sherpaModelNotInstalled,
-                downloadingReason: .sherpaModelDownloading,
-                unavailableReason: { .sherpaModelUnavailable(detail: $0) }
             )
         }
     }
@@ -191,20 +149,6 @@ enum RecordingStartPlanner {
         )
     }
 
-    private static func sherpaAvailability(
-        selectedModelID: SherpaOnnxModelID?,
-        activeDownloadModelID: SherpaOnnxModelID?,
-        isSelectedModelDownloaded: Bool,
-        state: SherpaOnnxModelManager.ModelState
-    ) -> DownloadableModelAvailability {
-        availability(
-            selectedIdentifier: selectedModelID?.rawValue,
-            activeIdentifier: activeDownloadModelID?.rawValue,
-            isSelectedModelDownloaded: isSelectedModelDownloaded,
-            canonicalize: SherpaOnnxModelCatalog.canonicalModelID,
-            state: state
-        )
-    }
 
     private static func availability(
         selectedIdentifier: String?,

@@ -176,25 +176,7 @@ final class MeetingASRSupportTests: XCTestCase {
         XCTAssertEqual(gate.silenceDuration, 0)
     }
 
-    func testSherpaMeetingContextUsesSelectedModelDescription() {
-        let context = MeetingASRSupport.resolveContext(
-            transcriptionEngine: .sherpaOnnx,
-            mlxModelState: .notDownloaded,
-            mlxCurrentModelRepo: MLXModelManager.defaultModelRepo,
-            mlxIsCurrentModelLoaded: false,
-            mlxDisplayTitle: { _ in "" },
-            sherpaModelID: SherpaOnnxModelCatalog.funASRNanoModelID,
-            sherpaDisplayTitle: { _ in "FunASR Nano" },
-            remoteProvider: .openAIWhisper,
-            remoteConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "")
-        )
 
-        XCTAssertEqual(context.engine, .sherpaOnnx)
-        XCTAssertEqual(context.sherpaModelID, SherpaOnnxModelCatalog.funASRNanoModelID)
-        XCTAssertEqual(context.chunkingProfile, .quality)
-        XCTAssertFalse(context.needsModelInitialization)
-        XCTAssertEqual(context.historyModelDescription, "FunASR Nano (funasr-nano-int8)")
-    }
 
     func testOpenAIPseudoRealtimeUsesRealtimeProfile() {
         let context = MeetingASRSupport.resolveContext(

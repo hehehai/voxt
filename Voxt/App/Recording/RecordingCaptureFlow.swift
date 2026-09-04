@@ -39,56 +39,6 @@ extension AppDelegate {
         }
     }
 
-    func startSherpaOnnxRecordingSession() {
-        startTrackedRecordingCaptureTask { [weak self] in
-            guard let self else { return }
-            let sessionID = self.activeRecordingSessionID
-            let sherpa = self.sherpaOnnxTranscriber ?? SherpaOnnxTranscriber(modelManager: self.sherpaOnnxModelManager)
-            self.sherpaOnnxTranscriber = sherpa
-            sherpa.dictionaryEntryProvider = { [weak self] in
-                guard let self else { return [] }
-                return self.dictionaryStore.activeEntriesForRemoteRequest(
-                    activeGroupID: self.activeDictionaryGroupID(),
-                    limit: DictionaryEntryCollection.asrPromptTermLimit
-                )
-            }
-            let granted = await sherpa.requestPermissions()
-            guard !Task.isCancelled,
-                  !self.isApplicationTerminating,
-                  self.shouldHandleCallbacks(for: sessionID),
-                  self.isSessionActive
-            else { return }
-            guard granted else {
-                self.handleRecordingPermissionDenied()
-                return
-            }
-
-            self.overlayState.statusMessage = ""
-            sherpa.transcribedText = ""
-            sherpa.setPreferredInputDevice(self.selectedInputDeviceID)
-            sherpa.onTranscriptionFinished = { [weak self] text in
-                self?.stashPendingCompletedHistoryAudioArchive(self?.sherpaOnnxTranscriber?.consumeCompletedAudioArchiveURL())
-                self?.processTranscription(text, sessionID: sessionID)
-            }
-            sherpa.onStartFailure = { [weak self] message in
-                guard let self, self.shouldHandleCallbacks(for: sessionID) else { return }
-                self.handleRecordingStartFailure(message, autoHideAfter: 3.6)
-            }
-            self.overlayState.bind(to: sherpa)
-            self.overlayWindow.show(
-                state: self.overlayState,
-                position: self.overlayPosition
-            )
-            sherpa.startRecording()
-            guard sherpa.isRecording else {
-                let failureMessage = sherpa.consumePendingRuntimeFailureMessage()
-                    ?? AppLocalization.localizedString("Sherpa ONNX failed to start recording.")
-                self.handleRecordingStartFailure(failureMessage)
-                return
-            }
-        }
-    }
-
     func startMLXRecordingSession() {
         let mlx = mlxTranscriber ?? MLXTranscriber(modelManager: mlxModelManager)
         mlxTranscriber = mlx
@@ -245,8 +195,6 @@ extension AppDelegate {
         switch engine {
         case .mlxAudio:
             startMLXRecordingSession()
-        case .sherpaOnnx:
-            startSherpaOnnxRecordingSession()
         case .remote:
             startRemoteRecordingSession()
         case .dictation:
@@ -329,7 +277,6 @@ extension AppDelegate {
     func applyPreferredInputDevice() {
         speechTranscriber.setPreferredInputDevice(selectedInputDeviceID)
         mlxTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
-        sherpaOnnxTranscriber?.setPreferredInputDevice(selectedInputDeviceID)
         remoteASRTranscriber.setPreferredInputDevice(selectedInputDeviceID)
     }
 
@@ -381,8 +328,6 @@ extension AppDelegate {
     func stopActiveRecordingTranscriber() {
         if transcriptionEngine == .mlxAudio {
             mlxTranscriber?.stopRecording()
-        } else if transcriptionEngine == .sherpaOnnx {
-            sherpaOnnxTranscriber?.stopRecording()
         } else if transcriptionEngine == .remote {
             remoteASRTranscriber.stopRecording()
         } else {
@@ -423,8 +368,6 @@ extension AppDelegate {
             remoteASRTranscriber.transcribedText = text
         case .mlxAudio:
             mlxTranscriber?.transcribedText = text
-        case .sherpaOnnx:
-            sherpaOnnxTranscriber?.transcribedText = text
         case .dictation:
             speechTranscriber.transcribedText = text
         }
@@ -434,8 +377,6 @@ extension AppDelegate {
         switch transcriptionEngine {
         case .mlxAudio:
             return mlxTranscriber?.consumePendingRuntimeFailureMessage()
-        case .sherpaOnnx:
-            return sherpaOnnxTranscriber?.consumePendingRuntimeFailureMessage()
         case .remote, .dictation:
             return nil
         }
@@ -445,8 +386,6 @@ extension AppDelegate {
         switch transcriptionEngine {
         case .mlxAudio:
             mlxTranscriber?.isEnhancing = isEnhancing
-        case .sherpaOnnx:
-            sherpaOnnxTranscriber?.isEnhancing = isEnhancing
         case .remote:
             remoteASRTranscriber.isEnhancing = isEnhancing
         case .dictation:
@@ -497,10 +436,6 @@ extension AppDelegate {
             return
         }
 
-        if transcriptionEngine == .sherpaOnnx {
-            try sherpaOnnxTranscriber?.restartCaptureForPreferredInputDevice()
-            return
-        }
 
         try speechTranscriber.restartCaptureForPreferredInputDevice()
     }

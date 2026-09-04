@@ -71,49 +71,6 @@ extension ModelCatalogBuilder {
         }
     }
 
-    func sherpaOnnxASREntries() -> [ModelCatalogEntry] {
-        return sherpaOnnxDisplayModelsIncludingFeatureSelections().map { model in
-            let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
-            let installSnapshot = sherpaOnnxCatalogSnapshot(for: model.id)
-            let decoration = catalogDecoration(
-                base: model.tagKeys.map { localizedModelCatalog($0) },
-                installed: installSnapshot.isInstalled,
-                requiresConfiguration: false,
-                configured: true,
-                selectionID: selectionID
-            )
-
-            return ModelCatalogEntry(
-                id: selectionID.rawValue,
-                title: model.title,
-                engine: localizedModelCatalog("Sherpa"),
-                sizeText: sherpaOnnxASRSizeText(id: model.id, isInstalled: installSnapshot.isInstalled),
-                ratingText: model.ratingText,
-                filterTags: decoration.filterTags,
-                displayTags: decoration.displayTags,
-                statusText: sherpaOnnxASRStatusText(installSnapshot.statusText),
-                usageLocations: decoration.usageLocations,
-                badgeText: installSnapshot.badgeText,
-                primaryAction: catalogPrimaryAction(installSnapshot),
-                secondaryActions: catalogSecondaryActions(installSnapshot)
-            )
-        }
-    }
-
-    private func sherpaOnnxDisplayModelsIncludingFeatureSelections() -> [SherpaOnnxModelOption] {
-        let selections = [
-            featureSettings.transcription.asrSelectionID,
-            featureSettings.translation.asrSelectionID,
-            featureSettings.rewrite.asrSelectionID,
-            featureSettings.meeting.asrSelectionID,
-        ]
-        let selectedModelIDs = Set(selections.compactMap { selectionID -> SherpaOnnxModelID? in
-            guard case .sherpaOnnx(let modelID)? = selectionID.asrSelection else { return nil }
-            return modelID
-        })
-        return sherpaOnnxModelManager.displayModelsIncludingInstalled(including: selectedModelIDs)
-    }
-
     private func localASRSecondaryActions(
         for snapshot: LocalModelInstallSnapshot,
         isAvailable: Bool
@@ -133,38 +90,6 @@ extension ModelCatalogBuilder {
     private func mlxASRSizeText(repo: String, isInstalled: Bool) -> String {
         _ = isInstalled
         return mlxModelManager.remoteSizeText(repo: repo)
-    }
-
-    private func sherpaOnnxASRSizeText(id: SherpaOnnxModelID, isInstalled: Bool) -> String {
-        _ = isInstalled
-        return sherpaOnnxModelManager.remoteSizeText(id: id)
-    }
-
-    private func sherpaOnnxASRStatusText(_ statusText: String) -> String {
-        let genericStatuses = Set([
-            localizedModelCatalog("Installed"),
-            localizedModelCatalog("Not installed")
-        ])
-        return genericStatuses.contains(statusText) ? "" : statusText
-    }
-
-    private func sherpaOnnxCatalogSnapshot(for modelID: SherpaOnnxModelID) -> LocalModelInstallSnapshot {
-        if SherpaOnnxRuntimeSupport.isAvailable {
-            return sherpaInstallSnapshot(modelID)
-        }
-
-        return LocalModelInstallSnapshot(
-            target: .sherpaOnnx(modelID),
-            state: .installable(isEnabled: false),
-            isInstalled: false,
-            isCurrentSelection: false,
-            statusText: SherpaOnnxRuntimeSupport.unavailableDetail ?? localizedModelCatalog("Not available"),
-            badgeText: localizedModelCatalog("Not available"),
-            downloadStatus: nil,
-            canOpenLocation: false,
-            canConfigure: false,
-            configureActionTitle: nil
-        )
     }
 
 }

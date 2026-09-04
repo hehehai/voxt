@@ -3,6 +3,8 @@
 日期：2026-08-02  
 对照基线：Qwen3-ASR / MOSS 上已落地的 Wave A–F（见 [`ASRFirstPartialLatencyEvaluation.zh-CN.md`](ASRFirstPartialLatencyEvaluation.zh-CN.md)）
 
+> 状态说明：本文中的 Sherpa ONNX 章节是历史方案记录。Sherpa-onnx ASR 已从当前实现移除，不应再按本文方案接入或验收。
+
 ---
 
 ## 1. 结论（先看这个）

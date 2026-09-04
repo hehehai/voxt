@@ -22,8 +22,6 @@ nonisolated enum SharedPromptResource: String, CaseIterable {
     case mossTimestampedDiarization = "moss-timestamped-diarization"
     case mossSpeakerOnly = "moss-speaker-only"
     case mossPlainText = "moss-plain-text"
-    case funASRNanoSystem = "funasr-nano-system"
-    case funASRNanoUser = "funasr-nano-user"
     case transcriptFollowUp = "transcript-follow-up"
     case savedTranscriptionFollowUp = "saved-transcription-follow-up"
 }

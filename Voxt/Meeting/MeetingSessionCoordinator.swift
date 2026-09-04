@@ -27,7 +27,6 @@ final class MeetingSessionCoordinator {
     var onSessionFinished: (@MainActor (MeetingSessionResult) -> Bool)?
 
     private let mlxModelManager: MLXModelManager
-    private let sherpaOnnxModelManager: SherpaOnnxModelManager
     private let microphoneCapture = MeetingMicrophoneCapture()
     private let systemAudioCapture = MeetingSystemAudioCapture()
     private static let micSpeechThreshold: Float = 0.012
@@ -86,13 +85,11 @@ final class MeetingSessionCoordinator {
 
     init(
         mlxModelManager: MLXModelManager,
-        sherpaOnnxModelManager: SherpaOnnxModelManager,
         preferredInputDeviceIDProvider: @escaping () -> AudioDeviceID?,
         realtimeTranslationTargetLanguageProvider: @escaping @MainActor () -> TranslationTargetLanguage?,
         realtimeTranslationHandler: @escaping @MainActor (String, TranslationTargetLanguage) -> MeetingTranslationOperation
     ) {
         self.mlxModelManager = mlxModelManager
-        self.sherpaOnnxModelManager = sherpaOnnxModelManager
         self.preferredInputDeviceIDProvider = preferredInputDeviceIDProvider
         self.realtimeTranslationTargetLanguageProvider = realtimeTranslationTargetLanguageProvider
         self.realtimeTranslationHandler = realtimeTranslationHandler
@@ -1719,8 +1716,6 @@ final class MeetingSessionCoordinator {
             mlxCurrentModelRepo: mlxModelManager.currentModelRepo,
             mlxIsCurrentModelLoaded: mlxModelManager.isCurrentModelLoaded,
             mlxDisplayTitle: mlxModelManager.displayTitle(for:),
-            sherpaModelID: sherpaOnnxModelManager.selectedModelID,
-            sherpaDisplayTitle: sherpaOnnxModelManager.displayTitle(for:),
             remoteProvider: remoteSelection.provider,
             remoteConfiguration: remoteSelection.configuration
         )
@@ -1762,12 +1757,6 @@ final class MeetingSessionCoordinator {
                 )
             }
             return MeetingRemoteASRSegmentTranscriber()
-        case .sherpaOnnx:
-            if let modelID = context.sherpaModelID {
-                sherpaOnnxModelManager.updateModel(id: modelID)
-            }
-            activeLocalEngine = .sherpaOnnx
-            return MeetingSherpaOnnxSegmentTranscriber(modelManager: sherpaOnnxModelManager)
         case .dictation:
             throw NSError(
                 domain: "Voxt.Meeting",
@@ -1851,7 +1840,7 @@ final class MeetingSessionCoordinator {
         switch activeLocalEngine {
         case .mlxAudio:
             mlxModelManager.endActiveUse()
-        case .dictation, .sherpaOnnx, .remote:
+        case .dictation, .remote:
             break
         }
         self.activeLocalEngine = nil

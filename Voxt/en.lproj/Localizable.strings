@@ -570,10 +570,6 @@
 "Access Token" = "Access Token";
 "Paste access token" = "Paste access token";
 "Not available" = "Not available";
-"Sherpa" = "Sherpa";
-"Sherpa runs local offline ASR models. Prompt editing is not applied." = "Sherpa runs local offline ASR models. Prompt editing is not applied.";
-"Local Sherpa" = "Local Sherpa";
-"Sherpa ONNX runtime is not bundled in this build." = "Sherpa ONNX runtime is not bundled in this build.";
 "Doubao Access Token is required for testing." = "Doubao Access Token is required for testing.";
 "Doubao App ID is required for testing." = "Doubao App ID is required for testing.";
 "Connection test succeeded (Doubao WebSocket reachable)." = "Connection test succeeded (Doubao WebSocket reachable).";
@@ -1709,7 +1705,6 @@
 "Local LLM Generation" = "Local LLM Generation";
 "Local LLM Configuration" = "Local LLM Configuration";
 "Model Default" = "Model Default";
-"Model Default keeps Voxt's built-in thinking disable behavior for Qwen3, GLM-Z1, and similar local reasoning models." = "Model Default keeps Voxt's built-in thinking disable behavior for Qwen3, GLM-Z1, and similar local reasoning models.";
 "Top P" = "Top P";
 "Top K" = "Top K";
 "Min P" = "Min P";
@@ -1999,7 +1994,6 @@
 "Voxt is ready. You can revisit this guide from the main window at any time." = "Voxt is ready. You can revisit this guide from the main window at any time.";
 "Voxt shortcut detected" = "Voxt shortcut detected";
 "Workflows" = "Workflows";
-"Sherpa ASR Configuration" = "Sherpa ASR Configuration";
 "Threads" = "Threads";
 "Max New Tokens" = "Max New Tokens";
 "Higher values can improve offline decode speed, but also use more CPU." = "Higher values can improve offline decode speed, but also use more CPU.";
@@ -2224,7 +2218,6 @@
 "Translation and meeting shortcuts should be different." = "Translation and meeting shortcuts should be different.";
 "Uninstalling…" = "Uninstalling…";
 "Use this as a maximum participant count hint. People who do not speak may not appear in the transcript." = "Use this as a maximum participant count hint. People who do not speak may not appear in the transcript.";
-"Uses sherpa-onnx speech models running locally. Requires a one-time model download." = "Uses sherpa-onnx speech models running locally. Requires a one-time model download.";
 "Uses ~/.codex/auth.json" = "Uses ~/.codex/auth.json";
 "Using Apple Intelligence for meeting summaries." = "Using Apple Intelligence for meeting summaries.";
 "VAD Segmented" = "VAD Segmented";
@@ -2244,7 +2237,6 @@
 "Stored provider credentials are invalid. Reopen the provider settings and save them again." = "Stored provider credentials are invalid. Reopen the provider settings and save them again.";
 "Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac." = "Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac.";
 "Configuration could not be encoded. Please try again." = "Configuration could not be encoded. Please try again.";
-"This model is unavailable because the sherpa-onnx runtime is not included in this build." = "This model is unavailable because the sherpa-onnx runtime is not included in this build.";
 "Uninstalled %@." = "Uninstalled %@.";
 "Uninstall failed: %@" = "Uninstall failed: %@";
 "Model download succeeded" = "Model download succeeded";

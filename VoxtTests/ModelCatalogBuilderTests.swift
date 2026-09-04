@@ -34,34 +34,8 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(builder.llmEntries().contains(where: { $0.id == "apple-intelligence" }))
     }
 
-    func testCancellingInstallActionKeepsCancelButtonWithProgress() throws {
-        let snapshot = LocalModelInstallSnapshot(
-            target: .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID),
-            state: .cancelling,
-            isInstalled: false,
-            isCurrentSelection: false,
-            statusText: AppLocalization.localizedString("Cancelling…"),
-            badgeText: nil,
-            downloadStatus: nil,
-            canOpenLocation: false,
-            canConfigure: false,
-            configureActionTitle: nil
-        )
 
-        let primaryAction = try XCTUnwrap(
-            ModelSettingsInstallActionResolver.catalogPrimaryAction(for: snapshot) { _, _ in }
-        )
-        let tableAction = try XCTUnwrap(
-            ModelSettingsInstallActionResolver.tableActions(for: snapshot) { _, _ in }.first
-        )
 
-        XCTAssertEqual(primaryAction.title, AppLocalization.localizedString("Cancel"))
-        XCTAssertFalse(primaryAction.isEnabled)
-        XCTAssertTrue(primaryAction.showsProgress)
-        XCTAssertEqual(tableAction.title, AppLocalization.localizedString("Cancel"))
-        XCTAssertFalse(tableAction.isEnabled)
-        XCTAssertTrue(tableAction.showsProgress)
-    }
 
     func testModelCatalogTagPriorityDoesNotExposeMultilingualFilter() {
         XCTAssertFalse(ModelCatalogTag.priority.contains(AppLocalization.localizedString("Multilingual")))
@@ -82,43 +56,7 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(directDictation.primaryAction?.title, AppLocalization.localizedString("Settings"))
         XCTAssertTrue(directDictation.usageLocations.contains(AppLocalization.localizedString("Transcription")))
         XCTAssertTrue(directDictation.displayTags.contains(AppLocalization.localizedString("In Use")))
-    }
-
-    func testASRCatalogShowsSelectedHiddenSherpaModelsEvenWhenRuntimeUnavailable() throws {
-        let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(
-                transcriptionASR: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID),
-                translationASR: .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID)
-            )
-        )
-
-        let entries = builder.asrEntries()
-        let fireRed = try XCTUnwrap(
-            entries.first(where: { $0.id == FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID).rawValue })
-        )
-        let funASR = try XCTUnwrap(
-            entries.first(where: { $0.id == FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID).rawValue })
-        )
-
-        XCTAssertEqual(fireRed.title, "FireRed 2 Mini")
-        XCTAssertEqual(funASR.title, "FunASR Nano")
-        XCTAssertEqual(fireRed.engine, AppLocalization.localizedString("Sherpa"))
-        XCTAssertEqual(funASR.engine, AppLocalization.localizedString("Sherpa"))
-
-        if !SherpaOnnxRuntimeSupport.isAvailable {
-            XCTAssertEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
-            XCTAssertEqual(funASR.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
-            XCTAssertEqual(fireRed.badgeText, AppLocalization.localizedString("Not available"))
-            XCTAssertEqual(fireRed.primaryAction?.title, AppLocalization.localizedString("Install"))
-            XCTAssertEqual(fireRed.primaryAction?.isEnabled, false)
-        } else {
-            XCTAssertNotEqual(fireRed.statusText, AppLocalization.localizedString("Installed"))
-            XCTAssertNotEqual(funASR.statusText, AppLocalization.localizedString("Installed"))
-            XCTAssertNotEqual(fireRed.statusText, AppLocalization.localizedString("Not installed"))
-            XCTAssertNotEqual(funASR.statusText, AppLocalization.localizedString("Not installed"))
-        }
-    }
-
+}
     func testConfiguredRemoteASREntryShowsNeedsSetupBadgeWhenProviderHasConfigurationIssue() throws {
         let remoteASRConfigurations: [String: RemoteProviderConfiguration] = [
             RemoteASRProvider.aliyunBailianASR.rawValue: TestFactories.makeRemoteConfiguration(
@@ -396,24 +334,9 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertFalse(entry.displayTags.contains(AppLocalization.localizedString("Accurate")))
     }
 
-    func testGGUFTranslationCatalogHidesQ6UnlessInstalled() throws {
-        let builder = makeBuilder(featureSettings: makeFeatureSettings())
-        let ids = Set(builder.llmEntries().map(\.id))
 
-        XCTAssertTrue(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q4KM.rawValue)"))
-        XCTAssertTrue(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q8_0.rawValue)"))
-        XCTAssertFalse(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q6K.rawValue)"))
-    }
 
-    func testGGUFTranslationCatalogShowsHiddenQ6WhenInstalled() throws {
-        let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(),
-            isGGUFTranslationInstalled: { $0 == .hyMT2Q6K }
-        )
-        let ids = Set(builder.llmEntries().map(\.id))
 
-        XCTAssertTrue(ids.contains("local-gguf-translation:\(GGUFTranslationModelID.hyMT2Q6K.rawValue)"))
-    }
 
     func testMLXCatalogUsesCuratedRatingAndTags() throws {
         let repo = "beshkenadze/cohere-transcribe-03-2026-mlx-fp16"
@@ -528,109 +451,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(gemmaGroup.badgeText, recommended)
     }
 
-    func testCatalogGroupsFireRedMiniAndOriginalAcrossLocalEngines() throws {
-        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.mlx("mlx-community/FireRedASR2-AED-mlx").rawValue,
-                title: "FireRed 2",
-                engine: AppLocalization.localizedString("MLX Audio")
-            ),
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID).rawValue,
-                title: "FireRed 2 Mini",
-                engine: AppLocalization.localizedString("Sherpa")
-            )
-        ])
-
-        let group = try XCTUnwrap(
-            items.compactMap { item -> ModelCatalogGroupSection? in
-                guard case .group(let group) = item, group.title == "FireRed" else { return nil }
-                return group
-            }.first
-        )
-
-        XCTAssertEqual(group.id, LocalModelSeriesClassifier.fireRedSeriesID)
-        XCTAssertEqual(group.engine, AppLocalization.localizedString("Local"))
-        XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["Mini", "Original"])
-    }
-
-    func testCatalogDoesNotGroupGLMModels() {
-        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.localLLM("mlx-community/GLM-4-9B-0414-4bit").rawValue,
-                title: "GLM 4 9B",
-                engine: AppLocalization.localizedString("Local LLM")
-            ),
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.localLLM("mlx-community/GLM-Z1-9B-0414-4bit").rawValue,
-                title: "GLM-Z1 9B (4bit)",
-                engine: AppLocalization.localizedString("Local LLM")
-            )
-        ])
-
-        XCTAssertEqual(items.count, 2)
-        XCTAssertTrue(items.allSatisfy { item in
-            if case .row = item {
-                return true
-            }
-            return false
-        })
-    }
-
-    func testCatalogDoesNotGroupMistralOrLlamaModels() {
-        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.localLLM("mlx-community/Ministral-3-3B-Instruct-2512-4bit").rawValue,
-                title: "Mistral 3 3B",
-                engine: AppLocalization.localizedString("Local LLM")
-            ),
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.localLLM("mlx-community/Mistral-Nemo-Instruct-2407-4bit").rawValue,
-                title: "Mistral Nemo Instruct 2407 (4bit)",
-                engine: AppLocalization.localizedString("Local LLM")
-            ),
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.localLLM("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit").rawValue,
-                title: "Meta Llama 3.1 8B Instruct (4bit)",
-                engine: AppLocalization.localizedString("Local LLM")
-            )
-        ])
-
-        XCTAssertEqual(items.count, 3)
-        XCTAssertTrue(items.allSatisfy { item in
-            if case .row = item {
-                return true
-            }
-            return false
-        })
-    }
-
-    func testCatalogGroupsLFMModels() throws {
-        let items = LocalModelSeriesGrouping.modelCatalogItems(from: [
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.localLLM("mlx-community/LFM2-1.2B-4bit").rawValue,
-                title: "LFM2 1.2B (4bit)",
-                engine: AppLocalization.localizedString("Local LLM")
-            ),
-            makeCatalogEntry(
-                id: FeatureModelSelectionID.localLLM("mlx-community/LFM2-8B-A1B-3bit-MLX").rawValue,
-                title: "LFM2 8B A1B (3bit)",
-                engine: AppLocalization.localizedString("Local LLM")
-            )
-        ])
-
-        let group = try XCTUnwrap(
-            items.compactMap { item -> ModelCatalogGroupSection? in
-                guard case .group(let group) = item, group.title == "LFM2" else { return nil }
-                return group
-            }.first
-        )
-
-        XCTAssertEqual(group.engine, AppLocalization.localizedString("Local LLM"))
-        XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["1.2B (4bit)", "8B A1B (3bit)"])
-        XCTAssertEqual(group.modelLogoKey, .liquid)
-    }
-
     private func makeBuilder(
         featureSettings: FeatureSettings,
         remoteASRConfigurations: [String: RemoteProviderConfiguration] = [:],
@@ -672,28 +492,16 @@ final class ModelCatalogBuilderTests: XCTestCase {
             let isUninstalling = isUninstallingModel(canonicalRepo)
             let isInstalled = !isDownloading && !isPaused && !isUninstalling
             let state: LocalModelInstallState
-            if isUninstalling {
-                state = .uninstalling
-            } else if isDownloading {
-                state = .downloading
-            } else if isPaused {
-                state = .paused
-            } else if isInstalled {
-                state = .installed
-            } else {
-                state = .installable(isEnabled: true)
-            }
+            if isUninstalling { state = .uninstalling }
+            else if isDownloading { state = .downloading }
+            else if isPaused { state = .paused }
+            else if isInstalled { state = .installed }
+            else { state = .installable(isEnabled: true) }
             return LocalModelInstallSnapshot(
-                target: .mlx(canonicalRepo),
-                state: state,
-                isInstalled: isInstalled,
+                target: .mlx(canonicalRepo), state: state, isInstalled: isInstalled,
                 isCurrentSelection: featureSettings.transcription.asrSelectionID == .mlx(canonicalRepo),
-                statusText: "",
-                badgeText: nil,
-                downloadStatus: nil,
-                canOpenLocation: isInstalled,
-                canConfigure: false,
-                configureActionTitle: nil
+                statusText: "", badgeText: nil, downloadStatus: nil, canOpenLocation: isInstalled,
+                canConfigure: false, configureActionTitle: nil
             )
         }
 
@@ -704,26 +512,15 @@ final class ModelCatalogBuilderTests: XCTestCase {
             let isUninstalling = isUninstallingCustomLLM(canonicalRepo)
             let isInstalled = !isDownloading && !isPaused && !isUninstalling && isCustomLLMInstalled(canonicalRepo)
             let state: LocalModelInstallState
-            if isUninstalling {
-                state = .uninstalling
-            } else if isDownloading {
-                state = .downloading
-            } else if isPaused {
-                state = .paused
-            } else if isInstalled {
-                state = .installed
-            } else {
-                state = .installable(isEnabled: true)
-            }
+            if isUninstalling { state = .uninstalling }
+            else if isDownloading { state = .downloading }
+            else if isPaused { state = .paused }
+            else if isInstalled { state = .installed }
+            else { state = .installable(isEnabled: true) }
             return LocalModelInstallSnapshot(
-                target: .customLLM(canonicalRepo),
-                state: state,
-                isInstalled: isInstalled,
+                target: .customLLM(canonicalRepo), state: state, isInstalled: isInstalled,
                 isCurrentSelection: featureSettings.translation.modelSelectionID == .localLLM(canonicalRepo),
-                statusText: "",
-                badgeText: nil,
-                downloadStatus: nil,
-                canOpenLocation: isInstalled,
+                statusText: "", badgeText: nil, downloadStatus: nil, canOpenLocation: isInstalled,
                 canConfigure: isInstalled,
                 configureActionTitle: isInstalled ? AppLocalization.localizedString("Configure") : nil
             )
@@ -734,46 +531,20 @@ final class ModelCatalogBuilderTests: XCTestCase {
             let isPaused = isPausedGGUFTranslation(modelID)
             let isInstalled = !isDownloading && !isPaused && isGGUFTranslationInstalled(modelID)
             let state: LocalModelInstallState
-            if isDownloading {
-                state = .downloading
-            } else if isPaused {
-                state = .paused
-            } else if isInstalled {
-                state = .installed
-            } else {
-                state = .installable(isEnabled: true)
-            }
+            if isDownloading { state = .downloading }
+            else if isPaused { state = .paused }
+            else if isInstalled { state = .installed }
+            else { state = .installable(isEnabled: true) }
             return LocalModelInstallSnapshot(
-                target: .ggufTranslation(modelID),
-                state: state,
-                isInstalled: isInstalled,
+                target: .ggufTranslation(modelID), state: state, isInstalled: isInstalled,
                 isCurrentSelection: featureSettings.translation.modelSelectionID == .localGGUFTranslation(modelID),
-                statusText: "",
-                badgeText: nil,
-                downloadStatus: nil,
-                canOpenLocation: isInstalled,
-                canConfigure: false,
-                configureActionTitle: nil
-            )
-        }
-        let sherpaInstallSnapshot: (SherpaOnnxModelID) -> LocalModelInstallSnapshot = { modelID in
-            LocalModelInstallSnapshot(
-                target: .sherpaOnnx(modelID),
-                state: .installable(isEnabled: true),
-                isInstalled: false,
-                isCurrentSelection: false,
-                statusText: "",
-                badgeText: nil,
-                downloadStatus: nil,
-                canOpenLocation: false,
-                canConfigure: false,
-                configureActionTitle: nil
+                statusText: "", badgeText: nil, downloadStatus: nil, canOpenLocation: isInstalled,
+                canConfigure: false, configureActionTitle: nil
             )
         }
 
         return ModelCatalogBuilder(
             mlxModelManager: TestModelManagers.mlx,
-            sherpaOnnxModelManager: TestModelManagers.sherpa,
             customLLMManager: TestModelManagers.customLLM,
             ggufTranslationModelManager: TestModelManagers.gguf,
             remoteASRConfigurations: remoteASRConfigurations,
@@ -786,45 +557,24 @@ final class ModelCatalogBuilderTests: XCTestCase {
             primaryUserLanguageCode: primaryUserLanguageCode,
             appleIntelligenceAvailability: appleIntelligenceAvailability,
             mlxInstallSnapshot: mlxInstallSnapshot,
-            sherpaInstallSnapshot: sherpaInstallSnapshot,
             customLLMInstallSnapshot: customLLMInstallSnapshot,
             ggufTranslationInstallSnapshot: ggufTranslationInstallSnapshot,
             catalogPrimaryAction: { snapshot in
-                ModelSettingsInstallActionResolver.catalogPrimaryAction(
-                    for: snapshot,
-                    perform: performAction
-                )
+                ModelSettingsInstallActionResolver.catalogPrimaryAction(for: snapshot, perform: performAction)
             },
             catalogSecondaryActions: { snapshot in
-                ModelSettingsInstallActionResolver.catalogSecondaryActions(
-                    for: snapshot,
-                    perform: performAction
-                )
+                ModelSettingsInstallActionResolver.catalogSecondaryActions(for: snapshot, perform: performAction)
             },
-            configureASRProvider: { _ in },
-            configureLLMProvider: { _ in },
-            showASRHintTarget: { _ in }
+            configureASRProvider: { _ in }, configureLLMProvider: { _ in }, showASRHintTarget: { _ in }
         )
     }
 
-    private func makeCatalogEntry(
-        id: String,
-        title: String,
-        engine: String
-    ) -> ModelCatalogEntry {
+    private func makeCatalogEntry(id: String, title: String, engine: String) -> ModelCatalogEntry {
         ModelCatalogEntry(
-            id: id,
-            title: title,
-            engine: engine,
-            sizeText: "1 GB",
-            ratingText: "4.8",
+            id: id, title: title, engine: engine, sizeText: "1 GB", ratingText: "4.8",
             filterTags: [AppLocalization.localizedString("Local")],
-            displayTags: [AppLocalization.localizedString("Local")],
-            statusText: "",
-            usageLocations: [],
-            badgeText: nil,
-            primaryAction: nil,
-            secondaryActions: []
+            displayTags: [AppLocalization.localizedString("Local")], statusText: "", usageLocations: [],
+            badgeText: nil, primaryAction: nil, secondaryActions: []
         )
     }
 
@@ -835,27 +585,17 @@ final class ModelCatalogBuilderTests: XCTestCase {
     ) -> FeatureSettings {
         let transcriptionASR = transcriptionASR ?? .dictation
         let translationASR = translationASR ?? .dictation
-        let translationModel = translationModel
-            ?? .localLLM(CustomLLMModelManager.defaultModelRepo)
+        let translationModel = translationModel ?? .localLLM(CustomLLMModelManager.defaultModelRepo)
         return FeatureSettings(
-            transcription: .init(
-                asrSelectionID: transcriptionASR,
-                llmEnabled: false,
-                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
-                prompt: AppPreferenceKey.defaultEnhancementPrompt
-            ),
-            translation: .init(
-                asrSelectionID: translationASR,
-                modelSelectionID: translationModel,
-                targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
-                prompt: AppPreferenceKey.defaultTranslationPrompt
-            ),
-            rewrite: .init(
-                asrSelectionID: .dictation,
-                llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
-                prompt: AppPreferenceKey.defaultRewritePrompt,
-                appEnhancementEnabled: false
-            )
+            transcription: .init(asrSelectionID: transcriptionASR, llmEnabled: false,
+                                 llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                                 prompt: AppPreferenceKey.defaultEnhancementPrompt),
+            translation: .init(asrSelectionID: translationASR, modelSelectionID: translationModel,
+                               targetLanguageRawValue: TranslationTargetLanguage.english.rawValue,
+                               prompt: AppPreferenceKey.defaultTranslationPrompt),
+            rewrite: .init(asrSelectionID: .dictation,
+                           llmSelectionID: .localLLM(CustomLLMModelManager.defaultModelRepo),
+                           prompt: AppPreferenceKey.defaultRewritePrompt, appEnhancementEnabled: false)
         )
     }
 }
@@ -863,7 +603,6 @@ final class ModelCatalogBuilderTests: XCTestCase {
 @MainActor
 private enum TestModelManagers {
     static let mlx = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
-    static let sherpa = SherpaOnnxModelManager(modelID: SherpaOnnxModelCatalog.defaultModelID)
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
     static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

@@ -4,7 +4,6 @@
 >
 > 来源：
 > - 本地 MLX ASR：`Voxt/Transcription/MLXModelSupport.swift`
-> - 本地 sherpa-onnx ASR：`Voxt/Transcription/SherpaOnnxModelSupport.swift`
 > - 本地 Whisper：`Voxt/Transcription/MLXModelSupport.swift` 中的 MLX Whisper family，旧 Whisper ID 仅保留迁移解析
 > - 远程 ASR：`Voxt/Core/Models/RemoteModelConfiguration.swift`
 
@@ -23,8 +22,6 @@
 | Granite | MLX Audio | 隐藏支持 | IBM Granite Speech |
 | Nemotron | MLX Audio | 可见 | NVIDIA Nemotron ASR Streaming |
 | MOSS | MLX Audio | 可见 | OpenMOSS Transcribe Diarize（窗口式实时 + 说话人/时间戳） |
-| FireRed | sherpa-onnx | 隐藏支持 | FireRed ASR 2 CTC int8；保留已有安装、旧配置和旧 MLX ID 迁移兼容 |
-| FunASR Nano | sherpa-onnx | 隐藏支持 | FunASR Nano int8；保留已有安装和旧配置兼容 |
 | SenseVoice | MLX Audio | 可见 | SenseVoice Small |
 
 ## 本地系统 ASR
@@ -120,20 +117,13 @@
 
 | 系列名称 | 模型显示名称 | Repo ID | 可见性 | 当前描述 |
 | --- | --- | --- | --- | --- |
-| FireRed | FireRed 2 | `mlx-community/FireRedASR2-AED-mlx` | 隐藏支持 | Legacy MLX FireRed option kept for migration to sherpa-onnx FireRed. |
+| FireRed | FireRed 2 | `mlx-community/FireRedASR2-AED-mlx` | 隐藏支持 | Legacy MLX FireRed option kept for existing installations and old configuration migration. |
 
 ### SenseVoice
 
 | 系列名称 | 模型显示名称 | Repo ID | 可见性 | 当前描述 |
 | --- | --- | --- | --- | --- |
 | SenseVoice | SenseVoice | `mlx-community/SenseVoiceSmall` | 可见 | Fast multilingual model with built-in language and event detection. |
-
-## 本地 sherpa-onnx ASR 模型
-
-| 系列名称 | 模型显示名称 | 内部 ID | 来源包 | 可见性 | 当前描述 |
-| --- | --- | --- | --- | --- | --- |
-| FireRed | FireRed ASR 2 (CTC int8) | `fire-red-asr-v2-onnx` | `sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25` | 隐藏支持 | 中文/英文 CTC int8 离线模型；保留已有安装、旧配置和旧 MLX ID 迁移兼容。 |
-| FunASR Nano | FunASR Nano (int8) | `funasr-nano-int8` | `sherpa-onnx-funasr-nano-int8-2025-12-30` | 隐藏支持 | 保留已有安装和旧配置兼容；使用 `encoder_adaptor`、`llm`、`embedding` 和 `Qwen3-0.6B` tokenizer 目录。 |
 
 ## 远程 ASR Provider 与模型选项
 

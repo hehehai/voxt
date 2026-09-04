@@ -176,27 +176,8 @@ jobs:
       APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
       NOTARY_PROFILE_NAME: ${{ secrets.NOTARY_PROFILE_NAME }}
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-      SHERPA_ONNX_REF: 142807252687d81b40d6315f23470a1512a00de3
     steps:
       - uses: actions/checkout@v5
-
-      - name: Resolve Sherpa ONNX cache key
-        id: sherpa_cache_key
-        run: |
-          set -euo pipefail
-          XCODE_VERSION="$(xcodebuild -version | tr '\n' '-' | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/-+$//')"
-          SHERPA_SCRIPT_HASH="$(shasum -a 256 tools/build_sherpa_onnx_macos.sh | awk '{print $1}')"
-          echo "xcode_version=$XCODE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "key=sherpa-onnx-${RUNNER_OS}-${RUNNER_ARCH}-${XCODE_VERSION}-${SHERPA_ONNX_REF}-${SHERPA_SCRIPT_HASH}" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Sherpa ONNX runtime cache
-        id: sherpa_cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            ThirdParty/sherpa-onnx/install
-            ThirdParty/sherpa-onnx/sherpa-onnx.xcframework
-          key: ${{ steps.sherpa_cache_key.outputs.key }}
 
       - name: Resolve Xcode compilation cache key
         id: compilation_cache_key
@@ -204,7 +185,8 @@ jobs:
           set -euo pipefail
           PACKAGE_RESOLVED="Voxt.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
           PACKAGE_HASH="$(shasum -a 256 "$PACKAGE_RESOLVED" | awk '{print $1}')"
-          CACHE_PREFIX="xcode-compilation-${RUNNER_OS}-${RUNNER_ARCH}-${{ steps.sherpa_cache_key.outputs.xcode_version }}-release-universal-v1"
+          XCODE_VERSION="$(xcodebuild -version | tr '\n' '-' | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/-+$//')"
+          CACHE_PREFIX="xcode-compilation-${RUNNER_OS}-${RUNNER_ARCH}-${XCODE_VERSION}-release-universal-v1"
           echo "key=${CACHE_PREFIX}-${PACKAGE_HASH}" >> "$GITHUB_OUTPUT"
           echo "restore_prefix=${CACHE_PREFIX}-" >> "$GITHUB_OUTPUT"
 
@@ -216,14 +198,6 @@ jobs:
           key: ${{ steps.compilation_cache_key.outputs.key }}
           restore-keys: |
             ${{ steps.compilation_cache_key.outputs.restore_prefix }}
-
-      - name: Report Sherpa ONNX cache status
-        run: |
-          {
-            echo "### Release dependency cache"
-            echo "- Sherpa ONNX: ${{ steps.sherpa_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
-            echo "- Xcode compilation: ${{ steps.compilation_cache.outputs.cache-hit == 'true' && 'exact hit' || 'miss/partial restore' }}"
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -290,25 +264,6 @@ jobs:
             echo "::error::MARKETING_VERSION values($MARKETING_VERSIONS) do not match tag base version($TAG_BASE_VERSION)"
             exit 1
           fi
-
-      - name: Prepare Sherpa ONNX runtime
-        run: |
-          set -euo pipefail
-          if [ "${{ steps.sherpa_cache.outputs.cache-hit }}" != "true" ]; then
-            tools/build_sherpa_onnx_macos.sh
-          fi
-
-          test -f ThirdParty/sherpa-onnx/install/include/sherpa-onnx/c-api/c-api.h
-          test -f ThirdParty/sherpa-onnx/install/lib/libsherpa-onnx.a
-          test -f ThirdParty/sherpa-onnx/install/lib/libonnxruntime.a
-          test -f ThirdParty/sherpa-onnx/sherpa-onnx.xcframework/Info.plist
-          test -f ThirdParty/sherpa-onnx/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a
-          lipo ThirdParty/sherpa-onnx/install/lib/libsherpa-onnx.a -verify_arch arm64 x86_64
-          lipo ThirdParty/sherpa-onnx/install/lib/libonnxruntime.a -verify_arch arm64 x86_64
-          lipo ThirdParty/sherpa-onnx/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a -verify_arch arm64 x86_64
-
-          cp Config/SherpaOnnx.local.xcconfig.example Config/SherpaOnnx.local.xcconfig
-          grep -F "SHERPA_ONNX_AVAILABLE" Config/SherpaOnnx.local.xcconfig >/dev/null
 
       - name: Setup keychain and import certificates
         run: |
@@ -427,28 +382,6 @@ jobs:
         with:
           path: build/DerivedData/CompilationCache.noindex
           key: ${{ steps.compilation_cache_key.outputs.key }}
-
-      - name: Validate Sherpa ONNX runtime symbols
-        run: |
-          set -euo pipefail
-          APP_EXECUTABLE="build/DerivedData/Build/Products/Release/Voxt.app/Contents/MacOS/Voxt"
-          if [ ! -f "$APP_EXECUTABLE" ]; then
-            echo "::error::Voxt executable not found at $APP_EXECUTABLE"
-            exit 1
-          fi
-
-          SYMBOLS_FILE="$(mktemp)"
-          trap 'rm -f "$SYMBOLS_FILE"' EXIT
-          nm -gU "$APP_EXECUTABLE" > "$SYMBOLS_FILE"
-
-          if ! grep -F "_SherpaOnnxCreateOfflineRecognizer" "$SYMBOLS_FILE" >/dev/null; then
-            echo "::error::Sherpa ONNX C API symbols are missing from the release app"
-            exit 1
-          fi
-          if ! grep -F "_OrtGetApiBase" "$SYMBOLS_FILE" >/dev/null; then
-            echo "::error::ONNX Runtime symbols are missing from the release app"
-            exit 1
-          fi
 
       - name: Validate Sparkle Info.plist keys
         run: |

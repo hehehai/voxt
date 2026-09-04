@@ -123,23 +123,7 @@ final class RecordingStartPlannerTests: XCTestCase {
         XCTAssertEqual(decision, .start(.mlxAudio))
     }
 
-    func testSherpaOnnxRuntimeUnavailableBlocksRecordingStart() {
-        #if SHERPA_ONNX_AVAILABLE
-        #else
-        let decision = RecordingStartPlanner.resolve(
-            selectedEngine: .sherpaOnnx,
-            mlxModelState: .downloaded,
-            selectedSherpaModelID: SherpaOnnxModelCatalog.fireRedModelID,
-            isSelectedSherpaModelDownloaded: true,
-            sherpaModelState: .downloaded
-        )
-        let expected: RecordingStartDecision = .blocked(
-            .sherpaModelUnavailable(detail: "Sherpa ONNX runtime is not bundled in this build.")
-        )
 
-        XCTAssertEqual(decision, expected)
-        #endif
-    }
 
     func testMLXUnavailableMessageIncludesErrorDetail() {
         let message = RecordingStartBlockReason.mlxModelUnavailable(detail: "Model load failed: missing key").userMessage

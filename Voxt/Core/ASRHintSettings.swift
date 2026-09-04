@@ -6,7 +6,6 @@ import Foundation
 enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
     case dictation
     case mlxAudio
-    case sherpaOnnx
     case openAIWhisper
     case glmASR
     case doubaoASR
@@ -23,8 +22,6 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("Direct Dictation")
         case .mlxAudio:
             return AppLocalization.localizedString("MLX Audio")
-        case .sherpaOnnx:
-            return AppLocalization.localizedString("Sherpa")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI Transcribe")
         case .glmASR:
@@ -46,7 +43,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .openAIWhisper, .glmASR:
             return true
-        case .dictation, .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR,
+        case .dictation, .mlxAudio, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR,
              .googleGeminiASR:
             return false
         }
@@ -64,7 +61,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppPromptDefaults.text(for: .openAIASRHint)
         case .glmASR:
             return AppPromptDefaults.text(for: .glmASRHint)
-        case .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR,
+        case .mlxAudio, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR,
              .googleGeminiASR:
             return ""
         }
@@ -76,8 +73,6 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return AppLocalization.localizedString("Direct Dictation uses your main language, optional contextual phrases, on-device preference, and punctuation settings. Prompt editing is not applied.")
         case .mlxAudio:
             return AppLocalization.localizedString("MLX uses language hints by default. Some model families also expose model-specific local tuning in the Configure dialog.")
-        case .sherpaOnnx:
-            return AppLocalization.localizedString("Sherpa runs local offline ASR models. Prompt editing is not applied.")
         case .openAIWhisper:
             return AppLocalization.localizedString("OpenAI ASR uses the resolved main language and a short prompt bias. Keep the prompt concise and focused on recognition.")
         case .glmASR:
@@ -99,7 +94,7 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .dictation:
             return AppLocalization.localizedString("Dictation Settings")
-        case .mlxAudio, .sherpaOnnx, .openAIWhisper, .glmASR, .doubaoASR, .aliyunBailianASR, .stepFunASR,
+        case .mlxAudio, .openAIWhisper, .glmASR, .doubaoASR, .aliyunBailianASR, .stepFunASR,
              .xiaomiMiMoASR, .googleGeminiASR:
             return AppLocalization.localizedString("Engine Hint Settings")
         }
@@ -111,8 +106,6 @@ enum ASRHintTarget: String, CaseIterable, Codable, Identifiable {
             return .dictation
         case .mlxAudio:
             return .mlxAudio
-        case .sherpaOnnx:
-            return .sherpaOnnx
         case .remote:
             switch remoteProvider ?? .openAIWhisper {
             case .openAIWhisper:
@@ -280,7 +273,7 @@ enum ASRHintSettingsStore {
             return .openAIASRHint
         case .glmASR:
             return .glmASRHint
-        case .dictation, .mlxAudio, .sherpaOnnx, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR,
+        case .dictation, .mlxAudio, .doubaoASR, .aliyunBailianASR, .stepFunASR, .xiaomiMiMoASR,
              .googleGeminiASR:
             return .openAIASRHint
         }

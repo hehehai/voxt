@@ -721,8 +721,6 @@ extension OnboardingSettingsView {
         switch localEngineSelection.wrappedValue {
         case .mlxAudio:
             return TranscriptionEngine.mlxAudio.description
-        case .sherpaOnnx:
-            return TranscriptionEngine.sherpaOnnx.description
         case .dictation, .remote:
             return ""
         }

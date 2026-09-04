@@ -5,13 +5,6 @@ import XCTest
 @testable import Voxt
 
 final class ModelDownloadSourceSupportTests: XCTestCase {
-    func testFunASRNanoRequiredPathsMatchExtractedArchiveLayout() {
-        let option = SherpaOnnxModelCatalog.option(for: SherpaOnnxModelCatalog.funASRNanoModelID)
-
-        XCTAssertTrue(option.requiredRelativePaths.contains("Qwen3-0.6B"))
-        XCTAssertFalse(option.requiredRelativePaths.contains("Qwen3-0.6 B"))
-    }
-
     func testSelectChoosesFastestReachableSourceAndPersistsIt() async throws {
         let defaults = try makeDefaults()
         let slow = candidate(id: "slow", url: "https://slow.example.com")

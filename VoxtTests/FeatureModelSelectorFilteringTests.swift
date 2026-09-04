@@ -121,16 +121,6 @@ final class FeatureModelSelectorFilteringTests: XCTestCase {
         ])
     }
 
-    func testConfigurationRoutingSupportsConfigurableModelKindsOnly() {
-        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.mlx("repo")))
-        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.sherpaOnnx(.init(rawValue: "model"))))
-        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.remoteASR(.openAIWhisper)))
-        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.localLLM("repo")))
-        XCTAssertTrue(FeatureModelConfigurationRouting.canConfigure(.remoteLLM(.openAI)))
-        XCTAssertFalse(FeatureModelConfigurationRouting.canConfigure(.dictation))
-        XCTAssertFalse(FeatureModelConfigurationRouting.canConfigure(.appleIntelligence))
-        XCTAssertFalse(FeatureModelConfigurationRouting.canConfigure(.localGGUFTranslation(.hyMT2Q6K)))
-    }
 
     func testAvailableTagsDoNotExposeMultilingualFilter() {
         let entries = [

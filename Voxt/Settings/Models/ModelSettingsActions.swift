@@ -190,14 +190,7 @@ extension ModelSettingsView {
             return AppLocalization.localizedString("Needs Setup")
         }
 
-        switch CustomLLMModelManager.releaseStatus(for: repo) {
-        case .deprecatedSoon:
-            return AppLocalization.localizedString("即将下线")
-        case .new:
-            return nil
-        case .standard:
-            return nil
-        }
+        return nil
     }
 
     private func selectionActionTitle(isSelected: Bool) -> String {
@@ -208,13 +201,6 @@ extension ModelSettingsView {
         let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
         modelRepo = canonicalRepo
         mlxModelManager.updateModel(repo: canonicalRepo)
-    }
-
-    func useSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
-        guard SherpaOnnxRuntimeSupport.isAvailable else { return }
-        sherpaOnnxModelManager.updateModel(id: modelID)
-        UserDefaults.standard.set(modelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
-        engineRaw = TranscriptionEngine.sherpaOnnx.rawValue
     }
 
     func downloadModel(_ repo: String) {
@@ -231,16 +217,6 @@ extension ModelSettingsView {
         }
     }
 
-    func downloadSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
-        guard SherpaOnnxRuntimeSupport.isAvailable else {
-            showModelOperationToast(
-                AppLocalization.localizedString("This model is unavailable because the sherpa-onnx runtime is not included in this build.")
-            )
-            return
-        }
-        sherpaOnnxModelManager.downloadModel(id: modelID)
-    }
-
     func deleteModel(_ repo: String) -> Result<Void, Error> {
         let result = mlxModelManager.deleteModel(repo: repo)
         if MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(modelRepo) {
@@ -249,21 +225,8 @@ extension ModelSettingsView {
         return result
     }
 
-    func deleteSherpaOnnxModel(_ modelID: SherpaOnnxModelID) -> Result<Void, Error> {
-        let result = sherpaOnnxModelManager.deleteModel(id: modelID)
-        if sherpaOnnxModelManager.selectedModelID == modelID {
-            sherpaOnnxModelManager.checkExistingModel()
-        }
-        return result
-    }
-
     func isCurrentModel(_ repo: String) -> Bool {
         MLXModelManager.canonicalModelRepo(repo) == MLXModelManager.canonicalModelRepo(modelRepo)
-    }
-
-    func isCurrentSherpaOnnxModel(_ modelID: SherpaOnnxModelID) -> Bool {
-        TranscriptionEngine.resolved(rawValue: engineRaw) == .sherpaOnnx
-            && sherpaOnnxModelManager.selectedModelID == modelID
     }
 
     func isDownloadingModel(_ repo: String) -> Bool {
@@ -309,10 +272,6 @@ extension ModelSettingsView {
         pendingModelRemovalTarget = .mlx(repo: repo)
     }
 
-    func requestDeleteSherpaOnnxModel(_ modelID: SherpaOnnxModelID) {
-        pendingModelRemovalTarget = .sherpaOnnx(modelID: modelID)
-    }
-
     func requestDeleteCustomLLM(_ repo: String) {
         pendingModelRemovalTarget = .customLLM(repo: repo)
     }
@@ -332,8 +291,6 @@ extension ModelSettingsView {
             switch target {
             case .mlx(let repo):
                 result = deleteModel(repo)
-            case .sherpaOnnx(let modelID):
-                result = deleteSherpaOnnxModel(modelID)
             case .customLLM(let repo):
                 result = deleteCustomLLM(repo)
             case .ggufTranslation(let modelID):
@@ -364,11 +321,6 @@ extension ModelSettingsView {
         return MLXModelManager.canonicalModelRepo(uninstallingRepo) == MLXModelManager.canonicalModelRepo(repo)
     }
 
-    func isUninstallingSherpaOnnxModel(_ modelID: SherpaOnnxModelID) -> Bool {
-        guard case .sherpaOnnx(let uninstallingModelID) = uninstallingModelTarget else { return false }
-        return uninstallingModelID == modelID
-    }
-
     func isUninstallingCustomLLM(_ repo: String) -> Bool {
         guard case .customLLM(let uninstallingRepo) = uninstallingModelTarget else { return false }
         return CustomLLMModelManager.canonicalModelRepo(uninstallingRepo) == CustomLLMModelManager.canonicalModelRepo(repo)
@@ -391,8 +343,6 @@ extension ModelSettingsView {
         switch target {
         case .mlx(let repo):
             return mlxModelManager.displayTitle(for: repo)
-        case .sherpaOnnx(let modelID):
-            return sherpaOnnxModelManager.displayTitle(for: modelID)
         case .customLLM(let repo):
             return customLLMManager.displayTitle(for: repo)
         case .ggufTranslation(let modelID):
@@ -519,30 +469,6 @@ extension ModelSettingsView {
         Binding(
             get: { resolvedMLXLocalTuningSettings(for: repo) },
             set: { saveMLXLocalTuningSettings($0, for: repo) }
-        )
-    }
-
-    func resolvedSherpaOnnxLocalTuningSettings(for modelID: SherpaOnnxModelID) -> SherpaOnnxLocalTuningSettings {
-        let option = SherpaOnnxModelCatalog.option(for: modelID)
-        return SherpaOnnxLocalTuningSettingsStore.resolvedSettings(
-            for: modelID,
-            kind: option.kind,
-            rawValue: sherpaOnnxLocalASRTuningSettingsRaw
-        )
-    }
-
-    func saveSherpaOnnxLocalTuningSettings(_ settings: SherpaOnnxLocalTuningSettings, for modelID: SherpaOnnxModelID) {
-        sherpaOnnxLocalASRTuningSettingsRaw = SherpaOnnxLocalTuningSettingsStore.save(
-            settings,
-            for: modelID,
-            rawValue: sherpaOnnxLocalASRTuningSettingsRaw
-        )
-    }
-
-    func sherpaOnnxLocalTuningSettingsBinding(for modelID: SherpaOnnxModelID) -> Binding<SherpaOnnxLocalTuningSettings> {
-        Binding(
-            get: { resolvedSherpaOnnxLocalTuningSettings(for: modelID) },
-            set: { saveSherpaOnnxLocalTuningSettings($0, for: modelID) }
         )
     }
 

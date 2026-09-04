@@ -20,13 +20,12 @@ extension AppDelegate {
     ) {
         let speechWasRecording = speechTranscriber.isRecording
         let mlxWasRecording = mlxTranscriber?.isRecording == true
-        let sherpaWasRecording = sherpaOnnxTranscriber?.isRecording == true
         let remoteWasRecording = remoteASRTranscriber.isRecording
 
-        if speechWasRecording || mlxWasRecording || sherpaWasRecording || remoteWasRecording {
+        if speechWasRecording || mlxWasRecording || remoteWasRecording {
             VoxtLog.asrWarning(
                 """
-                Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), sherpa=\(sherpaWasRecording), remote=\(remoteWasRecording)
+                Releasing residual recording resources. reason=\(reason), speech=\(speechWasRecording), mlx=\(mlxWasRecording), remote=\(remoteWasRecording)
                 """
             )
         }
@@ -40,7 +39,6 @@ extension AppDelegate {
         speechTranscriber.stopRecording()
         mlxTranscriber?.stopRecording()
         mlxTranscriber?.discardPreparedSessionModelUse()
-        sherpaOnnxTranscriber?.stopRecording()
         remoteASRTranscriber.discardPendingSessionOutput()
         systemAudioMuteController.restoreSystemAudioIfNeeded()
         if preservePendingHistoryAudio {
@@ -113,10 +111,6 @@ extension AppDelegate {
             activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
             mlxModelState: localASRStartContext.mlxModelState,
-            selectedSherpaModelID: localASRStartContext.selectedSherpaModelID,
-            activeSherpaDownloadModelID: localASRStartContext.activeSherpaDownloadModelID,
-            isSelectedSherpaModelDownloaded: localASRStartContext.isSelectedSherpaModelDownloaded,
-            sherpaModelState: localASRStartContext.sherpaModelState
         )
         guard case .start(let recordingEngine) = startDecision else {
             if case .blocked(let reason) = startDecision {

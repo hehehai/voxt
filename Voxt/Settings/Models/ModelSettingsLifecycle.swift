@@ -13,7 +13,6 @@ extension ModelSettingsView {
 
     func refreshAllModelStorageRoots() {
         mlxModelManager.refreshStorageRoot()
-        sherpaOnnxModelManager.refreshStorageRoot()
         customLLMManager.refreshStorageRoot()
         ggufTranslationModelManager.refreshStorageRoot()
     }

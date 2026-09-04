@@ -6,12 +6,10 @@ import Foundation
 enum SettingsModelDownloadBadgeSupport {
     static func activeDownloadCount(
         mlxActiveDownloadRepos: Set<String>,
-        sherpaActiveDownloadModelIDs: Set<SherpaOnnxModelID> = [],
         customLLMActiveDownloadRepos: Set<String>,
         ggufActiveDownloadModelID: GGUFTranslationModelID?
     ) -> Int {
         var count = mlxActiveDownloadRepos.count
-            + sherpaActiveDownloadModelIDs.count
             + customLLMActiveDownloadRepos.count
 
         if ggufActiveDownloadModelID != nil {

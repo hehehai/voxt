@@ -119,10 +119,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let speechTranscriber = SpeechTranscriber()
     var mlxTranscriber: MLXTranscriber?
-    var sherpaOnnxTranscriber: SherpaOnnxTranscriber?
     let remoteASRTranscriber = RemoteASRTranscriber()
     let mlxModelManager: MLXModelManager
-    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let historyStore = TranscriptionHistoryStore()
@@ -174,7 +172,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     )
     lazy var meetingSessionCoordinator = MeetingSessionCoordinator(
         mlxModelManager: mlxModelManager,
-        sherpaOnnxModelManager: sherpaOnnxModelManager,
         preferredInputDeviceIDProvider: { [weak self] in
             self?.selectedInputDeviceID
         },
@@ -315,13 +312,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set(repo, forKey: AppPreferenceKey.mlxModelRepo)
         }
         mlxModelManager = MLXModelManager(modelRepo: repo, hubBaseURL: MLXModelManager.defaultHubBaseURL)
-        let storedSherpaModelID = UserDefaults.standard.string(forKey: AppPreferenceKey.sherpaOnnxASRModelID)
-            ?? SherpaOnnxModelCatalog.defaultModelID.rawValue
-        let sherpaModelID = SherpaOnnxModelID(rawValue: storedSherpaModelID)
-        if sherpaModelID.rawValue != storedSherpaModelID {
-            UserDefaults.standard.set(sherpaModelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
-        }
-        sherpaOnnxModelManager = SherpaOnnxModelManager(modelID: sherpaModelID)
         let llmRepo = UserDefaults.standard.string(forKey: AppPreferenceKey.customLLMModelRepo)
             ?? CustomLLMModelManager.defaultModelRepo
         customLLMManager = CustomLLMModelManager(modelRepo: llmRepo, hubBaseURL: CustomLLMModelManager.defaultHubBaseURL)
@@ -340,7 +330,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppPreferenceKey.interfaceLanguage: AppInterfaceLanguage.system.rawValue,
             AppPreferenceKey.translationTargetLanguage: TranslationTargetLanguage.english.rawValue,
             AppPreferenceKey.userMainLanguageCodes: UserMainLanguageOption.defaultStoredSelectionValue,
-            AppPreferenceKey.sherpaOnnxASRModelID: SherpaOnnxModelCatalog.defaultModelID.rawValue,
             AppPreferenceKey.translationModelProvider: TranslationModelProvider.customLLM.rawValue,
             AppPreferenceKey.translationGGUFModelID: GGUFTranslationModelCatalog.defaultModelID.rawValue,
             AppPreferenceKey.rewriteModelProvider: RewriteModelProvider.customLLM.rawValue,
@@ -832,7 +821,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         speechTranscriber.shutdownForApplicationTermination()
         await remoteASRTranscriber.shutdownForApplicationTermination()
         await mlxTranscriber?.shutdownForApplicationTermination()
-        await sherpaOnnxTranscriber?.shutdownForApplicationTermination()
         await meetingStopTask?.value
 
         for task in tasksToCancel {
@@ -845,7 +833,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         await ggufTranslationModelManager.shutdownForApplicationTermination()
         await customLLMManager.shutdownForApplicationTermination()
         await mlxModelManager.shutdownForApplicationTermination()
-        await sherpaOnnxModelManager.shutdownForApplicationTermination()
         await SileroVADModelProvisioner.shared.shutdownForApplicationTermination()
 
         let syncCompletion = await (obsidianSyncCompleted, remindersSyncCompleted)

@@ -38,8 +38,8 @@
 | 高性能 | 高精度通用 ASR | Qwen3-ASR 1.7B 8bit | `mlx-community/Qwen3-ASR-1.7B-8bit` | 2.47 GB | 保留为高性能档 |
 | 兼容 | 实时多语言 | Voxtral Realtime Mini 4B | Voxtral Realtime repos | 3.15–8.89 GB | 全系列隐藏支持，仅保留已有安装和旧配置兼容 |
 | 低 / 中性能 | 英文专用 | Parakeet TDT 0.6B v3 | `mlx-community/parakeet-tdt-0.6b-v3` | 2.51 GB | 只保留 Parakeet 英文主入口 |
-| 兼容 | 离线准确率 | FireRed ASR 2 | MLX 与 sherpa FireRed IDs | 0.54–4.57 GB | 全系列隐藏支持，仅保留已有安装、旧配置和迁移兼容 |
-| 兼容 | 离线多语言 | FunASR Nano | `funasr-nano-int8` | 0.95 GB | 隐藏支持，仅保留已有安装和旧配置兼容 |
+| 已移除 | 离线准确率 | FireRed ASR 2 | MLX FireRed ID | 0.54–4.57 GB | sherpa-onnx FireRed 路径已移除；MLX FireRed 仅保留现有安装与旧配置迁移 |
+| 已移除 | 离线多语言 | FunASR Nano | `funasr-nano-int8` | 0.95 GB | sherpa-onnx 路径已移除 |
 | 中性能 | 多语言 / 事件检测 | SenseVoice Small | `mlx-community/SenseVoiceSmall` | 936 MB | 保留 |
 | 兼容 | MLX Whisper 历史迁移 | Whisper Tiny / Base / Small / Large v3 / Large v3 Turbo | MLX Whisper repos | 76 MB 到 3.09 GB | 保留 MLX 路径；旧短 ID 迁移 |
 | 低 / 中性能 | 流式 ASR | Nemotron ASR Streaming 0.6B 8bit | `mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit` | 约 0.76 GB | 保留为流式 ASR 入口 |
@@ -92,8 +92,8 @@
 | GLM-ASR Nano 2512 4bit | `mlx-community/GLM-ASR-Nano-2512-4bit` | 隐藏兼容 | 72 | 小体积中文/多语言备用，但默认价值低于 Qwen3-ASR 0.6B 4bit |
 | Granite Speech 4.0 1B 5bit | `mlx-community/granite-4.0-1b-speech-5bit` | 隐藏兼容 | 70 | 仅支持英语、法语、德语、西班牙语、葡萄牙语、日语；和 Qwen3-ASR 默认入口重叠 |
 | Nemotron ASR Streaming 0.6B 8bit | `mlx-community/nemotron-3.5-asr-streaming-0.6b-8bit` | 可见保留 | 82 | 新增依赖已支持，流式定位清晰，体积适合作为默认展示入口 |
-| FireRed ASR 2 | MLX 与 sherpa FireRed IDs | 隐藏兼容 | 82 | 不再默认展示，保留已有安装、旧配置和迁移兼容 |
-| FunASR Nano | `funasr-nano-int8` | 隐藏兼容 | 72 | 当前 sherpa ONNX 路径为离线识别，不进入默认模型列表 |
+| FireRed ASR 2 | MLX FireRed ID | 已移除 sherpa 路径 | 82 | sherpa-onnx 模型与运行时已移除；MLX 路径仍单独保留 |
+| FunASR Nano | `funasr-nano-int8` | 已移除 | 72 | sherpa-onnx 离线识别路径已移除 |
 | SenseVoice Small | `mlx-community/SenseVoiceSmall` | 可见保留 | 80 | 多语言和事件检测有差异化，体积也适合默认展示 |
 
 ## LLM 系列评估
@@ -116,15 +116,15 @@
 | Qwen3.5 | 4B OptiQ 4bit | 可见保留 | 94 | 中性能主推，体积略低于普通 4bit，评分更高 |
 | Qwen3.5 | 9B OptiQ 4bit | 可见保留 | 91 | 高性能质量档，阶段边界清晰 |
 | GLM | GLM 4 9B | 可见保留 | 86 | 中文 / 多语言备用价值明确 |
-| GLM | GLM-4 9B Chat 1M 4bit | 隐藏兼容 | 72 | 长上下文不是 Voxt 当前核心需求，和 GLM 4 9B 重叠 |
-| GLM | GLM-Z1 9B 0414 4bit | 隐藏兼容 | 74 | 推理向，但改写/翻译不需要默认展示 |
-| GLM | GLM-4.7 Flash 4bit | 隐藏兼容 | 68 | 16.9 GB，强性能兼容即可 |
-| Llama | Llama 3.2 1B 4bit | 隐藏兼容 | 60 | 低配阶段被 Qwen3.5 2B 覆盖 |
-| Llama | Llama 3.2 3B 4bit | 隐藏兼容 | 62 | 非主线轻量模型，和 Qwen3.5 2B / 4B 重叠 |
-| Llama | Llama 3 8B 4bit | 隐藏兼容 | 66 | 旧 8B，默认价值低于 Qwen3.5 9B / GLM 4 9B |
-| Llama | Llama 3.1 8B 4bit | 隐藏兼容 | 68 | 保留兼容，不默认展示 |
-| Mistral | Mistral 7B Instruct v0.3 4bit | 隐藏兼容 | 70 | 稳定但非主线，默认价值低于 Qwen3.5 / Gemma4 |
-| Mistral | Mistral Nemo 2407 4bit | 隐藏兼容 | 72 | 高质量备用，但 6.91 GB 体积偏重 |
+| GLM | GLM-4 9B Chat 1M 4bit | 已移除 | 72 | 长上下文不是 Voxt 当前核心需求，和 GLM 4 9B 重叠 |
+| GLM | GLM-Z1 9B 0414 4bit | 已移除 | 74 | 推理向，但改写/翻译不需要默认展示 |
+| GLM | GLM-4.7 Flash 4bit | 已移除 | 68 | 16.9 GB，强性能兼容即可 |
+| Llama | Llama 3.2 1B 4bit | 已移除 | 60 | 低配阶段被 Qwen3.5 2B 覆盖 |
+| Llama | Llama 3.2 3B 4bit | 已移除 | 62 | 非主线轻量模型，和 Qwen3.5 2B / 4B 重叠 |
+| Llama | Llama 3 8B 4bit | 已移除 | 66 | 旧 8B，默认价值低于 Qwen3.5 9B / GLM 4 9B |
+| Llama | Llama 3.1 8B 4bit | 已移除 | 68 | 2024 系列，主线已收敛到 Qwen / Gemma / GLM |
+| Mistral | Mistral 7B Instruct v0.3 4bit | 已移除 | 70 | 稳定但非主线，默认价值低于 Qwen3.5 / Gemma4 |
+| Mistral | Mistral Nemo 2407 4bit | 已移除 | 72 | 高质量备用，但 6.91 GB 体积偏重 |
 | Mistral | Mistral 3 3B | 可见保留 | 82 | 新 Mistral3 轻量入口，直接显示不分组 |
 | Gemma | Gemma 2 2B 4bit | 剔除 / 不推荐 | 61 | 被 Gemma 4 E2B 和 Qwen3.5 2B 替代 |
 | Gemma | Gemma 2 9B 4bit | 剔除 / 不推荐 | 66 | 被 Gemma 4 E4B 和 Qwen3.5 9B 替代 |
@@ -135,12 +135,12 @@
 
 | 模型 | repo / ID | 推荐动作 | 精简评分 | 理由 |
 |---|---|---:|---:|---|
-| Phi 3.5 Mini Instruct 4bit | `mlx-community/Phi-3.5-mini-instruct-4bit` | 隐藏兼容 | 60 | 轻量价值被 Qwen3.5 2B 覆盖 |
-| InternLM2.5 7B Chat 4bit | `mlx-community/internlm2_5-7b-chat-4bit` | 隐藏兼容 | 70 | 中文友好，但和 GLM 4 9B、Qwen3.5 高配重叠 |
-| MiniCPM4 8B 4bit | `mlx-community/MiniCPM4-8B-4bit` | 隐藏兼容 | 72 | 双语能力可能有价值，但默认列表已有 GLM / Qwen |
-| Granite 3.3 2B Instruct 4bit | `mlx-community/granite-3.3-2b-instruct-4bit` | 隐藏兼容 | 59 | 结构化能力不够支撑默认展示，且版本较旧 |
-| MiMo 7B SFT 4bit | `mlx-community/MiMo-7B-SFT-4bit` | 隐藏兼容 | 69 | 需要实测中文改写质量，先不默认展示 |
-| AceReason Nemotron 7B 4bit | `mlx-community/AceReason-Nemotron-7B-4bit` | 隐藏兼容 | 73 | 推理向模型，适合实验池，不适合作为改写/翻译默认 |
+| Phi 3.5 Mini Instruct 4bit | `mlx-community/Phi-3.5-mini-instruct-4bit` | 已移除 | 60 | 轻量价值被 Qwen3.5 2B 覆盖 |
+| InternLM2.5 7B Chat 4bit | `mlx-community/internlm2_5-7b-chat-4bit` | 已移除 | 70 | 中文友好，但和 GLM 4 9B、Qwen3.5 高配重叠 |
+| MiniCPM4 8B 4bit | `mlx-community/MiniCPM4-8B-4bit` | 已移除 | 72 | 双语能力可能有价值，但默认列表已有 GLM / Qwen |
+| Granite 3.3 2B Instruct 4bit | `mlx-community/granite-3.3-2b-instruct-4bit` | 已移除 | 59 | 结构化能力不够支撑默认展示，且版本较旧 |
+| MiMo 7B SFT 4bit | `mlx-community/MiMo-7B-SFT-4bit` | 已移除 | 69 | 需要实测中文改写质量，先不默认展示 |
+| AceReason Nemotron 7B 4bit | `mlx-community/AceReason-Nemotron-7B-4bit` | 已移除 | 73 | 推理向模型，适合实验池，不适合作为改写/翻译默认 |
 
 ## 建议执行顺序
 

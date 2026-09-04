@@ -297,9 +297,6 @@ extension AppDelegate {
         case .mlxAudio:
             let repo = mlxModelManager.currentModelRepo
             transcriptionModel = "\(mlxModelManager.displayTitle(for: repo)) (\(repo))"
-        case .sherpaOnnx:
-            let modelID = sherpaOnnxModelManager.selectedModelID
-            transcriptionModel = "\(sherpaOnnxModelManager.displayTitle(for: modelID)) (\(modelID.rawValue))"
         case .remote:
             let provider = remoteASRSelectedProvider
             if let config = remoteASRConfigurations[provider.rawValue], config.hasUsableModel {
@@ -755,8 +752,6 @@ extension AppDelegate {
             consumedURL = speechTranscriber.consumeCompletedAudioArchiveURL()
         case .mlxAudio:
             consumedURL = mlxTranscriber?.consumeCompletedAudioArchiveURL()
-        case .sherpaOnnx:
-            consumedURL = sherpaOnnxTranscriber?.consumeCompletedAudioArchiveURL()
         case .remote:
             consumedURL = remoteASRTranscriber.consumeCompletedAudioArchiveURL()
         }
@@ -782,7 +777,6 @@ extension AppDelegate {
         pendingCompletedHistoryAudioArchiveURL = nil
         speechTranscriber.discardCompletedAudioArchive()
         mlxTranscriber?.discardCompletedAudioArchive()
-        sherpaOnnxTranscriber?.discardCompletedAudioArchive()
         remoteASRTranscriber.discardCompletedAudioArchive()
     }
 

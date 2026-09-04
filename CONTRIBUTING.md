@@ -29,7 +29,7 @@ cd Voxt
 open Voxt.xcodeproj
 ```
 
-Most contributors can build and test without signing credentials. Local signing overrides are optional and must remain uncommitted. If you need the optional Sherpa ONNX integration, follow [`docs/SherpaOnnxDependency.md`](docs/SherpaOnnxDependency.md) and [`Config/SherpaOnnx.local.xcconfig.example`](Config/SherpaOnnx.local.xcconfig.example). Do not commit files under `ThirdParty/sherpa-onnx/` or either local `.xcconfig` file.
+Most contributors can build and test without signing credentials. Local signing overrides are optional and must remain uncommitted.
 
 ## Build and test
 

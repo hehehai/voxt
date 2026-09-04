@@ -25,17 +25,6 @@ extension ModelSettingsView {
         .map { _ in () }
         .eraseToAnyPublisher()
 
-        let sherpa = Publishers.CombineLatest(
-            sherpaOnnxModelManager.$activeDownloadModelIDs
-                .map { Set($0.map(\.rawValue)) }
-                .removeDuplicates(),
-            sherpaOnnxModelManager.$state
-                .map(ModelSettingsManagerRefreshSupport.phase(for:))
-                .removeDuplicates()
-        )
-        .map { _ in () }
-        .eraseToAnyPublisher()
-
         let gguf = Publishers.CombineLatest(
             ggufTranslationModelManager.$activeDownloadModelID
                 .map { $0?.rawValue }
@@ -48,8 +37,8 @@ extension ModelSettingsView {
         .eraseToAnyPublisher()
 
         return Publishers.Merge(
-            Publishers.Merge(mlx, sherpa),
-            Publishers.Merge(customLLM, gguf)
+            Publishers.Merge(mlx, customLLM),
+            gguf
         )
         .dropFirst()
         .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
@@ -84,23 +73,6 @@ extension ModelSettingsView {
         )
         .eraseToAnyPublisher()
 
-        let sherpaStateByID = sherpaOnnxModelManager.$stateByID
-            .removeDuplicates()
-            .map { _ in () }
-            .eraseToAnyPublisher()
-
-        let sherpaPauseMessage = Publishers.Merge(
-            sherpaOnnxModelManager.$pausedStatusMessage
-                .removeDuplicates()
-                .map { _ in () }
-                .eraseToAnyPublisher(),
-            sherpaOnnxModelManager.$pausedStatusMessageByID
-                .removeDuplicates()
-                .map { _ in () }
-                .eraseToAnyPublisher()
-        )
-        .eraseToAnyPublisher()
-
         let gguf = ggufTranslationModelManager.$stateByID
             .removeDuplicates()
             .map { _ in () }
@@ -113,10 +85,7 @@ extension ModelSettingsView {
 
         return Publishers.Merge(
             Publishers.Merge(
-                Publishers.Merge(
-                    Publishers.Merge(mlx, mlxPauseMessage),
-                    Publishers.Merge(sherpaStateByID, sherpaPauseMessage)
-                ),
+                Publishers.Merge(mlx, mlxPauseMessage),
                 customLLM
             ),
             Publishers.Merge(
@@ -300,8 +269,6 @@ extension ModelSettingsView {
         let token = ModelSettingsManagerRefreshSupport.downloadLifecycleToken(
             mlxState: mlxModelManager.state,
             mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
-            sherpaState: sherpaOnnxModelManager.state,
-            sherpaActiveDownloadModelIDs: sherpaOnnxModelManager.activeDownloadModelIDs,
             customLLMState: customLLMManager.state,
             customLLMStateByRepo: customLLMManager.stateByRepo,
             customLLMActiveDownloadRepos: customLLMManager.activeDownloadRepos,

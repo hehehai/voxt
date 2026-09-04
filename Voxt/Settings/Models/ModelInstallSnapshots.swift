@@ -114,47 +114,6 @@ extension ModelSettingsView {
         )
     }
 
-    func sherpaOnnxInstallSnapshot(for modelID: SherpaOnnxModelID) -> LocalModelInstallSnapshot {
-        let catalogSnapshot = sherpaOnnxModelManager.catalogSnapshot(for: modelID)
-        let isUninstalling = isUninstallingSherpaOnnxModel(modelID)
-        let target = LocalModelInstallTarget.sherpaOnnx(modelID)
-        let state: LocalModelInstallState
-
-        if isUninstalling {
-            state = .uninstalling
-        } else if isCancellationPending(for: target) {
-            state = .cancelling
-        } else if catalogSnapshot.isDownloading {
-            state = .downloading
-        } else if catalogSnapshot.isPaused {
-            state = .paused
-        } else if catalogSnapshot.isDownloaded {
-            state = .installed
-        } else {
-            state = .installable(isEnabled: true)
-        }
-
-        return LocalModelInstallSnapshot(
-            target: target,
-            state: state,
-            isInstalled: catalogSnapshot.isDownloaded,
-            isCurrentSelection: isCurrentSherpaOnnxModel(modelID),
-            statusText: sherpaOnnxInstallStatusText(
-                for: catalogSnapshot,
-                isUninstalling: isUninstalling,
-                isCancelling: isCancellationPending(for: target)
-            ),
-            badgeText: nil,
-            downloadStatus: isCancellationPending(for: target) ? nil : ModelDownloadStatusSnapshot.fromMLXState(
-                catalogSnapshot.state,
-                pauseMessage: catalogSnapshot.pausedStatusMessage
-            ),
-            canOpenLocation: catalogSnapshot.isDownloaded && !isUninstalling && !isCancellationPending(for: target),
-            canConfigure: catalogSnapshot.isDownloaded && !isUninstalling && !isCancellationPending(for: target),
-            configureActionTitle: AppLocalization.localizedString("Configure")
-        )
-    }
-
     func ggufTranslationInstallSnapshot(for modelID: GGUFTranslationModelID) -> LocalModelInstallSnapshot {
         let modelState = ggufTranslationModelManager.state(for: modelID)
         let isInstalled = ggufTranslationModelManager.isModelDownloaded(id: modelID)
@@ -226,24 +185,6 @@ extension ModelSettingsView {
             openMLXModelDirectory(repo)
         case (.mlx(let repo), .configure):
             activeLocalASRConfigurationTarget = .mlx(repo: repo)
-
-        case (.sherpaOnnx(let modelID), .use):
-            useSherpaOnnxModel(modelID)
-        case (.sherpaOnnx(let modelID), .install), (.sherpaOnnx(let modelID), .resume):
-            downloadSherpaOnnxModel(modelID)
-        case (.sherpaOnnx(let modelID), .pause):
-            sherpaOnnxModelManager.pauseDownload(id: modelID)
-            refreshCatalogSnapshot()
-        case (.sherpaOnnx(let modelID), .cancel):
-            cancellingInstallTargets.insert(.sherpaOnnx(modelID))
-            sherpaOnnxModelManager.cancelDownload(id: modelID)
-            refreshCatalogSnapshot()
-        case (.sherpaOnnx(let modelID), .uninstall):
-            requestDeleteSherpaOnnxModel(modelID)
-        case (.sherpaOnnx(let modelID), .openLocation):
-            sherpaOnnxModelManager.openModelDirectory(id: modelID)
-        case (.sherpaOnnx(let modelID), .configure):
-            activeLocalASRConfigurationTarget = .sherpaOnnx(modelID: modelID)
 
         case (.customLLM(let repo), .use):
             useCustomLLM(repo)
@@ -440,9 +381,6 @@ extension ModelSettingsView {
         case .mlx(let repo):
             let snapshot = mlxModelManager.catalogSnapshot(for: repo)
             return snapshot.isDownloading || snapshot.isPaused
-        case .sherpaOnnx(let modelID):
-            let snapshot = sherpaOnnxModelManager.catalogSnapshot(for: modelID)
-            return snapshot.isDownloading || snapshot.isPaused
         case .customLLM(let repo):
             let snapshot = customLLMManager.catalogSnapshot(for: repo)
             return snapshot.isDownloading || snapshot.isPaused
@@ -495,39 +433,4 @@ extension ModelSettingsView {
         }
     }
 
-    private func sherpaOnnxInstallStatusText(
-        for snapshot: SherpaOnnxModelManager.CatalogSnapshot,
-        isUninstalling: Bool,
-        isCancelling: Bool
-    ) -> String {
-        if isUninstalling {
-            return AppLocalization.localizedString("Uninstalling…")
-        }
-        if isCancelling {
-            return AppLocalization.localizedString("Cancelling…")
-        }
-
-        switch snapshot.state {
-        case .downloaded, .ready:
-            return AppLocalization.localizedString("Installed")
-        case .loading:
-            return AppLocalization.localizedString("Loading…")
-        case .downloading(_, let completed, let total, _, _, _):
-            return ModelDownloadPresentationSupport.statusText(
-                downloadState: .downloading(completed: completed, total: total)
-            )
-        case .paused(_, let completed, let total, _, _, _):
-            return ModelDownloadPresentationSupport.statusText(
-                downloadState: .paused(
-                    completed: completed,
-                    total: total,
-                    pauseMessage: snapshot.pausedStatusMessage
-                )
-            )
-        case .error(let message):
-            return ModelDownloadPresentationSupport.statusText(downloadState: .idle, errorMessage: message)
-        case .notDownloaded:
-            return ""
-        }
-    }
 }

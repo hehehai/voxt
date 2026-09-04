@@ -570,10 +570,6 @@
 "Access Token" = "Access Token";
 "Paste access token" = "粘贴 Access Token";
 "Not available" = "不可用";
-"Sherpa" = "Sherpa";
-"Sherpa runs local offline ASR models. Prompt editing is not applied." = "Sherpa 运行本地离线 ASR 模型。不应用提示词编辑。";
-"Local Sherpa" = "本地 Sherpa";
-"Sherpa ONNX runtime is not bundled in this build." = "此构建未内置 Sherpa ONNX 运行时。";
 "Doubao Access Token is required for testing." = "测试需要填写豆包 Access Token。";
 "Doubao App ID is required for testing." = "测试需要填写豆包 App ID。";
 "Connection test succeeded (Doubao WebSocket reachable)." = "连接测试成功（豆包 WebSocket 可达）。";
@@ -1655,7 +1651,6 @@
 "Local LLM Generation" = "本地 LLM 生成配置";
 "Local LLM Configuration" = "本地 LLM 配置";
 "Model Default" = "模型默认";
-"Model Default keeps Voxt's built-in thinking disable behavior for Qwen3, GLM-Z1, and similar local reasoning models." = "模型默认会保留 Voxt 对 Qwen3、GLM-Z1 等本地推理模型内置的关闭思考行为。";
 "Top P" = "Top P";
 "Top K" = "Top K";
 "Min P" = "Min P";
@@ -1999,7 +1994,6 @@
 "Voxt is ready. You can revisit this guide from the main window at any time." = "Voxt 已准备好。你可以随时从主窗口重新打开这个引导。";
 "Voxt shortcut detected" = "已检测到 Voxt 快捷键";
 "Workflows" = "工作流";
-"Sherpa ASR Configuration" = "Sherpa ASR 配置";
 "Threads" = "线程数";
 "Max New Tokens" = "最大新 Token";
 "Higher values can improve offline decode speed, but also use more CPU." = "更高的值可以提升离线解码速度，但会使用更多 CPU。";
@@ -2224,7 +2218,6 @@
 "Translation and meeting shortcuts should be different." = "翻译和会议快捷键不能相同。";
 "Uninstalling…" = "正在卸载…";
 "Use this as a maximum participant count hint. People who do not speak may not appear in the transcript." = "将此值作为参与者人数上限提示；未发言的人可能不会出现在转录中。";
-"Uses sherpa-onnx speech models running locally. Requires a one-time model download." = "使用本地运行的 sherpa-onnx 语音模型，首次使用需要下载模型。";
 "Uses ~/.codex/auth.json" = "使用 ~/.codex/auth.json";
 "Using Apple Intelligence for meeting summaries." = "正在使用 Apple Intelligence 生成会议摘要。";
 "VAD Segmented" = "VAD 分段";
@@ -2244,7 +2237,6 @@
 "Stored provider credentials are invalid. Reopen the provider settings and save them again." = "已保存的服务商凭据无效。请重新打开服务商设置并再次保存。";
 "Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac." = "已保存的服务商凭据暂时不可用。请解锁 Mac 后重试。";
 "Configuration could not be encoded. Please try again." = "无法编码配置，请重试。";
-"This model is unavailable because the sherpa-onnx runtime is not included in this build." = "此版本未包含 sherpa-onnx 运行时，因此该模型不可用。";
 "Uninstalled %@." = "已卸载 %@。";
 "Uninstall failed: %@" = "卸载失败：%@";
 "Model download succeeded" = "模型下载成功";

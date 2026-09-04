@@ -64,18 +64,6 @@ enum ASRHintResolver {
                 otherLanguages: otherLanguages,
                 multilingualContext: multilingualContext
             )
-        case .sherpaOnnx:
-            let terms = resolvedSherpaOnnxTerms(
-                contextualPhrases: contextualPhrases,
-                dictionaryTerms: dictionaryTerms
-            )
-            return ResolvedASRHintPayload(
-                language: usesExplicitSingleLanguageHint ? resolvedSherpaOnnxLanguage(mainLanguage) : nil,
-                prompt: nil,
-                otherLanguages: otherLanguages,
-                multilingualContext: multilingualContext,
-                contextualPhrases: terms
-            )
         case .openAIWhisper:
             return ResolvedASRHintPayload(
                 language: usesExplicitSingleLanguageHint ? resolvedOpenAILanguage(mainLanguage) : nil,
@@ -298,15 +286,6 @@ enum ASRHintResolver {
         )
     }
 
-    private static func resolvedSherpaOnnxTerms(
-        contextualPhrases: [String],
-        dictionaryTerms: String
-    ) -> [String] {
-        mergedTermLines(
-            contextualPhrases + dictionaryTerms.components(separatedBy: .newlines)
-        )
-    }
-
     private static func resolvedStepFunPrompt(
         terms: [String]
     ) -> String? {
@@ -333,15 +312,6 @@ enum ASRHintResolver {
 
     private static func resolvedOpenAILanguage(_ language: UserMainLanguageOption) -> String {
         language.baseLanguageCode
-    }
-
-    private static func resolvedSherpaOnnxLanguage(_ language: UserMainLanguageOption) -> String? {
-        switch language.baseLanguageCode {
-        case "zh", "en", "ja", "ko", "yue":
-            return language.baseLanguageCode
-        default:
-            return nil
-        }
     }
 
     private static func resolvedDoubaoLanguage(_ language: UserMainLanguageOption) -> String? {

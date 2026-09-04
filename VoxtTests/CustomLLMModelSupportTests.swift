@@ -71,37 +71,6 @@ final class CustomLLMModelSupportTests: XCTestCase {
         )
     }
 
-    func testCatalogUsesKnownRemoteSizeFallbacksForNewRecommendedModels() {
-        XCTAssertEqual(
-            CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit")?
-                .replacingOccurrences(of: "\u{2006}", with: " "),
-            "886.1 MB"
-        )
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Qwen3.5-0.8B-4bit-OptiQ"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Qwen3.5-4B-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Qwen3.5-4B-OptiQ-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Qwen3.5-9B-OptiQ-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/MiniCPM4-8B-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/internlm2_5-7b-chat-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/glm-4-9b-chat-1m-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/GLM-Z1-9B-0414-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/GLM-4.7-Flash-4bit"))
-        XCTAssertEqual(
-            CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Ministral-3-3B-Instruct-2512-4bit")?
-                .replacingOccurrences(of: "\u{2006}", with: " "),
-            "2.75 GB"
-        )
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/gemma-4-e2b-it-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/gemma-4-e4b-it-4bit"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/gemma-4-12B-it-OptiQ-4bit"))
-        XCTAssertEqual(
-            CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/LFM2-1.2B-4bit")?
-                .replacingOccurrences(of: "\u{2006}", with: " "),
-            "663.4 MB"
-        )
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/LFM2-8B-A1B-3bit-MLX"))
-        XCTAssertNotNil(CustomLLMModelCatalog.fallbackRemoteSizeText(repo: "mlx-community/Qwen3.6-27B-4bit"))
-    }
 
     func testAllSupportedCustomLLMModelsHaveFixedSizeFallbacks() {
         let missingRepos = CustomLLMModelCatalog.supportedModels
@@ -111,96 +80,6 @@ final class CustomLLMModelSupportTests: XCTestCase {
         XCTAssertEqual(missingRepos, [])
     }
 
-    func testCatalogMarksNewAndHiddenCompatibilityModels() {
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/Qwen3.5-2B-4bit"),
-            .new
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit"),
-            .standard
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/Qwen3.5-4B-4bit"),
-            .standard
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/Qwen3.5-4B-OptiQ-4bit"),
-            .new
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/Qwen3.5-9B-OptiQ-4bit"),
-            .new
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/MiniCPM4-8B-4bit"),
-            .standard
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/internlm2_5-7b-chat-4bit"),
-            .standard
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/glm-4-9b-chat-1m-4bit"),
-            .standard
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/GLM-Z1-9B-0414-4bit"),
-            .standard
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/GLM-4.7-Flash-4bit"),
-            .standard
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/Ministral-3-3B-Instruct-2512-4bit"),
-            .new
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/LFM2-1.2B-4bit"),
-            .new
-        )
-        XCTAssertEqual(
-            CustomLLMModelCatalog.releaseStatus(for: "mlx-community/Qwen3.6-27B-4bit"),
-            .new
-        )
-        let compatibilityOnly = CustomLLMModelCatalog.displayModels(including: "Qwen/Qwen2.5-7B-Instruct")
-        XCTAssertTrue(compatibilityOnly.contains(where: { $0.id == "mlx-community/Qwen2.5-7B-Instruct-4bit" }))
-        let qwen2Compatibility = CustomLLMModelCatalog.displayModels(including: "Qwen/Qwen2-1.5B-Instruct")
-        XCTAssertTrue(qwen2Compatibility.contains(where: { $0.id == "Qwen/Qwen2-1.5B-Instruct" }))
-        let qwen3Compatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/Qwen3-4B-4bit")
-        XCTAssertTrue(qwen3Compatibility.contains(where: { $0.id == "mlx-community/Qwen3-4B-4bit" }))
-        let qwen35UltraLightCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit")
-        XCTAssertTrue(qwen35UltraLightCompatibility.contains(where: { $0.id == "mlx-community/Qwen3.5-0.8B-OptiQ-4bit" }))
-        let qwen30BCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/Qwen3-30B-A3B-4bit")
-        XCTAssertTrue(qwen30BCompatibility.contains(where: { $0.id == "mlx-community/Qwen3-30B-A3B-4bit" }))
-        let glm47Compatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/GLM-4.7-Flash-4bit")
-        XCTAssertTrue(glm47Compatibility.contains(where: { $0.id == "mlx-community/GLM-4.7-Flash-4bit" }))
-        let glmChatCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/glm-4-9b-chat-1m-4bit")
-        XCTAssertTrue(glmChatCompatibility.contains(where: { $0.id == "mlx-community/glm-4-9b-chat-1m-4bit" }))
-        let glmZ1Compatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/GLM-Z1-9B-0414-4bit")
-        XCTAssertTrue(glmZ1Compatibility.contains(where: { $0.id == "mlx-community/GLM-Z1-9B-0414-4bit" }))
-        let llamaCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit")
-        XCTAssertTrue(llamaCompatibility.contains(where: { $0.id == "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit" }))
-        let mistralCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/Mistral-Nemo-Instruct-2407-4bit")
-        XCTAssertTrue(mistralCompatibility.contains(where: { $0.id == "mlx-community/Mistral-Nemo-Instruct-2407-4bit" }))
-        let phiCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/Phi-3.5-mini-instruct-4bit")
-        XCTAssertTrue(phiCompatibility.contains(where: { $0.id == "mlx-community/Phi-3.5-mini-instruct-4bit" }))
-        let internLMCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/internlm2_5-7b-chat-4bit")
-        XCTAssertTrue(internLMCompatibility.contains(where: { $0.id == "mlx-community/internlm2_5-7b-chat-4bit" }))
-        let miniCPMCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/MiniCPM4-8B-4bit")
-        XCTAssertTrue(miniCPMCompatibility.contains(where: { $0.id == "mlx-community/MiniCPM4-8B-4bit" }))
-        let graniteCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/granite-3.3-2b-instruct-4bit")
-        XCTAssertTrue(graniteCompatibility.contains(where: { $0.id == "mlx-community/granite-3.3-2b-instruct-4bit" }))
-        let mimoCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/MiMo-7B-SFT-4bit")
-        XCTAssertTrue(mimoCompatibility.contains(where: { $0.id == "mlx-community/MiMo-7B-SFT-4bit" }))
-        let aceReasonCompatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/AceReason-Nemotron-7B-4bit")
-        XCTAssertTrue(aceReasonCompatibility.contains(where: { $0.id == "mlx-community/AceReason-Nemotron-7B-4bit" }))
-        let gemma2Compatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/gemma-2-2b-it-4bit")
-        XCTAssertTrue(gemma2Compatibility.contains(where: { $0.id == "mlx-community/gemma-2-2b-it-4bit" }))
-        let gemma3Compatibility = CustomLLMModelCatalog.displayModels(including: "mlx-community/gemma-3n-E4B-it-lm-4bit")
-        XCTAssertTrue(gemma3Compatibility.contains(where: { $0.id == "mlx-community/gemma-3n-E4B-it-lm-4bit" }))
-    }
 
     func testHiddenLLMModelsDisplayOnlyWhenIncludedByLocalState() {
         let hiddenRepo = "mlx-community/gemma-2-2b-it-4bit"

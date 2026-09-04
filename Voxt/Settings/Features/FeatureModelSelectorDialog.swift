@@ -337,7 +337,7 @@ enum FeatureModelConfigurationRouting {
             switch selection {
             case .dictation:
                 return false
-            case .mlx, .sherpaOnnx, .remote:
+            case .mlx, .remote:
                 return true
             }
         }

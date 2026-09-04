@@ -8,6 +8,7 @@ enum FeatureSettingsStore {
         removeObsoleteLatencyProfileKeys(defaults: defaults)
         enforceAlwaysOnLegacyFlags(defaults: defaults)
         guard loadRaw(defaults: defaults) == nil else {
+            _ = load(defaults: defaults)
             return
         }
         save(deriveFromLegacy(defaults: defaults), defaults: defaults)
@@ -19,7 +20,11 @@ enum FeatureSettingsStore {
         if let raw = loadRaw(defaults: defaults),
            let data = raw.data(using: .utf8),
            let decoded = try? JSONDecoder().decode(FeatureSettings.self, from: data) {
-            return sanitize(decoded, defaults: defaults)
+            let sanitized = sanitize(decoded, defaults: defaults)
+            if sanitized != decoded {
+                save(sanitized, defaults: defaults)
+            }
+            return sanitized
         }
         let derived = deriveFromLegacy(defaults: defaults)
         save(derived, defaults: defaults)
@@ -255,9 +260,6 @@ enum FeatureSettingsStore {
         case .mlx(let repo):
             defaults.set(TranscriptionEngine.mlxAudio.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
             defaults.set(MLXModelManager.canonicalModelRepo(repo), forKey: AppPreferenceKey.mlxModelRepo)
-        case .sherpaOnnx(let modelID):
-            defaults.set(TranscriptionEngine.sherpaOnnx.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
-            defaults.set(modelID.rawValue, forKey: AppPreferenceKey.sherpaOnnxASRModelID)
         case .remote(let provider):
             defaults.set(TranscriptionEngine.remote.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
             defaults.set(provider.rawValue, forKey: AppPreferenceKey.remoteASRSelectedProvider)
@@ -491,8 +493,12 @@ enum FeatureSettingsStore {
         fallback: FeatureModelSelectionID
     ) -> FeatureModelSelectionID {
         switch selectionID.asrSelection {
-        case .dictation, .mlx, .sherpaOnnx, .remote:
-            return selectionID
+        case .dictation:
+            return .dictation
+        case let .mlx(repo):
+            return .mlx(repo)
+        case let .remote(provider):
+            return .remoteASR(provider)
         case .none:
             return fallback
         }
@@ -503,8 +509,12 @@ enum FeatureSettingsStore {
         fallback: FeatureModelSelectionID
     ) -> FeatureModelSelectionID {
         switch selectionID.translationSelection {
-        case .localLLM, .localGGUF, .remoteLLM:
-            return selectionID
+        case let .localLLM(repo):
+            return .localLLM(repo)
+        case let .localGGUF(modelID):
+            return .localGGUFTranslation(modelID)
+        case let .remoteLLM(provider):
+            return .remoteLLM(provider)
         case .none:
             return fallback
         }
@@ -665,7 +675,7 @@ enum FeatureSettingsStore {
         switch selectionID.asrSelection {
         case .none:
             return .mlx(fallbackRepo)
-        case .dictation, .mlx, .sherpaOnnx, .remote:
+        case .dictation, .mlx, .remote:
             return selectionID
         }
     }
@@ -686,18 +696,7 @@ enum FeatureSettingsStore {
                 )
             }
             let storedRepo = defaults.string(forKey: AppPreferenceKey.mlxModelRepo) ?? MLXModelManager.defaultModelRepo
-            if SherpaOnnxRuntimeSupport.isAvailable,
-               SherpaOnnxModelCatalog.isLegacyFireRedMLXRepo(storedRepo) {
-                return .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
-            }
             return .mlx(storedRepo)
-        case .sherpaOnnx:
-            return .sherpaOnnx(
-                SherpaOnnxModelID(
-                    rawValue: defaults.string(forKey: AppPreferenceKey.sherpaOnnxASRModelID)
-                        ?? SherpaOnnxModelCatalog.defaultModelID.rawValue
-                )
-            )
         case .remote:
             let provider = RemoteASRProvider(rawValue: defaults.string(forKey: AppPreferenceKey.remoteASRSelectedProvider) ?? "") ?? .openAIWhisper
             return .remoteASR(provider)

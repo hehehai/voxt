@@ -270,47 +270,9 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(MLXModelCatalog.supportsLanguage("de", for: repo))
     }
 
-    func testASRSelectorShowsSelectedHiddenSherpaModelsEvenWhenRuntimeUnavailable() throws {
-        let fireRedBuilder = makeBuilder(
-            featureSettings: makeFeatureSettings(
-                transcriptionASR: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
-            )
-        )
-        let funASRBuilder = makeBuilder(
-            featureSettings: makeFeatureSettings(
-                transcriptionASR: .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID)
-            )
-        )
 
-        let fireRed = try XCTUnwrap(
-            fireRedBuilder.entries(for: .transcriptionASR)
-                .first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID) })
-        )
-        let funASR = try XCTUnwrap(
-            funASRBuilder.entries(for: .transcriptionASR)
-                .first(where: { $0.selectionID == .sherpaOnnx(SherpaOnnxModelCatalog.funASRNanoModelID) })
-        )
 
-        XCTAssertEqual(fireRed.title, "FireRed 2 Mini")
-        XCTAssertEqual(funASR.title, "FunASR Nano")
-        XCTAssertEqual(fireRed.engine, AppLocalization.localizedString("Sherpa"))
-        XCTAssertEqual(funASR.engine, AppLocalization.localizedString("Sherpa"))
 
-        if SherpaOnnxRuntimeSupport.isAvailable {
-            XCTAssertNotEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
-            XCTAssertNotEqual(funASR.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
-            if fireRed.isSelectable {
-                XCTAssertNil(fireRed.disabledReason)
-            } else {
-                XCTAssertEqual(fireRed.disabledReason, AppLocalization.localizedString("Install this model in Model settings first."))
-            }
-        } else {
-            XCTAssertFalse(fireRed.isSelectable)
-            XCTAssertFalse(funASR.isSelectable)
-            XCTAssertEqual(fireRed.statusText, SherpaOnnxRuntimeSupport.unavailableDetail)
-            XCTAssertEqual(fireRed.disabledReason, SherpaOnnxRuntimeSupport.unavailableDetail)
-        }
-    }
 
     func testLLMSelectorUsesCuratedRatingAndTags() throws {
         let repo = "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
@@ -345,22 +307,9 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertTrue(entry.usageLocations.contains(AppLocalization.localizedString("Translation")))
     }
 
-    func testMeetingSummarySelectorIncludesHiddenLocalLLMFeatureSelection() throws {
-        let repo = "mlx-community/Mistral-Nemo-Instruct-2407-4bit"
-        let builder = makeBuilder(
-            featureSettings: makeFeatureSettings(meetingSummary: .localLLM(repo))
-        )
 
-        XCTAssertFalse(CustomLLMModelManager.availableModels.contains { $0.id == repo })
 
-        let entry = try XCTUnwrap(
-            builder.entries(for: .meetingSummary)
-                .first(where: { $0.selectionID == .localLLM(repo) })
-        )
 
-        XCTAssertEqual(entry.title, CustomLLMModelCatalog.displayTitle(for: repo))
-        XCTAssertTrue(entry.usageLocations.contains(AppLocalization.localizedString("Meeting")))
-    }
 
     func testMLXSelectorUsesCuratedRatingAndTags() throws {
         let repo = "mlx-community/parakeet-tdt-0.6b-v3"
@@ -509,92 +458,6 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         XCTAssertEqual(gemmaGroup.badgeText, recommended)
     }
 
-    func testSelectorGroupsFireRedMiniAndOriginalAcrossLocalEngines() throws {
-        let items = LocalModelSeriesGrouping.featureSelectorItems(
-            from: [
-                makeSelectorEntry(
-                    selectionID: .mlx("mlx-community/FireRedASR2-AED-mlx"),
-                    title: "FireRed 2",
-                    engine: AppLocalization.localizedString("MLX Audio")
-                ),
-                makeSelectorEntry(
-                    selectionID: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID),
-                    title: "FireRed 2 Mini",
-                    engine: AppLocalization.localizedString("Sherpa")
-                )
-            ],
-            selectedID: .sherpaOnnx(SherpaOnnxModelCatalog.fireRedModelID)
-        )
-
-        let group = try XCTUnwrap(
-            items.compactMap { item -> FeatureModelSelectorGroupSection? in
-                guard case .group(let group) = item, group.title == "FireRed" else { return nil }
-                return group
-            }.first
-        )
-
-        XCTAssertEqual(group.id, LocalModelSeriesClassifier.fireRedSeriesID)
-        XCTAssertEqual(group.engine, AppLocalization.localizedString("Local"))
-        XCTAssertEqual(group.entries.map(\.groupedVariantTitle), ["Mini", "Original"])
-    }
-
-    func testSelectorDoesNotGroupGLMModels() {
-        let items = LocalModelSeriesGrouping.featureSelectorItems(
-            from: [
-                makeSelectorEntry(
-                    selectionID: .localLLM("mlx-community/GLM-4-9B-0414-4bit"),
-                    title: "GLM 4 9B",
-                    engine: AppLocalization.localizedString("Local LLM")
-                ),
-                makeSelectorEntry(
-                    selectionID: .localLLM("mlx-community/GLM-Z1-9B-0414-4bit"),
-                    title: "GLM-Z1 9B (4bit)",
-                    engine: AppLocalization.localizedString("Local LLM")
-                )
-            ],
-            selectedID: .localLLM("mlx-community/GLM-4-9B-0414-4bit")
-        )
-
-        XCTAssertEqual(items.count, 2)
-        XCTAssertTrue(items.allSatisfy { item in
-            if case .row = item {
-                return true
-            }
-            return false
-        })
-    }
-
-    func testSelectorDoesNotGroupMistralOrLlamaModels() {
-        let items = LocalModelSeriesGrouping.featureSelectorItems(
-            from: [
-                makeSelectorEntry(
-                    selectionID: .localLLM("mlx-community/Ministral-3-3B-Instruct-2512-4bit"),
-                    title: "Mistral 3 3B",
-                    engine: AppLocalization.localizedString("Local LLM")
-                ),
-                makeSelectorEntry(
-                    selectionID: .localLLM("mlx-community/Mistral-Nemo-Instruct-2407-4bit"),
-                    title: "Mistral Nemo Instruct 2407 (4bit)",
-                    engine: AppLocalization.localizedString("Local LLM")
-                ),
-                makeSelectorEntry(
-                    selectionID: .localLLM("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"),
-                    title: "Meta Llama 3.1 8B Instruct (4bit)",
-                    engine: AppLocalization.localizedString("Local LLM")
-                )
-            ],
-            selectedID: .localLLM("mlx-community/Ministral-3-3B-Instruct-2512-4bit")
-        )
-
-        XCTAssertEqual(items.count, 3)
-        XCTAssertTrue(items.allSatisfy { item in
-            if case .row = item {
-                return true
-            }
-            return false
-        })
-    }
-
     private func makeBuilder(
         mlxModelManager: MLXModelManager? = nil,
         featureSettings: FeatureSettings,
@@ -603,10 +466,8 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         primaryUserLanguageCode: String? = "en",
         appleIntelligenceAvailability: AppleIntelligenceAvailability = .available
     ) -> FeatureModelCatalogBuilder {
-        let mlxModelManager = mlxModelManager ?? TestModelManagers.mlx
-        return FeatureModelCatalogBuilder(
-            mlxModelManager: mlxModelManager,
-            sherpaOnnxModelManager: TestModelManagers.sherpa,
+        FeatureModelCatalogBuilder(
+            mlxModelManager: mlxModelManager ?? TestModelManagers.mlx,
             customLLMManager: TestModelManagers.customLLM,
             ggufTranslationModelManager: TestModelManagers.gguf,
             featureSettings: featureSettings,
@@ -635,33 +496,17 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         let rewriteASR = rewriteASR ?? .dictation
         let rewriteLLM = rewriteLLM ?? defaultLLM
         return FeatureSettings(
-            transcription: .init(
-                asrSelectionID: transcriptionASR,
-                llmEnabled: true,
-                llmSelectionID: transcriptionLLM,
-                prompt: AppPreferenceKey.defaultEnhancementPrompt
-            ),
-            translation: .init(
-                asrSelectionID: translationASR,
-                modelSelectionID: translationModel,
-                targetLanguageRawValue: translationTarget.rawValue,
-                prompt: AppPreferenceKey.defaultTranslationPrompt
-            ),
-            rewrite: .init(
-                asrSelectionID: rewriteASR,
-                llmSelectionID: rewriteLLM,
-                prompt: AppPreferenceKey.defaultRewritePrompt,
-                appEnhancementEnabled: true
-            ),
-            meeting: .init(
-                asrSelectionID: transcriptionASR,
-                summaryModelSelectionID: meetingSummary ?? transcriptionLLM,
-                summaryPrompt: "",
-                summaryAutoGenerate: true,
-                realtimeTranslateEnabled: false,
-                realtimeTargetLanguageRawValue: "",
-                hideOverlayFromScreenSharing: false
-            )
+            transcription: .init(asrSelectionID: transcriptionASR, llmEnabled: true,
+                                 llmSelectionID: transcriptionLLM,
+                                 prompt: AppPreferenceKey.defaultEnhancementPrompt),
+            translation: .init(asrSelectionID: translationASR, modelSelectionID: translationModel,
+                               targetLanguageRawValue: translationTarget.rawValue,
+                               prompt: AppPreferenceKey.defaultTranslationPrompt),
+            rewrite: .init(asrSelectionID: rewriteASR, llmSelectionID: rewriteLLM,
+                           prompt: AppPreferenceKey.defaultRewritePrompt, appEnhancementEnabled: true),
+            meeting: .init(asrSelectionID: transcriptionASR, summaryModelSelectionID: meetingSummary ?? transcriptionLLM,
+                           summaryPrompt: "", summaryAutoGenerate: true, realtimeTranslateEnabled: false,
+                           realtimeTargetLanguageRawValue: "", hideOverlayFromScreenSharing: false)
         )
     }
 
@@ -671,27 +516,17 @@ final class FeatureModelCatalogBuilderTests: XCTestCase {
         engine: String
     ) -> FeatureModelSelectorEntry {
         FeatureModelSelectorEntry(
-            selectionID: selectionID,
-            title: title,
-            engine: engine,
-            sizeText: "1 GB",
-            ratingText: "4.8",
+            selectionID: selectionID, title: title, engine: engine, sizeText: "1 GB", ratingText: "4.8",
             filterTags: [AppLocalization.localizedString("Local")],
-            displayTags: [AppLocalization.localizedString("Local")],
-            statusText: "",
-            usageLocations: [],
-            badgeText: nil,
-            isSelectable: true,
-            disabledReason: nil
+            displayTags: [AppLocalization.localizedString("Local")], statusText: "", usageLocations: [],
+            badgeText: nil, isSelectable: true, disabledReason: nil
         )
     }
-
 }
 
 @MainActor
 private enum TestModelManagers {
     static let mlx = MLXModelManager(modelRepo: MLXModelManager.defaultModelRepo)
-    static let sherpa = SherpaOnnxModelManager(modelID: SherpaOnnxModelCatalog.defaultModelID)
     static let customLLM = CustomLLMModelManager(modelRepo: CustomLLMModelManager.defaultModelRepo)
     static let gguf = GGUFTranslationModelManager(modelID: .hyMT2Q4KM)
 }

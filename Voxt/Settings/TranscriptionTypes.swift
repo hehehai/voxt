@@ -6,13 +6,15 @@ import SwiftUI
 enum TranscriptionEngine: String, CaseIterable, Identifiable {
     case dictation
     case mlxAudio
-    case sherpaOnnx
     case remote
 
     var id: String { rawValue }
 
     static func resolved(rawValue: String?) -> TranscriptionEngine {
         if rawValue == "whisperKit" {
+            return .mlxAudio
+        }
+        if rawValue == "sherpaOnnx" {
             return .mlxAudio
         }
         return TranscriptionEngine(rawValue: rawValue ?? "") ?? .mlxAudio
@@ -22,7 +24,6 @@ enum TranscriptionEngine: String, CaseIterable, Identifiable {
         switch self {
         case .dictation: return "Direct Dictation"
         case .mlxAudio: return "MLX Audio (On-device)"
-        case .sherpaOnnx: return "Sherpa"
         case .remote: return "Remote"
         }
     }
@@ -31,7 +32,6 @@ enum TranscriptionEngine: String, CaseIterable, Identifiable {
         switch self {
         case .dictation: return AppLocalization.localizedString("Direct Dictation")
         case .mlxAudio: return AppLocalization.localizedString("MLX Audio (On-device)")
-        case .sherpaOnnx: return AppLocalization.localizedString("Sherpa")
         case .remote: return AppLocalization.localizedString("Remote")
         }
     }
@@ -42,8 +42,6 @@ enum TranscriptionEngine: String, CaseIterable, Identifiable {
             return AppLocalization.localizedString("Uses Apple's built-in speech recognition. Works immediately with no setup.")
         case .mlxAudio:
             return AppLocalization.localizedString("Uses MLX Audio speech models running locally. Requires a one-time model download.")
-        case .sherpaOnnx:
-            return AppLocalization.localizedString("Uses sherpa-onnx speech models running locally. Requires a one-time model download.")
         case .remote:
             return AppLocalization.localizedString("Uses remote speech recognition providers and cloud-hosted ASR models.")
         }

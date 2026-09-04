@@ -751,10 +751,6 @@ class CustomLLMModelManager: ObservableObject {
         return Self.displayModels(includingInstalled: localStateRepos.union([Self.canonicalModelRepo(modelRepo)]))
     }
 
-    nonisolated static func releaseStatus(for repo: String) -> CustomLLMModelCatalog.ReleaseStatus {
-        CustomLLMModelCatalog.releaseStatus(for: repo)
-    }
-
     func updateModel(repo: String) {
         let repoSelection = Self.resolveModelRepo(repo)
         let repoWasSupported = Self.isSupportedModelRepo(repo)

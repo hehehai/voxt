@@ -9,7 +9,6 @@ struct FeatureSettingsView: View {
     let navigationRequest: SettingsNavigationRequest?
     var onSelectFeatureTab: ((FeatureSettingsTab) -> Void)? = nil
     @ObservedObject var mlxModelManager: MLXModelManager
-    @ObservedObject var sherpaOnnxModelManager: SherpaOnnxModelManager
     @ObservedObject var customLLMManager: CustomLLMModelManager
     @ObservedObject var ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var noteStore: VoxtNoteStore
@@ -280,7 +279,6 @@ struct FeatureSettingsView: View {
     var selectorBuilder: FeatureModelCatalogBuilder {
         FeatureModelCatalogBuilder(
             mlxModelManager: mlxModelManager,
-            sherpaOnnxModelManager: sherpaOnnxModelManager,
             customLLMManager: customLLMManager,
             ggufTranslationModelManager: ggufTranslationModelManager,
             featureSettings: featureSettings,

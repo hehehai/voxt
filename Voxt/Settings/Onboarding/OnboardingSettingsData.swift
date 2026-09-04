@@ -315,8 +315,6 @@ extension OnboardingSettingsView {
             return AppLocalization.localizedString("Direct Dictation")
         case .mlx(let repo):
             return mlxModelManager.displayTitle(for: repo)
-        case .sherpaOnnx(let modelID):
-            return SherpaOnnxModelCatalog.displayTitle(for: modelID)
         case .remote(let provider):
             let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: remoteASRConfigurations)
             if configuration.hasUsableModel {

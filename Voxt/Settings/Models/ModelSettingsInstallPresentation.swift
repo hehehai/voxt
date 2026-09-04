@@ -5,7 +5,6 @@ import SwiftUI
 
 enum LocalModelInstallTarget: Hashable {
     case mlx(String)
-    case sherpaOnnx(SherpaOnnxModelID)
     case customLLM(String)
     case ggufTranslation(GGUFTranslationModelID)
 }

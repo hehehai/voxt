@@ -10,7 +10,6 @@ private func localized(_ key: String) -> String {
 @MainActor
 struct FeatureModelCatalogBuilder {
     let mlxModelManager: MLXModelManager
-    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     let featureSettings: FeatureSettings
@@ -39,8 +38,6 @@ struct FeatureModelCatalogBuilder {
             return localized("Direct Dictation")
         case .mlx(let repo):
             return mlxModelManager.displayTitle(for: repo)
-        case .sherpaOnnx(let modelID):
-            return sherpaOnnxModelManager.displayTitle(for: modelID)
         case .remote(let provider):
             let configurations = RemoteModelConfigurationStore.loadConfigurations(
                 from: remoteASRProviderConfigurationsRaw,
@@ -59,8 +56,6 @@ struct FeatureModelCatalogBuilder {
             return localized("Direct Dictation")
         case .mlx(let repo):
             return Self.compactModelBadgeTitle(from: mlxModelManager.displayTitle(for: repo))
-        case .sherpaOnnx(let modelID):
-            return Self.compactModelBadgeTitle(from: sherpaOnnxModelManager.displayTitle(for: modelID))
         case .remote(let provider):
             return provider.title
         case .none:
@@ -74,14 +69,6 @@ struct FeatureModelCatalogBuilder {
             return .apple
         case .mlx(let repo):
             return ModelLogoKey.resolve(title: mlxModelManager.displayTitle(for: repo), engine: "MLX")
-        case .sherpaOnnx(let modelID):
-            if modelID == SherpaOnnxModelCatalog.funASRNanoModelID {
-                return .qwen
-            }
-            return ModelLogoKey.resolve(
-                title: sherpaOnnxModelManager.displayTitle(for: modelID),
-                engine: "Sherpa ONNX"
-            )
         case .remote(let provider):
             return ModelLogoKey.resolve(title: provider.title, engine: "Remote ASR")
         case .none:
@@ -297,40 +284,6 @@ struct FeatureModelCatalogBuilder {
             )
         })
 
-        entries.append(contentsOf: sherpaOnnxDisplayModels(for: sheet).map { model in
-            let selectionID = FeatureModelSelectionID.sherpaOnnx(model.id)
-            let isRuntimeAvailable = SherpaOnnxRuntimeSupport.isAvailable
-            let isInstalled = isRuntimeAvailable && sherpaOnnxModelManager.isModelDownloaded(id: model.id)
-            let availability = Self.sherpaOnnxSelectorAvailability(isRuntimeAvailable: isRuntimeAvailable, isInstalled: isInstalled)
-            return FeatureModelSelectorEntry(
-                selectionID: selectionID,
-                title: model.title,
-                engine: localized("Sherpa"),
-                sizeText: sherpaOnnxModelManager.remoteSizeText(id: model.id),
-                ratingText: model.ratingText,
-                filterTags: featureFilterTags(
-                    base: model.tagKeys.map(localized),
-                    installed: isInstalled,
-                    requiresConfiguration: false,
-                    configured: true,
-                    usageLabels: usageLabels(for: selectionID)
-                ),
-                displayTags: featureDisplayTags(
-                    base: model.tagKeys.map(localized),
-                    requiresConfiguration: false,
-                    configured: true,
-                    selectionID: selectionID
-                ),
-                statusText: isRuntimeAvailable
-                    ? (isInstalled ? localized("Installed") : localized("Not installed"))
-                    : (SherpaOnnxRuntimeSupport.unavailableDetail ?? localized("Not available")),
-                usageLocations: usageLabels(for: selectionID),
-                badgeText: nil,
-                isSelectable: availability.isSelectable,
-                disabledReason: availability.disabledReason
-            )
-        })
-
         let remoteConfigurations = RemoteModelConfigurationStore.loadConfigurations(
             from: remoteASRProviderConfigurationsRaw,
             sensitiveValueLoading: .metadataOnly
@@ -371,48 +324,11 @@ struct FeatureModelCatalogBuilder {
         return entries
     }
 
-    private func sherpaOnnxDisplayModels(for sheet: FeatureModelSelectorSheet) -> [SherpaOnnxModelOption] {
-        let selectionID: FeatureModelSelectionID
-        switch sheet {
-        case .transcriptionASR:
-            selectionID = featureSettings.transcription.asrSelectionID
-        case .translationASR:
-            selectionID = featureSettings.translation.asrSelectionID
-        case .rewriteASR:
-            selectionID = featureSettings.rewrite.asrSelectionID
-        case .meetingASR:
-            selectionID = featureSettings.meeting.asrSelectionID
-        case .transcriptionLLM, .transcriptionNoteTitle, .translationModel, .rewriteLLM, .meetingSummary:
-            selectionID = .dictation
-        }
-
-        let selectedModelIDs: Set<SherpaOnnxModelID>
-        if case .sherpaOnnx(let modelID)? = selectionID.asrSelection {
-            selectedModelIDs = [modelID]
-        } else {
-            selectedModelIDs = []
-        }
-        return sherpaOnnxModelManager.displayModelsIncludingInstalled(including: selectedModelIDs)
-    }
-
     static func mlxSelectorAvailability(isInstalled: Bool) -> (isSelectable: Bool, disabledReason: String?) {
         (
             isSelectable: isInstalled,
             disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
         )
-    }
-
-    static func sherpaOnnxSelectorAvailability(
-        isRuntimeAvailable: Bool,
-        isInstalled: Bool
-    ) -> (isSelectable: Bool, disabledReason: String?) {
-        guard isRuntimeAvailable else {
-            return (
-                false,
-                SherpaOnnxRuntimeSupport.unavailableDetail ?? localized("Not available")
-            )
-        }
-        return mlxSelectorAvailability(isInstalled: isInstalled)
     }
 
     private func llmEntries(includeAppleIntelligence: Bool) -> [FeatureModelSelectorEntry] {
@@ -468,16 +384,7 @@ struct FeatureModelCatalogBuilder {
                 ),
                 statusText: isInstalled ? localized("Installed") : localized("Not installed"),
                 usageLocations: usageLabels(for: selectionID),
-                badgeText: {
-                    switch CustomLLMModelManager.releaseStatus(for: model.id) {
-                    case .deprecatedSoon:
-                        return localized("即将下线")
-                    case .new:
-                        return nil
-                    case .standard:
-                        return nil
-                    }
-                }(),
+                badgeText: nil,
                 isSelectable: isInstalled,
                 disabledReason: isInstalled ? nil : localized("Install this model in Model settings first.")
             )
@@ -718,8 +625,6 @@ struct FeatureModelCatalogBuilder {
             return true
         case .mlx(let repo):
             return mlxSupportsPrimaryLanguage(repo, primaryLanguage: primaryLanguage)
-        case .sherpaOnnx:
-            return true
         case .remote:
             return true
         case .none:

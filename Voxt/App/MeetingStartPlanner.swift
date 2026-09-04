@@ -48,10 +48,6 @@ enum MeetingStartPlanner {
         activeMLXDownloadRepo: String? = nil,
         isSelectedMLXModelDownloaded: Bool = false,
         mlxModelState: MLXModelManager.ModelState,
-        selectedSherpaModelID: SherpaOnnxModelID? = nil,
-        activeSherpaDownloadModelID: SherpaOnnxModelID? = nil,
-        isSelectedSherpaModelDownloaded: Bool = false,
-        sherpaModelState: SherpaOnnxModelManager.ModelState = .notDownloaded,
         remoteASRProvider: RemoteASRProvider,
         remoteASRConfiguration: RemoteProviderConfiguration
     ) -> MeetingStartDecision {
@@ -65,13 +61,6 @@ enum MeetingStartPlanner {
                 isSelectedMLXModelDownloaded: isSelectedMLXModelDownloaded,
                 mlxModelState: mlxModelState
             )
-        case .sherpaOnnx:
-            return resolveSherpaMeetingStart(
-                selectedSherpaModelID: selectedSherpaModelID,
-                activeSherpaDownloadModelID: activeSherpaDownloadModelID,
-                isSelectedSherpaModelDownloaded: isSelectedSherpaModelDownloaded,
-                sherpaModelState: sherpaModelState
-            )
         case .remote:
             guard remoteASRConfiguration.isConfigured else {
                 return .blocked(.remoteASRUnavailable)
@@ -83,27 +72,6 @@ enum MeetingStartPlanner {
                 return .blocked(.remoteASRMeetingUnavailable(remoteASRProvider))
             }
             return .start(.remote)
-        }
-    }
-
-    private static func resolveSherpaMeetingStart(
-        selectedSherpaModelID: SherpaOnnxModelID?,
-        activeSherpaDownloadModelID: SherpaOnnxModelID?,
-        isSelectedSherpaModelDownloaded: Bool,
-        sherpaModelState: SherpaOnnxModelManager.ModelState
-    ) -> MeetingStartDecision {
-        switch RecordingStartPlanner.resolve(
-            selectedEngine: .sherpaOnnx,
-            mlxModelState: .notDownloaded,
-            selectedSherpaModelID: selectedSherpaModelID,
-            activeSherpaDownloadModelID: activeSherpaDownloadModelID,
-            isSelectedSherpaModelDownloaded: isSelectedSherpaModelDownloaded,
-            sherpaModelState: sherpaModelState
-        ) {
-        case .start:
-            return .start(.sherpaOnnx)
-        case .blocked(let reason):
-            return .blocked(.recording(reason))
         }
     }
 

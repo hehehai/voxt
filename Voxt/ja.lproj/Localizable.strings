@@ -561,10 +561,6 @@
 "Access Token" = "アクセストークン";
 "Paste access token" = "アクセストークンを貼り付け";
 "Not available" = "利用不可";
-"Sherpa" = "Sherpa";
-"Sherpa runs local offline ASR models. Prompt editing is not applied." = "Sherpa はローカルのオフライン ASR モデルを実行します。プロンプト編集は適用されません。";
-"Local Sherpa" = "ローカル Sherpa";
-"Sherpa ONNX runtime is not bundled in this build." = "このビルドには Sherpa ONNX ランタイムが含まれていません。";
 "Doubao Access Token is required for testing." = "テストには Doubao アクセストークンが必要です。";
 "Doubao App ID is required for testing." = "テストには Doubao App ID が必要です。";
 "Connection test succeeded (Doubao WebSocket reachable)." = "接続テストに成功しました（Doubao WebSocket 到達可能）。";
@@ -1598,7 +1594,6 @@
 "Local LLM Generation" = "ローカル LLM 生成設定";
 "Local LLM Configuration" = "ローカル LLM 設定";
 "Model Default" = "モデル既定";
-"Model Default keeps Voxt's built-in thinking disable behavior for Qwen3, GLM-Z1, and similar local reasoning models." = "モデル既定では、Qwen3、GLM-Z1 などのローカル推論モデルに対する Voxt 内蔵の thinking 無効化動作を維持します。";
 "Top P" = "Top P";
 "Top K" = "Top K";
 "Min P" = "Min P";
@@ -1953,7 +1948,6 @@
 "Voxt is ready. You can revisit this guide from the main window at any time." = "Voxt の準備ができました。このガイドはいつでもメインウィンドウから再表示できます。";
 "Voxt shortcut detected" = "Voxt ショートカットを検出しました";
 "Workflows" = "ワークフロー";
-"Sherpa ASR Configuration" = "Sherpa ASR 設定";
 "Threads" = "スレッド数";
 "Max New Tokens" = "最大新規トークン";
 "Higher values can improve offline decode speed, but also use more CPU." = "値を大きくするとオフラインデコードが速くなる場合がありますが、CPU 使用量も増えます。";
@@ -2219,7 +2213,6 @@
 "Translation and meeting shortcuts should be different." = "翻訳と会議のショートカットは別にしてください。";
 "Uninstalling…" = "アンインストール中…";
 "Use this as a maximum participant count hint. People who do not speak may not appear in the transcript." = "参加者数の上限ヒントとして使用します。発言しない人は文字起こしに現れない場合があります。";
-"Uses sherpa-onnx speech models running locally. Requires a one-time model download." = "ローカルで動作する sherpa-onnx 音声モデルを使用します。初回のみモデルのダウンロードが必要です。";
 "Uses ~/.codex/auth.json" = "~/.codex/auth.json を使用";
 "Using Apple Intelligence for meeting summaries." = "Apple Intelligence で会議要約を生成しています。";
 "VAD Segmented" = "VAD 分割";
@@ -2239,7 +2232,6 @@
 "Stored provider credentials are invalid. Reopen the provider settings and save them again." = "保存済みのプロバイダ認証情報が無効です。プロバイダ設定を開き直して、もう一度保存してください。";
 "Stored provider credentials are temporarily unavailable. Try again after unlocking your Mac." = "保存済みのプロバイダ認証情報を一時的に利用できません。Mac のロックを解除してからもう一度お試しください。";
 "Configuration could not be encoded. Please try again." = "設定をエンコードできませんでした。もう一度お試しください。";
-"This model is unavailable because the sherpa-onnx runtime is not included in this build." = "このビルドには sherpa-onnx ランタイムが含まれていないため、このモデルは利用できません。";
 "Uninstalled %@." = "%@ をアンインストールしました。";
 "Uninstall failed: %@" = "アンインストールに失敗しました: %@";
 "Model download succeeded" = "モデルのダウンロードが完了しました";

@@ -17,7 +17,6 @@ struct SettingsView: View {
     let onIngestDictionarySuggestionsFromHistory: (DictionaryHistoryScanRequest, Bool) -> Void
     let onCancelDictionarySuggestionsFromHistory: () -> Void
     let mlxModelManager: MLXModelManager
-    let sherpaOnnxModelManager: SherpaOnnxModelManager
     let customLLMManager: CustomLLMModelManager
     let ggufTranslationModelManager: GGUFTranslationModelManager
     @ObservedObject var historyStore: TranscriptionHistoryStore
@@ -70,7 +69,6 @@ struct SettingsView: View {
         onIngestDictionarySuggestionsFromHistory: @escaping (DictionaryHistoryScanRequest, Bool) -> Void,
         onCancelDictionarySuggestionsFromHistory: @escaping () -> Void,
         mlxModelManager: MLXModelManager,
-        sherpaOnnxModelManager: SherpaOnnxModelManager,
         customLLMManager: CustomLLMModelManager,
         ggufTranslationModelManager: GGUFTranslationModelManager,
         historyStore: TranscriptionHistoryStore,
@@ -87,7 +85,6 @@ struct SettingsView: View {
         self.onIngestDictionarySuggestionsFromHistory = onIngestDictionarySuggestionsFromHistory
         self.onCancelDictionarySuggestionsFromHistory = onCancelDictionarySuggestionsFromHistory
         self.mlxModelManager = mlxModelManager
-        self.sherpaOnnxModelManager = sherpaOnnxModelManager
         self.customLLMManager = customLLMManager
         self.ggufTranslationModelManager = ggufTranslationModelManager
         self.historyStore = historyStore
@@ -107,7 +104,6 @@ struct SettingsView: View {
         _activeModelDownloadCount = State(
             initialValue: SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxModelManager.activeDownloadRepos,
-                sherpaActiveDownloadModelIDs: sherpaOnnxModelManager.activeDownloadModelIDs,
                 customLLMActiveDownloadRepos: customLLMManager.activeDownloadRepos,
                 ggufActiveDownloadModelID: ggufTranslationModelManager.activeDownloadModelID
             )
@@ -497,16 +493,14 @@ struct SettingsView: View {
     }
 
     private var modelDownloadBadgeCountPublisher: AnyPublisher<Int, Never> {
-        Publishers.CombineLatest4(
+        Publishers.CombineLatest3(
             mlxModelManager.$activeDownloadRepos,
-            sherpaOnnxModelManager.$activeDownloadModelIDs,
             customLLMManager.$activeDownloadRepos,
             ggufTranslationModelManager.$activeDownloadModelID
         )
-        .map { mlxActiveDownloadRepos, sherpaActiveDownloadModelIDs, customLLMActiveDownloadRepos, ggufActiveDownloadModelID in
+        .map { mlxActiveDownloadRepos, customLLMActiveDownloadRepos, ggufActiveDownloadModelID in
             SettingsModelDownloadBadgeSupport.activeDownloadCount(
                 mlxActiveDownloadRepos: mlxActiveDownloadRepos,
-                sherpaActiveDownloadModelIDs: sherpaActiveDownloadModelIDs,
                 customLLMActiveDownloadRepos: customLLMActiveDownloadRepos,
                 ggufActiveDownloadModelID: ggufActiveDownloadModelID
             )
@@ -574,7 +568,6 @@ struct SettingsView: View {
                             switchToFeatureTab(tab)
                         },
                         mlxModelManager: mlxModelManager,
-                        sherpaOnnxModelManager: sherpaOnnxModelManager,
                         customLLMManager: customLLMManager,
                         ggufTranslationModelManager: ggufTranslationModelManager,
                         noteStore: noteStore,
@@ -587,7 +580,6 @@ struct SettingsView: View {
                 staticTabLayer(for: .model) {
                     ModelSettingsView(
                         mlxModelManager: mlxModelManager,
-                        sherpaOnnxModelManager: sherpaOnnxModelManager,
                         customLLMManager: customLLMManager,
                         ggufTranslationModelManager: ggufTranslationModelManager,
                         mainWindowState: mainWindowState,
@@ -635,7 +627,6 @@ struct SettingsView: View {
                         case .model:
                             ModelSettingsView(
                                 mlxModelManager: mlxModelManager,
-                                sherpaOnnxModelManager: sherpaOnnxModelManager,
                                 customLLMManager: customLLMManager,
                                 ggufTranslationModelManager: ggufTranslationModelManager,
                                 mainWindowState: mainWindowState,
@@ -710,7 +701,6 @@ struct SettingsView: View {
     private func refreshModelConfigurationBadge() {
         let issues = ModelConfigurationIssueResolver.missingIssues(
             mlxModelManager: mlxModelManager,
-            sherpaOnnxModelManager: sherpaOnnxModelManager,
             customLLMManager: customLLMManager
         )
         guard issues != missingModelConfigurationIssues else { return }
