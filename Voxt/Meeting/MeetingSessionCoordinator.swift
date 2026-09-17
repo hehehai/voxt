@@ -124,6 +124,7 @@ final class MeetingSessionCoordinator {
 
     func analyzeImportedFile(
         at sourceURL: URL,
+        transcriptReady: @escaping @MainActor (MeetingSessionResult) throws -> Void,
         progress: @escaping @MainActor @Sendable (MeetingFileAnalysisProgress) -> Void
     ) async throws -> MeetingSessionResult {
         guard !isActive else {
@@ -137,6 +138,7 @@ final class MeetingSessionCoordinator {
             do {
                 let result = try await self.performImportedFileAnalysis(
                     at: sourceURL,
+                    transcriptReady: transcriptReady,
                     progress: progress
                 )
                 await self.finishImportedFileAnalysis()
@@ -157,116 +159,189 @@ final class MeetingSessionCoordinator {
 
     private func performImportedFileAnalysis(
         at sourceURL: URL,
+        transcriptReady: @escaping @MainActor (MeetingSessionResult) throws -> Void,
         progress: @escaping @MainActor @Sendable (MeetingFileAnalysisProgress) -> Void
     ) async throws -> MeetingSessionResult {
-        var preparedAudio: MeetingImportedAudioFile?
-        do {
-            let preparationTask = Task.detached(priority: .utility) {
-                try await MeetingImportedAudioFile.prepare(from: sourceURL) { fraction in
-                    await progress(
-                        MeetingFileAnalysisProgress(
-                            stage: .preparing,
-                            stageFraction: fraction
-                        )
-                    )
-                }
-            }
-            let importedAudio = try await withTaskCancellationHandler {
-                try await preparationTask.value
-            } onCancel: {
-                preparationTask.cancel()
-            }
-            preparedAudio = importedAudio
-            try Task.checkCancellation()
-
-            progress(
-                MeetingFileAnalysisProgress(
-                    stage: .preparing,
-                    stageFraction: 1,
-                    mediaDurationSeconds: importedAudio.durationSeconds
-                )
-            )
-
-            let engineContext = resolvedEngineContext()
-            activeEngineContext = engineContext
-            progress(MeetingFileAnalysisProgress(stage: .transcribing))
+        let analysisStartedAt = Date()
+        MeetingFileResourceTelemetry.log(stage: "analysis-start")
+        defer { MeetingFileResourceTelemetry.log(stage: "analysis-exit", startedAt: analysisStartedAt) }
+        try await MeetingLocalInferenceCoordinator.shared.checkFileResources()
+        // New tasks already contain canonical PCM16. Normalize legacy staged media
+        // once into the task's owned workspace, keeping it for retries.
+        let preparationTask = Task.detached(priority: .utility) {
+            if let prepared = try? MeetingImportedAudioFile.openPrepared(at: sourceURL) { return prepared }
+            let directory = MeetingFileCheckpointStore.directory(for: sourceURL)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let audioURL = directory.appendingPathComponent("audio.wav")
+            if let prepared = try? MeetingImportedAudioFile.openPrepared(at: audioURL) { return prepared }
+            try? FileManager.default.removeItem(at: audioURL)
+            return try await MeetingImportedAudioFile.prepare(from: sourceURL, destinationURL: audioURL)
+        }
+        let importedAudio = try await withTaskCancellationHandler {
+            try await preparationTask.value
+        } onCancel: { preparationTask.cancel() }
+        try Task.checkCancellation()
+        let engineContext = resolvedEngineContext()
+        activeEngineContext = engineContext
+        let fileDictionaryEntries: [DictionaryEntry]
+        if let app = AppDelegate.shared {
+            fileDictionaryEntries = app.dictionaryStore.activeEntriesForRemoteRequest(activeGroupID: app.activeDictionaryGroupID())
+        } else {
+            fileDictionaryEntries = []
+        }
+        let dictionarySignature = fileDictionarySignature(fileDictionaryEntries)
+        let transcriptionSignature = fileTranscriptionSignature(context: engineContext, dictionarySignature: dictionarySignature)
+        let checkpoints = MeetingFileCheckpointStore(
+            sourceURL: sourceURL, signature: transcriptionSignature,
+            engineRawValue: engineContext.engine.rawValue, modelDescription: engineContext.historyModelDescription
+        )
+        let descriptors = importedAudio.assetDescriptors
+        let checkpoint = try await checkpoints.load(windowCount: descriptors.count)
+        let historyEngine = checkpoint.transcriptionEngineRawValue.flatMap { TranscriptionEngine(rawValue: $0) } ?? engineContext.engine
+        let historyModel = checkpoint.transcriptionModelDescription ?? engineContext.historyModelDescription
+        VoxtLog.meeting("File transcription started. windows=\(descriptors.count), restored=\(checkpoint.completedWindows), audioSeconds=\(importedAudio.durationSeconds)")
+        let transcriptionStartedAt = Date()
+        let transcriptSegments: [MeetingTranscriptSegment]
+        if checkpoint.completedWindows == descriptors.count {
+            transcriptSegments = MeetingTranscriptPostProcessor.process(checkpoint.segments)
+        } else {
             let importedTranscriber = try await makeTranscriber(
-                for: engineContext,
-                strictInferenceWorkClass: .fileASR
+                for: engineContext, strictInferenceWorkClass: .fileASR, dictionaryEntries: fileDictionaryEntries
             )
             transcriber = importedTranscriber
-            try Task.checkCancellation()
-
-            let transcriptSegments = try await MeetingFinalTranscriptionPass.transcribe(
-                descriptors: importedAudio.assetDescriptors,
-                loadAsset: { descriptor in
-                    importedAudio.loadAsset(descriptor)
-                },
+            transcriptSegments = try await MeetingFinalTranscriptionPass.transcribe(
+                descriptors: descriptors,
+                loadAsset: { importedAudio.loadAsset($0) },
                 transcriber: importedTranscriber,
                 requiresCompleteTranscription: true,
-                processedDurationProgress: { fraction, processedDuration in
-                    await progress(
-                        MeetingFileAnalysisProgress(
-                            stage: .transcribing,
-                            stageFraction: fraction,
-                            mediaDurationSeconds: importedAudio.durationSeconds,
-                            processedMediaDurationSeconds: processedDuration
-                        )
-                    )
+                processedDurationProgress: { fraction, duration in
+                    await progress(MeetingFileAnalysisProgress(
+                        stage: .transcribing, stageFraction: fraction,
+                        mediaDurationSeconds: importedAudio.durationSeconds,
+                        processedMediaDurationSeconds: duration
+                    ))
+                },
+                completedWindowCount: checkpoint.completedWindows,
+                restoredSegments: checkpoint.segments,
+                beforeChunk: {
+                    try await MeetingLocalInferenceCoordinator.shared.checkFileResources()
+                    let currentSignature = try await MainActor.run {
+                        guard AppDelegate.shared?.isSessionActive != true else {
+                            throw MeetingFileWorkError.resourcesUnavailable
+                        }
+                        return self.fileTranscriptionSignature(context: self.resolvedEngineContext(), dictionarySignature: dictionarySignature)
+                    }
+                    guard currentSignature == transcriptionSignature else {
+                        throw MeetingFileWorkError.incompatibleCheckpoint
+                    }
+                    try MeetingFileResourcePolicy.requireDiskSpace(at: sourceURL.deletingLastPathComponent())
+                },
+                commitWindow: { index, segments in
+                    let currentSignature = await MainActor.run {
+                        self.fileTranscriptionSignature(context: self.resolvedEngineContext(), dictionarySignature: dictionarySignature)
+                    }
+                    guard currentSignature == transcriptionSignature else {
+                        throw MeetingFileWorkError.incompatibleCheckpoint
+                    }
+                    try await checkpoints.commit(index: index, segments: segments)
+                    if index.isMultiple(of: 10) {
+                        MeetingFileResourceTelemetry.log(stage: "asr-window-\(index + 1)-committed")
+                    }
                 }
             )
-            try Task.checkCancellation()
-            guard !MeetingTranscriptFormatter.meaningfulSegments(for: transcriptSegments).isEmpty else {
-                throw MeetingFileAnalysisError.noTranscript
-            }
+        }
+        MeetingFileResourceTelemetry.log(stage: "transcription-finished", startedAt: transcriptionStartedAt)
+        try Task.checkCancellation()
+        guard !MeetingTranscriptFormatter.meaningfulSegments(for: transcriptSegments).isEmpty else {
+            throw MeetingFileAnalysisError.noTranscript
+        }
+        // Text is durably delivered before optional heavyweight analysis. Audio is
+        // still owned by the queue until final persistence succeeds.
+        try transcriptReady(MeetingSessionResult(
+            recoverySessionID: checkpoint.historyID,
+            transcriptionEngine: historyEngine,
+            transcriptionModelDescription: historyModel,
+            segments: transcriptSegments, visibleSnapshotSegments: transcriptSegments,
+            audioDurationSeconds: importedAudio.durationSeconds, archivedAudioURL: nil
+        ))
+        progress(MeetingFileAnalysisProgress(stage: .identifyingSpeakers, historyEntryID: checkpoint.historyID))
+        transcriber = nil
+        releaseActiveLocalEngine()
+        mlxModelManager.releaseIdleModelForFileAnalysis()
+        MeetingFileResourceTelemetry.log(stage: "asr-released")
 
-            progress(MeetingFileAnalysisProgress(stage: .identifyingSpeakers))
-            let finalSegments: [MeetingTranscriptSegment]
+        let mode = MeetingFileSpeakerMode(rawValue: UserDefaults.standard.string(forKey: MeetingFileSpeakerMode.preferenceKey) ?? "") ?? .analyze
+        var finalSegments = transcriptSegments
+        var notice: String?
+        let diarizationMode = MeetingDiarizationMode.stored()
+        let offlineAllowed = diarizationMode != .offlineVBx ||
+            MeetingFileResourcePolicy.allowsOfflineSpeakers(
+                duration: importedAudio.durationSeconds, physicalMemory: ProcessInfo.processInfo.physicalMemory
+            )
+        if mode == .later {
+            notice = AppLocalization.localizedString("Transcript saved. Speaker analysis is pending; prepared audio is kept until completion or task cleanup.")
+        } else if mode == .analyze && !offlineAllowed {
+            notice = AppLocalization.localizedString("Transcript saved. Offline speaker analysis was deferred because this recording exceeds the safe duration limit.")
+        } else if mode == .analyze {
+            let speakerStartedAt = Date()
+            defer { MeetingFileResourceTelemetry.log(stage: "speaker-exit", startedAt: speakerStartedAt) }
             do {
                 finalSegments = try await MeetingLocalInferenceCoordinator.shared.withPermit(.speakerAnalysis) {
-                    await MeetingSpeakerAnalysisPipeline.analyzedSegments(
-                        from: transcriptSegments,
-                        descriptors: importedAudio.assetDescriptors,
-                        loadAsset: { descriptor in
-                            importedAudio.loadAsset(descriptor)
-                        },
-                        continuousAudioURL: importedAudio.standardizedAudioURL,
-                        options: MeetingSpeakerDiarizationOptions.fromPreferences(),
+                    try await MeetingSpeakerAnalysisPipeline.analyzeFile(
+                        segments: transcriptSegments, audio: importedAudio, mode: diarizationMode,
                         progress: { fraction in
-                            await progress(
-                                MeetingFileAnalysisProgress(
-                                    stage: .identifyingSpeakers,
-                                    stageFraction: fraction
-                                )
-                            )
+                            await progress(MeetingFileAnalysisProgress(stage: .identifyingSpeakers, stageFraction: fraction))
                         }
                     )
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
-                VoxtLog.meetingWarning(
-                    "Imported meeting speaker analysis skipped by device safety policy: \(error.localizedDescription)"
-                )
-                finalSegments = MeetingTranscriptPostProcessor.process(transcriptSegments)
+                VoxtLog.meetingWarning("File speaker analysis deferred: \(error.localizedDescription)")
+                notice = AppLocalization.localizedString("Transcript saved. Speaker analysis could not finish; check the selected model and system resources before retrying.")
             }
-            try Task.checkCancellation()
-
-            progress(MeetingFileAnalysisProgress(stage: .saving))
-            let result = MeetingSessionResult(
-                captureMode: .meeting,
-                transcriptionEngine: engineContext.engine,
-                transcriptionModelDescription: engineContext.historyModelDescription,
-                segments: finalSegments,
-                visibleSnapshotSegments: finalSegments,
-                audioDurationSeconds: importedAudio.durationSeconds,
-                archivedAudioURL: importedAudio.standardizedAudioURL
-            )
-            return result
-        } catch {
-            if let preparedAudio {
-                try? FileManager.default.removeItem(at: preparedAudio.standardizedAudioURL)
-            }
-            throw error
         }
+        try Task.checkCancellation()
+        progress(MeetingFileAnalysisProgress(stage: .saving, historyEntryID: checkpoint.historyID, notice: notice ?? ""))
+        return MeetingSessionResult(
+            recoverySessionID: checkpoint.historyID,
+            transcriptionEngine: historyEngine,
+            transcriptionModelDescription: historyModel,
+            segments: finalSegments, visibleSnapshotSegments: finalSegments,
+            audioDurationSeconds: importedAudio.durationSeconds,
+            archivedAudioURL: importedAudio.standardizedAudioURL,
+            captureFailureMessage: notice
+        )
+    }
+
+    private func fileTranscriptionSignature(context: MeetingASREngineContext, dictionarySignature: String) -> String {
+        let defaults = UserDefaults.standard
+        let keys = [AppPreferenceKey.userMainLanguageCodes, AppPreferenceKey.asrHintSettings]
+        var parts = ["file-asr-v1", context.engine.rawValue, context.mlxModelRepo ?? ""]
+        parts += keys.map { defaults.string(forKey: $0) ?? "" }
+        if context.engine == .mlxAudio {
+            parts.append(defaults.string(forKey: AppPreferenceKey.mlxLocalASRTuningSettings) ?? "")
+        } else if context.engine == .remote {
+            let selection = resolvedRemoteASRSelection()
+            let config = selection.configuration
+            let meetingConfig = RemoteASRMeetingConfiguration.resolvedMeetingConfiguration(provider: selection.provider, configuration: config)
+            parts += [selection.provider.rawValue, config.endpoint, meetingConfig.model, config.doubaoDictionaryMode,
+                      String(config.doubaoEnableRequestHotwords), String(config.doubaoEnableRequestCorrections)]
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            parts.append((try? encoder.encode(config.aliyunASRSettings)).map { $0.base64EncodedString() } ?? "")
+        }
+        parts.append(dictionarySignature)
+        return MeetingFileCheckpointStore.signature(parts: parts)
+    }
+
+    private func fileDictionarySignature(_ entries: [DictionaryEntry]) -> String {
+        // Freeze effective hints for a running file: switching foreground apps
+        // must not change its dictionary group halfway through a window.
+        let parts = entries.sorted(by: { $0.term < $1.term }).map {
+            MeetingFileCheckpointStore.signature(parts: [$0.term] + $0.replacementTerms.map(\.text).sorted())
+        }
+        return MeetingFileCheckpointStore.signature(parts: parts)
     }
 
     func cancelImportedFileAnalysis() async {
@@ -282,6 +357,7 @@ final class MeetingSessionCoordinator {
         liveSessionFactory = nil
         activeEngineContext = nil
         releaseActiveLocalEngine()
+        mlxModelManager.releaseIdleModelForFileAnalysis()
         isImportAnalyzing = false
         importedFileAnalysisTask = nil
     }
@@ -1725,7 +1801,8 @@ final class MeetingSessionCoordinator {
 
     private func makeTranscriber(
         for context: MeetingASREngineContext,
-        strictInferenceWorkClass: MeetingLocalInferenceWorkClass = .finalASR
+        strictInferenceWorkClass: MeetingLocalInferenceWorkClass = .finalASR,
+        dictionaryEntries: [DictionaryEntry]? = nil
     ) async throws -> any MeetingSegmentTranscribing {
         liveSessionFactory = nil
         switch context.engine {
@@ -1737,7 +1814,8 @@ final class MeetingSessionCoordinator {
             }
             return MeetingMLXSegmentTranscriber(
                 modelManager: mlxModelManager,
-                strictInferenceWorkClass: strictInferenceWorkClass
+                strictInferenceWorkClass: strictInferenceWorkClass,
+                dictionaryEntries: dictionaryEntries
             )
         case .remote:
             if context.resolvedMode.usesLiveSessions {
@@ -1756,7 +1834,7 @@ final class MeetingSessionCoordinator {
                     hintPayload: resolvedMeetingHintPayload(target: hintTarget, settings: hintSettings)
                 )
             }
-            return MeetingRemoteASRSegmentTranscriber()
+            return MeetingRemoteASRSegmentTranscriber(dictionaryEntries: dictionaryEntries)
         case .dictation:
             throw NSError(
                 domain: "Voxt.Meeting",

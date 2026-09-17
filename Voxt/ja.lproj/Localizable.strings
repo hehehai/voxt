@@ -2356,3 +2356,19 @@
 "Google Gemini API Key is required for testing." = "テストには Google Gemini API Key が必要です。";
 "Connection test succeeded (Gemini live transcribe reachable)." = "接続テストに成功しました（Gemini ライブ文字起こしに到達できます）。";
 "Failed to encode Gemini live payload." = "Gemini ライブのペイロードのエンコードに失敗しました。";
+
+/* File analysis resource safety */
+"Analyze speakers later" = "話者を後で分析";
+"Analyze speakers when safe" = "リソースに余裕がある場合に話者を分析";
+"Continue analysis" = "分析を続ける";
+"File analysis paused to protect system resources. Resume when the Mac is ready." = "システムリソースを保護するため分析を一時停止しました。Mac に余裕ができたら再開してください。";
+"File speaker analysis" = "ファイルの話者分析";
+"Pausing…" = "一時停止中…";
+"The file checkpoint is damaged. Import the file as a new task; existing results have been kept." = "チェックポイントが破損しています。新しいタスクとして再読み込みしてください。既存の結果は保持されています。";
+"Transcript saved. Offline speaker analysis was deferred because this recording exceeds the safe duration limit." = "文字起こしを保存しました。録音が安全な長さの上限を超えるため、オフライン話者分析を延期しました。";
+"Transcript saved. Speaker analysis could not finish; check the selected model and system resources before retrying." = "文字起こしを保存しました。話者分析を完了できませんでした。選択したモデルとシステムリソースを確認して再試行してください。";
+"Transcript saved. Speaker analysis is pending; prepared audio is kept until completion or task cleanup." = "文字起こしを保存しました。話者分析は保留中です。準備済み音声は分析完了またはタスク削除まで保持されます。";
+"Transcription only" = "文字起こしのみ";
+"The file queue is full. Wait for pending tasks to finish before importing more files." = "ファイルキューがいっぱいです。保留中のタスクが完了してから追加してください。";
+"Transcription settings changed. Restore the previous settings to resume, or import the file as a new task." = "文字起こし設定が変更されました。以前の設定に戻して再開するか、新しいタスクとして読み込んでください。";
+"Uses the selected meeting speaker model. Sortformer supports up to 4 speakers. Deferred tasks keep prepared audio; clearing tasks removes their resume data, not saved transcripts." = "会議設定で選択した話者モデルを使用します。Sortformer は最大4人に対応します。保留中のタスクは準備済み音声を保持します。タスク削除で再開データは消去されますが、保存済みの文字起こしは残ります。";

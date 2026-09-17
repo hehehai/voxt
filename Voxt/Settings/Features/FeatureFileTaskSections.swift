@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 extension FeatureSettingsView {
     var filesContent: some View {
         VStack(alignment: .leading, spacing: 18) {
+            MeetingFileAnalysisOptionsView()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     if meetingFileTaskQueue.tasks.isEmpty {
@@ -20,10 +21,15 @@ extension FeatureSettingsView {
                                 onCancel: {
                                     meetingFileTaskQueue.cancel(taskID: task.id)
                                 },
+                                onPause: { meetingFileTaskQueue.pause(taskID: task.id) },
                                 onPrioritize: {
                                     meetingFileTaskQueue.prioritize(taskID: task.id)
                                 },
                                 onRetry: {
+                                    if task.hasPendingSpeakerAnalysis,
+                                       UserDefaults.standard.string(forKey: MeetingFileSpeakerMode.preferenceKey) == MeetingFileSpeakerMode.later.rawValue {
+                                        UserDefaults.standard.set(MeetingFileSpeakerMode.analyze.rawValue, forKey: MeetingFileSpeakerMode.preferenceKey)
+                                    }
                                     meetingFileTaskQueue.retry(taskID: task.id)
                                 },
                                 onOpenDetails: {
@@ -76,7 +82,10 @@ extension FeatureSettingsView {
         }
         guard !validURLs.isEmpty else { return }
         SystemNotificationSupport.requestAuthorizationIfNeeded()
-        meetingFileTaskQueue.enqueue(urls: validURLs)
+        let accepted = meetingFileTaskQueue.enqueue(urls: validURLs)
+        if accepted < validURLs.count {
+            showMeetingFileImportToast(featureSettingsLocalized("The file queue is full. Wait for pending tasks to finish before importing more files."))
+        }
     }
 
     private func showMeetingFileImportToast(_ message: String) {
@@ -85,6 +94,24 @@ extension FeatureSettingsView {
             object: nil,
             userInfo: ["message": message]
         )
+    }
+}
+
+private struct MeetingFileAnalysisOptionsView: View {
+    @AppStorage(MeetingFileSpeakerMode.preferenceKey) private var speakerMode = MeetingFileSpeakerMode.analyze.rawValue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(featureSettingsLocalized("File speaker analysis"), selection: $speakerMode) {
+                ForEach(MeetingFileSpeakerMode.allCases) { mode in
+                    Text(mode.title).tag(mode.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            Text(featureSettingsLocalized("Uses the selected meeting speaker model. Sortformer supports up to 4 speakers. Deferred tasks keep prepared audio; clearing tasks removes their resume data, not saved transcripts."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -113,6 +140,7 @@ private struct MeetingFileTaskRow: View {
     let task: MeetingFileTask
     let now: Date
     let onCancel: () -> Void
+    let onPause: () -> Void
     let onPrioritize: () -> Void
     let onRetry: () -> Void
     let onOpenDetails: () -> Void
@@ -144,7 +172,13 @@ private struct MeetingFileTaskRow: View {
                 actionButtons
             }
 
-            if task.status == .processing || task.status == .cancelling || task.status == .completed {
+            if let notice = task.notice, !notice.isEmpty {
+                Text(notice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 5)
+            }
+            if task.status == .processing || task.status == .cancelling || task.status == .pausing || task.status == .paused || task.status == .completed {
                 ProgressView(value: task.progressFraction, total: 1)
                     .progressViewStyle(.linear)
                     .tint(statusColor)
@@ -160,16 +194,41 @@ private struct MeetingFileTaskRow: View {
     @ViewBuilder
     private var actionButtons: some View {
         switch task.status {
-        case .processing, .cancelling:
-            Button(featureSettingsLocalized(task.status == .cancelling ? "Cancelling…" : "Cancel"), action: onCancel)
-                .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
-                .disabled(task.status == .cancelling)
+        case .processing, .cancelling, .pausing:
+            HStack(spacing: 6) {
+                if task.historyEntryID != nil {
+                    Button(featureSettingsLocalized("Details"), action: onOpenDetails)
+                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+                }
+                Button(featureSettingsLocalized(task.status == .pausing ? "Pausing…" : "Pause"), action: onPause)
+                    .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+                    .disabled(task.status != .processing)
+                Button(featureSettingsLocalized(task.status == .cancelling ? "Cancelling…" : "Cancel"), action: onCancel)
+                    .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+                    .disabled(task.status == .cancelling)
+            }
         case .completed:
-            Button(featureSettingsLocalized("Details"), action: onOpenDetails)
-                .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
-        case .failed, .cancelled:
-            Button(featureSettingsLocalized("Retry"), action: onRetry)
-                .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+            HStack(spacing: 6) {
+                if task.hasPendingSpeakerAnalysis {
+                    Button(featureSettingsLocalized("Continue analysis"), action: onRetry)
+                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+                }
+                Button(featureSettingsLocalized("Details"), action: onOpenDetails)
+                    .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+            }
+        case .failed, .cancelled, .paused:
+            HStack(spacing: 6) {
+                if task.historyEntryID != nil {
+                    Button(featureSettingsLocalized("Details"), action: onOpenDetails)
+                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+                }
+                Button(featureSettingsLocalized(task.status == .paused ? "Resume" : "Retry"), action: onRetry)
+                    .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+                if task.status == .paused {
+                    Button(featureSettingsLocalized("Cancel"), action: onCancel)
+                        .buttonStyle(SettingsPillButtonStyle(horizontalPadding: 10, height: 27))
+                }
+            }
         case .queued:
             HStack(spacing: 6) {
                 Button(featureSettingsLocalized("Prioritize"), action: onPrioritize)
@@ -258,6 +317,10 @@ private struct MeetingFileTaskRow: View {
             return featureSettingsLocalized("Failed") + " · " + errorMessage
         case .cancelled:
             return featureSettingsLocalized("Cancelled")
+        case .pausing:
+            return featureSettingsLocalized("Pausing…")
+        case .paused:
+            return task.errorMessage ?? featureSettingsLocalized("Paused")
         }
     }
 
@@ -265,13 +328,13 @@ private struct MeetingFileTaskRow: View {
         switch task.status {
         case .queued:
             return .secondary
-        case .processing, .cancelling:
+        case .processing, .cancelling, .pausing:
             return .accentColor
         case .completed:
             return .green
         case .failed:
             return .orange
-        case .cancelled:
+        case .cancelled, .paused:
             return .secondary
         }
     }

@@ -242,11 +242,14 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
     private let modelManager: MLXModelManager
     private let mlxTranscriber: MLXTranscriber
     private let strictInferenceWorkClass: MeetingLocalInferenceWorkClass
+    private let dictionaryEntriesSnapshot: [DictionaryEntry]?
 
     init(
         modelManager: MLXModelManager,
-        strictInferenceWorkClass: MeetingLocalInferenceWorkClass = .finalASR
+        strictInferenceWorkClass: MeetingLocalInferenceWorkClass = .finalASR,
+        dictionaryEntries: [DictionaryEntry]? = nil
     ) {
+        self.dictionaryEntriesSnapshot = dictionaryEntries
         self.modelManager = modelManager
         self.strictInferenceWorkClass = strictInferenceWorkClass
         self.mlxTranscriber = MLXTranscriber(
@@ -255,6 +258,7 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             inferenceTaskPriority: strictInferenceWorkClass == .fileASR ? .utility : .userInitiated
         )
         self.mlxTranscriber.dictionaryEntryProvider = {
+            if let dictionaryEntries { return dictionaryEntries }
             guard let appDelegate = AppDelegate.shared else { return [] }
             return appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
                 activeGroupID: appDelegate.activeDictionaryGroupID()
@@ -304,8 +308,10 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
     }
 
     func transcribeSegmentsStrict(chunk: BufferedMeetingChunk) async throws -> [MeetingTranscriptSegment] {
-        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(strictInferenceWorkClass) { [mlxTranscriber] in
-            try await mlxTranscriber.transcribeBufferedResult(
+        let workClass = strictInferenceWorkClass
+        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(workClass) { [mlxTranscriber] in
+            defer { Self.trimFileInferenceCacheIfNeeded(workClass) }
+            return try await mlxTranscriber.transcribeBufferedResult(
                 samples: chunk.samples,
                 sampleRate: chunk.sampleRate
             )
@@ -332,8 +338,10 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
         guard MLXModelFamily.family(for: modelManager.currentModelRepo) == .mossTranscribeDiarize else {
             return nil
         }
-        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(.finalASR) { [mlxTranscriber] in
-            try await mlxTranscriber.transcribeBufferedResult(
+        let workClass = strictInferenceWorkClass
+        let result = try await MeetingLocalInferenceCoordinator.shared.withPermit(workClass) { [mlxTranscriber] in
+            defer { Self.trimFileInferenceCacheIfNeeded(workClass) }
+            return try await mlxTranscriber.transcribeBufferedResult(
                 samples: asset.samples,
                 sampleRate: asset.sampleRate
             )
@@ -353,6 +361,14 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             modelFamily: capability.family,
             preventsAdjacentMerge: true
         )
+    }
+
+    private nonisolated static func trimFileInferenceCacheIfNeeded(_ workClass: MeetingLocalInferenceWorkClass) {
+        // Trim reusable buffers, never active model tensors. Do not change global
+        // allocator limits or repeatedly unload the model between file chunks.
+        if workClass == .fileASR, Memory.cacheMemory > 256 * 1024 * 1024 {
+            Memory.clearCache()
+        }
     }
 
     private func meetingSegments(
@@ -376,7 +392,7 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
             usesStructuredOutput: usesStructuredOutput,
             modelFamily: modelFamily,
             preventsAdjacentMerge: preventsAdjacentMerge,
-            dictionaryEntries: activeMeetingDictionaryEntries(),
+            dictionaryEntries: dictionaryEntriesSnapshot ?? activeMeetingDictionaryEntries(),
             speakerDisplayName: { speakerID in
                 self.speakerDisplayName(for: speakerID, source: audioSource)
             }
@@ -397,17 +413,17 @@ final class MeetingMLXSegmentTranscriber: MeetingSegmentTranscribing {
 @MainActor
 final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
     private let transcriptionGate = MeetingRemoteTranscriptionGate()
-    private let remoteTranscriber: RemoteASRTranscriber = {
-        let transcriber = RemoteASRTranscriber()
-        transcriber.doubaoDictionaryEntryProvider = {
-            guard let appDelegate = AppDelegate.shared else { return [] }
-            return appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
-                activeGroupID: appDelegate.activeDictionaryGroupID()
-            )
-        }
-        return transcriber
-    }()
+    private let remoteTranscriber: RemoteASRTranscriber
+    private let dictionaryEntriesSnapshot: [DictionaryEntry]?
     private var isCancelled = false
+
+    init(dictionaryEntries: [DictionaryEntry]? = nil) {
+        dictionaryEntriesSnapshot = dictionaryEntries
+        remoteTranscriber = RemoteASRTranscriber()
+        remoteTranscriber.doubaoDictionaryEntryProvider = {
+            dictionaryEntries ?? activeMeetingDictionaryEntries()
+        }
+    }
 
     func cancelPendingWork() async {
         isCancelled = true
@@ -458,7 +474,7 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
             text,
             prompt: hintPayload.prompt,
             contextualPhrases: hintPayload.contextualPhrases,
-            dictionaryEntries: activeMeetingDictionaryEntries()
+            dictionaryEntries: dictionaryEntriesSnapshot ?? activeMeetingDictionaryEntries()
         )
         guard !sanitizedText.isEmpty else {
             VoxtLog.meetingWarning("Meeting Remote ASR transcription suppressed because it matched ASR prompt or hint guidance.")
@@ -547,7 +563,7 @@ final class MeetingRemoteASRSegmentTranscriber: MeetingSegmentTranscribing {
             settings: settings,
             userLanguageCodes: userLanguageCodes,
             mlxModelRepo: meetingConfiguration.configuration.model,
-            dictionaryTerms: DictionaryEntryCollection.asrPromptTermsText(from: activeMeetingDictionaryEntries())
+            dictionaryTerms: DictionaryEntryCollection.asrPromptTermsText(from: dictionaryEntriesSnapshot ?? activeMeetingDictionaryEntries())
         )
     }
 }

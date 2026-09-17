@@ -64,6 +64,8 @@ final class MeetingImportedAudioFileTests: XCTestCase {
         let imported = try await MeetingImportedAudioFile.prepare(from: sourceURL)
         defer { try? FileManager.default.removeItem(at: imported.standardizedAudioURL) }
 
+        let reopened = try MeetingImportedAudioFile.openPrepared(at: imported.standardizedAudioURL)
+        XCTAssertEqual(reopened.sampleCount, imported.sampleCount)
         XCTAssertEqual(imported.durationSeconds, 61, accuracy: 0.05)
         XCTAssertEqual(imported.assetDescriptors.count, 2)
         XCTAssertEqual(imported.assetDescriptors[0].durationSeconds, 60, accuracy: 0.001)
@@ -75,6 +77,22 @@ final class MeetingImportedAudioFileTests: XCTestCase {
         XCTAssertEqual(finalAsset.sessionStartOffset, 60, accuracy: 0.001)
         XCTAssertEqual(finalAsset.durationSeconds, 1, accuracy: 0.05)
         XCTAssertTrue(finalAsset.samples.contains { abs($0) > 0.01 })
+        XCTAssertTrue(finalAsset.samples.allSatisfy { $0.isFinite && abs($0) <= 1 })
+    }
+
+    func testPrepareDoesNotOverwriteOrDeleteAnExistingDestination() async throws {
+        let directory = try TemporaryDirectory()
+        let destination = directory.url.appendingPathComponent("existing.wav")
+        let original = Data([1, 2, 3])
+        try original.write(to: destination)
+        do {
+            _ = try await MeetingImportedAudioFile.prepare(
+                from: directory.url.appendingPathComponent("input.wav"), destinationURL: destination
+            )
+            XCTFail("An existing destination must never be replaced")
+        } catch {
+            XCTAssertEqual(try Data(contentsOf: destination), original)
+        }
     }
 
     func testWAVDataByteCountRejectsValuesThatOverflowRIFFChunkSize() throws {

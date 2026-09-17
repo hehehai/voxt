@@ -274,6 +274,8 @@ struct MeetingSpeakerDiarizationOptions: Equatable, Sendable {
     var sensitivity: MeetingSpeakerDiarizationSensitivity
     var speakerCountHint: MeetingSpeakerCountHint
     var debugLoggingEnabled: Bool
+    /// File-only cooperative guards; live meeting behavior remains unchanged.
+    var checksFileResources = false
 
     nonisolated init(
         minimumAudioDurationSeconds: TimeInterval = 2.0,

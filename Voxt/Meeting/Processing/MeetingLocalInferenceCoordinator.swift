@@ -105,6 +105,11 @@ actor MeetingLocalInferenceCoordinator {
     private var memoryPressureConstrained = false
     private var statistics = MeetingLocalInferenceStatistics()
     private let clock = ContinuousClock()
+    private let thermalStateProvider: @Sendable () -> ProcessInfo.ThermalState
+
+    init(thermalStateProvider: @escaping @Sendable () -> ProcessInfo.ThermalState = { ProcessInfo.processInfo.thermalState }) {
+        self.thermalStateProvider = thermalStateProvider
+    }
 
     func setRecordingActive(_ isActive: Bool) {
         recordingActive = isActive
@@ -113,6 +118,16 @@ actor MeetingLocalInferenceCoordinator {
 
     func setMemoryPressureConstrained(_ isConstrained: Bool) {
         memoryPressureConstrained = isConstrained
+        if isConstrained {
+            // A queued file must return to its checkpoint/cleanup path rather than
+            // wait indefinitely while pinning its model under memory pressure.
+            let rejected = waiters.filter { $0.workClass == .fileASR || $0.workClass == .speakerAnalysis }
+            waiters.removeAll { $0.workClass == .fileASR || $0.workClass == .speakerAnalysis }
+            for waiter in rejected {
+                statistics.memoryDeferralCount += 1
+                waiter.continuation.resume(throwing: MeetingLocalInferenceCoordinatorError.memoryConstrained)
+            }
+        }
         scheduleNextIfPossible()
     }
 
@@ -123,9 +138,31 @@ actor MeetingLocalInferenceCoordinator {
         let token = try await acquire(workClass)
         defer { release(token) }
         try Task.checkCancellation()
+        // Conditions can change while a permit waits behind another operation.
+        if memoryPressureConstrained, workClass.isMemoryDeferrable {
+            statistics.memoryDeferralCount += 1
+            throw MeetingLocalInferenceCoordinatorError.memoryConstrained
+        }
+        if workClass.isThermallyDeferrable {
+            let thermal = thermalStateProvider()
+            if thermal == .serious || thermal == .critical {
+                statistics.thermalDeferralCount += 1
+                throw MeetingLocalInferenceCoordinatorError.thermallyConstrained
+            }
+        }
         let value = try await operation()
         statistics.completedCount += 1
         return value
+    }
+
+    /// Checked at file window/chunk boundaries, including remote-ASR work.
+    func checkFileResources() throws {
+        try Task.checkCancellation()
+        let thermal = thermalStateProvider()
+        guard !memoryPressureConstrained, !recordingActive,
+              thermal != .serious, thermal != .critical else {
+            throw MeetingFileWorkError.resourcesUnavailable
+        }
     }
 
     func currentStatistics() -> MeetingLocalInferenceStatistics {
@@ -141,7 +178,7 @@ actor MeetingLocalInferenceCoordinator {
         statistics.submittedCount += 1
 
         if workClass.isThermallyDeferrable {
-            switch ProcessInfo.processInfo.thermalState {
+            switch thermalStateProvider() {
             case .serious, .critical:
                 statistics.thermalDeferralCount += 1
                 throw MeetingLocalInferenceCoordinatorError.thermallyConstrained

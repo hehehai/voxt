@@ -4,6 +4,41 @@
 import Foundation
 
 enum MeetingSpeakerAnalysisPipeline {
+    /// Unlike the live/finalization convenience API, file tasks need to distinguish
+    /// a failed optional stage from a successfully delivered transcript.
+    static func analyzeFile(
+        segments: [MeetingTranscriptSegment],
+        audio: MeetingImportedAudioFile,
+        mode: MeetingDiarizationMode,
+        progress: (@Sendable (Double) async -> Void)? = nil
+    ) async throws -> [MeetingTranscriptSegment] {
+        var options = MeetingSpeakerDiarizationOptions.fromPreferences()
+        options.checksFileResources = true
+        let descriptors = audio.assetDescriptors.filter { $0.durationSeconds >= options.minimumAudioDurationSeconds }
+        guard !descriptors.isEmpty else { return segments }
+        guard AppDelegate.shared?.isSessionActive != true else { throw MeetingFileWorkError.resourcesUnavailable }
+        guard let engine = MeetingSpeakerDiarizationEngineFactory.make(mode: mode) else {
+            throw MeetingVADModelError.modelNotDownloaded
+        }
+        do {
+            let turns = try await engine.diarizeSession(
+                descriptors: descriptors,
+                loadAsset: { descriptor in audio.loadAsset(descriptor) },
+                continuousAudioURL: audio.standardizedAudioURL,
+                options: options,
+                progress: progress
+            )
+            try Task.checkCancellation()
+            guard !turns.isEmpty else { throw MeetingFileAnalysisError.noTranscript }
+            let result = assembledSegments(from: segments, turns: turns, options: options)
+            await engine.releaseFileAnalysisResources()
+            return result
+        } catch {
+            await engine.releaseFileAnalysisResources()
+            throw error
+        }
+    }
+
     static func analyzedSegmentsPreservingStructuredSpeakerData(
         from segments: [MeetingTranscriptSegment],
         assets: [MeetingAudioAsset],

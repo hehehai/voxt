@@ -814,6 +814,43 @@ final class TranscriptionHistoryStore: ObservableObject {
         return updatedEntry
     }
 
+    /// File analysis already delivered text. Commit its optional speaker/audio
+    /// additions synchronously before the queue is allowed to delete its input.
+    func commitFileAnalysis(
+        entryID: UUID,
+        segments: [TranscriptSegment],
+        audioCopyURL: URL?,
+        originalSegments: [TranscriptSegment]? = nil
+    ) throws -> TranscriptionHistoryEntry {
+        guard let existing = entry(id: entryID) else { throw CocoaError(.fileNoSuchFile) }
+        // Details can be opened while speaker analysis runs. Do not overwrite edits
+        // made to the already delivered transcript (IDs may change during splitting).
+        let canUpdateSegments = originalSegments.map { original in
+            let current = existing.transcriptSegments ?? []
+            return current.count == original.count && zip(current, original).allSatisfy { lhs, rhs in
+                lhs.text == rhs.text && lhs.startSeconds == rhs.startSeconds && lhs.endSeconds == rhs.endSeconds &&
+                    lhs.speakerID == rhs.speakerID && lhs.speakerDisplayName == rhs.speakerDisplayName &&
+                    lhs.translatedText == rhs.translatedText
+            }
+        } ?? true
+        var updated = canUpdateSegments
+            ? existing.updatingTranscriptSegments(segments, text: TranscriptFormatter.joinedText(for: segments))
+            : existing
+        var importedPath: String?
+        if existing.audioRelativePath == nil, let audioCopyURL {
+            importedPath = try audioArchive.importArchive(from: audioCopyURL, kind: .transcript, preferredFileName: nil)
+            updated = updated.updatingAudioRelativePath(importedPath)
+        }
+        guard persistEntry(updated) else {
+            audioArchive.removeArchive(relativePath: importedPath)
+            throw CocoaError(.fileWriteUnknown)
+        }
+        cacheUpdatedEntry(updated)
+        refreshEntryIndexes()
+        publishVisibleEntries()
+        return updated
+    }
+
     func audioURL(for entry: TranscriptionHistoryEntry) -> URL? {
         audioArchive.audioURL(for: entry)
     }

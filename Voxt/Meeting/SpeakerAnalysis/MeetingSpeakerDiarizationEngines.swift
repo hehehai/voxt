@@ -10,6 +10,7 @@ import FluidAudio
 #endif
 
 protocol MeetingSpeakerDiarizationEngine: Sendable {
+    func releaseFileAnalysisResources() async
     func diarize(
         asset: MeetingAudioAsset,
         options: MeetingSpeakerDiarizationOptions
@@ -25,6 +26,8 @@ protocol MeetingSpeakerDiarizationEngine: Sendable {
 }
 
 extension MeetingSpeakerDiarizationEngine {
+    func releaseFileAnalysisResources() async {}
+
     func diarizeSession(
         descriptors: [MeetingAudioAssetDescriptor],
         loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
@@ -53,7 +56,11 @@ enum MeetingSpeakerDiarizationEngineFactory {
     nonisolated private static let sharedSortformerEngine = SortformerMeetingSpeakerDiarizationEngine()
 
     nonisolated static func makeDefault(defaults: UserDefaults = .standard) -> (any MeetingSpeakerDiarizationEngine)? {
-        switch MeetingDiarizationMode.stored(in: defaults) {
+        make(mode: MeetingDiarizationMode.stored(in: defaults))
+    }
+
+    nonisolated static func make(mode: MeetingDiarizationMode) -> (any MeetingSpeakerDiarizationEngine)? {
+        switch mode {
         case .offlineVBx:
             #if canImport(FluidAudio)
             return sharedFluidAudioEngine
@@ -108,7 +115,7 @@ actor SortformerMeetingSpeakerDiarizationEngine: MeetingSpeakerDiarizationEngine
         descriptors: [MeetingAudioAssetDescriptor],
         loadAsset: @escaping @Sendable (MeetingAudioAssetDescriptor) async -> MeetingAudioAsset?,
         continuousAudioURL _: URL?,
-        options _: MeetingSpeakerDiarizationOptions,
+        options: MeetingSpeakerDiarizationOptions,
         progress: (@Sendable (Double) async -> Void)?
     ) async throws -> [MeetingSpeakerTurn] {
         let model = try await loadModelIfAvailable()
@@ -121,6 +128,9 @@ actor SortformerMeetingSpeakerDiarizationEngine: MeetingSpeakerDiarizationEngine
 
         for (index, descriptor) in descriptors.enumerated() {
             try Task.checkCancellation()
+            if options.checksFileResources {
+                try await MeetingFileResourcePolicy.checkBackgroundWork()
+            }
             if let previousDescriptor {
                 let expectedStart = previousDescriptor.sessionStartOffset + previousDescriptor.durationSeconds
                 let isContinuous = descriptor.source == previousDescriptor.source
@@ -169,6 +179,11 @@ actor SortformerMeetingSpeakerDiarizationEngine: MeetingSpeakerDiarizationEngine
             await progress?(Double(index + 1) / Double(descriptorCount))
         }
         return turns
+    }
+
+    func releaseFileAnalysisResources() async {
+        model = nil
+        Memory.clearCache()
     }
 
     private func loadModelIfAvailable() async throws -> SortformerModel {
@@ -242,9 +257,41 @@ actor FluidAudioMeetingSpeakerDiarizationEngine: MeetingSpeakerDiarizationEngine
         }
         let result: DiarizationResult
         do {
-            result = try await manager.process(continuousAudioURL) { completed, total in
+            let report: @Sendable (Int, Int) -> Void = { completed, total in
                 guard total > 0 else { return }
                 progressStream.continuation.yield(Double(completed) / Double(total))
+            }
+            let pcmSource: MeetingPCM16AudioSampleSource?
+            if options.checksFileResources {
+                // File tasks have a canonical input; never silently allocate a full
+                // Float32 spool if that owned input becomes unavailable or invalid.
+                pcmSource = try MeetingPCM16AudioSampleSource(url: continuousAudioURL)
+            } else {
+                pcmSource = try? MeetingPCM16AudioSampleSource(url: continuousAudioURL)
+            }
+            if let source = pcmSource {
+                let resourceMonitor: Task<Void, Never>? = options.checksFileResources ? Task(priority: .utility) {
+                    while !Task.isCancelled {
+                        do {
+                            try await MeetingFileResourcePolicy.checkBackgroundWork()
+                            try await Task.sleep(for: .seconds(1))
+                        } catch {
+                            if !Task.isCancelled { source.stopForResourcePressure() }
+                            return
+                        }
+                    }
+                } : nil
+                defer { resourceMonitor?.cancel() }
+                result = try await withTaskCancellationHandler {
+                    try await manager.process(audioSource: source, audioLoadingSeconds: 0, progressCallback: report)
+                } onCancel: {
+                    // FluidAudio uses detached producer/consumer tasks. Propagate
+                    // cancellation through their shared reader as well.
+                    source.cancel()
+                }
+            } else {
+                // Compatibility for noncanonical audio produced by other workflows.
+                result = try await manager.process(continuousAudioURL, progressCallback: report)
             }
             progressStream.continuation.yield(1)
             progressStream.continuation.finish()
@@ -265,6 +312,11 @@ actor FluidAudioMeetingSpeakerDiarizationEngine: MeetingSpeakerDiarizationEngine
                 confidence: Double(segment.qualityScore)
             )
         }
+    }
+
+    func releaseFileAnalysisResources() async {
+        diarizer = nil
+        preparedConfiguration = nil
     }
 
     private func diarizeStreaming(

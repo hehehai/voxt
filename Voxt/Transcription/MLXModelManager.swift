@@ -906,6 +906,13 @@ class MLXModelManager: ObservableObject {
         scheduleIdleUnloadIfNeeded()
     }
 
+    /// A phase boundary, not a per-chunk operation. Active users keep their model.
+    func releaseIdleModelForFileAnalysis() {
+        guard activeUseCount == 0 else { return }
+        cancelIdleUnloadTask()
+        unloadLoadedModelIfIdle(expectedRepo: loadedRepo, reason: "file-analysis-phase-boundary")
+    }
+
     func shutdownForApplicationTermination() async {
         guard !isShuttingDownForApplicationTermination else {
             let loadTasks = applicationTerminationModelLoadTasks

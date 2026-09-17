@@ -12,8 +12,7 @@ extension AppDelegate {
             return
         }
 
-        guard task.status == .completed,
-              let historyEntryID = task.historyEntryID,
+        guard let historyEntryID = task.historyEntryID,
               let entry = historyStore.entry(id: historyEntryID)
         else {
             openMainWindow(target: SettingsNavigationTarget(tab: .feature, featureTab: .files))
@@ -26,7 +25,6 @@ extension AppDelegate {
 
     func showMeetingFileTaskDetail(taskID: UUID) {
         guard let task = meetingFileTaskQueue.task(id: taskID),
-              task.status == .completed,
               let historyEntryID = task.historyEntryID,
               let entry = historyStore.entry(id: historyEntryID)
         else {
@@ -59,40 +57,61 @@ extension AppDelegate {
             }
         }
 
+        var displayTitle = sourceURL.deletingPathExtension().lastPathComponent
+        if displayTitle.count > 37, UUID(uuidString: String(displayTitle.prefix(36))) != nil {
+            displayTitle = String(displayTitle.dropFirst(37))
+        }
+        let originalFileName = meetingFileTaskQueue.tasks.first {
+            $0.stagedFileName == sourceURL.lastPathComponent
+        }?.fileName
+        let title = originalFileName.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? displayTitle
+        var originalSegments: [TranscriptSegment]?
         let result = try await meetingSessionCoordinator.analyzeImportedFile(
             at: sourceURL,
+            transcriptReady: { [self] transcript in
+                originalSegments = transcript.persistedSegments
+                guard persistMeetingHistory(transcript, forceSave: true, displayTitle: title) != nil else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+            },
             progress: progress
         )
-        let importedAudioURL = result.archivedAudioURL
-        if Task.isCancelled {
-            if let importedAudioURL {
-                try? FileManager.default.removeItem(at: importedAudioURL)
+        try Task.checkCancellation()
+        guard let entryID = result.recoverySessionID else { throw CocoaError(.fileWriteUnknown) }
+        var audioCopyURL: URL?
+        defer {
+            if let audioCopyURL { try? FileManager.default.removeItem(at: audioCopyURL) }
+        }
+        if historyAudioStorageEnabled, historyStore.entry(id: entryID)?.audioRelativePath == nil,
+           let sourceAudio = result.archivedAudioURL {
+            // Stage on the archive volume, not the queue volume: the final import
+            // remains a rename even when history lives on an external disk.
+            let archiveRoot = try HistoryAudioStorageDirectoryManager.ensureRootDirectoryExists()
+            let copyURL = try MeetingFileArchiveCopy.stagingURL(root: archiveRoot, entryID: entryID)
+            try? FileManager.default.removeItem(at: copyURL)
+            audioCopyURL = copyURL
+            let copyTask = Task.detached(priority: .utility) {
+                try MeetingFileArchiveCopy.create(from: sourceAudio, to: copyURL)
             }
-            throw CancellationError()
-        }
-        let displayTitle = sourceURL.deletingPathExtension().lastPathComponent
-        guard let entry = persistMeetingHistory(
-            result,
-            forceSave: true,
-            displayTitle: displayTitle
-        ) else {
-            if let importedAudioURL {
-                try? FileManager.default.removeItem(at: importedAudioURL)
+            try await withTaskCancellationHandler {
+                try await copyTask.value
+            } onCancel: { copyTask.cancel() }
+            if !historyAudioStorageEnabled {
+                try? FileManager.default.removeItem(at: copyURL)
+                audioCopyURL = nil
+            } else if HistoryAudioStorageDirectoryManager.resolvedRootURL().standardizedFileURL != archiveRoot.standardizedFileURL {
+                throw CocoaError(.fileWriteUnknown)
             }
-            throw NSError(
-                domain: "Voxt.MeetingFileAnalysis",
-                code: -1,
-                userInfo: [
-                    NSLocalizedDescriptionKey: AppLocalization.localizedString(
-                        "The analyzed meeting could not be saved."
-                    )
-                ]
-            )
         }
-        if let importedAudioURL, FileManager.default.fileExists(atPath: importedAudioURL.path) {
-            try? FileManager.default.removeItem(at: importedAudioURL)
-        }
-        progress(MeetingFileAnalysisProgress(stage: .saving, stageFraction: 1))
+        try Task.checkCancellation()
+        let entry = try historyStore.commitFileAnalysis(
+            entryID: entryID, segments: result.persistedSegments, audioCopyURL: audioCopyURL,
+            originalSegments: originalSegments
+        )
+        progress(MeetingFileAnalysisProgress(
+            stage: .saving, stageFraction: 1, historyEntryID: entry.id,
+            notice: result.captureFailureMessage ?? ""
+        ))
         return entry
     }
 

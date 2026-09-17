@@ -8,6 +8,8 @@ enum MeetingFileTaskStatus: String, Codable, Hashable, Sendable {
     case queued
     case processing
     case cancelling
+    case pausing
+    case paused
     case completed
     case failed
     case cancelled
@@ -16,7 +18,7 @@ enum MeetingFileTaskStatus: String, Codable, Hashable, Sendable {
         switch self {
         case .completed, .failed, .cancelled:
             return true
-        case .queued, .processing, .cancelling:
+        case .queued, .processing, .cancelling, .pausing, .paused:
             return false
         }
     }
@@ -44,8 +46,10 @@ struct MeetingFileTask: Identifiable, Codable, Hashable, Sendable {
     var estimatedTotalSeconds: TimeInterval?
     var errorMessage: String?
     var historyEntryID: UUID?
+    var notice: String?
 
     var isTerminal: Bool { status.isTerminal }
+    var hasPendingSpeakerAnalysis: Bool { status == .completed && !(notice ?? "").isEmpty }
 
     func elapsedSeconds(now: Date) -> TimeInterval {
         guard let startedAt else { return 0 }
@@ -185,10 +189,8 @@ final class MeetingFileTaskQueue: ObservableObject {
     private let storageDirectoryURL: URL
     private let taskFileURL: URL
     private let persistenceCoordinator: AsyncJSONPersistenceCoordinator
-    private static let maximumSingleSourceBytes: Int64 = 4 * 1024 * 1024 * 1024
-    private static let maximumStagedSourceBytes: Int64 = 8 * 1024 * 1024 * 1024
-    private static let minimumFreeDiskBytes: Int64 = 512 * 1024 * 1024
-    private nonisolated static let copyChunkByteCount = 1024 * 1024
+    private static let maximumStagedSourceBytes = MeetingFileResourcePolicy.maximumPreparedQueueBytes
+    static let maximumPendingFiles = 64
     private var workerTask: Task<Void, Never>?
     private var tickerTask: Task<Void, Never>?
     private var activeTaskID: UUID?
@@ -197,6 +199,8 @@ final class MeetingFileTaskQueue: ObservableObject {
     private var stagingReservations: [UUID: Int64] = [:]
     private var reservedStagingBytes: Int64 = 0
     private var isShuttingDown = false
+    private var stagingTail: Task<Void, Never>?
+    private var loadedTaskManifest = false
 
     init(
         analyzer: @escaping Analyzer,
@@ -223,10 +227,11 @@ final class MeetingFileTaskQueue: ObservableObject {
         self.tasks = []
 
         loadPersistedTasks()
+        removeAbandonedTaskFiles()
     }
 
     var hasActiveTasks: Bool {
-        tasks.contains { !$0.isTerminal }
+        tasks.contains { !$0.isTerminal && $0.status != .paused }
     }
 
     var hasFinishedTasks: Bool {
@@ -237,15 +242,21 @@ final class MeetingFileTaskQueue: ObservableObject {
         tasks.first { $0.id == id }
     }
 
-    func enqueue(urls: [URL]) {
-        guard !isShuttingDown else { return }
-
+    @discardableResult
+    func enqueue(urls: [URL]) -> Int {
+        guard !isShuttingDown else { return 0 }
+        var accepted = 0
+        let pendingIDs = Set(tasks.filter { !$0.isTerminal }.map(\.id)).union(stagingTaskIDs)
+        let availableSlots = max(0, Self.maximumPendingFiles - pendingIDs.count)
         for sourceURL in urls {
+            guard accepted < availableSlots else { break }
             guard MeetingFileImportSupport.isSupportedImportFile(at: sourceURL) else { continue }
 
             let taskID = UUID()
             let fileName = sourceURL.lastPathComponent
-            let stagedFileName = taskID.uuidString + "-" + fileName
+            // Leave room for UUID and sidecar suffixes even with long UTF-8 names.
+            let stagedName = String(decoding: fileName.utf8.prefix(160), as: UTF8.self)
+            let stagedFileName = taskID.uuidString + "-" + stagedName + ".wav"
             tasks.append(
                 .queued(
                     id: taskID,
@@ -256,17 +267,20 @@ final class MeetingFileTaskQueue: ObservableObject {
             )
             stagingTaskIDs.insert(taskID)
             stage(sourceURL: sourceURL, taskID: taskID, stagedFileName: stagedFileName)
+            accepted += 1
         }
 
         persist()
         startIfNeeded()
+        return accepted
     }
 
     func cancel(taskID: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
         guard !tasks[index].isTerminal else { return }
 
-        if activeTaskID == taskID, tasks[index].status == .processing {
+        if activeTaskID == taskID {
+            guard tasks[index].status != .cancelling else { return }
             tasks[index].status = .cancelling
             persist()
             Task { @MainActor [weak self] in
@@ -282,6 +296,16 @@ final class MeetingFileTaskQueue: ObservableObject {
         tasks[index].completedAt = now()
         persist()
         startIfNeeded()
+    }
+
+    func pause(taskID: UUID) {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }),
+              tasks[index].status == .processing else { return }
+        tasks[index].status = .pausing
+        persist()
+        Task { @MainActor [weak self] in
+            await self?.cancelActiveAnalysis()
+        }
     }
 
     /// Moves a queued task ahead of the other queued tasks while keeping any
@@ -302,7 +326,7 @@ final class MeetingFileTaskQueue: ObservableObject {
 
     func retry(taskID: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
-        guard tasks[index].status == .failed || tasks[index].status == .cancelled else { return }
+        guard tasks[index].status == .failed || tasks[index].status == .cancelled || tasks[index].status == .paused || tasks[index].hasPendingSpeakerAnalysis else { return }
         guard fileManager.fileExists(atPath: stagedURL(for: tasks[index]).path) else {
             tasks[index].status = .failed
             tasks[index].errorMessage = AppLocalization.localizedString("The staged source file is no longer available.")
@@ -310,7 +334,9 @@ final class MeetingFileTaskQueue: ObservableObject {
             return
         }
 
+        let historyID = tasks[index].historyEntryID
         tasks[index] = tasks[index].resetForRetry()
+        tasks[index].historyEntryID = historyID
         persist()
         startIfNeeded()
     }
@@ -319,7 +345,7 @@ final class MeetingFileTaskQueue: ObservableObject {
         let finishedTasks = tasks.filter(\.isTerminal)
         tasks.removeAll(where: \.isTerminal)
         for task in finishedTasks {
-            try? fileManager.removeItem(at: stagedURL(for: task))
+            removeTaskFiles(task)
             if !fileManager.fileExists(atPath: stagedURL(for: task).path) {
                 releaseStagingReservation(for: task.id)
             }
@@ -328,7 +354,7 @@ final class MeetingFileTaskQueue: ObservableObject {
     }
 
     func startIfNeeded() {
-        guard !isShuttingDown, workerTask == nil, tasks.contains(where: { !$0.isTerminal }) else { return }
+        guard !isShuttingDown, workerTask == nil, hasActiveTasks else { return }
         workerTask = Task { @MainActor [weak self] in
             await self?.runWorker()
         }
@@ -378,7 +404,7 @@ final class MeetingFileTaskQueue: ObservableObject {
 
         while !Task.isCancelled, !isShuttingDown {
             guard let index = nextRunnableTaskIndex() else {
-                guard tasks.contains(where: { !$0.isTerminal }) else { return }
+                guard hasActiveTasks else { return }
                 try? await Task.sleep(for: .milliseconds(200))
                 continue
             }
@@ -415,12 +441,18 @@ final class MeetingFileTaskQueue: ObservableObject {
                     self.apply(progress: progress, to: taskID)
                 }
                 guard let finishedIndex = tasks.firstIndex(where: { $0.id == taskID }) else { continue }
-                let shouldRollback = isShuttingDown || tasks[finishedIndex].status == .cancelling
+                // Once text was delivered, cancellation must not erase it. Legacy
+                // analyzers without early delivery retain the rollback contract.
+                let shouldRollback = tasks[finishedIndex].historyEntryID == nil &&
+                    (isShuttingDown || tasks[finishedIndex].status == .cancelling)
                 if shouldRollback {
                     rollbackAnalysis(entry)
                 }
                 if isShuttingDown {
                     markInterrupted(taskID: taskID)
+                } else if tasks[finishedIndex].status == .pausing {
+                    tasks[finishedIndex].historyEntryID = entry.id
+                    markPaused(taskID: taskID)
                 } else if tasks[finishedIndex].status == .cancelling {
                     tasks[finishedIndex].status = .cancelled
                     tasks[finishedIndex].completedAt = now()
@@ -430,6 +462,15 @@ final class MeetingFileTaskQueue: ObservableObject {
                     tasks[finishedIndex].progressStage = .saving
                     tasks[finishedIndex].progressFraction = 1
                     tasks[finishedIndex].historyEntryID = entry.id
+                    // Never delete recovery inputs before both history and queue
+                    // completion are durable. Failed state writes keep the inputs.
+                    let didPersist = persistenceCoordinator.flushWrite(PersistedPayload(version: 1, tasks: tasks), to: taskFileURL)
+                    if didPersist, !tasks[finishedIndex].hasPendingSpeakerAnalysis {
+                        removeTaskFiles(tasks[finishedIndex])
+                        if !fileManager.fileExists(atPath: stagedURL(for: tasks[finishedIndex]).path) {
+                            releaseStagingReservation(for: taskID)
+                        }
+                    }
                     SystemNotificationSupport.post(
                         title: AppLocalization.localizedString("File conversion completed"),
                         body: AppLocalization.format("%@ has been converted successfully.", tasks[finishedIndex].fileName),
@@ -442,11 +483,26 @@ final class MeetingFileTaskQueue: ObservableObject {
             } catch is CancellationError {
                 if isShuttingDown {
                     markInterrupted(taskID: taskID)
+                } else if task(id: taskID)?.status == .pausing {
+                    markPaused(taskID: taskID)
                 } else {
                     markCancelled(taskID: taskID)
                 }
+            } catch MeetingFileWorkError.resourcesUnavailable {
+                markResourceInterruption(taskID: taskID, message: MeetingFileWorkError.resourcesUnavailable.localizedDescription)
+            } catch let error as MeetingLocalInferenceCoordinatorError {
+                VoxtLog.meetingWarning("File inference deferred: \(error.localizedDescription)")
+                markResourceInterruption(taskID: taskID, message: MeetingFileWorkError.resourcesUnavailable.localizedDescription)
             } catch {
-                markFailed(taskID: taskID, error: error)
+                if isShuttingDown {
+                    markInterrupted(taskID: taskID)
+                } else if task(id: taskID)?.status == .cancelling {
+                    markCancelled(taskID: taskID)
+                } else if task(id: taskID)?.status == .pausing {
+                    markPaused(taskID: taskID)
+                } else {
+                    markFailed(taskID: taskID, error: error)
+                }
             }
 
             activeTaskID = nil
@@ -465,7 +521,7 @@ final class MeetingFileTaskQueue: ObservableObject {
     }
 
     private func nextRunnableTaskIndex() -> Int? {
-        guard let index = tasks.firstIndex(where: { !$0.isTerminal }) else { return nil }
+        guard let index = tasks.firstIndex(where: { !$0.isTerminal && $0.status != .paused }) else { return nil }
         let task = tasks[index]
         guard task.status == .queued, !stagingTaskIDs.contains(task.id) else { return nil }
         guard fileManager.fileExists(atPath: stagedURL(for: task).path) else {
@@ -484,8 +540,10 @@ final class MeetingFileTaskQueue: ObservableObject {
 
     private func apply(progress: MeetingFileAnalysisProgress, to taskID: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == taskID }),
-              tasks[index].status == .processing
-        else { return }
+              !tasks[index].isTerminal else { return }
+        if let historyID = progress.historyEntryID { tasks[index].historyEntryID = historyID }
+        if let notice = progress.notice { tasks[index].notice = notice }
+        guard tasks[index].status == .processing else { persist(); return }
         let sampleDate = now()
         tasks[index].progressStage = progress.stage
         tasks[index].progressFraction = min(max(progress.fractionCompleted, 0), 1)
@@ -532,6 +590,30 @@ final class MeetingFileTaskQueue: ObservableObject {
         task.speedSampleProcessedMediaDurationSeconds = processedDuration
     }
 
+    private func markResourceInterruption(taskID: UUID, message: String) {
+        if isShuttingDown {
+            markInterrupted(taskID: taskID)
+        } else if task(id: taskID)?.status == .cancelling {
+            markCancelled(taskID: taskID)
+        } else {
+            markPaused(taskID: taskID, message: message)
+        }
+    }
+
+    private func markPaused(taskID: UUID, message: String? = nil) {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
+        tasks[index].status = .paused
+        tasks[index].errorMessage = message
+        tasks[index].completedAt = now()
+    }
+
+    private func removeTaskFiles(_ task: MeetingFileTask) {
+        let source = stagedURL(for: task)
+        try? fileManager.removeItem(at: source)
+        try? fileManager.removeItem(at: source.appendingPathExtension("partial"))
+        try? fileManager.removeItem(at: MeetingFileCheckpointStore.directory(for: source))
+    }
+
     private func markCancelled(taskID: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
         tasks[index].status = .cancelled
@@ -540,7 +622,16 @@ final class MeetingFileTaskQueue: ObservableObject {
 
     private func markInterrupted(taskID: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
+        if tasks[index].status == .pausing {
+            markPaused(taskID: taskID)
+            return
+        }
+        if tasks[index].status == .cancelling {
+            markCancelled(taskID: taskID)
+            return
+        }
         var task = tasks[index].resetForRetry()
+        task.historyEntryID = tasks[index].historyEntryID
         task.errorMessage = AppLocalization.localizedString("The task was interrupted and has been queued again.")
         tasks[index] = task
     }
@@ -561,6 +652,8 @@ final class MeetingFileTaskQueue: ObservableObject {
         let destinationURL = storageDirectoryURL.appendingPathComponent(stagedFileName)
         let fileManager = self.fileManager
         let storageDirectoryURL = self.storageDirectoryURL
+        let previousStagingTask = stagingTail
+        let partialURL = destinationURL.appendingPathExtension("partial")
 
         let stagingTask = Task { @MainActor [weak self] in
             defer {
@@ -568,65 +661,55 @@ final class MeetingFileTaskQueue: ObservableObject {
                     sourceURL.stopAccessingSecurityScopedResource()
                 }
                 self?.stagingTasks.removeValue(forKey: taskID)
+                if self?.stagingTasks.isEmpty == true { self?.stagingTail = nil }
             }
 
             do {
-                guard let sourceByteCount = self?.sourceByteCount(at: sourceURL, fileManager: fileManager) else {
-                    throw MeetingFileTaskStagingError.sourceUnavailable
-                }
-                guard sourceByteCount <= Self.maximumSingleSourceBytes else {
-                    throw MeetingFileTaskStagingError.sourceTooLarge
-                }
-                guard self?.reserveStagingBytes(sourceByteCount, for: taskID) == true else {
-                    throw MeetingFileTaskStagingError.stagingLimitExceeded
-                }
-
-                try fileManager.createDirectory(at: storageDirectoryURL, withIntermediateDirectories: true)
-                guard self?.hasSufficientDiskSpace(
-                    for: self?.unmaterializedStagingBytes() ?? 0,
-                    at: storageDirectoryURL
-                ) == true else {
-                    throw MeetingFileTaskStagingError.insufficientDiskSpace
-                }
-                let copyTask = Task.detached(priority: .utility) {
-                    try Self.copyFileCancellable(
-                        from: sourceURL,
-                        to: destinationURL,
-                        fileManager: fileManager,
-                        maximumByteCount: sourceByteCount
-                    )
-                }
-                try await withTaskCancellationHandler {
-                    try await copyTask.value
-                } onCancel: {
-                    copyTask.cancel()
-                }
+                // Keep the provider URL/security scope intact while waiting. Only
+                // one task may decode or copy audio at a time.
+                await previousStagingTask?.value
                 try Task.checkCancellation()
-                guard let mediaDuration = await MeetingFileImportSupport.mediaDurationSeconds(at: destinationURL) else {
+                guard let mediaDuration = await MeetingFileImportSupport.mediaDurationSeconds(at: sourceURL) else {
                     throw MeetingFileTaskStagingError.mediaDurationUnavailable
                 }
-                guard mediaDuration <= MeetingFileImportSupport.maximumAnalysisDurationSeconds else {
-                    throw MeetingFileTaskStagingError.mediaTooLong
+                let preparedBytes = try MeetingFileResourcePolicy.preparedByteCount(duration: mediaDuration)
+                guard self?.reserveStagingBytes(preparedBytes, for: taskID) == true else {
+                    throw MeetingFileTaskStagingError.stagingLimitExceeded
                 }
+                try fileManager.createDirectory(at: storageDirectoryURL, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+                try MeetingFileResourcePolicy.requireDiskSpace(at: storageDirectoryURL, additionalBytes: preparedBytes)
                 self?.updateMediaDuration(mediaDuration, taskID: taskID)
-
-                let estimatedWAVByteCount = self?.estimatedWAVByteCount(for: mediaDuration) ?? 0
-                let (pendingBytes, pendingBytesOverflow) = (self?.unmaterializedStagingBytes(excluding: taskID) ?? 0)
-                    .addingReportingOverflow(estimatedWAVByteCount)
-                guard !pendingBytesOverflow else {
-                    throw MeetingFileTaskStagingError.insufficientDiskSpace
+                let preparation = Task.detached(priority: .utility) {
+                    if (try? MeetingImportedAudioFile.openPrepared(at: sourceURL)) != nil {
+                        try Self.copyFileCancellable(
+                            from: sourceURL, to: partialURL, fileManager: fileManager,
+                            maximumByteCount: preparedBytes + 32_000
+                        )
+                    } else {
+                        _ = try await MeetingImportedAudioFile.prepare(from: sourceURL, destinationURL: partialURL)
+                    }
+                    try Task.checkCancellation()
+                    _ = try MeetingImportedAudioFile.openPrepared(at: partialURL)
+                    try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: partialURL.path)
+                    try fileManager.moveItem(at: partialURL, to: destinationURL)
                 }
-                guard self?.hasSufficientDiskSpace(
-                    for: pendingBytes,
-                    at: storageDirectoryURL
-                ) == true else {
-                    throw MeetingFileTaskStagingError.insufficientDiskSpace
+                try await withTaskCancellationHandler {
+                    try await preparation.value
+                } onCancel: {
+                    preparation.cancel()
                 }
-
+                try Task.checkCancellation()
+                // Replace the metadata estimate with the actual decoded size.
+                self?.releaseStagingReservation(for: taskID)
+                guard let actualBytes = self?.sourceByteCount(at: destinationURL, fileManager: fileManager),
+                      self?.reserveStagingBytes(actualBytes, for: taskID) == true else {
+                    throw MeetingFileTaskStagingError.stagingLimitExceeded
+                }
                 self?.stagingTaskIDs.remove(taskID)
                 self?.persist()
                 self?.startIfNeeded()
             } catch {
+                try? fileManager.removeItem(at: partialURL)
                 try? fileManager.removeItem(at: destinationURL)
                 self?.stagingTaskIDs.remove(taskID)
                 self?.releaseStagingReservation(for: taskID)
@@ -638,6 +721,7 @@ final class MeetingFileTaskQueue: ObservableObject {
             }
         }
         stagingTasks[taskID] = stagingTask
+        stagingTail = stagingTask
     }
 
     private func stagedURL(for task: MeetingFileTask) -> URL {
@@ -653,7 +737,7 @@ final class MeetingFileTaskQueue: ObservableObject {
 
     private func reserveStagingBytes(_ byteCount: Int64, for taskID: UUID) -> Bool {
         guard byteCount >= 0,
-              byteCount <= Self.maximumSingleSourceBytes,
+              byteCount <= Self.maximumStagedSourceBytes,
               stagingReservations[taskID] == nil,
               reservedStagingBytes <= Self.maximumStagedSourceBytes - byteCount
         else {
@@ -662,16 +746,6 @@ final class MeetingFileTaskQueue: ObservableObject {
         stagingReservations[taskID] = byteCount
         reservedStagingBytes += byteCount
         return true
-    }
-
-    private func unmaterializedStagingBytes(excluding taskID: UUID? = nil) -> Int64 {
-        stagingTaskIDs.reduce(into: Int64(0)) { total, stagingTaskID in
-            guard stagingTaskID != taskID,
-                  let byteCount = stagingReservations[stagingTaskID]
-            else { return }
-            let (sum, overflow) = total.addingReportingOverflow(byteCount)
-            total = overflow ? Int64.max : sum
-        }
     }
 
     private func releaseStagingReservation(for taskID: UUID) {
@@ -702,37 +776,6 @@ final class MeetingFileTaskQueue: ObservableObject {
         }
     }
 
-    private func estimatedWAVByteCount(for duration: TimeInterval) -> Int64 {
-        let bytesPerSecond = Double(MeetingImportedAudioFile.targetSampleRate * MemoryLayout<Int16>.size)
-        let estimated = duration * bytesPerSecond
-        guard estimated.isFinite, estimated > 0 else { return 0 }
-        return min(Int64(estimated.rounded(.up)), MeetingImportedWAVFormat.maximumDataByteCount)
-    }
-
-    private func hasSufficientDiskSpace(for requiredBytes: Int64, at url: URL) -> Bool {
-        guard requiredBytes >= 0 else {
-            return false
-        }
-        let (requiredWithReserve, requiredBytesOverflow) = requiredBytes
-            .addingReportingOverflow(Self.minimumFreeDiskBytes)
-        guard !requiredBytesOverflow else { return false }
-        guard let values = try? url.resourceValues(forKeys: [
-            .volumeAvailableCapacityForImportantUsageKey,
-            .volumeAvailableCapacityKey
-        ]) else {
-            return false
-        }
-        let available: Int64?
-        if let importantCapacity = values.volumeAvailableCapacityForImportantUsage {
-            available = Int64(importantCapacity)
-        } else if let capacity = values.volumeAvailableCapacity {
-            available = Int64(capacity)
-        } else {
-            available = nil
-        }
-        return available.map { $0 >= requiredWithReserve } ?? false
-    }
-
     private nonisolated static func copyFileCancellable(
         from sourceURL: URL,
         to destinationURL: URL,
@@ -745,7 +788,7 @@ final class MeetingFileTaskQueue: ObservableObject {
 
         let input = try FileHandle(forReadingFrom: sourceURL)
         defer { try? input.close() }
-        guard fileManager.createFile(atPath: destinationURL.path, contents: nil) else {
+        guard fileManager.createFile(atPath: destinationURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
             throw CocoaError(.fileWriteUnknown)
         }
         let output = try FileHandle(forWritingTo: destinationURL)
@@ -754,15 +797,18 @@ final class MeetingFileTaskQueue: ObservableObject {
         var copiedByteCount: Int64 = 0
         while true {
             try Task.checkCancellation()
-            guard let data = try input.read(upToCount: Self.copyChunkByteCount), !data.isEmpty else {
-                break
+            let byteCount = try autoreleasepool {
+                guard let data = try input.read(upToCount: 1_048_576), !data.isEmpty else { return 0 }
+                let (total, overflow) = copiedByteCount.addingReportingOverflow(Int64(data.count))
+                guard !overflow, total <= maximumByteCount else { throw MeetingFileTaskStagingError.sourceTooLarge }
+                try output.write(contentsOf: data)
+                return data.count
             }
-            let (newCopiedByteCount, overflow) = copiedByteCount.addingReportingOverflow(Int64(data.count))
-            guard !overflow, newCopiedByteCount <= maximumByteCount else {
-                throw MeetingFileTaskStagingError.sourceTooLarge
+            guard byteCount > 0 else { break }
+            copiedByteCount += Int64(byteCount)
+            if copiedByteCount.isMultiple(of: 32 * 1_048_576) {
+                try MeetingFileResourcePolicy.requireDiskSpace(at: destinationURL.deletingLastPathComponent())
             }
-            try output.write(contentsOf: data)
-            copiedByteCount = newCopiedByteCount
         }
         try output.synchronize()
     }
@@ -772,16 +818,62 @@ final class MeetingFileTaskQueue: ObservableObject {
             guard fileManager.fileExists(atPath: taskFileURL.path) else { return }
             let data = try Data(contentsOf: taskFileURL)
             let payload = try JSONDecoder().decode(PersistedPayload.self, from: data)
-            tasks = payload.tasks.map { task in
-                guard task.status == .processing || task.status == .cancelling else { return task }
+            loadedTaskManifest = true
+            tasks = payload.tasks.filter { task in
+                task.stagedFileName == URL(fileURLWithPath: task.stagedFileName).lastPathComponent &&
+                    task.stagedFileName.hasPrefix(task.id.uuidString + "-")
+            }.map { task in
+                guard task.status == .processing || task.status == .cancelling || task.status == .pausing else { return task }
                 var restored = task.resetForRetry()
-                restored.errorMessage = AppLocalization.localizedString("The task was interrupted and has been queued again.")
+                restored.historyEntryID = task.historyEntryID
+                if task.status == .pausing {
+                    restored.status = .paused
+                } else if task.status == .cancelling {
+                    restored.status = .cancelled
+                } else {
+                    restored.errorMessage = AppLocalization.localizedString("The task was interrupted and has been queued again.")
+                }
                 return restored
+            }
+            // Only task-owned paths are removed. A prepared .partial file cannot
+            // be resumed without the original security-scoped source URL.
+            for index in tasks.indices {
+                let task = tasks[index]
+                try? fileManager.removeItem(at: stagedURL(for: task).appendingPathExtension("partial"))
+                if task.status == .completed && !task.hasPendingSpeakerAnalysis {
+                    removeTaskFiles(task)
+                }
             }
             restoreStagingReservations()
             persist()
         } catch {
             tasks = []
+            VoxtLog.meetingWarning("File queue restore failed; recovery files were retained. error=\(error.localizedDescription)")
+        }
+    }
+
+    private func removeAbandonedTaskFiles() {
+        // Never sweep arbitrary temporary files or user-selected media. Only this
+        // queue's UUID-owned names, older than a day and absent from its manifest.
+        guard loadedTaskManifest, let urls = try? fileManager.contentsOfDirectory(
+            at: storageDirectoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]
+        ) else { return }
+        let knownIDs = Set(tasks.map(\.id))
+        let cutoff = now().addingTimeInterval(-24 * 60 * 60)
+        for url in urls {
+            let name = url.lastPathComponent
+            guard name.count > 37, name.dropFirst(36).first == "-",
+                  let id = UUID(uuidString: String(name.prefix(36))), !knownIDs.contains(id),
+                  ["wav", "partial", "analysis"].contains(url.pathExtension),
+                  let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let modified = values.contentModificationDate, modified < cutoff else { continue }
+            let source = url.pathExtension == "analysis" || url.pathExtension == "partial"
+                ? url.deletingPathExtension() : url
+            let checkpoint = MeetingFileCheckpointStore.directory(for: source).appendingPathComponent("manifest.json")
+            // A lost queue row is not permission to delete a recoverable transcript.
+            guard !fileManager.fileExists(atPath: checkpoint.path) else { continue }
+            try? fileManager.removeItem(at: url)
         }
     }
 
