@@ -45,7 +45,7 @@ final class MeetingHistoryDurabilityTests: XCTestCase {
         XCTAssertEqual(appendMeeting(store: seedStore, entryID: entryID, text: "delivered"), entryID)
         let failing = retain(FailingMeetingHistoryRepository(base: base))
         let store = retain(TranscriptionHistoryStore(repository: failing))
-        let segment = TranscriptSegment(speaker: .them, startSeconds: 0, text: "updated")
+        let segment = TranscriptSegment(speaker: .them, startSeconds: 0, endSeconds: 10, text: "updated")
         XCTAssertThrowsError(try store.commitFileAnalysis(entryID: entryID, segments: [segment], audioCopyURL: nil))
         XCTAssertEqual(try base.entry(id: entryID)?.text, "delivered")
         XCTAssertEqual(store.entry(id: entryID)?.text, "delivered")
@@ -58,8 +58,8 @@ final class MeetingHistoryDurabilityTests: XCTestCase {
         let store = retain(TranscriptionHistoryStore(repository: repository))
         let entryID = UUID()
         XCTAssertEqual(appendMeeting(store: store, entryID: entryID, text: "original"), entryID)
-        let original = TranscriptSegment(speaker: .them, startSeconds: 0, text: "original")
-        let edited = TranscriptSegment(speaker: .them, startSeconds: 0, text: "user correction")
+        let original = TranscriptSegment(speaker: .them, startSeconds: 0, endSeconds: 10, text: "original")
+        let edited = TranscriptSegment(speaker: .them, startSeconds: 0, endSeconds: 10, text: "user correction")
         _ = store.updateTranscriptSegments([edited], for: entryID)
         let result = try store.commitFileAnalysis(
             entryID: entryID, segments: [original], audioCopyURL: nil, originalSegments: [original]

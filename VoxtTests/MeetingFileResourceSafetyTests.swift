@@ -100,7 +100,7 @@ final class MeetingFileResourceSafetyTests: XCTestCase {
         let failing = FileWindowTestTranscriber(failAt: 2)
         do {
             _ = try await MeetingFinalTranscriptionPass.transcribe(
-                descriptors: descriptors, loadAsset: Self.asset,
+                descriptors: descriptors, loadAsset: { await Self.asset($0) },
                 transcriber: failing,
                 commitWindow: { try await store.commit(index: $0, segments: $1) }
             )
@@ -110,7 +110,7 @@ final class MeetingFileResourceSafetyTests: XCTestCase {
         XCTAssertEqual(saved.completedWindows, 1)
         let succeeding = FileWindowTestTranscriber()
         let segments = try await MeetingFinalTranscriptionPass.transcribe(
-            descriptors: descriptors, loadAsset: Self.asset, transcriber: succeeding,
+            descriptors: descriptors, loadAsset: { await Self.asset($0) }, transcriber: succeeding,
             completedWindowCount: saved.completedWindows, restoredSegments: saved.segments,
             commitWindow: { try await store.commit(index: $0, segments: $1) }
         )
@@ -181,7 +181,7 @@ final class MeetingFileResourceSafetyTests: XCTestCase {
         MeetingTranscriptSegment(speaker: .them, startSeconds: start, endSeconds: start + 1, text: text, preventsAdjacentMerge: true)
     }
 
-    private nonisolated static func asset(_ descriptor: MeetingAudioAssetDescriptor) async -> MeetingAudioAsset? {
+    private static func asset(_ descriptor: MeetingAudioAssetDescriptor) -> MeetingAudioAsset? {
         MeetingAudioAsset(source: descriptor.source, samples: Array(repeating: 0.1, count: descriptor.sampleCount),
                           sampleRate: descriptor.sampleRate, sessionStartOffset: descriptor.sessionStartOffset)
     }
