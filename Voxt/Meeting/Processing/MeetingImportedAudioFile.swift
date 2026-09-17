@@ -2,13 +2,14 @@
 // Normalizes imported meeting media and exposes bounded analysis windows.
 
 import AVFoundation
+import AudioToolbox
 import CoreMedia
 import Foundation
 import UniformTypeIdentifiers
 
 enum MeetingFileImportSupport {
     static let allowedContentTypes: [UTType] = [.audio, .movie]
-    static let maximumAnalysisDurationSeconds: TimeInterval = 12 * 60 * 60
+    static let maximumAnalysisDurationSeconds = MeetingFileResourcePolicy.maximumDurationSeconds
 
     static func isSupportedImportFile(at url: URL) -> Bool {
         let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .contentTypeKey])
@@ -73,7 +74,7 @@ enum MeetingFileImportSupport {
     }
 }
 
-enum MeetingFileTaskStagingError: LocalizedError {
+nonisolated enum MeetingFileTaskStagingError: LocalizedError {
     case sourceUnavailable
     case sourceTooLarge
     case stagingLimitExceeded
@@ -111,13 +112,19 @@ struct MeetingFileAnalysisProgress: Equatable, Sendable {
     let fractionCompleted: Double
     let mediaDurationSeconds: TimeInterval?
     let processedMediaDurationSeconds: TimeInterval?
+    let historyEntryID: UUID?
+    let notice: String?
 
     init(
         stage: MeetingFileAnalysisStage,
         stageFraction: Double = 0,
         mediaDurationSeconds: TimeInterval? = nil,
-        processedMediaDurationSeconds: TimeInterval? = nil
+        processedMediaDurationSeconds: TimeInterval? = nil,
+        historyEntryID: UUID? = nil,
+        notice: String? = nil
     ) {
+        self.historyEntryID = historyEntryID
+        self.notice = notice
         let clampedStageFraction = min(max(stageFraction, 0), 1)
         self.stage = stage
         self.mediaDurationSeconds = Self.validDuration(mediaDurationSeconds)
@@ -189,13 +196,18 @@ nonisolated struct MeetingImportedAudioFile: Sendable {
 
     static func prepare(
         from sourceURL: URL,
+        destinationURL: URL? = nil,
         progress: (@Sendable (Double) async -> Void)? = nil
     ) async throws -> MeetingImportedAudioFile {
-        let destinationURL = FileManager.default.temporaryDirectory
+        let destinationURL = destinationURL ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("Voxt-Imported-Meeting-\(UUID().uuidString)")
             .appendingPathExtension("wav")
+        guard !FileManager.default.fileExists(atPath: destinationURL.path) else {
+            throw CocoaError(.fileWriteFileExists)
+        }
 
         do {
+            try Task.checkCancellation()
             let asset = AVURLAsset(url: sourceURL)
             guard let audioTrack = try await asset.loadTracks(withMediaType: .audio).first else {
                 throw MeetingImportedAudioFileError.noAudioTrack
@@ -206,15 +218,21 @@ nonisolated struct MeetingImportedAudioFile: Sendable {
                 : 0
             await progress?(0)
 
+            let estimatedBytes = try MeetingFileResourcePolicy.preparedByteCount(duration: durationSeconds)
+            try MeetingFileResourcePolicy.requireDiskSpace(
+                at: destinationURL.deletingLastPathComponent(), additionalBytes: estimatedBytes
+            )
+            try Task.checkCancellation()
             let reader = try AVAssetReader(asset: asset)
+            defer { reader.cancelReading() }
             let output = AVAssetReaderTrackOutput(
                 track: audioTrack,
                 outputSettings: [
                     AVFormatIDKey: kAudioFormatLinearPCM,
                     AVSampleRateKey: targetSampleRate,
                     AVNumberOfChannelsKey: 1,
-                    AVLinearPCMBitDepthKey: 32,
-                    AVLinearPCMIsFloatKey: true,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
                     AVLinearPCMIsBigEndianKey: false
                 ]
             )
@@ -224,10 +242,13 @@ nonisolated struct MeetingImportedAudioFile: Sendable {
             }
             reader.add(output)
 
-            FileManager.default.createFile(
-                atPath: destinationURL.path,
-                contents: Data(count: MeetingImportedWAVWriter.headerByteCount)
-            )
+            guard FileManager.default.createFile(
+                    atPath: destinationURL.path,
+                    contents: Data(count: MeetingImportedWAVWriter.headerByteCount),
+                    attributes: [.posixPermissions: 0o600]
+                  ) else {
+                throw CocoaError(.fileWriteFileExists)
+            }
             let writer = try MeetingImportedWAVWriter(
                 destinationURL: destinationURL,
                 sampleRate: targetSampleRate
@@ -238,9 +259,22 @@ nonisolated struct MeetingImportedAudioFile: Sendable {
             }
 
             var lastReportedProgress = 0.0
-            while let sampleBuffer = output.copyNextSampleBuffer() {
+            var lastDiskCheckSample = 0
+            while true {
                 try Task.checkCancellation()
-                try writer.append(sampleBuffer: sampleBuffer)
+                let hasBuffer = try autoreleasepool {
+                    guard let sampleBuffer = output.copyNextSampleBuffer() else { return false }
+                    try writer.append(sampleBuffer: sampleBuffer)
+                    return true
+                }
+                guard hasBuffer else { break }
+                guard writer.sampleCount <= Int(MeetingFileResourcePolicy.maximumDurationSeconds) * targetSampleRate else {
+                    throw MeetingFileTaskStagingError.mediaTooLong
+                }
+                if writer.sampleCount - lastDiskCheckSample >= targetSampleRate * 30 {
+                    try MeetingFileResourcePolicy.requireDiskSpace(at: destinationURL.deletingLastPathComponent())
+                    lastDiskCheckSample = writer.sampleCount
+                }
                 if estimatedSampleCount > 0 {
                     let currentProgress = min(Double(writer.sampleCount) / estimatedSampleCount, 1)
                     if currentProgress - lastReportedProgress >= 0.01 {
@@ -253,6 +287,7 @@ nonisolated struct MeetingImportedAudioFile: Sendable {
             if reader.status == .failed {
                 throw reader.error ?? MeetingImportedAudioFileError.unableToDecode
             }
+            try Task.checkCancellation()
             try writer.finish()
 
             guard writer.sampleCount > 0 else {
@@ -267,6 +302,36 @@ nonisolated struct MeetingImportedAudioFile: Sendable {
             try? FileManager.default.removeItem(at: destinationURL)
             throw error
         }
+    }
+
+    /// Only accepts the canonical WAV layout produced by this importer. Other media
+    /// must be normalized; a .wav extension alone is not sufficient.
+    static func openPrepared(at url: URL) throws -> MeetingImportedAudioFile {
+        let input = try FileHandle(forReadingFrom: url)
+        defer { try? input.close() }
+        guard let header = try input.read(upToCount: 44), header.count == 44 else {
+            throw MeetingImportedAudioFileError.unsupportedMedia
+        }
+        func u16(_ offset: Int) -> UInt16 {
+            UInt16(header[offset]) | UInt16(header[offset + 1]) << 8
+        }
+        func u32(_ offset: Int) -> UInt32 {
+            UInt32(u16(offset)) | UInt32(u16(offset + 2)) << 16
+        }
+        let byteCount = Int64(u32(40))
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        guard String(data: header[0..<4], encoding: .ascii) == "RIFF",
+              String(data: header[8..<12], encoding: .ascii) == "WAVE",
+              String(data: header[12..<16], encoding: .ascii) == "fmt ",
+              u32(16) == 16, u16(20) == 1, u16(22) == 1,
+              u32(24) == 16_000, u32(28) == 32_000, u16(32) == 2, u16(34) == 16,
+              String(data: header[36..<40], encoding: .ascii) == "data",
+              byteCount > 0, byteCount.isMultiple(of: 2),
+              Int64(u32(4)) == byteCount + 36,
+              size.map({ Int64($0) == byteCount + 44 }) == true,
+              byteCount <= Int64(MeetingFileResourcePolicy.maximumDurationSeconds * 32_000)
+        else { throw MeetingImportedAudioFileError.unsupportedMedia }
+        return MeetingImportedAudioFile(standardizedAudioURL: url, sampleCount: Int(byteCount / 2))
     }
 
     func loadAsset(_ descriptor: MeetingAudioAssetDescriptor) -> MeetingAudioAsset? {
@@ -369,13 +434,23 @@ nonisolated private final class MeetingImportedWAVWriter {
 
     func append(sampleBuffer: CMSampleBuffer) throws {
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
-        let byteCount = CMBlockBufferGetDataLength(blockBuffer)
-        let floatByteCount = MemoryLayout<Float32>.size
-        guard byteCount >= floatByteCount else { return }
-        guard byteCount.isMultiple(of: floatByteCount) else {
+        guard let description = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let format = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
+              format.mFormatID == kAudioFormatLinearPCM,
+              format.mSampleRate == Double(sampleRate), format.mChannelsPerFrame == 1,
+              format.mBitsPerChannel == 16, format.mBytesPerFrame == 2,
+              format.mFormatFlags & kAudioFormatFlagIsFloat == 0,
+              format.mFormatFlags & kAudioFormatFlagIsBigEndian == 0,
+              format.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0 else {
             throw MeetingImportedAudioFileError.unableToDecode
         }
-        let incomingSampleCount = byteCount / floatByteCount
+        let byteCount = CMBlockBufferGetDataLength(blockBuffer)
+        let bytesPerSample = MemoryLayout<Int16>.size
+        guard byteCount >= bytesPerSample else { return }
+        guard byteCount.isMultiple(of: bytesPerSample) else {
+            throw MeetingImportedAudioFileError.unableToDecode
+        }
+        let incomingSampleCount = byteCount / bytesPerSample
         guard sampleCount <= Int.max - incomingSampleCount else {
             throw MeetingImportedAudioFileError.fileTooLarge
         }
@@ -383,8 +458,10 @@ nonisolated private final class MeetingImportedWAVWriter {
             sampleCount: sampleCount + incomingSampleCount
         )
 
-        var floatData = Data(count: byteCount)
-        let copyStatus = floatData.withUnsafeMutableBytes { bytes in
+        // AVFoundation performs resampling/downmix/PCM16 conversion natively.
+        // Avoid a Float32 copy and a per-sample Swift quantization/append loop.
+        var pcmData = Data(count: byteCount)
+        let copyStatus = pcmData.withUnsafeMutableBytes { bytes in
             guard let baseAddress = bytes.baseAddress else { return kCMBlockBufferBadPointerParameterErr }
             return CMBlockBufferCopyDataBytes(
                 blockBuffer,
@@ -397,14 +474,6 @@ nonisolated private final class MeetingImportedWAVWriter {
             throw MeetingImportedAudioFileError.unableToDecode
         }
 
-        var pcmData = Data(capacity: incomingSampleCount * MemoryLayout<Int16>.size)
-        floatData.withUnsafeBytes { bytes in
-            for sample in bytes.bindMemory(to: Float32.self) {
-                let clamped = max(-1, min(1, sample))
-                var pcmSample = Int16((clamped * Float32(Int16.max)).rounded()).littleEndian
-                withUnsafeBytes(of: &pcmSample) { pcmData.append(contentsOf: $0) }
-            }
-        }
         try handle.write(contentsOf: pcmData)
         sampleCount += incomingSampleCount
     }

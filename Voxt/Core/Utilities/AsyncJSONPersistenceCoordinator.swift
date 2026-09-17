@@ -36,16 +36,18 @@ final class AsyncJSONPersistenceCoordinator {
     /// Cancels a debounced write and synchronously writes the newest value.
     /// This is intended for termination paths where returning before the write
     /// completes would make the latest state disappear after relaunch.
-    func flushWrite<Value: Encodable>(_ value: Value, to url: URL) {
+    @discardableResult
+    func flushWrite<Value: Encodable>(_ value: Value, to url: URL) -> Bool {
         queue.sync {
             self.pendingWriteWorkItem?.cancel()
             self.pendingWriteWorkItem = nil
             self.pendingWriteGeneration &+= 1
-            self.write(value, to: url)
+            return self.write(value, to: url)
         }
     }
 
-    private func write<Value: Encodable>(_ value: Value, to url: URL) {
+    @discardableResult
+    private func write<Value: Encodable>(_ value: Value, to url: URL) -> Bool {
         do {
             let data = try JSONEncoder().encode(value)
             try FileManager.default.createDirectory(
@@ -53,8 +55,10 @@ final class AsyncJSONPersistenceCoordinator {
                 withIntermediateDirectories: true
             )
             try data.write(to: url, options: [.atomic])
+            return true
         } catch {
-            // Keep UI responsive even if persistence fails.
+            // Synchronous callers can retain recovery assets when the commit fails.
+            return false
         }
     }
 }

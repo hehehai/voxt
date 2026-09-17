@@ -236,6 +236,219 @@ final class MeetingFileTaskQueueTests: XCTestCase {
         await queue.shutdown()
     }
 
+    func testImportNormalizesBeforeAnalyzerAndDoesNotStageOriginalBytes() async throws {
+        let storage = try TemporaryDirectory()
+        let source = storage.url.appendingPathComponent("source.wav")
+        try MeetingAudioChunkWAVExporter.write(samples: Array(repeating: 0.1, count: 8000), sampleRate: 8000, to: source)
+        let original = try Data(contentsOf: source)
+        var analyzed = false
+        let queue = MeetingFileTaskQueue(
+            analyzer: { url, _ in
+                let audio = try MeetingImportedAudioFile.openPrepared(at: url)
+                XCTAssertEqual(Double(audio.sampleCount), 16_000, accuracy: 16)
+                analyzed = true
+                return Self.makeHistoryEntry()
+            }, cancelActiveAnalysis: {}, canStart: { true },
+            storageDirectoryURL: storage.url.appendingPathComponent("tasks")
+        )
+        queue.enqueue(urls: [source])
+        try await waitUntilAllTasksAreTerminal(queue)
+        XCTAssertTrue(analyzed)
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        XCTAssertEqual(queue.tasks.first?.status, .completed)
+        await queue.shutdown()
+    }
+
+    func testCompletedTaskReclaimsPreparedAudioButNeverOriginalFile() async throws {
+        let storage = try TemporaryDirectory()
+        let source = try makeSourceFile(named: "cleanup.wav")
+        let queue = MeetingFileTaskQueue(
+            analyzer: { url, _ in
+                XCTAssertNoThrow(try MeetingImportedAudioFile.openPrepared(at: url))
+                XCTAssertNotEqual(url, source)
+                return Self.makeHistoryEntry()
+            }, cancelActiveAnalysis: {}, canStart: { true }, storageDirectoryURL: storage.url
+        )
+        queue.enqueue(urls: [source])
+        try await waitUntilAllTasksAreTerminal(queue)
+        let task = try XCTUnwrap(queue.tasks.first)
+        XCTAssertEqual(task.status, .completed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storage.url.appendingPathComponent(task.stagedFileName).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        await queue.shutdown()
+    }
+
+    func testDeliveredTranscriptIsNotRolledBackOnCancellation() async throws {
+        let storage = try TemporaryDirectory()
+        let source = try makeSourceFile(named: "delivered.wav")
+        let entry = Self.makeHistoryEntry()
+        var cancelled = false
+        var rollbacks = 0
+        let queue = MeetingFileTaskQueue(
+            analyzer: { _, progress in
+                progress(MeetingFileAnalysisProgress(stage: .identifyingSpeakers, historyEntryID: entry.id))
+                while !cancelled { try await Task.sleep(for: .milliseconds(10)) }
+                return entry
+            }, cancelActiveAnalysis: { cancelled = true }, canStart: { true },
+            rollbackAnalysis: { _ in rollbacks += 1 }, storageDirectoryURL: storage.url
+        )
+        queue.enqueue(urls: [source])
+        try await waitUntil(queue, status: .processing, at: 0)
+        queue.cancel(taskID: try XCTUnwrap(queue.tasks.first?.id))
+        try await waitUntilAllTasksAreTerminal(queue)
+        XCTAssertEqual(queue.tasks.first?.historyEntryID, entry.id)
+        XCTAssertEqual(rollbacks, 0)
+        await queue.shutdown()
+    }
+
+    func testResourcePauseDoesNotBlockNextFileAndCanResume() async throws {
+        let storage = try TemporaryDirectory()
+        let first = try makeSourceFile(named: "resource-pause.wav")
+        let second = try makeSourceFile(named: "next.wav")
+        var shouldPause = true
+        let queue = MeetingFileTaskQueue(
+            analyzer: { url, _ in
+                if url.path.contains("resource-pause"), shouldPause {
+                    throw MeetingFileWorkError.resourcesUnavailable
+                }
+                return Self.makeHistoryEntry()
+            }, cancelActiveAnalysis: {}, canStart: { true }, storageDirectoryURL: storage.url
+        )
+        queue.enqueue(urls: [first, second])
+        try await waitUntil(queue, status: .paused, at: 0)
+        try await waitUntil(queue, status: .completed, at: 1)
+        shouldPause = false
+        queue.retry(taskID: try XCTUnwrap(queue.tasks.first?.id))
+        try await waitUntilAllTasksAreTerminal(queue)
+        XCTAssertEqual(queue.tasks.map(\.status), [.completed, .completed])
+        await queue.shutdown()
+    }
+
+    func testUserPauseRetainsPreparedInputAndHistoryAcrossRestart() async throws {
+        let storage = try TemporaryDirectory()
+        let source = try makeSourceFile(named: "pause.wav")
+        let entry = Self.makeHistoryEntry()
+        var stop = false
+        let queue = MeetingFileTaskQueue(
+            analyzer: { _, progress in
+                progress(MeetingFileAnalysisProgress(stage: .identifyingSpeakers, historyEntryID: entry.id))
+                while !stop { try await Task.sleep(for: .milliseconds(10)) }
+                throw CancellationError()
+            }, cancelActiveAnalysis: { stop = true }, canStart: { true }, storageDirectoryURL: storage.url
+        )
+        queue.enqueue(urls: [source])
+        try await waitUntil(queue, status: .processing, at: 0)
+        queue.pause(taskID: try XCTUnwrap(queue.tasks.first?.id))
+        try await waitUntil(queue, status: .paused, at: 0)
+        await queue.shutdown()
+        let restored = MeetingFileTaskQueue(
+            analyzer: { _, _ in entry }, cancelActiveAnalysis: {}, canStart: { false }, storageDirectoryURL: storage.url
+        )
+        let task = try XCTUnwrap(restored.tasks.first)
+        XCTAssertEqual(task.status, .paused)
+        XCTAssertEqual(task.historyEntryID, entry.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.url.appendingPathComponent(task.stagedFileName).path))
+        restored.cancel(taskID: task.id)
+        restored.clearFinishedTasks()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storage.url.appendingPathComponent(task.stagedFileName).path))
+        await restored.shutdown()
+    }
+
+    func testDeferredSpeakerTaskKeepsOnlyOwnedResumeDataUntilCleanup() async throws {
+        let storage = try TemporaryDirectory()
+        let source = try makeSourceFile(named: "later.wav")
+        let queue = MeetingFileTaskQueue(
+            analyzer: { _, progress in
+                progress(MeetingFileAnalysisProgress(stage: .saving, notice: "pending speakers"))
+                return Self.makeHistoryEntry()
+            }, cancelActiveAnalysis: {}, canStart: { true }, storageDirectoryURL: storage.url
+        )
+        queue.enqueue(urls: [source])
+        try await waitUntilAllTasksAreTerminal(queue)
+        let task = try XCTUnwrap(queue.tasks.first)
+        XCTAssertTrue(task.hasPendingSpeakerAnalysis)
+        let preparedURL = storage.url.appendingPathComponent(task.stagedFileName)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: preparedURL.path))
+        queue.clearFinishedTasks()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: preparedURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        await queue.shutdown()
+    }
+
+    func testFailedCompletionCommitRetainsRecoveryAudio() async throws {
+        let storage = try TemporaryDirectory()
+        let source = try makeSourceFile(named: "persist-failure.wav")
+        let manifestURL = storage.url.appendingPathComponent("tasks.json")
+        try FileManager.default.createDirectory(at: manifestURL, withIntermediateDirectories: true)
+        let queue = MeetingFileTaskQueue(
+            analyzer: { _, _ in Self.makeHistoryEntry() },
+            cancelActiveAnalysis: {}, canStart: { true }, storageDirectoryURL: storage.url
+        )
+        queue.enqueue(urls: [source])
+        try await waitUntilAllTasksAreTerminal(queue)
+        let task = try XCTUnwrap(queue.tasks.first)
+        XCTAssertEqual(task.status, .completed)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.url.appendingPathComponent(task.stagedFileName).path))
+        await queue.shutdown()
+    }
+
+    func testPendingImportCountIsBoundedBeforeStartingDecodeTasks() async throws {
+        let storage = try TemporaryDirectory()
+        let source = try makeSourceFile(named: "bounded.wav")
+        let queue = MeetingFileTaskQueue(
+            analyzer: { _, _ in XCTFail("Must not analyze while blocked"); return Self.makeHistoryEntry() },
+            cancelActiveAnalysis: {}, canStart: { false }, storageDirectoryURL: storage.url
+        )
+        let accepted = queue.enqueue(urls: Array(repeating: source, count: MeetingFileTaskQueue.maximumPendingFiles + 10))
+        XCTAssertEqual(accepted, MeetingFileTaskQueue.maximumPendingFiles)
+        XCTAssertEqual(queue.tasks.count, MeetingFileTaskQueue.maximumPendingFiles)
+        await queue.shutdown()
+    }
+
+    func testRepeatedCancellationCannotMakeAnActiveTaskClearable() async throws {
+        let storage = try TemporaryDirectory()
+        let source = try makeSourceFile(named: "cancel-twice.wav")
+        var release = false
+        let queue = MeetingFileTaskQueue(
+            analyzer: { _, _ in
+                while !release { try await Task.sleep(for: .milliseconds(10)) }
+                throw CancellationError()
+            }, cancelActiveAnalysis: {}, canStart: { true }, storageDirectoryURL: storage.url
+        )
+        queue.enqueue(urls: [source])
+        try await waitUntil(queue, status: .processing, at: 0)
+        let task = try XCTUnwrap(queue.tasks.first)
+        queue.cancel(taskID: task.id)
+        queue.cancel(taskID: task.id)
+        queue.clearFinishedTasks()
+        XCTAssertEqual(queue.tasks.first?.status, .cancelling)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.url.appendingPathComponent(task.stagedFileName).path))
+        release = true
+        try await waitUntilAllTasksAreTerminal(queue)
+        await queue.shutdown()
+    }
+
+    func testRestartPreservesInFlightPauseAndCancelIntent() async throws {
+        let storage = try TemporaryDirectory()
+        let pauseID = UUID()
+        let cancelID = UUID()
+        var pausing = MeetingFileTask.queued(id: pauseID, fileName: "pause.wav", stagedFileName: pauseID.uuidString + "-pause.wav")
+        pausing.status = .pausing
+        pausing.historyEntryID = UUID()
+        var cancelling = MeetingFileTask.queued(id: cancelID, fileName: "cancel.wav", stagedFileName: cancelID.uuidString + "-cancel.wav")
+        cancelling.status = .cancelling
+        struct Payload: Encodable { let version: Int; let tasks: [MeetingFileTask] }
+        try JSONEncoder().encode(Payload(version: 1, tasks: [pausing, cancelling]))
+            .write(to: storage.url.appendingPathComponent("tasks.json"))
+        let queue = MeetingFileTaskQueue(
+            analyzer: { _, _ in XCTFail("Paused work must not restart automatically"); return Self.makeHistoryEntry() },
+            cancelActiveAnalysis: {}, canStart: { false }, storageDirectoryURL: storage.url
+        )
+        XCTAssertEqual(queue.tasks.map(\.status), [.paused, .cancelled])
+        XCTAssertEqual(queue.tasks.first?.historyEntryID, pausing.historyEntryID)
+        await queue.shutdown()
+    }
+
     func testTaskEstimateAndRetryReset() {
         let enqueuedAt = Date(timeIntervalSince1970: 100)
         var task = MeetingFileTask.queued(
@@ -362,6 +575,7 @@ final class MeetingFileTaskQueueTests: XCTestCase {
     private func makeSourceFile(named name: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("Voxt-Meeting-Task-\(UUID().uuidString)-\(name)")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         try MeetingAudioChunkWAVExporter.write(
             samples: Array(repeating: Float.zero, count: 160),
             sampleRate: 16_000,

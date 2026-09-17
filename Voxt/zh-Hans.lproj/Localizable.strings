@@ -2361,3 +2361,19 @@
 "Google Gemini API Key is required for testing." = "测试需要填写 Google Gemini API Key。";
 "Connection test succeeded (Gemini live transcribe reachable)." = "连接测试成功（Gemini 实时转写可访问）。";
 "Failed to encode Gemini live payload." = "Gemini 实时转写请求编码失败。";
+
+/* File analysis resource safety */
+"Analyze speakers later" = "稍后分析说话人";
+"Analyze speakers when safe" = "资源允许时分析说话人";
+"Continue analysis" = "继续分析";
+"File analysis paused to protect system resources. Resume when the Mac is ready." = "为保护系统资源，文件分析已暂停。请在 Mac 资源充足后继续。";
+"File speaker analysis" = "文件说话人分析";
+"Pausing…" = "正在暂停…";
+"The file checkpoint is damaged. Import the file as a new task; existing results have been kept." = "文件检查点已损坏。请重新导入为新任务，已有结果已保留。";
+"Transcript saved. Offline speaker analysis was deferred because this recording exceeds the safe duration limit." = "文字已保存。录音超过安全时长限制，离线说话人分析已延后。";
+"Transcript saved. Speaker analysis could not finish; check the selected model and system resources before retrying." = "文字已保存。说话人分析未能完成，请检查所选模型和系统资源后重试。";
+"Transcript saved. Speaker analysis is pending; prepared audio is kept until completion or task cleanup." = "文字已保存，说话人待分析。准备好的音频将保留至分析完成或清理任务。";
+"Transcription only" = "仅转写文字";
+"The file queue is full. Wait for pending tasks to finish before importing more files." = "文件队列已满，请等待待处理任务完成后再导入更多文件。";
+"Transcription settings changed. Restore the previous settings to resume, or import the file as a new task." = "转写设置已变化。请恢复原设置后继续，或重新导入为新任务。";
+"Uses the selected meeting speaker model. Sortformer supports up to 4 speakers. Deferred tasks keep prepared audio; clearing tasks removes their resume data, not saved transcripts." = "使用会议设置中选定的说话人模型，Sortformer 最多支持 4 人。延后任务会保留准备好的音频；清理任务将删除续跑数据，不会删除已保存的文字。";

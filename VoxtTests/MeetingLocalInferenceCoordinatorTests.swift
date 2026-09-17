@@ -91,6 +91,36 @@ final class MeetingLocalInferenceCoordinatorTests: XCTestCase {
         XCTAssertEqual(peakAfterRecording, 1)
     }
 
+    func testFileBoundaryRejectsMemoryPressureBeforeWorkStarts() async throws {
+        let coordinator = MeetingLocalInferenceCoordinator(thermalStateProvider: { .nominal })
+        await coordinator.setMemoryPressureConstrained(true)
+        do {
+            try await coordinator.checkFileResources()
+            XCTFail("File work must pause under memory pressure")
+        } catch MeetingFileWorkError.resourcesUnavailable {} catch { XCTFail("Unexpected error: \(error)") }
+    }
+
+    func testMemoryPressureRejectsAlreadyQueuedFileWork() async throws {
+        let coordinator = MeetingLocalInferenceCoordinator(thermalStateProvider: { .nominal })
+        let gate = MeetingInferenceGate()
+        let active = Task {
+            try await coordinator.withPermit(.liveASRFinal) { await gate.wait() }
+        }
+        await gate.waitUntilStarted()
+        let queued = Task {
+            try await coordinator.withPermit(.fileASR) { XCTFail("Queued file must not begin") }
+        }
+        let didQueue = await waitForQueuedWork(1, coordinator: coordinator)
+        XCTAssertTrue(didQueue)
+        await coordinator.setMemoryPressureConstrained(true)
+        do {
+            try await queued.value
+            XCTFail("Queued file must return to its checkpoint")
+        } catch MeetingLocalInferenceCoordinatorError.memoryConstrained {} catch { XCTFail("Unexpected error: \(error)") }
+        await gate.open()
+        try await active.value
+    }
+
     private func waitForQueuedWork(
         _ expectedCount: Int,
         coordinator: MeetingLocalInferenceCoordinator,

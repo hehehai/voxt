@@ -75,23 +75,35 @@ enum MeetingFinalTranscriptionPass {
         options: Options = Options(),
         requiresCompleteTranscription: Bool = false,
         progress: (@Sendable (Double) async -> Void)? = nil,
-        processedDurationProgress: (@Sendable (Double, TimeInterval) async -> Void)? = nil
+        processedDurationProgress: (@Sendable (Double, TimeInterval) async -> Void)? = nil,
+        completedWindowCount: Int = 0,
+        restoredSegments: [MeetingTranscriptSegment] = [],
+        beforeChunk: (@Sendable () async throws -> Void)? = nil,
+        commitWindow: (@Sendable (Int, [MeetingTranscriptSegment]) async throws -> Void)? = nil
     ) async throws -> [MeetingTranscriptSegment] {
-        var segments: [MeetingTranscriptSegment] = []
+        guard (0...descriptors.count).contains(completedWindowCount) else {
+            throw MeetingFileWorkError.invalidCheckpoint
+        }
+        var segments = restoredSegments
         let descriptorCount = max(descriptors.count, 1)
-        var completedDurationBeforeDescriptor: TimeInterval = 0
-        await progress?(0)
-        await processedDurationProgress?(0, 0)
-        for (descriptorIndex, descriptor) in descriptors.enumerated() {
+        var completedDurationBeforeDescriptor = descriptors.prefix(completedWindowCount)
+            .reduce(TimeInterval(0)) { $0 + max($1.durationSeconds, 0) }
+        let initialProgress = Double(completedWindowCount) / Double(descriptorCount)
+        await progress?(initialProgress)
+        await processedDurationProgress?(initialProgress, completedDurationBeforeDescriptor)
+        for (descriptorIndex, descriptor) in descriptors.enumerated().dropFirst(completedWindowCount) {
             try Task.checkCancellation()
             let descriptorDuration = max(descriptor.durationSeconds, 0)
             defer { completedDurationBeforeDescriptor += descriptorDuration }
+            try await beforeChunk?()
+            let windowSegmentStart = segments.count
             guard let asset = await loadAsset(descriptor) else {
                 throw Failure.assetUnavailable(descriptor.source)
             }
             try Task.checkCancellation()
             if let wholeAssetSegments = try await transcriber.transcribeWholeAsset(asset) {
                 appendCleaned(wholeAssetSegments, to: &segments)
+                try await commitWindow?(descriptorIndex, Array(segments[windowSegmentStart...]))
                 let descriptorProgress = Double(descriptorIndex + 1) / Double(descriptorCount)
                 await progress?(descriptorProgress)
                 await processedDurationProgress?(
@@ -104,6 +116,7 @@ enum MeetingFinalTranscriptionPass {
             let chunkCount = max(chunks.count, 1)
             for (chunkIndex, chunk) in chunks.enumerated() {
                 try Task.checkCancellation()
+                try await beforeChunk?()
                 let chunkSegments = if requiresCompleteTranscription {
                     try await transcriber.transcribeSegmentsStrict(chunk: chunk)
                 } else {
@@ -119,6 +132,7 @@ enum MeetingFinalTranscriptionPass {
                     completedDurationBeforeDescriptor + descriptorDuration * descriptorProgress
                 )
             }
+            try await commitWindow?(descriptorIndex, Array(segments[windowSegmentStart...]))
             if chunks.isEmpty {
                 let descriptorProgress = Double(descriptorIndex + 1) / Double(descriptorCount)
                 await progress?(descriptorProgress)

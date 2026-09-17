@@ -36,6 +36,38 @@ final class MeetingHistoryDurabilityTests: XCTestCase {
         XCTAssertEqual(try repository.entry(id: entryID)?.text, "first recovery")
     }
 
+    func testFileAnalysisCommitFailureKeepsDeliveredText() throws {
+        let directory = retain(try TemporaryDirectory())
+        let database = retain(VoxtDatabase(databaseURL: directory.url.appendingPathComponent("history.sqlite")))
+        let base = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let seedStore = retain(TranscriptionHistoryStore(repository: base))
+        let entryID = UUID()
+        XCTAssertEqual(appendMeeting(store: seedStore, entryID: entryID, text: "delivered"), entryID)
+        let failing = retain(FailingMeetingHistoryRepository(base: base))
+        let store = retain(TranscriptionHistoryStore(repository: failing))
+        let segment = TranscriptSegment(speaker: .them, startSeconds: 0, text: "updated")
+        XCTAssertThrowsError(try store.commitFileAnalysis(entryID: entryID, segments: [segment], audioCopyURL: nil))
+        XCTAssertEqual(try base.entry(id: entryID)?.text, "delivered")
+        XCTAssertEqual(store.entry(id: entryID)?.text, "delivered")
+    }
+
+    func testFileAnalysisCommitPreservesEditsMadeDuringSpeakerAnalysis() throws {
+        let directory = retain(try TemporaryDirectory())
+        let database = retain(VoxtDatabase(databaseURL: directory.url.appendingPathComponent("history.sqlite")))
+        let repository = retain(HistoryRepository(database: database, legacyJSONURL: nil, migrateLegacyJSON: false))
+        let store = retain(TranscriptionHistoryStore(repository: repository))
+        let entryID = UUID()
+        XCTAssertEqual(appendMeeting(store: store, entryID: entryID, text: "original"), entryID)
+        let original = TranscriptSegment(speaker: .them, startSeconds: 0, text: "original")
+        let edited = TranscriptSegment(speaker: .them, startSeconds: 0, text: "user correction")
+        _ = store.updateTranscriptSegments([edited], for: entryID)
+        let result = try store.commitFileAnalysis(
+            entryID: entryID, segments: [original], audioCopyURL: nil, originalSegments: [original]
+        )
+        XCTAssertEqual(result.transcriptSegments, [edited])
+        XCTAssertEqual(try repository.entry(id: entryID)?.transcriptSegments, [edited])
+    }
+
     private func appendMeeting(
         store: TranscriptionHistoryStore,
         entryID: UUID,
