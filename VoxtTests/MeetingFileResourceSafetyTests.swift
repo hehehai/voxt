@@ -32,6 +32,38 @@ final class MeetingFileResourceSafetyTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
     }
 
+    func testRestoredMergeBoundariesMatchUninterruptedPostProcessing() async throws {
+        let directory = try TemporaryDirectory()
+        let source = try makeSource(in: directory.url)
+        let store = MeetingFileCheckpointStore(sourceURL: source, signature: "same")
+        _ = try await store.load(windowCount: 1)
+        let segments = [
+            makeSegment("first clause", start: 0),
+            MeetingTranscriptSegment(speaker: .them, startSeconds: 1, endSeconds: 2, text: "second clause")
+        ]
+        try await store.commit(index: 0, segments: segments)
+        let restored = try await store.load(windowCount: 1)
+        XCTAssertEqual(restored.segments.map(\.preventsAdjacentMerge), [true, false])
+        let uninterrupted = MeetingTranscriptPostProcessor.process(segments)
+        let resumed = MeetingTranscriptPostProcessor.process(restored.segments)
+        XCTAssertEqual(uninterrupted.count, 2)
+        XCTAssertEqual(resumed, uninterrupted)
+    }
+
+    func testInputSizeChangeInvalidatesCheckpointWithReusedStore() async throws {
+        let directory = try TemporaryDirectory()
+        let source = try makeSource(in: directory.url)
+        let store = MeetingFileCheckpointStore(sourceURL: source, signature: "same")
+        _ = try await store.load(windowCount: 1)
+        let handle = try FileHandle(forWritingTo: source)
+        try handle.truncate(atOffset: 44)
+        try handle.close()
+        do {
+            _ = try await store.load(windowCount: 1)
+            XCTFail("Changed input size must invalidate a cached checkpoint")
+        } catch MeetingFileWorkError.invalidCheckpoint {} catch { XCTFail("Unexpected error: \(error)") }
+    }
+
     func testCheckpointRejectsConfigurationChangesAndCorruptionWithoutDeletingResults() async throws {
         let directory = try TemporaryDirectory()
         let source = try makeSource(in: directory.url)

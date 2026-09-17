@@ -23,6 +23,9 @@ actor MeetingFileCheckpointStore {
     private struct Window: Codable, Sendable {
         let index: Int
         let segments: [MeetingTranscriptSegment]
+        // TranscriptSegment's history encoding intentionally omits this transient
+        // flag. Checkpoints must retain it to make resumed post-processing identical.
+        let preventsAdjacentMergeIDs: [UUID]?
     }
 
     nonisolated let directoryURL: URL
@@ -53,10 +56,14 @@ actor MeetingFileCheckpointStore {
 
     func load(windowCount: Int) throws -> MeetingFileCheckpoint {
         guard (0...720).contains(windowCount) else { throw MeetingFileWorkError.invalidCheckpoint }
-        let values = try sourceURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        guard let sourceBytes = values.fileSize, let modified = values.contentModificationDate else {
+        // URL.resourceValues may reuse cached metadata on repeated loads of the
+        // same URL instance, hiding input replacement/modification during a retry.
+        let attributes = try fileManager.attributesOfItem(atPath: sourceURL.path)
+        guard let size = attributes[.size] as? NSNumber,
+              let modified = attributes[.modificationDate] as? Date else {
             throw MeetingFileWorkError.invalidCheckpoint
         }
+        let sourceBytes = size.intValue
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let manifestURL = directoryURL.appendingPathComponent("manifest.json")
         var manifest: Manifest
@@ -83,7 +90,19 @@ actor MeetingFileCheckpointStore {
             do { window = try JSONDecoder().decode(Window.self, from: Data(contentsOf: url)) }
             catch { throw MeetingFileWorkError.invalidCheckpoint }
             guard window.index == index else { throw MeetingFileWorkError.invalidCheckpoint }
-            segments.append(contentsOf: window.segments)
+            let mergeProtectedIDs = Set(window.preventsAdjacentMergeIDs ?? [])
+            segments.append(contentsOf: window.segments.map { segment in
+                guard mergeProtectedIDs.contains(segment.id) else { return segment }
+                return MeetingTranscriptSegment(
+                    id: segment.id, speaker: segment.speaker,
+                    speakerID: segment.speakerID, speakerDisplayName: segment.speakerDisplayName,
+                    audioSource: segment.audioSource, speakerConfidence: segment.speakerConfidence,
+                    startSeconds: segment.startSeconds, endSeconds: segment.endSeconds,
+                    text: segment.text, translatedText: segment.translatedText,
+                    isTranslationPending: segment.isTranslationPending,
+                    preventsAdjacentMerge: true, isHighlighted: segment.isHighlighted
+                )
+            })
             completed += 1
         }
         if manifest.signature != signature, completed < windowCount {
@@ -113,7 +132,10 @@ actor MeetingFileCheckpointStore {
         }
         try Task.checkCancellation()
         try MeetingFileResourcePolicy.requireDiskSpace(at: directoryURL)
-        try write(Window(index: index, segments: segments), to: windowURL(index))
+        try write(Window(
+            index: index, segments: segments,
+            preventsAdjacentMergeIDs: segments.filter(\.preventsAdjacentMerge).map(\.id)
+        ), to: windowURL(index))
     }
 
     private func windowURL(_ index: Int) -> URL {
