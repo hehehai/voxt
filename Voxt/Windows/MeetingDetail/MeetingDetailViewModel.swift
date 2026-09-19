@@ -1,10 +1,8 @@
 // MeetingDetailViewModel.swift
 // Provides Meeting Detail View Model for meeting detail windows.
 
-import AppKit
 import Combine
 import Foundation
-import UniformTypeIdentifiers
 
 @MainActor
 enum MeetingSummaryLoadState: Equatable {
@@ -67,24 +65,24 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published var editingText = ""
     @Published private(set) var isUndoDeleteAvailable = false
 
-    private var speakerOrdinalByIdentityKey: [String: Int] = [:]
+    private(set) var speakerOrdinalByIdentityKey: [String: Int] = [:]
 
     let mode: Mode
     let audioURL: URL?
     let captureMode: MeetingCaptureMode
     @Published private(set) var summaryModelOptions: [MeetingSummaryModelOption]
 
-    private let historyEntryID: UUID?
+    let historyEntryID: UUID?
     private let translationHandler: MeetingDetailWindowManager.TranslationHandler
     private let summarySettingsProvider: MeetingDetailWindowManager.SummarySettingsProvider?
     private let summaryModelOptionsProvider: MeetingDetailWindowManager.SummaryModelOptionsProvider?
-    private let summaryStatusProvider: MeetingDetailWindowManager.SummaryStatusProvider?
+    let summaryStatusProvider: MeetingDetailWindowManager.SummaryStatusProvider?
     private let summaryGenerator: MeetingDetailWindowManager.SummaryGenerator?
     private let summaryPersistence: MeetingDetailWindowManager.SummaryPersistence?
     private let summaryStalePersistence: MeetingDetailWindowManager.SummaryStalePersistence?
     private let summaryChatAnswerer: MeetingDetailWindowManager.SummaryChatAnswerer?
     private let summaryChatPersistence: MeetingDetailWindowManager.SummaryChatPersistence?
-    private let transcriptSegmentsPersistence: MeetingDetailWindowManager.TranscriptSegmentsPersistence?
+    let transcriptSegmentsPersistence: MeetingDetailWindowManager.TranscriptSegmentsPersistence?
     private let historySubtitle: String?
 
     private var cancellables = Set<AnyCancellable>()
@@ -259,101 +257,6 @@ final class MeetingDetailViewModel: ObservableObject {
         undoDeleteTask?.cancel()
     }
 
-    var canExport: Bool {
-        switch mode {
-        case .history:
-            return !segments.isEmpty
-        case .live:
-            return isPaused && !segments.isEmpty
-        }
-    }
-
-    var canEditSpeakers: Bool {
-        captureMode.capabilities.allowsSpeakerFeatures
-            && mode == .history
-            && historyEntryID != nil
-            && transcriptSegmentsPersistence != nil
-    }
-
-    var canEditTranscript: Bool {
-        mode == .history && historyEntryID != nil && transcriptSegmentsPersistence != nil
-    }
-
-    var canRegenerateSummary: Bool {
-        mode == .history && historyEntryID != nil && !segments.isEmpty
-    }
-
-    var canSendSummaryChat: Bool {
-        mode == .history
-            && historyEntryID != nil
-            && summary != nil
-            && !segments.isEmpty
-            && hasSummaryModelOptions
-            && !isSummaryChatLoading
-            && !summaryChatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var hasSummaryModelOptions: Bool {
-        !summaryModelOptions.isEmpty
-    }
-
-    var resolvedSummaryModelSelectionID: String {
-        if summaryModelOptions.contains(where: { $0.id == summaryModelSelectionID }) {
-            return summaryModelSelectionID
-        }
-        return summaryModelOptions.first?.id ?? summaryModelSelectionID
-    }
-
-    var summaryProviderMessage: String {
-        summaryProviderStatus.message
-    }
-
-    var summaryProviderStatus: MeetingSummaryProviderStatus {
-        switch mode {
-        case .history:
-            return summaryStatusProvider?(summarySettingsSnapshot)
-                ?? MeetingSummaryProviderStatus(
-                    isAvailable: false,
-                    message: AppLocalization.localizedString("Meeting summary is unavailable.")
-                )
-        case .live:
-            return MeetingSummaryProviderStatus(
-                isAvailable: false,
-                message: AppLocalization.localizedString("Meeting summary is generated after the meeting is saved.")
-            )
-        }
-    }
-
-    var transcriptPresentationMode: TranscriptPresentationMode {
-        let resolved = TranscriptPresentationMode(rawValue: transcriptPresentationModeRaw) ?? .timeline
-        guard captureMode.capabilities.allowsSpeakerFeatures || resolved != .speakerMarks else {
-            return .timeline
-        }
-        return resolved
-    }
-
-    var transcriptSpeakerDisplayMode: TranscriptSpeakerDisplayMode {
-        guard captureMode.capabilities.allowsSpeakerFeatures else { return .source }
-        return TranscriptSpeakerDisplayMode(rawValue: transcriptSpeakerDisplayModeRaw) ?? .source
-    }
-
-    var availableTranscriptPresentationModes: [TranscriptPresentationMode] {
-        captureMode.capabilities.allowsSpeakerFeatures
-            ? TranscriptPresentationMode.allCases
-            : [.timeline]
-    }
-
-    var showsSpeakerDisplayModePicker: Bool {
-        captureMode.capabilities.allowsSpeakerFeatures
-    }
-
-    func export() throws {
-        try MeetingTranscriptExporter.export(
-            segments: segments,
-            defaultFilename: MeetingTranscriptExporter.defaultFilename(prefix: "Voxt-Meeting")
-        )
-    }
-
     func handleViewAppear() {
         guard !hasHandledInitialAppearance else { return }
         hasHandledInitialAppearance = true
@@ -435,19 +338,6 @@ final class MeetingDetailViewModel: ObservableObject {
         guard captureMode.capabilities.allowsSpeakerFeatures else { return }
         transcriptSpeakerDisplayModeRaw = mode.rawValue
         refreshTranscriptListCaches()
-    }
-
-    func timelineSpeakerTitle(for segment: MeetingTranscriptSegment) -> String {
-        switch transcriptSpeakerDisplayMode {
-        case .source:
-            return segment.speaker.displayTitle
-        case .speaker:
-            return speakerTimelineTitle(for: segment)
-        }
-    }
-
-    func displayedNewestSegmentID() -> UUID? {
-        displayedSegments.last?.id
     }
 
     func toggleSearchPresentation() {
@@ -1057,40 +947,6 @@ final class MeetingDetailViewModel: ObservableObject {
         )
     }
 
-    private func speakerTimelineTitle(for segment: MeetingTranscriptSegment) -> String {
-        if let displayName = speakerDisplayNameIfUserFacing(for: segment) {
-            return displayName
-        }
-        let ordinal = speakerOrdinalByIdentityKey[segment.speakerIdentityKey] ?? 1
-        return AppLocalization.format("Speaker %d", ordinal)
-    }
-
-    private func speakerDisplayNameIfUserFacing(for segment: MeetingTranscriptSegment) -> String? {
-        guard let displayName = segment.speakerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !displayName.isEmpty,
-              !isAudioSourceDisplayName(displayName)
-        else {
-            return nil
-        }
-        return displayName
-    }
-
-    private func isAudioSourceDisplayName(_ displayName: String) -> Bool {
-        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return false }
-        if normalized == TranscriptSpeaker.me.displayTitle.lowercased()
-            || normalized == TranscriptSpeaker.them.displayTitle.lowercased() {
-            return true
-        }
-        if normalized.range(of: #"^me\s+\d+$"#, options: .regularExpression) != nil {
-            return true
-        }
-        if normalized.range(of: #"^them\s+\d+$"#, options: .regularExpression) != nil {
-            return true
-        }
-        return false
-    }
-
     private func resolvedStoredTranslationLanguage() -> TranslationTargetLanguage {
         guard let rawValue = UserDefaults.standard.string(forKey: AppPreferenceKey.meetingRealtimeTranslationTargetLanguage),
               let language = TranslationTargetLanguage(rawValue: rawValue)
@@ -1098,14 +954,6 @@ final class MeetingDetailViewModel: ObservableObject {
             return .english
         }
         return language
-    }
-
-    private var summarySettingsSnapshot: MeetingSummarySettingsSnapshot {
-        MeetingSummarySettingsSnapshot(
-            autoGenerate: summaryAutoGenerate,
-            promptTemplate: summaryPromptTemplate.trimmingCharacters(in: .whitespacesAndNewlines),
-            modelSelectionID: resolvedSummaryModelSelectionID.isEmpty ? nil : resolvedSummaryModelSelectionID
-        )
     }
 
     private func refreshSummaryConfigurationFromProviders() {
@@ -1129,78 +977,5 @@ final class MeetingDetailViewModel: ObservableObject {
             : TranslationTargetLanguage.english.rawValue
     }
 
-    private static func inferredCaptureMode(from segments: [MeetingTranscriptSegment]) -> MeetingCaptureMode {
-        let meaningfulSegments = segments.filter {
-            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        let hasMicrophone = meaningfulSegments.contains { segment in
-            segment.audioSource == .microphone || segment.speaker == .me
-        }
-        let hasSystemAudio = meaningfulSegments.contains { segment in
-            segment.audioSource == .systemAudio || segment.speaker == .them
-        }
 
-        switch (hasMicrophone, hasSystemAudio) {
-        case (true, true):
-            return .meeting
-        case (false, true):
-            return .subtitles
-        case (true, false):
-            return .recording
-        case (false, false):
-            return .meeting
-        }
-    }
-
-    private static func resolveSummaryConfiguration(
-        settings: MeetingSummarySettingsSnapshot,
-        modelOptions: [MeetingSummaryModelOption],
-        currentSelectionID: String?
-    ) -> MeetingDetailSummaryConfiguration {
-        let preferredSelectionID = settings.modelSelectionID?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let normalizedCurrentSelectionID = currentSelectionID?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        let resolvedSelectionID: String
-        if modelOptions.contains(where: { $0.id == normalizedCurrentSelectionID }) {
-            resolvedSelectionID = normalizedCurrentSelectionID
-        } else if modelOptions.contains(where: { $0.id == preferredSelectionID }) {
-            resolvedSelectionID = preferredSelectionID
-        } else {
-            resolvedSelectionID = modelOptions.first?.id ?? ""
-        }
-
-        return MeetingDetailSummaryConfiguration(
-            autoGenerate: settings.autoGenerate,
-            promptTemplate: MeetingSummarySupport.resolvedPromptTemplate(settings.promptTemplate),
-            modelSelectionID: resolvedSelectionID
-        )
-    }
-}
-
-private struct MeetingDetailSummaryConfiguration {
-    let autoGenerate: Bool
-    let promptTemplate: String
-    let modelSelectionID: String
-}
-
-@MainActor
-enum MeetingTranscriptExporter {
-    static func defaultFilename(prefix: String) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd-HHmm"
-        return "\(prefix)-\(formatter.string(from: Date())).txt"
-    }
-
-    static func export(segments: [MeetingTranscriptSegment], defaultFilename: String) throws {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = defaultFilename
-        panel.canCreateDirectories = true
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try MeetingTranscriptFormatter.joinedText(for: segments).write(to: url, atomically: true, encoding: .utf8)
-    }
 }

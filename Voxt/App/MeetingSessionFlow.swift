@@ -340,7 +340,6 @@ extension AppDelegate {
             activeMLXDownloadRepo: localASRStartContext.activeMLXDownloadRepo,
             isSelectedMLXModelDownloaded: localASRStartContext.isSelectedMLXModelDownloaded,
             mlxModelState: localASRStartContext.mlxModelState,
-            remoteASRProvider: remoteASRSelectedProvider,
             remoteASRConfiguration: remoteConfiguration
         )
         guard case .start = startDecision else {

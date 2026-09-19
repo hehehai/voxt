@@ -27,9 +27,7 @@ struct RemoteProviderConfigurationSheet: View {
     @State var editedCredentialFields: Set<RemoteProviderConfiguration.CredentialField> = []
     @State var searchEnabled = false
     @State var openAIChunkPseudoRealtimeEnabled = false
-    @State var openAIReasoningEffort = OpenAIReasoningEffort.automatic.rawValue
     @State var openAITextVerbosity = OpenAITextVerbosity.automatic.rawValue
-    @State var openAIMaxOutputTokensText = ""
     @State var generationMaxOutputTokensText = ""
     @State var generationTemperatureText = ""
     @State var generationTopPText = ""
@@ -197,9 +195,7 @@ struct RemoteProviderConfigurationSheet: View {
             editedCredentialFields.removeAll()
             searchEnabled = configuration.searchEnabled
             openAIChunkPseudoRealtimeEnabled = configuration.openAIChunkPseudoRealtimeEnabled
-            openAIReasoningEffort = configuration.openAIReasoningEffort
             openAITextVerbosity = configuration.openAITextVerbosity
-            openAIMaxOutputTokensText = configuration.openAIMaxOutputTokens.map(String.init) ?? ""
             configureGenerationSettingsState()
             doubaoDictionaryMode = configuration.doubaoDictionaryMode
             doubaoEnableRequestHotwords = configuration.doubaoEnableRequestHotwords

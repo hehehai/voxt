@@ -131,15 +131,3 @@ struct MeetingPrimaryButtonStyle: ButtonStyle {
             )
     }
 }
-
-struct MeetingPrimaryIconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(width: 34, height: 34)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(configuration.isPressed ? MeetingDetailUIStyle.primaryButtonPressedFillColor : MeetingDetailUIStyle.primaryButtonFillColor)
-            )
-            .opacity(configuration.isPressed ? 0.92 : 1)
-    }
-}

@@ -9,25 +9,18 @@ extension AppDelegate {
     func startTrackedRecordingCaptureTask(
         _ operation: @escaping @MainActor () async -> Void
     ) {
-        for task in recordingCaptureStartTasksByToken.values {
-            task.cancel()
-        }
-        let token = UUID()
-        let task = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.recordingCaptureStartTasksByToken[token] = nil }
+        let retiringStarts = recordingCaptureStartTasks.cancelAll()
+        // An old start can still be unwinding CoreAudio. It must finish its cleanup
+        // before a replacement touches the same transcriber/engine.
+        recordingCaptureStartTasks.start(after: retiringStarts) { [weak self] in
+            guard let self, !self.isApplicationTerminating else { return }
             await operation()
         }
-        recordingCaptureStartTasksByToken[token] = task
     }
 
     @discardableResult
     func cancelRecordingCaptureStartTask() -> [Task<Void, Never>] {
-        let tasks = Array(recordingCaptureStartTasksByToken.values)
-        for task in tasks {
-            task.cancel()
-        }
-        return tasks
+        recordingCaptureStartTasks.cancelAll()
     }
 
     private var isMLXReady: Bool {
@@ -213,12 +206,8 @@ extension AppDelegate {
         }
         discardPendingCompletedHistoryAudio()
         isSessionActive = false
-        isSessionCancellationRequested = false
-        didCommitSessionOutput = false
-        activeRecordingSessionID = UUID()
+        recordingLifecycle.begin()
         invalidateActiveLLMRequest()
-        currentEndingSessionID = nil
-        lastCompletedSessionEndSessionID = nil
         sessionOutputMode = .transcription
         recordingRequestedAt = nil
         recordingStartedAt = nil

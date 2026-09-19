@@ -66,9 +66,14 @@ If Swift package resolution behaves differently locally than in CI, reproduce th
 
 ## Making changes
 
+Start with the [source map](docs/Architecture.md) and [documentation index](docs/index.md). The [refactoring checklist](docs/RefactoringAssessment.zh-CN.md) records known hotspots and validation requirements.
+
 - Follow the existing Swift style and the nearby SwiftUI/AppKit structure.
 - Prefer existing managers, stores, and support types before introducing new abstractions.
 - Keep behavior changes covered by deterministic tests where practical.
+- Split by responsibility; prefer roughly 200–500 lines for new files and review files exceeding 800 lines. These are review guidelines, not a reason to scatter shared mutable state across extensions.
+- Remove code only after checking production/test references, protocol and selector callbacks, resources, and migrations. Similar-looking provider or failure-path tests are not automatically duplicates.
+- Preserve actor isolation, cancellation, and access control when moving Swift declarations. Update focused-test scripts when renaming suites.
 - Use the shared test helpers in `VoxtTests/TestSupport/` and isolated `UserDefaults` suites or temporary directories for stateful tests.
 - Do not modify audio fixtures in `VoxtTests/Fixtures/Audio/` unless the change specifically requires a fixture update.
 - For UI changes, verify the affected menu bar, settings, window, and accessibility behavior on macOS.

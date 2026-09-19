@@ -3,17 +3,29 @@
 
 import Foundation
 
+/// A handshake result is latched even if it arrives before the upload starts waiting.
 actor AsyncGate {
-    private var isOpen = false
+    private var result: Result<Void, Error>?
 
     func open() {
-        isOpen = true
+        guard result == nil else { return }
+        result = .success(())
     }
 
-    func wait() async {
-        while !isOpen {
-            try? await Task.sleep(for: .milliseconds(30))
+    func fail(_ error: Error) {
+        guard result == nil else { return }
+        result = .failure(error)
+    }
+
+    func wait(timeoutSeconds: TimeInterval = 20) async throws {
+        try Task.checkCancellation()
+        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
+        while result == nil {
+            guard Date() < deadline else { throw URLError(.timedOut) }
+            try await Task.sleep(for: .milliseconds(30))
         }
+        try Task.checkCancellation()
+        try result?.get()
     }
 }
 
@@ -42,78 +54,7 @@ final class AliyunQwenStreamingContext {
     }
 }
 
-actor AliyunQwenResponseState {
-    private var committed: [String] = []
-    private var partial = ""
-    private var finishRequested = false
-    private var sessionFinished = false
-    private var completionError: Error?
-    private let onError: @Sendable (Error) -> Void
 
-    init(onError: @escaping @Sendable (Error) -> Void = { _ in }) {
-        self.onError = onError
-    }
-
-    func markFinishRequested() {
-        finishRequested = true
-    }
-
-    func markSessionFinished() {
-        sessionFinished = true
-    }
-
-    func markCompletedWithError(_ error: Error) {
-        if sessionFinished {
-            return
-        }
-        if completionError == nil {
-            completionError = error
-            onError(error)
-        }
-    }
-
-    func setPartial(_ value: String) -> String {
-        partial = value
-        return mergedText()
-    }
-
-    func commit(_ value: String) -> String {
-        if committed.last != value {
-            committed.append(value)
-        }
-        partial = ""
-        return mergedText()
-    }
-
-    func waitForFinalResult(timeoutSeconds: TimeInterval) async throws -> String {
-        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
-        while !sessionFinished, completionError == nil, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(120))
-        }
-        if let completionError {
-            throw completionError
-        }
-        if finishRequested, !partial.isEmpty {
-            if committed.last != partial {
-                committed.append(partial)
-            }
-            partial = ""
-        }
-        return mergedText()
-    }
-
-    func currentText() -> String {
-        mergedText()
-    }
-
-    private func mergedText() -> String {
-        var values = committed
-        if !partial.isEmpty {
-            values.append(partial)
-        }
-        return values.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
 
 @MainActor
 final class StepFunStreamingContext {
@@ -141,91 +82,7 @@ final class StepFunStreamingContext {
     }
 }
 
-actor StepFunResponseState {
-    private var committed: [String] = []
-    private var partialByItem: [String: String] = [:]
-    private var finishRequested = false
-    private var finishRequestedAt: Date?
-    private var sessionFinished = false
-    private var completionError: Error?
-    private let onError: @Sendable (Error) -> Void
 
-    init(onError: @escaping @Sendable (Error) -> Void = { _ in }) {
-        self.onError = onError
-    }
-
-    func markFinishRequested() {
-        finishRequested = true
-        finishRequestedAt = Date()
-    }
-
-    func markSessionFinished() {
-        sessionFinished = true
-    }
-
-    func markCompletedWithError(_ error: Error) {
-        if sessionFinished {
-            return
-        }
-        if completionError == nil {
-            completionError = error
-            onError(error)
-        }
-    }
-
-    func appendDelta(_ value: String, itemID: String?) -> String {
-        let key = itemID ?? "_default"
-        partialByItem[key, default: ""] += value
-        return mergedText()
-    }
-
-    func commit(_ value: String, itemID: String?) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty, committed.last != trimmed {
-            committed.append(trimmed)
-        }
-        partialByItem[itemID ?? "_default"] = nil
-        if finishRequested {
-            sessionFinished = true
-        }
-        return mergedText()
-    }
-
-    func waitForFinalResult(timeoutSeconds: TimeInterval) async throws -> String {
-        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
-        while !sessionFinished, completionError == nil, Date() < deadline {
-            if let finishRequestedAt,
-               Date().timeIntervalSince(finishRequestedAt) >= 2.0 {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(120))
-        }
-        if let completionError {
-            throw completionError
-        }
-        if finishRequested {
-            let partial = partialByItem.values.joined()
-            if !partial.isEmpty, committed.last != partial {
-                committed.append(partial)
-            }
-            partialByItem.removeAll()
-        }
-        return mergedText()
-    }
-
-    func currentText() -> String {
-        mergedText()
-    }
-
-    private func mergedText() -> String {
-        var values = committed
-        let partial = partialByItem.values.joined()
-        if !partial.isEmpty {
-            values.append(partial)
-        }
-        return values.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
 
 @MainActor
 final class AliyunFunStreamingContext {
@@ -252,99 +109,7 @@ final class AliyunFunStreamingContext {
     }
 }
 
-actor AliyunFunResponseState {
-    private var committedSegments: [String] = []
-    private var livePartial = ""
-    private var finishRequested = false
-    private var taskFinished = false
-    private var completionError: Error?
-    private let onError: @Sendable (Error) -> Void
 
-    init(onError: @escaping @Sendable (Error) -> Void = { _ in }) {
-        self.onError = onError
-    }
-
-    func markRunRequested() {}
-
-    func markFinishRequested() {
-        finishRequested = true
-    }
-
-    func markTaskFinished() {
-        taskFinished = true
-    }
-
-    func markCompletedWithError(_ error: Error) {
-        if completionError == nil {
-            completionError = error
-            onError(error)
-        }
-    }
-
-    func updateWithSentence(_ text: String, isSentenceEnd: Bool) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return joinedText()
-        }
-        if isSentenceEnd {
-            if committedSegments.last != trimmed {
-                committedSegments.append(trimmed)
-            }
-            livePartial = ""
-        } else {
-            livePartial = trimmed
-        }
-        return joinedText()
-    }
-
-    func waitForFinalResult(timeoutSeconds: TimeInterval) async throws -> String {
-        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
-        while !taskFinished, completionError == nil, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(120))
-        }
-        if let completionError {
-            throw completionError
-        }
-        if finishRequested, !livePartial.isEmpty {
-            if committedSegments.last != livePartial {
-                committedSegments.append(livePartial)
-            }
-            livePartial = ""
-        }
-        return joinedText()
-    }
-
-    func currentText() -> String {
-        joinedText()
-    }
-
-    private func joinedText() -> String {
-        var segments = committedSegments
-        if !livePartial.isEmpty {
-            segments.append(livePartial)
-        }
-        return segments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-func remoteASRBigEndianData(_ value: UInt32) -> Data {
-    withUnsafeBytes(of: value.bigEndian) { Data($0) }
-}
-
-func remoteASRBigEndianData(_ value: Int32) -> Data {
-    withUnsafeBytes(of: value.bigEndian) { Data($0) }
-}
-
-func remoteASRUInt32(fromBigEndian data: Data) -> UInt32 {
-    precondition(data.count == 4)
-    return data.reduce(UInt32(0)) { partial, byte in
-        (partial << 8) | UInt32(byte)
-    }
-}
-
-func remoteASRInt32(fromBigEndian data: Data) -> Int32 {
-    Int32(bitPattern: remoteASRUInt32(fromBigEndian: data))
-}
 
 @MainActor
 final class GeminiLiveStreamingContext {
@@ -370,86 +135,5 @@ final class GeminiLiveStreamingContext {
         self.ws = ws
         self.responseState = responseState
         self.generationID = generationID
-    }
-}
-
-actor GeminiLiveResponseState {
-    private var committed: [String] = []
-    private var interim = ""
-    private var finishRequested = false
-    private var finishRequestedAt: Date?
-    private var sessionFinished = false
-    private var completionError: Error?
-    private let onError: @Sendable (Error) -> Void
-
-    init(onError: @escaping @Sendable (Error) -> Void = { _ in }) {
-        self.onError = onError
-    }
-
-    func markFinishRequested() {
-        finishRequested = true
-        finishRequestedAt = Date()
-    }
-
-    func markSessionFinished() {
-        sessionFinished = true
-    }
-
-    func markCompletedWithError(_ error: Error) {
-        if sessionFinished {
-            return
-        }
-        if completionError == nil {
-            completionError = error
-            onError(error)
-        }
-    }
-
-    func setInterim(_ value: String) -> String {
-        interim = value
-        return mergedText()
-    }
-
-    func commit(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty, committed.last != trimmed {
-            committed.append(trimmed)
-        }
-        interim = ""
-        return mergedText()
-    }
-
-    func waitForFinalResult(timeoutSeconds: TimeInterval) async throws -> String {
-        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
-        while !sessionFinished, completionError == nil, Date() < deadline {
-            // The live transcribe API documents no session-end event, so a short
-            // grace window after audioStreamEnd is what actually ends the wait.
-            if let finishRequestedAt, Date().timeIntervalSince(finishRequestedAt) >= 2.5 {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(120))
-        }
-        if let completionError {
-            throw completionError
-        }
-        if finishRequested, !interim.isEmpty {
-            if committed.last != interim {
-                committed.append(interim)
-            }
-            interim = ""
-        }
-        return mergedText()
-    }
-
-    func currentText() -> String {
-        mergedText()
-    }
-
-    private func mergedText() -> String {
-        var values = committed
-        if !interim.isEmpty {
-            values.append(interim)
-        }
-        return GeminiLiveTranscriptJoining.join(values)
     }
 }

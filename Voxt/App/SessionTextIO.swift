@@ -17,117 +17,6 @@ extension AppDelegate {
         case selectedTextTranslationResultWindow
     }
 
-    private struct NormalizeOutputStage: SessionFinalizeStage {
-        let normalize: (String) -> String
-
-        var name: String { "normalizeOutput" }
-
-        func run(context: inout SessionFinalizeContext) {
-            context.outputText = normalize(context.outputText)
-        }
-    }
-
-    private struct DictionaryCorrectionStage: SessionFinalizeStage {
-        let correct: (String) -> DictionaryCorrectionResult
-
-        var name: String { "dictionaryCorrection" }
-
-        func run(context: inout SessionFinalizeContext) {
-            let result = correct(context.outputText)
-            context.outputText = result.text
-            context.dictionaryMatches = result.candidates
-            context.dictionaryCorrectedTerms = result.correctedTerms
-            context.dictionaryCorrectionSnapshots = result.correctionSnapshots
-        }
-    }
-
-    private struct DictionarySuggestionStage: SessionFinalizeStage {
-        let suggest: (String, [DictionaryMatchCandidate], [String]) -> [DictionarySuggestionDraft]
-
-        var name: String { "dictionarySuggestions" }
-
-        func run(context: inout SessionFinalizeContext) {
-            context.dictionarySuggestions = suggest(
-                context.outputText,
-                context.dictionaryMatches,
-                context.dictionaryCorrectedTerms
-            )
-        }
-    }
-
-    private struct RewriteAnswerExtractionStage: SessionFinalizeStage {
-        let extract: (String) -> RewriteAnswerPayload?
-
-        var name: String { "rewriteAnswerExtraction" }
-
-        func run(context: inout SessionFinalizeContext) {
-            guard let payload = extract(context.outputText) else { return }
-            context.rewriteAnswerPayload = payload
-            context.outputText = payload.content
-        }
-    }
-
-    private struct DeliverOutputStage: SessionFinalizeStage {
-        let deliver: (SessionFinalizeContext) -> Void
-
-        var name: String { "deliverOutput" }
-
-        func run(context: inout SessionFinalizeContext) {
-            deliver(context)
-        }
-    }
-
-    private struct SessionTimingSummarySnapshot {
-        let transcriptionCapturePipeline: TranscriptionCapturePipeline
-        let captureStageLabels: [String]
-        let asrProvider: String
-        let asrModel: String
-        let captureMetrics: TranscriptionCaptureMetrics?
-        let recordingRequestedAt: Date?
-        let recordingStartedAt: Date?
-        let recordingStoppedAt: Date?
-        let transcriptionResultReceivedAt: Date?
-        let firstLiveASRPartialReceivedAt: Date?
-        let sessionFinalOutputDeliveredAt: Date?
-        let llmExecutions: [SessionLLMExecutionTiming]
-    }
-
-    private struct PersistDictionaryEvidenceStage: SessionFinalizeStage {
-        let persist: ([DictionaryMatchCandidate], [DictionarySuggestionDraft], UUID?) -> Void
-
-        var name: String { "persistDictionaryEvidence" }
-
-        func run(context: inout SessionFinalizeContext) {
-            persist(context.dictionaryMatches, context.dictionarySuggestions, context.historyEntryID)
-        }
-    }
-
-    private struct AppendHistoryStage: SessionFinalizeStage {
-        let append: (String, String?, TimeInterval?, [String], [String], [DictionaryCorrectionSnapshot], [DictionarySuggestionSnapshot]) -> UUID?
-
-        var name: String { "appendHistory" }
-
-        func run(context: inout SessionFinalizeContext) {
-            context.historyEntryID = append(
-                context.outputText,
-                context.rewriteAnswerPayload?.trimmedTitle,
-                context.llmDurationSeconds,
-                Self.uniqueTerms(from: context.dictionaryMatches),
-                Self.deduplicatedTerms(context.dictionaryCorrectedTerms),
-                context.dictionaryCorrectionSnapshots,
-                context.dictionarySuggestions.map(\.snapshot)
-            )
-        }
-
-        private static func uniqueTerms(from candidates: [DictionaryMatchCandidate]) -> [String] {
-            AppDelegate.orderedUniqueDictionaryTerms(from: candidates.map(\.term))
-        }
-
-        private static func deduplicatedTerms(_ values: [String]) -> [String] {
-            AppDelegate.orderedUniqueDictionaryTerms(from: values)
-        }
-    }
-
     // MARK: - Session Text I/O
     // Keeps clipboard/AX/paste simulation logic isolated from recording orchestration.
 
@@ -136,12 +25,11 @@ extension AppDelegate {
         llmDurationSeconds: TimeInterval?,
         onDeliveryCompleted: (() -> Void)? = nil
     ) {
-        if didCommitSessionOutput {
-            VoxtLog.input("Skipping duplicate commit for current session output.")
+        let sessionID = activeRecordingSessionID
+        guard recordingLifecycle.claimOutput(for: sessionID) else {
+            VoxtLog.input("Skipping duplicate or cancelled commit for current session output.")
             return
         }
-        didCommitSessionOutput = true
-        let sessionID = activeRecordingSessionID
         let sessionOutputMode = sessionOutputMode
         let userMainLanguage = userMainLanguage
         let callbackDecision = Self.sessionCallbackHandlingDecision(
@@ -160,6 +48,8 @@ extension AppDelegate {
 
         VoxtLog.input("Commit transcription entered. characters=\(text.count)", verbose: true)
 
+        // Prepare once, then persist this exact snapshot after delivery completes.
+        // Recomputing from mutable session state could record a different result.
         let context = Self.preparedDeliveryContext(
             originalText: text,
             llmDurationSeconds: llmDurationSeconds,
@@ -185,7 +75,7 @@ extension AppDelegate {
         )
 
         deliverCommittedOutput(context) { [weak self] didInject, didTriggerAutoKeyPress, outputDestinationContext in
-            guard let self else { return }
+            guard let self, self.recordingLifecycle.accepts(sessionID), !self.isApplicationTerminating else { return }
             self.finalizeCommittedOutputPostDelivery(
                 deliveredContext: context,
                 outputMode: sessionOutputMode,
@@ -195,114 +85,6 @@ extension AppDelegate {
             )
             onDeliveryCompleted?()
         }
-    }
-
-    func preparedDeliveryContextForCurrentSession(
-        originalText: String,
-        llmDurationSeconds: TimeInterval?
-    ) -> SessionFinalizeContext {
-        Self.preparedDeliveryContext(
-            originalText: originalText,
-            llmDurationSeconds: llmDurationSeconds,
-            sessionOutputMode: sessionOutputMode,
-            userMainLanguage: userMainLanguage,
-            matcher: dictionaryStore.makeMatcherIfEnabled(for: originalText, activeGroupID: activeDictionaryGroupID()),
-            usesConservativeEvidence: shouldUseConservativeDictionaryEvidenceForCurrentSession(),
-            automaticReplacementEnabled: UserDefaults.standard.bool(
-                forKey: AppPreferenceKey.dictionaryHighConfidenceCorrectionEnabled
-            )
-        )
-    }
-
-    func finalizePreviouslyDeliveredOutput(
-        _ text: String,
-        llmDurationSeconds: TimeInterval?,
-        didInject: Bool,
-        onDeliveryCompleted: (() -> Void)? = nil
-    ) {
-        if didCommitSessionOutput {
-            VoxtLog.input("Skipping duplicate finalize for previously delivered session output.")
-            return
-        }
-        didCommitSessionOutput = true
-
-        let sessionID = activeRecordingSessionID
-        let callbackDecision = Self.sessionCallbackHandlingDecision(
-            requestedSessionID: sessionID,
-            activeSessionID: activeRecordingSessionID,
-            isSessionCancellationRequested: isSessionCancellationRequested
-        )
-        guard callbackDecision == .accept else {
-            VoxtLog.inputWarning(
-                "Finalize previously delivered output abandoned after session invalidation. reason=\(callbackDecision.logDescription), sessionID=\(sessionID.uuidString)"
-            )
-            return
-        }
-
-        let context = preparedDeliveryContextForCurrentSession(
-            originalText: text,
-            llmDurationSeconds: llmDurationSeconds
-        )
-        cacheLatestInjectableOutputText(context.outputText)
-        logUnicodeReplacementCharactersIfNeeded(
-            stage: "finalizePreviouslyDelivered",
-            inputText: text,
-            outputText: context.outputText,
-            outputMode: sessionOutputMode
-        )
-        OnboardingSessionEvent.delivered(id: sessionID, text: context.outputText, succeeded: didInject).post()
-        finalizeCommittedOutputPostDelivery(
-            deliveredContext: context,
-            outputMode: sessionOutputMode,
-            didInject: didInject,
-            didTriggerAutoKeyPress: false,
-            outputDestinationContext: didInject ? sessionOutputDestinationContext : nil
-        )
-        onDeliveryCompleted?()
-    }
-
-    func tryDeliverPreviewOutputIfPossible(
-        _ text: String,
-        sessionID: UUID,
-        requestID: UUID?
-    ) async -> String? {
-        let context = preparedDeliveryContextForCurrentSession(
-            originalText: text,
-            llmDurationSeconds: nil
-        )
-        guard resolvedOutputDelivery(for: context) == .typeText else {
-            return nil
-        }
-        guard let transaction = makePendingOutputReplacementTransaction(
-            previewText: context.outputText,
-            sessionID: sessionID,
-            expectedBundleID: sessionTargetApplicationBundleID
-        ) else {
-            return nil
-        }
-
-        beginOverlayOutputDelivery()
-        let didInject = await withCheckedContinuation { continuation in
-            typeText(context.outputText) { injected in
-                continuation.resume(returning: injected)
-            }
-        }
-        endOverlayOutputDelivery()
-
-        guard didInject else { return nil }
-        sessionOutputDestinationContext = captureCurrentOutputDestinationContext()
-        guard shouldHandleCallbacks(for: sessionID),
-              requestID.map(isCurrentLLMRequest) ?? true
-        else {
-            return nil
-        }
-
-        pendingOutputReplacementTransaction = transaction
-        cacheLatestInjectableOutputText(context.outputText)
-        VoxtLog.input(
-            "Preview output injected. chars=\(context.outputText.count), sessionID=\(sessionID.uuidString)"
-        )
-        return context.outputText
     }
 
     private func logUnicodeReplacementCharactersIfNeeded(
@@ -325,191 +107,16 @@ extension AppDelegate {
         )
     }
 
-    func performPendingOutputReplacementIfPossible(
-        with text: String,
-        sessionID: UUID
-    ) async -> Bool {
-        guard let transaction = pendingOutputReplacementTransaction,
-              transaction.sessionID == sessionID else {
-            return false
-        }
-
-        defer {
-            pendingOutputReplacementTransaction = nil
-        }
-
-        return await performPendingOutputReplacement(transaction, replacementText: text)
-    }
-
-    nonisolated static func resolveDictionaryOutput(
-        text: String,
-        matcher: DictionaryMatcher?,
-        usesConservativeEvidence: Bool,
-        automaticReplacementEnabled: Bool
-    ) -> DictionaryCorrectionResult {
-        guard let matcher else {
-            return DictionaryCorrectionResult(
-                text: text,
-                candidates: [],
-                correctedTerms: [],
-                correctionSnapshots: []
-            )
-        }
-
-        if usesConservativeEvidence {
-            let candidates = matcher.recallCandidates(in: text)
-            return DictionaryCorrectionResult(
-                text: text,
-                candidates: candidates,
-                correctedTerms: [],
-                correctionSnapshots: []
-            )
-        }
-
-        return matcher.applyCorrections(
-            to: text,
-            automaticReplacementEnabled: automaticReplacementEnabled
-        )
-    }
-
-    nonisolated static func preparedDeliveryContext(
-        originalText: String,
-        llmDurationSeconds: TimeInterval?,
-        sessionOutputMode: SessionOutputMode,
-        userMainLanguage: UserMainLanguageOption,
-        matcher: DictionaryMatcher?,
-        usesConservativeEvidence: Bool,
-        automaticReplacementEnabled: Bool
-    ) -> SessionFinalizeContext {
-        let normalized = normalizedOutputText(
-            originalText,
-            sessionOutputMode: sessionOutputMode,
-            userMainLanguage: userMainLanguage
-        )
-
-        let extractedRewriteAnswerPayload = RewriteAnswerPayloadParser.extract(from: normalized)
-        let rewriteContent = extractedRewriteAnswerPayload?.content ?? normalized
-        let dictionaryCorrection = resolveDictionaryOutput(
-            text: rewriteContent,
-            matcher: matcher,
-            usesConservativeEvidence: usesConservativeEvidence,
-            automaticReplacementEnabled: automaticReplacementEnabled
-        )
-        let uniqueDictionaryMatches = orderedUniqueDictionaryMatches(dictionaryCorrection.candidates)
-        let rewriteAnswerPayload = extractedRewriteAnswerPayload.map {
-            RewriteAnswerPayload(title: $0.title, content: dictionaryCorrection.text)
-        }
-
-        return SessionFinalizeContext(
-            outputText: dictionaryCorrection.text,
-            llmDurationSeconds: llmDurationSeconds,
-            dictionaryMatches: uniqueDictionaryMatches,
-            dictionaryCorrectedTerms: dictionaryCorrection.correctedTerms,
-            dictionaryCorrectionSnapshots: dictionaryCorrection.correctionSnapshots,
-            dictionarySuggestions: [],
-            historyEntryID: nil,
-            rewriteAnswerPayload: rewriteAnswerPayload
-        )
-    }
-
-    nonisolated private static func orderedUniqueDictionaryMatches(
-        _ candidates: [DictionaryMatchCandidate]
-    ) -> [DictionaryMatchCandidate] {
-        var seen = Set<String>()
-        var ordered: [DictionaryMatchCandidate] = []
-        for candidate in candidates {
-            let normalized = DictionaryStore.normalizeTerm(candidate.term)
-            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
-            ordered.append(candidate)
-        }
-        return ordered
-    }
-
-    nonisolated private static func orderedUniqueDictionaryTerms(from values: [String]) -> [String] {
-        var seen = Set<String>()
-        var ordered: [String] = []
-        for value in values {
-            let normalized = DictionaryStore.normalizeTerm(value)
-            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
-            ordered.append(value)
-        }
-        return ordered
-    }
-
-    private func shouldUseConservativeDictionaryEvidenceForCurrentSession() -> Bool {
-        let featureSettings = FeatureSettingsStore.load(defaults: .standard)
-        let selectionID: FeatureModelSelectionID
-        switch sessionOutputMode {
-        case .translation:
-            selectionID = featureSettings.translation.asrSelectionID
-        case .rewrite:
-            selectionID = featureSettings.rewrite.asrSelectionID
-        case .transcription:
-            selectionID = featureSettings.transcription.asrSelectionID
-        }
-
-        guard case .remote(let provider)? = selectionID.asrSelection,
-              provider == .doubaoASR
-        else {
-            return false
-        }
-
-        let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-        let stored = RemoteModelConfigurationStore.loadConfigurations(
-            from: raw,
-            sensitiveValueLoading: .metadataOnly
-        )
-        let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: stored)
-
-        switch configuration.doubaoDictionaryModeValue {
-        case .off:
-            return false
-        case .requestScoped:
-            return configuration.doubaoEnableRequestCorrections
+    private func beginOverlayOutputDelivery() {
+        overlayState.isRequesting = true
+        overlayState.isCompleting = false
+        if overlayState.displayMode != .answer {
+            overlayState.displayMode = .processing
         }
     }
 
-    private func normalizedOutputText(_ text: String) -> String {
-        Self.normalizedOutputText(
-            text,
-            sessionOutputMode: sessionOutputMode,
-            userMainLanguage: userMainLanguage
-        )
-    }
-
-    nonisolated private static func normalizedOutputText(
-        _ text: String,
-        sessionOutputMode: SessionOutputMode,
-        userMainLanguage: UserMainLanguageOption
-    ) -> String {
-        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard value.count >= 2 else { return value }
-
-        // Remove paired wrapping quotes from some model outputs.
-        let left = value.first
-        let right = value.last
-        let isWrappedByDoubleQuotes =
-            (left == "\"" && right == "\"") ||
-            (left == "“" && right == "”")
-
-        if isWrappedByDoubleQuotes {
-            value.removeFirst()
-            value.removeLast()
-            value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        switch sessionOutputMode {
-        case .translation:
-            break
-        case .transcription, .rewrite:
-            let normalizedChineseScript = ChineseScriptNormalizer.normalize(
-                value,
-                preferredMainLanguage: userMainLanguage
-            )
-            value = normalizedChineseScript
-        }
-
-        return value
+    private func endOverlayOutputDelivery() {
+        overlayState.isRequesting = false
     }
 
     private func deliverCommittedOutput(
@@ -537,9 +144,12 @@ extension AppDelegate {
             let autoKeyPressHotkey = sessionOutputMode == .transcription
                 ? autoKeyPressHotkeyForCurrentAppBranchSession()
                 : nil
+            let outputGeneration = recordingLifecycle.outputGeneration
             beginOverlayOutputDelivery()
-            typeText(context.outputText) { [weak self] didInject in
-                guard let self else { return }
+            typeText(context.outputText, isValid: { [weak self] in
+                self?.recordingLifecycle.accepts(sessionID) == true
+            }) { [weak self] didInject in
+                guard let self, self.recordingLifecycle.accepts(sessionID), !self.isApplicationTerminating else { return }
                 self.sessionFinalOutputDeliveredAt = Date()
                 self.endOverlayOutputDelivery()
                 let outputDestinationContext = didInject
@@ -547,7 +157,7 @@ extension AppDelegate {
                     : nil
                 self.sessionOutputDestinationContext = outputDestinationContext
                 if didInject, let autoKeyPressHotkey {
-                    self.pressAutoKeyAfterTextInjection(autoKeyPressHotkey)
+                    self.pressAutoKeyAfterTextInjection(autoKeyPressHotkey, outputGeneration: outputGeneration)
                 }
                 OnboardingSessionEvent.delivered(id: sessionID, text: context.outputText, succeeded: didInject).post()
                 completion?(
@@ -605,11 +215,6 @@ extension AppDelegate {
             llmExecutions: sessionLLMExecutionTimings
         )
 
-        let dictionarySuggestions = previewDictionarySuggestions(
-            for: deliveredText,
-            candidates: dictionaryMatches,
-            correctedTerms: dictionaryCorrectedTerms
-        )
         let historyEntryID = appendHistoryIfNeeded(
             text: deliveredText,
             outputMode: outputMode,
@@ -619,7 +224,9 @@ extension AppDelegate {
             dictionaryHitTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryMatches.map(\.term)),
             dictionaryCorrectedTerms: Self.orderedUniqueDictionaryTerms(from: dictionaryCorrectedTerms),
             dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots,
-            dictionarySuggestedTerms: dictionarySuggestions.map(\.snapshot),
+            // Automatic suggestion discovery is retired; keep the history field
+            // for older records. Explicit history scans add directly to DictionaryStore.
+            dictionarySuggestedTerms: [],
             rewriteConversationTurns: rewriteConversationTurns
         )
         overlayState.latestHistoryEntryID = historyEntryID
@@ -643,11 +250,7 @@ extension AppDelegate {
             didTriggerAutoKeyPress: didTriggerAutoKeyPress,
             historyEntryID: historyEntryID
         )
-        persistDictionaryEvidence(
-            candidates: dictionaryMatches,
-            suggestions: dictionarySuggestions,
-            historyEntryID: historyEntryID
-        )
+        dictionaryStore.recordMatches(dictionaryMatches)
         VoxtLog.input(
             "Deliver committed output finalized. historyEntryID=\(historyEntryID?.uuidString ?? "nil"), characters=\(deliveredText.count)",
             verbose: true
@@ -658,141 +261,6 @@ extension AppDelegate {
             outputMode: outputMode,
             didInject: didInject
         )
-    }
-
-    private func logSessionTimingSummaryIfPossible(
-        snapshot: SessionTimingSummarySnapshot,
-        deliveredText: String,
-        outputMode: SessionOutputMode,
-        didInject: Bool
-    ) {
-        let outputCompletedAt = snapshot.sessionFinalOutputDeliveredAt ?? Date()
-        let firstLLMExecution = snapshot.llmExecutions.first
-        let finalLLMExecution = snapshot.llmExecutions.last
-
-        let requestToStartMs = resolvedDurationMs(from: snapshot.recordingRequestedAt, to: snapshot.recordingStartedAt)
-        let startToStopMs = resolvedDurationMs(from: snapshot.recordingStartedAt, to: snapshot.recordingStoppedAt)
-        let startToFirstLiveASRMs = resolvedDurationMs(
-            from: snapshot.recordingStartedAt,
-            to: snapshot.firstLiveASRPartialReceivedAt
-        )
-        let stopToASRMs = resolvedDurationMs(from: snapshot.recordingStoppedAt, to: snapshot.transcriptionResultReceivedAt)
-        let asrToFirstChunkMs = resolvedDurationMs(
-            from: snapshot.transcriptionResultReceivedAt,
-            to: firstLLMExecution?.firstChunkAt
-        )
-        let asrToFirstCompleteMs = resolvedDurationMs(
-            from: snapshot.transcriptionResultReceivedAt,
-            to: firstLLMExecution?.completedAt
-        )
-        let asrToFinalCompleteMs = resolvedDurationMs(
-            from: snapshot.transcriptionResultReceivedAt,
-            to: finalLLMExecution?.completedAt
-        )
-        let asrToDeliveredMs = resolvedDurationMs(
-            from: snapshot.transcriptionResultReceivedAt,
-            to: outputCompletedAt
-        )
-        let wallClockCaptureMs = resolvedDurationMs(
-            from: snapshot.recordingStartedAt,
-            to: snapshot.recordingStoppedAt
-        )
-        let capturedAudioMs = snapshot.captureMetrics.map { Int($0.capturedAudioSeconds * 1000) }
-        let captureGapMs = resolvedCaptureGapMs(
-            wallClockCaptureMs: wallClockCaptureMs,
-            capturedAudioMs: capturedAudioMs
-        )
-        let stopToDeliveredMs = resolvedDurationMs(from: snapshot.recordingStoppedAt, to: outputCompletedAt)
-        let overallMs = resolvedDurationMs(from: snapshot.recordingRequestedAt, to: outputCompletedAt)
-
-        let firstLLMSummary = sessionLLMSummaryLabel(firstLLMExecution)
-        let finalLLMSummary = sessionLLMSummaryLabel(finalLLMExecution)
-
-        if let captureGapMs, captureGapMs >= 350 {
-            VoxtLog.inputWarning(
-                "Transcription capture gap detected. pipeline=\(snapshot.transcriptionCapturePipeline.rawValue), captureGapMs=\(captureGapMs), capturedAudioMs=\(timingValueLabel(capturedAudioMs)), startToStopMs=\(timingValueLabel(startToStopMs))"
-            )
-        }
-
-        VoxtLog.input(
-            """
-            Session timing summary. output=\(RecordingSessionSupport.outputLabel(for: outputMode)), pipeline=\(snapshot.transcriptionCapturePipeline.rawValue), stages=\(snapshot.captureStageLabels.joined(separator: ">")), asrProvider=\(snapshot.asrProvider), asrModel=\(snapshot.asrModel), llmCalls=\(snapshot.llmExecutions.count), deliveredChars=\(deliveredText.count), didInject=\(didInject), requestToStartMs=\(timingValueLabel(requestToStartMs)), startToStopMs=\(timingValueLabel(startToStopMs)), startToFirstLiveASRMs=\(timingValueLabel(startToFirstLiveASRMs)), capturedAudioMs=\(timingValueLabel(capturedAudioMs)), captureGapMs=\(timingValueLabel(captureGapMs)), stopToASRMs=\(timingValueLabel(stopToASRMs)), asrToFirstLLMChunkMs=\(timingValueLabel(asrToFirstChunkMs)), asrToFirstLLMCompleteMs=\(timingValueLabel(asrToFirstCompleteMs)), asrToFinalLLMCompleteMs=\(timingValueLabel(asrToFinalCompleteMs)), asrToDeliveredMs=\(timingValueLabel(asrToDeliveredMs)), stopToDeliveredMs=\(timingValueLabel(stopToDeliveredMs)), overallMs=\(timingValueLabel(overallMs)), firstLLM=\(firstLLMSummary), finalLLM=\(finalLLMSummary)
-            """
-        )
-    }
-
-    private func sessionASRSummary(for outputMode: SessionOutputMode) -> (provider: String, model: String) {
-        let selectionID: FeatureModelSelectionID
-        switch outputMode {
-        case .transcription:
-            selectionID = transcriptionFeatureSettings.asrSelectionID
-        case .translation:
-            selectionID = translationFeatureSettings.asrSelectionID
-        case .rewrite:
-            selectionID = rewriteFeatureSettings.asrSelectionID
-        }
-
-        switch selectionID.asrSelection {
-        case .dictation:
-            return ("dictation", "builtin")
-        case .mlx(let repo):
-            let canonicalRepo = MLXModelManager.canonicalModelRepo(repo)
-            return (MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) ? "whisper-mlx" : "mlx", canonicalRepo)
-        case .remote(let provider):
-            let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.remoteASRProviderConfigurations) ?? ""
-            let stored = RemoteModelConfigurationStore.loadConfigurations(
-                from: raw,
-                sensitiveValueLoading: .metadataOnly
-            )
-            let configuration = RemoteModelConfigurationStore.resolvedASRConfiguration(provider: provider, stored: stored)
-            return ("remote:\(provider.rawValue)", configuration.model)
-        case .none:
-            switch transcriptionEngine {
-            case .dictation:
-                return ("dictation", "builtin")
-            case .mlxAudio:
-                let canonicalRepo = MLXModelManager.canonicalModelRepo(mlxModelManager.currentModelRepo)
-                return (MLXWhisperMigrationSupport.isWhisperRepo(canonicalRepo) ? "whisper-mlx" : "mlx", canonicalRepo)
-            case .remote:
-                return ("remote", "unknown")
-            }
-        }
-    }
-
-    private func resolvedDurationMs(from start: Date?, to end: Date?) -> Int? {
-        guard let start, let end else { return nil }
-        return max(Int(end.timeIntervalSince(start) * 1000), 0)
-    }
-
-    private func resolvedLeadMs(earlier: Date?, later: Date?) -> Int? {
-        guard let earlier, let later else { return nil }
-        let deltaMs = Int(later.timeIntervalSince(earlier) * 1000)
-        return deltaMs >= 0 ? deltaMs : nil
-    }
-
-    private func resolvedCaptureGapMs(
-        wallClockCaptureMs: Int?,
-        capturedAudioMs: Int?
-    ) -> Int? {
-        guard let wallClockCaptureMs, let capturedAudioMs else { return nil }
-        return max(wallClockCaptureMs - capturedAudioMs, 0)
-    }
-
-    private func timingValueLabel(_ value: Int?) -> String {
-        value.map(String.init) ?? "n/a"
-    }
-
-    private func sessionLLMSummaryLabel(_ execution: SessionLLMExecutionTiming?) -> String {
-        guard let execution else { return "n/a" }
-        let diagnostics = execution.diagnostics
-        let firstChunk = diagnostics?.overallFirstChunkMs.map(String.init) ?? "n/a"
-        let prefill = diagnostics?.prefillMs.map(String.init) ?? "n/a"
-        let generation = diagnostics?.generationMs.map(String.init) ?? "n/a"
-        let total = diagnostics.map { String($0.totalElapsedMs) } ?? timingValueLabel(
-            resolvedDurationMs(from: execution.startedAt, to: execution.completedAt)
-        )
-        return
-            "task=\(execution.taskLabel),provider=\(execution.providerLabel),firstChunkMs=\(firstChunk),prefillMs=\(prefill),generationMs=\(generation),totalElapsedMs=\(total)"
     }
 
     private func resolvedOutputDelivery(for context: SessionFinalizeContext) -> SessionOutputDelivery {
@@ -958,27 +426,6 @@ extension AppDelegate {
         overlayWindow.show(state: overlayState, position: overlayPosition)
     }
 
-    func presentRewriteAnswerStreamingPreview(rawText: String) {
-        let previewPayload = RewriteAnswerPayloadParser.preview(from: rawText) ?? RewriteAnswerPayload(
-            title: AppLocalization.localizedString("AI Answer"),
-            content: rawText
-        )
-        guard !previewPayload.trimmedTitle.isEmpty || !previewPayload.trimmedContent.isEmpty else { return }
-
-        configureAnswerOverlayInjectionHandler()
-        let canInjectIntoFocusedInput =
-            overlayState.latestCompletedAnswerPayload != nil
-                ? resolvedCanInjectIntoFocusedInputForRewriteAnswer(logResult: false)
-                : false
-
-        overlayState.presentStreamingAnswer(
-            title: previewPayload.title,
-            content: previewPayload.content,
-            canInject: canInjectIntoFocusedInput
-        )
-        overlayWindow.show(state: overlayState, position: overlayPosition)
-    }
-
     func presentRewriteConversationStreamingPreview(content: String) {
         let normalizedContent = RewriteAnswerContentNormalizer.normalizePlainTextStreamingPreview(content)
         guard !normalizedContent.isEmpty else { return }
@@ -1002,13 +449,15 @@ extension AppDelegate {
 
     func dismissAnswerOverlay() {
         guard overlayState.displayMode == .answer else { return }
+        recordingLifecycle.invalidateOutputDelivery()
         if isSessionActive {
             cancelActiveRecordingSession()
         }
         cancelPendingSelectedTextTranslationRefresh()
         releaseResidualRecordingResources(reason: "dismiss-answer-overlay")
+        let generation = recordingLifecycle.outputGeneration
         overlayWindow.hide { [weak self] in
-            guard let self else { return }
+            guard let self, self.recordingLifecycle.acceptsOutputGeneration(generation) else { return }
             self.overlayWindow.onRequestInject = nil
             self.overlayState.reset()
             self.answerOverlayInjectionMode = .standard
@@ -1024,59 +473,40 @@ extension AppDelegate {
         guard overlayState.canInjectAnswer else { return }
         VoxtLog.input("Answer overlay inject requested. chars=\(trimmed.count), canInject=\(overlayState.canInjectAnswer)")
 
-        if answerOverlayInjectionMode == .selectedTextTranslation {
-            injectSelectedTextTranslationAnswerOverlayContent(trimmed)
-            return
-        }
-
-        injectStandardAnswerOverlayContent(trimmed)
+        injectAnswerOverlayContent(trimmed, mode: answerOverlayInjectionMode)
     }
 
-    private func injectStandardAnswerOverlayContent(_ text: String) {
+    private func injectAnswerOverlayContent(_ text: String, mode: AnswerOverlayInjectionMode) {
+        let generation = recordingLifecycle.outputGeneration
+        let target = sessionTextInjectionTarget
+        let historyEntryID = overlayState.latestHistoryEntryID
+        let isValid: @MainActor () -> Bool = { [weak self] in
+            guard let self, !self.isApplicationTerminating else { return false }
+            return self.recordingLifecycle.acceptsOutputGeneration(generation)
+        }
         VoxtLog.input("Answer overlay inject will hide overlay before paste. chars=\(text.count)")
         overlayWindow.onRequestInject = nil
         overlayWindow.hide(animated: false) { [weak self] in
-            guard let self else { return }
+            guard let self, isValid() else { return }
             self.overlayState.canInjectAnswer = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-                guard let self else { return }
-                self.typeText(text, restoreSessionTarget: true) { [weak self] didInject in
-                    guard let self else { return }
+                guard let self, isValid() else { return }
+                if mode == .selectedTextTranslation {
+                    let activationRestored = self.activateSelectedTextTranslationInjectionTargetIfNeeded(target)
+                    VoxtLog.input(
+                        "Selected text translation overlay inject target prepared. activationRestored=\(activationRestored)"
+                    )
+                }
+                self.typeText(
+                    text,
+                    restoreSessionTarget: mode == .standard,
+                    target: target,
+                    isValid: isValid
+                ) { [weak self] didInject in
+                    guard let self, isValid() else { return }
                     VoxtLog.input("Answer overlay inject completed. didInject=\(didInject)")
                     if didInject {
-                        self.updateLatestHistoryOutputDestinationAfterInjection()
-                        self.overlayState.reset()
-                        self.answerOverlayInjectionMode = .standard
-                        self.sessionTargetApplicationPID = nil
-                        self.sessionTargetApplicationBundleID = nil
-                        self.selectedTextTranslationHadWritableFocusedInput = false
-                    } else {
-                        self.configureAnswerOverlayInjectionHandler()
-                        self.overlayState.canInjectAnswer = true
-                        self.overlayWindow.show(state: self.overlayState, position: self.overlayPosition)
-                    }
-                }
-            }
-        }
-    }
-
-    private func injectSelectedTextTranslationAnswerOverlayContent(_ text: String) {
-        VoxtLog.input("Selected text translation overlay inject will hide overlay before paste. chars=\(text.count)")
-        overlayWindow.onRequestInject = nil
-        overlayWindow.hide(animated: false) { [weak self] in
-            guard let self else { return }
-            self.overlayState.canInjectAnswer = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-                guard let self else { return }
-                let activationRestored = self.activateSelectedTextTranslationInjectionTargetIfNeeded()
-                VoxtLog.input(
-                    "Selected text translation overlay inject target prepared. activationRestored=\(activationRestored)"
-                )
-                self.typeText(text, restoreSessionTarget: false) { [weak self] didInject in
-                    guard let self else { return }
-                    VoxtLog.input("Selected text translation overlay inject completed. didInject=\(didInject)")
-                    if didInject {
-                        self.updateLatestHistoryOutputDestinationAfterInjection()
+                        self.updateHistoryOutputDestinationAfterInjection(historyEntryID: historyEntryID)
                         self.overlayState.reset()
                         self.answerOverlayInjectionMode = .standard
                         self.sessionTargetApplicationPID = nil
@@ -1093,16 +523,16 @@ extension AppDelegate {
     }
 
     @discardableResult
-    private func activateSelectedTextTranslationInjectionTargetIfNeeded() -> Bool {
+    private func activateSelectedTextTranslationInjectionTargetIfNeeded(_ target: TextInjectionTarget) -> Bool {
         let ownBundleID = Bundle.main.bundleIdentifier
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
         let frontmostBundleID = frontmostApplication?.bundleIdentifier
         if frontmostBundleID != ownBundleID,
-           frontmostBundleID == sessionTargetApplicationBundleID {
+           frontmostBundleID == target.bundleIdentifier {
             return false
         }
 
-        if let targetPID = sessionTargetApplicationPID,
+        if let targetPID = target.processIdentifier,
            let targetApplication = NSRunningApplication(processIdentifier: targetPID),
            !targetApplication.isTerminated {
             VoxtLog.input(
@@ -1111,7 +541,7 @@ extension AppDelegate {
             return targetApplication.activate(options: [])
         }
 
-        if let targetBundleID = sessionTargetApplicationBundleID,
+        if let targetBundleID = target.bundleIdentifier,
            let targetApplication = NSRunningApplication.runningApplications(withBundleIdentifier: targetBundleID)
             .first(where: { !$0.isTerminated }) {
             VoxtLog.input(
@@ -1121,7 +551,7 @@ extension AppDelegate {
         }
 
         VoxtLog.input(
-            "Selected text translation overlay target restore skipped. frontmostBundleID=\(frontmostBundleID ?? "nil"), targetBundleID=\(sessionTargetApplicationBundleID ?? "nil"), targetPID=\(sessionTargetApplicationPID.map(String.init) ?? "nil")"
+            "Selected text translation overlay target restore skipped. frontmostBundleID=\(frontmostBundleID ?? "nil"), targetBundleID=\(target.bundleIdentifier ?? "nil"), targetPID=\(target.processIdentifier.map(String.init) ?? "nil")"
         )
         return false
     }
@@ -1134,8 +564,8 @@ extension AppDelegate {
         showTranscriptionDetailWindow(for: historyEntryID)
     }
 
-    private func updateLatestHistoryOutputDestinationAfterInjection() {
-        guard let historyEntryID = overlayState.latestHistoryEntryID,
+    private func updateHistoryOutputDestinationAfterInjection(historyEntryID: UUID?) {
+        guard let historyEntryID,
               let outputDestinationContext = captureCurrentOutputDestinationContext()
         else {
             return
@@ -1151,8 +581,11 @@ extension AppDelegate {
 
     private func configureAnswerOverlayInjectionHandler() {
         overlayWindow.onRequestInject = { [weak self] in
+            guard let self else { return }
+            let generation = self.recordingLifecycle.outputGeneration
             Task { @MainActor [weak self] in
-                self?.injectAnswerOverlayContent()
+                guard let self, self.recordingLifecycle.acceptsOutputGeneration(generation) else { return }
+                self.injectAnswerOverlayContent()
             }
         }
     }
@@ -1170,10 +603,6 @@ extension AppDelegate {
             )
         }
         return canInjectIntoFocusedInput
-    }
-
-    func extractRewriteAnswerPayload(from text: String) -> RewriteAnswerPayload? {
-        RewriteAnswerPayloadParser.extract(from: text)
     }
 
     private func emptyRewriteAnswerPlaceholderTitle(from text: String) -> String? {

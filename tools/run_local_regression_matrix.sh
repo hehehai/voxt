@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT="/Users/guanwei/x/doit/Voxt"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT="$ROOT/Voxt.xcodeproj"
 SCHEME="Voxt"
 CONFIGURATION="TestDebug"
@@ -33,6 +33,8 @@ run_tests() {
       -destination "$DESTINATION" \
       -clonedSourcePackagesDirPath "$SPM_CLONE_PATH" \
       -packageCachePath "$SPM_CACHE_PATH" \
+      -onlyUsePackageVersionsFromResolvedFile \
+      CODE_SIGNING_ALLOWED=NO \
       "$@"
   fi
 }
@@ -74,6 +76,7 @@ run_tests_with_model_gate() {
     -derivedDataPath "$derived_data" \
     -clonedSourcePackagesDirPath "$SPM_CLONE_PATH" \
     -packageCachePath "$SPM_CACHE_PATH" \
+    -onlyUsePackageVersionsFromResolvedFile \
     CODE_SIGNING_ALLOWED=NO \
     "$@"
 
@@ -135,6 +138,85 @@ run_core() {
     -only-testing:VoxtTests/ModelDebugSupportTests
 }
 
+# Complements run_core; globbed suite families keep split tests in the focused gate.
+run_refactor() {
+  local selectors=(
+    -only-testing:VoxtTests/OnboardingGuideTests
+    -only-testing:VoxtTests/SettingsTypesTests
+    -only-testing:VoxtTests/SettingsPermissionSupportTests
+    -only-testing:VoxtTests/ASRHintSettingsTests
+    -only-testing:VoxtTests/MeetingStartPlannerTests
+    -only-testing:VoxtTests/MeetingASRSupportTests
+    -only-testing:VoxtTests/RemoteASRSupportTests
+    -only-testing:VoxtTests/MeetingLiveSessionSupportTests
+    -only-testing:VoxtTests/DoubaoPacketCodecTests
+    -only-testing:VoxtTests/RemoteASRResponseStateTests
+    -only-testing:VoxtTests/RemoteASRCompletionTests
+    -only-testing:VoxtTests/MeetingRemoteSessionLifecycleTests
+    -only-testing:VoxtTests/TrackedTaskStoreTests
+    -only-testing:VoxtTests/LLMRequestLifecycleTests
+    -only-testing:VoxtTests/MeetingLiveSessionRegistryTests
+    -only-testing:VoxtTests/MLXCorrectionPassCoordinatorTests
+    -only-testing:VoxtTests/MLXNativeLiveRuntimeTests
+    -only-testing:VoxtTests/HotkeyEventTapRunLoopTests
+    -only-testing:VoxtTests/SharedModelLoadCoordinatorTests
+    -only-testing:VoxtTests/MeetingImportedFileAnalyzerTests
+    -only-testing:VoxtTests/MeetingFileTaskQueueTests
+    -only-testing:VoxtTests/MeetingFinalizationContextTests
+    -only-testing:VoxtTests/MeetingFinalizationCheckpointStoreTests
+    -only-testing:VoxtTests/RecordingSessionLifecycleTests
+    -only-testing:VoxtTests/TextInjectionTransactionTests
+    -only-testing:VoxtTests/PasteboardTextWriterTests
+    -only-testing:VoxtTests/RemoteProviderConnectivityTesterTests
+    -only-testing:VoxtTests/RemoteProviderConfigurationPolicyTests
+    -only-testing:VoxtTests/DictionarySuggestionStoreTests
+    -only-testing:VoxtTests/MeetingCaptureTimelineTests
+    -only-testing:VoxtTests/ModelDownloadStatusSnapshotTests
+    -only-testing:VoxtTests/RemoteEndpointSecurityPolicyTests
+    -only-testing:VoxtTests/RewriteAnswerContentNormalizerTests
+    -only-testing:VoxtTests/RewriteAnswerPayloadParserTests
+    -only-testing:VoxtTests/CustomLLMModelConfigurationTests
+    -only-testing:VoxtTests/CustomLLMRequestRuntimeTests
+    -only-testing:VoxtTests/CustomLLMModelSupportTests
+    -only-testing:VoxtTests/CustomLLMModelDownloadSupportTests
+    -only-testing:VoxtTests/ModelDownloadSourceSupportTests
+    -only-testing:VoxtTests/ModelInstallationCacheTests
+    -only-testing:VoxtTests/MLXModelSupportTests
+    -only-testing:VoxtTests/MLXModelPerRepoStateSupportTests
+    -only-testing:VoxtTests/GGUFUTF8OutputAccumulatorTests/testWaitsForCompleteMultibyteSequenceBeforeDecoding
+    -only-testing:VoxtTests/GGUFUTF8OutputAccumulatorTests/testFinalizesInvalidUTF8WithReplacementFlag
+    -only-testing:VoxtTests/GGUFUTF8OutputAccumulatorTests/testApplicationTerminationShutdownRejectsNewGGUFInference
+    -only-testing:VoxtTests/SQLiteStorageRepositoryTests
+    -only-testing:VoxtTests/AutomaticDictionaryLearningMonitorTests
+    -only-testing:VoxtTests/DictionaryEntryCollectionTests
+    -only-testing:VoxtTests/DictionaryMatcherTests
+    -only-testing:VoxtTests/DictionaryMatcherAliasTests
+    -only-testing:VoxtTests/DictionaryStoreAsyncTests
+    -only-testing:VoxtTests/TranscriptionHistoryStoreAsyncTests
+    -only-testing:VoxtTests/TranscriptionHistoryEntryAudioTests
+    -only-testing:VoxtTests/TranscriptionHistoryConversationSupportTests
+    -only-testing:VoxtTests/HistoryValueResolverTests
+    -only-testing:VoxtTests/HistoryCorrectionPresentationTests
+    -only-testing:VoxtTests/MeetingDetailFormattingTests
+    -only-testing:VoxtTests/MeetingTranscriptVirtualListTests
+    -only-testing:VoxtTests/MeetingDetailTranscriptListCacheTests
+    -only-testing:VoxtTests/VoxtNoteStoreTests
+    -only-testing:VoxtTests/VoxtObsidianSyncCoordinatorTests
+    -only-testing:VoxtTests/VoxtRemindersSyncCoordinatorTests
+  )
+  local path suite
+  for path in \
+    "$ROOT"/VoxtTests/RemoteLLMRuntimeClient*Tests.swift \
+    "$ROOT"/VoxtTests/RemoteModelConfiguration*Tests.swift \
+    "$ROOT"/VoxtTests/HotkeyManager*Tests.swift \
+    "$ROOT"/VoxtTests/MLXModelManager*Tests.swift \
+    "$ROOT"/VoxtTests/MeetingDetailViewModel*Tests.swift; do
+    suite="$(basename "$path" .swift)"
+    selectors+=("-only-testing:VoxtTests/$suite")
+  done
+  run_tests "refactoring behavior contracts" "${selectors[@]}"
+}
+
 run_mlx() {
   run_tests "MLX public fixture regression" \
     -only-testing:VoxtTests/QwenOfficialFixtureASRIntegrationTests \
@@ -156,14 +238,6 @@ run_vad() {
     -only-testing:VoxtTests/ModelDebugSupportTests
 }
 
-run_whisper() {
-  run_tests "Whisper diagnostic regression" \
-    -only-testing:VoxtTests/WhisperOfficialFixtureASRIntegrationTests \
-    -only-testing:VoxtTests/WhisperLongFormReplayIntegrationTests \
-    -only-testing:VoxtTests/WhisperRealtimeReplayIntegrationTests \
-    -only-testing:VoxtTests/WhisperPipelineMetricsIntegrationTests
-}
-
 run_installed_matrix() {
   run_tests "installed-model long-form matrix" \
     -only-testing:VoxtTests/InstalledASRLongFormMatrixIntegrationTests
@@ -172,6 +246,9 @@ run_installed_matrix() {
 case "$GROUP" in
   core)
     run_core
+    ;;
+  refactor)
+    run_group_collecting_failures run_core run_refactor
     ;;
   mlx)
     run_mlx
@@ -182,26 +259,19 @@ case "$GROUP" in
   vad)
     run_vad
     ;;
-  whisper)
-    run_whisper
-    ;;
   installed)
     run_installed_matrix
     ;;
-  diagnostic)
-    run_group_collecting_failures run_whisper run_installed_matrix
-    ;;
   all)
-    run_core
-    run_mlx
-    run_vad
+    # VAD's three suites are already included in core; do not run them twice.
+    run_group_collecting_failures run_core run_refactor run_mlx
     ;;
   full)
-    run_group_collecting_failures run_core run_mlx run_gguf run_vad run_whisper run_installed_matrix
+    run_group_collecting_failures run_core run_refactor run_mlx run_gguf run_installed_matrix
     ;;
   *)
     echo "Unknown group: $GROUP" >&2
-    echo "Usage: $0 [core|mlx|gguf|vad|whisper|installed|diagnostic|all|full]" >&2
+    echo "Usage: $0 [core|refactor|mlx|gguf|vad|installed|all|full]" >&2
     exit 2
     ;;
 esac

@@ -273,31 +273,24 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A[commitTranscription] --> B[NormalizeOutputStage]
-    B --> C[TypeTextStage]
-    C --> D[AppendHistoryStage]
-    D --> E[finishSession]
-    E --> F[隐藏悬浮层]
-    F --> G[播放结束音]
-    G --> H[重置会话状态]
+    A[commitTranscription] --> B[preparedDeliveryContext]
+    B --> C[deliverCommittedOutput]
+    C --> D[交付回调]
+    D --> E[finalizeCommittedOutputPostDelivery]
+    E --> F[历史记录与词典证据]
+    F --> G[调用方 completion]
+    G --> H[会话结束编排]
 ```
 
 #### 分阶段说明
 
-1. `NormalizeOutputStage`
-   - 对最终输出文本做统一规范化
-2. `TypeTextStage`
-   - 自动写回当前输入位置
-   - 如果没有足够权限，可能退化为只保留在剪贴板
-3. `AppendHistoryStage`
-   - 把结果写入历史记录
-   - 同时带上必要的模型 / provider / 模式信息
-4. `finishSession(...)`
-   - 延迟收尾（某些模式下会稍微停留，让用户看到结果）
-5. `executeSessionEndPipeline()`
-   - 隐藏悬浮层
-   - 播放结束音
-   - 重置当前 session 状态
+1. `commitTranscription` 拦截重复提交和已失效的会话。
+2. `preparedDeliveryContext` 先规范化文本、提取结构化转写答案、应用词典修正，再生成不可变的 `SessionFinalizeContext`，确保交付和历史记录使用同一份文本。
+3. `deliverCommittedOutput` 选择自动注入、答案悬浮层或选中文本翻译结果界面；文本注入通过异步回调报告成功状态和目标位置。
+4. 交付回调中的 `finalizeCommittedOutputPostDelivery` 写入历史、生成词典建议和证据、记录时序；自动学习依据实际注入结果触发。
+5. 调用方 completion 继续会话结束编排（`finishSession` / `executeSessionEndPipeline`），按模式处理悬浮层、结束音和状态清理。
+
+准备逻辑位于 `App/SessionOutputPreparation.swift`，交付位于 `App/SessionTextIO.swift`，时序日志位于 `App/SessionTimingLogging.swift`，会话结束编排位于 `App/Recording/`。旧的 finalize-stage 协议、runner 及未使用 stage 已删除，不再把它们描述成实际输出路径。
 
 ### 一句话总结
 

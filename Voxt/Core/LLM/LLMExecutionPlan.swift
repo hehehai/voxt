@@ -3,12 +3,6 @@
 
 import Foundation
 
-enum LLMExecutionLatencyProfile: String, CaseIterable, Equatable {
-    case instant
-    case balanced
-    case quality
-}
-
 enum LLMExecutionDelivery: Equatable {
     case systemPrompt
     case userMessage

@@ -550,13 +550,6 @@ struct DictionarySettingsView: View {
         return entry.groupNameSnapshot ?? AppLocalization.localizedString("Missing Group")
     }
 
-    private func suggestionScopeLabel(for suggestion: DictionarySuggestion) -> String {
-        guard suggestion.groupID != nil else {
-            return AppLocalization.localizedString("Global")
-        }
-        return suggestion.groupNameSnapshot ?? AppLocalization.localizedString("Missing Group")
-    }
-
     private func groupName(for groupID: UUID?) -> String? {
         guard let groupID else { return nil }
         return appBranchGroups.first(where: { $0.id == groupID })?.name

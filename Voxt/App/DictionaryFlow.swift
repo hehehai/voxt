@@ -116,26 +116,6 @@ extension AppDelegate {
         return result
     }
 
-    func previewDictionarySuggestions(
-        for text: String,
-        candidates: [DictionaryMatchCandidate],
-        correctedTerms: [String]
-    ) -> [DictionarySuggestionDraft] {
-        _ = text
-        _ = candidates
-        _ = correctedTerms
-        return []
-    }
-
-    func persistDictionaryEvidence(
-        candidates: [DictionaryMatchCandidate],
-        suggestions: [DictionarySuggestionDraft],
-        historyEntryID: UUID?
-    ) {
-        dictionaryStore.recordMatches(candidates)
-        dictionarySuggestionStore.applyDiscoveredSuggestions(suggestions, historyEntryID: historyEntryID)
-    }
-
     func activeDictionaryGroupID() -> UUID? {
         if let matchedGroupID = lastEnhancementPromptContext?.matchedGroupID {
             return matchedGroupID
@@ -145,10 +125,6 @@ extension AppDelegate {
 
     func startDictionaryHistorySuggestionScan() {
         startDictionaryHistorySuggestionScan(request: nil, persistSettings: false)
-    }
-
-    func scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded() {
-        // Automatic dictionary ingestion has been removed in favor of explicit one-click ingestion.
     }
 
     func availableDictionaryHistoryScanModelOptions() -> [DictionaryHistoryScanModelOption] {
@@ -302,7 +278,6 @@ extension AppDelegate {
                 duplicateCount: duplicateCount,
                 checkpointEntry: lastProcessedEntry
             )
-            scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded()
         } catch is CancellationError {
             VoxtLog.dictionary("Dictionary history scan cancelled.")
             dictionarySuggestionStore.cancelHistoryScan(

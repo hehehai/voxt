@@ -43,9 +43,7 @@ enum CustomLLMModelDownloadSupport {
     static func makeDownloadContext(
         repo: String,
         baseURL: URL,
-        userAgent: String,
-        token: String?,
-        cache: HubCache = .default
+        userAgent: String
     ) async throws -> DownloadContext {
         guard let repoID = Repo.ID(rawValue: repo) else {
             throw NSError(

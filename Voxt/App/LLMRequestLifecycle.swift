@@ -1,21 +1,45 @@
-// LLMRequestLifecycle.swift
-// Provides LLMRequest Lifecycle for app lifecycle and routing.
-
 import Foundation
+
+/// Owns both request validity and the work still unwinding after invalidation.
+@MainActor
+final class LLMRequestLifecycle {
+    private var currentRequestID = UUID()
+    private let tasks = TrackedTaskStore()
+
+    var hasPendingWork: Bool { !tasks.isEmpty }
+
+    func begin() -> UUID {
+        tasks.cancelAll()
+        currentRequestID = UUID()
+        return currentRequestID
+    }
+
+    func isCurrent(_ requestID: UUID) -> Bool {
+        currentRequestID == requestID
+    }
+
+    func run(_ requestID: UUID, operation: @escaping @MainActor () async -> Void) {
+        guard isCurrent(requestID) else { return }
+        tasks.start { [weak self] in
+            guard self?.isCurrent(requestID) == true else { return }
+            await operation()
+        }
+    }
+
+    func cancel() -> [Task<Void, Never>] {
+        currentRequestID = UUID()
+        return tasks.cancelAll()
+    }
+}
 
 extension AppDelegate {
     @discardableResult
     func beginLLMRequest() -> UUID {
-        for task in llmTasksByRequestID.values {
-            task.cancel()
-        }
-        let requestID = UUID()
-        activeLLMRequestID = requestID
-        return requestID
+        llmRequests.begin()
     }
 
     func isCurrentLLMRequest(_ requestID: UUID) -> Bool {
-        activeLLMRequestID == requestID && !isSessionCancellationRequested
+        llmRequests.isCurrent(requestID) && !isSessionCancellationRequested
     }
 
     func invalidateActiveLLMRequest() {
@@ -26,22 +50,12 @@ extension AppDelegate {
         _ requestID: UUID,
         operation: @escaping @MainActor () async -> Void
     ) {
-        guard !isApplicationTerminating else { return }
-        let task = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.llmTasksByRequestID[requestID] = nil }
-            await operation()
-        }
-        llmTasksByRequestID[requestID] = task
+        guard !isApplicationTerminating, isCurrentLLMRequest(requestID) else { return }
+        llmRequests.run(requestID, operation: operation)
     }
 
     @discardableResult
     func cancelActiveLLMRequest() -> [Task<Void, Never>] {
-        let tasks = Array(llmTasksByRequestID.values)
-        activeLLMRequestID = UUID()
-        for task in tasks {
-            task.cancel()
-        }
-        return tasks
+        llmRequests.cancel()
     }
 }

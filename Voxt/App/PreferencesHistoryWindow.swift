@@ -381,7 +381,6 @@ extension AppDelegate {
             }
             lastEnhancementPromptContext = nil
             transcriptionResultReceivedAt = nil
-            scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded()
             return continuedEntryID
         }
 
@@ -437,10 +436,6 @@ extension AppDelegate {
 
         lastEnhancementPromptContext = nil
         transcriptionResultReceivedAt = nil
-
-        if entryID != nil {
-            scheduleAutomaticDictionaryHistorySuggestionScanIfNeeded()
-        }
 
         return entryID
     }

@@ -31,6 +31,18 @@ final class MeetingCaptureTimelineTests: XCTestCase {
         XCTAssertEqual(restarted?.upperBound, 4.5)
     }
 
+    func testCleanupInvalidatesCallbacksBeforeNextCaptureStarts() {
+        var tracker = MeetingCaptureTimelineTracker()
+        let generation = tracker.beginEpoch(for: .me)
+        XCTAssertTrue(tracker.isCurrent(generation, for: .me))
+        tracker.invalidateEpochs()
+        XCTAssertFalse(tracker.isCurrent(generation, for: .me))
+        XCTAssertNil(tracker.nextRange(for: .me, generation: generation, durationSeconds: 1, fallbackEndSeconds: 1))
+        let next = tracker.beginEpoch(for: .me)
+        XCTAssertNotEqual(next, generation)
+        XCTAssertTrue(tracker.isCurrent(next, for: .me))
+    }
+
     func testStaleCaptureGenerationCannotAdvanceNewTimeline() {
         var tracker = MeetingCaptureTimelineTracker()
         let staleGeneration = tracker.beginEpoch(for: .me)

@@ -44,9 +44,9 @@ extension RemoteASRTranscriber {
         let context = GeminiLiveStreamingContext(
             session: managedSocket.session,
             ws: ws,
-            responseState: GeminiLiveResponseState { [weak self] error in
+            responseState: GeminiLiveResponseState { [weak self, generationID = self.recordingGenerationID] error in
                 Task { @MainActor [weak self] in
-                    self?.notifyRuntimeFailure(error)
+                    self?.notifyRuntimeFailure(error, generationID: generationID)
                 }
             },
             generationID: recordingGenerationID

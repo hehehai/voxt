@@ -1,5 +1,4 @@
-// SessionFinalizePipeline.swift
-// Provides Session Finalize Pipeline for core app behavior.
+// Rewrite answer and conversation values shared by prompts, overlays, and history.
 
 import Foundation
 
@@ -253,33 +252,5 @@ enum RewriteAnswerContentNormalizer {
             lowered.contains("\"title\"") ||
             lowered.contains("\"content\"") ||
             (lowered.contains("title:") && lowered.contains("content:"))
-    }
-}
-
-struct SessionFinalizeContext {
-    var outputText: String
-    let llmDurationSeconds: TimeInterval?
-    var dictionaryMatches: [DictionaryMatchCandidate]
-    var dictionaryCorrectedTerms: [String]
-    var dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot]
-    var dictionarySuggestions: [DictionarySuggestionDraft]
-    var historyEntryID: UUID?
-    var rewriteAnswerPayload: RewriteAnswerPayload?
-}
-
-protocol SessionFinalizeStage {
-    var name: String { get }
-    func run(context: inout SessionFinalizeContext)
-}
-
-struct SessionFinalizePipelineRunner {
-    let stages: [any SessionFinalizeStage]
-
-    func run(initial: SessionFinalizeContext) -> SessionFinalizeContext {
-        var context = initial
-        for stage in stages {
-            stage.run(context: &context)
-        }
-        return context
     }
 }

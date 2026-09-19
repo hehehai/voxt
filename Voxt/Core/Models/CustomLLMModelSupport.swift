@@ -18,10 +18,6 @@ struct CustomLLMModelBehavior: Equatable {
         "reasoning_effort": "medium"
     ]
 
-    var additionalContext: [String: any Sendable]? {
-        guard disablesThinking else { return nil }
-        return Self.thinkingOffAdditionalContext
-    }
 }
 
 enum CustomLLMModelBehaviorResolver {
@@ -68,60 +64,6 @@ enum CustomLLMTaskKind: Equatable {
         case .dictionaryHistoryScan:
             return 2.20
         }
-    }
-}
-
-struct CustomLLMRepoSelection: Equatable {
-    let requestedRepo: String
-    let effectiveRepo: String
-
-    var didFallback: Bool { requestedRepo != effectiveRepo }
-
-    nonisolated static func resolve(
-        requestedRepo: String,
-        supportedRepos: [String],
-        fallbackRepo: String
-    ) -> CustomLLMRepoSelection {
-        let effectiveRepo = isSupported(repo: requestedRepo, supportedRepos: supportedRepos)
-            ? requestedRepo
-            : fallbackRepo
-        return CustomLLMRepoSelection(
-            requestedRepo: requestedRepo,
-            effectiveRepo: effectiveRepo
-        )
-    }
-
-    nonisolated static func isSupported(repo: String, supportedRepos: [String]) -> Bool {
-        supportedRepos.contains(repo)
-    }
-}
-
-enum CustomLLMRemoteSizeCache {
-    static let unknownText = "Unknown"
-
-    static func cachedState(
-        for repo: String,
-        cache: [String: String]
-    ) -> CustomLLMModelManager.ModelSizeState? {
-        guard let cachedText = cache[repo], cachedText != unknownText else { return nil }
-        return .ready(bytes: 0, text: cachedText)
-    }
-
-    static func shouldPrefetch(
-        repo: String,
-        cache: [String: String]
-    ) -> Bool {
-        cache[repo] == nil
-    }
-
-    static func updatedCache(
-        _ cache: [String: String],
-        repo: String,
-        text: String
-    ) -> [String: String] {
-        var updated = cache
-        updated[repo] = text
-        return updated
     }
 }
 
@@ -300,37 +242,6 @@ enum CustomLLMRequestPlanBuilder {
         )
     }
 
-    static func enhancement(
-        input: String,
-        systemPrompt: String,
-        repo: String,
-        resultFallback: String,
-        structuredOutputPrompt: (String, String) -> String
-    ) -> CustomLLMRequestPlan {
-        let prompt = structuredOutputPrompt(
-            "Clean up this transcription while preserving meaning and style.",
-            input
-        )
-        return CustomLLMRequestPlan(
-            kind: .enhancement,
-            repo: repo,
-            instructions: systemPrompt,
-            prompt: prompt,
-            inputCharacterCount: input.count,
-            maxTokensOverride: nil,
-            attachments: [],
-            conversationHistory: [],
-            logMode: nil,
-            contentLogSections: [
-                CustomLLMLogSection(label: "system_prompt", content: systemPrompt),
-                CustomLLMLogSection(label: "input", content: input),
-                CustomLLMLogSection(label: "request_content", content: prompt)
-            ],
-            resultFallback: resultFallback,
-            responseExtractionMode: .textResultPayloadOrNormalizedText
-        )
-    }
-
     static func userPromptEnhancement(
         prompt: String,
         repo: String
@@ -350,122 +261,6 @@ enum CustomLLMRequestPlanBuilder {
                 CustomLLMLogSection(label: "input", content: prompt)
             ],
             resultFallback: "",
-            responseExtractionMode: .textResultPayloadOrNormalizedText
-        )
-    }
-
-    static func translation(
-        text: String,
-        instructions: String,
-        repo: String,
-        structuredOutputPrompt: (String, String) -> String
-    ) -> CustomLLMRequestPlan {
-        let prompt = structuredOutputPrompt(
-            "Process the input according to the instructions.",
-            text
-        )
-        return CustomLLMRequestPlan(
-            kind: .translation,
-            repo: repo,
-            instructions: instructions,
-            prompt: prompt,
-            inputCharacterCount: text.count,
-            maxTokensOverride: nil,
-            attachments: [],
-            conversationHistory: [],
-            logMode: nil,
-            contentLogSections: [
-                CustomLLMLogSection(label: "system_prompt", content: instructions),
-                CustomLLMLogSection(label: "input", content: text),
-                CustomLLMLogSection(label: "request_content", content: prompt)
-            ],
-            resultFallback: "",
-            responseExtractionMode: .textResultPayloadOrNormalizedText
-        )
-    }
-
-    static func userPromptTranslation(
-        prompt: String,
-        repo: String,
-        resultFallback: String
-    ) -> CustomLLMRequestPlan {
-        CustomLLMRequestPlan(
-            kind: .translation,
-            repo: repo,
-            instructions: "",
-            prompt: prompt,
-            inputCharacterCount: prompt.count,
-            maxTokensOverride: nil,
-            attachments: [],
-            conversationHistory: [],
-            logMode: "userMessage",
-            contentLogSections: [
-                CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
-                CustomLLMLogSection(label: "input", content: prompt)
-            ],
-            resultFallback: resultFallback,
-            responseExtractionMode: .textResultPayloadOrNormalizedText
-        )
-    }
-
-    static func rewrite(
-        sourceText: String,
-        dictatedPrompt: String,
-        instructions: String,
-        repo: String,
-        structuredOutputPrompt: (String, String) -> String
-    ) -> CustomLLMRequestPlan {
-        let combinedInput = """
-        Spoken instruction:
-        \(dictatedPrompt)
-
-        Selected source text:
-        \(sourceText)
-        """
-        let prompt = structuredOutputPrompt(
-            "Produce the final text to insert according to the instructions.",
-            combinedInput
-        )
-        return CustomLLMRequestPlan(
-            kind: .rewrite,
-            repo: repo,
-            instructions: instructions,
-            prompt: prompt,
-            inputCharacterCount: combinedInput.count,
-            maxTokensOverride: nil,
-            attachments: [],
-            conversationHistory: [],
-            logMode: nil,
-            contentLogSections: [
-                CustomLLMLogSection(label: "system_prompt", content: instructions),
-                CustomLLMLogSection(label: "input", content: combinedInput),
-                CustomLLMLogSection(label: "request_content", content: prompt)
-            ],
-            resultFallback: "",
-            responseExtractionMode: .textResultPayloadOrNormalizedText
-        )
-    }
-
-    static func userPromptRewrite(
-        prompt: String,
-        repo: String,
-        resultFallback: String
-    ) -> CustomLLMRequestPlan {
-        CustomLLMRequestPlan(
-            kind: .rewrite,
-            repo: repo,
-            instructions: "",
-            prompt: prompt,
-            inputCharacterCount: prompt.count,
-            maxTokensOverride: nil,
-            attachments: [],
-            conversationHistory: [],
-            logMode: "userMessage",
-            contentLogSections: [
-                CustomLLMLogSection(label: "system_prompt", content: "<empty>"),
-                CustomLLMLogSection(label: "input", content: prompt)
-            ],
-            resultFallback: resultFallback,
             responseExtractionMode: .textResultPayloadOrNormalizedText
         )
     }

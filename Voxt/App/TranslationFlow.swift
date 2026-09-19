@@ -170,12 +170,8 @@ extension AppDelegate {
         let startedAt = Date()
         isSessionActive = true
         isSelectedTextTranslationFlow = true
-        didCommitSessionOutput = false
-        isSessionCancellationRequested = false
-        activeRecordingSessionID = UUID()
+        recordingLifecycle.begin()
         invalidateActiveLLMRequest()
-        currentEndingSessionID = nil
-        lastCompletedSessionEndSessionID = nil
         sessionOutputMode = .translation
         recordingRequestedAt = startedAt
         recordingStartedAt = startedAt

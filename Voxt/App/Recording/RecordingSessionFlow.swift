@@ -138,13 +138,8 @@ extension AppDelegate {
         sessionLLMExecutionTimings = []
         localVADObservedFramesInCurrentSession = false
         localVADObservedSpeechInCurrentSession = false
-        didCommitSessionOutput = false
-        isSessionCancellationRequested = false
-        activeRecordingSessionID = UUID()
+        recordingLifecycle.begin()
         invalidateActiveLLMRequest()
-        pendingOutputReplacementTransaction = nil
-        currentEndingSessionID = nil
-        lastCompletedSessionEndSessionID = nil
         sessionOutputMode = outputMode
         enhancementContextSnapshot = nil
         sessionOutputDestinationContext = nil
@@ -269,11 +264,8 @@ extension AppDelegate {
 
         let cancelledSessionID = activeRecordingSessionID
         hotkeyManager.setCommonStopKeyEnabled(false)
-        activeRecordingSessionID = UUID()
+        recordingLifecycle.cancel()
         invalidateActiveLLMRequest()
-        pendingOutputReplacementTransaction = nil
-        isSessionCancellationRequested = true
-        didCommitSessionOutput = true
         sessionTargetApplicationPID = nil
         sessionTargetApplicationBundleID = nil
         sessionOutputDestinationContext = nil

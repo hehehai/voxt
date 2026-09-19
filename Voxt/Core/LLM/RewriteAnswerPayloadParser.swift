@@ -57,51 +57,6 @@ enum RewriteAnswerPayloadParser {
         return nil
     }
 
-    nonisolated static func preview(
-        from text: String,
-        fallbackTitle: String = AppLocalization.localizedString("AI Answer")
-    ) -> RewriteAnswerPayload? {
-        let normalizedText = sanitizeStructuredCandidate(normalizedStreamChunkEnvelope(in: text) ?? text)
-
-        if let extracted = extract(from: normalizedText, fallbackTitle: fallbackTitle) {
-            return extracted
-        }
-
-        let trimmed = normalizedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        let looksStructuredEnvelope =
-            trimmed.hasPrefix("{") ||
-            trimmed.hasPrefix("[") ||
-            trimmed.lowercased().contains("\"title\"") ||
-            trimmed.lowercased().contains("\"content\"") ||
-            trimmed.lowercased().contains("title:")
-
-        if looksStructuredEnvelope {
-            let title = normalizeJSONFragment(firstMatch(
-                in: trimmed,
-                patterns: [
-                    #"(?is)["']?title["']?\s*[:：]\s*["']?(.+?)["']?(?=\s*(?:,\s*["']?(?:content|answer|body|text)["']?\s*[:：]|\n\s*["']?(?:content|answer|body|text)["']?\s*[:：]|\n{2,}|$))"#,
-                    #"(?is)["']?(?:heading|summary)["']?\s*[:：]\s*["']?(.+?)["']?(?=\s*(?:,\s*["']?(?:content|answer|body|text)["']?\s*[:：]|\n\s*["']?(?:content|answer|body|text)["']?\s*[:：]|\n{2,}|$))"#
-                ]
-            ) ?? "")
-            let content = normalizeJSONFragment(firstMatch(
-                in: trimmed,
-                patterns: [
-                    #"(?is)["']?(?:content|answer|body|text)["']?\s*[:：]\s*["']([\s\S]*)$"#,
-                    #"(?is)(?:^|\n|\{)\s*["']?(?:content|answer|body|text)["']?\s*[:：]\s*["']?([\s\S]+?)["']?\s*$"#
-                ]
-            ) ?? "")
-
-            return RewriteAnswerPayload(
-                title: title.isEmpty ? fallbackTitle : title,
-                content: content
-            )
-        }
-
-        return RewriteAnswerPayload(title: fallbackTitle, content: trimmed)
-    }
-
     nonisolated private static func normalizedStreamChunkEnvelope(in text: String) -> String? {
         let lines = text
             .replacingOccurrences(of: "\r\n", with: "\n")

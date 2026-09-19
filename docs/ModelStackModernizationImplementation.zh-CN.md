@@ -144,7 +144,9 @@ VOXT_RUN_MODEL_TESTS=1 VOXT_MODEL_STORAGE_ROOT="/absolute/path/to/existing/model
 - 复用实际快捷键、音频反馈、文本注入和翻译结果窗口；新增中英日文案及 `OnboardingGuideTests`。
 - 具体流程、测试与人工验收见 [六步交互引导](OnboardingGuide.zh-CN.md)。AppKit 交互、权限、焦点和真实输入验证仍待 Mac 执行。
 
-### PR 依赖解析阻断
+### PR 依赖解析阻断（历史记录）
+
+后续状态（`81c04a3`）：当前已提交的 `Package.resolved` 通过升级兼容集静态审计。下面保留的是当时的失败记录，不表示当前锁文件仍不匹配；macOS 构建及模型行为仍需独立验证，当前策略见 [依赖文档](MLXAudioDependency.md)。
 
 [PR 首轮 CI 35322684144](https://github.com/hehehai/voxt/actions/runs/35322684144) 因旧 lockfile 与新 revision 不匹配失败：`an out-of-date resolved file was detected`，退出码 74。这不是 XCTest 断言失败；app 编译和测试尚未开始。
 

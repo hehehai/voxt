@@ -36,9 +36,9 @@ extension RemoteASRTranscriber {
         let context = StepFunStreamingContext(
             session: managedSocket.session,
             ws: ws,
-            responseState: StepFunResponseState { [weak self] error in
+            responseState: StepFunResponseState { [weak self, generationID = self.recordingGenerationID] error in
                 Task { @MainActor [weak self] in
-                    self?.notifyRuntimeFailure(error)
+                    self?.notifyRuntimeFailure(error, generationID: generationID)
                 }
             },
             generationID: recordingGenerationID

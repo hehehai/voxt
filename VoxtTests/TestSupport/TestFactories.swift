@@ -116,14 +116,6 @@ enum TestFactories {
         BranchURLItem(id: id, pattern: pattern)
     }
 
-    static func makeDictionarySuggestion(term: String, groupID: UUID? = nil) -> DictionarySuggestion {
-        DictionarySuggestion(
-            term: term,
-            normalizedTerm: normalizedDictionaryTerm(term),
-            sourceContext: .history,
-            groupID: groupID
-        )
-    }
 }
 
 private func normalizedDictionaryTerm(_ input: String) -> String {

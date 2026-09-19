@@ -140,47 +140,6 @@ struct DictionaryRow: View {
     }
 }
 
-struct DictionarySuggestionRow: View {
-    let suggestion: DictionarySuggestion
-    let scopeLabel: String
-    let onAdd: () -> Void
-    let onDismiss: () -> Void
-
-    var body: some View {
-        DictionaryListRowContainer(
-            content: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(suggestion.term)
-                        .font(.body.weight(.medium))
-                        .lineLimit(1)
-                        .textSelection(.enabled)
-
-                    HStack(spacing: 6) {
-                        DictionaryCapsuleBadge(
-                            title: scopeLabel,
-                            fill: Color.secondary.opacity(0.12),
-                            foreground: Color.secondary
-                        )
-                    }
-                }
-            },
-            actions: {
-                Button(action: onAdd) {
-                    Image(systemName: "plus.circle")
-                }
-                .buttonStyle(SettingsCompactIconButtonStyle())
-                .help(localized("Add to Dictionary"))
-
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark.circle")
-                }
-                .buttonStyle(SettingsCompactIconButtonStyle())
-                .help(localized("Ignore"))
-            }
-        )
-    }
-}
-
 enum DictionaryDialog: Identifiable {
     case create(categoryID: UUID?, mode: DictionaryTermDialogMode)
     case edit(DictionaryEntry)
@@ -329,57 +288,6 @@ struct DictionaryCategoryDialogView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-}
-
-private struct DictionaryListRowContainer<Content: View, Actions: View>: View {
-    @ViewBuilder let content: () -> Content
-    @ViewBuilder let actions: () -> Actions
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            content()
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                actions()
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .settingsCardSurface(cornerRadius: SettingsUIStyle.compactCornerRadius, fillOpacity: 1)
-    }
-}
-
-private struct DictionaryCapsuleBadge: View {
-    let title: Text
-    let fill: Color
-    let foreground: Color
-
-    init<Title: StringProtocol>(title: Title, fill: Color, foreground: Color) {
-        self.title = Text(String(title))
-        self.fill = fill
-        self.foreground = foreground
-    }
-
-    init(title: LocalizedStringKey, fill: Color, foreground: Color) {
-        self.title = Text(title)
-        self.fill = fill
-        self.foreground = foreground
-    }
-
-    var body: some View {
-        title
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(fill)
-            )
-            .foregroundStyle(foreground)
     }
 }
 

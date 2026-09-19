@@ -4,132 +4,20 @@
 import Foundation
 import HuggingFace
 import Combine
-import CoreImage
 import MLX
 import MLXLLM
 import MLXLMCommon
 import MLXVLM
-import Tokenizers
-
-private struct LocalTokenizerBridge: MLXLMCommon.Tokenizer {
-    private let upstream: any Tokenizers.Tokenizer
-
-    init(_ upstream: any Tokenizers.Tokenizer) {
-        self.upstream = upstream
-    }
-
-    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
-        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
-    }
-
-    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
-        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
-    }
-
-    func convertTokenToId(_ token: String) -> Int? {
-        upstream.convertTokenToId(token)
-    }
-
-    func convertIdToToken(_ id: Int) -> String? {
-        upstream.convertIdToToken(id)
-    }
-
-    var bosToken: String? { upstream.bosToken }
-    var eosToken: String? { upstream.eosToken }
-    var unknownToken: String? { upstream.unknownToken }
-
-    func applyChatTemplate(
-        messages: [[String: any Sendable]],
-        tools: [[String: any Sendable]]?,
-        additionalContext: [String: any Sendable]?
-    ) throws -> [Int] {
-        do {
-            return try upstream.applyChatTemplate(
-                messages: messages,
-                tools: tools,
-                additionalContext: additionalContext
-            )
-        } catch Tokenizers.TokenizerError.missingChatTemplate {
-            throw MLXLMCommon.TokenizerError.missingChatTemplate
-        }
-    }
-}
-
-private struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
-    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
-        let tokenizer = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
-        return LocalTokenizerBridge(tokenizer)
-    }
-}
 
 @MainActor
 class CustomLLMModelManager: ObservableObject {
-    private struct TextResultPayload: Decodable {
-        let resultText: String
-    }
-
     static let defaultHubBaseURL = URL(string: "https://huggingface.co")!
     static let mirrorHubBaseURL = URL(string: "https://hf-mirror.com")!
     static let hubUserAgent = "Voxt/1.0 (CustomLLM)"
 
-    enum ModelState: Equatable {
-        case notDownloaded
-        case downloading(
-            progress: Double,
-            completed: Int64,
-            total: Int64,
-            currentFile: String?,
-            completedFiles: Int,
-            totalFiles: Int
-        )
-        case paused(
-            progress: Double,
-            completed: Int64,
-            total: Int64,
-            currentFile: String?,
-            completedFiles: Int,
-            totalFiles: Int
-        )
-        case downloaded
-        case error(String)
-    }
-
-    struct CatalogSnapshot: Equatable {
-        let repo: String
-        let isDownloaded: Bool
-        let hasResumableDownload: Bool
-        let state: ModelState
-        let pausedStatusMessage: String?
-        let hasActiveDownloadTask: Bool
-
-        var isDownloading: Bool {
-            if hasActiveDownloadTask {
-                return true
-            }
-            if case .downloading = state {
-                return true
-            }
-            return false
-        }
-
-        var isPaused: Bool {
-            if case .paused = state {
-                return true
-            }
-            return hasResumableDownload
-        }
-    }
-
     private enum DownloadStopAction {
         case pause
         case cancel
-    }
-
-    enum ModelSizeState: Equatable {
-        case unknown
-        case loading
-        case ready(bytes: Int64, text: String)
-        case error(String)
     }
 
     typealias ModelOption = CustomLLMModelCatalog.Option
@@ -160,8 +48,6 @@ class CustomLLMModelManager: ObservableObject {
     private var hubBaseURL: URL
     private var downloadTasksByRepo: [String: Task<Void, Never>] = [:]
     private var downloadProgressTasksByRepo: [String: Task<Void, Never>] = [:]
-    private var sizeTask: Task<Void, Never>?
-    private var prefetchTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
     private var downloadStopActionsByRepo: [String: DownloadStopAction] = [:]
     private var inferenceContainer: ModelContainer? {
@@ -183,6 +69,7 @@ class CustomLLMModelManager: ObservableObject {
     private var activeInferenceCount = 0
     private var activeInferenceWaiters: [CheckedContinuation<Void, Never>] = []
     private var isShuttingDownForApplicationTermination = false
+    private var shutdownTask: Task<Void, Never>?
     var onModelUnloaded: (() -> Void)?
     private var resolvedIdleUnloadDelay: Duration {
         .seconds(AppPreferenceKey.resolvedLocalModelIdleUnloadDelaySeconds())
@@ -196,17 +83,17 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     init(modelRepo: String, hubBaseURL: URL = URL(string: "https://huggingface.co")!) {
-        let repoSelection = Self.resolveModelRepo(modelRepo)
+        let resolvedRepo = Self.resolveModelRepo(modelRepo)
         let repoWasSupported = Self.isSupportedModelRepo(modelRepo)
-        self.modelRepo = repoSelection.effectiveRepo
+        self.modelRepo = resolvedRepo
         self.hubBaseURL = hubBaseURL
         self.remoteSizeTextByRepo = CustomLLMModelStorageSupport.loadPersistedRemoteSizeCache()
         if !repoWasSupported {
-            VoxtLog.modelWarning("Unsupported custom LLM repo '\(modelRepo)' found in settings. Falling back to \(repoSelection.effectiveRepo).")
-        } else if repoSelection.effectiveRepo != modelRepo {
-            VoxtLog.modelInfo("Canonicalized custom LLM repo '\(modelRepo)' -> '\(repoSelection.effectiveRepo)'")
+            VoxtLog.modelWarning("Unsupported custom LLM repo '\(modelRepo)' found in settings. Falling back to \(resolvedRepo).")
+        } else if resolvedRepo != modelRepo {
+            VoxtLog.modelInfo("Canonicalized custom LLM repo '\(modelRepo)' -> '\(resolvedRepo)'")
         }
-        VoxtLog.modelInfo("Custom LLM manager initialized. repo=\(repoSelection.effectiveRepo), hub=\(hubBaseURL.absoluteString)")
+        VoxtLog.modelInfo("Custom LLM manager initialized. repo=\(resolvedRepo), hub=\(hubBaseURL.absoluteString)")
         storageRoots = [writeRootURL()] + readableRootURLs()
         installationCache.onChange = { [weak self] repo, snapshot in
             guard let self else { return }
@@ -224,6 +111,7 @@ class CustomLLMModelManager: ObservableObject {
     var currentModelRepo: String { modelRepo }
     var hasLoadedInferenceModel: Bool { inferenceContainer != nil }
     var hasPendingModelLoad: Bool { inferenceLoadCoordinator.hasPendingLoad }
+    var hasOutstandingModelLoad: Bool { inferenceLoadCoordinator.hasOutstandingLoad }
     var hasActiveInference: Bool { activeInferenceCount > 0 }
 
     func refreshMemoryOptimizationPolicy() {
@@ -255,27 +143,6 @@ class CustomLLMModelManager: ObservableObject {
         }
     }
 
-    func enhance(_ rawText: String, systemPrompt: String) async throws -> String {
-        try await enhance(rawText, systemPrompt: systemPrompt, modelRepo: modelRepo)
-    }
-
-    func enhance(_ rawText: String, systemPrompt: String, modelRepo: String) async throws -> String {
-        let input = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !input.isEmpty else { return rawText }
-        let request = CustomLLMRequestPlanBuilder.enhancement(
-            input: input,
-            systemPrompt: systemPrompt,
-            repo: modelRepo,
-            resultFallback: rawText,
-            structuredOutputPrompt: structuredOutputPrompt(taskInstruction:input:)
-        )
-        return try await runLocalPromptRequest(request)
-    }
-
-    func enhance(userPrompt: String) async throws -> String {
-        try await enhance(userPrompt: userPrompt, repo: modelRepo)
-    }
-
     func enhance(userPrompt: String, repo: String) async throws -> String {
         let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return "" }
@@ -292,7 +159,7 @@ class CustomLLMModelManager: ObservableObject {
         let request = CustomLLMRequestPlanBuilder.dictionaryHistoryScan(
             prompt: prompt,
             repo: repo,
-            structuredOutputPrompt: dictionaryHistoryScanStructuredOutputPrompt(_:)
+            structuredOutputPrompt: CustomLLMRequestRuntime.dictionaryHistoryScanStructuredOutputPrompt(_:)
         )
         let rawOutput = try await runLocalPromptRequest(request)
         return try DictionaryHistoryScanResponseParser.parseTerms(from: rawOutput)
@@ -308,168 +175,6 @@ class CustomLLMModelManager: ObservableObject {
         let compiledPlan = CustomLLMRequestPlanBuilder.compiled(request: request, repo: repo)
         let result = try await runLocalPromptRequest(compiledPlan, onPartialText: onPartialText)
         return result.isEmpty ? request.fallbackText : result
-    }
-
-    func translate(
-        _ text: String,
-        targetLanguage: TranslationTargetLanguage,
-        systemPrompt: String,
-        modelRepo: String
-    ) async throws -> String {
-        let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !input.isEmpty else { return text }
-        _ = targetLanguage
-        let translated = try await runTranslationPrompt(
-            input,
-            instructions: systemPrompt,
-            modelRepo: modelRepo
-        )
-        return translated.isEmpty ? text : translated
-    }
-
-    func translate(
-        userPrompt: String,
-        fallbackText: String,
-        modelRepo: String
-    ) async throws -> String {
-        let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return fallbackText }
-        let request = CustomLLMRequestPlanBuilder.userPromptTranslation(
-            prompt: prompt,
-            repo: modelRepo,
-            resultFallback: fallbackText
-        )
-        let translated = try await runLocalPromptRequest(request)
-        return translated.isEmpty ? fallbackText : translated
-    }
-
-    func rewrite(
-        sourceText: String,
-        dictatedPrompt: String,
-        systemPrompt: String,
-        modelRepo: String,
-        onPartialText: (@Sendable (String) -> Void)? = nil
-    ) async throws -> String {
-        let instruction = dictatedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let source = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !instruction.isEmpty || !source.isEmpty else { return sourceText }
-        let result = try await runRewritePrompt(
-            sourceText: source,
-            dictatedPrompt: instruction,
-            instructions: systemPrompt,
-            modelRepo: modelRepo,
-            onPartialText: onPartialText
-        )
-        return result.isEmpty ? sourceText : result
-    }
-
-    func rewrite(
-        userPrompt: String,
-        fallbackText: String,
-        modelRepo: String,
-        onPartialText: (@Sendable (String) -> Void)? = nil
-    ) async throws -> String {
-        let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return fallbackText }
-        let request = CustomLLMRequestPlanBuilder.userPromptRewrite(
-            prompt: prompt,
-            repo: modelRepo,
-            resultFallback: fallbackText
-        )
-        let result = try await runLocalPromptRequest(request, onPartialText: onPartialText)
-        return result.isEmpty ? fallbackText : result
-    }
-
-    private func runTranslationPrompt(
-        _ text: String,
-        instructions: String,
-        modelRepo: String
-    ) async throws -> String {
-        let request = CustomLLMRequestPlanBuilder.translation(
-            text: text,
-            instructions: instructions,
-            repo: modelRepo,
-            structuredOutputPrompt: structuredOutputPrompt(taskInstruction:input:)
-        )
-        return try await runLocalPromptRequest(request)
-    }
-
-    private func runRewritePrompt(
-        sourceText: String,
-        dictatedPrompt: String,
-        instructions: String,
-        modelRepo: String,
-        onPartialText: (@Sendable (String) -> Void)? = nil
-    ) async throws -> String {
-        let request = CustomLLMRequestPlanBuilder.rewrite(
-            sourceText: sourceText,
-            dictatedPrompt: dictatedPrompt,
-            instructions: instructions,
-            repo: modelRepo,
-            structuredOutputPrompt: structuredOutputPrompt(taskInstruction:input:)
-        )
-        return try await runLocalPromptRequest(request, onPartialText: onPartialText)
-    }
-
-    private func generationParameters(
-        for request: CustomLLMRequestPlan,
-        behavior: CustomLLMModelBehavior,
-        settings: LLMGenerationSettings
-    ) -> GenerateParameters {
-        let safeInput = max(1, request.inputCharacterCount)
-        let estimated = Int(Double(safeInput) * request.kind.tokenBudgetMultiplier)
-        let totalPromptCharacters = request.instructions.count + request.prompt.count
-        let budget: Int?
-        if let override = generationTuning.maxTokensOverride {
-            budget = max(1, override)
-        } else if let override = settings.maxOutputTokens {
-            budget = max(1, override)
-        } else if let override = request.maxTokensOverride {
-            budget = max(1, override)
-        } else {
-            budget = defaultOutputTokenBudget(for: request.kind, estimated: estimated)
-        }
-
-        let prefillStepSize: Int
-        if let override = generationTuning.prefillStepSizeOverride {
-            prefillStepSize = override
-        } else {
-            switch totalPromptCharacters {
-            case ..<1000:
-                prefillStepSize = 256
-            case ..<3000:
-                prefillStepSize = 512
-            default:
-                prefillStepSize = 768
-            }
-        }
-
-        let repetitionPenalty: Float? =
-            settings.repetitionPenalty.map(Float.init) ?? (behavior.family == .qwen3 ? 1.05 : nil)
-
-        return GenerateParameters(
-            maxTokens: budget,
-            temperature: settings.temperature.map(Float.init) ?? 0,
-            topP: settings.topP.map(Float.init) ?? 1.0,
-            topK: settings.topK ?? 0,
-            minP: settings.minP.map(Float.init) ?? 0,
-            repetitionPenalty: repetitionPenalty,
-            repetitionContextSize: 32,
-            prefill: .init(stepSize: prefillStepSize, chunking: .remainder)
-        )
-    }
-
-    private func defaultOutputTokenBudget(for kind: CustomLLMTaskKind, estimated: Int) -> Int {
-        switch kind {
-        case .enhancement:
-            return max(128, min(estimated + 128, 1024))
-        case .translation:
-            return max(128, min(estimated + 160, 1024))
-        case .rewrite:
-            return max(256, min(estimated + 192, 1536))
-        case .dictionaryHistoryScan:
-            return max(256, min(estimated + 96, 2048))
-        }
     }
 
     private func runLocalPromptRequest(
@@ -492,7 +197,7 @@ class CustomLLMModelManager: ObservableObject {
             let container = containerSnapshot.container
             let behavior = CustomLLMModelBehaviorResolver.behavior(for: request.repo)
             let settings = resolvedGenerationSettings(for: request.repo)
-            let session = makeChatSession(
+            let session = CustomLLMRequestRuntime.makeChatSession(
                 container: container,
                 instructions: request.instructions,
                 conversationHistory: request.conversationHistory,
@@ -500,14 +205,14 @@ class CustomLLMModelManager: ObservableObject {
                 behavior: behavior,
                 settings: settings
             )
-            let params = generationParameters(for: request, behavior: behavior, settings: settings)
+            let params = CustomLLMRequestRuntime.generationParameters(for: request, behavior: behavior, settings: settings, tuning: generationTuning)
             session.generateParameters = params
-            let inputImages = userInputImages(from: request.attachments)
+            let inputImages = CustomLLMRequestRuntime.userInputImages(from: request.attachments)
 
             let modelStartedAt = Date()
             let setupMs = Int(modelStartedAt.timeIntervalSince(overallStartedAt) * 1000) - containerSnapshot.elapsedMs
-            VoxtLog.llmDebug(startLogMessage(for: request, params: params, behavior: behavior))
-            VoxtLog.llm(contentLogMessage(for: request))
+            VoxtLog.llmDebug(CustomLLMRequestRuntime.startLogMessage(for: request, params: params, behavior: behavior))
+            VoxtLog.llm(CustomLLMRequestRuntime.contentLogMessage(for: request))
 
             var aggregated = ""
             var firstChunkLatencyMs: Int?
@@ -561,9 +266,9 @@ class CustomLLMModelManager: ObservableObject {
             let cleaned: String
             switch request.responseExtractionMode {
             case .textResultPayloadOrNormalizedText:
-                cleaned = extractResultText(response)
+                cleaned = CustomLLMRequestRuntime.extractResultText(response)
             case .normalizedRawText:
-                cleaned = sanitizeModelOutput(response)
+                cleaned = CustomLLMRequestRuntime.sanitizeModelOutput(response)
             }
 
             VoxtLog.llmDebug(
@@ -625,29 +330,6 @@ class CustomLLMModelManager: ObservableObject {
             )
             return cleaned.isEmpty ? request.resultFallback : cleaned
         }
-    }
-
-    private func startLogMessage(
-        for request: CustomLLMRequestPlan,
-        params: GenerateParameters,
-        behavior: CustomLLMModelBehavior
-    ) -> String {
-        var suffix = ""
-        if let mode = request.logMode {
-            suffix = ", mode=\(mode)"
-        }
-        let maxTokens = params.maxTokens.map(String.init) ?? "0"
-        let prefillStepSize = params.prefill.stepSize.map(String.init) ?? "0"
-        return "Custom LLM \(request.kind.logLabel) started. repo=\(request.repo), inputChars=\(request.inputCharacterCount), maxTokens=\(maxTokens), temperature=\(params.temperature), topP=\(params.topP), prefillStep=\(prefillStepSize)\(suffix), family=\(behavior.family.logLabel), thinkingDisabled=\(behavior.disablesThinking)"
-    }
-
-    private func contentLogMessage(for request: CustomLLMRequestPlan) -> String {
-        var lines = ["Custom LLM \(request.kind.logLabel) content. repo=\(request.repo)"]
-        for section in request.contentLogSections {
-            lines.append("[\(section.label)]")
-            lines.append(VoxtLog.llmPreview(section.content))
-        }
-        return lines.joined(separator: "\n")
     }
 
     private func profiledContainer(for repo: String) async throws -> (
@@ -728,73 +410,17 @@ class CustomLLMModelManager: ObservableObject {
         return container
     }
 
-    private func userInputImages(from attachments: [LLMInputAttachment]) -> [UserInput.Image] {
-        attachments.compactMap { attachment in
-            switch attachment {
-            case .image(let imageAttachment):
-                return userInputImage(from: imageAttachment)
-            }
-        }
-    }
-
-    private func userInputImage(from attachment: LLMImageAttachment) -> UserInput.Image? {
-        guard let image = CIImage(data: attachment.data, options: [.applyOrientationProperty: true]) else {
-            VoxtLog.modelWarning(
-                "Custom LLM could not decode image attachment '\(attachment.filename)' for local VLM input."
-            )
-            return nil
-        }
-        return .ciImage(image)
-    }
-
-    func displayTitle(for repo: String) -> String {
-        CustomLLMModelCatalog.displayTitle(for: repo)
-    }
-
-    func description(for repo: String) -> String? {
-        CustomLLMModelCatalog.description(for: repo)
-    }
-
-    nonisolated static func ratingText(for repo: String) -> String {
-        CustomLLMModelCatalog.ratingText(for: repo)
-    }
-
-    nonisolated static func catalogTagKeys(for repo: String) -> [String] {
-        CustomLLMModelCatalog.catalogTagKeys(for: repo)
-    }
-
-    nonisolated static func fallbackRemoteSizeText(repo: String) -> String? {
-        CustomLLMModelCatalog.fallbackRemoteSizeText(repo: repo)
-    }
-
-    nonisolated static func canonicalModelRepo(_ repo: String) -> String {
-        CustomLLMModelCatalog.canonicalModelRepo(repo)
-    }
-
-    nonisolated static func displayModels(including repo: String? = nil) -> [ModelOption] {
-        CustomLLMModelCatalog.displayModels(including: repo)
-    }
-
-    nonisolated static func displayModels(includingInstalled repos: Set<String>) -> [ModelOption] {
-        CustomLLMModelCatalog.displayModels(includingInstalled: repos)
-    }
-
-    func displayModelsIncludingInstalled() -> [ModelOption] {
-        // Catalog membership no longer depends on disk state.
-        Self.availableModels
-    }
-
     func updateModel(repo: String) {
-        let repoSelection = Self.resolveModelRepo(repo)
+        let resolvedRepo = Self.resolveModelRepo(repo)
         let repoWasSupported = Self.isSupportedModelRepo(repo)
-        guard repoSelection.effectiveRepo != modelRepo else { return }
+        guard resolvedRepo != modelRepo else { return }
         if !repoWasSupported {
-            VoxtLog.modelWarning("Unsupported custom LLM repo '\(repo)' requested. Falling back to \(repoSelection.effectiveRepo).")
-        } else if repoSelection.effectiveRepo != repo {
-            VoxtLog.modelInfo("Canonicalized custom LLM repo '\(repo)' -> '\(repoSelection.effectiveRepo)'")
+            VoxtLog.modelWarning("Unsupported custom LLM repo '\(repo)' requested. Falling back to \(resolvedRepo).")
+        } else if resolvedRepo != repo {
+            VoxtLog.modelInfo("Canonicalized custom LLM repo '\(repo)' -> '\(resolvedRepo)'")
         }
-            VoxtLog.modelInfo("Custom LLM model changed: \(modelRepo) -> \(repoSelection.effectiveRepo)")
-        modelRepo = repoSelection.effectiveRepo
+        VoxtLog.modelInfo("Custom LLM model changed: \(modelRepo) -> \(resolvedRepo)")
+        modelRepo = resolvedRepo
         releaseInferenceResources()
         lastLoggedModelPresence = nil
         lastInvalidRepoLogged = nil
@@ -802,21 +428,9 @@ class CustomLLMModelManager: ObservableObject {
         fetchRemoteSize()
     }
 
-    static func isSupportedModelRepo(_ repo: String) -> Bool {
-        CustomLLMModelCatalog.isSupportedModelRepo(repo)
-    }
-
-    private nonisolated static func resolveModelRepo(_ requestedRepo: String) -> CustomLLMRepoSelection {
-        guard CustomLLMModelCatalog.isSupportedModelRepo(requestedRepo) else {
-            return CustomLLMRepoSelection(
-                requestedRepo: requestedRepo,
-                effectiveRepo: defaultModelRepo
-            )
-        }
-        return CustomLLMRepoSelection(
-            requestedRepo: requestedRepo,
-            effectiveRepo: CustomLLMModelCatalog.canonicalModelRepo(requestedRepo)
-        )
+    private nonisolated static func resolveModelRepo(_ requestedRepo: String) -> String {
+        guard CustomLLMModelCatalog.isSupportedModelRepo(requestedRepo) else { return defaultModelRepo }
+        return CustomLLMModelCatalog.canonicalModelRepo(requestedRepo)
     }
 
     func updateHubBaseURL(_ url: URL) {
@@ -910,10 +524,6 @@ class CustomLLMModelManager: ObservableObject {
 
     func remoteSizeText(repo: String) -> String {
         Self.fallbackRemoteSizeText(repo: repo) ?? "Unknown"
-    }
-
-    func ensureRemoteSizeLoaded(repo: String) {
-        _ = repo
     }
 
     func checkExistingModel(refresh: Bool = false) {
@@ -1234,8 +844,6 @@ class CustomLLMModelManager: ObservableObject {
     private func performDownloadWithFallback(for repo: String) async throws -> URL {
         _ = try ModelStorageDirectoryManager.requireWriteRootURL()
         let canonicalRepo = Self.canonicalModelRepo(repo)
-        let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
-            ?? Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String
         let selection = try await ModelDownloadSourceSelector.select(
             candidates: downloadSourceCandidates(),
             targetKey: downloadSourceTargetKey(for: canonicalRepo),
@@ -1245,8 +853,7 @@ class CustomLLMModelManager: ObservableObject {
             let context = try await CustomLLMModelDownloadSupport.makeDownloadContext(
                 repo: canonicalRepo,
                 baseURL: candidate.url,
-                userAgent: Self.hubUserAgent,
-                token: token
+                userAgent: Self.hubUserAgent
             )
             let elapsed = max(Date().timeIntervalSince(startedAt), 0.001)
             return (elapsed, context.totalBytes)
@@ -1257,7 +864,7 @@ class CustomLLMModelManager: ObservableObject {
         )
 
         var lastError: Error?
-        for candidate in downloadAttemptCandidates(from: selection) {
+        for candidate in selection.attemptCandidates {
             try Task.checkCancellation()
             do {
                 return try await performDownload(using: candidate.url, repo: canonicalRepo)
@@ -1281,20 +888,6 @@ class CustomLLMModelManager: ObservableObject {
         )
     }
 
-    private func downloadAttemptCandidates(
-        from selection: ModelDownloadSourceSelection
-    ) -> [ModelDownloadSourceCandidate] {
-        guard !selection.reusedSavedSource, !selection.probeResults.isEmpty else {
-            return [selection.candidate]
-        }
-
-        let candidates = selection.probeResults
-            .filter(\.isReachable)
-            .sorted(by: { $0.elapsed < $1.elapsed })
-            .map(\.candidate)
-        return candidates.isEmpty ? [selection.candidate] : candidates
-    }
-
     private func performDownload(using baseURL: URL, repo: String) async throws -> URL {
         let canonicalRepo = Self.canonicalModelRepo(repo)
         let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
@@ -1302,8 +895,7 @@ class CustomLLMModelManager: ObservableObject {
         let context = try await CustomLLMModelDownloadSupport.makeDownloadContext(
             repo: canonicalRepo,
             baseURL: baseURL,
-            userAgent: Self.hubUserAgent,
-            token: token
+            userAgent: Self.hubUserAgent
         )
         VoxtLog.modelInfo("Custom LLM download started: repo=\(context.repoID.description), files=\(context.entries.count), baseURL=\(baseURL.absoluteString)")
 
@@ -1539,18 +1131,12 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     private func fetchRemoteSize() {
-        sizeTask?.cancel()
         let repo = modelRepo
         if let fallback = CustomLLMModelCatalog.fallbackRemoteSizeInfo(repo: repo) {
             sizeState = .ready(bytes: fallback.bytes, text: fallback.text)
         } else {
             sizeState = .error("Size unavailable")
         }
-    }
-
-    func prefetchAllModelSizes() {
-        prefetchTask?.cancel()
-        prefetchTask = nil
     }
 
     private func setDownloadingState(
@@ -1702,153 +1288,6 @@ class CustomLLMModelManager: ObservableObject {
         return (progress, completed, total, currentFile, completedFiles, totalFiles)
     }
 
-    private func makeChatSession(
-        container: ModelContainer,
-        instructions: String,
-        conversationHistory: [RewriteConversationPromptTurn],
-        repo: String,
-        behavior: CustomLLMModelBehavior,
-        settings: LLMGenerationSettings
-    ) -> ChatSession {
-        let additionalContext = localThinkingAdditionalContext(
-            behavior: behavior,
-            settings: settings
-        )
-        let history = conversationHistory.flatMap { turn -> [Chat.Message] in
-            var messages: [Chat.Message] = []
-            let userMessage = turn.modelUserMessage
-            if !userMessage.isEmpty {
-                messages.append(.user(userMessage))
-            }
-            let assistantMessage = turn.resultContent.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !assistantMessage.isEmpty {
-                messages.append(.assistant(assistantMessage))
-            }
-            return messages
-        }
-        let session = ChatSession(
-            container,
-            instructions: instructions,
-            history: history,
-            additionalContext: additionalContext
-        )
-        if additionalContext?["enable_thinking"] as? Bool == false {
-            VoxtLog.llmDebug("Custom LLM thinking disabled for repo=\(repo) using chat-template additionalContext.")
-        } else if additionalContext?["enable_thinking"] as? Bool == true {
-            VoxtLog.llmDebug("Custom LLM thinking enabled for repo=\(repo) using chat-template additionalContext.")
-        }
-        return session
-    }
-
-    private func localThinkingAdditionalContext(
-        behavior: CustomLLMModelBehavior,
-        settings: LLMGenerationSettings
-    ) -> [String: any Sendable]? {
-        switch settings.thinking.mode {
-        case .providerDefault:
-            return CustomLLMModelBehavior.thinkingOffAdditionalContext
-        case .off:
-            return CustomLLMModelBehavior.thinkingOffAdditionalContext
-        case .on:
-            return CustomLLMModelBehavior.thinkingOnAdditionalContext
-        case .effort, .budget:
-            return CustomLLMModelBehavior.thinkingOffAdditionalContext
-        }
-    }
-
-    private func structuredOutputPrompt(taskInstruction: String, input: String) -> String {
-        """
-        \(taskInstruction)
-
-        Return only valid JSON with exactly one key:
-        {"resultText":"..."}
-
-        Input:
-        \(input)
-        """
-    }
-
-    private func dictionaryHistoryScanStructuredOutputPrompt(_ prompt: String) -> String {
-        """
-        Analyze the following task and return only valid JSON.
-
-        Final answer requirements:
-        - Return only a JSON array.
-        - Every item must be an object with exactly one key: "term".
-        - Example: [{"term":"OpenAI"},{"term":"MCP"}]
-        - If no term qualifies, return [].
-        - Do not wrap the array in another object.
-        - Do not return prose, markdown, code fences, or explanations.
-
-        Task:
-        \(prompt)
-        """
-    }
-
-    private func extractResultText(_ output: String) -> String {
-        let normalized = sanitizeModelOutput(output)
-        if let parsed = decodeStructuredResultText(from: normalized) {
-            return parsed
-        }
-        return normalized
-    }
-
-    private func decodeStructuredResultText(from output: String) -> String? {
-        for candidate in jsonCandidates(from: output) {
-            guard let data = candidate.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode(TextResultPayload.self, from: data) else {
-                continue
-            }
-            let text = CustomLLMOutputSanitizer.normalizeResultText(decoded.resultText)
-            if !text.isEmpty {
-                return text
-            }
-        }
-        return nil
-    }
-
-    private func jsonCandidates(from output: String) -> [String] {
-        let normalized = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        var candidates: [String] = [normalized]
-
-        let unfenced = CustomLLMOutputSanitizer.unwrapCodeFenceIfNeeded(normalized)
-        if unfenced != normalized {
-            candidates.append(unfenced)
-        }
-
-        if let jsonObject = Self.extractFirstJSONObject(in: unfenced),
-           !candidates.contains(jsonObject) {
-            candidates.append(jsonObject)
-        }
-
-        return candidates
-    }
-
-    private static func extractFirstJSONObject(in text: String) -> String? {
-        guard let start = text.firstIndex(of: "{"),
-              let end = text.lastIndex(of: "}"),
-              start <= end else {
-            return nil
-        }
-        return String(text[start...end])
-    }
-
-    private func sanitizeModelOutput(_ output: String) -> String {
-        let cleaned = CustomLLMOutputSanitizer.normalizeResultText(output)
-        if cleaned != output.trimmingCharacters(in: .whitespacesAndNewlines) {
-            VoxtLog.llm(
-                """
-                Custom LLM output sanitized.
-                [raw]
-                \(VoxtLog.llmPreview(output))
-                [cleaned]
-                \(VoxtLog.llmPreview(cleaned))
-                """
-            )
-        }
-        return cleaned
-    }
-
     private func writeCacheDirectory(for repo: String) -> URL? {
         CustomLLMModelStorageSupport.cacheDirectory(
             for: repo,
@@ -1903,31 +1342,26 @@ class CustomLLMModelManager: ObservableObject {
     }
 
     func shutdownForApplicationTermination() async {
-        guard !isShuttingDownForApplicationTermination else {
-            await waitForActiveInferencesToFinish()
-            return
-        }
+        if let shutdownTask { await shutdownTask.value; return }
         isShuttingDownForApplicationTermination = true
+        let task = Task { @MainActor [self] in await performApplicationTerminationShutdown() }
+        shutdownTask = task
+        await task.value
+    }
+
+    private func performApplicationTerminationShutdown() async {
         installationCache.invalidateAll()
 
         let downloadTasks = Array(downloadTasksByRepo.values)
         for repo in Array(downloadTasksByRepo.keys) {
             pauseDownload(repo: repo)
         }
-        let pendingSizeTask = sizeTask
-        sizeTask?.cancel()
-        sizeTask = nil
-        let pendingPrefetchTask = prefetchTask
-        prefetchTask?.cancel()
-        prefetchTask = nil
         let pendingInferenceLoadTasks = inferenceLoadCoordinator.cancelAll()
         cancelIdleUnloadTask()
 
         for task in downloadTasks {
             await task.value
         }
-        await pendingSizeTask?.value
-        await pendingPrefetchTask?.value
         for task in pendingInferenceLoadTasks {
             await task.waitForCompletion()
         }

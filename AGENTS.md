@@ -32,14 +32,23 @@ For local signing, copy `Config/Signing.local.xcconfig.example` to `Config/Signi
 ## Coding Conventions
 
 - Follow existing Swift style in nearby files.
-- Keep UI work consistent with the existing SwiftUI/AppKit split under `Voxt/UI`, `Voxt/Settings`, and `Voxt/App`.
+- Keep UI work consistent with the existing SwiftUI/AppKit split under `Voxt/Windows`, `Voxt/Settings`, and `Voxt/App`.
+- Split large files by responsibility, not arbitrary line counts. Preserve actor isolation and keep file-local helpers private when extracting code.
+- Treat unreferenced-symbol scans as candidates only: check protocol/selector callbacks, resource references, migrations, and tests before deletion.
 - Prefer existing managers, stores, and support types before adding new abstractions.
 - Keep tests deterministic by using `UserDefaults` suites and temporary directories from `VoxtTests/TestSupport` where applicable.
 - Do not modify audio fixtures in `VoxtTests/Fixtures/Audio/` unless the task explicitly requires fixture changes.
 
 ## Dependencies
 
-Swift package dependencies are resolved through the Xcode project. Notable packages include WhisperKit, MLXAudio, mlx-swift, mlx-swift-lm, Sparkle, SwiftSoup, and PermissionFlow. The MLX Audio dependency policy is documented in `docs/MLXAudioDependency.md`.
+Swift package dependencies are resolved through the Xcode project. Direct package references include MLXAudio, mlx-swift-lm, llama.swift, GRDB, swift-log, Sparkle, PermissionFlow, and FaviconFinder; mlx-swift is part of the model dependency graph. The MLX Audio dependency policy is documented in `docs/MLXAudioDependency.md`.
+
+## Architecture And Documentation
+
+- Documentation index: `docs/index.md`.
+- Current source map: `docs/Architecture.md`.
+- Refactoring baseline and deletion evidence: `docs/RefactoringAssessment.zh-CN.md`; staged implementation and pending validation: `docs/RefactoringProgress.zh-CN.md`.
+- Keep current behavior guides distinct from historical plans; do not present pending verification as completed.
 
 ## Release Workflow
 

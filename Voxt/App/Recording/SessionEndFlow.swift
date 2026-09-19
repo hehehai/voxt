@@ -5,119 +5,44 @@ import AppKit
 import Foundation
 
 extension AppDelegate {
-    enum SessionEndExecutionDecision: Equatable {
-        case execute
-        case skipDuplicateInFlight
-        case skipAlreadyCompleted
-    }
+    private func resetEndedSessionState() {
+        let shouldPreserveTranslationAnswerControls =
+            sessionOutputMode == .translation &&
+            overlayState.displayMode == .answer
 
-    @MainActor
-    private protocol SessionEndStage {
-        var name: String { get }
-        func run(delegate: AppDelegate)
-    }
-
-    private struct HideOverlayStage: SessionEndStage {
-        var name: String { "hideOverlay" }
-
-        func run(delegate: AppDelegate) {
-            guard delegate.overlayState.displayMode != .answer else { return }
-            delegate.overlayWindow.hide(animated: false)
+        recordingLifecycle.invalidateCallbacks()
+        invalidateActiveLLMRequest()
+        isSessionActive = false
+        sessionOutputMode = .transcription
+        isSelectedTextTranslationFlow = false
+        if !shouldPreserveTranslationAnswerControls {
+            sessionTargetApplicationPID = nil
+            sessionTargetApplicationBundleID = nil
+            selectedTextTranslationHadWritableFocusedInput = false
         }
-    }
-
-    private struct RestoreSystemAudioStage: SessionEndStage {
-        var name: String { "restoreSystemAudio" }
-
-        func run(delegate: AppDelegate) {
-            delegate.systemAudioMuteController.restoreSystemAudioIfNeeded()
+        enhancementContextSnapshot = nil
+        sessionOutputDestinationContext = nil
+        rewriteSessionHasSelectedSourceText = false
+        rewriteSessionSelectedSourceText = ""
+        rewriteSessionHadWritableFocusedInput = false
+        rewriteSessionFallbackInjectBundleID = nil
+        sessionTranslationTargetLanguageOverride = nil
+        activeSessionTranslationProviderResolution = nil
+        resetVoxtNoteSessionRuntimeState()
+        if !shouldPreserveTranslationAnswerControls {
+            overlayState.configureSessionTranslationTargetLanguage(nil, allowsSwitching: false)
         }
-    }
-
-    private struct PlayEndSoundStage: SessionEndStage {
-        var name: String { "playEndSound" }
-
-        func run(delegate: AppDelegate) {
-            guard delegate.interactionSoundsEnabled else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                delegate.interactionSoundPlayer.playEnd()
-            }
+        overlayState.isCompleting = false
+        if overlayState.displayMode != .answer {
+            overlayState.reset()
         }
-    }
-
-    private struct ResetSessionStateStage: SessionEndStage {
-        var name: String { "resetSessionState" }
-
-        func run(delegate: AppDelegate) {
-            let shouldPreserveTranslationAnswerControls =
-                delegate.sessionOutputMode == .translation &&
-                delegate.overlayState.displayMode == .answer
-
-            delegate.activeRecordingSessionID = UUID()
-            delegate.invalidateActiveLLMRequest()
-            delegate.isSessionActive = false
-            delegate.sessionOutputMode = .transcription
-            delegate.isSelectedTextTranslationFlow = false
-            delegate.pendingOutputReplacementTransaction = nil
-            if !shouldPreserveTranslationAnswerControls {
-                delegate.sessionTargetApplicationPID = nil
-                delegate.sessionTargetApplicationBundleID = nil
-                delegate.selectedTextTranslationHadWritableFocusedInput = false
-            }
-            delegate.enhancementContextSnapshot = nil
-            delegate.sessionOutputDestinationContext = nil
-            delegate.rewriteSessionHasSelectedSourceText = false
-            delegate.rewriteSessionSelectedSourceText = ""
-            delegate.rewriteSessionHadWritableFocusedInput = false
-            delegate.rewriteSessionFallbackInjectBundleID = nil
-            delegate.sessionTranslationTargetLanguageOverride = nil
-            delegate.activeSessionTranslationProviderResolution = nil
-            delegate.resetVoxtNoteSessionRuntimeState()
-            if !shouldPreserveTranslationAnswerControls {
-                delegate.overlayState.configureSessionTranslationTargetLanguage(nil, allowsSwitching: false)
-            }
-            delegate.overlayState.isCompleting = false
-            if delegate.overlayState.displayMode != .answer {
-                delegate.overlayState.reset()
-            }
-            delegate.pendingSessionFinishTask = nil
-        }
-    }
-
-    private struct ReleaseResidualCaptureStage: SessionEndStage {
-        var name: String { "releaseResidualCapture" }
-
-        func run(delegate: AppDelegate) {
-            delegate.releaseResidualRecordingResources(
-                reason: "session-end-pipeline",
-                preservePendingHistoryAudio: true
-            )
-        }
-    }
-
-    nonisolated static func sessionEndExecutionDecision(
-        requestedSessionID: UUID,
-        currentEndingSessionID: UUID?,
-        lastCompletedSessionEndSessionID: UUID?
-    ) -> SessionEndExecutionDecision {
-        if currentEndingSessionID == requestedSessionID {
-            return .skipDuplicateInFlight
-        }
-        if lastCompletedSessionEndSessionID == requestedSessionID {
-            return .skipAlreadyCompleted
-        }
-        return .execute
+        pendingSessionFinishTask = nil
     }
 
     private func beginSessionEndExecution(for sessionID: UUID, trigger: String) -> Bool {
-        let decision = Self.sessionEndExecutionDecision(
-            requestedSessionID: sessionID,
-            currentEndingSessionID: currentEndingSessionID,
-            lastCompletedSessionEndSessionID: lastCompletedSessionEndSessionID
-        )
+        let decision = recordingLifecycle.beginEnding(sessionID)
         switch decision {
         case .execute:
-            currentEndingSessionID = sessionID
             return true
         case .skipDuplicateInFlight:
             VoxtLog.asr(
@@ -129,14 +54,14 @@ extension AppDelegate {
                 "Session end pipeline ignored because the same session has already ended. sessionID=\(sessionID.uuidString), trigger=\(trigger)"
             )
             return false
+        case .skipStale:
+            VoxtLog.asr("Session end pipeline ignored for an obsolete session. sessionID=\(sessionID.uuidString), trigger=\(trigger)")
+            return false
         }
     }
 
     private func completeSessionEndExecution(for sessionID: UUID) {
-        if currentEndingSessionID == sessionID {
-            currentEndingSessionID = nil
-        }
-        lastCompletedSessionEndSessionID = sessionID
+        recordingLifecycle.completeEnding(sessionID)
     }
 
     @MainActor
@@ -151,16 +76,17 @@ extension AppDelegate {
             verbose: true
         )
         OnboardingSessionEvent.ended(id: sessionID, message: overlayState.statusMessage).post()
-        let stages: [any SessionEndStage] = [
-            HideOverlayStage(),
-            RestoreSystemAudioStage(),
-            PlayEndSoundStage(),
-            ResetSessionStateStage(),
-            ReleaseResidualCaptureStage()
-        ]
-        for stage in stages {
-            stage.run(delegate: self)
+        if overlayState.displayMode != .answer {
+            overlayWindow.hide(animated: false)
         }
+        systemAudioMuteController.restoreSystemAudioIfNeeded()
+        if interactionSoundsEnabled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.interactionSoundPlayer.playEnd()
+            }
+        }
+        resetEndedSessionState()
+        releaseResidualRecordingResources(reason: "session-end-pipeline", preservePendingHistoryAudio: true)
         scheduleDeepIdleMemoryReclamation()
         VoxtLog.asr(
             "Session end pipeline completed. sessionID=\(sessionID.uuidString), overlayVisible=\(overlayWindow.isVisible)",

@@ -10,6 +10,13 @@ final class RewriteAnswerContentNormalizerTests: XCTestCase {
         )
     ]
 
+    func testStreamingPreviewUnwrapsTruncatedStructuredDraft() {
+        let preview = RewriteAnswerContentNormalizer.normalizePlainTextStreamingPreview(
+            #"{"title": "路线建议", "content": "建议优先乘坐高铁"#
+        )
+        XCTAssertEqual(preview, "建议优先乘坐高铁")
+    }
+
     func testRepeatedAssistantClarificationIsRejectedAfterConfirmation() {
         XCTAssertTrue(
             RewriteAnswerContentNormalizer.repeatsLatestAssistantAnswer(

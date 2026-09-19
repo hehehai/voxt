@@ -84,13 +84,8 @@ enum MeetingASRSupport {
                 provider: remoteProvider,
                 configuration: remoteConfiguration
             )
-            let modelConfiguration = resolvedMode.usesLiveSessions
-                ? remoteConfiguration
-                : RemoteASRMeetingConfiguration.resolvedMeetingConfiguration(
-                    provider: remoteProvider,
-                    configuration: remoteConfiguration
-                )
-            let model = modelConfiguration.hasUsableModel ? modelConfiguration.model : remoteProvider.suggestedModel
+            // Live and chunked meetings use the same configured provider model.
+            let model = remoteConfiguration.hasUsableModel ? remoteConfiguration.model : remoteProvider.suggestedModel
             return MeetingASREngineContext(
                 engine: .remote,
                 historyModelDescription: "\(remoteProvider.title) (\(model))",

@@ -2,6 +2,8 @@
 
 日期：2026-06-12
 
+维护说明：下文是当时的修复和验证记录。测试拆分后，Doubao 压缩包边界回归位于 `RemoteModelConfigurationASRTests`；当前完整聚焦入口为 `bash tools/run_local_regression_matrix.sh refactor`，不要仅运行旧配置 suite 就认为已覆盖这些协议测试。当前文件结构见 [源码地图](Architecture.md)。
+
 ## 修复范围
 
 本次修复覆盖前次审核中除日志外的项目：

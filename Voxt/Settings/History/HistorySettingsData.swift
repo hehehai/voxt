@@ -173,3 +173,45 @@ enum HistorySettingsData {
         return filteredEntries.isEmpty ? .noEntriesInCategory : .none
     }
 }
+
+enum HistoryBulkDeletionTarget: Identifiable {
+    case history(HistoryFilterTab)
+    case notes
+
+    var id: String {
+        switch self {
+        case .history(let filter):
+            return "history-\(filter.id)"
+        case .notes:
+            return "notes"
+        }
+    }
+}
+
+enum HistoryListItem: Identifiable {
+    case dayHeader(Date)
+    case entry(TranscriptionHistoryEntry)
+    case meetingEntry(TranscriptionHistoryListEntry)
+
+    var id: String {
+        switch self {
+        case .dayHeader(let date):
+            return "day-\(date.timeIntervalSince1970)"
+        case .entry(let entry):
+            return "entry-\(entry.id.uuidString)"
+        case .meetingEntry(let entry):
+            return "entry-\(entry.id.uuidString)"
+        }
+    }
+
+    var createdAt: Date {
+        switch self {
+        case .dayHeader(let date):
+            return date
+        case .entry(let entry):
+            return entry.createdAt
+        case .meetingEntry(let entry):
+            return entry.createdAt
+        }
+    }
+}

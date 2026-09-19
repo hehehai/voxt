@@ -270,7 +270,9 @@ final class MeetingFileTaskQueue: ObservableObject {
             tasks[index].status = .cancelling
             persist()
             Task { @MainActor [weak self] in
-                await self?.cancelActiveAnalysis()
+                guard let self, self.activeTaskID == taskID,
+                      self.task(id: taskID)?.status == .cancelling else { return }
+                await self.cancelActiveAnalysis()
             }
             return
         }

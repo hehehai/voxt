@@ -55,6 +55,10 @@ brew tap hehehai/tap
 brew install --cask voxt
 ```
 
+## Development
+
+[Contributing](CONTRIBUTING.md) · [Documentation](docs/index.md) · [Architecture](docs/Architecture.md)
+
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE).

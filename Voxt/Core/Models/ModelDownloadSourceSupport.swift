@@ -24,6 +24,17 @@ struct ModelDownloadSourceSelection: Sendable {
     let candidate: ModelDownloadSourceCandidate
     let reusedSavedSource: Bool
     let probeResults: [ModelDownloadSourceProbeResult]
+
+    /// Resume stays on the saved source; a fresh selection may try reachable
+    /// mirrors in probe order. Both ASR and LLM managers use this same policy.
+    var attemptCandidates: [ModelDownloadSourceCandidate] {
+        guard !reusedSavedSource, !probeResults.isEmpty else { return [candidate] }
+        let reachable = probeResults
+            .filter(\.isReachable)
+            .sorted(by: { $0.elapsed < $1.elapsed })
+            .map(\.candidate)
+        return reachable.isEmpty ? [candidate] : reachable
+    }
 }
 
 enum ModelDownloadSourceSelectionStore {
@@ -123,36 +134,6 @@ enum ModelDownloadSourceSelector {
             reusedSavedSource: false,
             probeResults: results
         )
-    }
-
-    static func probeHTTPDownloadURL(
-        _ url: URL,
-        userAgent: String,
-        expectedBytes: Int64?,
-        timeout: TimeInterval = 12
-    ) async throws -> (elapsed: TimeInterval, bytes: Int64) {
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        request.timeoutInterval = timeout
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-
-        let startedAt = Date()
-        let (_, response) = try await URLSession.shared.data(for: request)
-        let elapsed = max(Date().timeIntervalSince(startedAt), 0.001)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<400).contains(httpResponse.statusCode) else {
-            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw NSError(
-                domain: "Voxt.ModelDownloadSourceSelector",
-                code: status,
-                userInfo: [NSLocalizedDescriptionKey: "HTTP \(status)"]
-            )
-        }
-
-        let responseBytes = httpResponse.expectedContentLength > 0 ? httpResponse.expectedContentLength : (expectedBytes ?? 0)
-        return (elapsed, responseBytes)
     }
 
     static func logSummary(for selection: ModelDownloadSourceSelection) -> String {

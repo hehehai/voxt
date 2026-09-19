@@ -56,6 +56,10 @@ brew tap hehehai/tap
 brew install --cask voxt
 ```
 
+## 开发与维护
+
+[贡献指南](../CONTRIBUTING.md) · [文档导航](index.md) · [项目结构](Architecture.md) · [重构评估与计划](RefactoringAssessment.zh-CN.md)
+
 ## License
 
 Apache 2.0. See [LICENSE](../LICENSE).

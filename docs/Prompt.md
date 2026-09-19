@@ -273,31 +273,24 @@ All three main chains eventually pass through the same output submission logic.
 
 ```mermaid
 flowchart LR
-    A[commitTranscription] --> B[NormalizeOutputStage]
-    B --> C[TypeTextStage]
-    C --> D[AppendHistoryStage]
-    D --> E[finishSession]
-    E --> F[Hide overlay]
-    F --> G[Play end sound]
-    G --> H[Reset session state]
+    A[commitTranscription] --> B[preparedDeliveryContext]
+    B --> C[deliverCommittedOutput]
+    C --> D[Delivery callback]
+    D --> E[finalizeCommittedOutputPostDelivery]
+    E --> F[History and dictionary evidence]
+    F --> G[Caller completion]
+    G --> H[Session-end orchestration]
 ```
 
 #### Stage-by-stage explanation
 
-1. `NormalizeOutputStage`
-   - applies final normalization to the output text
-2. `TypeTextStage`
-   - writes the text back to the current input target
-   - if permissions are insufficient, it may fall back to clipboard-only behavior
-3. `AppendHistoryStage`
-   - writes the result into history
-   - includes related model / provider / mode metadata
-4. `finishSession(...)`
-   - delays finalization slightly in some modes, so the user can still see the result
-5. `executeSessionEndPipeline()`
-   - hide overlay
-   - play end sound
-   - reset current session state
+1. `commitTranscription` guards duplicate/invalidated commits.
+2. `preparedDeliveryContext` normalizes text, extracts any structured rewrite answer and applies dictionary correction before delivery. It creates an immutable `SessionFinalizeContext` so delivery and history use the same text.
+3. `deliverCommittedOutput` chooses text injection, the answer overlay or the selected-text translation result UI. Text injection completes asynchronously and reports its destination/success.
+4. In the delivery callback, `finalizeCommittedOutputPostDelivery` records history, dictionary suggestions/evidence and timing. Automatic learning uses the actual injection result.
+5. The caller's completion continues session-end orchestration (`finishSession` / `executeSessionEndPipeline`), including overlay, sound and state cleanup as appropriate to the mode.
+
+Preparation lives in `App/SessionOutputPreparation.swift`, delivery in `App/SessionTextIO.swift`, timing in `App/SessionTimingLogging.swift`, and session-end orchestration under `App/Recording/`. The old finalize-stage protocol/runner and its unused stages have been removed; they are not the active output path.
 
 ### One-line Summary
 

@@ -6,4 +6,12 @@ Dictionary domain logic for glossary storage, matching, validation, import, tran
 
 - Maintains dictionary entries, suggestions, matching rules, aliases, and validation behavior.
 - Supports project scanning, one-click ingestion, export/import, and repository persistence.
-- Runs automatic learning monitors that derive candidate terms from transcription history.
+- Derives automatic-learning candidates from edits to delivered text; history scanning has its own support path.
+
+## Source boundaries
+
+`DictionaryModels` holds domain values and serialization. `DictionaryStore` owns published state, reload generations, validation caches and writes; `DictionaryStoreQueries` contains read/query and matcher assembly methods using the same immutable dependencies.
+
+`DictionarySuggestionModels` preserves legacy suggestion/history-snapshot Codable values and scan progress/results. `DictionaryHistoryScanPolicy` owns prompt migration, bounds and candidate filtering. `DictionarySuggestionStore` retains private scan/settings state and the legacy file reload/merge/write-back path; its defaults/file URL can be isolated in tests. Explicit history scans add directly to `DictionaryStore`. Retired empty discovery, pending-suggestion mutations and their unused UI/test helpers are removed; legacy files and persisted history fields are not deleted.
+
+Automatic learning is separated into observation/request policy (`DictionaryLearningMonitor`), prompt/candidate formatting (`DictionaryLearningPrompt`), scope/line matching (`DictionaryLearningTextScope`), and active edit comparison (`DictionaryLearningTextDiff`). The unused semantic scoring/phrase-expansion branch was removed; token/LCS deletion detection is still active and must remain covered.

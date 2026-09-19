@@ -10,7 +10,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
             mlxModelState: .ready,
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
 
@@ -21,7 +20,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: TranscriptionEngine.resolved(rawValue: "whisperKit"),
             mlxModelState: .notDownloaded,
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
 
@@ -32,7 +30,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .mlxAudio,
             mlxModelState: .ready,
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
 
@@ -57,7 +54,6 @@ final class MeetingStartPlannerTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
 
@@ -77,7 +73,6 @@ final class MeetingStartPlannerTests: XCTestCase {
                 completedFiles: 1,
                 totalFiles: 2
             ),
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "", endpoint: "", apiKey: "")
         )
 
@@ -88,7 +83,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let blocked = MeetingStartPlanner.resolve(
             selectedEngine: .remote,
             mlxModelState: .ready,
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "")
         )
         XCTAssertEqual(blocked, .blocked(.remoteASRUnavailable))
@@ -96,7 +90,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let allowed = MeetingStartPlanner.resolve(
             selectedEngine: .remote,
             mlxModelState: .ready,
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "token")
         )
         XCTAssertEqual(allowed, .start(.remote))
@@ -106,7 +99,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let allowed = MeetingStartPlanner.resolve(
             selectedEngine: .remote,
             mlxModelState: .ready,
-            remoteASRProvider: .doubaoASR,
             remoteASRConfiguration: .init(
                 providerID: RemoteASRProvider.doubaoASR.rawValue,
                 model: DoubaoASRConfiguration.modelV2,
@@ -123,7 +115,6 @@ final class MeetingStartPlannerTests: XCTestCase {
         let decision = MeetingStartPlanner.resolve(
             selectedEngine: .dictation,
             mlxModelState: .ready,
-            remoteASRProvider: .openAIWhisper,
             remoteASRConfiguration: .init(providerID: RemoteASRProvider.openAIWhisper.rawValue, model: "whisper-1", endpoint: "", apiKey: "token")
         )
 

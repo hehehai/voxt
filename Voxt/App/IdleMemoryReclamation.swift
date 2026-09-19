@@ -171,8 +171,8 @@ extension AppDelegate {
             isMeetingActive: meetingSessionCoordinator.isActive,
             hasPendingRecordingWork: pendingTranscriptionStartTask != nil
                 || pendingMeetingStartupTask != nil
-                || !recordingCaptureStartTasksByToken.isEmpty,
-            hasPendingLLMWork: !llmTasksByRequestID.isEmpty
+                || !recordingCaptureStartTasks.isEmpty,
+            hasPendingLLMWork: llmRequests.hasPendingWork
                 || !llmWarmupTasksByRepo.isEmpty
                 || !remoteLLMWarmupTasksByKey.isEmpty
                 || pauseLLMTask != nil
@@ -184,8 +184,8 @@ extension AppDelegate {
             hasActiveLLMInference: customLLMManager.hasActiveInference,
             isTranscriberRecording: mlxTranscriber?.isRecording == true,
             isTranscriberFinalizing: mlxTranscriber?.isFinalizingTranscription == true,
-            hasPendingASRLoad: mlxModelManager.hasPendingModelLoad,
-            hasPendingLLMLoad: customLLMManager.hasPendingModelLoad
+            hasPendingASRLoad: mlxModelManager.hasOutstandingModelLoad,
+            hasPendingLLMLoad: customLLMManager.hasOutstandingModelLoad
         )
     }
 

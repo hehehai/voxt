@@ -62,9 +62,11 @@ extension RemoteASRTranscriber {
                 }
             } catch {
                 await responseState.markCompletedWithError(error)
-                await startSignal.open()
+                await startSignal.fail(error)
             }
         }
+
+        defer { receiveTask.cancel() }
 
         sendAliyunFunControl(
             action: "run-task",
@@ -84,14 +86,12 @@ extension RemoteASRTranscriber {
             Task {
                 if let error {
                     await responseState.markCompletedWithError(error)
-                    await startSignal.open()
-                } else {
-                    await responseState.markRunRequested()
+                    await startSignal.fail(error)
                 }
             }
         }
 
-        await startSignal.wait()
+        try await startSignal.wait()
 
         let chunkSize = 3200
         var offset = 0
@@ -100,7 +100,7 @@ extension RemoteASRTranscriber {
             let chunk = Data(pcmData[offset..<end])
             try await ws.send(.data(chunk))
             offset = end
-            try? await Task.sleep(for: .milliseconds(24))
+            try await Task.sleep(for: .milliseconds(24))
         }
 
         sendAliyunFunControl(action: "finish-task", through: ws, taskID: taskID) { error in
@@ -120,7 +120,6 @@ extension RemoteASRTranscriber {
         } fallback: {
             await responseState.currentText()
         }
-        receiveTask.cancel()
         return finalText
     }
 
@@ -182,20 +181,22 @@ extension RemoteASRTranscriber {
                 }
             } catch {
                 await responseState.markCompletedWithError(error)
-                await startSignal.open()
+                await startSignal.fail(error)
             }
         }
+
+        defer { receiveTask.cancel() }
 
         sendAliyunQwenSessionUpdate(through: ws, hintPayload: hintPayload, kind: kind) { error in
             Task {
                 if let error {
                     await responseState.markCompletedWithError(error)
-                    await startSignal.open()
+                    await startSignal.fail(error)
                 }
             }
         }
 
-        await startSignal.wait()
+        try await startSignal.wait()
 
         let chunkSize = 3200
         var offset = 0
@@ -208,7 +209,7 @@ extension RemoteASRTranscriber {
                 }
             }
             offset = end
-            try? await Task.sleep(for: .milliseconds(24))
+            try await Task.sleep(for: .milliseconds(24))
         }
 
         sendAliyunQwenEvent(type: "input_audio_buffer.commit", through: ws) { error in
@@ -233,7 +234,6 @@ extension RemoteASRTranscriber {
         } fallback: {
             await responseState.currentText()
         }
-        receiveTask.cancel()
         return finalText
     }
 

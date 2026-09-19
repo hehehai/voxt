@@ -246,16 +246,63 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
     }
 
     func testOpenAISheetValidationRejectsInvalidMaxOutputTokens() {
-        let sheet = makeSheet(
-            target: .llm(.openAI),
-            model: "gpt-5.2"
+        let invalid = makeSheet(
+            target: .llm(.openAI), model: "gpt-5.2", generationMaxOutputTokensText: "0"
+        )
+        let valid = makeSheet(
+            target: .llm(.openAI), model: "gpt-5.2", generationMaxOutputTokensText: "4096"
         )
 
         XCTAssertEqual(
-            sheet.validationMessageForOpenAISettings(maxOutputTokensText: "0"),
-            AppLocalization.localizedString("Max Output Tokens must be a positive integer.")
+            invalid.validationMessageForGenerationSettings(),
+            AppLocalization.format("%@ must be a positive integer.", AppLocalization.localizedString("Max Output Tokens"))
         )
-        XCTAssertNil(sheet.validationMessageForOpenAISettings(maxOutputTokensText: "4096"))
+        XCTAssertNil(valid.validationMessageForGenerationSettings())
+    }
+
+    func testGenerationValidationAllowsBlankOrTrimmedPositiveTokenLimit() {
+        for text in ["", "  ", " 4096 "] {
+            let sheet = makeSheet(
+                target: .llm(.openAI), model: "gpt-5.2", generationMaxOutputTokensText: text
+            )
+            XCTAssertNil(sheet.validationMessageForGenerationSettings(), text)
+        }
+    }
+
+    func testGenerationValidationRejectsNegativeFractionalAndOverflowingTokenLimits() {
+        for text in ["-1", "1.5", "abc", "999999999999999999999999999999"] {
+            let sheet = makeSheet(
+                target: .llm(.openAI), model: "gpt-5.2", generationMaxOutputTokensText: text
+            )
+            XCTAssertEqual(
+                sheet.validationMessageForGenerationSettings(),
+                AppLocalization.format("%@ must be a positive integer.", AppLocalization.localizedString("Max Output Tokens")),
+                text
+            )
+        }
+    }
+
+    func testASRSheetDoesNotValidateInactiveGenerationFields() {
+        let sheet = makeSheet(
+            target: .asr(.openAIWhisper), model: "whisper-1", generationMaxOutputTokensText: "invalid"
+        )
+        XCTAssertNil(sheet.validationMessageForGenerationSettings())
+    }
+
+    func testOMLXValidationRequiresObjectOnlyForSelectedSchemaFormat() {
+        let sheet = makeSheet(target: .llm(.omlx), model: "qwen3")
+        XCTAssertNil(sheet.validationMessageForOMLXSettings(
+            responseFormat: OMLXResponseFormat.plain.rawValue, jsonSchema: "invalid", extraBodyJSON: "{}"
+        ))
+        XCTAssertNotNil(sheet.validationMessageForOMLXSettings(
+            responseFormat: OMLXResponseFormat.jsonSchema.rawValue, jsonSchema: "", extraBodyJSON: "{}"
+        ))
+        XCTAssertNotNil(sheet.validationMessageForOMLXSettings(
+            responseFormat: OMLXResponseFormat.jsonSchema.rawValue, jsonSchema: "[]", extraBodyJSON: "{}"
+        ))
+        XCTAssertNil(sheet.validationMessageForOMLXSettings(
+            responseFormat: OMLXResponseFormat.jsonSchema.rawValue, jsonSchema: "{}", extraBodyJSON: "{}"
+        ))
     }
 
     func testSelectingCustomProviderModelPrefillsCurrentBuiltinModel() {
@@ -484,7 +531,8 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
 
     private func makeSheet(
         target: RemoteProviderTestTarget,
-        model: String
+        model: String,
+        generationMaxOutputTokensText: String = ""
     ) -> RemoteProviderConfigurationSheet {
         RemoteProviderConfigurationSheet(
             providerTitle: providerTitle(for: target),
@@ -497,7 +545,8 @@ final class RemoteProviderConfigurationPolicyTests: XCTestCase {
                 endpoint: "",
                 apiKey: ""
             ),
-            onSave: { _ in .success(()) }
+            onSave: { _ in .success(()) },
+            generationMaxOutputTokensText: generationMaxOutputTokensText
         )
     }
 

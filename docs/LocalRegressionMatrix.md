@@ -7,13 +7,29 @@ Use this document to choose focused local checks before a full release gate. CI 
 | Group | Scope | Command |
 | --- | --- | --- |
 | core | Capture pipeline, session flow, prompt building, VAD planning, Feature Settings, MLX planning, model debug | `tools/run_local_regression_matrix.sh core` |
+| refactor | core + split LLM/configuration/hotkey/model/meeting-detail suites, onboarding and storage contracts | `tools/run_local_regression_matrix.sh refactor` |
 | mlx | MLX public fixture and replay tests | `VOXT_RUN_MODEL_TESTS=1 tools/run_local_regression_matrix.sh mlx` |
 | gguf | Installed GGUF inference and native termination cleanup | `tools/run_local_regression_matrix.sh gguf` |
 | vad | Local VAD mode, runtime policy, storage, debug snapshot | `tools/run_local_regression_matrix.sh vad` |
-| whisper | Whisper diagnostic fixture/replay tests | `tools/run_local_regression_matrix.sh whisper` |
-| installed | Installed-model long-form matrix | `tools/run_local_regression_matrix.sh installed` |
-| all | core + mlx + vad | `tools/run_local_regression_matrix.sh all` |
-| full | core + mlx + gguf + vad + whisper + installed | `tools/run_local_regression_matrix.sh full` |
+| installed | Installed-model long-form matrix | `VOXT_RUN_MODEL_TESTS=1 tools/run_local_regression_matrix.sh installed` |
+| all | refactor + mlx (core already includes vad) | `VOXT_RUN_MODEL_TESTS=1 tools/run_local_regression_matrix.sh all` |
+| full | all + gguf + installed | `VOXT_RUN_MODEL_TESTS=1 tools/run_local_regression_matrix.sh full` |
+
+The script resolves the repository from its own location, disables signing, and uses the committed lockfile strictly. `VOXT_SPM_CACHE_PATH` and `VOXT_SPM_CLONE_PATH` override the local cache paths. Model groups need installed checkpoints; review skips separately from passes.
+
+The `refactor` group also includes the stage-4 ASR framing/response/completion and meeting-session lifecycle tests, alongside existing ASR/meeting support cases. It also includes stage-5A tracked-task, request validity, meeting-token, correction-pass and capture-epoch contracts. Its fake sessions, task barriers and controlled deadlines do not exercise real provider accounts or devices.
+
+Stage 6A adds existing dictionary learning/matcher/store, history serialization/store/correction, and meeting-detail formatting/virtual-list/cache coverage to `refactor`. Playback controls, scrolling and accessibility still need UI acceptance on macOS.
+
+Stage 6B includes current local-LLM request policy, source selection, resumable URLProtocol, installation/cache and catalog contracts. The three non-model GGUF tests are selected by method; installed GGUF inference is still isolated in `gguf`. Tooling validates both suite and method names to detect stale selectors.
+
+Stage 6C adds queued-injection and pasteboard-ownership tests, lifecycle output-generation cases, and the existing connectivity tester suite. Pasteboard tests use unique named boards, never the general clipboard. They do not post real keys or validate editor/focus behavior; manual acceptance must cover cancel/restart during paste, overlay dismissal, follow-up keys, window switching and concurrent user copies.
+
+Stage 6D adds `DictionarySuggestionStoreTests` and the existing `RemoteProviderConfigurationPolicyTests` to `refactor`. The store uses isolated defaults and temporary legacy files to check compatibility, merge/write-back, direct dictionary insertion and scan checkpoints; provider cases target current generation/schema validation rather than a retired OpenAI wrapper. These do not replace asynchronous reload/network or UI acceptance.
+
+The old `whisper` / `diagnostic` groups were removed because their dedicated Whisper test classes no longer exist. This does not remove MLX Whisper model support or migration coverage. Unknown groups fail rather than selecting nonexistent suites. The `all` / `full` groups avoid rerunning VAD suites already selected by core.
+
+See [test-suite organization](../VoxtTests/README.md) and the [phased refactoring record](RefactoringProgress.zh-CN.md).
 
 ## VAD / ASR Gate Safety
 

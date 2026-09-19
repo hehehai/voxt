@@ -432,40 +432,6 @@ struct GeneralLanguagesCard: View {
     }
 }
 
-struct GeneralModelStorageCard: View {
-    let displayPath: String
-    let errorMessage: String?
-    let onOpenFinder: () -> Void
-    let onChoose: () -> Void
-
-    var body: some View {
-        GeneralSettingsCard(title: localizedKey("Model Storage")) {
-            SettingsPathSelectionRow(
-                title: localized("Storage Path"),
-                displayedPath: displayPath,
-                fallbackPath: ModelStorageDirectoryManager.defaultRootURL.path,
-                openButtonHelp: localized("Open folder"),
-                chooseButtonTitle: localized("Choose"),
-                onOpen: onOpenFinder,
-                onChoose: onChoose
-            )
-
-            Text(localized("New model downloads in Model settings are stored in this folder."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(localized("After switching to a new path, previously downloaded models won't be detected and must be downloaded again."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-        }
-    }
-}
-
 struct GeneralAppBehaviorCard: View {
     @Binding var autoCopyWhenNoFocusedInput: Bool
     @Binding var realtimeTextDisplayEnabled: Bool

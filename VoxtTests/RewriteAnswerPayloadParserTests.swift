@@ -35,15 +35,6 @@ final class RewriteAnswerPayloadParserTests: XCTestCase {
         XCTAssertEqual(payload.content, "建议优先乘坐高铁。")
     }
 
-    func testPreviewParsesStructuredDraftWithoutLeakingJSONShell() {
-        let payload = RewriteAnswerPayloadParser.preview(
-            from: #"{"title": "路线建议", "content": "建议优先乘坐高铁"#
-        )
-
-        XCTAssertEqual(payload?.title, "路线建议")
-        XCTAssertEqual(payload?.content, "建议优先乘坐高铁")
-    }
-
     func testNormalizeUnwrapsChatCompletionChunkDump() {
         let payload = RewriteAnswerPayloadParser.normalize(
             RewriteAnswerPayload(
@@ -62,8 +53,8 @@ final class RewriteAnswerPayloadParserTests: XCTestCase {
         XCTAssertEqual(payload.content, "大同美食很多")
     }
 
-    func testPreviewRecoversMalformedChunkDumpLines() {
-        let payload = RewriteAnswerPayloadParser.preview(
+    func testExtractRecoversMalformedChunkDumpLines() {
+        let payload = RewriteAnswerPayloadParser.extract(
             from: #"""
             {"choices":[{"delta":{"content":"{""},"index":0}],"object":"chat.completion.chunk"}
             {"choices":[{"delta":{"content":"title": ""},"finish_reason":null,"index":0}],"object":"chat.completion.chunk"}
@@ -79,8 +70,8 @@ final class RewriteAnswerPayloadParserTests: XCTestCase {
         XCTAssertEqual(payload?.content, "大同今天天气晴朗。")
     }
 
-    func testPreviewIgnoresLeadingStreamingFragmentLine() {
-        let payload = RewriteAnswerPayloadParser.preview(
+    func testExtractIgnoresLeadingStreamingFragmentLine() {
+        let payload = RewriteAnswerPayloadParser.extract(
             from: #"""
             ","role":"assistant"},"index":0,"logprobs":null,"finish_reason":null}],"object":"chat.completion.chunk","usage":null,"created":1775888214,"system_fingerprint":null,"model":"qwen-plus-latest","id":"chatcmpl-33b142b4-251d-98a8-b4f0-68c0398a1303"}
             {"choices":[{"delta":{"content":"{""},"index":0}],"object":"chat.completion.chunk"}
@@ -98,8 +89,8 @@ final class RewriteAnswerPayloadParserTests: XCTestCase {
         XCTAssertEqual(payload?.content, "湖南省")
     }
 
-    func testPreviewRecoversDelimiterPunctuationFromMalformedChunkLines() {
-        let payload = RewriteAnswerPayloadParser.preview(
+    func testExtractRecoversDelimiterPunctuationFromMalformedChunkLines() {
+        let payload = RewriteAnswerPayloadParser.extract(
             from: #"""
             {"choices":[{"delta":{"content":"{""},"index":0}],"object":"chat.completion.chunk"}
             {"choices":[{"delta":{"content":"title": ""},"finish_reason":null,"index":0}],"object":"chat.completion.chunk"}

@@ -34,14 +34,6 @@ extension TranscriptionHistoryEntry {
         copy(dictionaryCorrectedTerms: dictionaryCorrectedTerms)
     }
 
-    func updatingDictionaryCorrectionSnapshots(_ dictionaryCorrectionSnapshots: [DictionaryCorrectionSnapshot]) -> TranscriptionHistoryEntry {
-        copy(dictionaryCorrectionSnapshots: dictionaryCorrectionSnapshots)
-    }
-
-    func updatingDictionarySuggestedTerms(_ dictionarySuggestedTerms: [DictionarySuggestionSnapshot]) -> TranscriptionHistoryEntry {
-        copy(dictionarySuggestedTerms: dictionarySuggestedTerms)
-    }
-
     func updatingTranscriptSummary(_ summary: TranscriptSummarySnapshot?) -> TranscriptionHistoryEntry {
         copy(
             transcriptSummary: .set(summary),

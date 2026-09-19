@@ -7,7 +7,6 @@ enum MeetingStartBlockReason: Equatable {
     case dictationUnsupported
     case recording(RecordingStartBlockReason)
     case remoteASRUnavailable
-    case remoteASRMeetingUnavailable(RemoteASRProvider)
 
     var userMessage: String {
         switch self {
@@ -17,8 +16,6 @@ enum MeetingStartBlockReason: Equatable {
             return reason.userMessage
         case .remoteASRUnavailable:
             return AppLocalization.localizedString("Remote ASR is not configured yet. Open Settings > Model to finish the provider setup.")
-        case .remoteASRMeetingUnavailable(let provider):
-            return RemoteASRMeetingConfiguration.startBlockedMessage(for: provider)
         }
     }
 
@@ -30,8 +27,6 @@ enum MeetingStartBlockReason: Equatable {
             return reason.logDescription
         case .remoteASRUnavailable:
             return "Remote ASR provider configuration is incomplete."
-        case .remoteASRMeetingUnavailable(let provider):
-            return "Meeting ASR provider configuration is incomplete for \(provider.rawValue)."
         }
     }
 }
@@ -48,7 +43,6 @@ enum MeetingStartPlanner {
         activeMLXDownloadRepo: String? = nil,
         isSelectedMLXModelDownloaded: Bool = false,
         mlxModelState: MLXModelManager.ModelState,
-        remoteASRProvider: RemoteASRProvider,
         remoteASRConfiguration: RemoteProviderConfiguration
     ) -> MeetingStartDecision {
         switch selectedEngine {
@@ -64,12 +58,6 @@ enum MeetingStartPlanner {
         case .remote:
             guard remoteASRConfiguration.isConfigured else {
                 return .blocked(.remoteASRUnavailable)
-            }
-            guard RemoteASRMeetingConfiguration.hasValidMeetingModel(
-                provider: remoteASRProvider,
-                configuration: remoteASRConfiguration
-            ) else {
-                return .blocked(.remoteASRMeetingUnavailable(remoteASRProvider))
             }
             return .start(.remote)
         }

@@ -276,3 +276,50 @@ struct MeetingMiniWaveform: View {
         return WaveformBarVisuals.glowOpacity(level: baseLevel, base: 0.03, gain: 0.18, cap: 0.22)
     }
 }
+
+struct MeetingDetailTranscriptListPane: View, Equatable {
+    let rows: [MeetingTranscriptVirtualRow]
+    let showsTranslation: Bool
+    let scrollRequest: MeetingTranscriptScrollRequest?
+    let canEditTranscript: Bool
+    let editingSegmentID: UUID?
+    let editingText: String
+    let onSelectSegment: (MeetingTranscriptSegment) -> Void
+    let onBeginEditing: (MeetingTranscriptSegment) -> Void
+    let onEditingTextChanged: (String) -> Void
+    let onSaveEditing: () -> Void
+    let onCancelEditing: () -> Void
+    let onDeleteSegment: (MeetingTranscriptSegment) -> Void
+    let onToggleHighlight: (MeetingTranscriptSegment) -> Void
+
+    static func == (
+        lhs: MeetingDetailTranscriptListPane,
+        rhs: MeetingDetailTranscriptListPane
+    ) -> Bool {
+        lhs.rows == rhs.rows
+            && lhs.showsTranslation == rhs.showsTranslation
+            && lhs.scrollRequest == rhs.scrollRequest
+            && lhs.canEditTranscript == rhs.canEditTranscript
+            && lhs.editingSegmentID == rhs.editingSegmentID
+            && lhs.editingText == rhs.editingText
+    }
+
+    var body: some View {
+        MeetingTranscriptVirtualList(
+            rows: rows,
+            showsTranslation: showsTranslation,
+            scrollRequest: scrollRequest,
+            canEditTranscript: canEditTranscript,
+            editingSegmentID: editingSegmentID,
+            editingText: editingText,
+            onSelectSegment: onSelectSegment,
+            onBeginEditing: onBeginEditing,
+            onEditingTextChanged: onEditingTextChanged,
+            onSaveEditing: onSaveEditing,
+            onCancelEditing: onCancelEditing,
+            onDeleteSegment: onDeleteSegment,
+            onToggleHighlight: onToggleHighlight
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}

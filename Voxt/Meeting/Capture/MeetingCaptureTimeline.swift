@@ -16,6 +16,18 @@ nonisolated struct MeetingCaptureTimelineTracker: Sendable {
         return generation
     }
 
+    func isCurrent(_ generation: UInt64, for speaker: MeetingSpeaker) -> Bool {
+        generationBySpeaker[speaker] == generation
+    }
+
+    /// Cleanup invalidates callbacks immediately, even before the next source starts.
+    mutating func invalidateEpochs() {
+        for speaker in Array(generationBySpeaker.keys) {
+            generationBySpeaker[speaker] = (generationBySpeaker[speaker] ?? 0) &+ 1
+        }
+        resetCursors()
+    }
+
     mutating func anchorEpoch(
         for speaker: MeetingSpeaker,
         generation: UInt64,
