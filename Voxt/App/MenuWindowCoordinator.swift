@@ -247,6 +247,17 @@ extension AppDelegate {
                 self?.refreshInputDevicesSnapshot(reason: "hardware change")
             }
         }
+        // Closing or opening the lid with an external display attached changes the built-in
+        // microphone's usability without any Core Audio device-list notification.
+        displayConfigurationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshInputDevicesSnapshot(reason: "display configuration change")
+            }
+        }
     }
 
     func refreshInputDevicesSnapshot(reason: String) {

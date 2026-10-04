@@ -275,13 +275,11 @@ extension OnboardingGuideView {
         capture.setPreferredInputDevice(preferredDeviceID)
         microphoneCapture = capture
 
-        do {
-            try capture.start { _, level in
+        capture.start(
+            onBuffer: { _, level in
                 Task { @MainActor in
                     guard currentStep == .permissions, microphoneCapture === capture else { return }
                     microphoneReceivedInitialBuffer = true
-                    microphoneStartupWatchdogTask?.cancel()
-                    microphoneStartupWatchdogTask = nil
                     guard !microphoneHasDetectedAudio else { return }
                     if level >= Self.microphoneSignalThreshold {
                         microphoneSignalFrameCount += 1
@@ -294,17 +292,14 @@ extension OnboardingGuideView {
                         }
                     }
                 }
+            },
+            onFailure: { error in
+                handleMicrophoneMeterStartFailure(error, capture: capture, preferredDeviceID: preferredDeviceID)
             }
-            scheduleMicrophoneStartupWatchdog(preferredDeviceID: preferredDeviceID)
-        } catch {
-            VoxtLog.settingsWarning("Guide microphone meter failed: \(error.localizedDescription)")
-            stopMicrophoneMeter()
-        }
+        )
     }
 
     func stopMicrophoneMeter(resetStartupRetry: Bool = true) {
-        microphoneStartupWatchdogTask?.cancel()
-        microphoneStartupWatchdogTask = nil
         microphoneCapture?.stop()
         microphoneCapture = nil
         microphoneReceivedInitialBuffer = false
@@ -313,27 +308,21 @@ extension OnboardingGuideView {
         }
     }
 
-    private func scheduleMicrophoneStartupWatchdog(preferredDeviceID: AudioDeviceID?) {
-        microphoneStartupWatchdogTask?.cancel()
-        microphoneStartupWatchdogTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: Self.microphoneStartupWatchdogDelay)
-            } catch {
-                return
-            }
-
-            guard !Task.isCancelled,
-                  currentStep == .permissions,
-                  !microphoneReceivedInitialBuffer,
-                  microphoneStartupRetryCount < 1
-            else {
-                return
-            }
-
-            microphoneStartupRetryCount += 1
-            VoxtLog.settingsWarning("Guide microphone meter restarting after missing initial callback.")
-            startMicrophoneMeter(preferredDeviceID: nil, resetStartupRetry: false)
+    /// A preferred microphone that cannot start is retried once with the system default.
+    private func handleMicrophoneMeterStartFailure(
+        _ error: Error,
+        capture: MeetingMicrophoneCapture,
+        preferredDeviceID: AudioDeviceID?
+    ) {
+        guard currentStep == .permissions, microphoneCapture === capture else { return }
+        guard preferredDeviceID != nil, microphoneStartupRetryCount < 1 else {
+            VoxtLog.settingsWarning("Guide microphone meter failed: \(error.localizedDescription)")
+            stopMicrophoneMeter()
+            return
         }
+        microphoneStartupRetryCount += 1
+        VoxtLog.settingsWarning("Guide microphone meter retrying with the system default input. error=\(error.localizedDescription)")
+        startMicrophoneMeter(preferredDeviceID: nil, resetStartupRetry: false)
     }
 
     private func restartMicrophoneMeterIfNeeded() {

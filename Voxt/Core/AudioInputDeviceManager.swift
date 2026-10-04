@@ -3,7 +3,6 @@
 
 import Foundation
 import CoreAudio
-import AVFoundation
 
 struct AudioInputDevice: Identifiable, Hashable, Sendable {
     let id: AudioDeviceID
@@ -56,12 +55,31 @@ enum AudioInputDeviceManager {
             return AudioInputDevice(id: id, uid: uid, name: name)
         }
 
+        let lidState = LaptopLidState.current()
         let devices = discoveredDevices
             .filter { shouldIncludeInSnapshot(uid: $0.uid, name: $0.name) }
+            .filter { isAvailableForCapture($0, lidState: lidState) }
             .sorted { (lhs: AudioInputDevice, rhs: AudioInputDevice) in
                 lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
         return devices
+    }
+
+    /// Core Audio keeps publishing a laptop's internal microphone while the lid is closed,
+    /// but the hardware is disconnected and only produces silence.
+    nonisolated private static func isAvailableForCapture(_ device: AudioInputDevice, lidState: LaptopLidState) -> Bool {
+        guard lidState == .closed else { return true }
+        let snapshot = AudioDeviceInspector.snapshot(of: device.id)
+        let isAvailable = MicrophoneAvailabilityPolicy.isAvailable(
+            transport: snapshot.transport,
+            uid: device.uid,
+            inputDataSource: snapshot.inputDataSource,
+            lidState: lidState
+        )
+        if !isAvailable {
+            VoxtLog.audio("Internal microphone excluded because the laptop lid is closed. device=\(snapshot.diagnosticDescription)")
+        }
+        return isAvailable
     }
 
     nonisolated static func shouldIncludeInSnapshot(uid: String, name: String) -> Bool {
@@ -143,63 +161,6 @@ enum AudioInputDeviceManager {
         }
 
         return devices.first?.id
-    }
-
-    static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
-        snapshotAvailableInputDevices().contains(where: { $0.id == deviceID })
-    }
-
-    nonisolated static func nominalSampleRate(for deviceID: AudioDeviceID?) -> Double? {
-        guard let deviceID,
-              deviceID != AudioDeviceID(kAudioObjectUnknown)
-        else {
-            return nil
-        }
-
-        var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var sampleRate = Float64(0)
-        var dataSize = UInt32(MemoryLayout<Float64>.size)
-        let status = AudioObjectGetPropertyData(
-            deviceID,
-            &propertyAddress,
-            0,
-            nil,
-            &dataSize,
-            &sampleRate
-        )
-        guard status == noErr, sampleRate.isFinite, sampleRate > 0 else {
-            return nil
-        }
-        return sampleRate
-    }
-
-    nonisolated static func captureTapFormat(
-        nodeOutputFormat: AVAudioFormat,
-        hardwareSampleRate: Double?
-    ) -> AVAudioFormat {
-        // AVAudioInputNode can report 48 kHz even when the active input hardware is
-        // running at 44.1 kHz. Installing a tap with the node format in that state
-        // raises "Input HW format and tap format not matching", so prefer the
-        // hardware sample rate while preserving the node channel/layout format.
-        guard let hardwareSampleRate,
-              hardwareSampleRate.isFinite,
-              hardwareSampleRate > 0,
-              abs(hardwareSampleRate - nodeOutputFormat.sampleRate) > 1
-        else {
-            return nodeOutputFormat
-        }
-
-        return AVAudioFormat(
-            commonFormat: nodeOutputFormat.commonFormat,
-            sampleRate: hardwareSampleRate,
-            channels: nodeOutputFormat.channelCount,
-            interleaved: nodeOutputFormat.isInterleaved
-        ) ?? nodeOutputFormat
     }
 
     static func makeDevicesObserver(onChange: @escaping @Sendable () -> Void) -> AudioInputDeviceObserver? {

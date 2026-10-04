@@ -210,13 +210,9 @@ extension RemoteASRTranscriber {
                 VoxtLog.asr("Aliyun fun task-started ignored because stop was already requested.", verbose: true)
                 return
             }
-            do {
-                try startAliyunAudioCapture(context: context)
-                context.didStartAudioStream = true
-                VoxtLog.model("Aliyun fun task-started acknowledged. audio capture started.")
-            } catch {
-                throw error
-            }
+            startAliyunAudioCapture(context: context)
+            context.didStartAudioStream = true
+            VoxtLog.model("Aliyun fun task-started acknowledged. audio capture started.")
             return
         }
 
@@ -244,44 +240,21 @@ extension RemoteASRTranscriber {
         }
     }
 
-    func startAliyunAudioCapture(context: AliyunFunStreamingContext) throws {
-        let inputNode = acquireStreamingInputNode()
-        let didApplyPreferredInputDevice = applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
-        let inputFormat = inputCaptureTapFormat(
-            inputNode: inputNode,
-            activeInputDeviceID: activeInputDeviceID,
-            logContext: "Aliyun fun transcriber"
-        )
-        streamingInputSampleRate = inputFormat.sampleRate
-        inputNode.removeTap(onBus: 0)
-        let captureGeneration = recordingGenerationID
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
-            Task { @MainActor in
-                guard self.isCurrentGeneration(captureGeneration), self.isRecording,
-                      let ctx = self.aliyunStreamingContext,
-                      !ctx.isClosed
-                else { return }
-                self.audioLevel = self.audioLevelFromPCM16(pcmData)
-                ctx.ws.send(.data(pcmData)) { error in
-                    if let error {
-                        Task { [responseState = ctx.responseState] in
-                            await responseState.markCompletedWithError(error)
-                        }
+    func startAliyunAudioCapture(context: AliyunFunStreamingContext) {
+        startMicrophoneCapture(context: "aliyun-fun") { [weak self] pcmData in
+            guard let self,
+                  let ctx = self.aliyunStreamingContext,
+                  !ctx.isClosed
+            else { return }
+            ctx.ws.send(.data(pcmData)) { error in
+                if let error {
+                    Task { [responseState = ctx.responseState] in
+                        await responseState.markCompletedWithError(error)
                     }
                 }
             }
         }
-
-        audioEngine.prepare()
-        try audioEngine.start()
-        isRecording = true
-        VoxtLog.model("Aliyun fun audio capture started. sampleRate=\(Int(streamingInputSampleRate))")
+        VoxtLog.model("Aliyun fun audio capture requested.")
     }
 
     func stopAliyunAudioCapture() {
@@ -436,7 +409,7 @@ extension RemoteASRTranscriber {
                 VoxtLog.asr("Aliyun qwen session.updated ignored because stop was already requested.", verbose: true)
                 return
             }
-            try startAliyunQwenAudioCapture(context: context)
+            startAliyunQwenAudioCapture(context: context)
             context.didStartAudioStream = true
             VoxtLog.model("Aliyun qwen session.updated acknowledged. audio capture started. kind=\(context.kind)")
             return
@@ -476,43 +449,21 @@ extension RemoteASRTranscriber {
         }
     }
 
-    func startAliyunQwenAudioCapture(context: AliyunQwenStreamingContext) throws {
-        let inputNode = acquireStreamingInputNode()
-        let didApplyPreferredInputDevice = applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
-        let inputFormat = inputCaptureTapFormat(
-            inputNode: inputNode,
-            activeInputDeviceID: activeInputDeviceID,
-            logContext: "Aliyun qwen transcriber"
-        )
-        streamingInputSampleRate = inputFormat.sampleRate
-        inputNode.removeTap(onBus: 0)
-        let captureGeneration = recordingGenerationID
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
-            Task { @MainActor in
-                guard self.isCurrentGeneration(captureGeneration), self.isRecording,
-                      let ctx = self.aliyunQwenStreamingContext,
-                      !ctx.isClosed
-                else { return }
-                self.audioLevel = self.audioLevelFromPCM16(pcmData)
-                self.sendAliyunQwenAudioAppend(pcmData, through: ctx.ws) { error in
-                    if let error {
-                        Task { [responseState = ctx.responseState] in
-                            await responseState.markCompletedWithError(error)
-                        }
+    func startAliyunQwenAudioCapture(context: AliyunQwenStreamingContext) {
+        startMicrophoneCapture(context: "aliyun-qwen") { [weak self] pcmData in
+            guard let self,
+                  let ctx = self.aliyunQwenStreamingContext,
+                  !ctx.isClosed
+            else { return }
+            self.sendAliyunQwenAudioAppend(pcmData, through: ctx.ws) { error in
+                if let error {
+                    Task { [responseState = ctx.responseState] in
+                        await responseState.markCompletedWithError(error)
                     }
                 }
             }
         }
-        audioEngine.prepare()
-        try audioEngine.start()
-        isRecording = true
-        VoxtLog.model("Aliyun qwen audio capture started. kind=\(context.kind), sampleRate=\(Int(streamingInputSampleRate))")
+        VoxtLog.model("Aliyun qwen audio capture requested. kind=\(context.kind)")
     }
 
     private func shouldIgnoreTrailingAliyunQwenGenericError(

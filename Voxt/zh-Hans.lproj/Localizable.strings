@@ -1059,6 +1059,7 @@
 "Microphone Status Disconnected" = "已断开";
 "Switched microphone to %@." = "已切换麦克风到 %@。";
 "Failed to switch microphone to %@." = "切换麦克风到 %@ 失败。";
+"No sound is reaching the microphone. Check the selected microphone." = "麦克风没有收到任何声音，请检查当前选择的麦克风。";
 "Guide" = "引导";
 "Setup Guide" = "配置引导";
 "Open Setup Guide" = "打开使用引导";

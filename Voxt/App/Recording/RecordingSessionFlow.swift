@@ -217,13 +217,27 @@ extension AppDelegate {
             }
         }
 
+        // Opening a Bluetooth headset's microphone switches it to its call profile and cuts
+        // off audio playing on it, so on a shared headset the cue finishes first.
+        let startsCaptureAfterCue = interactionSoundsEnabled
+            && BluetoothAudioRoute.openingInputInterruptsOutput(inputDeviceID: selectedInputDeviceID)
         if interactionSoundsEnabled {
             interactionSoundPlayer.playStartAsync { [weak self] in
                 guard let self,
                       self.activeRecordingSessionID == sessionID,
-                      self.isSessionActive,
-                      self.recordingStoppedAt == nil else { return }
+                      self.isSessionActive
+                else { return }
+                guard self.recordingStoppedAt == nil else {
+                    if startsCaptureAfterCue {
+                        // Stopped before the microphone was opened; nothing was captured.
+                        self.processTranscription("", sessionID: sessionID)
+                    }
+                    return
+                }
                 muteOutputIfNeeded()
+                if startsCaptureAfterCue {
+                    startCapture()
+                }
             }
         } else {
             muteOutputIfNeeded()
@@ -294,10 +308,14 @@ extension AppDelegate {
             prepareMicrophoneTranslationSessionState()
         }
 
-        // UI and microphone capture must not wait for either the cue or output
-        // mute. If mute is enabled, it is applied after the cue so the cue is
-        // audible; the capture path starts immediately after session setup.
-        startCapture()
+        // UI and microphone capture do not wait for the cue or output mute, except on a
+        // Bluetooth headset shared with the output (see above). If mute is enabled, it is
+        // applied after the cue so the cue is audible.
+        if startsCaptureAfterCue {
+            VoxtLog.audio("Microphone start follows the start cue because input and output share a Bluetooth headset.")
+        } else {
+            startCapture()
+        }
 
     }
 

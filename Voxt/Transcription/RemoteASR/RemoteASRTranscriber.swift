@@ -3,12 +3,13 @@
 
 import Foundation
 import AVFoundation
-import AudioToolbox
+import CoreAudio
 import Combine
 
 @MainActor
 class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
-    final class AudioSampleStore {
+    /// Written from the microphone delivery queue; every access takes `lock`.
+    nonisolated final class AudioSampleStore: @unchecked Sendable {
         private let lock = NSLock()
         var samples: [Float] = []
 
@@ -46,17 +47,17 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     var doubaoDictionaryEntryProvider: (() -> [DictionaryEntry])?
     var voiceActivityUseCase: ASRVoiceActivityUseCase = .transcription
 
-    private var recorder: AVAudioRecorder?
-    let audioEngine = AVAudioEngine()
-    private var streamingInputNode: AVAudioInputNode?
+    /// One capture per recording, shared by realtime providers and file recording.
+    var microphoneCaptureSession: MicrophoneCaptureSession?
+    var microphoneCaptureStartTask: Task<Void, Never>?
+    var didRetryMicrophoneWithSystemDefault = false
+    private var isFileRecordingActive = false
     var doubaoStreamingContext: DoubaoStreamingContext?
     var aliyunStreamingContext: AliyunFunStreamingContext?
     var aliyunQwenStreamingContext: AliyunQwenStreamingContext?
     var stepFunStreamingContext: StepFunStreamingContext?
     var geminiLiveStreamingContext: GeminiLiveStreamingContext?
-    private var meterTimer: Timer?
     private let openAIPreview = RemoteASRPreviewController()
-    private var recordingFileURL: URL?
     private var completedAudioArchiveURL: URL?
     let sampleStore = AudioSampleStore()
     var streamingInputSampleRate: Double = HistoryAudioArchiveSupport.targetSampleRate
@@ -70,27 +71,8 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     private var pendingIntermediateTranscription: String?
     private var intermediateTranscriptionPublishTask: Task<Void, Never>?
     var recordingGenerationID = UUID()
-    var doubaoCaptureStartupWatchdogTask: Task<Void, Never>?
-    var didRetryDoubaoCaptureStartup = false
-    var doubaoCaptureUsesPreferredInputDevice = false
-    let doubaoCaptureStartupWatchdogDelay: Duration = .seconds(1.2)
     let aliyunRealtimeStopDrainDelay: Duration = .milliseconds(180)
     let realtimePendingAudioByteLimit = 1_024_000
-
-    func acquireStreamingInputNode() -> AVAudioInputNode {
-        let node = audioEngine.inputNode
-        streamingInputNode = node
-        return node
-    }
-
-    func stopStreamingAudioCapture() {
-        if audioEngine.isRunning { audioEngine.stop() }
-        // inputNode is lazy and may initialize hardware. Cleanup must only
-        // touch a node acquired by an actual capture attempt, including failure.
-        streamingInputNode?.removeTap(onBus: 0)
-        streamingInputNode = nil
-        audioLevel = 0
-    }
 
     func setPreferredInputDevice(_ deviceID: AudioDeviceID?) {
         preferredInputDeviceID = deviceID
@@ -259,19 +241,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             return
         }
 
-        do {
-            try startFileRecordingMode()
-            if provider == .openAIWhisper,
-               configuration.openAIChunkPseudoRealtimeEnabled,
-               sessionAllowsRealtimeTextDisplay {
-                startOpenAIPreviewLoop(configuration: configuration)
-            }
-        } catch {
-            VoxtLog.asrError("Remote ASR recorder setup failed: \(error.localizedDescription)")
-            cleanupRecorderState()
-            activeProvider = nil
-            activeConfiguration = nil
-            notifyStartFailure(error)
+        startFileRecordingMode()
+        if provider == .openAIWhisper,
+           configuration.openAIChunkPseudoRealtimeEnabled,
+           sessionAllowsRealtimeTextDisplay {
+            startOpenAIPreviewLoop(configuration: configuration)
         }
     }
 
@@ -282,7 +256,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             aliyunQwenStreamingContext != nil ||
             stepFunStreamingContext != nil ||
             geminiLiveStreamingContext != nil
-        guard isRecording || hasPendingRealtimeSession || recorder != nil else { return }
+        guard isRecording || hasPendingRealtimeSession || isFileRecordingActive else { return }
         stopRequested = true
         let generationID = recordingGenerationID
 
@@ -464,54 +438,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
+    /// Moves the running capture (realtime or file recording) to the current preferred
+    /// device. The delivered audio format does not change, so provider streams continue.
     func restartCaptureForPreferredInputDevice() throws {
-        if let context = doubaoStreamingContext {
-            VoxtLog.asrWarning(
-                "Doubao audio capture restart requested. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
-            )
-        stopDoubaoAudioCapture()
-        didRetryDoubaoCaptureStartup = false
-        try startDoubaoAudioCapture(usePreferredInputDevice: preferredInputDeviceID != nil)
-        context.audioCaptureStartCount += 1
-        context.lastAudioCaptureStartReason = "preferred-input-change"
-        scheduleDoubaoCaptureStartupWatchdog(context)
-        VoxtLog.asrWarning(
-            "Doubao audio capture restart completed. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), state=\(context.debugSummary())"
+        guard let microphoneCaptureSession else { return }
+        VoxtLog.asr(
+            "Remote ASR microphone switch requested. preferredDeviceID=\(preferredInputDeviceID.map(String.init(describing:)) ?? "default"), realtime=\(activeRealtimeDebugSummary() ?? "none")"
         )
-        return
-        }
-
-        if let context = aliyunStreamingContext {
-            stopAliyunAudioCapture()
-            try startAliyunAudioCapture(context: context)
-            return
-        }
-
-        if let context = aliyunQwenStreamingContext {
-            stopAliyunAudioCapture()
-            try startAliyunQwenAudioCapture(context: context)
-            return
-        }
-
-        if let context = stepFunStreamingContext {
-            guard context.didStartAudioStream else { return }
-            stopStepFunAudioCapture()
-            try startStepFunAudioCapture(context: context)
-            return
-        }
-
-        if let context = geminiLiveStreamingContext {
-            guard context.didStartAudioStream else { return }
-            stopGeminiLiveAudioCapture()
-            try startGeminiLiveAudioCapture(context: context)
-            return
-        }
-
-        throw NSError(
-            domain: "Voxt.RemoteASR",
-            code: -101,
-            userInfo: [NSLocalizedDescriptionKey: "Remote ASR file recording cannot switch microphones during an active session."]
-        )
+        microphoneCaptureSession.switchDevice(to: preferredInputDeviceID)
     }
 
     private func scheduleStreamingCompletion(
@@ -616,26 +550,11 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         )
     }
 
-    private func startFileRecordingMode() throws {
-        let fileURL = makeTemporaryRecordingURL()
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16000,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsFloatKey: false
-        ]
-
-        let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
-        recorder.isMeteringEnabled = true
-        guard recorder.record() else {
-            throw NSError(domain: "Voxt.RemoteASR", code: -100, userInfo: [NSLocalizedDescriptionKey: "Recorder start failed"])
-        }
-        self.recorder = recorder
-        self.recordingFileURL = fileURL
-        self.isRecording = true
-        startMeteringTimer()
+    /// Records the selected microphone for upload; the WAV file is written when recording
+    /// stops. (`AVAudioRecorder` always records the system default input.)
+    private func startFileRecordingMode() {
+        isFileRecordingActive = true
+        startMicrophoneCapture(context: "file")
     }
 
     private var selectedProvider: RemoteASRProvider {
@@ -685,68 +604,46 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
         }
     }
 
-    private func startMeteringTimer() {
-        stopMeteringTimer()
-        meterTimer = Timer.scheduledTimer(
-            timeInterval: 0.05,
-            target: self,
-            selector: #selector(updateAudioMeter),
-            userInfo: nil,
-            repeats: true
-        )
-    }
-
-    private func stopMeteringTimer() {
-        meterTimer?.invalidate()
-        meterTimer = nil
-        audioLevel = 0
-    }
-
-    @objc private func updateAudioMeter() {
-        guard let recorder else { return }
-        recorder.updateMeters()
-        let avgPower = recorder.averagePower(forChannel: 0)
-        let linear = pow(10, avgPower / 20)
-        audioLevel = min(max(linear, 0), 1)
-    }
-
-    private func makeTemporaryRecordingURL() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("voxt-remote-asr-\(UUID().uuidString)")
-            .appendingPathExtension("wav")
-    }
-
     private func cleanupRecorderState() {
         resetIntermediateTranscriptionPublishing()
-        recorder?.stop()
-        recorder = nil
-        recordingFileURL = nil
+        if isFileRecordingActive {
+            stopStreamingAudioCapture()
+            isFileRecordingActive = false
+        }
         sampleStore.clear()
         streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         isRecording = false
         stopRequested = false
         stopOpenAIPreviewLoop()
-        stopMeteringTimer()
     }
 
+    /// Stops file recording and writes the captured audio as the upload file.
     private func stopFileRecordingCapture() -> URL? {
-        let fileURL = recordingFileURL
-        recorder?.stop()
-        recorder = nil
-        recordingFileURL = nil
+        guard isFileRecordingActive else { return nil }
+        isFileRecordingActive = false
+        stopStreamingAudioCapture()
+        stopOpenAIPreviewLoop()
+        let samples = sampleStore.snapshot()
+        let sampleRate = streamingInputSampleRate
         sampleStore.clear()
         streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
         isRecording = false
-        stopOpenAIPreviewLoop()
-        stopMeteringTimer()
-        return fileURL
+
+        let fileURL = HistoryAudioArchiveSupport.temporaryArchiveURL(prefix: "voxt-remote-asr")
+        do {
+            guard try HistoryAudioArchiveSupport.exportWAV(samples: samples, sampleRate: sampleRate, to: fileURL) else {
+                VoxtLog.asrWarning("Remote ASR file recording captured no audio.")
+                return nil
+            }
+            return fileURL
+        } catch {
+            try? FileManager.default.removeItem(at: fileURL)
+            VoxtLog.asrError("Remote ASR file recording could not be written: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     func cleanupDoubaoStreamingState() {
-        doubaoCaptureStartupWatchdogTask?.cancel()
-        doubaoCaptureStartupWatchdogTask = nil
-        didRetryDoubaoCaptureStartup = false
-        doubaoCaptureUsesPreferredInputDevice = false
         if let context = doubaoStreamingContext {
             context.isClosed = true
             context.ws.cancel(with: .normalClosure, reason: nil)
@@ -816,12 +713,14 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     func shutdownForApplicationTermination() async {
         let tasks = [
             intermediateTranscriptionPublishTask,
-            doubaoCaptureStartupWatchdogTask
+            microphoneCaptureStartTask
         ].compactMap { $0 }
+        let captureSession = microphoneCaptureSession
         onTranscriptionFinished = nil
         onStartFailure = nil
         onRuntimeFailure = nil
         discardPendingSessionOutput()
+        await captureSession?.stopAndWait()
         await transcriptionTasks.waitForAll()
         await openAIPreview.waitForIdle()
         for task in tasks {
@@ -886,26 +785,22 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
     }
 
     private func runOpenAIPreviewPass(configuration: RemoteProviderConfiguration) async -> String? {
-        guard isRecording, selectedProvider == .openAIWhisper, let sourceURL = recordingFileURL else { return nil }
+        guard isRecording, isFileRecordingActive, selectedProvider == .openAIWhisper else { return nil }
 
+        // Skip previews shorter than ~0.2 s of audio.
+        let samples = sampleStore.snapshot()
+        guard samples.count >= Int(streamingInputSampleRate * 0.2) else { return nil }
         let snapshotURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("voxt-openai-preview-\(UUID().uuidString)")
             .appendingPathExtension("wav")
-        // Also remove a partially created destination if copyItem itself fails.
         defer { try? FileManager.default.removeItem(at: snapshotURL) }
 
         do {
-            if FileManager.default.fileExists(atPath: snapshotURL.path) {
-                try FileManager.default.removeItem(at: snapshotURL)
-            }
-            try FileManager.default.copyItem(at: sourceURL, to: snapshotURL)
-
-            let attrs = try FileManager.default.attributesOfItem(atPath: snapshotURL.path)
-            if let size = attrs[.size] as? Int64, size < 6_000 {
-                return nil
-            }
-
-            RemoteASRPreviewAudio.normalizeWAVHeader(at: snapshotURL)
+            guard try HistoryAudioArchiveSupport.exportWAV(
+                samples: samples,
+                sampleRate: streamingInputSampleRate,
+                to: snapshotURL
+            ) else { return nil }
 
             let hintPayload = resolvedHintPayload(for: .openAIWhisper, configuration: configuration)
             let preview = try await transcribeOpenAI(
@@ -925,7 +820,7 @@ class RemoteASRTranscriber: NSObject, ObservableObject, TranscriberProtocol {
             }
             return visibleText
         } catch {
-            // Preview failures are expected while recorder header is still mutating.
+            // Preview failures are transient; the final pass transcribes the full recording.
             return nil
         }
     }

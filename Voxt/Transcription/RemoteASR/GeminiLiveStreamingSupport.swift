@@ -53,7 +53,7 @@ extension RemoteASRTranscriber {
         )
         geminiLiveStreamingContext = context
         receiveGeminiLiveMessages(context)
-        try startGeminiLiveAudioCapture(context: context)
+        startGeminiLiveAudioCapture(context: context)
         context.didStartAudioStream = true
 
         let payload = GeminiLivePayloadSupport.setupPayload(model: model, hintPayload: hintPayload)
@@ -198,50 +198,15 @@ extension RemoteASRTranscriber {
         }
     }
 
-    func startGeminiLiveAudioCapture(context: GeminiLiveStreamingContext) throws {
-        if audioEngine.isRunning {
-            audioEngine.stop()
+    func startGeminiLiveAudioCapture(context: GeminiLiveStreamingContext) {
+        startMicrophoneCapture(context: "gemini-live") { [weak self] pcmData in
+            guard let self,
+                  let context = self.geminiLiveStreamingContext,
+                  !context.isClosed
+            else { return }
+            self.sendGeminiLiveAudio(pcmData, context: context)
         }
-        audioEngine.reset()
-
-        let inputNode = acquireStreamingInputNode()
-        let didApplyPreferredInputDevice = preferredInputDeviceID != nil
-            ? applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-            : false
-        let activeInputDeviceID = didApplyPreferredInputDevice
-            ? preferredInputDeviceID
-            : AudioInputDeviceManager.defaultInputDeviceID()
-        let inputFormat = inputCaptureTapFormat(
-            inputNode: inputNode,
-            activeInputDeviceID: activeInputDeviceID,
-            logContext: "Gemini live transcriber"
-        )
-        streamingInputSampleRate = inputFormat.sampleRate
-        inputNode.removeTap(onBus: 0)
-        let captureGeneration = recordingGenerationID
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
-            Task { @MainActor in
-                guard self.isCurrentGeneration(captureGeneration), self.isRecording,
-                      let context = self.geminiLiveStreamingContext,
-                      !context.isClosed
-                else { return }
-                self.audioLevel = self.audioLevelFromPCM16(pcmData)
-                self.sendGeminiLiveAudio(pcmData, context: context)
-            }
-        }
-
-        audioEngine.prepare()
-        try audioEngine.start()
-        isRecording = true
-        VoxtLog.asr(
-            "Gemini live audio capture started. sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount)",
-            verbose: true
-        )
+        VoxtLog.asr("Gemini live audio capture requested.", verbose: true)
     }
 
     func stopGeminiLiveAudioCapture() {

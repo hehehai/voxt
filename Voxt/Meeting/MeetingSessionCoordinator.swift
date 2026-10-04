@@ -64,7 +64,6 @@ final class MeetingSessionCoordinator {
     private var sessionRevision = UUID()
     private var pendingChunks: [BufferedMeetingChunk] = []
     private let realtimeTranslationScheduler = MeetingRealtimeTranslationScheduler()
-    private var microphoneStartupWatchdogTask: Task<Void, Never>?
     private var microphoneStartupRetryCount = 0
     private var micLevel: Float = 0
     private var systemLevel: Float = 0
@@ -502,8 +501,6 @@ final class MeetingSessionCoordinator {
         if !mode.usesMicrophone {
             micLevel = 0
             loggedInitialBufferSpeakers.remove(.me)
-            microphoneStartupWatchdogTask?.cancel()
-            microphoneStartupWatchdogTask = nil
         }
         if !mode.usesSystemAudio {
             systemLevel = 0
@@ -557,10 +554,6 @@ final class MeetingSessionCoordinator {
               captureTimeline.isCurrent(captureGeneration, for: speaker) else { return }
         if speaker == .me {
             micLevel = level
-            if loggedInitialBufferSpeakers.contains(.me) == false {
-                microphoneStartupWatchdogTask?.cancel()
-                microphoneStartupWatchdogTask = nil
-            }
         } else {
             systemLevel = level
         }
@@ -864,8 +857,6 @@ final class MeetingSessionCoordinator {
         hasCapturedAudio = false
         pendingCaptureFailureMessage = nil
         pendingChunks.removeAll()
-        microphoneStartupWatchdogTask?.cancel()
-        microphoneStartupWatchdogTask = nil
         microphoneStartupRetryCount = 0
         liveAudioPrebuffers = Self.makeLiveAudioPrebuffers(
             maxDuration: Self.remoteLivePrebufferSeconds
@@ -908,9 +899,9 @@ final class MeetingSessionCoordinator {
         loggedSampleExtractionFailureSpeakers.remove(.them)
         captureTimeline.resetCursors()
 
-        let resolvedInputDeviceID = captureMode.usesMicrophone
-            ? try startConfiguredMicrophoneCapture(scheduleWatchdog: false)
-            : nil
+        if captureMode.usesMicrophone {
+            startConfiguredMicrophoneCapture()
+        }
 
         if captureMode.usesSystemAudio {
             do {
@@ -922,17 +913,10 @@ final class MeetingSessionCoordinator {
                 throw error
             }
         }
-
-        if captureMode.usesMicrophone {
-            scheduleMicrophoneStartupWatchdog(with: resolvedInputDeviceID)
-        }
-
     }
 
     private func stopCaptureSources(for transition: MeetingCaptureSourceTransition) {
         if transition.stopsMicrophone {
-            microphoneStartupWatchdogTask?.cancel()
-            microphoneStartupWatchdogTask = nil
             microphoneCapture.stop()
         }
         if transition.stopsSystemAudio {
@@ -942,16 +926,15 @@ final class MeetingSessionCoordinator {
 
     private func startCaptureSources(for transition: MeetingCaptureSourceTransition) throws {
         if transition.startsMicrophone {
-            _ = try startConfiguredMicrophoneCapture()
+            microphoneStartupRetryCount = 0
+            startConfiguredMicrophoneCapture()
         }
         if transition.startsSystemAudio {
             try startSystemAudioCapture()
         }
     }
 
-    private func startConfiguredMicrophoneCapture(
-        scheduleWatchdog: Bool = true
-    ) throws -> AudioDeviceID? {
+    private func startConfiguredMicrophoneCapture() {
         let availableDevices = AudioInputDeviceManager.snapshotAvailableInputDevices()
         let preferredInputDeviceID = preferredInputDeviceIDProvider()
         let resolvedInputDeviceID = AudioInputDeviceManager.resolvedInputDeviceID(
@@ -963,11 +946,7 @@ final class MeetingSessionCoordinator {
                 "Meeting microphone input device fallback applied. preferred=\(preferredInputDeviceID), resolved=\(resolvedInputDeviceID.map(String.init(describing:)) ?? "default")"
             )
         }
-        try startMicrophoneCapture(with: resolvedInputDeviceID)
-        if scheduleWatchdog {
-            scheduleMicrophoneStartupWatchdog(with: resolvedInputDeviceID)
-        }
-        return resolvedInputDeviceID
+        startMicrophoneCapture(with: resolvedInputDeviceID)
     }
 
     private func startSystemAudioCapture() throws {
@@ -1011,16 +990,14 @@ final class MeetingSessionCoordinator {
         if shouldLog {
             VoxtLog.meeting("Meeting capture stop requested.", verbose: true)
         }
-        microphoneStartupWatchdogTask?.cancel()
-        microphoneStartupWatchdogTask = nil
         microphoneCapture.stop()
         systemAudioCapture.stop()
     }
 
-    private func startMicrophoneCapture(with deviceID: AudioDeviceID?) throws {
+    private func startMicrophoneCapture(with deviceID: AudioDeviceID?) {
         microphoneCapture.setPreferredInputDevice(deviceID)
         let generation = beginCaptureEpoch(for: .me)
-        try microphoneCapture.start { [weak self] buffer, level in
+        microphoneCapture.start(onBuffer: { [weak self] buffer, level in
             let sampleRate = buffer.format.sampleRate
             guard let samples = Self.extractMonoSamples(from: buffer) else {
                 let format = buffer.format
@@ -1047,7 +1024,9 @@ final class MeetingSessionCoordinator {
                     captureGeneration: generation
                 )
             }
-        }
+        }, onFailure: { [weak self] error in
+            self?.handleMicrophoneStartFailure(error, deviceID: deviceID, captureGeneration: generation)
+        })
         captureTimeline.anchorEpoch(
             for: .me,
             generation: generation,
@@ -1073,46 +1052,35 @@ final class MeetingSessionCoordinator {
         )
     }
 
-    private func scheduleMicrophoneStartupWatchdog(with deviceID: AudioDeviceID?) {
-        microphoneStartupWatchdogTask?.cancel()
-        microphoneStartupWatchdogTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await Task.sleep(for: .milliseconds(1200))
-            } catch {
-                return
-            }
-
-            guard !Task.isCancelled,
-                  (self.overlayState.isRecording || self.isStarting),
-                  self.overlayState.isPresented,
-                  !self.loggedInitialBufferSpeakers.contains(.me),
-                  self.microphoneStartupRetryCount < 1
-            else {
-                return
-            }
-
-            self.microphoneStartupRetryCount += 1
-            let retryDeviceID: AudioDeviceID? = self.microphoneStartupRetryCount == 1 ? AudioDeviceID(kAudioObjectUnknown) : deviceID
-            let modeDescription = (retryDeviceID == nil || retryDeviceID == AudioDeviceID(kAudioObjectUnknown)) ? "default-input" : "preferred-input"
-            VoxtLog.meetingWarning("Meeting microphone startup watchdog restarting capture after missing initial callback. mode=\(modeDescription)")
-            do {
-                self.microphoneCapture.stop()
-                try self.startMicrophoneCapture(with: retryDeviceID == AudioDeviceID(kAudioObjectUnknown) ? nil : retryDeviceID)
-                self.scheduleMicrophoneStartupWatchdog(with: retryDeviceID == AudioDeviceID(kAudioObjectUnknown) ? nil : retryDeviceID)
-            } catch {
-                VoxtLog.meetingWarning("Meeting microphone watchdog restart failed: \(error.localizedDescription)")
-            }
+    /// A preferred microphone that cannot start is retried once with the system default
+    /// input, matching the device fallback used when the preferred device is missing.
+    private func handleMicrophoneStartFailure(
+        _ error: Error,
+        deviceID: AudioDeviceID?,
+        captureGeneration: UInt64
+    ) {
+        guard overlayState.isRecording || isStarting,
+              overlayState.captureMode.usesMicrophone,
+              captureTimeline.isCurrent(captureGeneration, for: .me)
+        else { return }
+        guard deviceID != nil, microphoneStartupRetryCount < 1 else {
+            VoxtLog.meetingWarning("Meeting microphone unavailable; continuing without microphone input. error=\(error.localizedDescription)")
+            // Previously a synchronous start failure aborted the meeting; keep the failure
+            // visible and recorded now that the microphone starts asynchronously.
+            pendingCaptureFailureMessage = pendingCaptureFailureMessage ?? error.localizedDescription
+            overlayState.safetyMessage = error.localizedDescription
+            return
         }
+        microphoneStartupRetryCount += 1
+        VoxtLog.meetingWarning("Meeting microphone retrying with the system default input. error=\(error.localizedDescription)")
+        startMicrophoneCapture(with: nil)
     }
 
-    func switchMicrophoneInput(to deviceID: AudioDeviceID?) throws {
+    func switchMicrophoneInput(to deviceID: AudioDeviceID?) {
         guard overlayState.captureMode.usesMicrophone else { return }
-        microphoneStartupWatchdogTask?.cancel()
         microphoneCapture.stop()
-        microphoneCapture.setPreferredInputDevice(deviceID)
-        try startMicrophoneCapture(with: deviceID)
-        scheduleMicrophoneStartupWatchdog(with: deviceID)
+        microphoneStartupRetryCount = 0
+        startMicrophoneCapture(with: deviceID)
     }
 
     private func finalizeCurrentRecordingSlice() {

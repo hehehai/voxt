@@ -5,6 +5,7 @@ import AppKit
 import SwiftUI
 import AVFoundation
 import Combine
+import CoreAudio
 
 
 func modelDebugLocalized(_ key: String) -> String {
@@ -141,48 +142,89 @@ extension ASRDebugResult.Source {
     }
 }
 
-private final class DebugAudioRecorder: NSObject {
-    private var recorder: AVAudioRecorder?
-    private(set) var activeURL: URL?
+/// Records debug clips through the same microphone capture path as dictation.
+private final class DebugAudioRecorder {
+    nonisolated private final class SampleBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var samples: [Float] = []
 
-    func start() throws {
-        let url = DebugAudioClipIO.temporaryClipURL()
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16_000,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false
-        ]
-
-        let recorder = try AVAudioRecorder(url: url, settings: settings)
-        recorder.isMeteringEnabled = false
-        guard recorder.record() else {
-            throw NSError(
-                domain: "Voxt.ModelDebug",
-                code: -10,
-                userInfo: [NSLocalizedDescriptionKey: modelDebugLocalized("Failed to start recording.")]
-            )
+        func append(_ newSamples: [Float]) {
+            lock.lock()
+            defer { lock.unlock() }
+            samples.append(contentsOf: newSamples)
         }
-        self.recorder = recorder
-        activeURL = url
+
+        func snapshot() -> [Float] {
+            lock.lock()
+            defer { lock.unlock() }
+            return samples
+        }
+    }
+
+    private var captureSession: MicrophoneCaptureSession?
+    private var startTask: Task<Void, Never>?
+    private var samples = SampleBuffer()
+
+    func start(deviceID: AudioDeviceID?, onFailure: @escaping @MainActor (Error) -> Void) {
+        cancel()
+        let capture = MicrophoneCaptureSession(context: "model-debug")
+        let buffer = SampleBuffer()
+        captureSession = capture
+        samples = buffer
+        let request = MicrophoneCaptureRequest(
+            deviceID: deviceID,
+            outputSampleRate: HistoryAudioArchiveSupport.targetSampleRate
+        )
+        startTask = Task { @MainActor [weak self] in
+            do {
+                _ = try await capture.start(
+                    request,
+                    onBuffer: { pcmBuffer in
+                        guard let newSamples = AudioLevelMeter.monoSamples(from: pcmBuffer) else { return }
+                        buffer.append(newSamples)
+                    },
+                    onEvent: { _ in }
+                )
+            } catch {
+                guard !MicrophoneCaptureError.isAbort(error),
+                      let self,
+                      self.captureSession === capture
+                else { return }
+                self.cancel()
+                onFailure(error)
+            }
+        }
     }
 
     func stop() -> URL? {
-        recorder?.stop()
-        recorder = nil
-        defer { activeURL = nil }
-        return activeURL
+        guard let captureSession else { return nil }
+        captureSession.stop()
+        self.captureSession = nil
+        startTask?.cancel()
+        startTask = nil
+
+        let url = DebugAudioClipIO.temporaryClipURL()
+        let captured = samples.snapshot()
+        samples = SampleBuffer()
+        do {
+            guard try HistoryAudioArchiveSupport.exportWAV(
+                samples: captured,
+                sampleRate: HistoryAudioArchiveSupport.targetSampleRate,
+                to: url
+            ) else { return nil }
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
     }
 
     func cancel() {
-        recorder?.stop()
-        recorder = nil
-        if let activeURL {
-            try? FileManager.default.removeItem(at: activeURL)
-        }
-        activeURL = nil
+        startTask?.cancel()
+        startTask = nil
+        captureSession?.stop()
+        captureSession = nil
+        samples = SampleBuffer()
     }
 }
 
@@ -202,6 +244,7 @@ final class ASRDebugViewModel: ObservableObject {
     private let mlxModelManager: MLXModelManager
     private var remoteConfigurations: [String: RemoteProviderConfiguration]
     private let recorder = DebugAudioRecorder()
+    private let preferredInputDeviceIDProvider: () -> AudioDeviceID?
     private let mlxTranscriber: MLXTranscriber
     private let remoteTranscriber = RemoteASRTranscriber()
     private var toastDismissTask: Task<Void, Never>?
@@ -214,6 +257,7 @@ final class ASRDebugViewModel: ObservableObject {
             hubBaseURL: hubURL
         )
         mlxTranscriber = MLXTranscriber(modelManager: mlxModelManager)
+        preferredInputDeviceIDProvider = { [weak appDelegate] in appDelegate?.selectedInputDeviceID }
         mlxTranscriber.dictionaryEntryProvider = {
             appDelegate.dictionaryStore.activeEntriesForRemoteRequest(
                 activeGroupID: appDelegate.activeDictionaryGroupID(),
@@ -354,13 +398,13 @@ final class ASRDebugViewModel: ObservableObject {
     }
 
     private func startRecording() {
-        do {
-            try recorder.start()
-            isRecording = true
-            statusMessage = modelDebugLocalized("Recording…")
-        } catch {
-            statusMessage = error.localizedDescription
+        recorder.start(deviceID: preferredInputDeviceIDProvider()) { [weak self] error in
+            guard let self else { return }
+            self.isRecording = false
+            self.statusMessage = error.localizedDescription
         }
+        isRecording = true
+        statusMessage = modelDebugLocalized("Recording…")
     }
 
     private func stopRecordingAndRun() {

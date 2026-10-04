@@ -221,6 +221,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var workspaceSessionDidBecomeActiveObserver: NSObjectProtocol?
     var workspaceSessionDidResignActiveObserver: NSObjectProtocol?
     var audioInputDevicesObserver: AudioInputDeviceObserver?
+    var displayConfigurationObserver: NSObjectProtocol?
     var localEscapeKeyMonitor: Any?
     let overlayShortcutEventGate = OverlayShortcutEventGate()
     var inputDevicesRefreshTask: Task<Void, Never>?
@@ -906,6 +907,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let fileTaskNotificationObserver {
             NotificationCenter.default.removeObserver(fileTaskNotificationObserver)
             self.fileTaskNotificationObserver = nil
+        }
+        if let displayConfigurationObserver {
+            NotificationCenter.default.removeObserver(displayConfigurationObserver)
+            self.displayConfigurationObserver = nil
         }
         let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
         if let workspaceWillSleepObserver {
