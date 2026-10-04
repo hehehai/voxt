@@ -47,6 +47,8 @@ nonisolated enum MicrophoneCaptureEvent: Sendable {
     case restartFailed(reason: String, message: String)
     case deviceLost(AudioDeviceSnapshot)
     case renderFailed(OSStatus)
+    /// The device started but no audio arrived within the expected time.
+    case noAudio(waitedMs: Int)
 }
 
 nonisolated enum MicrophoneCaptureError: LocalizedError {
@@ -92,6 +94,10 @@ nonisolated enum MicrophoneCaptureError: LocalizedError {
 nonisolated final class MicrophoneCaptureSession: @unchecked Sendable {
     typealias BufferHandler = @Sendable (AVAudioPCMBuffer) -> Void
     typealias EventHandler = @Sendable (MicrophoneCaptureEvent) -> Void
+
+    /// A started device delivers its first I/O cycle within milliseconds; Bluetooth links
+    /// can take a few hundred. Anything beyond this is reported (not restarted).
+    static let firstBufferExpectationSeconds: Double = 2
 
     let context: String
     private let controlQueue: DispatchQueue
@@ -240,6 +246,7 @@ nonisolated final class MicrophoneCaptureSession: @unchecked Sendable {
         inputUnit = unit
         hasStarted = true
         registerDeviceListener(for: target.id)
+        sink.scheduleFirstBufferCheck(after: Self.firstBufferExpectationSeconds)
 
         let elapsedMs = MicrophoneCaptureTimings.milliseconds(since: startedAt)
         VoxtLog.audio(
@@ -559,17 +566,15 @@ nonisolated private final class MicrophoneInputUnit {
             return status
         }
 
-        let buffers = UnsafeMutableAudioBufferListPointer(renderBuffer.mutableAudioBufferList)
-        let byteCount = frameCount * UInt32(MemoryLayout<Float>.size)
-        for index in 0..<buffers.count {
-            buffers[index].mDataByteSize = byteCount
-        }
+        // `mutableAudioBufferList` derives every `mDataByteSize` from `frameLength` on each
+        // access, so the length must be set before rendering; a zero length makes the unit
+        // reject the buffer list with kAudio_ParamError (-50).
+        renderBuffer.frameLength = frameCount
         let status = AudioUnitRender(audioUnit, flags, timeStamp, busNumber, frameCount, renderBuffer.mutableAudioBufferList)
         guard status == noErr else {
             sink.reportRenderFailure(status)
             return status
         }
-        renderBuffer.frameLength = frameCount
         sink.enqueueCopy(of: renderBuffer)
         return noErr
     }
@@ -659,6 +664,17 @@ nonisolated private final class MicrophoneCaptureSink: @unchecked Sendable {
         }
         queue.async {
             self.process(copy)
+        }
+    }
+
+    func scheduleFirstBufferCheck(after seconds: Double) {
+        queue.asyncAfter(deadline: .now() + seconds) {
+            guard self.accepting, !self.hasReportedFirstBuffer else { return }
+            let waitedMs = MicrophoneCaptureTimings.milliseconds(since: self.requestedAt)
+            VoxtLog.audioWarning(
+                "Microphone capture has not delivered audio. context=\(self.context), waitedMs=\(waitedMs), device=\(self.currentDeviceDescription), lid=\(self.currentLidState.rawValue)"
+            )
+            self.deliver(.noAudio(waitedMs: waitedMs))
         }
     }
 

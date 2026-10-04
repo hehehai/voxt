@@ -115,7 +115,7 @@ extension AppDelegate {
         else { return }
 
         switch event {
-        case .digitalSilence:
+        case .digitalSilence, .noAudio, .renderFailed:
             showOverlayStatus(
                 AppLocalization.localizedString("No sound is reaching the microphone. Check the selected microphone."),
                 clearAfter: 3
@@ -128,7 +128,7 @@ extension AppDelegate {
                     clearAfter: 2.4
                 )
             }
-        case .firstBuffer, .signalRecovered, .deviceFormatChanged, .deviceSwitched, .deviceLost, .renderFailed:
+        case .firstBuffer, .signalRecovered, .deviceFormatChanged, .deviceSwitched, .deviceLost:
             // Logged by the capture session; device loss is resolved by the input-device
             // snapshot, which moves the session to the next available microphone.
             break
