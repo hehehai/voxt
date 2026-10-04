@@ -9,3 +9,5 @@ Shared business and infrastructure layer used across app flows, settings, transc
 - Keeps UI-independent logic separate from AppKit and SwiftUI presentation code.
 
 Repositories live beside their domain stores in `History/` and `Dictionary/`. `Notes/` contains note storage, export records, and Obsidian/Reminders sync coordinators. `VoxtDatabase` remains shared infrastructure at the Core root. These source moves do not change database or user-data paths.
+
+`Audio/` holds microphone capture (`MicrophoneCaptureSession`), Core Audio device inspection used for routing and diagnostics, laptop lid state, and capture signal-health detection.

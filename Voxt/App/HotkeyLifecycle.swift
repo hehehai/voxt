@@ -161,6 +161,7 @@ extension AppDelegate {
             Task { @MainActor [weak self] in
                 self?.interactionSoundPlayer.reset()
                 self?.interactionSoundPlayer.prewarm()
+                self?.refreshInputDevicesSnapshot(reason: "wake")
                 self?.scheduleHotkeyTransientStateReset(reason: "workspaceDidWake")
             }
         }

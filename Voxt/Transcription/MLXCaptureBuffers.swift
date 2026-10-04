@@ -2,7 +2,7 @@
 
 import Foundation
 
-struct MLXVoiceActivitySampleContextBuffer {
+nonisolated struct MLXVoiceActivitySampleContextBuffer {
     static let defaultMaximumContextSeconds: TimeInterval = 0.35
 
     private let maximumContextSeconds: TimeInterval
@@ -114,7 +114,9 @@ nonisolated final class MLXAudioLevelDelivery: @unchecked Sendable {
 }
 
 extension MLXTranscriber {
-    final class AudioSampleStore {
+    /// Written from the microphone delivery queue, read on the main actor; every access
+    /// takes `lock`.
+    nonisolated final class AudioSampleStore: @unchecked Sendable {
         private let lock = NSLock()
         private var samples: [Float] = []
         private var callbackCount: Int = 0
@@ -205,7 +207,7 @@ extension MLXTranscriber {
         }
     }
 
-    final class VoiceActivityFrameStore {
+    nonisolated final class VoiceActivityFrameStore: @unchecked Sendable {
         private let lock = NSLock()
         private var frames: [ASRVoiceActivityAudioFrame] = []
         private var cursorSeconds: TimeInterval = 0

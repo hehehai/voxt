@@ -1059,6 +1059,7 @@
 "Microphone Status Disconnected" = "Disconnected";
 "Switched microphone to %@." = "Switched microphone to %@.";
 "Failed to switch microphone to %@." = "Failed to switch microphone to %@.";
+"No sound is reaching the microphone. Check the selected microphone." = "No sound is reaching the microphone. Check the selected microphone.";
 "Guide" = "Guide";
 "Setup Guide" = "Setup Guide";
 "Open Setup Guide" = "Open Setup Guide";

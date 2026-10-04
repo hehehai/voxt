@@ -64,6 +64,9 @@ extension AppDelegate {
             self?.stashPendingCompletedHistoryAudioArchive(self?.mlxTranscriber?.consumeCompletedAudioArchiveURL())
             self?.processTranscription(text, sessionID: sessionID)
         }
+        mlx.onMicrophoneCaptureEvent = { [weak self] event in
+            self?.handleMicrophoneCaptureEvent(event, sessionID: sessionID)
+        }
         overlayState.bind(to: mlx)
         overlayWindow.show(
             state: overlayState,
@@ -78,6 +81,13 @@ extension AppDelegate {
                       self.shouldHandleCallbacks(for: sessionID),
                       self.isSessionActive
                 else { return }
+                if self.recordingStoppedAt != nil {
+                    // The user stopped while the microphone was still starting; stopping
+                    // aborted the start. End like a recording that captured nothing.
+                    VoxtLog.asr("Recording stopped before the microphone finished starting; finishing with an empty result.")
+                    self.processTranscription("", sessionID: sessionID)
+                    return
+                }
                 VoxtLog.asrWarning("MLX recording session did not enter recording state. reason=\(startFailureMessage)")
                 self.handleRecordingStartFailure(startFailureMessage)
                 return
@@ -95,6 +105,33 @@ extension AppDelegate {
                 self.systemAudioMuteController.restoreSystemAudioIfNeeded()
                 return
             }
+        }
+    }
+
+    func handleMicrophoneCaptureEvent(_ event: MicrophoneCaptureEvent, sessionID: UUID) {
+        guard shouldHandleCallbacks(for: sessionID),
+              isSessionActive,
+              recordingStoppedAt == nil
+        else { return }
+
+        switch event {
+        case .digitalSilence:
+            showOverlayStatus(
+                AppLocalization.localizedString("No sound is reaching the microphone. Check the selected microphone."),
+                clearAfter: 3
+            )
+        case .restartFailed(let reason, let message):
+            VoxtLog.asrWarning("Microphone capture restart failed during recording. reason=\(reason), error=\(message)")
+            if let device = microphoneResolvedState.activeDevice {
+                showOverlayStatus(
+                    AppLocalization.format("Failed to switch microphone to %@.", device.name),
+                    clearAfter: 2.4
+                )
+            }
+        case .firstBuffer, .signalRecovered, .deviceFormatChanged, .deviceSwitched, .deviceLost, .renderFailed:
+            // Logged by the capture session; device loss is resolved by the input-device
+            // snapshot, which moves the session to the next available microphone.
+            break
         }
     }
 
