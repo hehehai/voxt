@@ -5,11 +5,20 @@ import Foundation
 import Speech
 import AVFoundation
 import Combine
-import AudioToolbox
+import CoreAudio
 
 @MainActor
 class SpeechTranscriber: ObservableObject, TranscriberProtocol {
-    private final class AudioSampleStore {
+    /// Speech framework requests accept appended audio from any thread.
+    nonisolated private final class RecognitionAudioInput: @unchecked Sendable {
+        let request: SFSpeechAudioBufferRecognitionRequest
+
+        init(request: SFSpeechAudioBufferRecognitionRequest) {
+            self.request = request
+        }
+    }
+
+    nonisolated private final class AudioSampleStore: @unchecked Sendable {
         private let lock = NSLock()
         private var samples: [Float] = []
 
@@ -41,10 +50,11 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine()
+    private var captureSession: MicrophoneCaptureSession?
     private let sampleStore = AudioSampleStore()
     private var preferredInputDeviceID: AudioDeviceID?
-    private var inputSampleRate: Double = 16000
+    /// Capture always delivers mono audio at this rate.
+    private let inputSampleRate: Double = 16000
     private var completedAudioArchiveURL: URL?
 
     private var finalizeTimeoutTask: Task<Void, Never>?
@@ -78,7 +88,16 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     }
 
     func startRecording() {
-        guard !isRecording else { return }
+        Task { [weak self] in
+            _ = await self?.startRecordingSession()
+        }
+    }
+
+    /// Starts recognition and microphone capture. Returns whether recording started;
+    /// `lastStartFailureMessage` explains a failure.
+    @discardableResult
+    func startRecordingSession() async -> Bool {
+        guard !isRecording else { return true }
         lastStartFailureMessage = nil
         removeCompletedAudioArchiveIfNeeded()
 
@@ -89,7 +108,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             let message = AppLocalization.localizedString("Direct Dictation is unavailable for the current language.")
             lastStartFailureMessage = message
             VoxtLog.asrWarning("Speech transcriber start blocked: recognizer is unavailable for current locale.")
-            return
+            return false
         }
         if settings.prefersOnDeviceRecognition && !recognizer.supportsOnDeviceRecognition {
             let message = AppLocalization.localizedString("Direct Dictation on-device recognition is unavailable for the selected language.")
@@ -97,13 +116,13 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             VoxtLog.asrWarning(
                 "Speech transcriber start blocked: on-device recognition is unavailable. locale=\(recognizer.locale.identifier)"
             )
-            return
+            return false
         }
         guard recognizer.isAvailable else {
             let message = AppLocalization.localizedString("Direct Dictation is temporarily unavailable. Try again in a moment.")
             lastStartFailureMessage = message
             VoxtLog.asrWarning("Speech transcriber start blocked: recognizer is not currently available.")
-            return
+            return false
         }
 
         cleanupSessionState()
@@ -113,18 +132,29 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         hasDeliveredFinalResult = false
 
         do {
-            try startSpeechRecognition(recognizer: recognizer, settings: settings)
+            try await startSpeechRecognition(recognizer: recognizer, settings: settings)
             isRecording = true
             lastStartFailureMessage = nil
+            return true
         } catch {
             lastStartFailureMessage = AppLocalization.localizedString("Direct Dictation failed to start recording.")
-            VoxtLog.asrError("Speech transcriber start recording failed: \(error)")
+            if MicrophoneCaptureError.isAbort(error) {
+                VoxtLog.asr("Speech transcriber start cancelled before the microphone was running.")
+            } else {
+                VoxtLog.asrError("Speech transcriber start recording failed: \(error.localizedDescription)")
+            }
+            stopAudioCapture()
             cleanupSessionState()
+            return false
         }
     }
 
     func stopRecording() {
-        guard isRecording else { return }
+        guard isRecording else {
+            // Abort a microphone start that is still in progress.
+            stopAudioCapture()
+            return
+        }
 
         stopAudioCapture()
         isRecording = false
@@ -148,26 +178,11 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         onTranscriptionFinished = nil
     }
 
+    /// Moves capture to the current preferred device. The recognition request keeps running
+    /// because the delivered audio format does not change with the device.
     func restartCaptureForPreferredInputDevice() throws {
         guard isRecording else { return }
-        let settings = resolvedDictationSettings()
-        refreshSpeechRecognizer(localeIdentifier: settings.localeIdentifier)
-        guard let recognizer = speechRecognizer else {
-            throw NSError(
-                domain: "Voxt.SpeechTranscriber",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Speech recognizer is unavailable."]
-            )
-        }
-        if settings.prefersOnDeviceRecognition && !recognizer.supportsOnDeviceRecognition {
-            throw NSError(
-                domain: "Voxt.SpeechTranscriber",
-                code: -2,
-                userInfo: [NSLocalizedDescriptionKey: "On-device recognition is unavailable for the selected language."]
-            )
-        }
-        stopAudioCapture()
-        try startSpeechRecognition(recognizer: recognizer, settings: settings)
+        captureSession?.switchDevice(to: preferredInputDeviceID)
     }
 
     private func cleanupSessionState() {
@@ -178,11 +193,10 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         sampleStore.clear()
     }
 
+    /// Stops capture after handing out already captured audio, then ends the request.
     private func stopAudioCapture() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        }
-        audioEngine.inputNode.removeTap(onBus: 0)
+        captureSession?.stop()
+        captureSession = nil
         recognitionRequest?.endAudio()
     }
 
@@ -206,14 +220,9 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     private func startSpeechRecognition(
         recognizer: SFSpeechRecognizer,
         settings: ResolvedDictationSettings
-    ) throws {
+    ) async throws {
         clearRecognitionPipeline(cancelTask: true)
-
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
-        }
-        audioEngine.reset()
+        captureSession?.stop()
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = settings.reportsPartialResults
@@ -225,49 +234,33 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         }
         recognitionRequest = request
 
-        let inputNode = audioEngine.inputNode
-        let didApplyPreferredInputDevice = applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
-        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
-        let hardwareSampleRate = AudioInputDeviceManager.nominalSampleRate(for: activeInputDeviceID)
-        let tapFormat = AudioInputDeviceManager.captureTapFormat(
-            nodeOutputFormat: nodeOutputFormat,
-            hardwareSampleRate: hardwareSampleRate
+        let capture = MicrophoneCaptureSession(context: "dictation")
+        captureSession = capture
+        let audioInput = RecognitionAudioInput(request: request)
+        let sampleStore = self.sampleStore
+        let deliverLevel: @MainActor @Sendable (Float) -> Void = { [weak self] level in
+            self?.audioLevel = level
+        }
+
+        _ = try await capture.start(
+            MicrophoneCaptureRequest(deviceID: preferredInputDeviceID, outputSampleRate: inputSampleRate),
+            onBuffer: { buffer in
+                audioInput.request.append(buffer)
+                guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else { return }
+                sampleStore.append(samples)
+
+                var sumOfSquares: Float = 0
+                for sample in samples {
+                    sumOfSquares += sample * sample
+                }
+                let normalized = min(sqrt(sumOfSquares / Float(samples.count)) * 20, 1.0)
+                Task { @MainActor in
+                    deliverLevel(normalized)
+                }
+            },
+            onEvent: { _ in }
         )
-        inputSampleRate = tapFormat.sampleRate
-
-        if abs(tapFormat.sampleRate - nodeOutputFormat.sampleRate) > 1 {
-            VoxtLog.warning(
-                "Speech transcriber adjusted input tap format. deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default"), hardwareSampleRate=\(hardwareSampleRate.map { String(Int($0.rounded())) } ?? "unknown"), nodeSampleRate=\(Int(nodeOutputFormat.sampleRate.rounded())), tapSampleRate=\(Int(tapFormat.sampleRate.rounded()))"
-            )
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            self.recognitionRequest?.append(buffer)
-
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
-
-            guard let channelData = buffer.floatChannelData?[0] else { return }
-            let frameLength = Int(buffer.frameLength)
-            if frameLength == 0 { return }
-
-            var rms: Float = 0
-            for i in 0..<frameLength {
-                rms += channelData[i] * channelData[i]
-            }
-            rms = sqrt(rms / Float(frameLength))
-            let normalized = min(rms * 20, 1.0)
-
-            Task { @MainActor [weak self] in
-                self?.audioLevel = normalized
-            }
-        }
-
-        audioEngine.prepare()
-        try audioEngine.start()
+        guard captureSession === capture else { throw CancellationError() }
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
@@ -309,31 +302,6 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
         }
         recognitionTask = nil
         recognitionRequest = nil
-    }
-
-    @discardableResult
-    private func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) -> Bool {
-        guard let preferredInputDeviceID,
-              preferredInputDeviceID != AudioDeviceID(kAudioObjectUnknown),
-              AudioInputDeviceManager.isAvailableInputDevice(preferredInputDeviceID)
-        else {
-            return false
-        }
-        guard let audioUnit = inputNode.audioUnit else { return false }
-        var deviceID = preferredInputDeviceID
-        let status = AudioUnitSetProperty(
-            audioUnit,
-            kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global,
-            0,
-            &deviceID,
-            UInt32(MemoryLayout<AudioDeviceID>.size)
-        )
-        if status != noErr {
-            VoxtLog.asrWarning("Unable to switch input device. status=\(status)")
-            return false
-        }
-        return true
     }
 
     private func resolvedDictationSettings() -> ResolvedDictationSettings {

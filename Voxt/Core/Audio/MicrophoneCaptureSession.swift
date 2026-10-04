@@ -52,6 +52,13 @@ nonisolated enum MicrophoneCaptureError: LocalizedError {
     case startTimedOut(seconds: Double)
     case stopped
 
+    /// The start ended because its owner stopped or cancelled it, not because of a device error.
+    static func isAbort(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if case MicrophoneCaptureError.stopped = error { return true }
+        return false
+    }
+
     var errorDescription: String? {
         switch self {
         case .noInputDevice:

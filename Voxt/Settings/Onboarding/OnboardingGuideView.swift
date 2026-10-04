@@ -53,7 +53,6 @@ struct OnboardingGuideView: View {
     @State var microphoneSignalFrameCount = 0
     @State var microphoneReceivedInitialBuffer = false
     @State var microphoneStartupRetryCount = 0
-    @State var microphoneStartupWatchdogTask: Task<Void, Never>?
     @State var microphoneRefreshTask: Task<Void, Never>?
     @State var transcriptionInput = ""
     @State var translationInput = ""
@@ -75,7 +74,6 @@ struct OnboardingGuideView: View {
     private static let contentBottomCompensation: CGFloat = 0
     static let microphoneSignalThreshold: Float = 0.006
     static let microphoneRequiredSignalFrames = 2
-    static let microphoneStartupWatchdogDelay: Duration = .milliseconds(1200)
     static let collapsedModelListLimit = 3
     static let preferredLocalASRRepos = [
         "mlx-community/SenseVoiceSmall",

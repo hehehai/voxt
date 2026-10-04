@@ -1,52 +1,105 @@
 import Foundation
 import AVFoundation
-import AudioToolbox
+import CoreAudio
 
 extension RemoteASRTranscriber {
-    func inputCaptureTapFormat(
-        inputNode: AVAudioInputNode,
-        activeInputDeviceID: AudioDeviceID?,
-        logContext: String
-    ) -> AVAudioFormat {
-        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
-        let hardwareSampleRate = AudioInputDeviceManager.nominalSampleRate(for: activeInputDeviceID)
-        let tapFormat = AudioInputDeviceManager.captureTapFormat(
-            nodeOutputFormat: nodeOutputFormat,
-            hardwareSampleRate: hardwareSampleRate
-        )
-
-        if abs(tapFormat.sampleRate - nodeOutputFormat.sampleRate) > 1 {
-            VoxtLog.warning(
-                "\(logContext) adjusted input tap format. deviceID=\(activeInputDeviceID.map(String.init(describing:)) ?? "default"), hardwareSampleRate=\(hardwareSampleRate.map { String(Int($0.rounded())) } ?? "unknown"), nodeSampleRate=\(Int(nodeOutputFormat.sampleRate.rounded())), tapSampleRate=\(Int(tapFormat.sampleRate.rounded()))"
-            )
-        }
-
-        return tapFormat
+    /// Starts the microphone for the active realtime provider or file recording and returns
+    /// immediately; the device starts on the capture queue, never on the main thread.
+    /// Samples are kept for the history archive and file upload. When `deliver` is set, each
+    /// chunk is passed to it on the main actor as 16 kHz mono PCM16 while this recording
+    /// generation is current.
+    func startMicrophoneCapture(
+        context: String,
+        deliver: (@MainActor @Sendable (Data) -> Void)? = nil
+    ) {
+        didRetryMicrophoneWithSystemDefault = false
+        startMicrophoneCapture(context: context, deviceID: preferredInputDeviceID, deliver: deliver)
     }
 
-    @discardableResult
-    func applyPreferredInputDeviceIfNeeded(inputNode: AVAudioInputNode) -> Bool {
-        guard let preferredInputDeviceID,
-              preferredInputDeviceID != AudioDeviceID(kAudioObjectUnknown),
-              AudioInputDeviceManager.isAvailableInputDevice(preferredInputDeviceID)
-        else {
-            return false
+    private func startMicrophoneCapture(
+        context: String,
+        deviceID: AudioDeviceID?,
+        deliver: (@MainActor @Sendable (Data) -> Void)?
+    ) {
+        stopStreamingAudioCapture()
+        let capture = MicrophoneCaptureSession(context: "remote-\(context)")
+        microphoneCaptureSession = capture
+        streamingInputSampleRate = HistoryAudioArchiveSupport.targetSampleRate
+        isRecording = true
+
+        let generationID = recordingGenerationID
+        let sampleStore = self.sampleStore
+        let handleChunk: @MainActor @Sendable (Data) -> Void = { [weak self] pcmData in
+            guard let self, self.isCurrentGeneration(generationID), self.isRecording else { return }
+            self.audioLevel = self.audioLevelFromPCM16(pcmData)
+            deliver?(pcmData)
         }
-        guard let audioUnit = inputNode.audioUnit else { return false }
-        var deviceID = preferredInputDeviceID
-        let status = AudioUnitSetProperty(
-            audioUnit,
-            kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global,
-            0,
-            &deviceID,
-            UInt32(MemoryLayout<AudioDeviceID>.size)
+        let request = MicrophoneCaptureRequest(
+            deviceID: deviceID,
+            outputSampleRate: HistoryAudioArchiveSupport.targetSampleRate
         )
-        if status != noErr {
-            VoxtLog.asrWarning("Remote ASR failed to switch preferred input device. status=\(status)")
-            return false
+
+        microphoneCaptureStartTask = Task { @MainActor [weak self] in
+            do {
+                _ = try await capture.start(
+                    request,
+                    onBuffer: { buffer in
+                        guard let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty else { return }
+                        sampleStore.append(samples)
+                        guard let pcmData = RemoteASRTranscriber.makePCM16MonoData(
+                            from: samples,
+                            inputSampleRate: buffer.format.sampleRate
+                        ) else { return }
+                        Task { @MainActor in
+                            handleChunk(pcmData)
+                        }
+                    },
+                    onEvent: { _ in }
+                )
+            } catch {
+                guard !MicrophoneCaptureError.isAbort(error),
+                      let self,
+                      self.microphoneCaptureSession === capture
+                else { return }
+                self.handleMicrophoneCaptureStartFailure(
+                    error,
+                    context: context,
+                    deviceID: deviceID,
+                    deliver: deliver
+                )
+            }
         }
-        return true
+    }
+
+    /// Stops the microphone after already captured audio has been handed out.
+    func stopStreamingAudioCapture() {
+        microphoneCaptureStartTask?.cancel()
+        microphoneCaptureStartTask = nil
+        microphoneCaptureSession?.stop()
+        microphoneCaptureSession = nil
+        audioLevel = 0
+    }
+
+    /// A preferred microphone that cannot start is retried once with the system default
+    /// input; any other failure is reported to the session.
+    private func handleMicrophoneCaptureStartFailure(
+        _ error: Error,
+        context: String,
+        deviceID: AudioDeviceID?,
+        deliver: (@MainActor @Sendable (Data) -> Void)?
+    ) {
+        let generationID = recordingGenerationID
+        guard deviceID != nil, !didRetryMicrophoneWithSystemDefault else {
+            VoxtLog.asrError("Remote ASR microphone failed to start. context=\(context), error=\(error.localizedDescription)")
+            stopStreamingAudioCapture()
+            notifyRuntimeFailure(error, generationID: generationID)
+            return
+        }
+        didRetryMicrophoneWithSystemDefault = true
+        VoxtLog.asrWarning(
+            "Remote ASR microphone retrying with the system default input. context=\(context), error=\(error.localizedDescription)"
+        )
+        startMicrophoneCapture(context: context, deviceID: nil, deliver: deliver)
     }
 
     func audioLevelFromPCM16(_ data: Data) -> Float {
@@ -64,43 +117,6 @@ extension RemoteASRTranscriber {
         guard count > 0 else { return 0 }
         let rms = sqrt(sum / count)
         return min(max(rms * 2.4, 0), 1)
-    }
-
-    nonisolated static func makeDoubaoPCM16MonoData(from buffer: AVAudioPCMBuffer) -> Data? {
-        let frameCount = Int(buffer.frameLength)
-        guard frameCount > 0 else { return nil }
-
-        let inputRate = max(buffer.format.sampleRate, 1)
-        let targetRate = 16000.0
-        let step = max(inputRate / targetRate, 1)
-        let outputCount = max(Int(Double(frameCount) / step), 1)
-        var output = Data(count: outputCount * MemoryLayout<Int16>.size)
-
-        switch buffer.format.commonFormat {
-        case .pcmFormatInt16:
-            guard let channelData = buffer.int16ChannelData?[0] else { return nil }
-            output.withUnsafeMutableBytes { rawBuffer in
-                let out = rawBuffer.bindMemory(to: Int16.self)
-                for index in 0..<outputCount {
-                    let sourceIndex = min(Int(Double(index) * step), frameCount - 1)
-                    out[index] = channelData[sourceIndex]
-                }
-            }
-        case .pcmFormatFloat32:
-            guard let channelData = buffer.floatChannelData?[0] else { return nil }
-            output.withUnsafeMutableBytes { rawBuffer in
-                let out = rawBuffer.bindMemory(to: Int16.self)
-                for index in 0..<outputCount {
-                    let sourceIndex = min(Int(Double(index) * step), frameCount - 1)
-                    let clamped = max(-1.0, min(1.0, channelData[sourceIndex]))
-                    out[index] = Int16(clamped * Float(Int16.max))
-                }
-            }
-        default:
-            return nil
-        }
-
-        return output
     }
 
     nonisolated static func makePCM16MonoData(from samples: [Float], inputSampleRate: Double) -> Data? {

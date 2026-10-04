@@ -157,8 +157,21 @@ extension AppDelegate {
                 self?.stashPendingCompletedHistoryAudioArchive(self?.speechTranscriber.consumeCompletedAudioArchiveURL())
                 self?.processTranscription(text, sessionID: sessionID)
             }
-            self.speechTranscriber.startRecording()
-            guard self.speechTranscriber.isRecording else {
+            let didStart = await self.speechTranscriber.startRecordingSession()
+            guard !Task.isCancelled,
+                  !self.isApplicationTerminating,
+                  self.shouldHandleCallbacks(for: sessionID),
+                  self.isSessionActive
+            else {
+                self.speechTranscriber.stopRecording()
+                return
+            }
+            if !didStart, self.recordingStoppedAt != nil {
+                VoxtLog.asr("Recording stopped before the microphone finished starting; finishing with an empty result.")
+                self.processTranscription("", sessionID: sessionID)
+                return
+            }
+            guard didStart else {
                 let failureMessage = self.speechTranscriber.lastStartFailureMessage
                     ?? AppLocalization.localizedString("Direct Dictation failed to start recording.")
                 VoxtLog.asrWarning("Speech recording session did not enter recording state. reason=\(failureMessage)")

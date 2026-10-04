@@ -45,7 +45,7 @@ extension RemoteASRTranscriber {
         )
         stepFunStreamingContext = context
         receiveStepFunMessages(context)
-        try startStepFunAudioCapture(context: context)
+        startStepFunAudioCapture(context: context)
         context.didStartAudioStream = true
         VoxtLog.model("StepFun realtime audio capture started while waiting for session.updated.")
 
@@ -137,13 +137,8 @@ extension RemoteASRTranscriber {
             guard !context.isSessionUpdated else { return }
             context.isSessionUpdated = true
             if !context.didStartAudioStream, !stopRequested {
-                do {
-                    try startStepFunAudioCapture(context: context)
-                    context.didStartAudioStream = true
-                } catch {
-                    await context.responseState.markCompletedWithError(error)
-                    return
-                }
+                startStepFunAudioCapture(context: context)
+                context.didStartAudioStream = true
             }
             flushPendingStepFunAudio(context)
             VoxtLog.model(
@@ -178,48 +173,15 @@ extension RemoteASRTranscriber {
         }
     }
 
-    func startStepFunAudioCapture(context: StepFunStreamingContext) throws {
-        if audioEngine.isRunning {
-            audioEngine.stop()
+    func startStepFunAudioCapture(context: StepFunStreamingContext) {
+        startMicrophoneCapture(context: "stepfun") { [weak self] pcmData in
+            guard let self,
+                  let context = self.stepFunStreamingContext,
+                  !context.isClosed
+            else { return }
+            self.sendStepFunAudio(pcmData, context: context)
         }
-        audioEngine.reset()
-
-        let inputNode = acquireStreamingInputNode()
-        let didApplyPreferredInputDevice = preferredInputDeviceID != nil
-            ? applyPreferredInputDeviceIfNeeded(inputNode: inputNode)
-            : false
-        let activeInputDeviceID = didApplyPreferredInputDevice ? preferredInputDeviceID : AudioInputDeviceManager.defaultInputDeviceID()
-        let inputFormat = inputCaptureTapFormat(
-            inputNode: inputNode,
-            activeInputDeviceID: activeInputDeviceID,
-            logContext: "StepFun transcriber"
-        )
-        streamingInputSampleRate = inputFormat.sampleRate
-        inputNode.removeTap(onBus: 0)
-        let captureGeneration = recordingGenerationID
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            guard let pcmData = Self.makeDoubaoPCM16MonoData(from: buffer) else { return }
-            if let samples = AudioLevelMeter.monoSamples(from: buffer), !samples.isEmpty {
-                self.sampleStore.append(samples)
-            }
-            Task { @MainActor in
-                guard self.isCurrentGeneration(captureGeneration), self.isRecording,
-                      let context = self.stepFunStreamingContext,
-                      !context.isClosed
-                else { return }
-                self.audioLevel = self.audioLevelFromPCM16(pcmData)
-                self.sendStepFunAudio(pcmData, context: context)
-            }
-        }
-
-        audioEngine.prepare()
-        try audioEngine.start()
-        isRecording = true
-        VoxtLog.asr(
-            "StepFun realtime audio capture engine started. sampleRate=\(Int(inputFormat.sampleRate)), channels=\(inputFormat.channelCount)",
-            verbose: true
-        )
+        VoxtLog.asr("StepFun realtime audio capture requested.", verbose: true)
     }
 
     func stopStepFunAudioCapture() {

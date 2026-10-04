@@ -220,7 +220,7 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             }
             return nil
         } catch {
-            if Self.isAbortedStart(error) {
+            if MicrophoneCaptureError.isAbort(error) {
                 VoxtLog.asr("MLX recording start cancelled before the microphone was running.")
             } else {
                 VoxtLog.asrError("MLXTranscriber start recording failed: \(error.localizedDescription)")
@@ -229,12 +229,6 @@ class MLXTranscriber: ObservableObject, TranscriberProtocol {
             discardPreparedSessionModelUse()
             return AppLocalization.localizedString("Failed to start the microphone. Please try again.")
         }
-    }
-
-    private static func isAbortedStart(_ error: Error) -> Bool {
-        if error is CancellationError { return true }
-        if case MicrophoneCaptureError.stopped = error { return true }
-        return false
     }
 
     func stopRecording() {
