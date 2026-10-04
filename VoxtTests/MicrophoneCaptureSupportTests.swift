@@ -116,6 +116,49 @@ final class MicrophoneCaptureSupportTests: XCTestCase {
         XCTAssertEqual(monitor.observe(peak: .nan, durationSeconds: 0.1), .digitalSilenceDetected(durationMs: 200))
     }
 
+    // MARK: Bluetooth route
+
+    func testBluetoothHeadsetInputAndOutputShareDeviceAddress() {
+        XCTAssertEqual(BluetoothAudioRoute.deviceAddress(fromUID: "7C-C1-80-21-87-97:input"), "7C-C1-80-21-87-97")
+        XCTAssertTrue(
+            BluetoothAudioRoute.sharesHeadset(
+                inputID: 601,
+                inputUID: "7C-C1-80-21-87-97:input",
+                inputTransport: .bluetooth,
+                outputID: 602,
+                outputUID: "7C-C1-80-21-87-97:output",
+                outputTransport: .bluetooth
+            )
+        )
+    }
+
+    func testDifferentBluetoothDevicesDoNotShareHeadset() {
+        XCTAssertFalse(
+            BluetoothAudioRoute.sharesHeadset(
+                inputID: 113,
+                inputUID: "EC-72-F7-5A-28-2A:input",
+                inputTransport: .bluetooth,
+                outputID: 602,
+                outputUID: "7C-C1-80-21-87-97:output",
+                outputTransport: .bluetooth
+            )
+        )
+    }
+
+    func testNonBluetoothRoutesNeverShareHeadset() {
+        XCTAssertFalse(
+            BluetoothAudioRoute.sharesHeadset(
+                inputID: 85,
+                inputUID: "BuiltInMicrophoneDevice",
+                inputTransport: .builtIn,
+                outputID: 85,
+                outputUID: "BuiltInMicrophoneDevice",
+                outputTransport: .builtIn
+            )
+        )
+        XCTAssertNil(BluetoothAudioRoute.deviceAddress(fromUID: "BuiltInMicrophoneDevice"))
+    }
+
     // MARK: Device description
 
     func testTransportTypesMapToLabels() {

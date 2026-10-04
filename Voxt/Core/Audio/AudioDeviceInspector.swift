@@ -55,6 +55,10 @@ nonisolated enum AudioDeviceTransport: Equatable, Sendable {
         }
     }
 
+    var isBluetooth: Bool {
+        self == .bluetooth || self == .bluetoothLE
+    }
+
     var label: String {
         switch self {
         case .builtIn: return "builtIn"
@@ -117,9 +121,7 @@ nonisolated enum AudioDeviceInspector {
             id: deviceID,
             uid: uid(of: deviceID) ?? "unknown",
             name: name(of: deviceID) ?? "unknown",
-            transport: AudioDeviceTransport(
-                rawValue: uint32Property(deviceID, selector: kAudioDevicePropertyTransportType)
-            ),
+            transport: transport(of: deviceID),
             inputChannels: channelCount(of: deviceID, scope: kAudioObjectPropertyScopeInput),
             outputChannels: channelCount(of: deviceID, scope: kAudioObjectPropertyScopeOutput),
             nominalSampleRate: nominalSampleRate(of: deviceID),
@@ -161,6 +163,10 @@ nonisolated enum AudioDeviceInspector {
         let input = defaultInputDeviceID().map { snapshot(of: $0).diagnosticDescription } ?? "none"
         let output = defaultOutputDeviceID().map { snapshot(of: $0).diagnosticDescription } ?? "none"
         return "defaultInput=\(input), defaultOutput=\(output)"
+    }
+
+    static func transport(of deviceID: AudioDeviceID) -> AudioDeviceTransport {
+        AudioDeviceTransport(rawValue: uint32Property(deviceID, selector: kAudioDevicePropertyTransportType))
     }
 
     static func isUsableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
