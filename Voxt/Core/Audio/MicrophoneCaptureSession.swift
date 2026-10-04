@@ -20,6 +20,10 @@ nonisolated struct MicrophoneCaptureRequest: Sendable {
     /// Every delivered buffer is mono Float32 at this rate, independent of the device
     /// format and of device format changes during the session.
     var outputSampleRate: Double
+    /// Delivered buffers are regrouped to this duration (the last one may be shorter).
+    /// Device I/O cycles are ~10 ms; consumers such as VAD frames and provider streams
+    /// expect ~100 ms chunks.
+    var chunkDurationSeconds: Double = 0.1
     /// Upper bound for the asynchronous start. Only the awaiting caller waits for it.
     var startTimeoutSeconds: Double = 10
 }
@@ -124,6 +128,7 @@ nonisolated final class MicrophoneCaptureSession: @unchecked Sendable {
             context: context,
             queue: deliveryQueue,
             outputSampleRate: request.outputSampleRate,
+            chunkDurationSeconds: request.chunkDurationSeconds,
             onBuffer: onBuffer,
             onEvent: onEvent
         )
@@ -585,6 +590,7 @@ nonisolated private final class MicrophoneCaptureSink: @unchecked Sendable {
     private let queue: DispatchQueue
     private let queueKey = DispatchSpecificKey<Bool>()
     private let outputFormat: AVAudioFormat
+    private let chunkFrameCount: Int
     private let onBuffer: MicrophoneCaptureSession.BufferHandler
     private let onEvent: MicrophoneCaptureSession.EventHandler
     private let requestedAt = DispatchTime.now().uptimeNanoseconds
@@ -602,6 +608,7 @@ nonisolated private final class MicrophoneCaptureSink: @unchecked Sendable {
     private var health = CaptureSignalHealthMonitor()
     private var hasReportedFirstBuffer = false
     private var bufferCount = 0
+    private var pendingOutput: [Float] = []
     private var deliveredFrameCount = 0
     private var deviceSecondsCaptured: Double = 0
 
@@ -609,6 +616,7 @@ nonisolated private final class MicrophoneCaptureSink: @unchecked Sendable {
         context: String,
         queue: DispatchQueue,
         outputSampleRate: Double,
+        chunkDurationSeconds: Double,
         onBuffer: @escaping MicrophoneCaptureSession.BufferHandler,
         onEvent: @escaping MicrophoneCaptureSession.EventHandler
     ) {
@@ -621,6 +629,8 @@ nonisolated private final class MicrophoneCaptureSink: @unchecked Sendable {
             channels: 1,
             interleaved: false
         )!
+        let chunkSeconds = chunkDurationSeconds.isFinite ? max(chunkDurationSeconds, 0) : 0
+        chunkFrameCount = max(Int((sampleRate * chunkSeconds).rounded()), 1)
         self.onBuffer = onBuffer
         self.onEvent = onEvent
         queue.setSpecific(key: queueKey, value: true)
@@ -670,9 +680,13 @@ nonisolated private final class MicrophoneCaptureSink: @unchecked Sendable {
         }
     }
 
-    /// Hands out everything already captured, then drops later buffers and logs a summary.
+    /// Hands out everything already captured (including a final partial chunk), then drops
+    /// later buffers and logs a summary.
     func close() {
         let finish = {
+            if self.accepting {
+                self.flushPendingOutput()
+            }
             self.lock.lock()
             let wasAccepting = self.isAccepting
             self.isAccepting = false
@@ -736,9 +750,32 @@ nonisolated private final class MicrophoneCaptureSink: @unchecked Sendable {
             }
         }
 
-        guard let output = convert(input) else { return }
-        deliveredFrameCount += Int(output.frameLength)
-        onBuffer(output)
+        guard let output = convert(input), let samples = output.floatChannelData?[0] else { return }
+        pendingOutput.append(contentsOf: UnsafeBufferPointer(start: samples, count: Int(output.frameLength)))
+        while pendingOutput.count >= chunkFrameCount {
+            emitChunk(frameCount: chunkFrameCount)
+        }
+    }
+
+    private func flushPendingOutput() {
+        guard !pendingOutput.isEmpty else { return }
+        emitChunk(frameCount: pendingOutput.count)
+    }
+
+    private func emitChunk(frameCount: Int) {
+        defer { pendingOutput.removeFirst(frameCount) }
+        guard let chunk = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: AVAudioFrameCount(frameCount)),
+              let destination = chunk.floatChannelData?[0]
+        else {
+            return
+        }
+        pendingOutput.withUnsafeBufferPointer { source in
+            guard let base = source.baseAddress else { return }
+            memcpy(destination, base, frameCount * MemoryLayout<Float>.size)
+        }
+        chunk.frameLength = AVAudioFrameCount(frameCount)
+        deliveredFrameCount += frameCount
+        onBuffer(chunk)
     }
 
     private var currentLidState: LaptopLidState {

@@ -1065,6 +1065,10 @@ final class MeetingSessionCoordinator {
         else { return }
         guard deviceID != nil, microphoneStartupRetryCount < 1 else {
             VoxtLog.meetingWarning("Meeting microphone unavailable; continuing without microphone input. error=\(error.localizedDescription)")
+            // Previously a synchronous start failure aborted the meeting; keep the failure
+            // visible and recorded now that the microphone starts asynchronously.
+            pendingCaptureFailureMessage = pendingCaptureFailureMessage ?? error.localizedDescription
+            overlayState.safetyMessage = error.localizedDescription
             return
         }
         microphoneStartupRetryCount += 1
