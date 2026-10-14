@@ -34,13 +34,6 @@ enum RemoteProviderConfigurationPolicy {
         return nil
     }
 
-    static func isDoubaoASRTest(_ target: RemoteProviderTestTarget) -> Bool {
-        if case .asr(let provider) = target {
-            return provider == .doubaoASR
-        }
-        return false
-    }
-
     static func isOpenAIASRTest(_ target: RemoteProviderTestTarget) -> Bool {
         if case .asr(let provider) = target {
             return provider == .openAIWhisper
@@ -152,6 +145,12 @@ enum RemoteProviderConfigurationPolicy {
     static func endpointPresets(target: RemoteProviderTestTarget, resolvedModel: String) -> [RemoteEndpointPreset] {
         switch target {
         case .asr(let provider):
+            if provider == .doubaoASR {
+                return [
+                    RemoteEndpointPreset(id: "doubao-asr-agent-plan-streaming", title: AppLocalization.localizedString("Ark Agent Plan · Streaming"), url: DoubaoASRConfiguration.agentPlanStreamingEndpoint),
+                    RemoteEndpointPreset(id: "doubao-asr-agent-plan-one-shot", title: AppLocalization.localizedString("Ark Agent Plan · One-shot"), url: DoubaoASRConfiguration.agentPlanNoStreamEndpoint)
+                ]
+            }
             guard provider == .aliyunBailianASR else { return [] }
             if isAliyunQwenRealtimeModel(resolvedModel) {
                 return [
@@ -211,7 +210,7 @@ enum RemoteProviderConfigurationPolicy {
             case .aliyunBailianASR:
                 return endpointPresets(target: target, resolvedModel: resolvedModel).first?.url ?? "https://..."
             case .doubaoASR:
-                return "https://..."
+                return DoubaoASRConfiguration.agentPlanStreamingEndpoint
             case .stepFunASR:
                 return "https://api.stepfun.com/v1/audio/asr/sse"
             case .xiaomiMiMoASR:
@@ -234,6 +233,9 @@ enum RemoteProviderConfigurationPolicy {
         newModel: String,
         currentEndpoint: String
     ) -> String {
+        if case .asr(.doubaoASR) = target {
+            return currentEndpoint
+        }
         let trimmedEndpoint = currentEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let oldPresets = endpointPresets(target: target, resolvedModel: previousModel)
         let newPresets = endpointPresets(target: target, resolvedModel: newModel)

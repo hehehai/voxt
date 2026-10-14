@@ -55,6 +55,16 @@ Important notes:
 
 <img width="939" height="683" alt="image" src="https://github.com/user-attachments/assets/18c4032e-b3e8-4ab5-92fe-9f6f0117ecd1" />
 
+#### Volcengine Ark Agent Plan
+
+Ark Agent Plan authenticates with a single `X-Api-Key` header instead of an App ID plus Access Token, so this tier needs a different endpoint:
+
+1. Keep the model on `volc.seedasr.sauc.duration`.
+2. Apply the `Ark Agent Plan · Streaming` endpoint preset, or paste `wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async`. Use `Ark Agent Plan · One-shot` (`.../bigmodel_nostream`) if you prefer one high-accuracy result per utterance.
+3. Paste your Ark Agent Plan API key into `API Key` and leave `App ID` / `Access Token` empty.
+
+When an `API Key` is set, Voxt sends `X-Api-Key` and skips the app credentials entirely. Existing speech-console setups are unaffected: leaving `API Key` empty keeps the App ID + Access Token flow.
+
 ### GLM ASR
 
 - Suggested default: `glm-asr-1`

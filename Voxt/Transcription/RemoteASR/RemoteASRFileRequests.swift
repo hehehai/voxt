@@ -326,20 +326,24 @@ extension RemoteASRTranscriber {
     ) async throws -> String {
         let accessToken = configuration.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
         let appID = configuration.appID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let resourceID = RemoteASREndpointSupport.resolvedDoubaoResourceID(from: configuration)
         let endpoint = RemoteASREndpointSupport.resolvedDoubaoStreamingEndpoint(from: configuration)
 
-        guard !accessToken.isEmpty else {
-            throw NSError(domain: "Voxt.RemoteASR", code: -3, userInfo: [NSLocalizedDescriptionKey: "Doubao Access Token is empty."])
-        }
-        guard !appID.isEmpty else {
-            throw NSError(domain: "Voxt.RemoteASR", code: -4, userInfo: [NSLocalizedDescriptionKey: "Doubao App ID is empty."])
+        if !DoubaoASRConfiguration.usesAPIKeyAuthentication(apiKey) {
+            guard !accessToken.isEmpty else {
+                throw NSError(domain: "Voxt.RemoteASR", code: -3, userInfo: [NSLocalizedDescriptionKey: "Doubao Access Token is empty."])
+            }
+            guard !appID.isEmpty else {
+                throw NSError(domain: "Voxt.RemoteASR", code: -4, userInfo: [NSLocalizedDescriptionKey: "Doubao App ID is empty."])
+            }
         }
         if DoubaoASRConfiguration.isFlashRecognitionModel(resourceID) {
             return try await transcribeDoubaoFlashRecognition(
                 fileURL: fileURL,
                 appID: appID,
                 accessToken: accessToken,
+                apiKey: apiKey,
                 resourceID: resourceID,
                 endpoint: DoubaoASRConfiguration.resolvedFlashRecognitionEndpoint(configuration.endpoint),
                 hintPayload: hintPayload,
@@ -350,6 +354,7 @@ extension RemoteASRTranscriber {
             fileURL: fileURL,
             appID: appID,
             accessToken: accessToken,
+            apiKey: apiKey,
             resourceID: resourceID,
             endpoint: endpoint,
             hintPayload: hintPayload,
@@ -361,6 +366,7 @@ extension RemoteASRTranscriber {
         fileURL: URL,
         appID: String,
         accessToken: String,
+        apiKey: String,
         resourceID: String,
         endpoint: String,
         hintPayload: ResolvedASRHintPayload,
@@ -385,10 +391,14 @@ extension RemoteASRTranscriber {
         request.timeoutInterval = 60
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
-        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
-        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
-        request.setValue(UUID().uuidString.lowercased(), forHTTPHeaderField: "X-Api-Request-Id")
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken,
+            resourceID: resourceID,
+            requestID: UUID().uuidString.lowercased()
+        )
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await VoxtNetworkSession.active.data(for: request)

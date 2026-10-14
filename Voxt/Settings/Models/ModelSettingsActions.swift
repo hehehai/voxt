@@ -570,7 +570,7 @@ extension ModelSettingsView {
     func asrCredentialHint(for provider: RemoteASRProvider) -> String? {
         switch provider {
         case .doubaoASR:
-            return AppLocalization.localizedString("Doubao uses App ID + Access Token for streaming API.")
+            return AppLocalization.localizedString("Doubao uses App ID + Access Token for streaming API. Fill in an API Key instead to authenticate with a Volcengine Ark Agent Plan key.")
         case .aliyunBailianASR:
             return AppLocalization.localizedString("Aliyun ASR in Voxt uses realtime WebSocket only: Qwen models use /api-ws/v1/realtime, Fun/Paraformer models use /api-ws/v1/inference.")
         case .xiaomiMiMoASR:

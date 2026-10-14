@@ -143,7 +143,7 @@ struct RemoteProviderConfiguration: Codable, Identifiable, Hashable {
             !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
             storedCredentialPresence?.accessToken == true
         if providerID == RemoteASRProvider.doubaoASR.rawValue {
-            return hasUsableModel && hasAppID && hasAccessToken
+            return hasUsableModel && (hasAPIKey || (hasAppID && hasAccessToken))
         }
         return hasUsableModel && (hasAPIKey || hasAccessToken)
     }

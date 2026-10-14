@@ -44,6 +44,7 @@ extension RemoteASRTranscriber {
         fileURL: URL,
         appID: String,
         accessToken: String,
+        apiKey: String,
         resourceID: String,
         endpoint: String,
         hintPayload: ResolvedASRHintPayload,
@@ -65,12 +66,15 @@ extension RemoteASRTranscriber {
 
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
-        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
-        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
-        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
         let requestID = UUID().uuidString.lowercased()
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken,
+            resourceID: resourceID,
+            requestID: requestID
+        )
         VoxtLog.asr(
             "Doubao websocket connect. endpoint=\(endpoint), resource=\(resourceID)"
         )
@@ -117,7 +121,8 @@ extension RemoteASRTranscriber {
                     endpoint: endpoint,
                     resourceID: resourceID,
                     appID: appID,
-                    accessToken: accessToken
+                    accessToken: accessToken,
+                    apiKey: apiKey
                 ) {
                     VoxtLog.asrWarning("Doubao websocket receive failed. detail=\(detail)")
                     let detailedError = NSError(
@@ -170,13 +175,16 @@ extension RemoteASRTranscriber {
     ) throws {
         let accessToken = configuration.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
         let appID = configuration.appID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let resourceID = RemoteASREndpointSupport.resolvedDoubaoResourceID(from: configuration)
 
-        guard !accessToken.isEmpty else {
-            throw NSError(domain: "Voxt.RemoteASR", code: -3, userInfo: [NSLocalizedDescriptionKey: "Doubao Access Token is empty."])
-        }
-        guard !appID.isEmpty else {
-            throw NSError(domain: "Voxt.RemoteASR", code: -4, userInfo: [NSLocalizedDescriptionKey: "Doubao App ID is empty."])
+        if !DoubaoASRConfiguration.usesAPIKeyAuthentication(apiKey) {
+            guard !accessToken.isEmpty else {
+                throw NSError(domain: "Voxt.RemoteASR", code: -3, userInfo: [NSLocalizedDescriptionKey: "Doubao Access Token is empty."])
+            }
+            guard !appID.isEmpty else {
+                throw NSError(domain: "Voxt.RemoteASR", code: -4, userInfo: [NSLocalizedDescriptionKey: "Doubao App ID is empty."])
+            }
         }
 
         let endpoint = RemoteASREndpointSupport.resolvedDoubaoStreamingEndpoint(from: configuration)
@@ -186,12 +194,15 @@ extension RemoteASRTranscriber {
 
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
-        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
-        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
-        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
         let requestID = UUID().uuidString.lowercased()
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken,
+            resourceID: resourceID,
+            requestID: requestID
+        )
         VoxtLog.model(
             "Doubao stream connect. endpoint=\(endpoint), resource=\(resourceID)"
         )
@@ -210,7 +221,14 @@ extension RemoteASRTranscriber {
             generationID: recordingGenerationID
         )
         doubaoStreamingContext = context
-        receiveDoubaoMessages(context, endpoint: endpoint, resourceID: resourceID, appID: appID, accessToken: accessToken)
+        receiveDoubaoMessages(
+            context,
+            endpoint: endpoint,
+            resourceID: resourceID,
+            appID: appID,
+            accessToken: accessToken,
+            apiKey: apiKey
+        )
 
         let reqID = UUID().uuidString.lowercased()
         let streamingHintPayload = ResolvedASRHintPayload(
@@ -374,7 +392,8 @@ extension RemoteASRTranscriber {
         endpoint: String,
         resourceID: String,
         appID: String,
-        accessToken: String
+        accessToken: String,
+        apiKey: String
     ) {
         context.ws.receive { [weak self] result in
             guard let self else { return }
@@ -434,7 +453,8 @@ extension RemoteASRTranscriber {
                             endpoint: endpoint,
                             resourceID: resourceID,
                             appID: appID,
-                            accessToken: accessToken
+                            accessToken: accessToken,
+                            apiKey: apiKey
                         )
                     }
                 }
@@ -455,7 +475,8 @@ extension RemoteASRTranscriber {
                         endpoint: endpoint,
                         resourceID: resourceID,
                         appID: appID,
-                        accessToken: accessToken
+                        accessToken: accessToken,
+                        apiKey: apiKey
                     ) {
                         context.isClosed = true
                         await MainActor.run {
@@ -481,7 +502,8 @@ extension RemoteASRTranscriber {
         endpoint: String,
         resourceID: String,
         appID: String,
-        accessToken: String
+        accessToken: String,
+        apiKey: String
     ) async -> String? {
         let nsError = error as NSError
         if nsError.domain != NSURLErrorDomain || nsError.code != NSURLErrorBadServerResponse {
@@ -505,12 +527,15 @@ extension RemoteASRTranscriber {
         request.timeoutInterval = 10
         request.setValue("websocket", forHTTPHeaderField: "Upgrade")
         request.setValue("Upgrade", forHTTPHeaderField: "Connection")
-        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
-        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
-        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
         let requestID = UUID().uuidString.lowercased()
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken,
+            resourceID: resourceID,
+            requestID: requestID
+        )
 
         do {
             let (data, response) = try await VoxtNetworkSession.active.data(for: request)

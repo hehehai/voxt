@@ -6,8 +6,8 @@ extension RemoteProviderConfigurationSheet {
         let snapshot = RemoteProviderConfiguration(
             providerID: configuration.providerID,
             model: resolvedModelValue(),
-            endpoint: isDoubaoASRTest ? "" : endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
-            apiKey: (isDoubaoASRTest || isCodexLLMProvider) ? "" : apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
+            apiKey: isCodexLLMProvider ? "" : apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
             appID: appID.trimmingCharacters(in: .whitespacesAndNewlines),
             accessToken: accessToken.trimmingCharacters(in: .whitespacesAndNewlines),
             searchEnabled: (llmProviderForPicker?.supportsHostedSearch == true) ? searchEnabled : false,

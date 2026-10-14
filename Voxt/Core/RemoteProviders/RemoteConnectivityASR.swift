@@ -5,17 +5,21 @@ extension RemoteProviderConnectivityTester {
         switch provider {
         case .doubaoASR:
             let token = configuration.accessToken
-            guard !token.isEmpty else {
-                throw NSError(domain: "Voxt.Settings", code: -1, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Doubao Access Token is required for testing.")])
-            }
-            guard !configuration.appID.isEmpty else {
-                throw NSError(domain: "Voxt.Settings", code: -2, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Doubao App ID is required for testing.")])
+            let apiKey = configuration.apiKey
+            if !DoubaoASRConfiguration.usesAPIKeyAuthentication(apiKey) {
+                guard !token.isEmpty else {
+                    throw NSError(domain: "Voxt.Settings", code: -1, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Doubao Access Token is required for testing.")])
+                }
+                guard !configuration.appID.isEmpty else {
+                    throw NSError(domain: "Voxt.Settings", code: -2, userInfo: [NSLocalizedDescriptionKey: AppLocalization.localizedString("Doubao App ID is required for testing.")])
+                }
             }
             let endpoint = RemoteProviderConnectivityTestEndpoints.resolvedDoubaoASREndpoint(configuration.endpoint, model: configuration.model)
             return try await testDoubaoStreamingReachability(
                 endpoint: endpoint,
                 appID: configuration.appID,
                 accessToken: token,
+                apiKey: apiKey,
                 model: configuration.model
             )
         case .openAIWhisper:

@@ -280,10 +280,6 @@ extension RemoteProviderConfigurationSheet {
             (isOllamaLLMProvider || isOMLXLLMProvider)
     }
 
-    var isDoubaoASRTest: Bool {
-        RemoteProviderConfigurationPolicy.isDoubaoASRTest(testTarget)
-    }
-
     var isOpenAIASRTest: Bool {
         RemoteProviderConfigurationPolicy.isOpenAIASRTest(testTarget)
     }

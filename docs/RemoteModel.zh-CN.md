@@ -55,6 +55,16 @@ key: `$OPENAI_API_KEY`
 
 <img width="939" height="683" alt="image" src="https://github.com/user-attachments/assets/18c4032e-b3e8-4ab5-92fe-9f6f0117ecd1" />
 
+#### 火山方舟 Agent Plan
+
+方舟 Agent Plan 只用 `X-Api-Key` 一个头鉴权，不走 App ID + Access Token，所以这一档需要换端点：
+
+1. 模型保持 `volc.seedasr.sauc.duration`。
+2. 应用 `Ark Agent Plan · Streaming` 端点预设，或直接填 `wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async`。想要整段音频一次性出高精度结果，就用 `Ark Agent Plan · One-shot`（`.../bigmodel_nostream`）。
+3. 把方舟专属 API Key 填进 `API Key`，`App ID` / `Access Token` 留空。
+
+填了 `API Key` 之后，Voxt 只发 `X-Api-Key`，完全跳过 App ID 凭据。原有豆包语音应用不受影响：`API Key` 留空时行为和以前完全一致。
+
 ### GLM ASR
 
 - 默认推荐：`glm-asr-1`

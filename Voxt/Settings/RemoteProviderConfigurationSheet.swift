@@ -99,9 +99,7 @@ struct RemoteProviderConfigurationSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     modelSection
 
-                    if !isDoubaoASRTest {
-                        endpointAndKeySection
-                    }
+                    endpointAndKeySection
 
                     if isCodexLLMProvider {
                         codexConfigurationSection

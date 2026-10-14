@@ -14,6 +14,140 @@ final class RemoteModelConfigurationASRTests: RemoteModelConfigurationTestCase {
         )
     }
 
+    func testDoubaoAuthenticationHeadersUseAppCredentialsByDefault() {
+        var request = URLRequest(url: URL(string: DoubaoASRConfiguration.defaultStreamingEndpointV2)!)
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: "",
+            appID: "app-1",
+            accessToken: "token-1",
+            resourceID: DoubaoASRConfiguration.modelV2,
+            requestID: "req-1"
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-App-Key"), "app-1")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Access-Key"), "token-1")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Key"), nil)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Resource-Id"), DoubaoASRConfiguration.modelV2)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Request-Id"), "req-1")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Connect-Id"), "req-1")
+    }
+
+    func testDoubaoAuthenticationHeadersPreferAPIKeyOverAppCredentials() {
+        var request = URLRequest(url: URL(string: DoubaoASRConfiguration.agentPlanStreamingEndpoint)!)
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: "  ark-key  ",
+            appID: "app-1",
+            accessToken: "token-1",
+            resourceID: DoubaoASRConfiguration.modelV2,
+            requestID: "req-1"
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Key"), "ark-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-App-Key"), nil)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Access-Key"), nil)
+    }
+
+    func testDoubaoAPIKeyAuthenticationDetection() {
+        XCTAssertFalse(DoubaoASRConfiguration.usesAPIKeyAuthentication(""))
+        XCTAssertFalse(DoubaoASRConfiguration.usesAPIKeyAuthentication("   "))
+        XCTAssertTrue(DoubaoASRConfiguration.usesAPIKeyAuthentication("ark-key"))
+    }
+
+    func testDoubaoAgentPlanEndpointIsUsedWhenConfigured() {
+        XCTAssertEqual(
+            DoubaoASRConfiguration.resolvedStreamingEndpoint(
+                DoubaoASRConfiguration.agentPlanStreamingEndpoint,
+                model: DoubaoASRConfiguration.modelV2
+            ),
+            "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async"
+        )
+        XCTAssertEqual(
+            DoubaoASRConfiguration.resolvedEndpoint(
+                DoubaoASRConfiguration.agentPlanStreamingEndpoint,
+                model: DoubaoASRConfiguration.modelV2
+            ),
+            "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_nostream"
+        )
+    }
+
+    func testDoubaoFlashRecognitionEndpointIsDerivedFromAgentPlanEndpoint() {
+        XCTAssertEqual(
+            DoubaoASRConfiguration.resolvedFlashRecognitionEndpoint(
+                DoubaoASRConfiguration.agentPlanStreamingEndpoint
+            ),
+            "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+        )
+        XCTAssertEqual(
+            DoubaoASRConfiguration.resolvedFlashRecognitionEndpoint(
+                DoubaoASRConfiguration.defaultStreamingEndpointV2
+            ),
+            "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+        )
+    }
+
+    func testDoubaoEndpointPresetsExposeAgentPlanEndpoints() {
+        let presets = RemoteProviderConfigurationPolicy.endpointPresets(
+            target: .asr(.doubaoASR),
+            resolvedModel: DoubaoASRConfiguration.modelV2
+        )
+
+        XCTAssertEqual(
+            presets.map(\.url),
+            [
+                "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async",
+                "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_nostream"
+            ]
+        )
+    }
+
+    func testDoubaoEndpointIsNotRemappedOnModelChange() {
+        let custom = "wss://relay.example.com/api/v3/plan/sauc/bigmodel_async"
+
+        XCTAssertEqual(
+            RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+                target: .asr(.doubaoASR),
+                previousModel: DoubaoASRConfiguration.modelV1,
+                newModel: DoubaoASRConfiguration.modelV2,
+                currentEndpoint: custom
+            ),
+            custom
+        )
+        XCTAssertEqual(
+            RemoteProviderConfigurationPolicy.remappedEndpointOnModelChange(
+                target: .asr(.doubaoASR),
+                previousModel: DoubaoASRConfiguration.modelV1,
+                newModel: DoubaoASRConfiguration.modelV2,
+                currentEndpoint: ""
+            ),
+            ""
+        )
+    }
+
+    func testDoubaoIsConfiguredWithAPIKeyAlone() {
+        let base = RemoteProviderConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            endpoint: DoubaoASRConfiguration.agentPlanStreamingEndpoint,
+            apiKey: "ark-key"
+        )
+
+        var appCredentials = base
+        appCredentials.apiKey = ""
+        appCredentials.appID = "app-1"
+        appCredentials.accessToken = "token-1"
+
+        XCTAssertTrue(base.isConfigured)
+        XCTAssertTrue(appCredentials.isConfigured)
+        XCTAssertFalse(RemoteProviderConfiguration(
+            providerID: RemoteASRProvider.doubaoASR.rawValue,
+            model: DoubaoASRConfiguration.modelV2,
+            endpoint: "",
+            apiKey: ""
+        ).isConfigured)
+    }
+
     func testDoubaoFullRequestPayloadIncludesLanguageAndVariant() {
         let payload = DoubaoASRConfiguration.fullRequestPayload(
             requestID: "req-1",

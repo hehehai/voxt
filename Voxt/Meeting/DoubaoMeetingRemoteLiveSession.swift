@@ -6,6 +6,7 @@ final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession {
     private let endpoint: String
     private let appID: String
     private let accessToken: String
+    private let apiKey: String
     private var bufferedPCMData = Data()
 
     init(
@@ -19,6 +20,7 @@ final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession {
         self.endpoint = DoubaoASRConfiguration.resolvedStreamingEndpoint(configuration.endpoint, model: configuration.model)
         self.appID = configuration.appID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.accessToken = configuration.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         super.init(
             speaker: speaker,
             configuration: configuration,
@@ -30,11 +32,13 @@ final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession {
     }
 
     override func openTransport() async throws {
-        guard !accessToken.isEmpty else {
-            throw NSError(domain: "Voxt.Meeting", code: -10, userInfo: [NSLocalizedDescriptionKey: "Doubao Access Token is empty."])
-        }
-        guard !appID.isEmpty else {
-            throw NSError(domain: "Voxt.Meeting", code: -11, userInfo: [NSLocalizedDescriptionKey: "Doubao App ID is empty."])
+        if !DoubaoASRConfiguration.usesAPIKeyAuthentication(apiKey) {
+            guard !accessToken.isEmpty else {
+                throw NSError(domain: "Voxt.Meeting", code: -10, userInfo: [NSLocalizedDescriptionKey: "Doubao Access Token is empty."])
+            }
+            guard !appID.isEmpty else {
+                throw NSError(domain: "Voxt.Meeting", code: -11, userInfo: [NSLocalizedDescriptionKey: "Doubao App ID is empty."])
+            }
         }
         guard let wsURL = URL(string: endpoint) else {
             throw NSError(domain: "Voxt.Meeting", code: -12, userInfo: [NSLocalizedDescriptionKey: "Invalid Doubao WebSocket endpoint URL."])
@@ -42,12 +46,15 @@ final class DoubaoMeetingRemoteLiveSession: BaseMeetingRemoteLiveSession {
 
         var request = URLRequest(url: wsURL)
         request.timeoutInterval = 45
-        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
-        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
-        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
         let requestID = UUID().uuidString.lowercased()
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken,
+            resourceID: resourceID,
+            requestID: requestID
+        )
         VoxtLog.meeting(
             "Meeting Doubao live connect. endpoint=\(endpoint), resource=\(resourceID), speaker=\(speaker.rawValue), proxyMode=\(VoxtNetworkSession.modeDescription)"
         )

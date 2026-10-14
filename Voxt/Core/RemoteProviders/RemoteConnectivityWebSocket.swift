@@ -5,6 +5,7 @@ extension RemoteProviderConnectivityTester {
         endpoint: String,
         appID: String,
         accessToken: String,
+        apiKey: String,
         model: String,
         successMessage: String = ""
     ) async throws -> String {
@@ -15,12 +16,15 @@ extension RemoteProviderConnectivityTester {
         let resourceID = DoubaoConnectivityTestSupport.normalizedResourceID(model)
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
-        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
-        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
-        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
         let requestID = UUID().uuidString.lowercased()
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken,
+            resourceID: resourceID,
+            requestID: requestID
+        )
         RemoteProviderConnectivityTestLogging.logHTTPRequest(
             context: "Doubao streaming test",
             request: request,
@@ -91,6 +95,7 @@ extension RemoteProviderConnectivityTester {
                     endpoint: endpoint,
                     appID: appID,
                     accessToken: accessToken,
+                    apiKey: apiKey,
                     resourceID: resourceID
                ) {
                 throw detailedError
@@ -108,6 +113,7 @@ extension RemoteProviderConnectivityTester {
         endpoint: String,
         appID: String,
         accessToken: String,
+        apiKey: String,
         resourceID: String
     ) async -> NSError? {
         guard var components = URLComponents(string: endpoint) else {
@@ -127,12 +133,15 @@ extension RemoteProviderConnectivityTester {
         request.timeoutInterval = 10
         request.setValue("websocket", forHTTPHeaderField: "Upgrade")
         request.setValue("Upgrade", forHTTPHeaderField: "Connection")
-        request.setValue(appID, forHTTPHeaderField: "X-Api-App-Key")
-        request.setValue(accessToken, forHTTPHeaderField: "X-Api-Access-Key")
-        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
         let requestID = UUID().uuidString.lowercased()
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
-        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+        DoubaoASRConfiguration.applyAuthenticationHeaders(
+            to: &request,
+            apiKey: apiKey,
+            appID: appID,
+            accessToken: accessToken,
+            resourceID: resourceID,
+            requestID: requestID
+        )
 
         do {
             let (data, response) = try await VoxtNetworkSession.active.data(for: request)

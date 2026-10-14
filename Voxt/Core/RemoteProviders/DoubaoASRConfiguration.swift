@@ -40,6 +40,8 @@ enum DoubaoASRConfiguration {
     static let defaultStreamingEndpointV1 = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
     static let defaultStreamingEndpointV2 = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
     static let defaultFlashRecognitionEndpoint = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+    static let agentPlanStreamingEndpoint = "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async"
+    static let agentPlanNoStreamEndpoint = "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_nostream"
     static let requestAudioFormat = "wav"
     static let streamingAudioFormat = "pcm"
     static let requestAudioCodec = "raw"
@@ -72,11 +74,13 @@ enum DoubaoASRConfiguration {
         if !trimmed.isEmpty {
             if let url = URL(string: trimmed) {
                 let normalizedPath = url.path.lowercased()
-                if normalizedPath.hasSuffix("/api/v3/sauc/bigmodel_async") {
-                    return trimmed.replacingOccurrences(of: "/api/v3/sauc/bigmodel_async", with: "/api/v3/sauc/bigmodel_nostream")
+                if normalizedPath.hasSuffix("/api/v3/sauc/bigmodel_async")
+                    || normalizedPath.hasSuffix("/api/v3/plan/sauc/bigmodel_async") {
+                    return trimmed.replacingOccurrences(of: "/bigmodel_async", with: "/bigmodel_nostream")
                 }
-                if normalizedPath.hasSuffix("/api/v3/sauc/bigmodel") {
-                    return trimmed.replacingOccurrences(of: "/api/v3/sauc/bigmodel", with: "/api/v3/sauc/bigmodel_nostream")
+                if normalizedPath.hasSuffix("/api/v3/sauc/bigmodel")
+                    || normalizedPath.hasSuffix("/api/v3/plan/sauc/bigmodel") {
+                    return trimmed.replacingOccurrences(of: "/bigmodel", with: "/bigmodel_nostream")
                 }
             }
             return trimmed
@@ -104,6 +108,34 @@ enum DoubaoASRConfiguration {
     static func resolvedResourceID(_ model: String) -> String {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? modelV2 : trimmed
+    }
+
+    /// Volcengine authenticates the bigmodel streaming protocol in two ways: speech
+    /// console apps sign requests with an App ID plus Access Token, while Ark Agent
+    /// Plan keys send a single `X-Api-Key`. An explicit API key always wins so a
+    /// speech console configuration keeps working unchanged.
+    static func applyAuthenticationHeaders(
+        to request: inout URLRequest,
+        apiKey: String,
+        appID: String,
+        accessToken: String,
+        resourceID: String,
+        requestID: String
+    ) {
+        let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedAPIKey.isEmpty {
+            request.setValue(appID.trimmingCharacters(in: .whitespacesAndNewlines), forHTTPHeaderField: "X-Api-App-Key")
+            request.setValue(accessToken.trimmingCharacters(in: .whitespacesAndNewlines), forHTTPHeaderField: "X-Api-Access-Key")
+        } else {
+            request.setValue(trimmedAPIKey, forHTTPHeaderField: "X-Api-Key")
+        }
+        request.setValue(resourceID, forHTTPHeaderField: "X-Api-Resource-Id")
+        request.setValue(requestID, forHTTPHeaderField: "X-Api-Request-Id")
+        request.setValue(requestID, forHTTPHeaderField: "X-Api-Connect-Id")
+    }
+
+    static func usesAPIKeyAuthentication(_ apiKey: String) -> Bool {
+        !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func isFlashRecognitionModel(_ model: String) -> Bool {
@@ -141,12 +173,17 @@ enum DoubaoASRConfiguration {
             components.path = components.path.replacingOccurrences(of: "/api/v3/auc/bigmodel/submit", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
             return components.string ?? trimmed
         }
-        if path.hasSuffix("/api/v3/sauc/bigmodel_nostream") {
-            components.path = components.path.replacingOccurrences(of: "/api/v3/sauc/bigmodel_nostream", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
-            return components.string ?? trimmed
-        }
-        if path.hasSuffix("/api/v3/sauc/bigmodel_async") {
-            components.path = components.path.replacingOccurrences(of: "/api/v3/sauc/bigmodel_async", with: "/api/v3/auc/bigmodel/recognize/flash", options: [.caseInsensitive])
+        for streamingSuffix in [
+            "/api/v3/sauc/bigmodel_nostream",
+            "/api/v3/plan/sauc/bigmodel_nostream",
+            "/api/v3/sauc/bigmodel_async",
+            "/api/v3/plan/sauc/bigmodel_async"
+        ] where path.hasSuffix(streamingSuffix) {
+            components.path = components.path.replacingOccurrences(
+                of: streamingSuffix,
+                with: "/api/v3/auc/bigmodel/recognize/flash",
+                options: [.caseInsensitive]
+            )
             return components.string ?? trimmed
         }
         if path.hasSuffix("/api/v3/sauc/bigmodel") {
